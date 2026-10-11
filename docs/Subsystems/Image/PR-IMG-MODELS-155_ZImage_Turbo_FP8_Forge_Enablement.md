@@ -1,6 +1,6 @@
 # PR-IMG-MODELS-155 - Z-Image-Turbo FP8 exact-bundle Forge enablement
 
-Disposition: **LOCAL_IMPLEMENTATION_UNDER_VALIDATION**. The owner explicitly selected Klein's existing 32-GB-class
+Disposition: **LOCAL_VALIDATION_COMPLETE / READY_FOR_PUBLICATION_REVIEW**. The owner explicitly selected Klein's existing 32-GB-class
 total-RAM gate and pressure diagnostics, accepting removal of the provisional available-RAM and commit-headroom floors.
 The exact v1 profile is implemented through the existing production path. No physical run or publication is authorized
 in this package. The original PR-154B result remains `INSTRUMENTATION_GAP`.
@@ -15,7 +15,8 @@ cost significant; High is the lowest effective recommendation for this package. 
 one independent read-only aggregate reviewer; no chain of agents.
 
 Controller Surface Assessment: no new controller responsibilities or ratchet increase. Use the existing backend/profile,
-compiler and model-policy projection seams. No production lifecycle or process-manager change is authorized.
+compiler and model-policy projection seams. The managed-runtime utility adds read-only pin/launch verification;
+production lifecycle and process ownership remain unchanged.
 
 Token-Efficient Validation Plan: first reconcile the preserved exact evidence without GPU work; resolve the resource
 decision; then deterministic profile/compiler/NJR/backend/executor/GUI/replay regressions with temporary state, focused
@@ -114,7 +115,7 @@ Windows commit headroom as observations only. Reusing that gate unchanged remove
 37 GiB commit-headroom / 20 GiB available-RAM launch floors; the single successful output does not validate that reduction.
 The existing executor pressure diagnostics do not establish replacement Z-Image host-memory limits.
 
-| Alternative requiring owner selection | Concrete behavior and limitation |
+| Alternatives considered before owner selection | Concrete behavior and limitation |
 | --- | --- |
 | Retain the provisional 37 GiB commit / 20 GiB available-RAM floors before every dispatch | Explicitly carries those conservative experimental floors into v1; unknown readings refuse. Not claimed safe or calibrated. A retained model may block the next job until the operator releases resources; no automatic unload/restart is added. |
 | Prepare the profile but keep production dispatch disabled pending separately approved canonical acceptance | No production resource-risk expansion; the first full StableNew generation and final admission policy remain separately authorized work. This does not meet normal enablement yet. |
@@ -135,6 +136,25 @@ execution. The HTTP fake proves the exact POST, image manifest/history provenanc
 sampling drift refusal, asset/pin refusal before module writes, unconfirmed selection and one ambiguous POST without replay.
 The fake image is not a physical image-quality or hardware acceptance result.
 
-Validation results and the final read-only aggregate review are recorded at local closeout. Publication/hosted required
-Python 3.14 CI and the first normal StableNew Z-Image generation require separate current authorization. No physical
-qualification case was rerun, promoted, edited or cleared by this package.
+Validated source commit: `cf2eb3382f2d20cb98b0edb71eeec2bf1d16c106` (base
+`ef3fba8a0776548c4ac34a003452fa2402bdef32`). The subsequent closeout changes documentation only and reuses this evidence.
+
+| Local check | Result |
+| --- | --- |
+| Affected deterministic suites | 583 passed in 34.71 s: image backends, Klein/Z-Image compilation and canonical integration, PromptPack/CLI builders, GUI projections and managed-runtime pin checks |
+| Full repository Ruff | PASS |
+| Supplementary scoped mypy | PASS, 8 source files; pre-existing missing `psutil` typing stubs excluded with `--disable-error-code=import-untyped`; no dependency or canonical gate change |
+| `python tools/ci/run_pr_gate.py` | PASS: completeness (536 tracked Python sources), controller ratchet (4 controllers, unchanged ceilings), Ruff, required mypy (10 files), isolated collection (8,324 tests), required smoke/contracts (386 passed) |
+| Collection/smoke repository-content guards | PASS, repository unchanged |
+| Independent read-only aggregate review | PASS after repairing nested module-selection conflict validation and adding both alias regressions; profile identity, wire payload, asset/pin checks, transitions, compiler/admission parity and qualification wording reviewed |
+| Scoped aggregate diff and `git diff --check` | PASS |
+
+The canonical fake traverses JobService, SQLite and `PipelineRunner.run_njr` to the real executor and client HTTP boundary.
+It records the exact 14-field generation POST with `distilled_cfg_scale: 9.0`, CFG 1, Euler/Beta/9, 1024x1024 and one image;
+the saved image manifest and history carry the same effective request and confirmed selection. It also verifies frozen
+NJR identity, profile/module transitions and refusal without replay after an ambiguous POST. These deterministic results
+establish application behavior, not physical image quality or hardware stability.
+
+No local source/test blocker remains. Hosted required Python 3.14 CI has not run for this branch, so this is ready for
+publication review, not merge-ready. Publication and the first normal StableNew Z-Image physical acceptance require
+separate current authorization. No physical qualification case was rerun, promoted, edited or cleared by this package.
