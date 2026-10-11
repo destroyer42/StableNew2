@@ -4,6 +4,15 @@ Updated: 2026-10-11
 
 ## Repository
 
+- Preview draft recovery (PR-GUI-112, locally validated): Clear Draft remains
+  available for rejected/draft-only previews, compiler errors are actionable,
+  and stale asynchronous completion cannot restore a cleared draft. Fresh valid
+  previews recover queue eligibility on the existing submission path; saved
+  PromptPacks and SQLite queue/history are preserved. Z-Image v1 remains
+  1024x1024 only. All 84 affected tests, the final local PR gate (386 required
+  smoke tests) and independent targeted read-only review pass. See
+  `docs/Subsystems/GUI/PR-GUI-112_Preview_Draft_Recovery.md`.
+
 - Z-Image model-aware PromptPack compilation (PR-IMG-MODELS-157, locally validated):
   fresh PromptPack jobs use the existing shared adapter to flatten weighted prose and omit
   structured LoRAs, embeddings and negative channels, preserving saved packs and freezing

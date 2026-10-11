@@ -6760,6 +6760,7 @@ class AppController:
 
     def request_preview_refresh(self) -> None:
         """Request a debounced preview refresh suitable for GUI-triggered draft updates."""
+        self.app_state.invalidate_preview()
         scheduler = getattr(self, "_ui_scheduler", None)
         main_window = getattr(self, "main_window", None)
         dispatcher = getattr(main_window, "run_in_main_thread", None) if main_window is not None else None
@@ -6772,16 +6773,10 @@ class AppController:
         controller = getattr(self, "pipeline_controller", None)
         if controller is None:
             return
-        build_request = getattr(controller, "build_preview_request", None)
-        get_preview_jobs_for_request = getattr(controller, "get_preview_jobs_for_request", None)
-        if not callable(build_request) or not callable(get_preview_jobs_for_request):
-            return
-        request = build_request()
         self.current_operation_label = "Refreshing preview from state"
         self.last_ui_action = "_refresh_preview_from_state_async()"
-        self._runtime_projection_coordinator.publish_preview_refresh(
-            request=request,
-            build_preview_jobs=lambda req: list(get_preview_jobs_for_request(req) or []),
+        self._runtime_projection_coordinator.refresh_preview_from_state(
+            controller, self.app_state,
             on_complete=lambda *_: self._clear_active_operation("_refresh_preview_from_state_async()"),
         )
 

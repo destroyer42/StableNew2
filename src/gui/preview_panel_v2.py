@@ -237,6 +237,10 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.clear_draft_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
+        self.preview_error_label = ttk.Label(self.actions_frame, text="", wraplength=440,
+                                             style=STATUS_LABEL_STYLE)
+        self.preview_error_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
         self._update_action_states(None)
         self._bind_app_state_previews()
 
@@ -317,6 +321,7 @@ class PreviewPanelV2(ttk.Frame):
             f"[PreviewPanel] Created {len(summary_entries)} summary entries, calling set_job_summaries"
         )
         self.set_job_summaries(summary_entries)
+        self.update_from_app_state()
 
     def _summary_from_normalized_job(self, job: NormalizedJobRecord) -> Any:
         unified = job.to_unified_summary() if isinstance(job, NJRSummaryPort) else None
@@ -361,6 +366,7 @@ class PreviewPanelV2(ttk.Frame):
             return
         start = time.perf_counter()
         self._job_summaries = list(summaries)
+        self.update_from_app_state()
         last_summary = summaries[-1] if summaries else None
         render_signature = self._build_render_signature(last_summary, len(summaries))
         if last_summary is not None and render_signature == self._last_render_signature:
@@ -610,6 +616,7 @@ class PreviewPanelV2(ttk.Frame):
             try:
                 logger.debug("[PreviewPanel] Subscribing to preview_jobs changes")
                 self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
+                self.app_state.subscribe("job_draft", self._on_preview_jobs_changed)
                 logger.debug("[PreviewPanel] Successfully subscribed to preview_jobs")
             except Exception as e:
                 logger.debug(f"[PreviewPanel] Failed to subscribe: {e}")
@@ -644,7 +651,10 @@ class PreviewPanelV2(ttk.Frame):
         logger.debug(
             f"[PreviewPanel] Got {len(records) if records else 0} preview jobs from app_state"
         )
-        self.set_preview_jobs(records)
+        if records:
+            self.set_preview_jobs(records)
+        else:
+            self.update_from_job_draft(getattr(self.app_state, "job_draft", None))
 
     def _build_render_signature(self, summary: Any | None, total: int) -> tuple[Any, ...]:
         summary_obj = self._normalize_summary(summary)
@@ -902,6 +912,10 @@ class PreviewPanelV2(ttk.Frame):
         """Move the draft job into the queue."""
         if not self.controller:
             return
+        if self.app_state is not None and not self._can_add_to_queue(
+            self.app_state.job_draft, self.app_state.preview_jobs,
+        ):
+            return
         try:
             add_to_queue_v2 = getattr(self.controller, "on_add_job_to_queue_v2", None)
             if callable(add_to_queue_v2):
@@ -918,6 +932,10 @@ class PreviewPanelV2(ttk.Frame):
         if not self.controller:
             return
         self.controller.on_clear_draft()
+        if self.app_state is not None:
+            self._on_preview_jobs_changed()
+        else:
+            self.set_job_summaries([])
 
     def _on_details_clicked(self) -> None:
         """Show detailed information about the preview jobs."""
@@ -941,10 +959,16 @@ class PreviewPanelV2(ttk.Frame):
             self._can_add_to_queue(job_draft, preview_jobs),
         )
         can_queue = self._can_add_to_queue(job_draft, preview_jobs)
-        state = ["!disabled"] if can_queue else ["disabled"]
-        logger.debug(f"[PreviewPanel] Setting button state to: {state}")
-        self.add_to_queue_button.state(state)
-        self.clear_draft_button.state(state)
+        self.add_to_queue_button.state(["!disabled"] if can_queue else ["disabled"])
+        has_parts = bool(getattr(getattr(job_draft, "summary", None), "part_count", 0))
+        can_clear = bool(packs or has_parts or preview_jobs or self._job_summaries)
+        self.clear_draft_button.state(["!disabled"] if can_clear else ["disabled"])
+        error = getattr(self.app_state, "preview_error", None)
+        reason = ""
+        if can_clear and not can_queue:
+            detail = str(error).replace("\n", " ")[:240] if error else "No current compiled jobs."
+            reason = f"Preview unavailable: {detail} Correct settings and rebuild Preview, or Clear Draft."
+        self.preview_error_label.configure(text=reason)
 
     @staticmethod
     def _can_add_to_queue(
@@ -952,7 +976,7 @@ class PreviewPanelV2(ttk.Frame):
         preview_jobs: list[NormalizedJobRecord] | None,
     ) -> bool:
         """Return whether the current draft has a fresh, queueable preview."""
-        if job_draft is None or not preview_jobs:
+        if job_draft is None or not preview_jobs or not all(isinstance(job, NormalizedJobRecord) for job in preview_jobs):
             return False
         packs = getattr(job_draft, "packs", [])
         part_summary = getattr(job_draft, "summary", None)

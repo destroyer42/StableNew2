@@ -15,6 +15,13 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/pipeline_controller.py`,
   `src/controller/app_controller_services/run_submission_service.py`, and
   `src/controller/pipeline_controller_services/`.
+- Preview draft recovery (PR-GUI-112):
+  `docs/Subsystems/GUI/PR-GUI-112_Preview_Draft_Recovery.md` ->
+  `src/gui/preview_panel_v2.py` (independent Clear/queue eligibility and errors) ->
+  `src/gui/app_state_v2.py` (transient preview generation) ->
+  `src/controller/app_controller_services/runtime_projection_coordinator.py` /
+  `src/gui/app_state_projection_sink.py` (versioned async publication) ->
+  `tests/gui_v2/test_preview_draft_recovery_112.py`.
 - Z-Image PromptPack adaptation (PR-IMG-MODELS-157):
   `docs/Subsystems/Image/PR-IMG-MODELS-157_ZImage_PromptPack_Adaptation.md` ->
   `src/pipeline/prompt_pack_job_builder.py::_prepare_entry` -> existing

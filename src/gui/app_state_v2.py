@@ -91,6 +91,8 @@ class AppStateV2:
     # Canonical PromptPack-first draft state used by controllers (CORE1-A1)
     job_draft: JobDraft = field(default_factory=JobDraft)
     preview_jobs: list[NormalizedJobRecord] = field(default_factory=list)
+    preview_revision: int = 0
+    preview_error: str | None = None
     log_events: list[JobLifecycleLogEvent] = field(default_factory=list)
     log_events_max: int = 500
     operator_log: list[str] = field(default_factory=list)
@@ -496,6 +498,7 @@ class AppStateV2:
             f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects"
         )
         self.job_draft.packs.extend(entries)
+        self.invalidate_preview()
         logger.info(f"[AppState] Total packs in draft: {len(self.job_draft.packs)}")
         self._notify("job_draft")
 
@@ -511,23 +514,30 @@ class AppStateV2:
             estimated_images=estimated_images,
         )
         self.job_draft.add_part(part)
+        self.invalidate_preview()
         self._notify("job_draft")
 
     def clear_job_draft(self) -> None:
         self.job_draft.clear()
         self.job_draft.packs.clear()
-        if self.preview_jobs:
-            self.preview_jobs = []
-            self._notify("preview_jobs")
+        self.invalidate_preview()
         self._notify("job_draft")
 
-    def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:
+    def invalidate_preview(self) -> None:
+        """Invalidate only transient preview work, including results awaiting UI delivery."""
+        self.preview_revision += 1
+        self.preview_jobs = []
+        self.preview_error = None
+        self._notify("preview_jobs")
+
+    def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None, *, error: str | None = None) -> None:
         logger.debug(f"[AppState] set_preview_jobs called with {len(jobs) if jobs else 0} jobs")
         if jobs is None:
             jobs = []
-        if self.preview_jobs != jobs:
+        if self.preview_jobs != jobs or self.preview_error != error:
             logger.debug("[AppState] preview_jobs changed, notifying subscribers")
             self.preview_jobs = list(jobs)
+            self.preview_error = error
             self._notify("preview_jobs")
         else:
             logger.debug("[AppState] preview_jobs unchanged, not notifying")

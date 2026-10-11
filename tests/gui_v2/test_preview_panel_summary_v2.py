@@ -173,6 +173,8 @@ class TestPreviewPanelSummary:
         # after the canonical preview projection has arrived.
         assert preview_panel.add_to_queue_button.instate(["disabled"])
 
-        preview_panel.app_state = type("State", (), {"preview_jobs": [object()]})()
+        from tests.helpers.njr_factory import make_pipeline_njr
+
+        preview_panel.app_state = type("State", (), {"preview_jobs": [make_pipeline_njr()]})()
         preview_panel.update_from_job_draft(job_draft)
         assert preview_panel.add_to_queue_button.instate(["!disabled"])
