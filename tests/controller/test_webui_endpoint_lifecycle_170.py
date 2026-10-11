@@ -280,6 +280,37 @@ def test_launch_during_a_slow_legitimate_startup_does_not_restart_the_process(mo
     assert waited and waited[0][0] == FORGE_URL and 0 < waited[0][1] <= 120.0
 
 
+def test_concurrent_ensure_running_recovers_an_unhealthy_process_once(monkeypatch):
+    manager, popen = _started(monkeypatch, 710)
+    manager._start_time = time.time() - 10_000
+    monkeypatch.setattr(manager, "check_health", lambda: False)
+    stops = []
+    entered = threading.Event()
+    release = threading.Event()
+
+    def blocking_stop():
+        stops.append(1)
+        entered.set()
+        release.wait(5)
+
+    monkeypatch.setattr(manager, "stop", blocking_stop)
+    monkeypatch.setattr(manager, "start", mock.Mock())
+    results: list[bool] = []
+    threads = [threading.Thread(target=lambda: results.append(manager.ensure_running())) for _ in range(3)]
+    threads[0].start()
+    assert entered.wait(5)
+    for thread in threads[1:]:
+        thread.start()
+    threading.Event().wait(0.3)  # real-clock window in which an unserialized caller would also stop the process
+    observed_while_held = len(stops)
+    release.set()
+    for thread in threads:
+        thread.join(5)
+
+    assert observed_while_held == 1
+    assert len(results) == 3
+
+
 def test_an_unhealthy_process_past_its_startup_window_is_still_recovered(monkeypatch):
     manager, popen = _started(monkeypatch, 707)
     manager._start_time = time.time() - 10_000  # far outside the window

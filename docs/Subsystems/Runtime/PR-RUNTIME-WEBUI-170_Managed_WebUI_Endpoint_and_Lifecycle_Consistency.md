@@ -45,8 +45,8 @@ logs; the package removes every credible mechanism and records distinct events.
 
 ## Acceptance evidence
 
-`tests/controller/test_webui_endpoint_lifecycle_170.py` (16): 7871 throughout while 7860 answers; one epoch;
-no rebinding for any runtime; one process under concurrent start (deterministic, real-clock hold); single-flight
+`tests/controller/test_webui_endpoint_lifecycle_170.py` (17): 7871 throughout while 7860 answers; one epoch;
+no rebinding for any runtime; one process under concurrent start and one recovery under concurrent ensure_running (deterministic, real-clock hold); single-flight
 join; stale failure vs newer READY; stale backoff; no premature restart and unchanged recovery after the window;
 READY controls; endpoint agreement; startup failure evidence (PID, exit code, output tail); occupied external
 endpoint never launched over or stopped; removed mechanisms absent. 10 of 13 initial tests failed on the unchanged

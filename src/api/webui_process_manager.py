@@ -378,6 +378,12 @@ class WebUIProcessManager:
         return True
 
     def ensure_running(self) -> bool:
+        """Ensure one healthy owned process (serialized with ``start``: concurrent callers converge on one outcome)."""
+
+        with self._start_lock:
+            return self._ensure_running_locked()
+
+    def _ensure_running_locked(self) -> bool:
         # Note: The orphan monitor thread now handles preventing orphaned processes.
         # We don't need to check SingleInstanceLock here during normal startup,
         # as it would block legitimate WebUI launches during app initialization.
