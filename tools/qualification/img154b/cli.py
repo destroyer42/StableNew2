@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any
 
 from tools.qualification.img154.evidence import LEDGER_STAGES, redact_value
-from tools.qualification.img154.manifest import build_manifest
 from tools.qualification.img154.preflight import PreflightPolicy
 from tools.qualification.img154b import authorization as au
 from tools.qualification.img154b import request as rq
@@ -31,7 +30,7 @@ from tools.qualification.img154b import runtime as rt
 
 
 def _request(args: argparse.Namespace) -> dict[str, Any]:
-    plan = build_manifest()
+    plan = au.manifest_for_case(args.case_id)
     payload = rq.build_txt2img_payload(plan)
     findings = []
     verified: bool | None = None
@@ -48,7 +47,7 @@ def _request(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _layout_plan(args: argparse.Namespace) -> dict[str, Any]:
-    plan = build_manifest()
+    plan = au.manifest_for_case(args.case_id)
     layout = rt.plan_runtime_layout(args.qualification_root, plan)
     return {
         "layout": layout.as_dict(),
@@ -59,11 +58,9 @@ def _layout_plan(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _challenge(args: argparse.Namespace) -> dict[str, Any]:
-    plan = build_manifest()
+    plan = au.manifest_for_case(args.case_id)
     payload = rq.build_txt2img_payload(plan)
-    from tools.qualification.img154 import probes
-
-    code = au.CodeRevision.from_probe(probes.collect_code_revision())
+    code = au.CodeRevision.from_probe(au.harness_revision())
     return {
         "binding": au.binding(plan, payload, code),
         "challenge": au.authorization_challenge(plan, payload, code),
@@ -94,7 +91,7 @@ def _passphrase_verifier(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _dry_run(args: argparse.Namespace) -> dict[str, Any]:
-    plan = build_manifest()
+    plan = au.manifest_for_case(args.case_id)
     payload = rq.build_txt2img_payload(plan)
     policy = PreflightPolicy()
     return {
@@ -154,6 +151,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="derive the salted verifier of an owner passphrase (prompts without echo)",
     )
     for item in sub.choices.values():
+        item.add_argument(
+            "--case-id",
+            default=None,
+            help="explicit owner-authorized case; never resets a consumed ledger",
+        )
         item.add_argument(
             "--out", type=Path, default=None, help="write the redacted JSON report here"
         )

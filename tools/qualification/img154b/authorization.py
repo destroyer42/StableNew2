@@ -17,12 +17,13 @@ import os
 import re
 import secrets
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from tools.qualification.img154.core import Finding, digest, valid_utc
+from tools.qualification.img154.evidence import hash_files
 from tools.qualification.img154.manifest import QualificationManifest, build_manifest
 from tools.qualification.img154b.request import SEMANTICS_REVISION, FrozenPayload
 
@@ -61,6 +62,33 @@ class CodeRevision:
     @classmethod
     def from_probe(cls, info: Mapping[str, Any]) -> CodeRevision:
         return cls(str(info.get("state")), info.get("sha"), info.get("source_sha256"))
+
+
+def manifest_for_case(case_id: str | None = None) -> QualificationManifest:
+    """Select an explicitly authorized case without changing the default or its consumed ledger."""
+
+    plan = build_manifest()
+    if case_id is not None:
+        plan = replace(plan, case_id=case_id)
+    plan.attempt_identity()  # Reject an empty identity before any live operation.
+    return plan
+
+
+def harness_revision() -> dict[str, Any]:
+    """Read the same complete 154A/154B source identity for preparation and execution."""
+
+    from tools.qualification.img154 import probes
+
+    info = dict(probes.collect_code_revision())
+    repo_root = Path(__file__).resolve().parents[3]
+    harness = sorted(Path(__file__).parent.rglob("*.py"))
+    hashes = {
+        str(path.relative_to(repo_root)).replace("\\", "/"): hash_files([path])[path.name]
+        for path in harness
+    }
+    info["source_sha256"] = digest({"img154": info.get("source_hashes", {}), "img154b": hashes})
+    info["harness_hashes"] = hashes
+    return info
 
 
 @dataclass(frozen=True)

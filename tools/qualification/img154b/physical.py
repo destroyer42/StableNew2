@@ -27,11 +27,10 @@ from pathlib import Path
 from typing import Any
 
 from tools.qualification.img154 import probes
-from tools.qualification.img154.core import Finding, Observation, digest
+from tools.qualification.img154.core import Finding, Observation
 from tools.qualification.img154.evidence import (
     DurableJsonlWriter,
     FaultSnapshot,
-    hash_files,
     redact_value,
 )
 from tools.qualification.img154.isolation import QUALIFICATION_PORT, RealFs, validate_isolation
@@ -47,6 +46,8 @@ from tools.qualification.img154b import sampler as sp
 from tools.qualification.img154b.authorization import (
     AuthorizationRecord,
     OwnerAuthorization,
+    harness_revision,
+    manifest_for_case,
     read_authorization_record,
 )
 from tools.qualification.img154b.bundle import EvidenceBundle
@@ -228,20 +229,6 @@ def default_install() -> Path:
     return managed_install_dir(load_manifest())
 
 
-def harness_revision() -> dict[str, Any]:
-    """154A's read-only Git/source identity extended with the 154B sources that actually execute."""
-
-    info = dict(probes.collect_code_revision())
-    harness = sorted(Path(__file__).parent.rglob("*.py"))
-    hashes = {
-        str(path.relative_to(REPO_ROOT)).replace("\\", "/"): hash_files([path])[path.name]
-        for path in harness
-    }
-    info["source_sha256"] = digest({"img154": info.get("source_hashes", {}), "img154b": hashes})
-    info["harness_hashes"] = hashes
-    return info
-
-
 def build_host_readers(
     config: HostConfig,
     payload: FrozenPayload,
@@ -275,7 +262,23 @@ def build_host_readers(
         if config.models_root is not None:
             reserved["model_library"] = str(config.models_root)
         reserved.update({f"reserved_{i}": value for i, value in enumerate(config.reserve)})
-        return validate_isolation(str(config.root), reserved, RealFs(), manifest=plan)
+        findings = validate_isolation(str(config.root), reserved, RealFs(), manifest=plan)
+        proof = proof_box.get("proof")
+        if (
+            proof is not None
+            and proof.verified
+            and set(proof.measurements) == set(plan.assets)
+            and all(measurement is not None for measurement in proof.measurements.values())
+            and not rt.served_unchanged(proof, layout, plan)
+        ):
+            # The structural validator cannot hash existing targets; the complete current served proof does.
+            # Discharge only that provisional finding, retaining every other isolation/alias/path refusal.
+            findings = [
+                finding
+                for finding in findings
+                if finding.code != "ISOLATION_TARGET_EXISTS_UNVERIFIED"
+            ]
+        return findings
 
     def pin() -> list[Finding]:
         marker: dict[str, Any] = {}
@@ -632,6 +635,11 @@ def build_parser() -> argparse.ArgumentParser:
         ("execute", "ONE physical case; refuses unless every activation gate holds"),
     ):
         item = sub.add_parser(name, help=text)
+        item.add_argument(
+            "--case-id",
+            default=None,
+            help="explicit owner-authorized case; never resets a consumed ledger",
+        )
         item.add_argument("--qualification-root", type=Path, default=None)
         item.add_argument("--forge-install", type=Path, default=None)
         item.add_argument("--models-root", type=Path, default=None)
@@ -655,6 +663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         install=args.forge_install or default_install(),
         models_root=args.models_root,
         reserve=tuple(args.reserve),
+        manifest=manifest_for_case(args.case_id),
     )
     if args.command == "preflight":
         packet = run_preflight(config)

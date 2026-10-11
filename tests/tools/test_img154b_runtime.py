@@ -15,6 +15,8 @@ import pytest
 
 from tools.qualification.img154 import isolation as iso
 from tools.qualification.img154 import manifest as mf
+from tools.qualification.img154b import physical as ph
+from tools.qualification.img154b import request as rq
 from tools.qualification.img154b import runtime as rt
 
 CONTENT = {
@@ -61,6 +63,71 @@ def layout(tmp_path, plan):
 def materialized(layout, library, plan):
     rt.materialize_served_files(layout, library, plan)
     rt.write_isolated_config(layout)
+
+
+def host_readers(monkeypatch, tmp_path, plan, library, layout):
+    monkeypatch.setattr(ph.sp, "build_native_providers", lambda _owned_pids: ([], None))
+    config = ph.HostConfig(
+        root=Path(layout.root),
+        install=tmp_path / "forge",
+        models_root=library["transformer"].parent.parent,
+        manifest=plan,
+        record_root=tmp_path / "records",
+    )
+    return ph.build_host_readers(config, rq.build_txt2img_payload(plan))[0]
+
+
+def test_launch_isolation_consumes_complete_current_served_file_proof(
+    monkeypatch, tmp_path, plan, library, layout
+):
+    materialized(layout, library, plan)
+    readers = host_readers(monkeypatch, tmp_path, plan, library, layout)
+    assert [f.code for f in readers.isolation_findings()] == [
+        "ISOLATION_TARGET_EXISTS_UNVERIFIED"
+    ] * 3
+    assert readers.served_proof().verified
+    assert readers.isolation_findings() == []
+
+
+@pytest.mark.parametrize(
+    "problem", ["bad_hash", "changed", "unverifiable", "incomplete", "overlap"]
+)
+def test_launch_isolation_preserves_refusals_and_uncertain_or_stale_proof(
+    monkeypatch, tmp_path, plan, library, layout, problem
+):
+    materialized(layout, library, plan)
+    readers = host_readers(monkeypatch, tmp_path, plan, library, layout)
+    target = Path(layout.served_paths["transformer"])
+    if problem == "bad_hash":
+        target.write_bytes(b"X" * target.stat().st_size)
+    proof = readers.served_proof()
+    if problem == "changed":
+        target.write_bytes(b"Y" * target.stat().st_size)
+        timestamp = target.stat().st_mtime_ns + 1_000_000_000
+        os.utime(target, ns=(timestamp, timestamp))
+    if problem == "unverifiable":
+        monkeypatch.setattr(
+            ph.rt,
+            "served_unchanged",
+            lambda *_args: [ph.Finding("SERVED_RECHECK_UNKNOWN", "refuse", "unavailable")],
+        )
+    if problem == "incomplete":
+        proof.measurements.clear()
+    if problem == "overlap":
+        monkeypatch.setattr(
+            ph,
+            "validate_isolation",
+            lambda *_args, **_kwargs: [
+                ph.Finding("ISOLATION_INSIDE_RESERVED", "refuse", "overlap"),
+                ph.Finding("ISOLATION_TARGET_EXISTS_UNVERIFIED", "inconclusive", "target"),
+            ],
+        )
+        assert proof.verified
+        assert [f.code for f in readers.isolation_findings()] == ["ISOLATION_INSIDE_RESERVED"]
+    else:
+        assert "ISOLATION_TARGET_EXISTS_UNVERIFIED" in [
+            f.code for f in readers.isolation_findings()
+        ]
 
 
 # --- T28: layout ---------------------------------------------------------------------------------------------------------
@@ -318,6 +385,29 @@ def test_t30_the_proof_applies_to_the_served_path_not_to_a_matching_source(plan,
 
 
 # --- T31: launch profile -------------------------------------------------------------------------------------------------
+
+
+def test_retry_launch_resolves_managed_tools_without_activating_parent_env(
+    monkeypatch, tmp_path, layout
+):
+    monkeypatch.setenv("PATH", "operator-path")
+    install = str(tmp_path / "forge-install")
+    profile = rt.build_isolated_launch_profile(layout, install, contract=CONTRACT)
+    scripts = os.path.join(install, "venv", "Scripts")
+    assert profile.env_overrides["PATH"] == scripts + os.pathsep + "operator-path"
+    assert profile.env_overrides["VIRTUAL_ENV"] == os.path.join(install, "venv")
+    assert profile.env_overrides["UV_PYTHON"] == profile.command[0]
+    assert os.environ["PATH"] == "operator-path"
+    assert not Path(scripts).exists()
+    for key in ("PATH", "VIRTUAL_ENV", "UV_PYTHON"):
+        changed = dict(profile.env_overrides, **{key: "foreign-environment"})
+        assert "LAUNCH_ENV_MANAGED_VENV" in {
+            finding.code
+            for finding in rt.validate_launch(
+                replace(profile, env_overrides=changed), layout, install
+            )
+        }
+
 
 CONTRACT = {
     "launch_policy": {

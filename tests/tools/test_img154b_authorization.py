@@ -26,6 +26,115 @@ SALT = "00112233445566778899aabbccddeeff"
 ITERATIONS = 100_000
 
 
+def test_explicit_retry_case_binds_both_commands_and_rejects_prior_authorization(
+    monkeypatch, capsys, tmp_path
+):
+    case_id = "img154-zimage-turbo-owner-case-2"
+    original = mf.build_manifest()
+    retry = au.manifest_for_case(case_id)
+    assert au.manifest_for_case() == original
+    assert retry == replace(original, case_id=case_id)
+    assert retry.attempt_identity() != original.attempt_identity()
+    assert rq.build_txt2img_payload(retry) == rq.build_txt2img_payload(original)
+    monkeypatch.setattr(
+        au,
+        "harness_revision",
+        lambda: {"state": "clean", "sha": CODE.sha, "source_sha256": CODE.source_sha256},
+    )
+    assert cli.main(["challenge", "--case-id", case_id]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["binding"] == au.binding(retry, rq.build_txt2img_payload(retry), CODE)
+    captured = []
+
+    def preflight(config):
+        captured.append(config.manifest)
+        return {"prepared": False}
+
+    monkeypatch.setattr(ph, "run_preflight", preflight)
+    assert (
+        ph.main(
+            [
+                "preflight",
+                "--case-id",
+                case_id,
+                "--forge-install",
+                str(tmp_path),
+                "--qualification-root",
+                str(tmp_path / "isolated"),
+            ]
+        )
+        == 1
+    )
+    assert captured == [retry]
+    prior = record(original, rq.build_txt2img_payload(original))
+    findings = au.verify_authorization(
+        au.parse_authorization(prior),
+        manifest=retry,
+        payload=rq.build_txt2img_payload(retry),
+        code=CODE,
+        now_utc=NOW,
+    )
+    assert "AUTHORIZATION_CASE_MISMATCH" in {finding.code for finding in findings}
+    with pytest.raises(ValueError):
+        au.manifest_for_case(" ")
+
+
+@pytest.mark.parametrize("state", ["clean", "dirty", "unverifiable"])
+def test_launch_challenge_matches_the_executed_harness_binding(
+    monkeypatch, capsys, plan, payload, state
+):
+    monkeypatch.setattr(
+        ph.probes,
+        "collect_code_revision",
+        lambda: {
+            "state": state,
+            "sha": "a" * 40,
+            "source_sha256": "b" * 64,
+            "source_hashes": {"tools/qualification/img154/probes.py": "c" * 64},
+        },
+    )
+    expected_code = au.CodeRevision.from_probe(ph.harness_revision())
+    assert cli.main(["challenge"]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["binding"] == au.binding(plan, payload, expected_code)
+    assert output["challenge"] == au.authorization_challenge(plan, payload, expected_code)
+    assert output["code_trusted"] is expected_code.trusted
+    assert output["writes_authorization"] is False
+    auth = au.parse_authorization(
+        record(plan, payload, **output["binding"], challenge=output["challenge"])
+    )
+    findings = au.verify_authorization(
+        auth, manifest=plan, payload=payload, code=expected_code, now_utc=NOW
+    )
+    assert bool(findings) is (state != "clean")
+
+
+@pytest.mark.parametrize("changed_package", ["img154", "img154b"])
+def test_launch_binding_covers_changes_in_both_qualification_packages(
+    monkeypatch, tmp_path, changed_package
+):
+    package = tmp_path / "tools" / "qualification" / "img154b"
+    package.mkdir(parents=True)
+    source = package / "authorization.py"
+    source.write_text("# original synthetic harness source\n", encoding="utf-8")
+    monkeypatch.setattr(au, "__file__", str(source))
+    legacy = {
+        "state": "clean",
+        "sha": "a" * 40,
+        "source_sha256": "b" * 64,
+        "source_hashes": {"tools/qualification/img154/probes.py": "c" * 64},
+    }
+    monkeypatch.setattr(ph.probes, "collect_code_revision", lambda: legacy)
+    before = au.harness_revision()
+    if changed_package == "img154":
+        legacy["source_hashes"]["tools/qualification/img154/probes.py"] = "d" * 64
+    else:
+        source.write_text("# changed synthetic harness source\n", encoding="utf-8")
+    after = au.harness_revision()
+    assert before["source_sha256"] != after["source_sha256"]
+    assert before["sha"] == after["sha"]
+
+
 @pytest.fixture(scope="module")
 def plan():
     return mf.build_manifest()
