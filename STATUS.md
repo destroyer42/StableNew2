@@ -4,6 +4,15 @@ Updated: 2026-10-10
 
 ## Repository
 
+- Z-Image canonical acceptance preparation (PR-IMG-MODELS-156, local implementation validated):
+  a one-NJR dry-run packet and separately owner-authorized managed acceptance tool reuse the
+  production compiler/JobService/SQLite/queue/runner/Forge/artifact path. Generation,
+  integration, resource/fault coverage and immediate cleanup have separate verdicts;
+  ambiguity never authorizes replay. Focused tests, the final local PR gate and independent
+  aggregate/security review pass; one older affected fake-runtime test remains blocked by
+  an existing Forge process tree. No physical attempt or publication is authorized.
+  See `docs/Subsystems/Image/PR-IMG-MODELS-156_ZImage_Canonical_Production_Acceptance.md`.
+
 - Z-Image-Turbo FP8 exact-bundle Forge enablement (PR-IMG-MODELS-155, local validation complete / ready for publication review):
   immutable `z_image_turbo_fp8_scaled@v1` through the existing compiler/NJR/JobService/SQLite/runner/Forge/artifact path;
   one 1024x1024 txt2img image, Euler/Beta/9 steps/CFG 1/`distilled_cfg_scale` 9, natural-language positive prompt and seed.
