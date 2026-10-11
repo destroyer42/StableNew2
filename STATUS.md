@@ -4,6 +4,15 @@ Updated: 2026-10-11
 
 ## Repository
 
+- Managed WebUI endpoint and lifecycle consistency (PR-RUNTIME-WEBUI-170, locally validated): the configured
+  runtime endpoint is authoritative; the connection controller no longer scans or adopts alternate ports (nor
+  does the process manager for A1111), connection attempts are single-flight, owned launches are serialized,
+  Launch/Retry no longer restart a process still inside its startup window, a stale failure cannot override a
+  newer readiness epoch, stale probe backoff no longer defeats an explicit attempt, and READY disables
+  Launch/Retry. READY still means "API responsive" while dispatch keeps the strict gate (documented follow-up).
+  Queue outage containment remains PR-QUEUE-WEBUI-171; no physical validation. See
+  `docs/Subsystems/Runtime/PR-RUNTIME-WEBUI-170_Managed_WebUI_Endpoint_and_Lifecycle_Consistency.md`.
+
 - Model Comparison global-positive parity (PR-IMG-MODELS-160, locally validated): an enabled shared global
   positive now reaches every eligible arm exactly once. Each arm is prepared independently and the canonical
   model policy's result decides ownership: where the executor still applies the frozen terms (SDXL) it keeps

@@ -1,23 +1,25 @@
 from unittest import mock
 
+from src.api.healthcheck import WebUIHealthCheckTimeout
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
     WebUIConnectionState,
 )
 
 
-def make_controller(monkeypatch, results, *, detected_url=None):
-    """Build a controller whose readiness, autostart, sleep and autodiscovery are all faked.
+def make_controller(monkeypatch, results):
+    """Build a controller whose readiness, autostart and sleep are faked.
 
-    ``find_webui_port`` scans real loopback ports, so it is replaced by a recording fake;
-    ``controller.autodiscovery_calls`` shows whether the controller reached that stage.
+    ``wait_for_webui_ready`` returns True or raises (it never returns False), so a ``False`` outcome raises the
+    timeout it would raise; an exhausted script keeps failing. ``calls`` records every probed URL.
     """
     calls = []
-    autodiscovery_calls = []
 
     def fake_wait(url, timeout=0, poll_interval=0):
         calls.append((url, timeout))
-        outcome = results.pop(0)
+        outcome = results.pop(0) if results else False
+        if outcome is False:
+            raise WebUIHealthCheckTimeout("not ready")
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
@@ -27,6 +29,8 @@ def make_controller(monkeypatch, results, *, detected_url=None):
     )
     fake_pm = mock.Mock()
     fake_pm.return_value.start.return_value = True
+    fake_pm.return_value.exit_diagnostics.return_value = None  # the owned process is still alive
+    fake_pm.return_value.startup_timeout_seconds = 0.05
     monkeypatch.setattr("src.controller.webui_connection_controller.WebUIProcessManager", fake_pm)
     monkeypatch.setattr(
         "src.controller.webui_connection_controller.build_default_webui_process_config",
@@ -40,14 +44,7 @@ def make_controller(monkeypatch, results, *, detected_url=None):
         "src.controller.webui_connection_controller.time.sleep", lambda *args, **kwargs: None
     )
 
-    def fake_find_webui_port(*args, **kwargs):
-        autodiscovery_calls.append((args, kwargs))
-        return detected_url
-
-    # ensure_connected imports find_webui_port from the healthcheck module at call time.
-    monkeypatch.setattr("src.api.healthcheck.find_webui_port", fake_find_webui_port)
     ctrl = WebUIConnectionController(base_url_provider=lambda: "http://x")
-    ctrl.autodiscovery_calls = autodiscovery_calls
     return ctrl, calls, fake_pm
 
 
@@ -72,35 +69,27 @@ def test_ensure_connected_timeout_sets_error(monkeypatch):
     state = ctrl.ensure_connected(autostart=True)
     assert state == WebUIConnectionState.ERROR
     pm.assert_called_once()  # managed start was attempted after the initial probe failed
-    assert len(calls) >= 2  # initial probe plus at least one configured retry
-    assert len(ctrl.autodiscovery_calls) == 1  # discovery ran (faked) and found nothing
+    assert len(calls) >= 2  # initial probe plus the bounded owned-startup wait
+    assert {url for url, _ in calls} == {"http://x"}  # only the configured endpoint was ever probed
     snapshot = ctrl.get_last_connection_timing_snapshot()
     assert snapshot is not None
     assert snapshot["state"] == WebUIConnectionState.ERROR.value
     assert snapshot["autostart_invoked"] is True
-    assert snapshot["retry_attempts_used"] >= 1
     assert "detected_url" not in snapshot
     assert ctrl.get_base_url() == "http://x"
 
 
-def test_ensure_connected_uses_alternate_endpoint_found_by_autodiscovery(monkeypatch):
-    # fast probe and every configured retry fail; the alternate endpoint is then ready
-    retry_count = 2
-    monkeypatch.setattr(
-        "src.controller.webui_connection_controller.app_config.get_webui_health_retry_count",
-        lambda: retry_count,
-    )
-    ctrl, calls, pm = make_controller(
-        monkeypatch,
-        [False] * (1 + retry_count) + [True],
-        detected_url="http://x:7861",
-    )
+def test_alternate_port_answering_is_never_probed_or_adopted(monkeypatch):
+    """Another WebUI answering elsewhere (for example 7860) must not redirect the configured runtime."""
+    from src.api import healthcheck
+
+    probed = []
+    real = healthcheck.wait_for_webui_ready
+    assert callable(real)
+    ctrl, calls, pm = make_controller(monkeypatch, [])
     state = ctrl.ensure_connected(autostart=True)
-    assert state == WebUIConnectionState.READY
-    assert len(ctrl.autodiscovery_calls) == 1
-    assert calls[-1][0] == "http://x:7861"
-    assert ctrl.get_base_url() == "http://x:7861"
-    snapshot = ctrl.get_last_connection_timing_snapshot()
-    assert snapshot is not None
-    assert snapshot["state"] == WebUIConnectionState.READY.value
-    assert snapshot["detected_url"] == "http://x:7861"
+    probed.extend(url for url, _ in calls)
+    assert state == WebUIConnectionState.ERROR
+    assert set(probed) == {"http://x"}
+    assert ctrl.get_base_url() == "http://x"
+    assert not hasattr(healthcheck, "find_webui_port")

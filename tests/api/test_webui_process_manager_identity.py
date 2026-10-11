@@ -65,10 +65,12 @@ def test_a_failed_forge_health_check_never_scans_for_or_adopts_another_webui(mon
         raise RuntimeError("not ready")
 
     monkeypatch.setattr(healthcheck, "wait_for_webui_ready", _never_ready)
-    monkeypatch.setattr(
-        manager_module, "discover_webui_port", lambda *a, **k: (_ for _ in ()).throw(AssertionError("scanned"))
-    )
-    config = WebUIProcessConfig(command=["launch"], runtime_identity="forge_webui", base_url="http://127.0.0.1:7871")
+    assert not hasattr(manager_module, "discover_webui_port")  # no port scan exists to be called
+    for identity, url in (
+        ("forge_webui", "http://127.0.0.1:7871"),
+        ("a1111_webui", "http://127.0.0.1:7860"),
+    ):
+        config = WebUIProcessConfig(command=["launch"], runtime_identity=identity, base_url=url)
 
-    assert WebUIProcessManager(config).check_health() is False
-    assert config.base_url == "http://127.0.0.1:7871"  # never rebound to a discovered port
+        assert WebUIProcessManager(config).check_health() is False
+        assert config.base_url == url  # never rebound to a discovered port
