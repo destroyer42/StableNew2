@@ -261,7 +261,23 @@ def build_host_readers(
         if config.models_root is not None:
             reserved["model_library"] = str(config.models_root)
         reserved.update({f"reserved_{i}": value for i, value in enumerate(config.reserve)})
-        return validate_isolation(str(config.root), reserved, RealFs(), manifest=plan)
+        findings = validate_isolation(str(config.root), reserved, RealFs(), manifest=plan)
+        proof = proof_box.get("proof")
+        if (
+            proof is not None
+            and proof.verified
+            and set(proof.measurements) == set(plan.assets)
+            and all(measurement is not None for measurement in proof.measurements.values())
+            and not rt.served_unchanged(proof, layout, plan)
+        ):
+            # The structural validator cannot hash existing targets; the complete current served proof does.
+            # Discharge only that provisional finding, retaining every other isolation/alias/path refusal.
+            findings = [
+                finding
+                for finding in findings
+                if finding.code != "ISOLATION_TARGET_EXISTS_UNVERIFIED"
+            ]
+        return findings
 
     def pin() -> list[Finding]:
         marker: dict[str, Any] = {}
