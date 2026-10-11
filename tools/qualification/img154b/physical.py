@@ -27,11 +27,10 @@ from pathlib import Path
 from typing import Any
 
 from tools.qualification.img154 import probes
-from tools.qualification.img154.core import Finding, Observation, digest
+from tools.qualification.img154.core import Finding, Observation
 from tools.qualification.img154.evidence import (
     DurableJsonlWriter,
     FaultSnapshot,
-    hash_files,
     redact_value,
 )
 from tools.qualification.img154.isolation import QUALIFICATION_PORT, RealFs, validate_isolation
@@ -47,6 +46,7 @@ from tools.qualification.img154b import sampler as sp
 from tools.qualification.img154b.authorization import (
     AuthorizationRecord,
     OwnerAuthorization,
+    harness_revision,
     read_authorization_record,
 )
 from tools.qualification.img154b.bundle import EvidenceBundle
@@ -226,20 +226,6 @@ def default_install() -> Path:
     from src.utils.managed_forge_runtime import load_manifest, managed_install_dir
 
     return managed_install_dir(load_manifest())
-
-
-def harness_revision() -> dict[str, Any]:
-    """154A's read-only Git/source identity extended with the 154B sources that actually execute."""
-
-    info = dict(probes.collect_code_revision())
-    harness = sorted(Path(__file__).parent.rglob("*.py"))
-    hashes = {
-        str(path.relative_to(REPO_ROOT)).replace("\\", "/"): hash_files([path])[path.name]
-        for path in harness
-    }
-    info["source_sha256"] = digest({"img154": info.get("source_hashes", {}), "img154b": hashes})
-    info["harness_hashes"] = hashes
-    return info
 
 
 def build_host_readers(

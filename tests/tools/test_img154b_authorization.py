@@ -26,6 +26,62 @@ SALT = "00112233445566778899aabbccddeeff"
 ITERATIONS = 100_000
 
 
+@pytest.mark.parametrize("state", ["clean", "dirty", "unverifiable"])
+def test_launch_challenge_matches_the_executed_harness_binding(
+    monkeypatch, capsys, plan, payload, state
+):
+    monkeypatch.setattr(
+        ph.probes,
+        "collect_code_revision",
+        lambda: {
+            "state": state,
+            "sha": "a" * 40,
+            "source_sha256": "b" * 64,
+            "source_hashes": {"tools/qualification/img154/probes.py": "c" * 64},
+        },
+    )
+    expected_code = au.CodeRevision.from_probe(ph.harness_revision())
+    assert cli.main(["challenge"]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["binding"] == au.binding(plan, payload, expected_code)
+    assert output["challenge"] == au.authorization_challenge(plan, payload, expected_code)
+    assert output["code_trusted"] is expected_code.trusted
+    assert output["writes_authorization"] is False
+    auth = au.parse_authorization(
+        record(plan, payload, **output["binding"], challenge=output["challenge"])
+    )
+    findings = au.verify_authorization(
+        auth, manifest=plan, payload=payload, code=expected_code, now_utc=NOW
+    )
+    assert bool(findings) is (state != "clean")
+
+
+@pytest.mark.parametrize("changed_package", ["img154", "img154b"])
+def test_launch_binding_covers_changes_in_both_qualification_packages(
+    monkeypatch, tmp_path, changed_package
+):
+    package = tmp_path / "tools" / "qualification" / "img154b"
+    package.mkdir(parents=True)
+    source = package / "authorization.py"
+    source.write_text("# original synthetic harness source\n", encoding="utf-8")
+    monkeypatch.setattr(au, "__file__", str(source))
+    legacy = {
+        "state": "clean",
+        "sha": "a" * 40,
+        "source_sha256": "b" * 64,
+        "source_hashes": {"tools/qualification/img154/probes.py": "c" * 64},
+    }
+    monkeypatch.setattr(ph.probes, "collect_code_revision", lambda: legacy)
+    before = au.harness_revision()
+    if changed_package == "img154":
+        legacy["source_hashes"]["tools/qualification/img154/probes.py"] = "d" * 64
+    else:
+        source.write_text("# changed synthetic harness source\n", encoding="utf-8")
+    after = au.harness_revision()
+    assert before["source_sha256"] != after["source_sha256"]
+    assert before["sha"] == after["sha"]
+
+
 @pytest.fixture(scope="module")
 def plan():
     return mf.build_manifest()

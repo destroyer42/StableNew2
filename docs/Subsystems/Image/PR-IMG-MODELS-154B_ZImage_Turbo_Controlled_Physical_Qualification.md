@@ -89,6 +89,8 @@ labels), `report.py` (one residual-risk text and one checklist line).
   read without echo and never stored or logged**, and the refusal under a test runner. A script that can write the record and
   drive a console still cannot start the run without the passphrase; the owner must not share it with automation.
 * **Trusted code revision**: a clean checkout with an identified SHA; the source hash covers `img154` and `img154b`.
+  `cli challenge` and the physical preflight/execute path use the same read-only source-identity helper, so the owner record
+  binds both packages. Generate the challenge after the final correction commit; an older SHA/source binding is refused.
 * **Fresh, independently validated baselines**: a window of at least 20 samples over at least 20 s, ending within 60 s, taken
   by the harness's own sampler, bound to the NVML device digest and the boot identity of the launch reading, dedicated VRAM
   spread at most 128 MiB, shared memory spread at most 128 MiB, GPU utilization at most 15%, no model runtime present at the

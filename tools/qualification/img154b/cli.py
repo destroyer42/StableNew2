@@ -61,9 +61,7 @@ def _layout_plan(args: argparse.Namespace) -> dict[str, Any]:
 def _challenge(args: argparse.Namespace) -> dict[str, Any]:
     plan = build_manifest()
     payload = rq.build_txt2img_payload(plan)
-    from tools.qualification.img154 import probes
-
-    code = au.CodeRevision.from_probe(probes.collect_code_revision())
+    code = au.CodeRevision.from_probe(au.harness_revision())
     return {
         "binding": au.binding(plan, payload, code),
         "challenge": au.authorization_challenge(plan, payload, code),
