@@ -3506,10 +3506,9 @@ class LearningController:
         job_service = self._get_job_service()
         if job_service is None or not hasattr(job_service, "submit_njrs"):
             raise RuntimeError("Job service is not available for staged-curation advancement")
-        from src.controller.submission_policy_v26 import SubmissionPolicy
+        from src.controller.reprocess_admission import submit_reprocess_njrs
 
-        job_ids = job_service.submit_njrs(plan.jobs, SubmissionPolicy())
-        return len(job_ids)
+        return submit_reprocess_njrs(job_service, list(plan.jobs))
 
     def build_staged_curation_review_handoff(
         self,

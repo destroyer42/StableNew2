@@ -12,8 +12,11 @@ from PIL import Image
 
 from src.curation.curation_manifest import build_review_chunk_lineage_block
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
-from src.image_backends.forge_klein_profile import KLEIN_EDIT_METADATA_KEY
-from src.image_backends.model_policy import resolve_model_policy
+from src.image_backends.operation_compatibility import (
+    OperationAssessment,
+    OperationNotSupportedError,
+    assess_njr,
+)
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
 from src.utils.image_metadata import (
@@ -31,6 +34,8 @@ class ReviewBatchItem:
     metadata_source: str = "fallback"
     error: str | None = None
     fingerprint: tuple[int, int] | None = None
+    source_sha256: str | None = None
+    assessment: OperationAssessment | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,9 @@ class ReviewBatchPreview:
 
     def require_queueable(self) -> None:
         if self.blocked:
+            for item in self.blocked:
+                if item.assessment is not None:
+                    raise OperationNotSupportedError(item.assessment)
             raise ValueError("Nothing queued. Blocked sources:\n" + "\n".join(
                 f"{item.path}: {item.error}" for item in self.blocked
             ))
@@ -56,6 +64,16 @@ class ReviewBatchPreview:
             stat = Path(item.path).stat()
             if (stat.st_size, stat.st_mtime_ns) != item.fingerprint:
                 raise ValueError(f"Source changed; preview again: {item.path}")
+            if _source_sha256(Path(item.path)) != item.source_sha256:
+                raise ValueError(f"Source content changed; preview again: {item.path}")
+
+
+def _source_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def prepare_review_batch(
@@ -93,6 +111,7 @@ def prepare_review_batch(
             if not path.is_file():
                 raise ValueError("Input image not found")
             before = path.stat()
+            source_sha256 = _source_sha256(path)
             with Image.open(path) as image:
                 image.load()
             baseline = controller._extract_reprocess_baseline_from_image(path)
@@ -108,12 +127,8 @@ def prepare_review_batch(
             if isinstance(source_meta, dict):
                 metadata.update(source_meta)
             kv = read_image_metadata(path)
-            digest = hashlib.sha256()
-            with path.open("rb") as stream:
-                for block in iter(lambda: stream.read(1024 * 1024), b""):
-                    digest.update(block)
             metadata.update(source_job_id=kv.get(ImageMetadataContractV26.KEY_JOB_ID) or baseline.get("job_id") or metadata.get("source_job_id"),
-                            source_artifact_id=f"sha256:{digest.hexdigest()}",
+                            source_artifact_id=f"sha256:{source_sha256}",
                             source_path=str(path.resolve()))
             source = ReprocessSourceItem(
                 input_image_path=str(path), prompt=prompt, negative_prompt=negative,
@@ -126,19 +141,20 @@ def prepare_review_batch(
             )
             record = plan.jobs[0]
             model = record.base_model
-            policy = resolve_model_policy(model)
-            explicit_edit = bool(metadata.get(KLEIN_EDIT_METADATA_KEY))
-            if set(stages) - set(policy.stages) and not explicit_edit:
-                raise ValueError(f"{policy.display_name}: unsupported target stages {', '.join(stages)}")
+            assessment = assess_njr(record)
+            if not assessment.ready:
+                raise OperationNotSupportedError(assessment)
             after = path.stat()
             fingerprint = (after.st_size, after.st_mtime_ns)
-            if fingerprint != (before.st_size, before.st_mtime_ns):
+            if fingerprint != (before.st_size, before.st_mtime_ns) or _source_sha256(path) != source_sha256:
                 raise ValueError("Source changed while preparing; preview again")
             sources.append(source)
             jobs.extend(plan.jobs)
-            rows.append(ReviewBatchItem(str(path), model, prompt, origin, fingerprint=fingerprint))
+            rows.append(ReviewBatchItem(str(path), model, prompt, origin,
+                                       fingerprint=fingerprint, source_sha256=source_sha256))
         except (ValueError, OSError, TypeError) as exc:
-            rows.append(ReviewBatchItem(str(path), model, prompt, origin, error=str(exc)))
+            rows.append(ReviewBatchItem(str(path), model, prompt, origin, error=str(exc),
+                                       assessment=exc.assessment if isinstance(exc, OperationNotSupportedError) else None))
 
     # Preserve explicitly requested legacy compatible multi-source jobs. Default remains one job per source.
     if batch_size > 1 and sources:

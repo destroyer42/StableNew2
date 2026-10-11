@@ -21,6 +21,7 @@ from src.image_backends.forge_zimage_profile import (
     ZImageProfileError,
     is_zimage_transformer_name,
     validate_zimage_config,
+    validate_zimage_njr,
 )
 
 ExactModelProfile = KleinProfile | ZImageProfile
@@ -38,6 +39,30 @@ def resolve_model_profile(options: Any) -> ExactModelProfile | None:
             raise ZImageProfileError("Unsupported Z-Image profile reference; only immutable v1 is supported")
         return ZIMAGE_PROFILE_V1
     return resolve_klein(options)
+
+
+def validate_profile_njr(njr: Any) -> None:
+    """The pure exact-profile NJR admission check the NJR builders already apply (a no-op for every other model).
+
+    Callers that freeze work outside those builders (Learning's Model Comparison arms) reuse it so a refusal surfaces
+    before JobService admission. Klein's NJR validation needs live backend evidence and stays with the backend.
+    """
+    validate_zimage_njr(njr)
+
+
+def profile_prompt_refusal(profile: ExactModelProfile | None, text: str) -> str | None:
+    """The exact profile's own refusal of one *executable* positive prompt, or ``None``.
+
+    Reuses the profile validator the compiler applies (never a second parser). Only Z-Image validates prompt text
+    purely; Klein's inline-token decisions need LoRA evidence and stay with the compiler/backend.
+    """
+    if not isinstance(profile, ZImageProfile):
+        return None
+    try:
+        validate_zimage_config({}, prompt=text)
+    except ZImageProfileError as exc:
+        return str(exc)
+    return None
 
 
 def validate_profile_intent(profile: ExactModelProfile, **intent: Any) -> str:

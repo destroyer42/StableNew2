@@ -9,10 +9,35 @@ Updated: 2026-10-11
   and shared edits. A transient preflight now exposes every source's frozen settings
   and blocked items before canonical admission, supports explicit exclusion/re-preview
   and optional stable checkpoint/profile order within only the new batch, and freezes
-  shared batch/source lineage in existing NJR metadata. Queue/history, backend support
+  shared batch/source lineage in existing NJR metadata. Whole-selection readiness
+  and final admission reuse merged IMG-158's operation assessment; source hashes are
+  verified again before submission, including same-size/same-mtime modifications,
+  through the existing background coordinator. Queue/history, backend support
   and runtime authorities are unchanged. Multi-source Video Workflow is the next
   recommended batch priority; cross-checkpoint retargeting remains deferred. See
   `docs/Subsystems/GUI/PR-REVIEW-BATCH-200_Evidence_and_Preflight.md`.
+
+- Cross-workflow model compatibility and preflight (PR-IMG-MODELS-158, integrated as PR #88;
+  hosted required and affected CI green):
+  one pure read-only operation assessment over the canonical `ModelPolicy`
+  (`src/image_backends/operation_compatibility.py`) now fronts Review/reprocess admission
+  (`src/controller/reprocess_admission.py`: the whole batch is assessed before the single
+  `JobService.submit_njrs` call, so Z-Image img2img/ADetailer/upscale/multi-image reprocess and
+  an unrequested Klein img2img are refused before queueing; explicit Klein single-reference edit
+  and ordinary SDXL reprocess are unchanged), the Review effective-settings `Readiness:` line,
+  and the PromptPack editor's Validate (in-memory pack, structure and target readiness reported
+  separately, never "ready"; the former check read a key native packs do not have and the older
+  on-disk file). Model Comparison arms are prepared independently from the shared baseline
+  (the exact profile's own sampling/VAE/optimizer/global terms replace carried-over baseline
+  values; geometry, sample count, seed policy, stages and optional features are never altered,
+  so a genuine conflict fails the whole study at Preview with an arm-labelled message after a
+  dry run of every arm through the Run materialization boundary). Ordinary Z-Image Learning was
+  verified to expose no unsupported controls (tests only). Backend validation remains the
+  independent final authority; no queue, runner, backend, SQLite, NJR identity or replay change;
+  `app_controller.py` shrank 4 lines (ratchet lowered). Staged-curation advancement shares the same admission boundary. An exact compile preview of unsaved
+  editor state was not built (it would duplicate controller-owned configuration); execution
+  readiness remains Preview's answer. No physical generation. See
+  `docs/Subsystems/Image/PR-IMG-MODELS-158_Cross_Workflow_Model_Compatibility.md`.
 
 - Preview draft recovery (PR-GUI-112, locally validated): Clear Draft remains
   available for rejected/draft-only previews, compiler errors are actionable,

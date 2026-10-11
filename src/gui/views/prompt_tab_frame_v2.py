@@ -25,6 +25,7 @@ from src.controller.content_visibility_resolver import (
 )
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.layout_v2 import configure_grid_columns
+from src.gui.models.prompt_pack_model import render_prompt_slot_text
 from src.gui.prompt_adaptation_dialog import PromptAdaptationDialog
 from src.gui.prompt_target_presenter import NO_TARGET_LABEL, PromptTargetPresenter
 from src.gui.prompt_workspace_state import PromptWorkspaceState
@@ -44,6 +45,9 @@ from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
+from src.image_backends.image_backend_types import configured_image_backend_id
+from src.image_backends.model_policy import resolve_model_policy
+from src.prompting.pack_target_readiness import assess_pack_readiness
 from src.prompting.prompt_adaptation import PromptAdaptationInput, adapt_prompt_for_target
 from src.prompting.prompt_compatibility import (
     PromptStateSnapshot,
@@ -53,7 +57,6 @@ from src.prompting.prompt_compatibility import (
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.promptpacks.paths import resolve_prompt_pack_dir
-from src.promptpacks.storage import load_prompt_pack_document
 from src.training.style_lora_manager import ResolvedStyleLoRA, StyleLoRAManager
 from src.utils.config import ConfigManager
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
@@ -1649,58 +1652,40 @@ class PromptTabFrame(ttk.Frame):
             messagebox.showerror("Delete Pack", f"Failed to delete pack:\\n{str(e)}")
 
     def _on_validate_pack(self) -> None:
-        """Validate the selected pack for errors."""
+        """Report structure and target readiness separately, from the editor's in-memory pack (read-only)."""
         selection = self.pack_listbox.curselection()
-        if not selection:
+        json_path = None
+        if selection:
+            json_path = self._packs_dir / f"{self.pack_listbox.get(selection[0])}.json"
+        elif self.workspace_state.current_pack is None:
             messagebox.showinfo("Validate Pack", "Please select a pack to validate.")
             return
-
-        pack_name = self.pack_listbox.get(selection[0])
-
-        json_path = self._packs_dir / f"{pack_name}.json"
-
-        errors = []
-        warnings = []
-
-        if not json_path.exists():
-            errors.append(f"PromptPack JSON not found: {json_path}")
-
         try:
-            if json_path.exists():
-                json_data = load_prompt_pack_document(json_path)
+            pack, dirty = self.workspace_state.pack_for_validation(json_path)
+            readiness = self._assess_pack_readiness(pack, dirty)
+        except Exception as exc:
+            messagebox.showerror("Validation Error", f"Failed to validate pack: {exc}")
+            return
+        text = chr(10).join((f"Pack: {getattr(pack, 'name', '') or '(unnamed)'}", *readiness.lines()))
+        if not readiness.structure.valid:
+            messagebox.showerror("Validation Failed", text)
+        elif readiness.refusals or readiness.structure.warnings:
+            messagebox.showwarning("Validation: target refusals or warnings", text)
+        else:
+            messagebox.showinfo("Structure valid", text)
 
-                # Check matrix configuration
-                matrix_config = json_data.get("matrix_config", {})
-                if matrix_config.get("enabled"):
-                    slots = matrix_config.get("slots", [])
-                    if not slots:
-                        warnings.append("Matrix enabled but no slots defined")
-                    else:
-                        for slot in slots:
-                            if not slot.get("name"):
-                                errors.append("Matrix slot missing name")
-                            if not slot.get("values"):
-                                warnings.append(
-                                    f"Matrix slot '{slot.get('name', '?')}' has no values"
-                                )
-
-            # Display results
-            if errors:
-                result_msg = "❌ ERRORS FOUND:\\n\\n" + "\\n".join(f"• {e}" for e in errors)
-                if warnings:
-                    result_msg += "\\n\\n⚠️ WARNINGS:\\n\\n" + "\\n".join(f"• {w}" for w in warnings)
-                messagebox.showerror("Validation Failed", result_msg)
-            elif warnings:
-                result_msg = "⚠️ WARNINGS:\\n\\n" + "\\n".join(f"• {w}" for w in warnings)
-                messagebox.showwarning("Validation Warnings", result_msg)
-            else:
-                messagebox.showinfo(
-                    "Validation Passed",
-                    f"✓ Pack '{pack_name}' is valid!\\n\\nNo errors or warnings found.",
-                )
-
-        except Exception as e:
-            messagebox.showerror("Validation Error", f"Failed to validate pack:\\n{str(e)}")
+    def _assess_pack_readiness(self, pack, dirty: bool):
+        projection = self._model_projection
+        policy = projection.policy if projection is not None else resolve_model_policy(None)
+        return assess_pack_readiness(
+            pack,
+            policy,
+            model_name=projection.model_name if projection is not None else None,
+            backend_id=configured_image_backend_id(),
+            dirty=dirty,
+            render_text=render_prompt_slot_text,
+            lora_resolver=self._target_resolver(),
+        )
 
     def apply_prompt_text(self, prompt: str) -> None:
         text = prompt or ""

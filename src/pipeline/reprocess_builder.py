@@ -115,6 +115,9 @@ class ReprocessEffectiveSettingsPreview:
     metadata_source_label: str = "source artifact metadata"
     fallback_source_label: str = "stage baseline"
     default_source_label: str = "built-in defaults"
+    #: The checkpoint the job would actually carry: the artifact's own recorded model, else the merged baseline's (the
+    #: same precedence submission uses). It is never a replacement inferred by this preview.
+    effective_model: str | None = None
 
 
 class ReprocessJobBuilder:
@@ -590,7 +593,11 @@ class ReprocessJobBuilder:
                 )
             )
 
+        effective_model = str(
+            source_model or merged_config.get("model") or merged_config.get("model_name") or ""
+        ).strip()
         return ReprocessEffectiveSettingsPreview(
+            effective_model=effective_model or None,
             source_stage=str(source_stage or "unknown"),
             source_model=str(source_model).strip() if source_model else None,
             source_vae=str(source_vae).strip() if source_vae else None,

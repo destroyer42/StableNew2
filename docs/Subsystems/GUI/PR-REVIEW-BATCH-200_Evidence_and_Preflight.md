@@ -12,7 +12,10 @@ model cost or success-rate comparison is claimed.
 
 Controller surface assessment: AppController delegates compilation to
 `review_batch_service.py` and presentation to `review_batch_dialog.py`.
-Its physical-line ratchet falls from 7,678 to 7,611. The existing builder,
+The initial package shrank the controller from 7,678 to 7,611 lines. After
+integration with merged IMG-158, its ratchet is 7,615 versus updated main's
+7,674; the added async admission wrapper reuses the existing coordinator and
+the same synchronous admission method. The existing builder,
 JobService, SQLite repository, queue, runner and backend authorities are retained.
 There is no second lifecycle, runner, process manager or submission route.
 
@@ -62,7 +65,7 @@ in this implementation.
 |---|---|---|
 | 10–25-source admission, one job/source, shared edits: already supported | `review_tab_frame_v2.py:1641,1649,1706`; `app_controller.py:1884,1923,1973`; `reprocess_builder.py:983,1033,1059` | 10/25/40 admitted with exact mapping. Retain builder and append/replace/modify semantics; no batching rewrite. |
 | Whole-selection preflight: missing feature | `review_tab_frame_v2.py:1501,1502` | Selected-image preview cannot expose other models, prompts or errors. Added asynchronous whole-selection compilation and explicit frozen-job confirmation. |
-| Unsupported source stage appears successfully admitted: bug | `app_controller.py:1973,1983,2418`; `reprocess_builder.py:233,336` | Z-Image img2img admitted in each baseline case. Preflight now exposes every policy-stage refusal; existing backend/profile validation stays authoritative. |
+| Unsupported source stage appears successfully admitted: bug | `app_controller.py:1973,1983,2418`; `reprocess_builder.py:233,336` | Z-Image img2img admitted in each baseline case. IMG-158 subsequently fixed admission; the whole-selection preview now reuses its same operation assessment. Existing backend/profile validation stays authoritative. |
 | Missing-file refusal: already supported, limited recovery | `reprocess_builder.py:233,236` | Zero admission with first error. Now aggregate per-item errors, explicitly exclude blocked items and re-preview; never silently omit. |
 | Model/profile order choice: missing feature | `reprocess_builder.py:1033,1056` | Existing compatibility grouping keys include prompts/configuration and are not the requested ordering choice. Default new preview retains source order; optional stable model/profile sort only orders this new batch's NJRs. |
 | Source lineage/shared identity: gap | `reprocess_builder.py:336`; `app_controller.py:1923,1973` | Parent job absent despite PNG job header; batch_id absent. Freeze header parent and content-hash artifact identity plus shared batch_id in existing NJR metadata. |
@@ -70,10 +73,10 @@ in this implementation.
 
 File names above resolve under `src/gui/views/`, `src/controller/` and
 `src/pipeline/` respectively. Current fixes are in
-`src/controller/review_batch_service.py:37,61`,
-`src/controller/app_controller.py:1884,1905,1915`,
-`src/gui/review_batch_dialog.py:12,65,88,93,100` and
-`src/gui/views/review_tab_frame_v2.py:1690`.
+`src/controller/review_batch_service.py:42,53,79`,
+`src/controller/app_controller.py:1885,1906,1916,1925`,
+`src/gui/review_batch_dialog.py:12,69,92,99,106` and
+`src/gui/views/review_tab_frame_v2.py:1698`.
 
 ## Final behavior and architectural limits
 
@@ -90,9 +93,15 @@ File names above resolve under `src/gui/views/`, `src/controller/` and
   NJRs. Prior queued jobs remain unchanged. Cross-checkpoint retargeting is deferred.
 - The transient dialog shows each source, final prompts, stage settings,
   backend/profile, output directory and lineage. It submits exactly those frozen
-  jobs once through existing `JobService.submit_njrs`. Any blocked row prevents
-  admission until explicit exclusion/re-preview. Source size/mtime changes require
-  re-preview. Cancel does not touch queue/history; an error never auto-resubmits.
+  jobs once through IMG-158's existing reprocess final preflight and
+  `JobService.submit_njrs`. Any blocked row prevents
+  admission until explicit exclusion/re-preview. Source bytes are hashed before
+  and after preparation and rehashed immediately before final preflight/admission,
+  including changes with identical size/mtime. GUI confirmation uses the existing
+  background coordinator with one admission key per batch; Tk callbacks display
+  completion/error. Confirmation disables repeat/close/re-preview actions while
+  admission is pending. Cancel before confirmation does not touch queue/history;
+  an error never auto-resubmits.
 - Existing job failure/cancellation remains per job through queue/repository and
   JobService. No automatic replay of dispatched work, backend fallback, runtime
   ownership change, or generation request is added.
@@ -104,10 +113,12 @@ File names above resolve under `src/gui/views/`, `src/controller/` and
   A dedicated batch-id output filter/shortcut remains a lower-priority feature;
   this package only supplies provenance for a future repository projection.
 
-Separate PR-IMG-MODELS-158 addresses global model-operation admission and
-selected-image readiness. This package does not copy those edits. Publication
-should integrate/check against that package first, including any changed controller
-ratchet and shared Review sections. No support envelope is widened here.
+PR-IMG-MODELS-158 supplies global model-operation admission and selected-image
+readiness. Its merged source is retained byte-for-byte in `reprocess_admission.py`,
+`operation_compatibility.py`, the workflow adapter and reprocess builder.
+Whole-selection preview assesses its compiled NJRs with `assess_njr`; final
+submission independently requires each image operation through IMG-158's boundary.
+No support envelope is widened here.
 
 ## Token-efficient validation plan and evidence
 
@@ -139,6 +150,43 @@ physical retry is needed for this package.
   Required smoke finished successfully after that reviewer inspected the log.
   Logs are under the evidence root above; hosted CI has not been run for this branch.
 
+## Integration closeout after PR #88
+
+PR #88 was first verified OPEN at head
+`82389defe84f94838e4c303ed5998299667e6567`, with hosted `required` and `affected`
+green. Work waited for the owner-authorized merge. It was then verified MERGED
+at `2026-10-11T17:24:25Z`, merge commit
+`6c977aef3628e1a1763f6466686acd2385cf53cd`. Fetched `origin/main` matched that
+commit and contained the exact PR head and original baseline as ancestors.
+The initially clean Review branch retained `814f983f` and merged updated main
+without reset, rebase, overwrite or force-push. Conflicts were limited to
+AppController imports, the two STATUS entries and the controller ratchet.
+Shared Review GUI changes merged cleanly; the builder and admission source from
+IMG-158 were preserved without additional modifications.
+
+This is a Narrow integration/closeout pass using the same recommended
+GPT-6.1 Sol High / Sonnet 5.5 High Local/Desktop profile. Baseline probe/evidence
+was not rerun. Focused validation covers only the changed Review/controller/builder
+integration surfaces and their existing regression cases. `integration-final.log`
+records **66 passed in 8.23 seconds**: same-size/same-mtime source mutation before
+admission and during preparation, selected/whole-selection readiness agreement,
+explicit Klein edit, final-preflight bypass refusal, off-Tk hash/admission and
+two independent batches retaining both callbacks, plus existing Review/builder
+regressions. Initial test failures were expectation/API mismatches: the inherited
+`OperationNotSupportedError` message and history entries accessed as mappings.
+They were corrected to assert the canonical exception and actual entry attribute;
+no validation assertion was removed or softened.
+
+The integration canonical gate was invoked **once** and passed end-to-end
+(`integration-pr-gate.log`): completeness (541 tracked Python files), controller
+ratchet, Ruff, mypy smoke (10 files), isolated collection (8,473 tests) and required
+smoke (386 passed in 34.01 seconds). Independent read-only aggregate review found
+no concrete source/architecture blocker, verified final authority preservation,
+hash binding, callback isolation and the exact controller ratchet. Aggregate and
+staged whitespace checks pass. Initial-package evidence above remains dated to
+that package and is not relabeled as integration-gate evidence. No new baseline,
+physical generation, runtime launch, publication or Video implementation occurred.
+
 ## Corrected prioritization and remaining scope
 
 The evidence justifies this small Review completion package, not a replacement
@@ -146,7 +194,8 @@ batch architecture. The implementation touches two existing application files,
 adds two small modules, one deterministic regression suite and a lower controller
 ratchet. Main risks are stale source inputs, compatibility-policy integration and
 GUI callback lifetime; focused tests cover these boundaries. Hosted Python 3.14
-CI and integration with PR-IMG-MODELS-158 remain before publication acceptance.
+CI remains before publication acceptance. Integration with PR-IMG-MODELS-158 is
+complete locally; publication still requires owner authorization.
 
 Next recommendation: **PR-VID-BATCH-200**, multi-source Video Workflow through the
 existing compiler/JobService/SQLite path. Scope it by the Video intent/controller,
@@ -160,7 +209,9 @@ would need a repository projection and GUI tests, not a new store.
 Host: Codex Local/Desktop. Recommended profile: GPT-6.1 Sol High. Exact selected
 model/effort telemetry, token deltas, cost/credits and reliable package elapsed
 time are unavailable in the current host. Phases: discovery, implementation,
-bounded review repair, tests, documentation and closeout. Two focused repair
-passes addressed independent-review findings and invalid empty-file fixtures.
+bounded review repair, tests, documentation and integration/closeout. Two initial
+focused repair passes addressed independent-review findings and invalid empty-file
+fixtures; integration corrected inherited exception expectations and the test's
+history-entry attribute access, retaining all admission and immutability assertions.
 One context compaction was observed. Efficiency judgment: appropriate for this
 Standard package; no comparative measured cost claim.

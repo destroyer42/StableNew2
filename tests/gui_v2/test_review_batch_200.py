@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import hashlib
+import os
+from dataclasses import replace
 from pathlib import Path
-from threading import get_ident
+from threading import Event, get_ident
+from unittest.mock import Mock
 
 import pytest
 from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 
 from src.controller.app_controller import AppController
 from src.controller.app_controller_services.background_task_coordinator import (
@@ -14,10 +18,13 @@ from src.controller.app_controller_services.background_task_coordinator import (
 )
 from src.controller.job_service import JobService
 from src.controller.review_batch_service import prepare_review_batch
+from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.review_batch_dialog import ReviewBatchDialog
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.image_backends.forge_zimage_profile import ZIMAGE_PROFILE_V1
+from src.image_backends.operation_compatibility import OperationNotSupportedError
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
@@ -119,12 +126,12 @@ def test_incompatible_source_is_visible_excluded_only_explicitly_and_repreviewed
     preview = prepare(controller, paths)
     assert len(preview.items) == count and len(preview.blocked) == 1
     assert preview.blocked[0].path == str(paths[-1])
-    assert "unsupported target stages img2img" in preview.blocked[0].error
-    with pytest.raises(ValueError, match="Nothing queued"):
+    assert "stage(s) img2img are outside its qualified envelope" in preview.blocked[0].error
+    with pytest.raises(OperationNotSupportedError, match="Nothing was queued"):
         controller.submit_review_reprocess_batch(preview)
     assert not repository.list_jobs()
     remaining = []
-    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch,
+    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch_async,
         repreview=remaining.append, visibility=tab._visibility_resolver())
     assert dialog.submit_button.instate(["disabled"])
     assert len(dialog.rows.get_children()) == count
@@ -176,7 +183,7 @@ def test_cancel_preview_has_no_queue_history_or_source_side_effects(workflow, tm
     controller, repository, tab = workflow
     paths = images(tmp_path, 10)
     preview = prepare(controller, paths)
-    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch,
+    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch_async,
         repreview=lambda _: None, visibility=tab._visibility_resolver())
     dialog.destroy()
     assert not repository.list_jobs()
@@ -261,7 +268,7 @@ def test_dialog_exposes_frozen_negative_stage_profile_output_and_lineage(workflo
     controller, _, tab = workflow
     paths = images(tmp_path, 10)
     preview = prepare(controller, paths, negative_prompt_delta="avoid artifacts")
-    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch,
+    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch_async,
         repreview=lambda _: None, visibility=tab._visibility_resolver())
     detail = dialog.details.get("1.0", "end")
     assert "Negative prompt: avoid artifacts" in detail
@@ -277,7 +284,7 @@ def test_source_change_repreview_is_available_without_automatic_readmission(work
     preview = prepare(controller, paths)
     errors, requests = [], []
     monkeypatch.setattr("src.gui.review_batch_dialog.messagebox.showerror", lambda *args, **_: errors.append(args))
-    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch,
+    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch_async,
         repreview=requests.append, visibility=tab._visibility_resolver())
     paths[0].write_bytes(b"changed")
     dialog._confirm()
@@ -286,3 +293,166 @@ def test_source_change_repreview_is_available_without_automatic_readmission(work
     assert dialog.submit_button.instate(["disabled"])
     dialog._preview_all()
     assert requests == [[str(path) for path in paths]]
+
+
+def _comment_image(path, value):
+    info = PngInfo()
+    info.add_text("comment", value)
+    Image.new("RGB", (32, 32), (20, 30, 40)).save(path, pnginfo=info)
+
+
+def _change_content_preserving_stat(path):
+    original = path.stat()
+    _comment_image(path, "after!")
+    assert path.stat().st_size == original.st_size
+    os.utime(path, ns=(original.st_atime_ns, original.st_mtime_ns))
+    assert path.stat().st_mtime_ns == original.st_mtime_ns
+    with Image.open(path) as image:
+        image.load()  # the replacement remains a valid PNG, not just corrupt bytes
+
+
+def test_same_size_same_mtime_content_change_cannot_cross_admission(workflow, tmp_path):
+    controller, repository, _ = workflow
+    existing = make_pipeline_njr(job_id="existing")
+    controller.job_service.submit_njrs([existing])
+    path = tmp_path / "mutable.png"
+    _comment_image(path, "before")
+    preview = prepare(controller, [path])
+    frozen = preview.jobs[0].to_dict()
+    assert preview.jobs[0].source.parent_artifact_id == "sha256:" + preview.items[0].source_sha256
+    _change_content_preserving_stat(path)
+    with pytest.raises(ValueError, match="Source content changed; preview again"):
+        controller.submit_review_reprocess_batch(preview)
+    assert [row.job_id for row in repository.list_jobs()] == [existing.job_id]
+    assert preview.jobs[0].to_dict() == frozen
+
+
+def test_same_stat_content_change_during_preparation_is_blocked(workflow, tmp_path):
+    controller, repository, _ = workflow
+    path = tmp_path / "mutable.png"
+    _comment_image(path, "before")
+    def extract(_):
+        _change_content_preserving_stat(path)
+        return {}
+    controller._extract_reprocess_baseline_from_image = extract
+    preview = prepare(controller, [path])
+    assert not preview.jobs
+    assert "Source changed while preparing" in preview.blocked[0].error
+    assert not repository.list_jobs()
+
+
+@pytest.mark.parametrize("model,ready", [
+    (ZIMAGE_PROFILE_V1.transformer.filename, False),
+    ("flux-2-klein-4b-fp8.safetensors", False),
+    ("ordinary.safetensors", True),
+])
+def test_whole_selection_agrees_with_img158_selected_readiness(workflow, tmp_path, model, ready):
+    controller, repository, _ = workflow
+    path = tmp_path / "source.png"
+    _comment_image(path, "before")
+    controller._extract_reprocess_baseline_from_image = lambda _: {"model": model, "prompt": "neutral", "config": {}}
+    fallback = controller._build_reprocess_config(["img2img"])
+    fallback["backend_options"] = {"image": {"backend_id": "forge_webui"}}
+    controller._build_reprocess_config = lambda _: fallback
+    selected = controller.get_review_reprocess_effective_settings_preview(image_path=str(path), stages=["img2img"])
+    expected = ReviewWorkflowAdapter.assess_readiness(selected, backend_id="forge_webui")
+    batch = prepare(controller, [path])
+    assert expected.ready is ready
+    assert (not batch.blocked) is ready
+    if not ready:
+        assert batch.blocked[0].assessment == expected
+        with pytest.raises(OperationNotSupportedError) as refused:
+            controller.submit_review_reprocess_batch(batch)
+        assert refused.value.assessment == expected
+    assert not repository.list_jobs()
+
+
+def test_whole_selection_explicit_edit_matches_img158_and_final_preflight(workflow, tmp_path, monkeypatch):
+    import src.controller.reprocess_admission as admission
+    controller, repository, _ = workflow
+    path = tmp_path / "source.png"
+    Image.new("RGB", (1024, 1024)).save(path)
+    marked = ReviewWorkflowAdapter.with_klein_edit_request(None, [path])
+    controller._extract_reprocess_baseline_from_image = lambda _: {"model": ZIMAGE_PROFILE_V1.transformer.filename, "config": {}}
+    preview = prepare(controller, [path], source_metadata_by_image=marked)
+    assert not preview.blocked and preview.jobs[0].base_model == "flux-2-klein-4b-fp8.safetensors"
+    verify = Mock(wraps=admission.require_njr_operation)
+    monkeypatch.setattr(admission, "require_njr_operation", verify)
+    assert controller.submit_review_reprocess_batch(preview) == 1
+    verify.assert_called_once_with(preview.jobs[0])
+    assert repository.get_job_model(preview.jobs[0].job_id)._normalized_record.to_dict() == preview.jobs[0].to_dict()
+
+
+def test_even_a_forged_ready_preview_cannot_bypass_img158_final_admission(workflow, tmp_path):
+    controller, repository, _ = workflow
+    paths = images(tmp_path, 1)
+    preview = prepare(controller, paths)
+    unsupported = ReprocessJobBuilder().build_reprocess_job(
+        input_image_paths=[str(paths[0])], stages=["img2img"],
+        model=ZIMAGE_PROFILE_V1.transformer.filename,
+        config={"backend_options": {"image": {"backend_id": "forge_webui"}}},
+    )
+    forged = replace(preview, jobs=(unsupported,))
+    assert not forged.blocked
+    with pytest.raises(OperationNotSupportedError):
+        controller.submit_review_reprocess_batch(forged)
+    assert not repository.list_jobs()
+
+
+def test_admission_hashes_run_off_tk_and_dialog_confirms_only_once(workflow, tmp_path, monkeypatch):
+    import src.controller.review_batch_service as batches
+    controller, repository, tab = workflow
+    preview = prepare(controller, images(tmp_path, 10))
+    callbacks, hash_threads, results = [], [], []
+    main_id, registry = get_ident(), _ThreadRegistryStub()
+    controller._background_tasks = BackgroundTaskCoordinator(dispatcher=callbacks.append, thread_registry=registry)
+    original_hash = batches._source_sha256
+    def hash_source(path):
+        hash_threads.append(get_ident())
+        return original_hash(path)
+    monkeypatch.setattr(batches, "_source_sha256", hash_source)
+    monkeypatch.setattr("src.gui.review_batch_dialog.messagebox.showinfo", lambda *_, **__: results.append(get_ident()))
+    dialog = ReviewBatchDialog(tab, preview, submit=controller.submit_review_reprocess_batch_async,
+        repreview=lambda _: pytest.fail("Cannot re-preview while admission is pending"), visibility=tab._visibility_resolver())
+    dialog._confirm()
+    dialog._confirm()
+    dialog._preview_all()
+    assert dialog.cancel_button.instate(["disabled"]) and dialog.repreview_button.instate(["disabled"])
+    for thread in registry.threads:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    assert hash_threads and all(thread != main_id for thread in hash_threads)
+    assert len(repository.list_jobs()) == 10 and not results
+    for callback in callbacks:
+        callback()
+    assert results == [main_id] and not dialog.winfo_exists()
+
+
+def test_independent_confirmed_batches_do_not_drop_each_others_callbacks(workflow, tmp_path, monkeypatch):
+    import src.controller.review_batch_service as batches
+    controller, repository, _ = workflow
+    paths = images(tmp_path, 2)
+    first, second = prepare(controller, paths[:1]), prepare(controller, paths[1:])
+    entered, release = Event(), Event()
+    callbacks, results, errors = [], [], []
+    registry = _ThreadRegistryStub()
+    controller._background_tasks = BackgroundTaskCoordinator(dispatcher=callbacks.append, thread_registry=registry)
+    original_hash = batches._source_sha256
+    def hash_source(path):
+        if path == paths[0]:
+            entered.set()
+            assert release.wait(timeout=5)
+        return original_hash(path)
+    monkeypatch.setattr(batches, "_source_sha256", hash_source)
+    controller.submit_review_reprocess_batch_async(first, on_submitted=results.append, on_error=errors.append)
+    assert entered.wait(timeout=5)
+    controller.submit_review_reprocess_batch_async(second, on_submitted=results.append, on_error=errors.append)
+    release.set()
+    for thread in registry.threads:
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    for callback in callbacks:
+        callback()
+    assert not errors and results == [1, 1]
+    assert len(repository.list_jobs()) == 2
+    assert controller._background_tasks.get_metrics_snapshot()["stale_dropped"] == 0

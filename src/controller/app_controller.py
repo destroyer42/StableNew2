@@ -97,6 +97,7 @@ from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
     ProcessAutoScannerService,
 )
+from src.controller.reprocess_admission import submit_reprocess_njrs
 from src.controller.review_batch_service import ReviewBatchPreview, prepare_review_batch
 from src.controller.runtime_state import GUIState
 from src.controller.submission_policy_v26 import SubmissionPolicy
@@ -1915,11 +1916,19 @@ class AppController:
     def submit_review_reprocess_batch(self, preview: ReviewBatchPreview) -> int:
         preview.require_queueable()
         submitted_count = self._submit_reprocess_njrs(list(preview.jobs), source="review_tab")
-        self._append_log(
-            f"[reprocess] Review batch {preview.batch_id}: {submitted_count} jobs, "
-            f"{len(preview.items)} sources; group_by_model={preview.group_by_model}"
+        logger.info(
+            "[reprocess] Review batch %s: %s jobs, %s sources; group_by_model=%s",
+            preview.batch_id, submitted_count, len(preview.items), preview.group_by_model,
         )
         return submitted_count
+
+    def submit_review_reprocess_batch_async(self, preview: ReviewBatchPreview, *, on_submitted: Any, on_error: Any) -> None:
+        """Recheck bytes and use the same admission boundary without blocking Tk."""
+        self._background_tasks.submit(
+            f"review:admit:{preview.batch_id}", lambda: self.submit_review_reprocess_batch(preview),
+            on_result=on_submitted, on_error=on_error, name="ReviewBatchAdmission",
+            purpose="Verify source hashes and admit the confirmed Review batch",
+        )
 
     def get_review_reprocess_effective_settings_preview(
         self,
@@ -2349,12 +2358,7 @@ class AppController:
                 self._ui_dispatch(lambda: refresh(processed_asset_ids))
 
     def _submit_reprocess_njrs(self, njrs: list[Any], *, source: str) -> int:
-        if not self.job_service:
-            raise RuntimeError("Job service not available")
-        if not njrs:
-            return 0
-        job_ids = self.job_service.submit_njrs(njrs, SubmissionPolicy())
-        return len(job_ids)
+        return submit_reprocess_njrs(self.job_service, njrs)
 
     def _build_reprocess_config(self, stages: list[str]) -> dict[str, Any]:
         """Build configuration dict for reprocess jobs.

@@ -64,6 +64,8 @@ class ZImageProfile:
 
 
 ZIMAGE_PROFILE_V1 = ZImageProfile()
+#: The one fixed CLIP-skip value of v1; used by both the validator and the shared-baseline projection.
+FIXED_CLIP_SKIP = 1
 
 # Pinned Forge defaults reconciled in PR-154B; observe, never change server options.
 SAMPLING_OPTIONS = MappingProxyType({
@@ -100,7 +102,7 @@ def validate_zimage_config(config: Mapping[str, Any], *, prompt: str = "", negat
         "steps": p.steps, "cfg_scale": p.cfg_scale, "width": 1024, "height": 1024,
         "shift": p.distilled_cfg_scale, "distilled_cfg_scale": p.distilled_cfg_scale,
         "batch_size": 1, "n_iter": 1, "images_per_prompt": 1, "loop_count": 1,
-        "subseed_strength": 0, "clip_skip": 1,
+        "subseed_strength": 0, "clip_skip": FIXED_CLIP_SKIP,
         "apply_global_positive_txt2img": False, "apply_global_negative_txt2img": False,
     }
     for section in (*_sections(config), config.get("pipeline") or {}):
@@ -181,7 +183,7 @@ def apply_zimage_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
     defaults = {"model": p.transformer.filename, "sampler": p.sampler, "sampler_name": p.sampler,
                 "scheduler": p.scheduler, "steps": p.steps, "cfg_scale": p.cfg_scale,
                 "width": 1024, "height": 1024, "distilled_cfg_scale": p.distilled_cfg_scale,
-                "negative_prompt": "", "prompt_optimizer": {"enabled": False}, "clip_skip": 1}
+                "negative_prompt": "", "prompt_optimizer": {"enabled": False}, "clip_skip": FIXED_CLIP_SKIP}
     for target in (config, stage):
         for key, value in defaults.items():
             if target.get(key) is None:
@@ -193,6 +195,49 @@ def apply_zimage_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
     pipeline = dict(config.get("pipeline") or {})
     pipeline.update(apply_global_positive_txt2img=False, apply_global_negative_txt2img=False)
     config["pipeline"] = pipeline
+    return config
+
+
+_BASELINE_VAE_KEYS = ("vae", "sd_vae", "vae_name")
+_BASELINE_PROMPT_CHANNEL_KEYS = ("prompt", "negative_prompt", "global_positive_prompt", "global_negative_prompt")
+
+
+def project_shared_baseline(config: dict[str, Any]) -> dict[str, Any]:
+    """Replace the values a *shared comparison baseline* merely carries for another model with v1's own (in place).
+
+    A Model Comparison arm is prepared independently from one shared baseline whose sampling, VAE, prompt optimizer and
+    global prompt terms describe whichever model the baseline was authored for. For this exact profile those are not
+    requirements the operator made: sampling/VAE are the immutable profile's, and the prompt channels are projected by the
+    shared adaptation. Only those keys are replaced, and only where the baseline carries them. Geometry, counts
+    (batch/sample), seed/subseed, stage flags and every optional feature are left exactly as requested, so
+    ``validate_zimage_config`` still refuses a genuine conflict instead of the arm being forced to qualify.
+    """
+    if not zimage_selected(config):
+        return config
+    p = ZIMAGE_PROFILE_V1
+    fixed = {"sampler": p.sampler, "sampler_name": p.sampler, "scheduler": p.scheduler, "steps": p.steps,
+             "cfg_scale": p.cfg_scale, "shift": p.distilled_cfg_scale,
+             "distilled_cfg_scale": p.distilled_cfg_scale, "clip_skip": FIXED_CLIP_SKIP}
+    sections: list[dict[str, Any]] = [config]
+    for name in ("txt2img", "pipeline"):
+        section = config.get(name)
+        if isinstance(section, dict):
+            sections.append(section)
+    for section in sections:
+        for key, value in fixed.items():
+            if key in section:
+                section[key] = value
+        for key in _BASELINE_VAE_KEYS:
+            if key in section:
+                section[key] = ""
+        for key in _BASELINE_PROMPT_CHANNEL_KEYS:
+            if key in section:
+                section[key] = ""
+        for key in ("apply_global_positive_txt2img", "apply_global_negative_txt2img"):
+            if key in section:
+                section[key] = False
+        if isinstance(section.get("prompt_optimizer"), dict) and section["prompt_optimizer"].get("enabled"):
+            section["prompt_optimizer"] = {**section["prompt_optimizer"], "enabled": False}
     return config
 
 
