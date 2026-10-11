@@ -1,8 +1,8 @@
 # PR-IMG-MODELS-154B — Controlled one-case physical qualification harness: Z-Image-Turbo FP8-scaled
 
-Disposition: **`LOADER_FAILED`** for the separately owner-authorized physical attempt on 2026-10-10 (America/New_York).
-Managed Forge startup was attempted, but its launch environment could not locate `uv` and the owned root exited before
-startup verification. No model selection or generation request was sent; no image was produced. The case is consumed.
+Disposition: **`INSTRUMENTATION_GAP`** for the second owner-authorized physical case on 2026-10-10 (America/New_York).
+The corrected launch environment started Forge and generated one valid image. Shutdown was not verified clean at the
+recorded check; a later observation found no recorded PID or listener, but does not establish PASS. Both cases are consumed.
 
 Execution profile: Standard, high-risk qualification-specific lifecycle work (`tools/qualification/img154b/`, small edits to
 `tools/qualification/img154/`, no production `src/` change). Claude Code Sonnet 5.5 XHigh / Codex GPT-6.1 Sol XHigh, Windows
@@ -14,7 +14,7 @@ Canonical production execution is unchanged:
 This harness is a deliberately isolated hardware-qualification tool and is **not** an alternative production execution path:
 no queue, runner, history, compiler, PromptPack, profile or GUI authority is added.
 
-## Captured physical result
+## Captured first-case physical result: `LOADER_FAILED`
 
 The executed checkout was clean SHA `df4b518a0cacdc159272cd64afa38fe7d4cf791f`, source SHA-256
 `66298a85767d86a5636933bdb7bc5572538821dffbcc5fed984309f325b9e144`. Case identity
@@ -39,9 +39,36 @@ establish neither stability nor production support.
 Evidence is preserved locally under
 `%LOCALAPPDATA%\StableNew\Qualification\IMG154B_ZIMAGE_TURBO_FP8\evidence\case-471c18ba071a-20261011T011152Z`:
 `case-report.redacted.json`, `samples.jsonl`, the hashed `index.json`, and `redacted/console_tail.txt`.
-The stable no-retry ledger remains consumed. No `uv` installation, environment repair or further run was performed.
-The executed harness and tests are evidence-frozen; another run requires an explicitly authorized acceptance contract
-and a distinct case identity, without resetting this ledger.
+The stable no-retry ledger remains consumed. No `uv` installation or environment repair was performed in that attempt.
+The owner subsequently authorized the bounded launch correction and distinct second case below; this ledger was not reset.
+
+## Captured second-case physical result: `INSTRUMENTATION_GAP`
+
+The executed checkout was clean SHA `a4ee0464d92cd512923530ced8181fe97fec717e`, source SHA-256
+`c4ec1aa3545d864cf1de9f52cdd36de80f6c4f133bc26be5d5511d84230b0b15`. Case
+`df34833e09d1fbcab744b33412affd8aa431549bf9c6ad25e100d8e5794fb9d3` passed the owner's interactive confirmation
+and fresh claim-boundary preflight at 2026-10-11T01:48:00Z: commit headroom 41.87 GiB, available RAM 21.47 GiB,
+pagefile-volume free 265.05 GiB, VRAM at its 1,105 MiB baseline. The assets, request and limits were unchanged.
+
+Every durable stage was recorded through startup, confirmed selection, generation dispatch and terminal evidence.
+Forge returned HTTP 200 and one decodable, nontrivial 1024x1024 image; seed 424254, effective infotext and model/module
+identities all passed validation. `artifacts/output.png` is 937,523 bytes, SHA-256
+`871ee082e875ed0f89c9b758f95a3510499ebab2aa653e1e89422d0cda67bd06`. Visual quality remains unreviewed.
+The report's per-HTTP `requests` array is empty; the preserved ledger, console and validated output establish execution.
+
+The monitor did not halt. Telemetry was complete (187 samples, maximum gap 1.02062 s), and the 120-second settle fault
+check reported `NO_NEW_EVENTS_COMPLETE_COVERAGE`, no boot change or new records. Manager-owned stop returned, but its
+shutdown snapshot reported 20 surviving PIDs: `requested_unverified`, `verified: false`. The required clean-shutdown and
+no-survivor facts therefore remained false, producing `INSTRUMENTATION_GAP`; this is not qualification PASS.
+
+At 2026-10-11T01:52:26Z, a separate read-only process/port observation found none of the recorded root/survivor PIDs and
+no port 7886 listener. This later observation does not prove absence at the original verification time or change its verdict.
+The supplemental observation is outside the frozen bundle, in the local temporary retry package's
+`post-run-process-observation.json`; no process was stopped or restarted by that observation.
+
+Evidence is preserved under the same qualification evidence root at `case-df34833e09d1-20261011T014521Z`.
+All 45 indexed files were rehashed without mismatch. Both ledgers and original bundles remain unchanged and consumed.
+The executed harness/tests are evidence-frozen. No third attempt, environment installation or further runtime repair occurred.
 
 ## Execution boundary
 
@@ -51,7 +78,7 @@ and a distinct case identity, without resetting this ledger.
 | `python -m tools.qualification.img154b.cli` (default CLI) | `request`, `layout-plan`, `challenge`, `dry-run`, `passphrase-verifier`. Offline or read-only. It cannot import the live module. |
 | `physical preflight` | Read-only live preflight. Starts, selects and sends nothing; consumes no case. |
 | `physical materialize --confirm-copy` | Copies the three verified files (about 14.5 GB) into the isolated layout. Filesystem only. **Completed with exact served-file proof.** |
-| `physical execute` | The single physical case. Refuses unless: Windows, not under a test runner, `STABLENEW_IMG154B_PHYSICAL=ONE-CASE`, `--attempt-identity` equals the computed identity, an interactive TTY, an owner authorization record at the stable location, then a typed exact-case phrase and the owner's passphrase (no echo). **Consumed; `LOADER_FAILED` before selection or generation.** |
+| `physical execute` | One separately authorized case per identity. Refuses unless: Windows, not under a test runner, `STABLENEW_IMG154B_PHYSICAL=ONE-CASE`, `--attempt-identity` equals the computed identity, an interactive TTY, an owner authorization record at the stable location, then a typed exact-case phrase and the owner's passphrase (no echo). **Case 1 consumed as `LOADER_FAILED`; case 2 consumed as `INSTRUMENTATION_GAP` after valid generation.** |
 | `TECHNICAL_PASS_CONSTRAINED` | Reachable only with a `physical` execution authority that only the `execute` path can mint, plus complete evidence. A synthetic authority tops out at `INSTRUMENTATION_GAP`. |
 
 The original harness was integrated through PR #83 at `4d83fd8b`. The subsequent launch corrections and this physical-result
@@ -210,9 +237,13 @@ technical result, never stability, repeatability or production support.
 
 ## Validation
 
-The final executed launch-correction SHA passed 709 affected tests (6 platform/explicit-opt-in skips), scoped Ruff and mypy,
+The first executed launch-correction SHA passed 709 affected tests (6 platform/explicit-opt-in skips), scoped Ruff and mypy,
 and the local PR gate (8,244 collected; 386 smoke passed; repository unchanged; completeness/controller/Ruff/mypy passed).
 The physical-result closeout changes documentation only and reuses that source-identical evidence without another run.
+The second executed SHA passed 891 affected qualification/ownership tests (6 platform/explicit-opt-in skips), Ruff,
+the required mypy smoke and local PR gate (8,246 collected; 386 smoke passed; repository unchanged). Additional scoped
+typing passed four files with the pre-existing missing `psutil` stubs reported separately. This second closeout also changes
+documentation only, reusing the accepted exact-source validation without another test or physical run.
 
 The following records describe the original harness validation; PR #83 subsequently passed its hosted required and affected jobs.
 
@@ -250,21 +281,22 @@ needs a near-idle desktop (commit total at most about 12.8 GiB) still holds.
 * Every numeric threshold and the baseline-validation criteria are provisional; the RAM stop rule is uncalibrated. PR-IMG-115
   already saw 0.01 GB of available RAM during a benign load, so the 1 GiB floor held for 10 s may stop a healthy run
   (`RESOURCE_ABORT_REQUESTED`), which consumes the case. The threshold was not relaxed; that is an owner decision.
-* The semantics are a source reading, never exercised; image quality, load time and peak memory are unknown.
+* The second case exercised and validated the frozen effective semantics once; image quality is unreviewed and repeatability,
+  stability and production support remain unestablished. The recorded resource measurements describe only this exposure.
 * File provenance is exact bytes only; official provenance is unverified.
 * The owner-authorization record is unsigned; its authorship rests on the passphrase only the owner holds, and an owner who
   shares the passphrase with automation defeats that control.
-* The dispatch is an hour-scale, single blocking request; the real HTTP path has only been tested against fakes and a
-  loopback test server. The first real owned startup failed at the `uv` bootstrap check before endpoint readiness.
+* The dispatch is an hour-scale, single blocking request. The second case exercised it once after the first startup failed
+  at the `uv` bootstrap check. The second case's unverified shutdown prevents a constrained technical PASS.
 
 ## Boundary for any subsequent physical run
 
-The first authorized case is complete and consumed. Any subsequent package must explicitly
+Both authorized cases are complete and consumed; no third attempt is authorized. Any subsequent package must explicitly
 address the launch-environment blocker, define its acceptance contract and distinct case identity, and retain the existing
 case ledger and evidence. It must pass the unchanged authorization, isolation, ownership, resource and telemetry gates
 before any new managed startup. A pre-claim refusal consumes nothing; an attempt that reaches the claim cannot be retried.
 
-### Owner-authorized loader correction and second case (preparation)
+### Owner-authorized loader correction and second case (completed)
 
 The owner explicitly continued the package to correct the loader failure and launch again. Read-only inspection found
 `uv.exe` already present in the managed venv; the isolated profile had omitted the production profile's `PATH`,
