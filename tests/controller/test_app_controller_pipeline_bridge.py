@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from src.contracts import PreviewRequest
 from src.controller.app_controller import AppController
 from src.controller.runtime_state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionState
@@ -123,7 +124,7 @@ def test_refresh_preview_from_state_async_builds_off_thread_and_applies_latest_r
             self.calls = 0
 
         def build_preview_request(self):
-            return object()
+            return PreviewRequest()
 
         def get_preview_jobs_for_request(self, _request):
             self.calls += 1

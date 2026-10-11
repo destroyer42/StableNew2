@@ -13,6 +13,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -419,8 +420,8 @@ class PipelineController(CorePipelineController):
 
     def build_preview_request(self) -> PreviewRequest:
         job_draft = getattr(self._app_state, "job_draft", None)
-        pack_entries = tuple(getattr(job_draft, "packs", None) or ())
-        return PreviewRequest(pack_entries=pack_entries)
+        pack_entries = tuple(deepcopy(getattr(job_draft, "packs", None) or ()))
+        return PreviewRequest(pack_entries=pack_entries, preview_revision=getattr(self._app_state, "preview_revision", None))
 
     def get_preview_jobs_for_request(
         self,
@@ -1502,8 +1503,6 @@ class PipelineController(CorePipelineController):
         if not self._app_state:
             return
         self._app_state.clear_job_draft()
-        if not self._app_state_preview_updates_managed_externally:
-            self.refresh_preview_from_state()
 
     def _run_job(self, job: Job) -> dict[str, Any]:
         """Run a single job using NJR-only execution (PR-CORE1-B1/C2).

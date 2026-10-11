@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from src.gui.app_state_v2 import AppStateV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
 from tests.gui_v2.tk_test_utils import get_shared_tk_root
 
@@ -24,9 +25,7 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
         self._state_patch.start()
 
         self.controller = Mock()
-        self.app_state = Mock()
-        # Configure app_state.preview_jobs as empty list
-        self.app_state.preview_jobs = []
+        self.app_state = AppStateV2()
         self.panel = PreviewPanelV2(self.root, controller=self.controller, app_state=self.app_state)
 
     def tearDown(self) -> None:

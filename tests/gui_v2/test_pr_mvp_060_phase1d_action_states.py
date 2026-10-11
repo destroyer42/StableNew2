@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def test_add_to_queue_requires_fresh_draft_and_preview_for_three_cycles() -> None:
@@ -15,7 +16,8 @@ def test_add_to_queue_requires_fresh_draft_and_preview_for_three_cycles() -> Non
     assert PreviewPanelV2._can_add_to_queue(empty, []) is False
 
     for _ in range(3):
-        assert PreviewPanelV2._can_add_to_queue(draft, [object()]) is True
+        assert PreviewPanelV2._can_add_to_queue(draft, [make_pipeline_njr()]) is True
+        assert PreviewPanelV2._can_add_to_queue(draft, [object()]) is False
         assert PreviewPanelV2._can_add_to_queue(empty, []) is False
         assert PreviewPanelV2._can_add_to_queue(draft, []) is False
 

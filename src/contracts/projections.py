@@ -28,6 +28,8 @@ class HistoryProjection:
 class PreviewProjection:
     revision: int
     preview_jobs: tuple[NormalizedJobRecord, ...] = ()
+    preview_revision: int | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,7 @@ class PreviewRequest:
     pack_entries: tuple[PackJobEntry, ...] = ()
     base_config: Any | None = None
     use_state_fallback: bool = True
+    preview_revision: int | None = None
 
 
 @dataclass(frozen=True)

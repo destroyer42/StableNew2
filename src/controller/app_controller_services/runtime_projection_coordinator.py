@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from src.contracts import (
@@ -95,23 +96,52 @@ class RuntimeProjectionCoordinator:
         *,
         build_preview_jobs: Callable[[PreviewRequest], list[NormalizedJobRecord]],
         on_complete: Callable[[bool, Exception | None], None] | None = None,
+        get_build_error: Callable[[], str | None] | None = None,
     ) -> int:
         revision = self._next_revision("preview")
+
+        def build() -> PreviewProjection:
+            jobs = build_preview_jobs(request)
+            error = get_build_error() if get_build_error is not None and not jobs else None
+            return PreviewProjection(revision, tuple(jobs or []), request.preview_revision, error)
+
+        def failed(exc: Exception) -> None:
+            self._logger.error("Preview projection refresh failed", exc_info=(type(exc), exc, exc.__traceback__))
+            self._sink.apply_preview_projection(PreviewProjection(
+                revision, preview_revision=request.preview_revision, error=str(exc),
+            ))
+
         self._background_tasks.submit(
             "projection:preview",
-            lambda: build_preview_jobs(request),
-            on_result=lambda jobs, revision=revision: self._sink.apply_preview_projection(
-                PreviewProjection(revision=revision, preview_jobs=tuple(jobs or []))
-            ),
-            on_error=lambda exc: self._logger.error(
-                "Preview projection refresh failed",
-                exc_info=(type(exc), exc, exc.__traceback__),
-            ),
+            build,
+            on_result=self._sink.apply_preview_projection,
+            on_error=failed,
             on_complete=on_complete,
             name="PreviewProjectionRefresh",
             purpose="Refresh preview projections off the UI thread",
         )
         return revision
+
+    def refresh_preview_from_state(self, controller: Any, app_state: Any, *, on_complete: Any = None) -> None:
+        """Capture one draft version and its build diagnostics before scheduling UI publication."""
+        build_request = getattr(controller, "build_preview_request", None)
+        build_jobs = getattr(controller, "get_preview_jobs_for_request", None)
+        if not callable(build_request) or not callable(build_jobs):
+            return
+        invalidate = getattr(app_state, "invalidate_preview", None)
+        if callable(invalidate):
+            invalidate()
+        request = build_request()
+        draft = getattr(app_state, "job_draft", None)
+        has_parts = bool(getattr(getattr(draft, "summary", None), "part_count", 0))
+        request = replace(request, use_state_fallback=has_parts and not request.pack_entries)
+
+        def get_error() -> str | None:
+            snapshot = getattr(controller, "get_preview_build_timing_snapshot", lambda: None)()
+            return snapshot.get("error") if isinstance(snapshot, dict) else None
+
+        self.publish_preview_refresh(request, build_preview_jobs=build_jobs,
+                                     get_build_error=get_error, on_complete=on_complete)
 
     def publish_running_job(self, job: Any | None) -> int:
         revision = self._next_revision("runtime")
