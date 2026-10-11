@@ -89,7 +89,7 @@ fields, config copies and the NJR positive prompt are the same string; Run mater
 
 ## Acceptance evidence
 
-* `tests/learning_v2/test_model_comparison_global_positive_160.py` (84 tests): defect guards;
+* `tests/learning_v2/test_model_comparison_global_positive_160.py` (85 tests): defect guards;
   every candidate order including SDXL/Z-Image/Klein; disabled/enabled-empty/none; weighted + BREAK
   evidence and content-freedom; payload-boundary exactly-once through the real txt2img executor with a
   fake backend (all three candidate types produce the same prompt); freeze -> save -> restore ->
@@ -114,5 +114,10 @@ negative handling; ordinary Learning and controlled-variable studies. No physica
 
 * Pre-160 studies keep their frozen meaning: their exact-profile arms did not carry an enabled
   global positive. Rebuild Preview to obtain parity.
+* An inline `<lora:...>` token in the shared global terms is composed like any other prose. Z-Image
+  refuses it at Build Preview (its validator rejects adapter syntax); Klein v2, like authored
+  PromptPack prose today, is not pre-parsed at Preview and the exact profile's LoRA authority decides
+  at backend admission (refused without LoRA evidence, accepted only when compatible). No validator is
+  bypassed or widened; the parity is pinned by a test.
 * The executable prompt for a composed arm is validated for internal consistency, not recomputed
   from the shared text (see trust model above).

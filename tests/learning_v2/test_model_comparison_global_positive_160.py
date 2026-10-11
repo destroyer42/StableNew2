@@ -330,6 +330,46 @@ def test_unsupported_inline_global_terms_refuse_at_preview(tmp_path, text):
         build(tmp_path, models=[SDXL, ZIMAGE], text=PROSE, config=global_baseline(text=text))
 
 
+def test_inline_adapter_token_in_global_terms_is_admitted_like_authored_prose_for_klein(tmp_path):
+    """Preview does not pre-parse inline tokens for Klein; the exact profile's LoRA authority decides at admission."""
+    from src.image_backends.forge_klein_lora import KleinLoraDecision, KleinLoraStatus
+    from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
+
+    def klein_record(base, text, config):
+        _, snapshot = build(tmp_path / base, models=[SDXL, KLEIN], text=text, config=config)
+        return materialize_njr(
+            snapshot,
+            SimpleNamespace(param_value=KLEIN, executed_config=None),
+            metadata_factory=lambda cfg: {},
+            output_dir="output",
+            filename_template="{seed}",
+        )
+
+    for name in ("global", "prose"):
+        (tmp_path / name).mkdir()
+    via_global = klein_record("global", PROSE, global_baseline(text="rim light <lora:glow:0.5>"))
+    via_prose = klein_record("prose", "a red dress <lora:glow:0.5> in [[place]]", global_baseline(enabled=False))
+    verdicts = []
+    for record in (via_global, via_prose):
+        assert "<lora:glow:0.5>" in record.positive_prompt
+        outcome = []
+        for resolver in (
+            None,
+            lambda n: KleinLoraDecision(n, KleinLoraStatus.COMPATIBLE, "fixture"),
+            lambda n: KleinLoraDecision(n, KleinLoraStatus.INCOMPATIBLE, "fixture"),
+        ):
+            backend = ForgeWebUIImageBackend(**({"lora_resolver": resolver} if resolver else {}))
+            try:
+                backend.validate_njr_intent(record, ["txt2img"])
+                outcome.append("accepted")
+            except ValueError:
+                outcome.append("refused")
+        verdicts.append(outcome)
+    # An unverified or incompatible LoRA is refused at admission and only an explicitly compatible one is accepted -
+    # identically whether the token arrived through the global terms or the authored prose.
+    assert verdicts[0] == verdicts[1] == ["refused", "accepted", "refused"]
+
+
 def test_unsupported_inline_global_terms_do_not_refuse_an_executor_owned_only_study(tmp_path):
     arms_for(tmp_path, [SDXL, "peer.safetensors"], config=global_baseline(text="rim light <lora:glow:0.5>"))
 
