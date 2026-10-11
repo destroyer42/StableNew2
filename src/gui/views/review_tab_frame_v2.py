@@ -146,6 +146,7 @@ class ReviewTabFrame(ttk.Frame):
         self.stage_adetailer_var.trace_add("write", lambda *_: self._refresh_effective_settings())
         self.stage_upscale_var.trace_add("write", lambda *_: self._refresh_effective_settings())
         self.klein_edit_var.trace_add("write", lambda *_: self._on_klein_edit_toggled())
+        self.klein_edit_var.trace_add("write", lambda *_: self._refresh_effective_settings())
         self.prompt_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self.negative_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self._set_readonly_text(self.current_prompt_text, "")
@@ -1526,10 +1527,17 @@ class ReviewTabFrame(ttk.Frame):
         direct_queue_preview = None
         if self._active_handoff is not None:
             direct_queue_preview = self._active_handoff.direct_queue_preview
+        try:
+            readiness = self._workflow_adapter.assess_readiness(
+                preview, single_reference_edit=bool(self.klein_edit_var.get())
+            )
+        except Exception:  # advisory only; the admission boundary still validates
+            readiness = None
         self._effective_settings_var.set(
             self._workflow_adapter.format_effective_settings_summary(
                 preview,
                 direct_queue_preview=direct_queue_preview,
+                readiness=readiness,
             )
         )
 

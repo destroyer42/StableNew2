@@ -108,6 +108,19 @@ uncertainty behavior. Dropping a row LoRA never substring-deletes authored
 prose. Actor/style trigger ownership and manually typed inline tokens retain
 PR-PROMPT-140 semantics.
 
+## Independent arm preparation (PR-IMG-MODELS-158)
+
+Every arm is prepared independently from the shared baseline. For an exact profile that does
+not own the baseline's values (for example Z-Image against an SDXL-authored baseline), only the
+values the profile itself owns - sampling, VAE, CLIP skip, prompt optimizer and global prompt
+terms - are replaced with the profile's own before its unchanged compile policy runs
+(`model_policy.prepare_candidate_baseline`). Shared geometry, sample count, seed/subseed
+policy, stages and optional features are never altered; a genuine conflict (for example a
+shared sample count above one for a one-image profile) fails the whole study at Build Preview
+with an arm-labelled message and no snapshot. Preview dry-runs every arm through
+`materialize_njr` (including the exact profile's NJR validation), so refusal never happens
+mid-admission. See `docs/Subsystems/Image/PR-IMG-MODELS-158_Cross_Workflow_Model_Compatibility.md`.
+
 ## Frozen execution contract
 
 The existing Learning execution snapshot contains an additive `study_type` and

@@ -51,6 +51,22 @@ class PromptWorkspaceState:
         self.dirty = False
         return saved_path
 
+    def pack_for_validation(self, json_path: Path | None) -> tuple[PromptPackModel, bool]:
+        """The pack to validate and whether it carries unsaved edits.
+
+        The open pack is validated from memory when it is the requested one, so unsaved edits are never checked against
+        (and labelled ready from) an older on-disk copy. Any other pack is read from its saved file. Nothing is written.
+        """
+        current = self.current_pack
+        if current is not None and (
+            json_path is None
+            or (current.path and Path(current.path).resolve() == Path(json_path).resolve())
+        ):
+            return current, bool(self.dirty)
+        if json_path is None or not Path(json_path).exists():
+            raise FileNotFoundError(f"PromptPack JSON not found: {json_path}")
+        return PromptPackModel.load_from_file(json_path), False
+
     def get_slot(self, index: int) -> PromptSlot:
         if not self.current_pack:
             raise RuntimeError("No prompt pack loaded")

@@ -22,6 +22,16 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/app_controller_services/runtime_projection_coordinator.py` /
   `src/gui/app_state_projection_sink.py` (versioned async publication) ->
   `tests/gui_v2/test_preview_draft_recovery_112.py`.
+- Cross-workflow exact-profile compatibility and preflight (PR-IMG-MODELS-158):
+  `docs/Subsystems/Image/PR-IMG-MODELS-158_Cross_Workflow_Model_Compatibility.md` ->
+  `src/image_backends/operation_compatibility.py` (pure read-only assessment over `ModelPolicy`) ->
+  `src/controller/reprocess_admission.py` (whole-batch preflight before the one
+  `JobService.submit_njrs`; Review/Reprocess/mask-edit/photo-optimize/curation) ->
+  `src/gui/controllers/review_workflow_adapter.py::assess_readiness` (Review `Readiness:` line) ->
+  `src/learning/model_comparison.py` (`prepare_candidate_baseline`, `verify_arms_admissible`) ->
+  `src/prompting/pack_target_readiness.py` + `PromptWorkspaceState.pack_for_validation`
+  (editor Validate: structure vs target, in-memory) ->
+  `tests/*/test_*_158.py`.
 - Z-Image PromptPack adaptation (PR-IMG-MODELS-157):
   `docs/Subsystems/Image/PR-IMG-MODELS-157_ZImage_PromptPack_Adaptation.md` ->
   `src/pipeline/prompt_pack_job_builder.py::_prepare_entry` -> existing

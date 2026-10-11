@@ -4,6 +4,27 @@ Updated: 2026-10-11
 
 ## Repository
 
+- Cross-workflow model compatibility and preflight (PR-IMG-MODELS-158, locally validated):
+  one pure read-only operation assessment over the canonical `ModelPolicy`
+  (`src/image_backends/operation_compatibility.py`) now fronts Review/reprocess admission
+  (`src/controller/reprocess_admission.py`: the whole batch is assessed before the single
+  `JobService.submit_njrs` call, so Z-Image img2img/ADetailer/upscale/multi-image reprocess and
+  an unrequested Klein img2img are refused before queueing; explicit Klein single-reference edit
+  and ordinary SDXL reprocess are unchanged), the Review effective-settings `Readiness:` line,
+  and the PromptPack editor's Validate (in-memory pack, structure and target readiness reported
+  separately, never "ready"; the former check read a key native packs do not have and the older
+  on-disk file). Model Comparison arms are prepared independently from the shared baseline
+  (the exact profile's own sampling/VAE/optimizer/global terms replace carried-over baseline
+  values; geometry, sample count, seed policy, stages and optional features are never altered,
+  so a genuine conflict fails the whole study at Preview with an arm-labelled message after a
+  dry run of every arm through the Run materialization boundary). Ordinary Z-Image Learning was
+  verified to expose no unsupported controls (tests only). Backend validation remains the
+  independent final authority; no queue, runner, backend, SQLite, NJR identity or replay change;
+  `app_controller.py` shrank 4 lines (ratchet lowered). Staged-curation advancement shares the same admission boundary. An exact compile preview of unsaved
+  editor state was not built (it would duplicate controller-owned configuration); execution
+  readiness remains Preview's answer. No physical generation. See
+  `docs/Subsystems/Image/PR-IMG-MODELS-158_Cross_Workflow_Model_Compatibility.md`.
+
 - Preview draft recovery (PR-GUI-112, locally validated): Clear Draft remains
   available for rejected/draft-only previews, compiler errors are actionable,
   and stale asynchronous completion cannot restore a cleared draft. Fresh valid
