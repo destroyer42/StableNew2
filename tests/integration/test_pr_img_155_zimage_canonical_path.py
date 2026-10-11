@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 import requests
@@ -73,7 +74,10 @@ def test_actual_post_and_history_use_the_exact_profile(tmp_path):
     assert evidence["asset_identity"]["forge"]["revision"] == P.forge_revision
     assert evidence["requested_parameters"]["distilled_cfg_scale"] == 9
     assert evidence["qualification_status"].endswith("INSTRUMENTATION_GAP")
-    manifest = json.loads(next((tmp_path / "output").rglob("manifests/*.json")).read_text(encoding="utf-8"))
+    image_path = Path(variant["artifact"]["primary_path"])
+    manifest_path = Path(variant["artifact"]["manifest_path"])
+    assert manifest_path == image_path.parent / "manifests" / f"{image_path.stem}.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["zimage_effective_request"] == payload
     assert manifest["zimage_profile"]["model_profile"] == P.reference()
     assert manifest["zimage_profile"]["asset_identity"]["vae"]["sha256"] == P.vae.sha256
