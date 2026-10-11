@@ -20,6 +20,7 @@ from __future__ import annotations
 import functools
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -179,6 +180,44 @@ def _read_marker(install_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(marker, dict):
         raise ManagedForgeUnavailable(f"the ownership marker {marker_path} is not a JSON object")
     return marker
+
+
+def verify_pinned_launch(command: list[str], working_dir: str, revision: str) -> dict[str, str]:
+    """Read-only pin check for an already owned launch; never start, adopt or repair a runtime.
+
+    Bind the recorded interpreter/script and working directory to the existing managed
+    installation authority, then require its actual source checkout to be clean at the pin.
+    """
+    contract = load_manifest()
+    if not command or len(command) < 2 or contract["upstream"]["revision"] != revision:
+        raise ManagedForgeUnavailable("the exact model's Forge pin does not match the managed runtime contract")
+    problems = check_launch_command(command, contract)
+    if problems:
+        raise ManagedForgeUnavailable("the owned launch violates the managed launch policy: " + "; ".join(problems))
+    interpreter = Path(command[0]).resolve()
+    install = interpreter.parent.parent.parent
+    source = install / "source"
+    if (interpreter != (install / "venv" / "Scripts" / "python.exe").resolve()
+            or Path(working_dir).resolve() != source.resolve()
+            or command[1] != contract["launch_policy"]["launch_script"]):
+        raise ManagedForgeUnavailable("the owned launch is not bound to the pinned managed installation")
+    marker = _read_marker(install, contract)
+    if marker.get("revision") != revision or marker.get("status") != "verified":
+        raise ManagedForgeUnavailable("the owned installation marker does not verify the required revision")
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(source), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=10, check=True,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "--no-optional-locks", "-C", str(source), "status", "--porcelain", "--untracked-files=all"],
+            capture_output=True, text=True, timeout=10, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ManagedForgeUnavailable("the owned source revision cannot be verified") from exc
+    if head != revision or dirty:
+        raise ManagedForgeUnavailable("the owned Forge source is dirty or differs from the exact model's pin")
+    return {"revision": head, "source_state": "clean", "installation_status": "verified"}
 
 
 def resolve_default_launch_profile(

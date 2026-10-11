@@ -1,9 +1,9 @@
 # PR-IMG-MODELS-155 - Z-Image-Turbo FP8 exact-bundle Forge enablement
 
-Disposition: **HOLD_RESOURCE_ADMISSION_DECISION**. Evidence reconciliation and bounded design are complete;
-production selection, profile resolution and dispatch are not enabled. The owner implementation contract requires a
-decision before materially changing accepted hardware risk or establishing new resource thresholds. No physical run
-is authorized in this package. The original PR-154B result remains `INSTRUMENTATION_GAP`.
+Disposition: **LOCAL_IMPLEMENTATION_UNDER_VALIDATION**. The owner explicitly selected Klein's existing 32-GB-class
+total-RAM gate and pressure diagnostics, accepting removal of the provisional available-RAM and commit-headroom floors.
+The exact v1 profile is implemented through the existing production path. No physical run or publication is authorized
+in this package. The original PR-154B result remains `INSTRUMENTATION_GAP`.
 
 Integrated baseline: `ef3fba8a0776548c4ac34a003452fa2402bdef32` (PR #84), freshly fetched for this package.
 Local branch: `codex/img-models-155-zimage-exact-bundle`, worktree `C:\Users\rob\projects\StableNew-main`.
@@ -49,10 +49,10 @@ or boot change was recorded after the 120-second settle. The separate observatio
 the recorded PIDs or the port 7886 listener. That later observation does not retroactively establish clean shutdown.
 Visual quality, repeated-run stability, broader hardware margins and production support remain unestablished.
 
-## Proposed exact product envelope
+## Exact product envelope
 
-Candidate immutable reference: `backend_options.image.model_profile = {"id": "z_image_turbo_fp8_scaled", "version": 1}`.
-This reference does not exist in production until the resource decision is resolved and the integration is implemented.
+Immutable reference: `backend_options.image.model_profile = {"id": "z_image_turbo_fp8_scaled", "version": 1}`.
+The name identifies a candidate; only exact served-file hashes, the managed source pin and verified selection admit it.
 
 | Role | Filename | Bytes | SHA-256 |
 | --- | --- | ---: | --- |
@@ -67,25 +67,33 @@ modifiers, hires/refiner/ADetailer/upscale/img2img, other geometry/settings and 
 The GUI projects fixed/unsupported values, explains limited evidence, retains other-model drafts and never switches the
 backend automatically. Normal Run Now/Send Job remain queued; qualification passphrase and ledgers never enter production.
 
-## Bounded implementation design after the decision
+## Bounded production integration
 
 Keep `Intent -> Compiler -> NJR -> JobService -> SQLite Queue/Repository -> PipelineRunner.run_njr -> Forge backend ->
-Artifacts/History`. Add a small shared exact-profile resolver with independent Klein and Z-Image contracts, not a second
-registry or executor. Route new NJR stamping, model policy, compilation and backend/replay resolution through that resolver;
-retain frozen Klein v1/v2 semantics and refuse unknown profile references and unsupported dependency-bearing models.
+Artifacts/History`. `exact_model_profile.py` is a small shared resolver for independent Klein and Z-Image contracts,
+not a second registry or executor. New NJR stamping, model policy, compilation and backend/replay resolution use it;
+frozen Klein v1/v2 semantics remain intact, with unknown versions and unsupported dependency-bearing models refused.
 
-Extend the existing served-asset identity and Forge catalog authorities for the exact trio; filenames only suggest a
-candidate and never satisfy readiness. Verify served paths, fingerprint-bound full hashes and pin, confirm both modules,
-select through the existing client, then verify readback. Preserve ordinary Forge module-baseline normalization and test
-Z-Image/SDXL/Klein transitions. No lifecycle adoption, restart or ambiguous POST replay is added.
+The existing served-asset identity/hash cache and Forge catalogs bind the exact trio to the actual files the endpoint
+serves, including reference-home paths. The existing managed-runtime marker plus read-only Git checks bind the owned
+launch to clean pinned source. Missing, substituted or ambiguous paths refuse. Both modules are selected through the
+existing client; final options readback verifies checkpoint, modules and the pinned sampling options before the POST.
+Ordinary module-baseline normalization is preserved. No lifecycle adoption, restart or ambiguous POST replay is added.
 
-`executor.py::run_txt2img_stage` currently builds a fixed dictionary without `distilled_cfg_scale`. Add one small,
-profile-specific payload projection and immediately-before-dispatch validation there; prove with a fake client at the
-actual executor POST boundary that shift 9 reaches the wire as `distilled_cfg_scale`, never `shift`. SDXL, Klein and
-A1111 payloads retain their existing meaning. Existing artifact/history provenance records the frozen profile, exact
-identities, pin, requested/effective parameters, selection confirmation, seed and canonical job lineage.
+`executor.py::run_txt2img_stage` invokes one small profile-specific projection and immediately-before-dispatch readback.
+The exact POST has the PR-154B field set, `distilled_cfg_scale: 9.0` and CFG 1; `shift` cannot substitute. Non-Z-Image
+payloads are untouched. Existing image manifests and artifact/history results record profile, family, verified assets,
+pin, requested/effective parameters, confirmed selection, seed and canonical job lineage. No qualification ledger is used.
 
-## Resource decision required before enablement
+The GUI uses the existing model-policy projection for fixed settings and limited-support wording. Klein's selected
+geometry and ordinary-model drafts survive Z-Image transitions. Optional controls are locked without deleting stored
+PromptPack/feature intent; stored conflicts must be disabled before selecting Z-Image and receive explicit preflight
+rejection if submitted. The advanced CLIP-skip display projects the pinned default 1 and restores its previous draft.
+Natural-language prompts accept up to 10,000 characters, without weighted or adapter/embedding syntax; seeds accept
+integer -1 (normal canonical random seed) or 0 through 4294967295. Native PromptPack unsupported elements are checked
+before adaptation can omit them. Compiler and backend independently reject conflicting values/stage extras.
+
+## Owner-selected resource admission
 
 These are approximately 1 Hz observed samples from one exposure, not upper workload bounds or validated safe thresholds.
 
@@ -112,6 +120,21 @@ The existing executor pressure diagnostics do not establish replacement Z-Image 
 | Prepare the profile but keep production dispatch disabled pending separately approved canonical acceptance | No production resource-risk expansion; the first full StableNew generation and final admission policy remain separately authorized work. This does not meet normal enablement yet. |
 | Reuse the 32-GB-class total-RAM gate and current pressure diagnostics only | Allows dispatch without the experimental available-RAM/commit floors. Owner must explicitly accept the changed risk; neither observations nor the profile label imply safe repeated operation. |
 
-No alternative has been selected. No new numeric safe limit is invented, no pagefile/CUDA/offload/GPU configuration is
-changed, and no production admission path is enabled while this decision is pending. Implementation, gate and aggregate
-review remain to be completed after the owner choice; this branch is not merge-ready.
+The owner explicitly selected the third alternative: the existing total-RAM gate and pressure diagnostics only, accepting
+removal of the provisional available-RAM/commit floors. Dispatch refuses below 32,000,000,000 total physical bytes;
+available RAM and commit headroom are observational only. This choice is risk acceptance, not validated safe repeated-run
+headroom. No pagefile/CUDA/offload/GPU configuration is changed.
+
+## Deterministic validation and delivery boundary
+
+New focused suites cover profile identity/version/replay, near names, conflicting intent including nested module fields,
+native PromptPack rejection before adaptation, CLI construction, tiny served-file full hashes/cache invalidation,
+missing/ambiguous/wrong catalog paths, pin/marker/source drift, owned endpoint requirements, total-RAM-only admission,
+Tk-free fixed/optional control projection and draft restoration, and canonical JobService/SQLite/runner/executor/HTTP
+execution. The HTTP fake proves the exact POST, image manifest/history provenance, Z-Image/Klein/SDXL module transitions,
+sampling drift refusal, asset/pin refusal before module writes, unconfirmed selection and one ambiguous POST without replay.
+The fake image is not a physical image-quality or hardware acceptance result.
+
+Validation results and the final read-only aggregate review are recorded at local closeout. Publication/hosted required
+Python 3.14 CI and the first normal StableNew Z-Image generation require separate current authorization. No physical
+qualification case was rerun, promoted, edited or cleared by this package.

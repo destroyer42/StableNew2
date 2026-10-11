@@ -27,14 +27,20 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from src.image_backends.exact_model_profile import ExactModelProfile, resolve_model_profile
 from src.image_backends.forge_klein_profile import (
     KLEIN_PROFILE_ID,
-    KleinProfile,
     apply_klein_compile_policy,
     is_klein_transformer_name,
     klein_selected,
     latest_klein_profile,
-    resolve_model_profile,
+)
+from src.image_backends.forge_zimage_profile import (
+    ZIMAGE_PROFILE_V1,
+    ZImageProfile,
+    apply_zimage_compile_policy,
+    is_zimage_transformer_name,
+    zimage_selected,
 )
 from src.image_backends.image_backend_types import A1111_IMAGE_BACKEND_ID, FORGE_IMAGE_BACKEND_ID
 
@@ -162,7 +168,7 @@ class ModelPolicy:
 
     @property
     def qualified(self) -> bool:
-        """True only for an exact, versioned, qualified profile (a family label is never a qualification)."""
+        """An exact executable profile exists; this never establishes broad hardware qualification."""
 
         return self.profile_ref is not None
 
@@ -202,10 +208,28 @@ def _features(default: FeaturePolicy, **overrides: FeaturePolicy) -> dict[str, F
 # -- policies ---------------------------------------------------------------------------------------------------
 
 
-def policy_for_profile(profile: KleinProfile) -> ModelPolicy:
+def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
     """The policy of one exact qualified profile version (v1 admits no LoRA, v2 admits one)."""
 
     fixed = ControlMode.FIXED
+    if isinstance(profile, ZImageProfile):
+        return ModelPolicy(
+            policy_id=profile.profile_id, family="z_image", display_name=profile.display_name,
+            evidence=EVIDENCE_PROFILE, allowed_backends=(profile.backend_id,), required_backend=profile.backend_id,
+            profile_ref=profile.reference(), stages=(STAGE_TXT2IMG,), modes=profile.modes,
+            controls=_controls(
+                sampler=ControlPolicy(fixed, profile.sampler), scheduler=ControlPolicy(fixed, profile.scheduler),
+                steps=ControlPolicy(fixed, profile.steps), cfg_scale=ControlPolicy(fixed, profile.cfg_scale),
+                vae=ControlPolicy(fixed, ""), geometry=ControlPolicy(fixed, (1024, 1024), allowed=profile.geometries),
+            ),
+            features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
+            note=("Z-Image-Turbo FP8 limited support: exact three-file bundle, managed pinned Forge, txt2img only; "
+                  "one 1024x1024 image, Euler/Beta/9 steps/CFG 1/shift 9 (distilled_cfg_scale). "
+                  "Use a natural-language positive prompt; negative prompts and optional stages/modifiers are unsupported. "
+                  "Stored conflicting features are preserved and rejected; disable them before selecting this model. "
+                  "One physical generation was observed; clean-shutdown qualification and repeated-run stability remain incomplete. "
+                  "32-GB-class total RAM is required; available RAM/commit are observational, without floors."),
+        )
     lora = (
         FeaturePolicy(Support.SUPPORTED, limit=profile.max_loras, compatibility_policy=LORA_POLICY_KLEIN_4B_EXPLICIT,
                       stages=(STAGE_TXT2IMG,))
@@ -309,6 +333,8 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
 
     if is_klein_transformer_name(model_name):
         return policy_for_profile(latest_klein_profile())
+    if is_zimage_transformer_name(model_name):
+        return policy_for_profile(ZIMAGE_PROFILE_V1)
     if not str(model_name or "").strip() or family_lookup is None:
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_NONE)
     try:
@@ -412,6 +438,10 @@ def apply_model_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
     untouched). The per-profile rules live with the immutable profile and are unchanged.
     """
 
+    if zimage_selected(config):
+        return apply_zimage_compile_policy(config)
+    if isinstance(resolve_model_profile(config.get("backend_options")), ZImageProfile):
+        raise ValueError("The frozen Z-Image profile requires its exact selected checkpoint")
     if klein_selected(config):
         return _COMPILE_POLICIES[KLEIN_PROFILE_ID](config)
     return config

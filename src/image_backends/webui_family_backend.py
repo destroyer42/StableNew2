@@ -20,7 +20,8 @@ from src.api.webui_identity_attestation import (
     default_attestor,
     verify_backend_runtime_identity,
 )
-from src.image_backends.forge_klein_profile import KleinProfileError, resolve_model_profile
+from src.image_backends.exact_model_profile import resolve_model_profile
+from src.image_backends.forge_klein_profile import KleinProfileError
 from src.image_backends.image_backend_types import (
     ImageBackendCapabilities,
     ImageExecutionRequest,

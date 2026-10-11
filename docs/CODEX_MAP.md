@@ -114,6 +114,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 
 | Task | Start here |
 |---|---|
+| Z-Image-Turbo exact-bundle Forge execution (PR-IMG-MODELS-155) | `docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md` -> `src/image_backends/forge_zimage_profile.py` (immutable v1, pure intent/wire checks) + `exact_model_profile.py` (bounded Klein/Z-Image resolver) -> existing `model_policy.py`, compiler/NJR normalization, `forge_webui_backend.py`, served-path hash cache and `managed_forge_runtime.verify_pinned_launch` -> `executor.run_txt2img_stage` (profile-specific actual POST/readback) -> normal artifacts/history; GUI `model_policy_panel_projection.py`, `zimage_optional_control_projection.py`; no physical qualification authority or experimental ledger in production |
 | PromptPack behavior | `paths.py` -> `storage.py` -> `prompt_pack_model.py` -> `prompt_pack_job_builder.py` |
 | Matrix/randomization | `config_variant_plan_v2.py` -> `src/randomizer/` |
 | GUI submission | `app_controller.py` -> `run_submission_service.py` -> `job_service.py` |

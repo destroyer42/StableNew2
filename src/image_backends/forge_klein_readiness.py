@@ -19,7 +19,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from src.image_backends.forge_klein_profile import KleinProfile, KleinProfileError
+from src.image_backends.exact_model_profile import ExactModelProfile
+from src.image_backends.forge_klein_profile import KleinProfileError
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ def read_host_memory() -> HostMemorySnapshot:
 
 
 def check_klein_host_memory(
-    profile: KleinProfile,
+    profile: ExactModelProfile,
     *,
     probe: Callable[[], HostMemorySnapshot] = read_host_memory,
 ) -> KleinReadiness:

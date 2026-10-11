@@ -5141,6 +5141,13 @@ class Pipeline:
                         eta_text = f"Step {current_step}/{total_steps}, {eta_text}"
                     self.progress_controller.report_progress("txt2img", percent, eta_text)
 
+            from src.image_backends.forge_zimage_profile import (
+                project_zimage_wire_payload,
+                verify_zimage_dispatch_state,
+            )
+
+            payload = project_zimage_wire_payload(config, payload, prompt=original_positive_prompt)
+            zimage_selection = verify_zimage_dispatch_state(config, self.client)
             response = self._generate_images_with_progress(
                 "txt2img",
                 payload,
@@ -5172,6 +5179,9 @@ class Pipeline:
             run_dir = self._resolve_run_dir(output_dir)
             base_metadata = {
                 "stage": "txt2img",
+                **({"zimage_effective_request": dict(payload), "zimage_selection": zimage_selection,
+                    "zimage_profile": txt2img_config.get("zimage_provenance")}
+                   if zimage_selection is not None else {}),
                 "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
                 "original_prompt": original_positive_prompt,
                 "final_prompt": payload.get("prompt", enhanced_positive),
