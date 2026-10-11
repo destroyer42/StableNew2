@@ -56,6 +56,9 @@ class WebUIConnectionController:
         self._ready_epoch = 0
         # One connection attempt at a time: Launch, Retry, auto-reconnect and run preflight all converge here.
         self._flight = threading.Lock()
+        self._flight_owner: int | None = None
+        # Makes "publish ERROR unless READY" atomic against a manager thread publishing READY.
+        self._state_lock = threading.Lock()
         self._health_session = requests.Session()
         self._last_strict_check_ts: float | None = None
         self._last_strict_status = False
@@ -113,7 +116,8 @@ class WebUIConnectionController:
         return self._state
 
     def _set_state(self, state: WebUIConnectionState) -> None:
-        self._state = state
+        with self._state_lock:
+            self._state = state
 
     @property
     def ready_epoch(self) -> int:
@@ -179,12 +183,17 @@ class WebUIConnectionController:
         """
 
         if not self._flight.acquire(blocking=False):
+            if self._flight_owner == threading.get_ident():
+                # A ready callback re-entering from the attempt's own thread: blocking on its own lock would deadlock.
+                return self._state
             self._logger.info("WebUI connection attempt already in flight; joining it")
             with self._flight:
                 return self._state
+        self._flight_owner = threading.get_ident()
         try:
             return self._connect(autostart)
         finally:
+            self._flight_owner = None
             self._flight.release()
 
     @staticmethod
@@ -195,9 +204,17 @@ class WebUIConnectionController:
         return max(float(fallback), 1.0)
 
     def _settle_error(self, start_epoch: int, base_url: str, error: str | None) -> None:
-        """Publish ERROR unless a newer READY proof (another path's epoch) arrived while this attempt ran."""
+        """Publish ERROR unless another path proved the runtime READY while this attempt ran.
 
-        if self._ready_epoch != start_epoch and self._state is WebUIConnectionState.READY:
+        This attempt set CONNECTING itself and only publishes READY on its own success paths, so READY here is always
+        a newer proof from the owning manager (which may publish the state just before its epoch is announced).
+        """
+
+        with self._state_lock:
+            stale = self._state is WebUIConnectionState.READY
+            if not stale:
+                self._state = WebUIConnectionState.ERROR
+        if stale:
             log_with_ctx(
                 self._logger,
                 logging.INFO,
@@ -207,11 +224,10 @@ class WebUIConnectionController:
                     "event": "webui_stale_failure_ignored",
                     "configured_endpoint": base_url,
                     "ready_epoch": self._ready_epoch,
+                    "start_epoch": start_epoch,
                     "error": error,
                 },
             )
-            return
-        self._set_state(WebUIConnectionState.ERROR)
 
     def _connect(self, autostart: bool) -> WebUIConnectionState:
         base_url = self._base_url_provider()
@@ -327,7 +343,7 @@ class WebUIConnectionController:
 
     def reconnect(self) -> WebUIConnectionState:
         """Best-effort reconnect helper used by GUI retry buttons (joins an attempt already in flight)."""
-        if self._flight.locked():
+        if self._flight.locked():  # in flight (possibly this thread, via a callback): join it, never reset state
             return self.ensure_connected(autostart=True)
         self._set_state(WebUIConnectionState.DISCONNECTED)
         try:

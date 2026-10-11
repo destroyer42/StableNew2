@@ -204,6 +204,21 @@ def test_overlapping_connection_attempts_share_one_flight(monkeypatch):
     assert controller.ready_epoch == 1
 
 
+def test_a_ready_callback_reentering_connection_does_not_deadlock(monkeypatch):
+    controller = WebUIConnectionController(base_url_provider=lambda: FORGE_URL)
+    fake_probe(monkeypatch, lambda url: True)
+    seen: list[WebUIConnectionState] = []
+    controller.register_on_ready(lambda: seen.append(controller.ensure_connected(autostart=True)))
+    outcome: list[WebUIConnectionState] = []
+    worker = threading.Thread(target=lambda: outcome.append(controller.ensure_connected(autostart=True)))
+    worker.start()
+    worker.join(5)
+
+    assert not worker.is_alive()  # no self-deadlock on the attempt's own lock
+    assert outcome == [WebUIConnectionState.READY]
+    assert seen == [WebUIConnectionState.READY]
+
+
 # -- stale results ------------------------------------------------------------------------------------------------------
 
 
@@ -228,6 +243,19 @@ def test_a_stale_failure_cannot_overwrite_a_newer_ready_proof(monkeypatch):
     assert state is WebUIConnectionState.READY
     assert controller.get_state() is WebUIConnectionState.READY
     assert controller.ready_epoch == 1
+
+
+def test_a_stale_failure_is_ignored_in_the_window_before_the_ready_epoch_is_announced(monkeypatch):
+    controller = WebUIConnectionController(base_url_provider=lambda: FORGE_URL)
+
+    def probe(url, timeout=0, poll_interval=0):
+        # The manager thread has published READY but not yet bumped the epoch when this attempt's failure settles.
+        controller._set_state(WebUIConnectionState.READY)
+        raise WebUIHealthCheckTimeout("old attempt timed out")
+
+    monkeypatch.setattr("src.controller.webui_connection_controller.wait_for_webui_ready", probe)
+
+    assert controller.ensure_connected(autostart=False) is WebUIConnectionState.READY
 
 
 def test_an_unrelated_failure_still_publishes_error(monkeypatch):
