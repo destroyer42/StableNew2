@@ -96,6 +96,7 @@ class ReviewTabFrame(ttk.Frame):
             "modify": "",
         }
         self.batch_size_var = tk.IntVar(value=1)
+        self.group_by_model_var = tk.BooleanVar(value=False)
         self.rating_var = tk.IntVar(value=3)
         self.anatomy_rating_var = tk.IntVar(value=3)
         # PR-REFINE-160: optional per-region before/after judgment of an ADetailer output (default: unreviewed).
@@ -556,6 +557,8 @@ class ReviewTabFrame(ttk.Frame):
         ttk.Label(batch_row, text="(groups by compatible settings)", style="Dark.TLabel").pack(
             side="left", padx=(8, 0)
         )
+        ttk.Checkbutton(batch_row, text="Order new batch by checkpoint/profile",
+                        variable=self.group_by_model_var).pack(side="left", padx=8)
         batch_help_btn = ttk.Button(
             batch_row,
             text="?",
@@ -1684,6 +1687,40 @@ class ReviewTabFrame(ttk.Frame):
             negative_delta, batch_size = "", 1
 
         try:
+            preview_batch = getattr(controller, "preview_review_reprocess_batch", None)
+            if callable(preview_batch):
+                from src.gui.review_batch_dialog import ReviewBatchDialog
+
+                source_map = dict(getattr(self._active_handoff, "source_metadata_by_path", {}) or {})
+                if klein_edit:
+                    source_map = self._workflow_adapter.with_klein_edit_request(source_map, targets)
+                request = {
+                    "image_paths": [str(p) for p in targets], "stages": stages,
+                    "prompt_delta": prompt_delta, "negative_prompt_delta": negative_delta,
+                    "prompt_mode": "replace" if klein_edit else self.prompt_mode_var.get(),
+                    "negative_prompt_mode": "replace" if klein_edit else self.negative_mode_var.get(),
+                    "batch_size": batch_size, "source_metadata_by_image": source_map,
+                    "group_by_model": bool(self.group_by_model_var.get()),
+                }
+
+                def show(preview: Any) -> None:
+                    if not self.winfo_exists():
+                        return
+                    ReviewBatchDialog(
+                        self, preview, submit=controller.submit_review_reprocess_batch,
+                        repreview=lambda paths: prepare({**request, "image_paths": paths}),
+                        visibility=self._visibility_resolver(),
+                    )
+
+                def prepare(payload: dict[str, Any]) -> None:
+                    preview_batch(
+                        **payload, on_preview=show,
+                        on_error=lambda exc: messagebox.showerror("Review preview failed", str(exc))
+                        if self.winfo_exists() else None,
+                    )
+
+                prepare(request)
+                return
             handler = getattr(controller, "on_reprocess_images_with_prompt_delta", None)
             if callable(handler):
                 source_metadata_by_image = None

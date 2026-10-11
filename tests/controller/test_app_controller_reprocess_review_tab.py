@@ -3,6 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from PIL import Image
+
 from src.controller.app_controller import AppController
 
 
@@ -35,7 +37,7 @@ def _build_controller() -> AppController:
 def test_reprocess_with_prompt_delta_uses_metadata_baseline(tmp_path) -> None:
     controller = _build_controller()
     image = tmp_path / "img_a.png"
-    image.write_bytes(b"")
+    Image.new("RGB", (32, 32)).save(image)
 
     controller._extract_reprocess_baseline_from_image = Mock(
         return_value={
@@ -80,7 +82,7 @@ def test_reprocess_with_prompt_delta_uses_metadata_baseline(tmp_path) -> None:
 def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) -> None:
     controller = _build_controller()
     image = tmp_path / "img_b.png"
-    image.write_bytes(b"")
+    Image.new("RGB", (32, 32)).save(image)
 
     controller._extract_reprocess_baseline_from_image = Mock(return_value={})
 
@@ -105,7 +107,7 @@ def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) 
 def test_reprocess_with_source_lineage_metadata_stamps_top_level_curation_blocks(tmp_path) -> None:
     controller = _build_controller()
     image = tmp_path / "img_lineage.png"
-    image.write_bytes(b"")
+    Image.new("RGB", (32, 32)).save(image)
 
     controller._extract_reprocess_baseline_from_image = Mock(
         return_value={
@@ -155,7 +157,7 @@ def test_reprocess_with_source_lineage_metadata_stamps_top_level_curation_blocks
 def test_reprocess_with_prompt_modify_short_delta_preserves_baseline(tmp_path) -> None:
     controller = _build_controller()
     image = tmp_path / "img_modify.png"
-    image.write_bytes(b"")
+    Image.new("RGB", (32, 32)).save(image)
 
     controller._extract_reprocess_baseline_from_image = Mock(
         return_value={
@@ -190,7 +192,7 @@ def test_reprocess_with_prompt_modify_short_delta_preserves_baseline(tmp_path) -
 def test_reprocess_img2img_fallback_sets_stage_steps(tmp_path) -> None:
     controller = _build_controller()
     image = tmp_path / "img_img2img.png"
-    image.write_bytes(b"")
+    Image.new("RGB", (32, 32)).save(image)
 
     controller._extract_reprocess_baseline_from_image = Mock(return_value={})
 
@@ -216,9 +218,9 @@ def test_reprocess_batch_size_groups_only_compatible_jobs(tmp_path) -> None:
     image_a = tmp_path / "img_a.png"
     image_b = tmp_path / "img_b.png"
     image_c = tmp_path / "img_c.png"
-    image_a.write_bytes(b"")
-    image_b.write_bytes(b"")
-    image_c.write_bytes(b"")
+    Image.new("RGB", (32, 32)).save(image_a)
+    Image.new("RGB", (32, 32)).save(image_b)
+    Image.new("RGB", (32, 32)).save(image_c)
 
     def _baseline(path):
         name = path.name

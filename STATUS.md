@@ -4,6 +4,16 @@ Updated: 2026-10-11
 
 ## Repository
 
+- Review whole-selection batch preflight (PR-REVIEW-BATCH-200, local package):
+  synthetic 10/25/40-source evidence confirms existing one-job-per-source admission
+  and shared edits. A transient preflight now exposes every source's frozen settings
+  and blocked items before canonical admission, supports explicit exclusion/re-preview
+  and optional stable checkpoint/profile order within only the new batch, and freezes
+  shared batch/source lineage in existing NJR metadata. Queue/history, backend support
+  and runtime authorities are unchanged. Multi-source Video Workflow is the next
+  recommended batch priority; cross-checkpoint retargeting remains deferred. See
+  `docs/Subsystems/GUI/PR-REVIEW-BATCH-200_Evidence_and_Preflight.md`.
+
 - Preview draft recovery (PR-GUI-112, locally validated): Clear Draft remains
   available for rejected/draft-only previews, compiler errors are actionable,
   and stale asynchronous completion cannot restore a cleared draft. Fresh valid

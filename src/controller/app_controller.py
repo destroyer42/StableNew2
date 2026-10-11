@@ -97,6 +97,7 @@ from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
     ProcessAutoScannerService,
 )
+from src.controller.review_batch_service import ReviewBatchPreview, prepare_review_batch
 from src.controller.runtime_state import GUIState
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.svd_submission_service import (
@@ -108,7 +109,6 @@ from src.controller.webui_connection_controller import (
     WebUIConnectionController,
     WebUIConnectionState,
 )
-from src.curation.curation_manifest import build_review_chunk_lineage_block
 from src.gui.app_state_projection_sink import AppStateProjectionSink
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
@@ -1892,99 +1892,32 @@ class AppController:
         batch_size: int = 1,
         source_metadata_by_image: dict[str, dict[str, Any]] | None = None,
     ) -> int:
-        """Reprocess images while preserving metadata-derived settings and editing prompts.
+        """Preserve the existing direct controller API with whole-selection preparation."""
+        preview = prepare_review_batch(
+            self, image_paths=image_paths, stages=stages, prompt_delta=prompt_delta,
+            negative_prompt_delta=negative_prompt_delta, prompt_mode=prompt_mode,
+            negative_prompt_mode=negative_prompt_mode, batch_size=batch_size,
+            source_metadata_by_image=source_metadata_by_image,
+            fallback_config=self._build_reprocess_config(stages),
+        )
+        return self.submit_review_reprocess_batch(preview)
 
-        This path is used by the Review tab. For each image:
-        - Reads embedded stage metadata (if present) for prompt/model/VAE/config baseline.
-        - Applies prompt deltas in append/replace/modify mode.
-        - Builds a single-image NJR and submits it to the queue.
-        """
-        if not image_paths:
-            raise ValueError("No images provided for reprocessing")
-        if not stages:
-            raise ValueError("No stages specified for reprocessing")
-
-        valid_stages = {"adetailer", "upscale", "img2img"}
-        invalid_stages = set(stages) - valid_stages
-        if invalid_stages:
-            raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
-        if prompt_mode not in {"append", "replace", "modify"}:
-            raise ValueError("prompt_mode must be 'append', 'replace', or 'modify'")
-        if negative_prompt_mode not in {"append", "replace", "modify"}:
-            raise ValueError("negative_prompt_mode must be 'append', 'replace', or 'modify'")
-        if batch_size <= 0:
-            raise ValueError("batch_size must be >= 1")
-
-        builder = ReprocessJobBuilder()
-        fallback_config = self._build_reprocess_config(stages)
-        metadata_hits = 0
-        items: list[ReprocessSourceItem] = []
-
-        for image_path in image_paths:
-            image_file = Path(image_path)
-            base_prompt = ""
-            base_negative_prompt = ""
-            base_model: str | None = None
-            base_vae: str | None = None
-            metadata_config: dict[str, Any] = {}
-
-            metadata_baseline = self._extract_reprocess_baseline_from_image(image_file)
-            if metadata_baseline:
-                metadata_hits += 1
-                base_prompt = str(metadata_baseline.get("prompt") or "")
-                base_negative_prompt = str(metadata_baseline.get("negative_prompt") or "")
-                base_model = metadata_baseline.get("model")
-                base_vae = metadata_baseline.get("vae")
-                maybe_cfg = metadata_baseline.get("config")
-                if isinstance(maybe_cfg, dict):
-                    metadata_config = maybe_cfg
-
-            effective_prompt = self._apply_prompt_delta(base_prompt, prompt_delta, prompt_mode)
-            effective_negative_prompt = self._apply_prompt_delta(
-                base_negative_prompt, negative_prompt_delta, negative_prompt_mode
-            )
-            item_metadata: dict[str, Any] = {
-                "baseline_source": "embedded_metadata" if metadata_baseline else "fallback",
-            }
-            if isinstance(source_metadata_by_image, dict):
-                source_meta = source_metadata_by_image.get(str(image_file)) or source_metadata_by_image.get(str(image_file.resolve()))
-                if isinstance(source_meta, dict):
-                    item_metadata.update(source_meta)
-
-            items.append(
-                ReprocessSourceItem(
-                    input_image_path=str(image_file),
-                    prompt=effective_prompt,
-                    negative_prompt=effective_negative_prompt,
-                    model=base_model,
-                    vae=base_vae,
-                    config=metadata_config,
-                    metadata=item_metadata,
-                )
-            )
-
-        def _extra_metadata_builder(chunk: list[ReprocessSourceItem], _job_output_dir: str) -> dict[str, Any]:
-            if not chunk:
-                return {}
-            first_item_metadata = dict(chunk[0].metadata or {})
-            target_stage = stages[0] if len(stages) == 1 else " -> ".join(stages)
-            return build_review_chunk_lineage_block(first_item_metadata, target_stage=target_stage)
-
-        plan = builder.build_grouped_reprocess_jobs(
-            items=items,
-            stages=stages,
-            fallback_config=fallback_config,
-            batch_size=batch_size,
-            pack_name="ReviewReprocess",
-            source="review_tab",
-            extra_metadata_builder=_extra_metadata_builder,
+    def preview_review_reprocess_batch(self, *, on_preview: Any, on_error: Any, **request: Any) -> None:
+        """Capture GUI settings once; compile source files off the GUI thread."""
+        fallback = deepcopy(self._build_reprocess_config(request["stages"]))
+        captured = deepcopy(request)
+        self._background_tasks.submit(
+            "review:batch", lambda: prepare_review_batch(self, fallback_config=fallback, **captured),
+            on_result=on_preview, on_error=on_error, name="ReviewBatchPreview",
+            purpose="Compile the complete Review selection without admission",
         )
 
-        submitted_count = self._submit_reprocess_njrs(plan.jobs, source="review_tab")
+    def submit_review_reprocess_batch(self, preview: ReviewBatchPreview) -> int:
+        preview.require_queueable()
+        submitted_count = self._submit_reprocess_njrs(list(preview.jobs), source="review_tab")
         self._append_log(
-            f"[reprocess] Review-tab submit: {submitted_count} jobs, "
-            f"metadata baseline used for {metadata_hits}/{len(image_paths)} images "
-            f"across {plan.group_count} compatibility group(s), batch_size={batch_size}"
+            f"[reprocess] Review batch {preview.batch_id}: {submitted_count} jobs, "
+            f"{len(preview.items)} sources; group_by_model={preview.group_by_model}"
         )
         return submitted_count
 
