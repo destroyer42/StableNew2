@@ -15,6 +15,11 @@ from typing import Any, cast
 from src.contracts import PackJobEntry
 from src.image_backends.forge_klein_lora import LoraResolver
 from src.image_backends.forge_klein_profile import klein_selected
+from src.image_backends.forge_zimage_profile import (
+    ZImageProfileError,
+    validate_zimage_njr,
+    zimage_selected,
+)
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import FamilyLookup, apply_model_compile_policy
 from src.pipeline import config_contract_v26
@@ -486,6 +491,12 @@ class PromptPackNormalizedJobBuilder:
             resolved_actors,
             resolved_style_lora,
         )
+        if zimage_selected(source_config) and (
+            intent.loras or intent.positive_embeddings or intent.negative_embeddings
+            or intent.pack_negative.strip() or intent.global_negative_applied
+            or any(text.strip() for text in intent.negative_phrases) or intent.safety_negative.strip()
+        ):
+            raise ZImageProfileError("Z-Image PromptPack contains unsupported LoRA, embeddings or negative/global intent")
         return _PreparedPrompt(entry, matrix_variant_index, matrix_variant_count, source_config,
                                merged_config, stage_chain, record_metadata, resolved_style_lora, intent, pack_config.get("version"))
 
@@ -676,6 +687,8 @@ class PromptPackNormalizedJobBuilder:
                     ),
                 )
             )
+        for job in finalized_jobs:
+            validate_zimage_njr(job)
         return finalized_jobs
 
     def _resolve_source_intent(

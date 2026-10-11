@@ -66,7 +66,7 @@ def _normalized_endpoint(url: str) -> tuple[str, str, int | None]:
     return parsed.scheme.lower(), "127.0.0.1" if host == "localhost" else host, parsed.port
 
 
-def resolve_owned_forge_data_dir(endpoint: str) -> Path:
+def resolve_owned_forge_data_dir(endpoint: str, *, manager: Any = None) -> Path:
     """The data directory of the Forge process StableNew itself launched and that serves ``endpoint``.
 
     Established only through the existing ``WebUIProcessManager`` authority: a current manager with identity
@@ -76,7 +76,7 @@ def resolve_owned_forge_data_dir(endpoint: str) -> Path:
     taken as ownership.
     """
 
-    manager = _active_manager()
+    manager = manager if manager is not None else _active_manager()
     if manager is None:
         raise KleinProfileError("No StableNew WebUI process manager is active. " + _MANAGED_ONLY)
     if getattr(manager, "runtime_identity", "") != "forge_webui":
@@ -110,8 +110,8 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _verify_one(data_dir: Path, asset: KleinAsset) -> dict[str, Any]:
-    path = data_dir / "models" / asset.models_subdir / asset.filename
+def _verify_one(data_dir: Path, asset: KleinAsset, *, served_path: Path | None = None) -> dict[str, Any]:
+    path = served_path if served_path is not None else data_dir / "models" / asset.models_subdir / asset.filename
     if not path.is_file():
         raise KleinProfileError(
             f"The {asset.role} {asset.filename} is not installed in the managed Forge model tree "
@@ -131,6 +131,8 @@ def _verify_one(data_dir: Path, asset: KleinAsset) -> dict[str, Any]:
             f"The installed {asset.filename} has SHA-256 {actual}, expected {asset.sha256}; "
             "refusing to run Klein on files that are not the qualified assets."
         )
+    if _stat_key(path, asset.size, path.stat()) != key:
+        raise KleinProfileError(f"The served {asset.filename} changed while its bytes were verified")
     with _LOCK:
         _VERIFIED[key] = actual
     return {"name": asset.filename, "size": asset.size, "sha256": actual, "verified": "sha256", "cache": "miss"}
@@ -146,6 +148,41 @@ def verify_klein_assets(
 
     root = Path(data_dir) if data_dir is not None else resolve_owned_forge_data_dir(endpoint)
     return {asset.role: _verify_one(root, asset) for asset in profile.assets}
+
+
+def verify_zimage_assets(profile: Any, *, client: Any) -> dict[str, Any]:
+    """Use the existing owned-runtime, catalog and fingerprint hash authorities for Z-Image.
+
+    Hash the exact paths the endpoint serves, including reference-home files, never a
+    same-named installed copy that the runtime might not load. Catalog ambiguity refuses.
+    """
+    from src.image_backends.model_readiness_probe import checkpoint_key
+    from src.utils.managed_forge_runtime import verify_pinned_launch
+
+    manager = _active_manager()
+    root = resolve_owned_forge_data_dir(str(client.base_url), manager=manager)
+    pin = verify_pinned_launch(
+        manager.launch_session_command, str(getattr(manager._config, "working_dir", "") or ""),
+        profile.forge_revision,
+    )
+    models = client.get_models()
+    modules = client.get_module_catalog()
+    if not isinstance(models, list) or not isinstance(modules, list):
+        raise KleinProfileError("Z-Image requires readable Forge checkpoint and module catalogs")
+    result: dict[str, Any] = {"forge": pin}
+    for asset in profile.assets:
+        entries = models if asset.role == "transformer" else modules
+        paths = {
+            str(item.get("filename") or "") for item in entries if isinstance(item, dict)
+            and checkpoint_key(asset.filename) in {checkpoint_key(item.get(k)) for k in ("model_name", "title", "filename")}
+        }
+        if len(paths) != 1 or not next(iter(paths), ""):
+            raise KleinProfileError(f"Forge must list one unambiguous served file for {asset.filename}")
+        path = Path(next(iter(paths)))
+        if not path.is_absolute() or checkpoint_key(path.name) != checkpoint_key(asset.filename):
+            raise KleinProfileError(f"Forge's served path does not bind {asset.filename}")
+        result[asset.role] = _verify_one(root, asset, served_path=path)
+    return result
 
 
 __all__ = [

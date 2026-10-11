@@ -17,7 +17,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import MUTED_LABEL_STYLE
-from src.image_backends.forge_klein_profile import is_klein_transformer_name
+from src.image_backends.exact_model_profile import model_profile_for_model
 from src.image_backends.model_readiness import ModelReadiness
 from src.image_backends.model_readiness_probe import probe_model_readiness
 
@@ -38,7 +38,7 @@ class ModelReadinessPresenter:
         self._panel = panel
         self._controller = controller
         self._probe = probe or (
-            lambda client, model: probe_model_readiness(client, model, profile_available=is_klein_transformer_name(model))
+            lambda client, model: probe_model_readiness(client, model, profile_available=model_profile_for_model(model) is not None)
         )
         self._request_id = 0
         self._shown_model = ""

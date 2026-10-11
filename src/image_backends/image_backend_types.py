@@ -88,7 +88,7 @@ def normalize_image_backend_options(
         raise ValueError("backend_options.image.backend_id must not be blank")
     image["backend_id"] = normalized_backend_id
     if model_name and "model_profile" not in image:
-        from src.image_backends.forge_klein_profile import model_profile_for_model
+        from src.image_backends.exact_model_profile import model_profile_for_model
 
         profile_reference = model_profile_for_model(model_name)
         if profile_reference is not None:

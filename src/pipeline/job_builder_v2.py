@@ -22,6 +22,7 @@ from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from src.image_backends.forge_zimage_profile import validate_zimage_njr
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import apply_model_compile_policy
 from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
@@ -184,6 +185,7 @@ class JobBuilderV2:
                             pack_usage=tuple(self._build_pack_usage(config)),
                         ),
                     )
+                    validate_zimage_njr(job)
                     jobs.append(job)
 
         return jobs

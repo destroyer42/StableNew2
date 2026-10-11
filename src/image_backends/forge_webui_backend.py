@@ -36,7 +36,16 @@ from typing import Any
 from src.api.forge_client import ForgeVAEError, module_set_key
 from src.api.webui_identity_attestation import ManagedWebUIIdentityAttestor
 from src.assets.component_evidence import ComponentEvidence, inspect_component_file
-from src.image_backends.forge_klein_assets import _active_manager, verify_klein_assets
+from src.image_backends.exact_model_profile import (
+    ExactModelProfile,
+    resolve_model_profile,
+    validate_profile_intent,
+)
+from src.image_backends.forge_klein_assets import (
+    _active_manager,
+    verify_klein_assets,
+    verify_zimage_assets,
+)
 from src.image_backends.forge_klein_lora import (
     KleinLoraDecision,
     LoraResolver,
@@ -55,14 +64,19 @@ from src.image_backends.forge_klein_profile import (
     detect_unsupported_features,
     is_klein_transformer_name,
     klein_provenance,
-    resolve_model_profile,
-    validate_klein_intent,
 )
 from src.image_backends.forge_klein_readiness import (
     HostMemorySnapshot,
     KleinReadiness,
     check_klein_host_memory,
     read_host_memory,
+)
+from src.image_backends.forge_zimage_profile import (
+    ZImageProfile,
+    ZImageProfileError,
+    is_zimage_transformer_name,
+    validate_zimage_config,
+    validate_zimage_njr,
 )
 from src.image_backends.image_backend_types import (
     FORGE_IMAGE_BACKEND_ID,
@@ -197,11 +211,11 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     # ------------------------------------------------------------------ profile validation
 
     @staticmethod
-    def _profile_for(backend_options: Any) -> KleinProfile | None:
+    def _profile_for(backend_options: Any) -> ExactModelProfile | None:
         return resolve_model_profile(backend_options)
 
     @staticmethod
-    def _vae_conflict(vae: Any, profile: KleinProfile) -> list[str]:
+    def _vae_conflict(vae: Any, profile: ExactModelProfile) -> list[str]:
         name = str(vae or "").strip()
         if name.lower() in _AUTOMATIC_VAE:
             return []
@@ -227,7 +241,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
 
     def _lora_conflicts(
         self,
-        profile: KleinProfile,
+        profile: ExactModelProfile,
         *,
         stage_names: Any,
         prompt: str,
@@ -263,6 +277,9 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         # NJR.extra_metadata is the canonical JSON projection of frozen provenance.
         selection = getattr(njr, "extra_metadata", {}).get("klein_lora_selection")
         profile = self._profile_for(backend_options)
+        if isinstance(profile, ZImageProfile) or is_zimage_transformer_name(getattr(njr, "base_model", None)):
+            validate_zimage_njr(njr, stage_names)
+            return
         if profile is None:
             if selection is not None or _selection_from_config(config) is not None:
                 raise ForgeUnsupportedIntentError("Frozen Klein selection requires an exact execution profile; rebuild Preview")
@@ -291,7 +308,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             + lora_problems
         )
         input_images = tuple(getattr(njr, "input_image_paths", ()) or ())
-        mode = validate_klein_intent(
+        mode = validate_profile_intent(
             profile,
             backend_id=resolve_image_backend_id(backend_options),
             stage_names=stage_names,
@@ -314,6 +331,18 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
 
     def _validate_request(self, request: ImageExecutionRequest) -> None:
         profile = self._profile_for(request.backend_options)
+        if profile is None and is_zimage_transformer_name(request.selected_model):
+            raise ZImageProfileError("Z-Image requires its immutable execution profile; no generic fallback")
+        if isinstance(profile, ZImageProfile):
+            validate_zimage_config(request.execution_config, prompt=request.prompt, negative=request.negative_prompt)
+            stage = dict(request.stage_config or {})
+            extra = stage.pop("extra", {})
+            validate_zimage_config(extra if isinstance(extra, Mapping) else {}, prompt=request.prompt)
+            validate_zimage_config(stage, prompt=request.prompt)
+            validate_zimage_config({"seed": request.seed, "images_per_prompt": request.image_count,
+                                    "vae": request.selected_vae})
+            if not request.prompt.strip() or request.input_image_path is not None:
+                raise ZImageProfileError("Z-Image requires positive txt2img intent with no input image")
         if profile is None:
             if _selection_from_config(request.execution_config) is not None:
                 raise ForgeUnsupportedIntentError("Frozen Klein selection requires an exact execution profile; rebuild Preview")
@@ -340,7 +369,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         )
         if int(request.image_count or 1) != 1:
             features.append(f"image count {request.image_count}")
-        validate_klein_intent(
+        validate_profile_intent(
             profile,
             backend_id=request.backend_id,
             stage_names=(request.stage_name,),
@@ -555,7 +584,10 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         )
         # What Forge will load, by bytes: the API names below are only supplementary evidence of selection.
         endpoint = str(getattr(getattr(pipeline, "client", None), "base_url", "") or "")
-        self._identity[request.job_id] = verify_klein_assets(profile, endpoint=endpoint)
+        self._identity[request.job_id] = (
+            verify_zimage_assets(profile, client=pipeline.client) if isinstance(profile, ZImageProfile)
+            else verify_klein_assets(profile, endpoint=endpoint)
+        )
         self._assert_assets_listed(pipeline, profile)
         if self._lora_evidence.get(request.job_id, ((), ()))[1]:
             self._identity[request.job_id]["lora_served"] = self._assert_lora_served(pipeline, request)
@@ -592,7 +624,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         return {"name": source.name, "sha256": actual, "frozen_sha256": frozen, "verified_before_dispatch": True}
 
     @staticmethod
-    def _assert_assets_listed(pipeline: Any, profile: KleinProfile) -> None:
+    def _assert_assets_listed(pipeline: Any, profile: ExactModelProfile) -> None:
         """Read-only: refuse before any write if Forge does not list the exact installed assets.
 
         The executor swallows stage exceptions into a generic "no images" failure, so the actionable
@@ -600,6 +632,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         """
 
         client = getattr(pipeline, "client", None)
+        if isinstance(profile, ZImageProfile):
+            return  # Strict served-path catalogs were already checked by verify_zimage_assets.
         install_hint = (
             "Install the exact qualified files with scripts/install_forge_klein_assets.ps1 "
             "(-SourceDir <folder holding them>)."
@@ -657,7 +691,18 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             global_negative_prompt="",
             global_prompt_policy_source="frozen_njr",
         )
-        if request.stage_name == "img2img":
+        if isinstance(profile, ZImageProfile):
+            projected.update(
+                backend_options=request.backend_options, distilled_cfg_scale=profile.distilled_cfg_scale,
+                width=1024, height=1024, clip_skip=1,
+                zimage_provenance={
+                    "model_profile": profile.reference(), "family": "z_image",
+                    "forge_revision": profile.forge_revision, "job_id": request.job_id, "seed": request.seed,
+                    "asset_identity": self._identity.get(request.job_id),
+                    "qualification_status": "one_generation_observed; INSTRUMENTATION_GAP",
+                },
+            )
+        if request.stage_name == "img2img" and isinstance(profile, KleinProfile):
             for key in ("mask_image_path", "mask_path", "negative_adjust", "prompt_adjust"):
                 projected.pop(key, None)
             projected.update(
@@ -702,7 +747,23 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 f"({lora_block['observation'].get('line', 'adapter keys did not match')}); the generated image "
                 "does not reflect the requested LoRA, so the job is failed rather than recorded as a LoRA result."
             )
-        evidence = klein_provenance(profile, mode=mode, lora=lora_block)
+        if isinstance(profile, ZImageProfile):
+            evidence = {
+                "model_profile": profile.reference(), "family": "z_image", "backend_id": profile.backend_id,
+                "mode": mode, "forge_revision": profile.forge_revision,
+                "qualification_status": "one_generation_observed; INSTRUMENTATION_GAP",
+                "transformer": {"name": profile.transformer.filename, "size": profile.transformer.size,
+                                "sha256": profile.transformer.sha256},
+                "modules": [{"name": a.filename, "size": a.size, "sha256": a.sha256} for a in profile.modules],
+                "requested_parameters": {"sampler_name": request.sampler, "scheduler": request.scheduler,
+                                         "steps": request.steps, "cfg_scale": request.cfg_scale,
+                                         "distilled_cfg_scale": profile.distilled_cfg_scale,
+                                         "width": request.width, "height": request.height, "seed": request.seed},
+                "job_id": request.job_id,
+                "effective_request": result.raw_result.get("config"),
+            }
+        else:
+            evidence = klein_provenance(profile, mode=mode, lora=lora_block)
         if readiness is not None:
             evidence["host_memory_before_dispatch"] = readiness.as_dict()
         evidence["observed"] = self._observe(pipeline)  # Forge's reported names: supplementary evidence
@@ -710,7 +771,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             evidence["asset_identity"] = identity  # local size + SHA-256 of the files Forge loads
         if verified_source is not None:
             evidence["source_image"] = verified_source
-        result.backend_metadata["klein_profile"] = evidence
+        result.backend_metadata["zimage_profile" if isinstance(profile, ZImageProfile) else "klein_profile"] = evidence
         return result
 
     def _lora_block(

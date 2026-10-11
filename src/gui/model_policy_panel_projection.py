@@ -88,6 +88,7 @@ class ModelPolicyPanelProjection:
         self._policy_key: str | None = None
         self._constrained = False
         self._drafts: dict[str, dict[str, Any]] = {}
+        self._constrained_drafts: dict[str, dict[str, Any]] = {}
         self._last_working: dict[str, Any] | None = None
         self._saved_states: dict[str, str] = {}
         self._saved_presets: tuple[str, ...] | None = None
@@ -153,8 +154,15 @@ class ModelPolicyPanelProjection:
         if projection.constrained:
             if not self._constrained:
                 self._remember_working_values(self._policy_key or _INITIAL)
+            elif key != self._policy_key and self._policy_key is not None:
+                self._constrained_drafts[self._policy_key] = self._snapshot()
+            if key != self._policy_key:
+                for name, value in self._constrained_drafts.get(key, {}).items():
+                    getattr(panel, name).set(value)
             self._apply_constrained(projection)
         elif self._constrained:
+            if self._policy_key is not None:
+                self._constrained_drafts[self._policy_key] = self._snapshot()
             self._release(key)
         self._policy_key = key
         if self._lora_sink is not None:

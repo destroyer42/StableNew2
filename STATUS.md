@@ -4,6 +4,18 @@ Updated: 2026-10-10
 
 ## Repository
 
+- Z-Image-Turbo FP8 exact-bundle Forge enablement (PR-IMG-MODELS-155, local validation complete / ready for publication review):
+  immutable `z_image_turbo_fp8_scaled@v1` through the existing compiler/NJR/JobService/SQLite/runner/Forge/artifact path;
+  one 1024x1024 txt2img image, Euler/Beta/9 steps/CFG 1/`distilled_cfg_scale` 9, natural-language positive prompt and seed.
+  The exact served asset trio, clean managed Forge pin and module/sampling readback are required before the POST.
+  Unsupported intent is rejected, with no generic profile fallback or qualification passphrase. The owner explicitly
+  accepted Klein's 32-GB-class total-RAM gate and existing pressure diagnostics without provisional available-RAM/commit
+  floors. The original physical result remains `INSTRUMENTATION_GAP`; clean shutdown and repeated-run stability remain
+  unresolved. Source `cf2eb338` passed 583 affected tests, the full local PR gate (386 required tests) and independent
+  read-only aggregate review. Hosted Python 3.14 CI and canonical physical acceptance remain pending; no publication or
+  normal-path physical generation is authorized yet. See
+  `docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md`.
+
 - Z-Image-Turbo FP8-scaled controlled physical-qualification harness (PR-IMG-MODELS-154B, latest result `INSTRUMENTATION_GAP`;
   harness integrated as PR #83; subsequent launch corrections and physical closeout remain local): an isolated,
   disabled-by-default, one-case harness in `tools/qualification/img154b/` (not a production execution path; no `src/` change).

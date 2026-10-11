@@ -582,6 +582,11 @@ class MainWindowV2:
                 return
             projection.add_listener(prompt_tab.on_model_projection)
             prompt_tab.on_model_projection(projection.last_projection)
+            from src.gui.zimage_optional_control_projection import ZImageOptionalControlProjection
+
+            optional = ZImageOptionalControlProjection(self.pipeline_tab, prompt_tab, self.sidebar_panel_v2)
+            projection.add_listener(optional.apply)
+            optional.apply(projection.last_projection)
         except Exception:
             logger.debug("Prompt model-target wiring skipped", exc_info=True)
 
