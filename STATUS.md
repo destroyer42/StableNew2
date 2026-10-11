@@ -4,7 +4,21 @@ Updated: 2026-10-11
 
 ## Repository
 
-- Cross-workflow model compatibility and preflight (PR-IMG-MODELS-158, locally validated):
+- Review whole-selection batch preflight (PR-REVIEW-BATCH-200, local package):
+  synthetic 10/25/40-source evidence confirms existing one-job-per-source admission
+  and shared edits. A transient preflight now exposes every source's frozen settings
+  and blocked items before canonical admission, supports explicit exclusion/re-preview
+  and optional stable checkpoint/profile order within only the new batch, and freezes
+  shared batch/source lineage in existing NJR metadata. Whole-selection readiness
+  and final admission reuse merged IMG-158's operation assessment; source hashes are
+  verified again before submission, including same-size/same-mtime modifications,
+  through the existing background coordinator. Queue/history, backend support
+  and runtime authorities are unchanged. Multi-source Video Workflow is the next
+  recommended batch priority; cross-checkpoint retargeting remains deferred. See
+  `docs/Subsystems/GUI/PR-REVIEW-BATCH-200_Evidence_and_Preflight.md`.
+
+- Cross-workflow model compatibility and preflight (PR-IMG-MODELS-158, integrated as PR #88;
+  hosted required and affected CI green):
   one pure read-only operation assessment over the canonical `ModelPolicy`
   (`src/image_backends/operation_compatibility.py`) now fronts Review/reprocess admission
   (`src/controller/reprocess_admission.py`: the whole batch is assessed before the single
