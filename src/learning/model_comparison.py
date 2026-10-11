@@ -19,6 +19,51 @@ CONTRACT = "learning_model_comparison/1"
 STUDY_TYPE = "model_comparison"
 COMPARISON_CLAIM = "target_envelope_preference"
 RECORD_KIND = "learning_model_comparison_rating"
+#: Additive discriminator (PR-IMG-MODELS-160). A study carrying ``global_positive`` was built with shared global-positive
+#: parity and every arm must carry the matching block; a study without it keeps its original (pre-parity) meaning.
+GLOBAL_POSITIVE_CONTRACT = "learning_model_comparison_global_positive/1"
+GLOBAL_POSITIVE_NOT_REQUESTED = "not_requested"
+GLOBAL_POSITIVE_EXECUTOR = "executor_applied"
+GLOBAL_POSITIVE_COMPOSED = "compiler_composed"
+GLOBAL_POSITIVE_MODES = (
+    GLOBAL_POSITIVE_NOT_REQUESTED,
+    GLOBAL_POSITIVE_EXECUTOR,
+    GLOBAL_POSITIVE_COMPOSED,
+)
+_COMPOSED_OPERATION = "global_positive_composed"
+
+
+def shared_global_positive(config: dict) -> dict:
+    """The shared study's frozen global-positive request (text and enablement); nothing is applied here."""
+    from src.pipeline.global_prompt_policy import frozen_global_positive_policy
+
+    text, enabled = frozen_global_positive_policy(config)
+    return {"contract": GLOBAL_POSITIVE_CONTRACT, "enabled": enabled, "text": text}
+
+
+def _global_positive_requested(shared: dict) -> bool:
+    return bool(shared["enabled"] and shared["text"])
+
+
+def global_positive_ownership(shared: dict, config: dict) -> tuple[str, str]:
+    """``(mode, text to offer the shared adapter)`` from one arm's already-compiled frozen executor policy.
+
+    The decision is read from what the canonical model policy left in the arm: terms the executor will still apply stay
+    executor-owned; otherwise an enabled request must be composed by the compiler exactly once. Nothing is tabulated by
+    model family here.
+    """
+    from src.pipeline.global_prompt_policy import frozen_global_positive_policy
+
+    terms, enabled = frozen_global_positive_policy(config)
+    executor_terms = terms if enabled else ""
+    if _global_positive_requested(shared):
+        if executor_terms:
+            if executor_terms != shared["text"]:
+                raise ValueError("Candidate policy changed the shared global positive terms")
+            return GLOBAL_POSITIVE_EXECUTOR, ""
+        return GLOBAL_POSITIVE_COMPOSED, shared["text"]
+    # Disabled/empty. A target whose executor cannot hold the stored terms records them as not applied (content-free).
+    return GLOBAL_POSITIVE_NOT_REQUESTED, (shared["text"] if shared["text"] and not terms else "")
 
 
 def executor_global_prompt_policy(config: dict) -> dict:
@@ -180,6 +225,7 @@ def build_comparison_snapshot(
     from src.pipeline.global_prompt_policy import apply_global_prompt_policy
     from src.pipeline.resolution_layer import (
         adapt_pack_intent,
+        compose_global_positive,
         pack_prompt_intent_from_dict,
         pack_prompt_intent_to_dict,
         render_pack_intent,
@@ -230,27 +276,12 @@ def build_comparison_snapshot(
         (baseline.get("prompt_optimizer") or {}).get("enabled")
         or (section.get("prompt_optimizer") or {}).get("enabled")
     )
+    shared_positive = shared_global_positive(baseline)
     arms = []
     for index, model in enumerate(models):
         policy = policy_resolver(model) if policy_resolver else evidence.policy_for(model)
         _require_candidate(policy)
         _require_envelope(policy, baseline, backend, geometry)
-        adapted = adapt_pack_intent(
-            intent,
-            policy,
-            lora_resolver=evidence.lora_evidence,
-            optimizer_enabled=optimizer_enabled,
-        )
-        manifest = {"contract": "prompt_adaptation/1", **adapted.plan.to_diagnostics()}
-        if manifest["complete"] is not True or manifest["adaptable"] is not True:
-            raise ValueError(
-                f"Model Comparison arm {index + 1}: prompt adaptation evidence is incomplete; verify target/LoRA compatibility and rebuild preview"
-            )
-        adapted_rendered = render_pack_intent(adapted.intent)
-        # Keep global participation in adaptation evidence, but leave application
-        # to the executor. This projection uses the canonical intent renderer;
-        # it neither parses prompts nor changes the frozen execution apply flags.
-        rendered = render_pack_intent(replace(adapted.intent, apply_global_negative=False))
         config = copy.deepcopy(baseline)
         for container in (config, config.setdefault("txt2img", {})):
             for key in ("model", "model_name", "sd_model_checkpoint", "base_model"):
@@ -263,8 +294,37 @@ def build_comparison_snapshot(
             # the baseline's carried-over sampling/prompt-channel values, then its unchanged compile policy runs.
             prepare_candidate_baseline(config)
             apply_model_compile_policy(config)
+            # What the canonical policy left to the executor decides who owns the shared global positive.
+            positive_mode, offered_positive = global_positive_ownership(shared_positive, config)
         except ValueError as exc:
             raise ValueError(_arm_failure(index, exc)) from exc
+        adapted = adapt_pack_intent(
+            intent,
+            policy,
+            lora_resolver=evidence.lora_evidence,
+            optimizer_enabled=optimizer_enabled,
+            global_positive=offered_positive,
+            apply_global_positive=positive_mode == GLOBAL_POSITIVE_COMPOSED,
+        )
+        manifest = {"contract": "prompt_adaptation/1", **adapted.plan.to_diagnostics()}
+        if manifest["complete"] is not True or manifest["adaptable"] is not True:
+            raise ValueError(
+                f"Model Comparison arm {index + 1}: prompt adaptation evidence is incomplete; verify target/LoRA compatibility and rebuild preview"
+            )
+        if positive_mode == GLOBAL_POSITIVE_COMPOSED and not adapted.global_positive:
+            raise ValueError(
+                _arm_failure(
+                    index,
+                    ValueError("the shared global positive terms cannot be expressed for this target"),
+                )
+            )
+        adapted_rendered = render_pack_intent(adapted.intent)
+        # Keep global participation in adaptation evidence, but leave application of an executor-owned global to the
+        # executor. This projection uses the canonical intent renderer; it neither parses prompts nor changes the
+        # frozen execution apply flags. A compiler-composed global positive is the one prefix the compiler adds, with
+        # the executor's own merge rule, because that arm's executor flags are neutralized.
+        rendered = render_pack_intent(replace(adapted.intent, apply_global_negative=False))
+        executable_positive = compose_global_positive(rendered, adapted.global_positive).positive
         apply_frozen_seed_policy(config, seed_policy)
         config["pipeline"] = {
             **dict(config.get("pipeline") or {}),
@@ -274,7 +334,7 @@ def build_comparison_snapshot(
             "upscale_enabled": False,
         }
         for container in (config, config["txt2img"]):
-            container["prompt"] = rendered.positive
+            container["prompt"] = executable_positive
             container["negative_prompt"] = rendered.negative
         # Structured declarations describe execution, not the unadapted source row.
         config["txt2img"]["lora_strengths"] = [
@@ -303,9 +363,15 @@ def build_comparison_snapshot(
             "effective_intent": pack_prompt_intent_to_dict(adapted.intent),
             "adapted_positive_prompt": adapted_rendered.positive,
             "adapted_negative_prompt": adapted_rendered.negative,
-            "executor_base_positive_prompt": rendered.positive,
+            "executor_base_positive_prompt": executable_positive,
             "executor_base_negative_prompt": rendered.negative,
             "executor_global_prompt_policy": executor_global_prompt_policy(config),
+            "global_positive": {
+                "contract": GLOBAL_POSITIVE_CONTRACT,
+                "mode": positive_mode,
+                "requested": _global_positive_requested(shared_positive),
+            },
+            "effective_global_positive_prompt": adapted.global_positive,
             "prompt_semantics": "executor_base_before_globals_and_optimizer",
             "effective_positive_embeddings": list(rendered.positive_embeddings),
             "effective_negative_embeddings": list(rendered.negative_embeddings),
@@ -326,6 +392,7 @@ def build_comparison_snapshot(
         "source_intent_sha256": source_sha,
         "source_intent_contract": source["source_intent"]["contract"],
         "shared_geometry": geometry,
+        "global_positive": shared_positive,
         "arms": arms,
         "comparison_claim": COMPARISON_CLAIM,
         "causal_one_variable": False,
@@ -373,6 +440,76 @@ def verify_arms_admissible(snapshot: dict) -> None:
             )
         except ValueError as exc:
             raise ValueError(_arm_failure(index, exc)) from exc
+
+
+def _verify_global_positive(study: dict, arm: dict, config: dict, rendered: Any) -> str:
+    """Validate one arm's frozen global-positive representation; return the executable positive it implies.
+
+    Pure over frozen records: no adaptation is re-run and no mutable source is read. A study without the shared
+    ``global_positive`` record is a pre-parity study and keeps its original meaning (the executor base is the rendered
+    structured positive and no composition representation may exist). A study that carries it requires the matching
+    block on every arm, so a missing field can never bypass a check.
+    """
+    from src.pipeline.global_prompt_policy import frozen_global_positive_policy
+    from src.pipeline.resolution_layer import compose_global_positive
+
+    shared = study.get("global_positive")
+    block = arm.get("global_positive")
+    contribution = arm.get("effective_global_positive_prompt")
+    operations = (arm.get("prompt_adaptation") or {}).get("operations")
+    composed_operations = sum(
+        1
+        for operation in (operations if isinstance(operations, list) else ())
+        if isinstance(operation, dict) and operation.get("code") == _COMPOSED_OPERATION
+    )
+    mismatch = ValueError("Frozen global positive prompt ownership mismatch; rebuild preview")
+    if shared is None:
+        if block is not None or contribution is not None or composed_operations:
+            raise mismatch
+        return rendered.positive
+    if (
+        not isinstance(shared, dict)
+        or set(shared) != {"contract", "enabled", "text"}
+        or shared["contract"] != GLOBAL_POSITIVE_CONTRACT
+        or not isinstance(shared["enabled"], bool)
+        or not isinstance(shared["text"], str)
+        or shared["text"] != shared["text"].strip()
+    ):
+        raise ValueError("Frozen global positive prompt contract is malformed; rebuild preview")
+    if (
+        not isinstance(block, dict)
+        or set(block) != {"contract", "mode", "requested"}
+        or block["contract"] != GLOBAL_POSITIVE_CONTRACT
+        or block["mode"] not in GLOBAL_POSITIVE_MODES
+        or not isinstance(block["requested"], bool)
+        or not isinstance(contribution, str)
+    ):
+        raise ValueError("Frozen arm lacks global positive prompt evidence; rebuild preview")
+    requested = _global_positive_requested(shared)
+    terms, enabled = frozen_global_positive_policy(config)
+    executor_terms = terms if enabled else ""
+    mode = block["mode"]
+    if block["requested"] is not requested:
+        raise mismatch
+    if mode == GLOBAL_POSITIVE_COMPOSED:
+        manifest = arm.get("prompt_adaptation") or {}
+        if (
+            not requested
+            or terms
+            or enabled
+            or not contribution
+            or contribution != contribution.strip()
+            or composed_operations != 1
+            or manifest.get("changed") is not True
+        ):
+            raise mismatch
+        return compose_global_positive(rendered, contribution).positive
+    if mode == GLOBAL_POSITIVE_EXECUTOR:
+        if not requested or executor_terms != shared["text"] or contribution or composed_operations:
+            raise mismatch
+    elif requested or executor_terms or terms not in ("", shared["text"]) or contribution or composed_operations:
+        raise mismatch
+    return rendered.positive
 
 
 def frozen_arm(snapshot: dict, value: Any) -> dict:
@@ -504,8 +641,9 @@ def frozen_arm(snapshot: dict, value: Any) -> dict:
         declarations = [{"name": name, "weight": weight} for name, weight in rendered.lora_tags]
         if section.get("lora_strengths") != declarations:
             raise ValueError("Frozen LoRA declarations differ from execution")
+        executable_positive = _verify_global_positive(study, arm, config, rendered)
         for key, actual in (
-            ("executor_base_positive_prompt", rendered.positive),
+            ("executor_base_positive_prompt", executable_positive),
             ("executor_base_negative_prompt", rendered.negative),
             (
                 "effective_positive_embeddings",
@@ -521,7 +659,7 @@ def frozen_arm(snapshot: dict, value: Any) -> dict:
                 raise ValueError("Frozen prompt/provenance mismatch")
         for container in (config, section):
             if (
-                container.get("prompt") != rendered.positive
+                container.get("prompt") != executable_positive
                 or container.get("negative_prompt") != rendered.negative
             ):
                 raise ValueError("Frozen executable prompt mismatch")
@@ -709,6 +847,13 @@ def preview_summary(snapshot: dict, *, show_names: bool = False) -> str:
     rows = [
         "Target-envelope comparison: model-specific validated settings and prompt adaptation; requested seed held constant."
     ]
+    shared = study.get("global_positive") or {}
+    stored = bool(shared.get("text"))
+    notices = {
+        GLOBAL_POSITIVE_COMPOSED: "composed into the prompt",
+        GLOBAL_POSITIVE_EXECUTOR: "applied at execution",
+        GLOBAL_POSITIVE_NOT_REQUESTED: "disabled (not applied)",
+    }
     for arm in study["arms"]:
         context = arm["model_policy_context"]
         profile = context.get("profile_ref")
@@ -718,7 +863,11 @@ def preview_summary(snapshot: dict, *, show_names: bool = False) -> str:
         identity = arm.get("checkpoint_evidence", {})
         sources = list(dict.fromkeys(item["source"] for item in identity.get("family_evidence", [])))
         provenance = ", ".join(sources) or identity.get("authority", "frozen policy")
+        # Pre-parity studies carry no global-positive record and keep their original summary; a study with no stored
+        # terms has nothing to report.
+        mode = (arm.get("global_positive") or {}).get("mode")
+        notice = f" Global positive: {notices[mode]}." if stored and mode in notices else ""
         rows.append(
-            f"{label}: {target}; ready ({provenance}); adaptation {'changes' if arm['prompt_adaptation']['changed'] else 'preserves'} source projection; shared {size['width']}x{size['height']} valid."
+            f"{label}: {target}; ready ({provenance}); adaptation {'changes' if arm['prompt_adaptation']['changed'] else 'preserves'} source projection; shared {size['width']}x{size['height']} valid.{notice}"
         )
     return "\n".join(rows)
