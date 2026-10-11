@@ -4,6 +4,25 @@ Updated: 2026-10-11
 
 ## Repository
 
+- Z-Image effective configuration adaptation (PR-IMG-MODELS-159, locally validated; canonical gate green in
+  an isolated worktree): PromptPack and generic Pipeline Preview no longer fail for stored global positive
+  text (even disabled), an inherited prompt optimizer, CLIP skip 2 or inherited SDXL sampling. The executable
+  copy of the configuration is normalized to the exact Z-Image profile through the one profile projection before
+  the unchanged validator; enabled global positive terms are composed once with the executor's own merge rule
+  (the effective config carries none, so nothing applies them again); disabled terms are ignored; unsupported
+  negative/optimizer channels are dropped with content-free evidence (`global_positive_composed`,
+  `global_positive_not_applied`, `profile_value_normalized`, ruleset `159.1`; the generic path records
+  `effective_configuration/1` with the same operation vocabulary, including weighted/BREAK rewrites of the
+  composed terms and a global negative only when it would have applied). Preview shows the final channels,
+  effective settings and a compact notice; the global positive toggle is no longer locked for Z-Image.
+  Scope is not universal: global-positive composition applies to the PromptPack and generic builders only.
+  Model Comparison arms still omit a shared global positive (parity deferred to PR-IMG-MODELS-160) and the CLI
+  builder stays strict. Manual prompts are validated, not adapted (weighted/adapter syntax in a manual prompt is
+  still refused), unlike PromptPack prose and the generic path's global terms, which follow the shared adapter.
+  Geometry, stages, image counts, assets, backend and unresolved syntax still refuse; frozen intent
+  serialization, SDXL, Klein and backend validation are unchanged. No physical generation. See
+  `docs/Subsystems/Image/PR-IMG-MODELS-159_ZImage_Effective_Configuration_Adaptation.md`.
+
 - Review whole-selection batch preflight (PR-REVIEW-BATCH-200, local package):
   synthetic 10/25/40-source evidence confirms existing one-job-per-source admission
   and shared edits. A transient preflight now exposes every source's frozen settings

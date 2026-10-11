@@ -202,7 +202,9 @@ _BASELINE_VAE_KEYS = ("vae", "sd_vae", "vae_name")
 _BASELINE_PROMPT_CHANNEL_KEYS = ("prompt", "negative_prompt", "global_positive_prompt", "global_negative_prompt")
 
 
-def project_shared_baseline(config: dict[str, Any]) -> dict[str, Any]:
+def project_shared_baseline(
+    config: dict[str, Any], changes: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Replace the values a *shared comparison baseline* merely carries for another model with v1's own (in place).
 
     A Model Comparison arm is prepared independently from one shared baseline whose sampling, VAE, prompt optimizer and
@@ -211,6 +213,10 @@ def project_shared_baseline(config: dict[str, Any]) -> dict[str, Any]:
     shared adaptation. Only those keys are replaced, and only where the baseline carries them. Geometry, counts
     (batch/sample), seed/subseed, stage flags and every optional feature are left exactly as requested, so
     ``validate_zimage_config`` still refuses a genuine conflict instead of the arm being forced to qualify.
+
+    ``changes`` (optional) receives one content-free record per distinct setting that actually changed:
+    ``{"setting", "from", "to"}`` for sampling/VAE/CLIP-skip values, and ``{"setting", "cleared": True}`` (never the
+    text) for prompt channels, the prompt optimizer and global-term flags.
     """
     if not zimage_selected(config):
         return config
@@ -223,20 +229,37 @@ def project_shared_baseline(config: dict[str, Any]) -> dict[str, Any]:
         section = config.get(name)
         if isinstance(section, dict):
             sections.append(section)
+    seen: set[tuple[str, str]] = set()
+
+    def note(record: dict[str, Any]) -> None:
+        marker = (record["setting"], repr(record.get("from")))
+        if changes is not None and marker not in seen:
+            seen.add(marker)
+            changes.append(record)
+
     for section in sections:
         for key, value in fixed.items():
             if key in section:
+                if section[key] is not None and section[key] != value:
+                    note({"setting": key, "from": section[key], "to": value})
                 section[key] = value
         for key in _BASELINE_VAE_KEYS:
             if key in section:
+                if str(section[key] or "").strip():
+                    note({"setting": key, "from": "set", "to": ""})
                 section[key] = ""
         for key in _BASELINE_PROMPT_CHANNEL_KEYS:
             if key in section:
+                if key != "prompt" and str(section[key] or "").strip():
+                    note({"setting": key, "cleared": True})
                 section[key] = ""
         for key in ("apply_global_positive_txt2img", "apply_global_negative_txt2img"):
             if key in section:
+                if section[key]:
+                    note({"setting": key, "from": True, "to": False})
                 section[key] = False
         if isinstance(section.get("prompt_optimizer"), dict) and section["prompt_optimizer"].get("enabled"):
+            note({"setting": "prompt_optimizer", "from": True, "to": False})
             section["prompt_optimizer"] = {**section["prompt_optimizer"], "enabled": False}
     return config
 

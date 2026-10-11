@@ -22,6 +22,15 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/app_controller_services/runtime_projection_coordinator.py` /
   `src/gui/app_state_projection_sink.py` (versioned async publication) ->
   `tests/gui_v2/test_preview_draft_recovery_112.py`.
+- Z-Image effective configuration adaptation (PR-IMG-MODELS-159):
+  `docs/Subsystems/Image/PR-IMG-MODELS-159_ZImage_Effective_Configuration_Adaptation.md` ->
+  `src/pipeline/prompt_pack_job_builder.py::_prepare_entry`/`_build_jobs_for_entry` (normalize executable
+  config, compose global positive) -> `src/image_backends/model_policy.py::normalize_profile_owned_values` /
+  `forge_zimage_profile.project_shared_baseline` -> `src/prompting/prompt_adaptation.py` (ops, ruleset
+  `159.1`) / `src/pipeline/resolution_layer.py::compose_global_positive` ->
+  `src/pipeline/exact_profile_effective_config.py` + `job_builder_v2.py` (generic path) ->
+  `src/gui_v2/adaptation_notice.py` + `src/gui/preview_panel_v2.py` (notice) +
+  `src/gui/zimage_optional_control_projection.py` -> `tests/*/test_*159*.py`.
 - Cross-workflow exact-profile compatibility and preflight (PR-IMG-MODELS-158):
   `docs/Subsystems/Image/PR-IMG-MODELS-158_Cross_Workflow_Model_Compatibility.md` ->
   `src/image_backends/operation_compatibility.py` (pure read-only assessment over `ModelPolicy`) ->

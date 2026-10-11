@@ -201,6 +201,12 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.stage_flags_label.pack(anchor=tk.W, pady=(0, 4))
 
+        # PR-IMG-MODELS-159: compact, content-free note of what the compiler adapted for the target model.
+        self.adaptation_label = ttk.Label(
+            left_frame, text="", wraplength=440, style=STATUS_LABEL_STYLE, foreground="#7aa2d6"
+        )
+        self.adaptation_label.pack(anchor=tk.W, pady=(0, 4))
+
         self.randomizer_label = ttk.Label(
             left_frame,  # PR-GUI-FIX: pack into left_frame, not body
             text="Randomizer: OFF",
@@ -323,6 +329,22 @@ class PreviewPanelV2(ttk.Frame):
         self.set_job_summaries(summary_entries)
         self.update_from_app_state()
 
+    @staticmethod
+    def _adaptation_notice(job: Any) -> str:
+        try:
+            from src.gui_v2.adaptation_notice import (
+                compact_adaptation_notice,
+                manifest_from_effective_configuration,
+            )
+
+            metadata = getattr(job, "extra_metadata", {}) or {}
+            manifest = metadata.get("prompt_adaptation") or manifest_from_effective_configuration(
+                metadata.get("effective_configuration")
+            )
+            return compact_adaptation_notice(manifest)
+        except Exception:
+            return ""
+
     def _summary_from_normalized_job(self, job: NormalizedJobRecord) -> Any:
         unified = job.to_unified_summary() if isinstance(job, NJRSummaryPort) else None
         ui_summary = job.to_ui_summary() if isinstance(job, NJRUISummaryPort) else None
@@ -354,6 +376,7 @@ class PreviewPanelV2(ttk.Frame):
             cfg_scale=(unified.cfg_scale if unified else None),
             seed=getattr(job, "seed", None),
             base_model=(unified.base_model if unified else getattr(ui_summary, "label", "")),
+            adaptation_notice=self._adaptation_notice(job),
             prompt_pack_name=getattr(job, "prompt_pack_name", ""),
             thumbnail_path=getattr(job, "thumbnail_path", None),
             output_paths=list(getattr(job, "output_paths", []) or []),
@@ -679,6 +702,7 @@ class PreviewPanelV2(ttk.Frame):
             ),
             str(getattr(summary_obj, "positive_preview", "") or ""),
             str(getattr(summary_obj, "negative_preview", "") or ""),
+            str(getattr(summary_obj, "adaptation_notice", "") or ""),
             str(getattr(summary_obj, "stages_display", "-") or "-"),
             str(getattr(summary_obj, "sampler_name", getattr(summary_obj, "sampler", "-")) or "-"),
             self._coerce_int(getattr(summary_obj, "steps", None)),
@@ -740,6 +764,7 @@ class PreviewPanelV2(ttk.Frame):
                 self._format_flags(refiner=False, hires=False, upscale=False),
             )
             self._set_label_text(self.randomizer_label, "Randomizer: OFF")
+            self._set_label_text(self.adaptation_label, "")
             self._set_label_text(self.learning_metadata_label, "Learning metadata: N/A")
             # Clear thumbnail when no job
             self._current_preview_job = None
@@ -821,6 +846,9 @@ class PreviewPanelV2(ttk.Frame):
         seed_text = format_seed_display(requested_seed, actual_seed)
         self._set_label_text(self.seed_label, f"Seed: {seed_text}")
 
+        self._set_label_text(
+            self.adaptation_label, str(getattr(summary_obj, "adaptation_notice", "") or "")
+        )
         stages_text = getattr(summary_obj, "stages_display", "-")
         self._set_label_text(self.stage_summary_label, f"Stages: {stages_text}")
         self._set_label_text(

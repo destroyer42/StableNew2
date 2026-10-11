@@ -49,7 +49,7 @@ from src.prompting.prompt_compatibility import (
 )
 
 #: Version of the adaptation rule set; bump whenever any rule's output can change for the same input.
-ADAPTATION_RULESET_VERSION = "140.1"
+ADAPTATION_RULESET_VERSION = "159.1"
 
 # -- stable operation codes -------------------------------------------------------------------------------------------
 OP_WEIGHTED_FLATTENED = "weighted_attention_flattened"
@@ -80,6 +80,12 @@ OP_PACK_TRIGGER_UNOWNED = "pack_lora_trigger_not_tracked"
 OP_OPTIMIZER_NOT_APPLIED = "optimizer_not_applied"
 OP_GLOBAL_NEGATIVE_NOT_APPLIED = "global_negative_not_applied"
 OP_TARGET_UNVERIFIED = "target_unverified_no_adaptation"
+#: PR-IMG-MODELS-159: a target whose executor cannot apply global positive terms receives them as one deterministic
+#: positive-prose contribution at compile time (or records that the stored terms were not applied).
+OP_GLOBAL_POSITIVE_COMPOSED = "global_positive_composed"
+OP_GLOBAL_POSITIVE_NOT_APPLIED = "global_positive_not_applied"
+#: Inherited configuration the exact profile owns (sampling, CLIP skip, VAE, optimizer) was replaced by the profile's own.
+OP_PROFILE_VALUE_NORMALIZED = "profile_value_normalized"
 
 # -- effects ----------------------------------------------------------------------------------------------------------
 EFFECT_REWRITTEN = "rewritten"
@@ -95,6 +101,7 @@ SCOPE_LORA = "lora"
 SCOPE_STYLE = "style_lora"
 SCOPE_OPTIMIZER = "optimizer"
 SCOPE_TARGET = "target"
+SCOPE_CONFIG = "configuration"
 
 MODE_PREVIEW = "preview"
 MODE_COMPILE = "compile"
@@ -516,6 +523,9 @@ class StructuredPromptInput:
     #: Source facts the target may make inapplicable (recorded as ``not_applied`` evidence, values never touched).
     optimizer_enabled: bool = False
     global_negative_present: bool = False
+    #: Global positive terms the caller wants the *compiler* to compose (``""`` when the executor owns them, as for SDXL).
+    global_positive: str = ""
+    global_positive_enabled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -531,6 +541,8 @@ class StructuredAdaptation:
     triggers: tuple[TriggerContribution, ...]
     #: ``False`` when the target's policy omits the whole negative channel (nothing may be rendered into it).
     negative_channel: bool
+    #: The adapted global positive terms to compose in front of the positive prose (``""`` when disabled or absent).
+    global_positive: str = ""
 
 
 def _lora_codes(kind: str) -> dict[str, str]:
@@ -635,6 +647,7 @@ def adapt_structured_prompt(
         triggers: tuple[TriggerContribution, ...],
         operations: list[AdaptationOperation],
         channel: bool,
+        global_positive: str = "",
     ) -> StructuredAdaptation:
         style = next((lora for lora in loras if lora.kind == KIND_STYLE), None)
         style_trigger = next((t.text for t in triggers if t.kind == KIND_STYLE), "")
@@ -645,6 +658,7 @@ def adapt_structured_prompt(
             or neg_emb != source.negative_embeddings
             or loras != source.loras
             or triggers != source.triggers
+            or bool(global_positive)
         )
         plan = PromptAdaptationPlan(
             **identity,
@@ -661,7 +675,9 @@ def adapt_structured_prompt(
             style_trigger_phrase=style_trigger if style is not None else "",
             operations=tuple(operations),
         )
-        return StructuredAdaptation(plan, positive, negative, pos_emb, neg_emb, loras, triggers, channel)
+        return StructuredAdaptation(
+            plan, positive, negative, pos_emb, neg_emb, loras, triggers, channel, global_positive
+        )
 
     if target_is_unverified(policy):
         return build(
@@ -680,9 +696,18 @@ def adapt_structured_prompt(
 
     operations: list[AdaptationOperation] = []
     natural_language = policy.prompt_dialect == DIALECT_NATURAL_LANGUAGE
-    positive = (
-        _adapt_texts(source.positive_prose, SCOPE_POSITIVE, operations) if natural_language else source.positive_prose
-    )
+    composing = bool(source.global_positive.strip()) and source.global_positive_enabled
+    # The global positive terms are one more positive prose component (same dialect rules, one summed operation per rule).
+    prose_in = ((source.global_positive.strip(),) if composing else ()) + source.positive_prose
+    prose_out = _adapt_texts(prose_in, SCOPE_POSITIVE, operations) if natural_language else prose_in
+    global_positive = prose_out[0].strip() if composing else ""
+    positive = prose_out[1:] if composing else prose_out
+    if composing:
+        operations.append(AdaptationOperation(OP_GLOBAL_POSITIVE_COMPOSED, SCOPE_POSITIVE, EFFECT_REWRITTEN, {}))
+    elif source.global_positive.strip():
+        operations.append(
+            AdaptationOperation(OP_GLOBAL_POSITIVE_NOT_APPLIED, SCOPE_POSITIVE, EFFECT_NOT_APPLIED, {"enabled": False})
+        )
 
     channel = policy.feature("negative_prompt").support is not Support.UNSUPPORTED
     if not channel:
@@ -756,6 +781,7 @@ def adapt_structured_prompt(
         triggers=tuple(triggers),
         operations=operations,
         channel=channel,
+        global_positive=global_positive,
     )
 
 

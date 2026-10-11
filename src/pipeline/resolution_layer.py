@@ -23,6 +23,7 @@ from src.prompting.prompt_adaptation import (
     adapt_structured_prompt,
 )
 from src.utils.embedding_prompt_utils import render_embedding_reference
+from src.utils.negative_helpers_v2 import merge_global_positive
 from src.utils.prompt_pack_utils import resolve_matrix_slot_value
 
 MAX_PREVIEW_PROMPT_LENGTH = 120
@@ -240,6 +241,9 @@ class AdaptedPackIntent:
 
     intent: PackPromptIntent
     plan: PromptAdaptationPlan
+    #: Adapted global positive terms the compiler composes in front of the rendered positive (``""`` otherwise). It is
+    #: deliberately not part of the frozen ``PackPromptIntent`` contract; the executor never sees it separately.
+    global_positive: str = ""
 
 
 PACK_PROMPT_INTENT_CONTRACT = "pack_prompt_intent/1"
@@ -377,6 +381,8 @@ def adapt_pack_intent(
     lora_resolver: LoraResolver | None = None,
     optimizer_enabled: bool = False,
     lora_selection: Any = None,
+    global_positive: str = "",
+    apply_global_positive: bool = False,
 ) -> AdaptedPackIntent:
     """Run the one 130C rule implementation over the structured intent (compile-safe) and re-assemble it.
 
@@ -408,6 +414,8 @@ def adapt_pack_intent(
             triggers=intent.triggers,
             optimizer_enabled=optimizer_enabled,
             global_negative_present=bool(intent.apply_global_negative and intent.global_negative.strip()),
+            global_positive=global_positive,
+            global_positive_enabled=apply_global_positive,
         ),
         lora_resolver=lora_resolver,
         lora_selection=lora_selection,
@@ -442,6 +450,24 @@ def adapt_pack_intent(
             negative_channel=result.negative_channel,
         ),
         result.plan,
+        result.global_positive,
+    )
+
+
+def compose_global_positive(
+    resolution: PromptResolution, global_positive: str, *, max_preview_length: int = MAX_PREVIEW_PROMPT_LENGTH
+) -> PromptResolution:
+    """Prepend the (already adapted) global positive terms with the executor's own merge rule; nothing else changes.
+
+    Uses the one global-positive merge utility, so the compiler-composed prompt is byte-for-byte what the executor would
+    have produced for a target that lets the executor apply it.
+    """
+
+    _original, final, applied, _terms = merge_global_positive(resolution.positive, global_positive)
+    if not applied:
+        return resolution
+    return replace(
+        resolution, positive=final, positive_preview=_truncate(final, max_preview_length)
     )
 
 
