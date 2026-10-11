@@ -259,7 +259,29 @@ needs a near-idle desktop (commit total at most about 12.8 GiB) still holds.
 
 ## Boundary for any subsequent physical run
 
-The authorized case is complete and consumed; no additional run is authorized. Any subsequent package must explicitly
+The first authorized case is complete and consumed. Any subsequent package must explicitly
 address the launch-environment blocker, define its acceptance contract and distinct case identity, and retain the existing
 case ledger and evidence. It must pass the unchanged authorization, isolation, ownership, resource and telemetry gates
 before any new managed startup. A pre-claim refusal consumes nothing; an attempt that reaches the claim cannot be retried.
+
+### Owner-authorized loader correction and second case (preparation)
+
+The owner explicitly continued the package to correct the loader failure and launch again. Read-only inspection found
+`uv.exe` already present in the managed venv; the isolated profile had omitted the production profile's `PATH`,
+`VIRTUAL_ENV` and `UV_PYTHON` bindings. The correction pins these only in the launched child environment and validates them;
+no install, global environment change, manager change or threshold relaxation is needed. `uv --help` succeeds in that
+exact child environment without starting Forge. The import-audit subprocess now uses `-B` explicitly because `-I` ignores
+the existing bytecode environment flag; the audit still rejects every unexpected native/process/network/write event.
+
+The CLI and physical module accept an explicit `--case-id`; absent it, the original case and consumed ledger remain the
+default. The authorized second case is `img154-zimage-turbo-owner-case-2`, retaining the exact assets, request, limits and
+one-claim/no-replay fence. A new exact-SHA owner record and interactive private confirmation are required; case-1's record
+cannot authorize it. No loop or automatic third attempt is authorized.
+
+Execution Profile: Narrow, demonstrated launch-environment repair and explicit continuation using the existing case/fence
+contract. Recommendation: Codex GPT-6.1 Sol High / Claude Code Sonnet 5.5 High, Windows Local/Desktop, one session: the
+understood defect is small, while cross-command authorization and lifecycle regressions make retry cost material.
+Controller Surface Assessment: no production controller/coordinator/process manager touched; the existing qualification
+coordinator and submission budgets are unchanged. Token-Efficient Validation Plan: fail-before launch and case-binding
+regressions; focused boundary/fence suites; affected qualification/ownership suites and scoped lint/typing; one final local
+PR gate; clean committed SHA; read-only child `uv` check and preflight; one interactive execution if every existing gate passes.

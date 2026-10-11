@@ -457,7 +457,7 @@ def unexpected_import_events(events):
 def test_t89_importing_every_module_has_no_process_network_native_or_write_side_effect():
     script = AUDIT % {"modules": list(MODULES), "repo": str(REPO_ROOT)}
     done = subprocess.run(  # noqa: S603
-        [sys.executable, "-I", "-c", script],
+        [sys.executable, "-I", "-B", "-c", script],
         cwd=str(REPO_ROOT),
         env={
             "PYTHONDONTWRITEBYTECODE": "1",

@@ -47,6 +47,7 @@ from tools.qualification.img154b.authorization import (
     AuthorizationRecord,
     OwnerAuthorization,
     harness_revision,
+    manifest_for_case,
     read_authorization_record,
 )
 from tools.qualification.img154b.bundle import EvidenceBundle
@@ -634,6 +635,11 @@ def build_parser() -> argparse.ArgumentParser:
         ("execute", "ONE physical case; refuses unless every activation gate holds"),
     ):
         item = sub.add_parser(name, help=text)
+        item.add_argument(
+            "--case-id",
+            default=None,
+            help="explicit owner-authorized case; never resets a consumed ledger",
+        )
         item.add_argument("--qualification-root", type=Path, default=None)
         item.add_argument("--forge-install", type=Path, default=None)
         item.add_argument("--models-root", type=Path, default=None)
@@ -657,6 +663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         install=args.forge_install or default_install(),
         models_root=args.models_root,
         reserve=tuple(args.reserve),
+        manifest=manifest_for_case(args.case_id),
     )
     if args.command == "preflight":
         packet = run_preflight(config)

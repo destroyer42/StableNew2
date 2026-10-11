@@ -19,8 +19,9 @@ Updated: 2026-10-10
   claim-boundary preflight (41.92 GiB commit headroom, 21.48 GiB available RAM; thresholds unchanged). Managed Forge startup
   failed because its launch environment could not locate `uv`; the owned root exited before startup verification. No model
   selection or generation request was sent. Shutdown was verified clean; 138 telemetry samples were complete and the
-  120-second post-run fault check found no new events. Case `471c18ba071a` is consumed, with no retry or further physical run
-  authorized. This establishes no model/GPU qualification result; unresolved DIAG-GPU-130 risk remains. See
+  120-second post-run fault check found no new events. Case `471c18ba071a` remains consumed. The owner subsequently authorized
+  correction of the omitted managed-venv launch bindings and one distinct second case, now in preparation; the original
+  ledger and evidence are preserved. This establishes no model/GPU qualification result; unresolved DIAG-GPU-130 risk remains. See
   `docs/Subsystems/Image/PR-IMG-MODELS-154B_ZImage_Turbo_Controlled_Physical_Qualification.md`.
 
 - Z-Image-Turbo FP8-scaled safety preparation (PR-IMG-MODELS-154A, `PASS_PREPARATION_ONLY`; integrated as PR #82;

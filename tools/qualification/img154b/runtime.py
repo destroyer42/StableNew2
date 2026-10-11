@@ -590,6 +590,20 @@ def validate_launch(
             )
         )
     env = profile.env_overrides
+    scripts = os.path.join(install_dir, "venv", "Scripts")
+    if (
+        os.path.normcase(env.get("PATH", "").split(os.pathsep)[0]) != os.path.normcase(scripts)
+        or os.path.normcase(env.get("VIRTUAL_ENV", ""))
+        != os.path.normcase(os.path.join(install_dir, "venv"))
+        or os.path.normcase(env.get("UV_PYTHON", "")) != os.path.normcase(expected_python)
+    ):
+        findings.append(
+            Finding(
+                "LAUNCH_ENV_MANAGED_VENV",
+                "refuse",
+                "managed venv tools and uv interpreter are not pinned",
+            )
+        )
     if env.get("COMMANDLINE_ARGS") != "":
         findings.append(
             Finding(
@@ -646,6 +660,11 @@ def build_isolated_launch_profile(
             "MPLCONFIGDIR": os.path.join(runtime, "matplotlib"),
             "YOLO_CONFIG_DIR": os.path.join(runtime, "yolo"),
             "UV_CACHE_DIR": os.path.join(runtime, "uv-cache"),
+            "UV_PYTHON": command[0],
+            "VIRTUAL_ENV": os.path.join(install, "venv"),
+            "PATH": os.path.join(install, "venv", "Scripts")
+            + os.pathsep
+            + os.environ.get("PATH", ""),
             # Forge appends COMMANDLINE_ARGS to its argv; an inherited value could name a model directory elsewhere.
             "COMMANDLINE_ARGS": "",
         }

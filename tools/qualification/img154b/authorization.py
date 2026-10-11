@@ -17,7 +17,7 @@ import os
 import re
 import secrets
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -62,6 +62,16 @@ class CodeRevision:
     @classmethod
     def from_probe(cls, info: Mapping[str, Any]) -> CodeRevision:
         return cls(str(info.get("state")), info.get("sha"), info.get("source_sha256"))
+
+
+def manifest_for_case(case_id: str | None = None) -> QualificationManifest:
+    """Select an explicitly authorized case without changing the default or its consumed ledger."""
+
+    plan = build_manifest()
+    if case_id is not None:
+        plan = replace(plan, case_id=case_id)
+    plan.attempt_identity()  # Reject an empty identity before any live operation.
+    return plan
 
 
 def harness_revision() -> dict[str, Any]:

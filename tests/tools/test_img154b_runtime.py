@@ -386,6 +386,29 @@ def test_t30_the_proof_applies_to_the_served_path_not_to_a_matching_source(plan,
 
 # --- T31: launch profile -------------------------------------------------------------------------------------------------
 
+
+def test_retry_launch_resolves_managed_tools_without_activating_parent_env(
+    monkeypatch, tmp_path, layout
+):
+    monkeypatch.setenv("PATH", "operator-path")
+    install = str(tmp_path / "forge-install")
+    profile = rt.build_isolated_launch_profile(layout, install, contract=CONTRACT)
+    scripts = os.path.join(install, "venv", "Scripts")
+    assert profile.env_overrides["PATH"] == scripts + os.pathsep + "operator-path"
+    assert profile.env_overrides["VIRTUAL_ENV"] == os.path.join(install, "venv")
+    assert profile.env_overrides["UV_PYTHON"] == profile.command[0]
+    assert os.environ["PATH"] == "operator-path"
+    assert not Path(scripts).exists()
+    for key in ("PATH", "VIRTUAL_ENV", "UV_PYTHON"):
+        changed = dict(profile.env_overrides, **{key: "foreign-environment"})
+        assert "LAUNCH_ENV_MANAGED_VENV" in {
+            finding.code
+            for finding in rt.validate_launch(
+                replace(profile, env_overrides=changed), layout, install
+            )
+        }
+
+
 CONTRACT = {
     "launch_policy": {
         "launch_script": "launch.py",
