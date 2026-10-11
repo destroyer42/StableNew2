@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from PIL import Image
+
 from src.controller.app_controller import AppController
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState
@@ -43,7 +45,7 @@ def _build_reprocess_controller() -> AppController:
 def test_review_reprocess_feedback_to_recommendation_apply(tmp_path: Path) -> None:
     app_controller = _build_reprocess_controller()
     image = tmp_path / "img_a.png"
-    image.write_bytes(b"")
+    Image.new("RGB", (32, 32)).save(image)
     app_controller._extract_reprocess_baseline_from_image = Mock(
         return_value={
             "prompt": "portrait photo",
