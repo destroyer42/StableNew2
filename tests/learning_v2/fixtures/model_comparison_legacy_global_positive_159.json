@@ -1,0 +1,1709 @@
+{
+ "sdxl_klein_disabled": {
+  "baseline_config": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "global_negative_prompt": "global negative",
+   "global_positive_prompt": "studio lighting",
+   "global_prompt_policy_source": "frozen_njr",
+   "pipeline": {
+    "adetailer_enabled": false,
+    "apply_global_negative_adetailer": true,
+    "apply_global_negative_img2img": true,
+    "apply_global_negative_txt2img": true,
+    "apply_global_negative_upscale": true,
+    "apply_global_positive_txt2img": false,
+    "img2img_enabled": false,
+    "txt2img_enabled": true,
+    "upscale_enabled": false
+   },
+   "prompt_optimizer": {
+    "enabled": true
+   },
+   "txt2img": {
+    "cfg_scale": 7.0,
+    "clip_skip": 2,
+    "height": 1024,
+    "model": "ordinary.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "seed": 42,
+    "steps": 30,
+    "subseed": -1,
+    "subseed_strength": 0.0,
+    "vae": "sdxl_vae.safetensors",
+    "width": 1024
+   }
+  },
+  "display_name": "comparison",
+  "experiment_id": "study",
+  "experiment_timestamp": "20261011-214609",
+  "images_per_value": 1,
+  "input_image_path": "",
+  "model_comparison": {
+   "arms": [
+    {
+     "adapted_negative_prompt": "global negative, bad",
+     "adapted_positive_prompt": "a red dress in forest",
+     "arm_sha256": "ce84e04d5c22c7b91e96c590e3c098d4eb600aa26bf0ff54731c46aae02f6b00",
+     "candidate_index": 0,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "target_envelope_preference",
+     "contract": "learning_model_comparison/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "studio lighting",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "ordinary.safetensors",
+      "negative_prompt": "bad",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a red dress in forest",
+      "prompt_optimizer": {
+       "enabled": true
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "clip_skip": 2,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "ordinary.safetensors",
+       "negative_prompt": "bad",
+       "prompt": "a red dress in forest",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": -1,
+       "subseed_strength": 0.0,
+       "vae": "sdxl_vae.safetensors",
+       "width": 1024
+      }
+     },
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [
+       "bad"
+      ],
+      "pack_negative": "",
+      "positive_embeddings": [],
+      "quality": "a red dress in forest",
+      "safety_negative": "",
+      "subject": "",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad",
+     "executor_base_positive_prompt": "a red dress in forest",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "studio lighting",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "ordinary.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "ordinary.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 1024
+     },
+     "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7",
+     "study_type": "model_comparison"
+    },
+    {
+     "adapted_negative_prompt": "",
+     "adapted_positive_prompt": "a red dress in forest",
+     "arm_sha256": "885599c2b549b16d0127f1c798d512f59f73f78f3f856f0974b0ef1ba3a27639",
+     "candidate_index": 1,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "target_envelope_preference",
+     "contract": "learning_model_comparison/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui",
+       "model_profile": {
+        "id": "flux2_klein_4b_fp8",
+        "version": 2
+       }
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui",
+        "model_profile": {
+         "id": "flux2_klein_4b_fp8",
+         "version": 2
+        }
+       }
+      },
+      "global_negative_prompt": "",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "flux-2-klein-4b-fp8.safetensors",
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": false,
+       "apply_global_negative_img2img": false,
+       "apply_global_negative_txt2img": false,
+       "apply_global_negative_upscale": false,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a red dress in forest",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 1.0,
+       "clip_skip": 2,
+       "global_negative_prompt": "",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "flux-2-klein-4b-fp8.safetensors",
+       "negative_prompt": "",
+       "prompt": "a red dress in forest",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "sampler_name": "Euler",
+       "scheduler": "Beta",
+       "seed": 42,
+       "steps": 4,
+       "subseed": -1,
+       "subseed_strength": 0.0,
+       "vae": "",
+       "width": 1024
+      }
+     },
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "",
+      "loras": [],
+      "negative_channel": false,
+      "negative_embeddings": [],
+      "negative_phrases": [
+       ""
+      ],
+      "pack_negative": "",
+      "positive_embeddings": [],
+      "quality": "a red dress in forest",
+      "safety_negative": "",
+      "subject": "",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "",
+     "executor_base_positive_prompt": "a red dress in forest",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": false,
+       "apply_global_negative_img2img": false,
+       "apply_global_negative_txt2img": false,
+       "apply_global_negative_upscale": false,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": 1.0
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [
+          [
+           768,
+           1024
+          ],
+          [
+           1024,
+           1024
+          ]
+         ],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": "Euler"
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": "Beta"
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": 4
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": ""
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "lora": {
+         "compatibility_policy": "klein_4b_explicit_metadata",
+         "limit": 1,
+         "stages": [
+          "txt2img"
+         ],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "single_reference_edit"
+       ],
+       "prompt_dialect": "natural_language",
+       "required_backend": "forge_webui",
+       "stages": [
+        "txt2img",
+        "img2img"
+       ]
+      },
+      "evidence": "exact_profile",
+      "family": "flux2_klein",
+      "policy_id": "flux2_klein_4b_fp8",
+      "profile_ref": {
+       "id": "flux2_klein_4b_fp8",
+       "version": 2
+      },
+      "selected_model": "flux-2-klein-4b-fp8.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": true,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": false,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "exact_profile",
+      "family": "flux2_klein",
+      "mode": "compile",
+      "operations": [
+       {
+        "code": "negative_prompt_dropped_unsupported",
+        "details": {},
+        "effect": "dropped",
+        "scope": "negative"
+       },
+       {
+        "code": "optimizer_not_applied",
+        "details": {},
+        "effect": "not_applied",
+        "scope": "optimizer"
+       },
+       {
+        "code": "global_negative_not_applied",
+        "details": {},
+        "effect": "not_applied",
+        "scope": "negative"
+       }
+      ],
+      "policy_id": "flux2_klein_4b_fp8",
+      "profile_ref": {
+       "id": "flux2_klein_4b_fp8",
+       "version": 2
+      },
+      "prompt_dialect": "natural_language",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "flux-2-klein-4b-fp8.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 1024
+     },
+     "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7",
+     "study_type": "model_comparison"
+    }
+   ],
+   "causal_one_variable": false,
+   "comparison_claim": "target_envelope_preference",
+   "contract": "learning_model_comparison/1",
+   "seed_interpretation": "requested seed held constant; latent/noise semantics may differ",
+   "shared_geometry": {
+    "height": 1024,
+    "width": 1024
+   },
+   "source_intent": {
+    "apply_global_negative": true,
+    "contract": "pack_prompt_intent/1",
+    "global_negative": "global negative",
+    "loras": [],
+    "negative_channel": true,
+    "negative_embeddings": [],
+    "negative_phrases": [
+     "bad"
+    ],
+    "pack_negative": "",
+    "positive_embeddings": [],
+    "quality": "a red dress in forest",
+    "safety_negative": "",
+    "subject": "",
+    "triggers": []
+   },
+   "source_intent_contract": "pack_prompt_intent/1",
+   "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7"
+  },
+  "negative_prompt_text": "global negative, bad",
+  "prompt_source": {
+   "matrix_combination_index": 1,
+   "matrix_combination_total": 2,
+   "matrix_freeze_policy": "first_canonical_required_slots",
+   "matrix_referenced_variables": [
+    "place"
+   ],
+   "matrix_source_mode": "random",
+   "matrix_used": true,
+   "matrix_values": {
+    "place": "forest"
+   },
+   "prompt_source": "pack",
+   "rendered_negative_prompt": "global negative, bad",
+   "rendered_positive_prompt": "a red dress in forest",
+   "selected_models": [
+    "ordinary.safetensors",
+    "flux-2-klein-4b-fp8.safetensors"
+   ],
+   "selected_prompt_index": 0,
+   "selected_prompt_loras": [],
+   "selected_prompt_pack_name": "study",
+   "selected_prompt_pack_path": "pack.json",
+   "source_intent": {
+    "apply_global_negative": true,
+    "contract": "pack_prompt_intent/1",
+    "global_negative": "global negative",
+    "loras": [],
+    "negative_channel": true,
+    "negative_embeddings": [],
+    "negative_phrases": [
+     "bad"
+    ],
+    "pack_negative": "",
+    "positive_embeddings": [],
+    "quality": "a red dress in forest",
+    "safety_negative": "",
+    "subject": "",
+    "triggers": []
+   },
+   "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7",
+   "study_type": "model_comparison"
+  },
+  "prompt_text": "a red dress in forest",
+  "schema_version": 2,
+  "seed_policy": {
+   "policy": "requested_seed_with_backend_observed_vector",
+   "requested_base_seed": 42,
+   "requested_sample_count": 1,
+   "requested_subseed": null,
+   "subseed_strength": 0.0
+  },
+  "stage": "txt2img",
+  "study_type": "model_comparison",
+  "variable_under_test": "Model Comparison",
+  "variant_values": [
+   "ordinary.safetensors",
+   "flux-2-klein-4b-fp8.safetensors"
+  ]
+ },
+ "sdxl_klein_zimage_enabled": {
+  "baseline_config": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "global_negative_prompt": "global negative",
+   "global_positive_prompt": "studio lighting",
+   "global_prompt_policy_source": "frozen_njr",
+   "pipeline": {
+    "adetailer_enabled": false,
+    "apply_global_negative_adetailer": true,
+    "apply_global_negative_img2img": true,
+    "apply_global_negative_txt2img": true,
+    "apply_global_negative_upscale": true,
+    "apply_global_positive_txt2img": true,
+    "img2img_enabled": false,
+    "txt2img_enabled": true,
+    "upscale_enabled": false
+   },
+   "prompt_optimizer": {
+    "enabled": true
+   },
+   "txt2img": {
+    "cfg_scale": 7.0,
+    "clip_skip": 2,
+    "height": 1024,
+    "model": "ordinary.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "seed": 42,
+    "steps": 30,
+    "subseed": -1,
+    "subseed_strength": 0.0,
+    "vae": "sdxl_vae.safetensors",
+    "width": 1024
+   }
+  },
+  "display_name": "comparison",
+  "experiment_id": "study",
+  "experiment_timestamp": "20261011-214609",
+  "images_per_value": 1,
+  "input_image_path": "",
+  "model_comparison": {
+   "arms": [
+    {
+     "adapted_negative_prompt": "global negative, bad",
+     "adapted_positive_prompt": "a red dress in forest",
+     "arm_sha256": "d0e33378cacdf5e3651f634162af1265a7b7c0373ac920586d4028f1395e2d17",
+     "candidate_index": 0,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "target_envelope_preference",
+     "contract": "learning_model_comparison/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "studio lighting",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "ordinary.safetensors",
+      "negative_prompt": "bad",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": true,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a red dress in forest",
+      "prompt_optimizer": {
+       "enabled": true
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "clip_skip": 2,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "ordinary.safetensors",
+       "negative_prompt": "bad",
+       "prompt": "a red dress in forest",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": -1,
+       "subseed_strength": 0.0,
+       "vae": "sdxl_vae.safetensors",
+       "width": 1024
+      }
+     },
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [
+       "bad"
+      ],
+      "pack_negative": "",
+      "positive_embeddings": [],
+      "quality": "a red dress in forest",
+      "safety_negative": "",
+      "subject": "",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad",
+     "executor_base_positive_prompt": "a red dress in forest",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "studio lighting",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": true
+      }
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "ordinary.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "ordinary.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 1024
+     },
+     "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7",
+     "study_type": "model_comparison"
+    },
+    {
+     "adapted_negative_prompt": "",
+     "adapted_positive_prompt": "a red dress in forest",
+     "arm_sha256": "885599c2b549b16d0127f1c798d512f59f73f78f3f856f0974b0ef1ba3a27639",
+     "candidate_index": 1,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "target_envelope_preference",
+     "contract": "learning_model_comparison/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui",
+       "model_profile": {
+        "id": "flux2_klein_4b_fp8",
+        "version": 2
+       }
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui",
+        "model_profile": {
+         "id": "flux2_klein_4b_fp8",
+         "version": 2
+        }
+       }
+      },
+      "global_negative_prompt": "",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "flux-2-klein-4b-fp8.safetensors",
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": false,
+       "apply_global_negative_img2img": false,
+       "apply_global_negative_txt2img": false,
+       "apply_global_negative_upscale": false,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a red dress in forest",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 1.0,
+       "clip_skip": 2,
+       "global_negative_prompt": "",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "flux-2-klein-4b-fp8.safetensors",
+       "negative_prompt": "",
+       "prompt": "a red dress in forest",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "sampler_name": "Euler",
+       "scheduler": "Beta",
+       "seed": 42,
+       "steps": 4,
+       "subseed": -1,
+       "subseed_strength": 0.0,
+       "vae": "",
+       "width": 1024
+      }
+     },
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "",
+      "loras": [],
+      "negative_channel": false,
+      "negative_embeddings": [],
+      "negative_phrases": [
+       ""
+      ],
+      "pack_negative": "",
+      "positive_embeddings": [],
+      "quality": "a red dress in forest",
+      "safety_negative": "",
+      "subject": "",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "",
+     "executor_base_positive_prompt": "a red dress in forest",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": false,
+       "apply_global_negative_img2img": false,
+       "apply_global_negative_txt2img": false,
+       "apply_global_negative_upscale": false,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": 1.0
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [
+          [
+           768,
+           1024
+          ],
+          [
+           1024,
+           1024
+          ]
+         ],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": "Euler"
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": "Beta"
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": 4
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": ""
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "lora": {
+         "compatibility_policy": "klein_4b_explicit_metadata",
+         "limit": 1,
+         "stages": [
+          "txt2img"
+         ],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "single_reference_edit"
+       ],
+       "prompt_dialect": "natural_language",
+       "required_backend": "forge_webui",
+       "stages": [
+        "txt2img",
+        "img2img"
+       ]
+      },
+      "evidence": "exact_profile",
+      "family": "flux2_klein",
+      "policy_id": "flux2_klein_4b_fp8",
+      "profile_ref": {
+       "id": "flux2_klein_4b_fp8",
+       "version": 2
+      },
+      "selected_model": "flux-2-klein-4b-fp8.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": true,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": false,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "exact_profile",
+      "family": "flux2_klein",
+      "mode": "compile",
+      "operations": [
+       {
+        "code": "negative_prompt_dropped_unsupported",
+        "details": {},
+        "effect": "dropped",
+        "scope": "negative"
+       },
+       {
+        "code": "optimizer_not_applied",
+        "details": {},
+        "effect": "not_applied",
+        "scope": "optimizer"
+       },
+       {
+        "code": "global_negative_not_applied",
+        "details": {},
+        "effect": "not_applied",
+        "scope": "negative"
+       }
+      ],
+      "policy_id": "flux2_klein_4b_fp8",
+      "profile_ref": {
+       "id": "flux2_klein_4b_fp8",
+       "version": 2
+      },
+      "prompt_dialect": "natural_language",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "flux-2-klein-4b-fp8.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 1024
+     },
+     "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7",
+     "study_type": "model_comparison"
+    },
+    {
+     "adapted_negative_prompt": "",
+     "adapted_positive_prompt": "a red dress in forest",
+     "arm_sha256": "602e638ca2f7fcf4ce0e4f18ccb7acc3366e53320f8342be4e21e936e46edb40",
+     "candidate_index": 2,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "target_envelope_preference",
+     "contract": "learning_model_comparison/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui",
+       "model_profile": {
+        "id": "z_image_turbo_fp8_scaled",
+        "version": 1
+       }
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui",
+        "model_profile": {
+         "id": "z_image_turbo_fp8_scaled",
+         "version": 1
+        }
+       }
+      },
+      "cfg_scale": 1.0,
+      "clip_skip": 1,
+      "distilled_cfg_scale": 9.0,
+      "global_negative_prompt": "",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "height": 1024,
+      "model": "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors",
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": false,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a red dress in forest",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "sampler": "Euler",
+      "sampler_name": "Euler",
+      "scheduler": "Beta",
+      "steps": 9,
+      "txt2img": {
+       "cfg_scale": 1.0,
+       "clip_skip": 1,
+       "distilled_cfg_scale": 9.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors",
+       "negative_prompt": "",
+       "prompt": "a red dress in forest",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "sampler": "Euler",
+       "sampler_name": "Euler",
+       "scheduler": "Beta",
+       "seed": 42,
+       "steps": 9,
+       "subseed": -1,
+       "subseed_strength": 0.0,
+       "vae": "",
+       "width": 1024
+      },
+      "width": 1024
+     },
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "",
+      "loras": [],
+      "negative_channel": false,
+      "negative_embeddings": [],
+      "negative_phrases": [
+       ""
+      ],
+      "pack_negative": "",
+      "positive_embeddings": [],
+      "quality": "a red dress in forest",
+      "safety_negative": "",
+      "subject": "",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "",
+     "executor_base_positive_prompt": "a red dress in forest",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": false,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": 1.0
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [
+          [
+           1024,
+           1024
+          ]
+         ],
+         "mode": "fixed",
+         "value": [
+          1024,
+          1024
+         ]
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": "Euler"
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": "Beta"
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": 9
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "fixed",
+         "value": ""
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        }
+       },
+       "modes": [
+        "txt2img"
+       ],
+       "prompt_dialect": "natural_language",
+       "required_backend": "forge_webui",
+       "stages": [
+        "txt2img"
+       ]
+      },
+      "evidence": "exact_profile",
+      "family": "z_image",
+      "policy_id": "z_image_turbo_fp8_scaled",
+      "profile_ref": {
+       "id": "z_image_turbo_fp8_scaled",
+       "version": 1
+      },
+      "selected_model": "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": true,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": false,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "exact_profile",
+      "family": "z_image",
+      "mode": "compile",
+      "operations": [
+       {
+        "code": "negative_prompt_dropped_unsupported",
+        "details": {},
+        "effect": "dropped",
+        "scope": "negative"
+       },
+       {
+        "code": "optimizer_not_applied",
+        "details": {},
+        "effect": "not_applied",
+        "scope": "optimizer"
+       },
+       {
+        "code": "global_negative_not_applied",
+        "details": {},
+        "effect": "not_applied",
+        "scope": "negative"
+       }
+      ],
+      "policy_id": "z_image_turbo_fp8_scaled",
+      "profile_ref": {
+       "id": "z_image_turbo_fp8_scaled",
+       "version": 1
+      },
+      "prompt_dialect": "natural_language",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 1024
+     },
+     "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7",
+     "study_type": "model_comparison"
+    }
+   ],
+   "causal_one_variable": false,
+   "comparison_claim": "target_envelope_preference",
+   "contract": "learning_model_comparison/1",
+   "seed_interpretation": "requested seed held constant; latent/noise semantics may differ",
+   "shared_geometry": {
+    "height": 1024,
+    "width": 1024
+   },
+   "source_intent": {
+    "apply_global_negative": true,
+    "contract": "pack_prompt_intent/1",
+    "global_negative": "global negative",
+    "loras": [],
+    "negative_channel": true,
+    "negative_embeddings": [],
+    "negative_phrases": [
+     "bad"
+    ],
+    "pack_negative": "",
+    "positive_embeddings": [],
+    "quality": "a red dress in forest",
+    "safety_negative": "",
+    "subject": "",
+    "triggers": []
+   },
+   "source_intent_contract": "pack_prompt_intent/1",
+   "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7"
+  },
+  "negative_prompt_text": "global negative, bad",
+  "prompt_source": {
+   "matrix_combination_index": 1,
+   "matrix_combination_total": 2,
+   "matrix_freeze_policy": "first_canonical_required_slots",
+   "matrix_referenced_variables": [
+    "place"
+   ],
+   "matrix_source_mode": "random",
+   "matrix_used": true,
+   "matrix_values": {
+    "place": "forest"
+   },
+   "prompt_source": "pack",
+   "rendered_negative_prompt": "global negative, bad",
+   "rendered_positive_prompt": "a red dress in forest",
+   "selected_models": [
+    "ordinary.safetensors",
+    "flux-2-klein-4b-fp8.safetensors",
+    "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors"
+   ],
+   "selected_prompt_index": 0,
+   "selected_prompt_loras": [],
+   "selected_prompt_pack_name": "study",
+   "selected_prompt_pack_path": "pack.json",
+   "source_intent": {
+    "apply_global_negative": true,
+    "contract": "pack_prompt_intent/1",
+    "global_negative": "global negative",
+    "loras": [],
+    "negative_channel": true,
+    "negative_embeddings": [],
+    "negative_phrases": [
+     "bad"
+    ],
+    "pack_negative": "",
+    "positive_embeddings": [],
+    "quality": "a red dress in forest",
+    "safety_negative": "",
+    "subject": "",
+    "triggers": []
+   },
+   "source_intent_sha256": "9658fb8b179763f01d5f33387fabe00f56b205ec0b3d0091720b18612aeddeb7",
+   "study_type": "model_comparison"
+  },
+  "prompt_text": "a red dress in forest",
+  "schema_version": 2,
+  "seed_policy": {
+   "policy": "requested_seed_with_backend_observed_vector",
+   "requested_base_seed": 42,
+   "requested_sample_count": 1,
+   "requested_subseed": null,
+   "subseed_strength": 0.0
+  },
+  "stage": "txt2img",
+  "study_type": "model_comparison",
+  "variable_under_test": "Model Comparison",
+  "variant_values": [
+   "ordinary.safetensors",
+   "flux-2-klein-4b-fp8.safetensors",
+   "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors"
+  ]
+ }
+}

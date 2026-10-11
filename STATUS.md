@@ -4,6 +4,22 @@ Updated: 2026-10-11
 
 ## Repository
 
+- Model Comparison global-positive parity (PR-IMG-MODELS-160, locally validated): an enabled shared global
+  positive now reaches every eligible arm exactly once. Each arm is prepared independently and the canonical
+  model policy's result decides ownership: where the executor still applies the frozen terms (SDXL) it keeps
+  doing so; where an exact profile cleared the executor-global fields (Z-Image, Klein) the compiler adapts the
+  terms through the shared adapter and composes them once with the executor's own merge rule, so the arm's
+  executor flags stay neutralized and nothing is applied twice. Disabled or empty terms are never applied.
+  The freeze is additive (`model_comparison.global_positive` plus a per-arm `global_positive` mode and
+  `effective_global_positive_prompt`, content-free `global_positive_composed` /
+  `weighted_attention_flattened` / `break_separator_normalized` evidence); `frozen_arm()` validates it,
+  including resealed digests, without rerunning adaptation. Studies frozen before this keep their original
+  meaning and are neither reinterpreted nor upgraded. Preview adds a concise content-free per-arm notice.
+  Unsupported inline constructs, geometry, backend, stages, image count and exact-profile validators still
+  refuse at Build Preview; no controller, queue, JobService, runner or qualification change; no physical
+  generation. See
+  `docs/Subsystems/Image/PR-IMG-MODELS-160_Model_Comparison_Global_Positive_Parity.md`.
+
 - Z-Image effective configuration adaptation (PR-IMG-MODELS-159, locally validated; canonical gate green in
   an isolated worktree): PromptPack and generic Pipeline Preview no longer fail for stored global positive
   text (even disabled), an inherited prompt optimizer, CLIP skip 2 or inherited SDXL sampling. The executable
@@ -15,9 +31,8 @@ Updated: 2026-10-11
   `effective_configuration/1` with the same operation vocabulary, including weighted/BREAK rewrites of the
   composed terms and a global negative only when it would have applied). Preview shows the final channels,
   effective settings and a compact notice; the global positive toggle is no longer locked for Z-Image.
-  Scope is not universal: global-positive composition applies to the PromptPack and generic builders only.
-  Model Comparison arms still omit a shared global positive (parity deferred to PR-IMG-MODELS-160) and the CLI
-  builder stays strict. Manual prompts are validated, not adapted (weighted/adapter syntax in a manual prompt is
+  Scope is not universal: global-positive composition applies to the PromptPack and generic builders (Model
+  Comparison followed in PR-IMG-MODELS-160, below) and the CLI builder stays strict. Manual prompts are validated, not adapted (weighted/adapter syntax in a manual prompt is
   still refused), unlike PromptPack prose and the generic path's global terms, which follow the shared adapter.
   Geometry, stages, image counts, assets, backend and unresolved syntax still refuse; frozen intent
   serialization, SDXL, Klein and backend validation are unchanged. No physical generation. See

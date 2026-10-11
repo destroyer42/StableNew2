@@ -158,9 +158,15 @@ and Global Negative terms. Preview uses `render_pack_intent` on the adapted
 intent with global-negative participation disabled only for the executor base
 projection; it does not change the execution apply flags to compensate for
 preapplication. SDXL row negative `bad` with enabled frozen `GLOBAL` therefore
-dispatches `bad, GLOBAL` once. Qualified Klein compile policy still clears
-standard global terms/flags and the negative channel. No mutable global source
-is read after Preview, and shared merges/executor behavior are unchanged.
+dispatches `bad, GLOBAL` once. Qualified Klein/Z-Image compile policy still
+clears standard global terms/flags and the negative channel. Originally those
+arms simply omitted an enabled shared global positive; since PR-IMG-MODELS-160
+the compiler composes it once into such an arm's executable base prompt (the
+arm's executor flags stay neutralized) and records the ownership mode in the
+frozen arm. Studies frozen before that keep the original meaning. No mutable
+global source is read after Preview, and shared merges/executor behavior are
+unchanged. See
+`docs/Subsystems/Image/PR-IMG-MODELS-160_Model_Comparison_Global_Positive_Parity.md`.
 
 These base strings are not literal final backend prompts. The arm and rating
 declare `prompt_semantics="executor_base_before_globals_and_optimizer"`.

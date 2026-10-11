@@ -45,6 +45,19 @@ def apply_global_prompt_policy(
     return result
 
 
+def frozen_global_positive_policy(config: Mapping[str, Any] | None) -> tuple[str, bool]:
+    """The frozen global-positive ``(terms, enabled)`` exactly as the executor reads them (never applies them).
+
+    Read-only projection of a *frozen* configuration after any model compile policy has run: a target whose executor
+    cannot apply the terms carries ``("", False)``, so the effective ownership decision is derived, not tabulated.
+    """
+
+    data = dict(config or {})
+    pipeline = data.get("pipeline")
+    enabled = bool(pipeline.get(GLOBAL_POSITIVE_STAGE_FLAG)) if isinstance(pipeline, Mapping) else False
+    return str(data.get("global_positive_prompt") or "").strip(), enabled
+
+
 def has_frozen_global_prompt_policy(config: Mapping[str, Any] | None) -> bool:
     """Whether an execution config contains the complete modern policy."""
 

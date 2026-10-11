@@ -88,7 +88,7 @@ the PromptPack builder.
 |---|---|---|---|
 | PromptPack builder (Preview/Run Now/Send Job) | composed once | normalized with evidence | prose adapted |
 | Generic Pipeline builder | composed once (terms adapted) | normalized with evidence | manual prompt validated, **not** adapted |
-| Model Comparison arms | **omitted** (deferred to PR-IMG-MODELS-160) | normalized (PR-158) | prose adapted |
+| Model Comparison arms | composed once per exact-profile arm (PR-IMG-MODELS-160) | normalized (PR-158) | prose adapted |
 | CLI builder (`cli_njr_builder`) | strict, unchanged | strict, unchanged | validated |
 
 Manual prompts stay strict: weighted or adapter syntax in a manual prompt is refused, whereas
@@ -106,9 +106,9 @@ never rewritten and restore on model switch; PR-GUI-112 draft recovery is untouc
 ### Unchanged
 
 SDXL keeps executor-owned global terms, optimizer and sampling; Klein keeps its own compile
-policy (no composition, no new evidence). Model Comparison reuses the same projection and
-adaptation; its arms do not compose a global positive (the shared baseline's term stays
-replaced, as in PR-158).
+policy in the PromptPack and generic builders (no composition, no new evidence). Model
+Comparison reuses the same projection and adaptation and, since PR-IMG-MODELS-160, composes the
+shared enabled global positive per exact-profile arm (this PR left it omitted, as in PR-158).
 
 ## Token-Efficient Validation Plan
 
@@ -140,10 +140,10 @@ unchanged PR-155/157/158 evidence. No physical model launch or generation.
 
 ## Remaining limitations
 
-- **PR-IMG-MODELS-160 (deferred, bounded follow-up):** Z-Image Model Comparison arms still
-  replace a shared global positive term without composing it or recording an operation
-  (unchanged from PR-158). Parity changes frozen-arm prompt evidence and is not part of PR-159.
-  The sidebar global positive toggle is now operable for Z-Image, so the gap is more visible.
+- **Resolved by PR-IMG-MODELS-160:** Z-Image (and Klein) Model Comparison arms replaced a shared
+  global positive term without composing it or recording an operation (unchanged from PR-158).
+  Parity changed frozen-arm prompt evidence and was deliberately not part of PR-159; see
+  `PR-IMG-MODELS-160_Model_Comparison_Global_Positive_Parity.md`.
 - The generic builder clears (rather than refuses) a manual negative prompt and collapses
   inherited sampling variants for an exact Z-Image selection (owner-approved); the evidence is in
   `effective_configuration/1` and the Preview notice. Exact backend validation and Learning

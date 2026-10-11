@@ -42,14 +42,14 @@ def preview(tmp_path, *, negative="bad", enabled=True, positive=False):
     return exp, controller, config
 
 
-def dispatch(record, tmp_path, monkeypatch, *, readback=False):
+def dispatch(record, tmp_path, monkeypatch, *, readback=False, client=None):
     # Only external runtime/IO boundaries are stubbed. Prompt policy, merges,
     # payload construction and the disabled optimizer remain production code.
     manager = Mock()
     manager.get_global_positive_prompt.side_effect = AssertionError("mutable global read")
     manager.get_global_negative_prompt.side_effect = AssertionError("mutable global read")
     monkeypatch.setattr("src.pipeline.executor.ConfigManager", lambda: manager)
-    executor = Pipeline(Mock(), Mock())
+    executor = Pipeline(client or Mock(), Mock())
     for name in (
         "_apply_webui_defaults_once",
         "_ensure_model_and_vae",
@@ -106,9 +106,11 @@ def test_global_positive_executor_owned_and_klein_policy(tmp_path, monkeypatch, 
     exp, controller, _ = preview(tmp_path, positive=True)
     variant = next(v for v in controller.learning_state.plan if v.param_value == model)
     record = controller._build_variant_njr(variant, exp)
-    assert record.positive_prompt == "cat"
+    # SDXL: the executor applies the frozen terms at dispatch. Klein: its executor flags are neutralized, so the
+    # compiler composed the same terms into the executable prompt (PR-IMG-MODELS-160) - applied exactly once either way.
+    assert record.positive_prompt == ("cat" if model == SDXL else "POSITIVE, cat")
     payload = dispatch(record, tmp_path, monkeypatch)
-    assert payload["prompt"] == ("POSITIVE, cat" if model == SDXL else "cat")
+    assert payload["prompt"] == "POSITIVE, cat"
     if model == KLEIN:
         assert payload["negative_prompt"] == ""
         assert not record.config["pipeline"]["apply_global_negative_txt2img"]
@@ -154,7 +156,8 @@ def test_preview_globals_source_and_atomic_run_remain_frozen(tmp_path, monkeypat
             assert record.config["global_negative_prompt"] == ""
             assert record.config["global_positive_prompt"] == ""
             assert payload["negative_prompt"] == ""
-            assert payload["prompt"] == "cat"
+            assert record.positive_prompt == payload["prompt"] == "POSITIVE, cat"
+            assert arm["global_positive"]["mode"] == "compiler_composed"
 
 
 @pytest.mark.parametrize("model", [SDXL, KLEIN])
@@ -179,7 +182,9 @@ def test_runtime_readback_and_rating_distinguish_executor_base(tmp_path, monkeyp
     metadata = json.loads((tmp_path / "ratings.jsonl").read_text())["metadata"]
     assert metadata["runtime_prompt_readback"] == readback
     assert metadata["prompt_semantics"] == "executor_base_before_globals_and_optimizer"
-    assert metadata["model_comparison"]["executor_base_positive_prompt"] == "cat"
+    assert metadata["model_comparison"]["executor_base_positive_prompt"] == (
+        "cat" if model == SDXL else "POSITIVE, cat"
+    )
     assert runtime_prompt_readback(
         {"final_negative_prompt": ""}, {"final_negative_prompt": "wrong"}
     ) == {"final_negative_prompt": ""}
