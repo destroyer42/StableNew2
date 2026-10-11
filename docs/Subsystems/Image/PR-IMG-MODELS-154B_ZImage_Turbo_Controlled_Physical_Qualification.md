@@ -1,8 +1,8 @@
 # PR-IMG-MODELS-154B — Controlled one-case physical qualification harness: Z-Image-Turbo FP8-scaled
 
-Disposition: **`HARNESS_VALIDATED_NO_PHYSICAL_RUN`** (local branch; independent review and hosted CI pending). The executable
-capability exists, is disabled by default and has **never been run against a real runtime**. No Forge was started, no model
-was selected or loaded and no image was generated. The first physical execution needs its own explicit owner authorization.
+Disposition: **`LOADER_FAILED`** for the separately owner-authorized physical attempt on 2026-10-10 (America/New_York).
+Managed Forge startup was attempted, but its launch environment could not locate `uv` and the owned root exited before
+startup verification. No model selection or generation request was sent; no image was produced. The case is consumed.
 
 Execution profile: Standard, high-risk qualification-specific lifecycle work (`tools/qualification/img154b/`, small edits to
 `tools/qualification/img154/`, no production `src/` change). Claude Code Sonnet 5.5 XHigh / Codex GPT-6.1 Sol XHigh, Windows
@@ -14,6 +14,35 @@ Canonical production execution is unchanged:
 This harness is a deliberately isolated hardware-qualification tool and is **not** an alternative production execution path:
 no queue, runner, history, compiler, PromptPack, profile or GUI authority is added.
 
+## Captured physical result
+
+The executed checkout was clean SHA `df4b518a0cacdc159272cd64afa38fe7d4cf791f`, source SHA-256
+`66298a85767d86a5636933bdb7bc5572538821dffbcc5fed984309f325b9e144`. Case identity
+`471c18ba071aa54a2f7cebc26c101f78c8fea1f5a3fe0acd4792ff5772827231` was claimed at
+2026-10-11T01:13:56Z (2026-10-10 21:13:56 America/New_York) after the owner's interactive confirmations.
+The three served copies had exact verified bytes and hashes. The fresh claim-boundary preflight was
+`PREPARED_FOR_OWNER_REVIEW`: commit headroom 41.92 GiB, available RAM 21.48 GiB, pagefile-volume free 267.93 GiB,
+VRAM 1,053 MiB against a 1,061 MiB quiescent baseline. Limits and the frozen request were unchanged.
+
+Durable stages were `claimed -> managed_start_attempted -> terminal_evidence`. The console recorded
+`[Error] uv is not installed...`; the pinned Forge `modules_forge/uv_hook.py` emits this on `FileNotFoundError` from
+`subprocess.run(["uv", "--help"])`. This establishes that the launched environment could not find the executable,
+not whether it is installed elsewhere on the workstation. Ownership verification refused because the owned root no longer
+existed. There were zero selection/generation requests and no output. The result is a runtime bootstrap failure, not a
+Z-Image-Turbo model or GPU qualification verdict.
+
+Manager-owned shutdown was `verified_clean`, with no reported survivor; a subsequent read-only check found no qualification
+process or port 7886 listener. Telemetry was complete (138 samples; maximum gap 1.03109 s). After the 120-second settle,
+fault observation reported `NO_NEW_EVENTS_COMPLETE_COVERAGE`, with no boot change or new records. These observations
+establish neither stability nor production support.
+
+Evidence is preserved locally under
+`%LOCALAPPDATA%\StableNew\Qualification\IMG154B_ZIMAGE_TURBO_FP8\evidence\case-471c18ba071a-20261011T011152Z`:
+`case-report.redacted.json`, `samples.jsonl`, the hashed `index.json`, and `redacted/console_tail.txt`.
+The stable no-retry ledger remains consumed. No `uv` installation, environment repair or further run was performed.
+The executed harness and tests are evidence-frozen; another run requires an explicitly authorized acceptance contract
+and a distinct case identity, without resetting this ledger.
+
 ## Execution boundary
 
 | Capability | State |
@@ -21,12 +50,12 @@ no queue, runner, history, compiler, PromptPack, profile or GUI authority is add
 | Import of any module | Pure. An audit-hooked subprocess test proves no process start, no network, no native-library load (beyond `import ctypes`'s own kernel32) and no write at import. |
 | `python -m tools.qualification.img154b.cli` (default CLI) | `request`, `layout-plan`, `challenge`, `dry-run`, `passphrase-verifier`. Offline or read-only. It cannot import the live module. |
 | `physical preflight` | Read-only live preflight. Starts, selects and sends nothing; consumes no case. |
-| `physical materialize --confirm-copy` | Copies the three verified files (about 14.5 GB) into the isolated layout. Filesystem only. **Not run.** |
-| `physical execute` | The single physical case. Refuses unless: Windows, not under a test runner, `STABLENEW_IMG154B_PHYSICAL=ONE-CASE`, `--attempt-identity` equals the computed identity, an interactive TTY, an owner authorization record at the stable location, then a typed exact-case phrase and the owner's passphrase (no echo). **Not run.** |
+| `physical materialize --confirm-copy` | Copies the three verified files (about 14.5 GB) into the isolated layout. Filesystem only. **Completed with exact served-file proof.** |
+| `physical execute` | The single physical case. Refuses unless: Windows, not under a test runner, `STABLENEW_IMG154B_PHYSICAL=ONE-CASE`, `--attempt-identity` equals the computed identity, an interactive TTY, an owner authorization record at the stable location, then a typed exact-case phrase and the owner's passphrase (no echo). **Consumed; `LOADER_FAILED` before selection or generation.** |
 | `TECHNICAL_PASS_CONSTRAINED` | Reachable only with a `physical` execution authority that only the `execute` path can mint, plus complete evidence. A synthetic authority tops out at `INSTRUMENTATION_GAP`. |
 
-Git authorization honoured: local branch, implementation, synthetic validation and local commits only; nothing pushed, no PR,
-merge, release or worktree deletion.
+The original harness was integrated through PR #83 at `4d83fd8b`. The subsequent launch corrections and this physical-result
+closeout remain local on `codex/img154b-challenge-binding-launch`; they have no hosted CI verdict or publication authorization.
 
 ## Request semantics: reconciled against the pinned source (`d70373eb`)
 
@@ -181,11 +210,17 @@ technical result, never stability, repeatability or production support.
 
 ## Validation
 
+The final executed launch-correction SHA passed 709 affected tests (6 platform/explicit-opt-in skips), scoped Ruff and mypy,
+and the local PR gate (8,244 collected; 386 smoke passed; repository unchanged; completeness/controller/Ruff/mypy passed).
+The physical-result closeout changes documentation only and reuses that source-identical evidence without another run.
+
+The following records describe the original harness validation; PR #83 subsequently passed its hosted required and affected jobs.
+
 The R1 import audit initializes standard-library `ctypes` separately before importing any harness module: CPython 3.14.8
 `Lib/ctypes/__init__.py` initializes `pythonapi = PyDLL(None)` on Linux (the known hosted T89 event), and kernel32 on Windows.
 Every subsequent native-library load remains audited and rejected, including `None` and kernel32. Unexpected process,
 outbound-network and filesystem-write events remain rejected. This import isolation is not a hosted corrected-SHA verdict;
-Linux `affected` CI must pass after separately authorized publication.
+Linux `affected` CI was required before PR #83 integration; the subsequent local launch corrections remain unpublished.
 
 | Evidence | Result |
 | --- | --- |
@@ -195,12 +230,12 @@ Linux `affected` CI must pass after separately authorized publication.
 | Mutation probes (26 high-risk rules, including non-exclusive claim, skipped or stale ownership, post-then-record, ignored confirmation and passphrase, shift key, CFG 0, no-shutdown pass, ignored device mismatch, hard-link alias, authorization removed, unconditional shutdown verification, second POST budget, torn ledger as clean, unverified selection, no fresh-sample wait, boot-window listener, endpoint ownership, skipped sampler proof, stale single-pid tree, re-assigned PDH fields) | all killed (two survived the first round; the cross-process test was not sensitive to a stale pre-check and the shutdown test did not cover an unobserved tree, so two regressions were added) |
 | Anchors against the installed pinned tree (read-only text) | 23 anchors, 14 payload keys, no findings |
 | Real native providers, read-only, 12.5 s | all fields ok, cadence and latency as above |
-| Live read-only preflight (below) | refused, as expected |
+| Original live read-only preflight (below) | refused, as expected; superseded for the authorized attempt by the fresh prepared preflight above |
 
 Opt-in checks (not run by default): `STABLENEW_IMG154B_FORGE_SOURCE=<managed source>` re-verifies the anchors;
 `STABLENEW_IMG154B_NATIVE_SMOKE=1` reads the native providers.
 
-## Workstation preflight disposition (read-only observation)
+## Original workstation preflight disposition (historical read-only observation)
 
 `physical preflight` on this host, code state dirty (uncommitted work), no isolated layout: **`REFUSED_ASSET_IDENTITY`**
 (served files absent, config marker absent), with commit headroom 26.6 GiB (< 37 GiB), available RAM 16.1 GiB (< 20 GiB),
@@ -219,13 +254,12 @@ needs a near-idle desktop (commit total at most about 12.8 GiB) still holds.
 * File provenance is exact bytes only; official provenance is unverified.
 * The owner-authorization record is unsigned; its authorship rests on the passphrase only the owner holds, and an owner who
   shares the passphrase with automation defeats that control.
-* The dispatch is an hour-scale, single blocking request; the real HTTP path and the OwnedForge start have only been tested
-  against fakes and a loopback test server.
+* The dispatch is an hour-scale, single blocking request; the real HTTP path has only been tested against fakes and a
+  loopback test server. The first real owned startup failed at the `uv` bootstrap check before endpoint readiness.
 
-## Readiness for a separate, owner-approved physical run
+## Boundary for any subsequent physical run
 
-The harness is ready for review and, **if the owner then separately authorizes it**, a first run. Sequence: independent review
-and hosted CI; owner decision on the residual risk; `physical materialize --confirm-copy` into an isolated root; a quiet
-desktop meeting the unchanged thresholds; `cli passphrase-verifier` and `cli challenge`; the owner records the authorization
-(including the verifier); `physical execute` in an interactive terminal with the environment opt-in, the typed phrase and the
-passphrase. A refusal at any gate consumes nothing.
+The authorized case is complete and consumed; no additional run is authorized. Any subsequent package must explicitly
+address the launch-environment blocker, define its acceptance contract and distinct case identity, and retain the existing
+case ledger and evidence. It must pass the unchanged authorization, isolation, ownership, resource and telemetry gates
+before any new managed startup. A pre-claim refusal consumes nothing; an attempt that reaches the claim cannot be retried.

@@ -4,8 +4,8 @@ Updated: 2026-10-10
 
 ## Repository
 
-- Z-Image-Turbo FP8-scaled controlled physical-qualification harness (PR-IMG-MODELS-154B, `HARNESS_VALIDATED_NO_PHYSICAL_RUN`;
-  local branch `img/models-154b-zimage-controlled-qualification-harness`, hosted CI and independent review pending): an isolated,
+- Z-Image-Turbo FP8-scaled controlled physical-qualification harness (PR-IMG-MODELS-154B, physical attempt `LOADER_FAILED`;
+  harness integrated as PR #83; subsequent launch corrections and physical closeout remain local): an isolated,
   disabled-by-default, one-case harness in `tools/qualification/img154b/` (not a production execution path; no `src/` change).
   The 154A request semantics are reconciled against the pinned Forge source: the frozen sampling values are unchanged, but
   the model card's guidance 0.0 is `cfg_scale 1.0` there (0.0 would send the unconditional prediction) and shift travels as
@@ -15,10 +15,12 @@ Updated: 2026-10-10
   sampler (NVML, PDH, DXGI adapter map, exact commit bytes) feeding the 154A monitor, harness-acquired quiescent baselines,
   exact-case owner authorization with an owner-passphrase verifier (never written by the package), a one-case coordinator and an
   eight-class adjudication; an independent review found and drove fixes for two blockers (non-blocking start, PDH struct). A
-  read-only live preflight on this workstation was refused as expected (isolated files not materialized; commit headroom
-  26.6 GiB < 37 GiB; available RAM 16.1 GiB < 20 GiB); thresholds were not relaxed. No Forge was started, no model loaded or
-  selected and nothing generated; the physical run needs a separate explicit owner authorization and acceptance of the
-  unresolved DIAG-GPU-130 risk. See
+  separately owner-authorized attempt on 2026-10-10 used clean SHA `df4b518a`, three verified isolated copies and a prepared
+  claim-boundary preflight (41.92 GiB commit headroom, 21.48 GiB available RAM; thresholds unchanged). Managed Forge startup
+  failed because its launch environment could not locate `uv`; the owned root exited before startup verification. No model
+  selection or generation request was sent. Shutdown was verified clean; 138 telemetry samples were complete and the
+  120-second post-run fault check found no new events. Case `471c18ba071a` is consumed, with no retry or further physical run
+  authorized. This establishes no model/GPU qualification result; unresolved DIAG-GPU-130 risk remains. See
   `docs/Subsystems/Image/PR-IMG-MODELS-154B_ZImage_Turbo_Controlled_Physical_Qualification.md`.
 
 - Z-Image-Turbo FP8-scaled safety preparation (PR-IMG-MODELS-154A, `PASS_PREPARATION_ONLY`; integrated as PR #82;
@@ -35,7 +37,7 @@ Updated: 2026-10-10
   VRAM baselines remain inconclusive, and attempt identity survives policy changes. No new physical or live probe was run in the repair.
   The package has no launch, model-selection, request or termination path (source-guard tested) and changes no production
   behavior. The 154A work is integrated (PR #82 merged to `main` at `c9634b4c`; the hosted verdict is not restated here).
-  PR-IMG-MODELS-154B (above) added the gated harness; physical qualification itself is still not authorized or run. See
+  PR-IMG-MODELS-154B (above) added the gated harness; its authorized startup attempt failed before model selection or generation. See
   `docs/Subsystems/Image/PR-IMG-MODELS-154A_ZImage_Turbo_Safety_Preparation.md`.
 
 - ADetailer control truth and effectiveness evidence (PR-REFINE-160, COMPLETE / ACCEPTED; PR #81, hosted `required` and `affected` passed, independent reviews found no blocker): new ADetailer cards
