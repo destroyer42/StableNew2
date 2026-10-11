@@ -97,6 +97,7 @@ from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
     ProcessAutoScannerService,
 )
+from src.controller.reprocess_admission import submit_reprocess_njrs
 from src.controller.runtime_state import GUIState
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.svd_submission_service import (
@@ -2416,12 +2417,7 @@ class AppController:
                 self._ui_dispatch(lambda: refresh(processed_asset_ids))
 
     def _submit_reprocess_njrs(self, njrs: list[Any], *, source: str) -> int:
-        if not self.job_service:
-            raise RuntimeError("Job service not available")
-        if not njrs:
-            return 0
-        job_ids = self.job_service.submit_njrs(njrs, SubmissionPolicy())
-        return len(job_ids)
+        return submit_reprocess_njrs(self.job_service, njrs)
 
     def _build_reprocess_config(self, stages: list[str]) -> dict[str, Any]:
         """Build configuration dict for reprocess jobs.

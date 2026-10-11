@@ -40,6 +40,7 @@ from src.image_backends.forge_zimage_profile import (
     ZImageProfile,
     apply_zimage_compile_policy,
     is_zimage_transformer_name,
+    project_shared_baseline,
     zimage_selected,
 )
 from src.image_backends.image_backend_types import A1111_IMAGE_BACKEND_ID, FORGE_IMAGE_BACKEND_ID
@@ -325,6 +326,14 @@ def policy_for_model_profile_reference(backend_options: Any) -> ModelPolicy | No
     return None if profile is None else policy_for_profile(profile)
 
 
+def resolve_model_profile_for_policy(policy: ModelPolicy) -> ExactModelProfile | None:
+    """The immutable exact profile a policy projects (``None`` for an ordinary or unverified target)."""
+
+    if policy.profile_ref is None:
+        return None
+    return resolve_model_profile({"image": {"model_profile": dict(policy.profile_ref)}})
+
+
 def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup | None = None) -> ModelPolicy:
     """The policy for a selected checkpoint: exact qualified profile, else registry evidence, else unverified.
 
@@ -431,6 +440,21 @@ _COMPILE_POLICIES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
 }
 
 
+def prepare_candidate_baseline(config: dict[str, Any]) -> dict[str, Any]:
+    """Independently prepare one candidate's run config from a *shared* comparison baseline (in place).
+
+    Model Comparison starts every arm from one baseline that was authored for some other model. This step replaces
+    only the values the exact profile itself owns (sampling, VAE, prompt optimizer, global prompt terms) with the
+    profile's own, via the profile's projection; Klein's compile policy already owns those, and an ordinary model is
+    untouched. It never changes geometry, counts, seed policy, stages or optional features, so
+    ``apply_model_compile_policy`` (run next, unchanged) still refuses a genuine conflict.
+    """
+
+    if zimage_selected(config):
+        return project_shared_baseline(config)
+    return config
+
+
 def apply_model_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
     """Freeze the exact qualified profile semantics of the selected model into a merged run config (in place).
 
@@ -474,5 +498,7 @@ __all__ = [
     "apply_model_compile_policy",
     "policy_for_model_profile_reference",
     "policy_for_profile",
+    "prepare_candidate_baseline",
     "resolve_model_policy",
+    "resolve_model_profile_for_policy",
 ]

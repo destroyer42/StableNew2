@@ -7,7 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from src.curation.curation_manifest import build_serialized_curation_source_metadata
-from src.image_backends.forge_klein_profile import KLEIN_EDIT_METADATA_KEY
+from src.image_backends.forge_klein_profile import KLEIN_EDIT_METADATA_KEY, latest_klein_profile
+from src.image_backends.image_backend_types import configured_image_backend_id
+from src.image_backends.model_policy import resolve_model_policy
+from src.image_backends.operation_compatibility import (
+    OperationAssessment,
+    OperationRequest,
+    assess_operation,
+)
 from src.pipeline.reprocess_builder import ReprocessEffectiveSettingsPreview, ReprocessJobBuilder
 from src.state.output_routing import resolve_output_artifact_path
 from src.utils.image_metadata import resolve_model_vae_fields, resolve_prompt_fields
@@ -361,11 +368,42 @@ class ReviewWorkflowAdapter:
             marked[str(target)] = {**existing, KLEIN_EDIT_METADATA_KEY: True}
         return marked
 
+    @staticmethod
+    def assess_readiness(
+        preview: ReprocessEffectiveSettingsPreview,
+        *,
+        single_reference_edit: bool = False,
+        backend_id: str | None = None,
+    ) -> OperationAssessment:
+        """Read-only readiness of the requested Review operation (the same projection admission applies).
+
+        The checkpoint is the one the job would carry: the preview's effective model, or - for the explicit
+        single-reference edit, which freezes the qualified Klein checkpoint exactly as submission does - that profile.
+        The backend is the configured one. Backend validation stays the final authority after admission.
+        """
+
+        stages = ("img2img",) if single_reference_edit else tuple(preview.target_stages)
+        model = (
+            latest_klein_profile().transformer.filename
+            if single_reference_edit
+            else preview.effective_model or preview.source_model
+        )
+        return assess_operation(
+            resolve_model_policy(model),
+            OperationRequest(
+                stages=stages,
+                backend_id=backend_id or configured_image_backend_id(),
+                input_image_count=1,
+                single_reference_edit=single_reference_edit,
+            ),
+        )
+
     def format_effective_settings_summary(
         self,
         preview: ReprocessEffectiveSettingsPreview | None,
         *,
         direct_queue_preview: ReprocessEffectiveSettingsPreview | None = None,
+        readiness: OperationAssessment | None = None,
     ) -> str:
         if preview is None:
             return "Effective settings: unavailable"
@@ -379,6 +417,12 @@ class ReviewWorkflowAdapter:
         ]
         for stage_preview in list(preview.stage_settings or []):
             lines.append(self._format_stage_preview(stage_preview))
+        if readiness is not None:
+            lines.append(
+                f"Readiness: {readiness.target} - ready"
+                if readiness.ready
+                else f"Readiness: NOT READY - {readiness.explain()}. Nothing is queued or changed."
+            )
 
         if direct_queue_preview is not None:
             lines.append("")

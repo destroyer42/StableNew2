@@ -82,6 +82,15 @@ def candidate_models(values: Any) -> list[str]:
     return result
 
 
+def _arm_failure(index: int, exc: Exception) -> str:
+    """One whole-study refusal that names the arm; shared settings are never normalized to force qualification."""
+    return (
+        f"Model Comparison arm {index + 1} cannot execute the shared study: {exc}. "
+        "No arm was queued; shared geometry, sample count, seed policy, stages and optional features are not "
+        "changed for a candidate - adjust the shared settings or the candidate list and rebuild preview."
+    )
+
+
 def _require_candidate(policy: Any) -> None:
     if not (policy.qualified and policy.evidence == "exact_profile") and not (
         policy.family == "sdxl" and policy.evidence == "registry_evidence"
@@ -157,7 +166,10 @@ def build_comparison_snapshot(
 ) -> dict:
     """Build all semantic blueprints using one bounded canonical evidence context."""
     from src.image_backends.image_backend_types import normalize_image_backend_options
-    from src.image_backends.model_policy import apply_model_compile_policy
+    from src.image_backends.model_policy import (
+        apply_model_compile_policy,
+        prepare_candidate_baseline,
+    )
     from src.learning.experiment_freeze import (
         apply_frozen_seed_policy,
         freeze_prompt_pack_source,
@@ -246,7 +258,13 @@ def build_comparison_snapshot(
                     container[key] = model
         config["backend_options"] = copy.deepcopy(options)
         config["backend_options"]["image"].pop("model_profile", None)
-        apply_model_compile_policy(config)
+        try:
+            # Each arm is prepared independently from the shared baseline: the exact profile's own values replace
+            # the baseline's carried-over sampling/prompt-channel values, then its unchanged compile policy runs.
+            prepare_candidate_baseline(config)
+            apply_model_compile_policy(config)
+        except ValueError as exc:
+            raise ValueError(_arm_failure(index, exc)) from exc
         apply_frozen_seed_policy(config, seed_policy)
         config["pipeline"] = {
             **dict(config.get("pipeline") or {}),
@@ -332,7 +350,29 @@ def build_comparison_snapshot(
         "input_image_path": "",
     }
     frozen_arm(snapshot, models[0])
+    verify_arms_admissible(snapshot)
     return snapshot
+
+
+def verify_arms_admissible(snapshot: dict) -> None:
+    """Materialize every arm through the exact Run boundary so one incompatible candidate fails the whole study.
+
+    This builds the same immutable records Run will admit (no queue, backend, registry or filesystem access) and applies
+    the exact profile's NJR validation, so a refusal surfaces at Preview and never partway through admission.
+    """
+    from types import SimpleNamespace
+
+    for index, model in enumerate(snapshot["variant_values"]):
+        try:
+            materialize_njr(
+                snapshot,
+                SimpleNamespace(param_value=model, executed_config=None),
+                metadata_factory=lambda config: {},
+                output_dir="output",
+                filename_template="{seed}",
+            )
+        except ValueError as exc:
+            raise ValueError(_arm_failure(index, exc)) from exc
 
 
 def frozen_arm(snapshot: dict, value: Any) -> dict:
@@ -522,6 +562,7 @@ def materialize_njr(
     snapshot: dict, variant: Any, *, metadata_factory, output_dir: str, filename_template: str
 ):
     """Materialize one Learning NJR from its preview blueprint, with no adaptation."""
+    from src.image_backends.exact_model_profile import validate_profile_njr
     from src.learning.experiment_freeze import apply_frozen_seed_policy
     from src.pipeline.job_models_v2 import (
         CURRENT_NJR_SCHEMA_VERSION,
@@ -625,6 +666,8 @@ def materialize_njr(
         or record.workload.backend_options != config["backend_options"]
     ):
         raise ValueError("Model Comparison NJR does not match frozen execution")
+    # The same exact-profile admission check the NJR builders apply (a no-op for every other model).
+    validate_profile_njr(record)
     return record
 
 
