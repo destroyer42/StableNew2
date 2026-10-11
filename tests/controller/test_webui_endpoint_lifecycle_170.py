@@ -366,17 +366,16 @@ def test_manager_connection_browser_and_client_endpoints_agree_for_managed_forge
     from src.api.webui_runtime_identity import effective_webui_base_url
     from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
 
-    settings = {"webui_runtime_identity": "forge_webui"}
+    # An explicit endpoint keeps this independent of the machine's managed-Forge install (a Windows runtime).
+    settings = {"webui_runtime_identity": "forge_webui", "webui_base_url": FORGE_URL}
     monkeypatch.setattr("src.api.webui_runtime_identity.load_backend_settings", lambda *a, **k: settings)
     monkeypatch.delenv("STABLENEW_WEBUI_BASE_URL", raising=False)
-    config = wpm.build_default_webui_process_config()
-    assert config is not None
     controller = WebUIConnectionController()  # default provider: the same effective endpoint resolution
+    manager = WebUIProcessManager(forge_config())
 
-    # Process manager, connection/browser URL and API-client URL all resolve one configured endpoint.
+    # Connection/browser URL, API-client URL and the process manager's endpoint resolve one configured endpoint.
     assert controller.get_base_url() == effective_webui_base_url() == DefaultImageRuntimePorts.base_url()
-    assert config.base_url == controller.get_base_url()
-    assert controller.get_base_url().rstrip("/").endswith(":7871")
+    assert manager.endpoint == controller.get_base_url() == FORGE_URL
 
 
 def test_a_startup_failure_reports_the_actual_exit_and_leaves_evidence(monkeypatch):
