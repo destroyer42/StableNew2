@@ -16,7 +16,6 @@ from src.contracts import PackJobEntry
 from src.image_backends.forge_klein_lora import LoraResolver
 from src.image_backends.forge_klein_profile import klein_selected
 from src.image_backends.forge_zimage_profile import (
-    ZImageProfileError,
     validate_zimage_njr,
     zimage_selected,
 )
@@ -471,7 +470,21 @@ class PromptPackNormalizedJobBuilder:
         # Source intent (what the operator configured) stays separate from the effective executable config: the model
         # compile policy normalizes values (negative, global terms, optimizer) that the adaptation manifest must still see.
         source_config = copy.deepcopy(cached_resolved)
-        merged_config = apply_model_compile_policy(copy.deepcopy(cached_resolved))
+        executable_config = copy.deepcopy(cached_resolved)
+        if zimage_selected(source_config):
+            # Authored prompt channels are projected by adapt_pack_intent below.
+            # Keep their source values for adaptation evidence, while the exact
+            # profile validates only the executable negative/global channel.
+            for section in (executable_config, executable_config.get("txt2img", {})):
+                # Positive execution text is rendered from structured intent later.
+                section.pop("prompt", None)
+                for key in ("negative_prompt", "global_negative_prompt"):
+                    section[key] = ""
+                if "apply_global_negative_txt2img" in section:
+                    section["apply_global_negative_txt2img"] = False
+            executable_config["global_negative_prompt"] = ""
+            executable_config.setdefault("pipeline", {})["apply_global_negative_txt2img"] = False
+        merged_config = apply_model_compile_policy(executable_config)
         stage_flags = self._normalize_stage_flags(
             merged_config.get("pipeline", {}), entry.stage_flags or {}
         )
@@ -491,12 +504,6 @@ class PromptPackNormalizedJobBuilder:
             resolved_actors,
             resolved_style_lora,
         )
-        if zimage_selected(source_config) and (
-            intent.loras or intent.positive_embeddings or intent.negative_embeddings
-            or intent.pack_negative.strip() or intent.global_negative_applied
-            or any(text.strip() for text in intent.negative_phrases) or intent.safety_negative.strip()
-        ):
-            raise ZImageProfileError("Z-Image PromptPack contains unsupported LoRA, embeddings or negative/global intent")
         return _PreparedPrompt(entry, matrix_variant_index, matrix_variant_count, source_config,
                                merged_config, stage_chain, record_metadata, resolved_style_lora, intent, pack_config.get("version"))
 

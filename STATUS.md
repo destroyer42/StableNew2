@@ -1,8 +1,16 @@
 # StableNew current state
 
-Updated: 2026-10-10
+Updated: 2026-10-11
 
 ## Repository
+
+- Z-Image model-aware PromptPack compilation (PR-IMG-MODELS-157, locally validated):
+  fresh PromptPack jobs use the existing shared adapter to flatten weighted prose and omit
+  structured LoRAs, embeddings and negative channels, preserving saved packs and freezing
+  adaptation evidence in the NJR. Exact v1 execution restrictions remain enforced;
+  1,254 affected tests and all local gate steps passed (required smoke needed
+  an unsandboxed localhost fake-server rerun). No physical qualification result is added. See
+  `docs/Subsystems/Image/PR-IMG-MODELS-157_ZImage_PromptPack_Adaptation.md`.
 
 - Z-Image canonical acceptance preparation (PR-IMG-MODELS-156, local implementation validated):
   a one-NJR dry-run packet and separately owner-authorized managed acceptance tool reuse the

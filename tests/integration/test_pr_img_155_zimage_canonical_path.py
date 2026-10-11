@@ -16,6 +16,7 @@ from tests.helpers.fake_webui_transport import FakeWebUITransport
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 from tests.helpers.njr_queue_harness import run_njr_via_queue
 from tests.integration.test_pr_img_116_klein_canonical_path import _client
+from tests.tools.test_img_forge_100_acceptance_driver import canonical_context  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -82,6 +83,58 @@ def test_actual_post_and_history_use_the_exact_profile(tmp_path):
     assert manifest["zimage_profile"]["model_profile"] == P.reference()
     assert manifest["zimage_profile"]["asset_identity"]["vae"]["sha256"] == P.vae.sha256
     assert manifest["zimage_selection"]["verified_before_dispatch"] is True
+
+
+@pytest.mark.usefixtures("canonical_context")
+def test_adapted_promptpack_jobs_use_one_post_each_and_canonical_history(tmp_path, monkeypatch):
+    from copy import deepcopy
+    from dataclasses import replace
+
+    from src.controller.submission_policy_v26 import SubmissionPolicy
+    from tests.pipeline.test_zimage_compile_policy import _pack
+    from tools.acceptance.img_forge_100_acceptance import _await_terminal, build_stack
+
+    builder, template, path, original = _pack(
+        tmp_path, monkeypatch, text="A (ceramic teapot:1.2) on a wooden table.",
+        loras=[["adapter", 0.7]], positive_embeddings=[["token", 1]],
+        negative_embeddings=[["negative-token", 1]], negative="blurry",
+    )
+    entries = []
+    for seed in range(100, 104):
+        entry = deepcopy(template)
+        entry.config_snapshot = {"txt2img": {**builder._config_manager._config["txt2img"], "seed": seed}}
+        entries.append(entry)
+    records = builder.build_jobs(entries)
+    records = [replace(record, output_plan=replace(record.output_plan, base_output_dir=str(tmp_path / "output")))
+               for record in records]
+    assert len(records) == 4 and len({record.job_id for record in records}) == 4
+    assert all(record.images_per_prompt == 1 for record in records)
+    t = transport()
+    stack = build_stack(tmp_path / "state", tmp_path / "output", P.backend_id,
+                        "http://127.0.0.1:7860", client=_client(t))
+    try:
+        accepted = stack.service.submit_njrs(records, SubmissionPolicy(start_when_idle=True))
+        assert accepted == [record.job_id for record in records]
+        for record in records:
+            result = _await_terminal(stack.repository, record.job_id, 10)
+            assert result.status is JobStatus.COMPLETED, result.error_message
+            assert result.snapshot["normalized_job"] == record.to_dict()
+            assert stack.repository.get_artifact_references(record.job_id)
+        assert stack.repository.identities() == set(accepted)
+        assert len(t.generation_calls) == 4
+        for seed, (_, _, payload) in zip(range(100, 104), t.generation_calls, strict=True):
+            assert payload["prompt"] == "A ceramic teapot on a wooden table."
+            assert payload["negative_prompt"] == "" and payload["seed"] == seed
+            assert payload["batch_size"] == payload["n_iter"] == 1
+            assert payload["steps"] == 9 and payload["cfg_scale"] == 1
+            assert payload["sampler_name"] == "Euler" and payload["scheduler"] == "Beta"
+            assert payload["distilled_cfg_scale"] == 9
+        assert path.read_bytes() == original
+    finally:
+        quiesced = stack.service.stop(timeout=5)
+        if quiesced:
+            stack.repository.close()
+        assert quiesced
 
 
 @pytest.mark.parametrize("change", [

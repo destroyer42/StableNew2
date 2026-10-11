@@ -225,8 +225,9 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
             features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
             note=("Z-Image-Turbo FP8 limited support: exact three-file bundle, managed pinned Forge, txt2img only; "
                   "one 1024x1024 image, Euler/Beta/9 steps/CFG 1/shift 9 (distilled_cfg_scale). "
-                  "Use a natural-language positive prompt; negative prompts and optional stages/modifiers are unsupported. "
-                  "Stored conflicting features are preserved and rejected; disable them before selecting this model. "
+                  "PromptPack compilation adapts weighted prose and omits structured LoRAs, embeddings and negative prompts. "
+                  "Saved packs are preserved; adaptation is recorded in the queued job. "
+                  "Optional stages/modifiers and unresolved inline adapter/embedding tokens remain unsupported. "
                   "One physical generation was observed; clean-shutdown qualification and repeated-run stability remain incomplete. "
                   "32-GB-class total RAM is required; available RAM/commit are observational, without floors."),
         )

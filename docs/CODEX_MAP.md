@@ -15,6 +15,11 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/pipeline_controller.py`,
   `src/controller/app_controller_services/run_submission_service.py`, and
   `src/controller/pipeline_controller_services/`.
+- Z-Image PromptPack adaptation (PR-IMG-MODELS-157):
+  `docs/Subsystems/Image/PR-IMG-MODELS-157_ZImage_PromptPack_Adaptation.md` ->
+  `src/pipeline/prompt_pack_job_builder.py::_prepare_entry` -> existing
+  `adapt_pack_intent`/render and immutable adaptation provenance; model-facing
+  guidance remains in `src/image_backends/model_policy.py`.
 - PromptPack native storage, discovery, interchange, and migration:
   `src/promptpacks/paths.py` resolves the per-user authority and
   `src/promptpacks/storage.py` owns the versioned JSON format; typed GUI editing remains in
