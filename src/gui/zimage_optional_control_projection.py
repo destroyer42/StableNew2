@@ -1,7 +1,9 @@
 """Presentation-only availability for Z-Image's unsupported optional controls.
 
-Stored intent is preserved, never silently removed: conflicting saved/PromptPack
-features still produce compiler rejection. Switching models restores widget states.
+Stored intent is preserved, never silently removed. Values the exact profile owns (sampling,
+CLIP skip, prompt optimizer, global terms) are adapted at compile time with recorded evidence;
+conflicting stages, geometry or assets still produce compiler rejection. Switching models
+restores widget states.
 """
 
 from __future__ import annotations
@@ -50,8 +52,9 @@ class ZImageOptionalControlProjection:
         control = getattr(txt, "_setting_controls", {}).get("clip_skip")
         roots.append(control)
         variables = {str(v) for name, v in getattr(self.sidebar, "stage_states", {}).items() if name != "txt2img"}
-        variables.update(str(getattr(self.sidebar, name, "")) for name in
-                         ("global_positive_enabled_var", "global_negative_enabled_var"))
+        # PR-IMG-MODELS-159: global positive terms are composed into the positive prompt at compile time, so that toggle
+        # stays operable; the global negative has no channel for this profile and its toggle stays locked.
+        variables.add(str(getattr(self.sidebar, "global_negative_enabled_var", "")))
 
         def visit(widget: Any, *, restrict: bool) -> None:
             if widget is None:

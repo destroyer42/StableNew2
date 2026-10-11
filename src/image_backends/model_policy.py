@@ -226,7 +226,10 @@ def policy_for_profile(profile: ExactModelProfile) -> ModelPolicy:
             features=_features(_UNSUPPORTED), prompt_dialect=DIALECT_NATURAL_LANGUAGE,
             note=("Z-Image-Turbo FP8 limited support: exact three-file bundle, managed pinned Forge, txt2img only; "
                   "one 1024x1024 image, Euler/Beta/9 steps/CFG 1/shift 9 (distilled_cfg_scale). "
-                  "PromptPack compilation adapts weighted prose and omits structured LoRAs, embeddings and negative prompts. "
+                  "PromptPack compilation adapts weighted prose and omits structured LoRAs, embeddings, negative prompts and the "
+                  "global negative; PromptPack and generic Pipeline compilation compose enabled global positive terms into "
+                  "the prompt and replace inherited sampling, CLIP skip and prompt-optimizer settings with the profile's own "
+                  "(Model Comparison does not yet compose global positive terms; manual prompts are validated, not adapted). "
                   "Saved packs are preserved; adaptation is recorded in the queued job. "
                   "Optional stages/modifiers and unresolved inline adapter/embedding tokens remain unsupported. "
                   "One physical generation was observed; clean-shutdown qualification and repeated-run stability remain incomplete. "
@@ -440,6 +443,22 @@ _COMPILE_POLICIES: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
 }
 
 
+def normalize_profile_owned_values(
+    config: dict[str, Any], changes: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Replace inherited values the selected exact profile itself owns with the profile's own (in place).
+
+    The one effective-configuration normalization (PR-IMG-MODELS-159): sampling, VAE, CLIP skip, prompt optimizer and
+    global prompt terms/flags. Geometry, counts, seed policy, stages, assets and optional features are never touched,
+    so ``apply_model_compile_policy`` still refuses a genuine conflict. A no-op for every other model. ``changes``
+    optionally receives content-free records of what changed.
+    """
+
+    if zimage_selected(config):
+        return project_shared_baseline(config, changes)
+    return config
+
+
 def prepare_candidate_baseline(config: dict[str, Any]) -> dict[str, Any]:
     """Independently prepare one candidate's run config from a *shared* comparison baseline (in place).
 
@@ -450,9 +469,7 @@ def prepare_candidate_baseline(config: dict[str, Any]) -> dict[str, Any]:
     ``apply_model_compile_policy`` (run next, unchanged) still refuses a genuine conflict.
     """
 
-    if zimage_selected(config):
-        return project_shared_baseline(config)
-    return config
+    return normalize_profile_owned_values(config)
 
 
 def apply_model_compile_policy(config: dict[str, Any]) -> dict[str, Any]:
@@ -496,6 +513,7 @@ __all__ = [
     "Support",
     "VALUE_CONTROLS",
     "apply_model_compile_policy",
+    "normalize_profile_owned_values",
     "policy_for_model_profile_reference",
     "policy_for_profile",
     "prepare_candidate_baseline",

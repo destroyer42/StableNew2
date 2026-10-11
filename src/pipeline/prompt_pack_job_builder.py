@@ -8,7 +8,7 @@ import json
 import logging
 import random
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -20,7 +20,11 @@ from src.image_backends.forge_zimage_profile import (
     zimage_selected,
 )
 from src.image_backends.image_backend_types import normalize_image_backend_options
-from src.image_backends.model_policy import FamilyLookup, apply_model_compile_policy
+from src.image_backends.model_policy import (
+    FamilyLookup,
+    apply_model_compile_policy,
+    normalize_profile_owned_values,
+)
 from src.pipeline import config_contract_v26
 from src.pipeline.compile_evidence import CompileEvidence
 from src.pipeline.config_contract_v26 import (
@@ -52,6 +56,7 @@ from src.pipeline.resolution_layer import (
     UnifiedConfigResolver,
     UnifiedPromptResolver,
     adapt_pack_intent,
+    compose_global_positive,
 )
 from src.prompting.pack_lora_selection import (
     SELECTION_METADATA_KEY,
@@ -61,6 +66,12 @@ from src.prompting.pack_lora_selection import (
     SelectionChoice,
     applies,
     assess_target_loras,
+)
+from src.prompting.prompt_adaptation import (
+    EFFECT_REWRITTEN,
+    OP_PROFILE_VALUE_NORMALIZED,
+    SCOPE_CONFIG,
+    AdaptationOperation,
 )
 from src.promptpacks.storage import load_prompt_pack_document, prompt_pack_rows
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
@@ -99,6 +110,11 @@ class _PreparedPrompt:
     intent: PackPromptIntent
     revision: Any = None
     selection: KleinLoraSelection | None = None
+    #: Transient (never frozen as text): stored global positive terms and whether the source enabled them, for a target
+    #: whose executor cannot apply them (exact Z-Image), and what the profile's own values replaced.
+    global_positive: str = ""
+    global_positive_enabled: bool = False
+    normalizations: tuple[dict[str, Any], ...] = ()
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -471,19 +487,19 @@ class PromptPackNormalizedJobBuilder:
         # compile policy normalizes values (negative, global terms, optimizer) that the adaptation manifest must still see.
         source_config = copy.deepcopy(cached_resolved)
         executable_config = copy.deepcopy(cached_resolved)
+        global_positive, global_positive_enabled = "", False
+        normalizations: list[dict[str, Any]] = []
         if zimage_selected(source_config):
-            # Authored prompt channels are projected by adapt_pack_intent below.
-            # Keep their source values for adaptation evidence, while the exact
-            # profile validates only the executable negative/global channel.
+            # The exact profile's executor cannot apply global positive terms, so the compiler composes them (below),
+            # and inherited values the profile owns (sampling, CLIP skip, optimizer, global terms) are replaced by the
+            # profile's own in the *executable* configuration only. The source configuration, the saved PromptPack and
+            # the structured intent keep the operator's values for adaptation evidence.
+            global_positive, global_positive_enabled = self._source_global_positive(source_config)
+            normalize_profile_owned_values(executable_config, normalizations)
             for section in (executable_config, executable_config.get("txt2img", {})):
                 # Positive execution text is rendered from structured intent later.
                 section.pop("prompt", None)
-                for key in ("negative_prompt", "global_negative_prompt"):
-                    section[key] = ""
-                if "apply_global_negative_txt2img" in section:
-                    section["apply_global_negative_txt2img"] = False
-            executable_config["global_negative_prompt"] = ""
-            executable_config.setdefault("pipeline", {})["apply_global_negative_txt2img"] = False
+            executable_config.setdefault("pipeline", {})
         merged_config = apply_model_compile_policy(executable_config)
         stage_flags = self._normalize_stage_flags(
             merged_config.get("pipeline", {}), entry.stage_flags or {}
@@ -505,7 +521,21 @@ class PromptPackNormalizedJobBuilder:
             resolved_style_lora,
         )
         return _PreparedPrompt(entry, matrix_variant_index, matrix_variant_count, source_config,
-                               merged_config, stage_chain, record_metadata, resolved_style_lora, intent, pack_config.get("version"))
+                               merged_config, stage_chain, record_metadata, resolved_style_lora, intent, pack_config.get("version"),
+                               global_positive=global_positive, global_positive_enabled=global_positive_enabled,
+                               normalizations=tuple(normalizations))
+
+    def _source_global_positive(self, source_config: dict[str, Any]) -> tuple[str, bool]:
+        """The stored global positive terms and enablement exactly as the executor would have read them."""
+
+        pipeline = _mapping_dict(source_config.get("pipeline"))
+        frozen = has_frozen_global_prompt_policy(source_config)
+        text = (
+            str(source_config.get("global_positive_prompt") or "")
+            if frozen
+            else str(self._config_manager.get_global_positive_prompt() or "")
+        )
+        return text.strip(), bool(pipeline.get("apply_global_positive_txt2img", not frozen))
 
     def _build_jobs_for_entry(
         self, entry: PackJobEntry, *, matrix_variant_index: int = 0, matrix_variant_count: int = 1,
@@ -525,8 +555,17 @@ class PromptPackNormalizedJobBuilder:
             prepared.intent, evidence.policy_for(self._selected_model_name(prepared.source_config)),
             lora_resolver=evidence.lora_evidence, optimizer_enabled=self._optimizer_enabled(prepared.source_config),
             lora_selection=prepared.selection,
+            global_positive=prepared.global_positive, apply_global_positive=prepared.global_positive_enabled,
         )
         prompt_resolution, adaptation_plan = self._prompt_resolver.render_intent(adapted.intent), adapted.plan
+        if adapted.global_positive:
+            prompt_resolution = compose_global_positive(prompt_resolution, adapted.global_positive)
+        if prepared.normalizations:
+            adaptation_plan = replace(adaptation_plan, changed=True, operations=(
+                *adaptation_plan.operations,
+                *(AdaptationOperation(OP_PROFILE_VALUE_NORMALIZED, SCOPE_CONFIG, EFFECT_REWRITTEN, change)
+                  for change in prepared.normalizations),
+            ))
         if prepared.selection is not None:
             # Source actor/style metadata is evidence, never effective LoRA participation.
             record_metadata = copy.deepcopy(record_metadata)
@@ -754,6 +793,12 @@ class PromptPackNormalizedJobBuilder:
         """The checkpoint the work targets: the qualified Klein selection if any, else the txt2img model."""
 
         txt2img = _mapping_dict(source_config.get("txt2img"))
+        if zimage_selected(source_config):
+            for container in (txt2img, source_config):
+                for key in ("model", "model_name", "sd_model_checkpoint", "base_model"):
+                    value = str(container.get(key) or "").strip()
+                    if value and zimage_selected({"txt2img": {"model": value}}):
+                        return value
         if klein_selected(source_config):
             for container in (txt2img, source_config):
                 for key in ("model", "model_name", "sd_model_checkpoint", "base_model"):

@@ -42,6 +42,13 @@ distilled_cfg_scale 9 remain required. This change does not expand v1 geometry:
 unresolved inline adapter/embedding syntax and multi-image jobs still refuse.
 The GUI policy explains which prompt components are adapted automatically.
 
+## Superseded detail (PR-IMG-MODELS-159)
+
+Inherited sampling, CLIP skip, prompt-optimizer state and global prompt text are now normalized
+in the executable configuration and an enabled global positive is composed into the prompt; see
+`PR-IMG-MODELS-159_ZImage_Effective_Configuration_Adaptation.md`. The restrictions in the
+previous paragraph that refer to those inherited values no longer apply.
+
 ## Token-Efficient Validation Plan
 
 Use neutral temporary native packs to verify automatic adaptation, source-byte
