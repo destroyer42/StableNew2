@@ -87,7 +87,9 @@ def test_generate_images_does_not_restart_on_structured_http_500_inference_error
     assert "NansException" in excinfo.value.error.message
 
 
-def test_generate_images_still_attempts_restart_on_opaque_http_500():
+def test_generate_images_never_replays_a_dispatched_request_after_opaque_http_500():
+    """PR-QUEUE-WEBUI-171: the server answered the POST; the queue assesses the backend, not the executor."""
+
     outcome = GenerateOutcome(
         error=GenerateError(
             code=GenerateErrorCode.UNKNOWN,
@@ -114,10 +116,7 @@ def test_generate_images_still_attempts_restart_on_opaque_http_500():
     ):
         pipeline._generate_images("adetailer", {})
 
-    mock_recovery.assert_called_once_with(
-        stage="adetailer",
-        reason="request_http_500",
-    )
+    mock_recovery.assert_not_called()
 
 
 def test_ambiguous_external_generation_fails_without_recovery_or_replay(monkeypatch):

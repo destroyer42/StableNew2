@@ -2029,6 +2029,14 @@ class PipelineRunner:
             terminal_outcome = "failed"
             error = str(exc)
             logger.error("[pipeline] execution failed: %s", exc, exc_info=True)
+            try:
+                # Typed, content-free evidence so the queue can classify this normalized failure
+                # (PR-QUEUE-WEBUI-171) without relying on message keywords or a raised exception.
+                from src.api.webui_failure_evidence import METADATA_KEY, build_failure_evidence
+
+                metadata[METADATA_KEY] = build_failure_evidence(exc)
+            except Exception:
+                logger.debug("failure evidence unavailable", exc_info=True)
             stage_events.append(
                 {
                     "stage": stage.stage_name if "stage" in locals() else "pipeline",

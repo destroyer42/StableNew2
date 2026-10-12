@@ -1961,11 +1961,13 @@ class Pipeline:
             diagnostics=diagnostics,
             reason_hint=reason_hint,
         )
+        # PR-QUEUE-WEBUI-171: ``request_http_500`` is deliberately absent. The server answered the dispatched
+        # generation POST, so replaying it after a restart is not "retrying a lost request"; the failure is
+        # recorded and the queue assesses the backend independently.
         return classification in {
             "true_ready_timeout",
             "pre_stage_health_failed",
             "request_connection_failure",
-            "request_http_500",
             "request_timeout_escalated",
         }, classification
 

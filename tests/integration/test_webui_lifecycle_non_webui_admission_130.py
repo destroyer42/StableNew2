@@ -47,8 +47,10 @@ def webui_is_down_and_nothing_may_ask(monkeypatch):
 
     monkeypatch.setattr(WebUIConnectionController, "ensure_connected", _forbidden("ensure_connected"))
     monkeypatch.setattr("src.api.healthcheck.wait_for_webui_ready", _forbidden("wait_for_webui_ready"))
+    # The queue's outage coordinator resolves the manager lazily from this module (PR-QUEUE-WEBUI-171); a video job
+    # that succeeds must never cause it to be consulted.
     monkeypatch.setattr(
-        "src.queue.single_node_runner.get_global_webui_process_manager", _forbidden("global_manager")
+        "src.api.webui_process_manager.get_global_webui_process_manager", _forbidden("global_manager")
     )
     yield consulted
     healthcheck.clear_readiness_failure_state()

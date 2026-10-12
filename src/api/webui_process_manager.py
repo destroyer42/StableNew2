@@ -847,8 +847,30 @@ class WebUIProcessManager:
         max_delay: float = 8.0,
         profile_override: str | None = None,
     ) -> bool:
-        """Restart the WebUI process and wait for its API to become available."""
+        """Restart the WebUI process and wait for its API to become available.
 
+        Serialized with ``start()``/``ensure_running()`` on the launch lock, so a runner recovery, an executor
+        recovery and Launch/Retry can never run overlapping process actions.
+        """
+
+        with self._start_lock:
+            return self._restart_webui_locked(
+                wait_ready=wait_ready,
+                max_attempts=max_attempts,
+                base_delay=base_delay,
+                max_delay=max_delay,
+                profile_override=profile_override,
+            )
+
+    def _restart_webui_locked(
+        self,
+        *,
+        wait_ready: bool,
+        max_attempts: int,
+        base_delay: float,
+        max_delay: float,
+        profile_override: str | None,
+    ) -> bool:
         if not self.owns_process:
             logger.warning(
                 "WebUI restart requested without a manager-owned process; refusing to mutate an "

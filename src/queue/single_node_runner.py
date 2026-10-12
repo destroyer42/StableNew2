@@ -12,10 +12,9 @@ from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
-from src.api.webui_process_manager import get_global_webui_process_manager
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.pipeline.pipeline_runner import normalize_run_result
-from src.queue.job_model import Job, JobStatus, RetryAttempt, StageCheckpoint
+from src.queue.job_model import Job, JobStatus, StageCheckpoint
 from src.queue.job_queue import JobQueue
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import get_attached_envelope, wrap_exception
@@ -40,142 +39,6 @@ def _ensure_job_envelope(job: Job | None, exc: Exception) -> None:
             envelope.retry_info = {
                 "attempts": [asdict(attempt) for attempt in job.execution_metadata.retry_attempts]
             }
-
-
-_MAX_WEBUI_CRASH_RETRIES = 4
-"""Retry count if WebUI crash suspected."""
-
-_TIMEOUT_ESCALATION_THRESHOLD = 3
-"""Consecutive timeouts before treating as crash-eligible."""
-
-_consecutive_timeout_counts: dict[str, int] = {}
-"""Track consecutive timeout count per job_id for escalation."""
-
-_QUEUE_JOB_WEBUI_CRASH_SUSPECTED = "QUEUE_JOB_WEBUI_CRASH_SUSPECTED"
-_QUEUE_JOB_WEBUI_RETRY_EXHAUSTED = "QUEUE_JOB_WEBUI_RETRY_EXHAUSTED"
-_CRASH_ELIGIBLE_STAGES = {"txt2img", "img2img", "upscale", "adetailer"}
-_CRASH_MESSAGE_KEYWORDS = (
-    "connection refused",
-    "actively refused",
-    "webui unavailable",
-    "500 server error",
-    "internal server error",
-    "500 internal",
-)
-# Timeout keywords indicate slow processing, NOT a crash - don't restart WebUI for these
-_TIMEOUT_KEYWORDS = ("read timed out", "readtimeout", "timeout", "timed out")
-
-
-def _select_request_summary_stage(summary: dict[str, Any] | None) -> str | None:
-    if not summary:
-        return None
-    stage = summary.get("stage")
-    if stage:
-        return str(stage)
-    endpoint = summary.get("endpoint")
-    if endpoint and "/txt2img" in endpoint:
-        return "txt2img"
-    if endpoint and "/img2img" in endpoint:
-        return "img2img"
-    if endpoint and "/upscale" in endpoint:
-        return "upscale"
-    return None
-
-
-def _get_diagnostics_context(exc: Exception) -> dict[str, Any] | None:
-    envelope = get_attached_envelope(exc)
-    if envelope and envelope.context:
-        diagnostics = envelope.context.get("diagnostics")
-        if isinstance(diagnostics, dict):
-            return diagnostics
-    diagnostics = getattr(exc, "diagnostics_context", None)
-    if isinstance(diagnostics, dict):
-        return diagnostics
-    return None
-
-
-def _clear_timeout_tracking(job_id: str) -> None:
-    """Clear timeout tracking for a job (call on completion/failure)."""
-    _consecutive_timeout_counts.pop(job_id, None)
-
-
-def _is_webui_crash_exception(exc: Exception, job_id: str | None = None) -> tuple[bool, str | None]:
-    """Return (crash_eligible, stage_name) tuple.
-
-    Looks for:
-    - HTTP 500 POST to crash-eligible stages
-    - connection refused / actively refused
-    - 'webui unavailable' in error text
-    - Consecutive timeouts (escalated after threshold)
-    """
-    diag = _get_diagnostics_context(exc)
-    if not diag:
-        return False, None
-    summary = diag.get("request_summary") or {}
-    status = summary.get("status")
-    method = (summary.get("method") or "").upper()
-    attempt_stage = _select_request_summary_stage(summary)
-    stage_name = attempt_stage or (getattr(exc, "stage", None) or summary.get("stage"))
-
-    # Check if this is a timeout error - may escalate to crash after consecutive occurrences
-    error_message_lower = str(diag.get("error_message") or exc).lower()
-    exc_message_lower = str(exc).lower()
-    is_timeout = any(
-        kw in error_message_lower or kw in exc_message_lower for kw in _TIMEOUT_KEYWORDS
-    )
-    if is_timeout:
-        if job_id:
-            count = _consecutive_timeout_counts.get(job_id, 0) + 1
-            _consecutive_timeout_counts[job_id] = count
-            if count >= _TIMEOUT_ESCALATION_THRESHOLD:
-                logger.warning(
-                    "Timeout escalation: %d consecutive timeouts for job %s, treating as crash",
-                    count,
-                    job_id,
-                    extra={"stage": stage_name, "job_id": job_id, "timeout_count": count},
-                )
-                return True, stage_name
-        logger.info(
-            "Timeout detected but NOT treating as crash (slow processing, not WebUI failure): %s",
-            str(exc)[:200],
-        )
-        return False, stage_name
-
-    # Reset timeout counter on non-timeout error
-    if job_id:
-        _consecutive_timeout_counts.pop(job_id, None)
-
-    try:
-        status_code = int(status)
-    except (TypeError, ValueError):
-        status_code = None
-    if (
-        status_code == 500
-        and method == "POST"
-        and stage_name
-        and stage_name.lower() in _CRASH_ELIGIBLE_STAGES
-    ):
-        return True, stage_name
-    if diag.get("webui_unavailable"):
-        if any(keyword in error_message_lower for keyword in _CRASH_MESSAGE_KEYWORDS):
-            return True, stage_name
-    message = str(exc).lower()
-    if "webui unavailable" in message:
-        return True, stage_name
-    return False, stage_name
-
-
-def _record_retry_attempt(
-    job: Job, *, stage: str | None, attempt_index: int, reason: str, max_attempts: int
-) -> None:
-    job.execution_metadata.retry_attempts.append(
-        RetryAttempt(
-            stage=stage or "pipeline",
-            attempt_index=attempt_index,
-            max_attempts=max_attempts,
-            reason=reason,
-        )
-    )
 
 
 def _extract_stage_checkpoints(canonical_result: dict[str, Any]) -> list[StageCheckpoint]:
@@ -236,40 +99,6 @@ def _merge_stage_checkpoints(
     return merged
 
 
-def _restart_webui_process(job_id: str) -> bool:
-    manager = get_global_webui_process_manager()
-    if manager is None:
-        logger.debug("No WebUI process manager available for restart", extra={"job_id": job_id})
-        return False
-    if not bool(getattr(manager, "owns_process", False)):
-        logger.info(
-            "WebUI restart skipped because no manager-owned process exists",
-            extra={"job_id": job_id},
-        )
-        return False
-    try:
-        return manager.restart_webui()
-    except Exception as exc:  # pragma: no cover - best effort
-        log_with_ctx(
-            logger,
-            logging.ERROR,
-            "Failed to restart WebUI process",
-            ctx=LogContext(job_id=job_id, subsystem="queue_runner"),
-            extra_fields={"error": str(exc)},
-        )
-        return False
-
-
-def _log_retry_exhausted(job: Job, stage: str | None, reason: str) -> None:
-    log_with_ctx(
-        logger,
-        logging.ERROR,
-        f"{_QUEUE_JOB_WEBUI_RETRY_EXHAUSTED} | WebUI crash retry exhausted",
-        ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
-        extra_fields={"stage": stage, "reason": reason},
-    )
-
-
 class SingleNodeJobRunner:
     """Background worker that executes jobs from a JobQueue."""
 
@@ -282,6 +111,8 @@ class SingleNodeJobRunner:
         on_activity=None,
         is_paused: Callable[[], bool] | None = None,
         continuous_dispatch_allowed: Callable[[], bool] | None = None,
+        outage_observer: Any | None = None,
+        held_poll_interval: float = 1.0,
     ) -> None:
         self.job_queue = job_queue
         self.run_callable = run_callable
@@ -303,6 +134,11 @@ class SingleNodeJobRunner:
         # BUGFIX: Pause state callback
         self._is_paused = is_paused
         self._continuous_dispatch_allowed = continuous_dispatch_allowed or (lambda: True)
+        # PR-QUEUE-WEBUI-171: typed outage assessment/recovery (duck-typed; see WebUIOutageCoordinator). The
+        # runner never replays a job: a failed job is published once, or restored to QUEUED on positive
+        # evidence that nothing was dispatched.
+        self._outage_observer = outage_observer
+        self._held_poll_interval = max(0.01, float(held_poll_interval))
         # Worker lifecycle handoff state. All transitions happen under
         # ``_lifecycle_lock`` so a thread's decision to retire and a concurrent
         # request for continuous dispatch can never miss each other.
@@ -315,6 +151,61 @@ class SingleNodeJobRunner:
         """Set the service-owned policy checked before each continuous claim."""
         self._continuous_dispatch_allowed = callback
 
+    def set_outage_observer(self, observer: Any | None) -> None:
+        """Bind the service-owned WebUI outage coordinator (assessment + bounded owned recovery)."""
+        self._outage_observer = observer
+
+    def _observe_failure(
+        self, job: Job, *, result: dict | None = None, exc: BaseException | None = None
+    ) -> Any | None:
+        observer = self._outage_observer
+        if observer is None:
+            return None
+        try:
+            return observer.assess(job, result=result, exc=exc)
+        except Exception:  # noqa: BLE001 - containment must never break the worker
+            logger.exception("WebUI outage assessment failed; the job result is published unchanged")
+            return None
+
+    def _after_failure(self, decision: Any | None) -> None:
+        observer = self._outage_observer
+        if observer is None or decision is None or not getattr(decision, "outage_confirmed", False):
+            return
+        try:
+            observer.recover(decision)
+        except Exception:  # noqa: BLE001
+            logger.exception("WebUI outage recovery failed")
+
+    def _restore_if_undispatched(self, job: Job, decision: Any | None) -> bool:
+        """Restore a job to QUEUED only on positive evidence that nothing was dispatched."""
+        if decision is None or not getattr(decision, "requeue", False):
+            return False
+        restored = self.job_queue.return_undispatched_to_queue(job.job_id, reason="webui_outage")
+        if restored is None:
+            return False
+        self._notify(restored, JobStatus.QUEUED)
+        return True
+
+    def _maybe_release_hold(self) -> None:
+        observer = self._outage_observer
+        if observer is None:
+            return
+        try:
+            observer.maybe_release()
+        except Exception:  # noqa: BLE001
+            logger.debug("WebUI hold release check failed", exc_info=True)
+
+    def _idle_wait(self) -> None:
+        """Wait for work; when only WebUI-held work remains, wait longer (no hot spin) and stay stop-responsive."""
+        try:
+            held_only = self.job_queue.is_webui_held() and self.job_queue.dispatch_summary()["held_webui"] > 0
+        except Exception:  # noqa: BLE001
+            held_only = False
+        if held_only:
+            self._stop_event.wait(self._held_poll_interval)
+        else:
+            time.sleep(self.poll_interval)
+
     def set_activity_callback(self, callback) -> None:
         """Bind the existing runner activity signal to an external observer."""
         self._on_activity = callback
@@ -326,59 +217,11 @@ class SingleNodeJobRunner:
             logger.exception("Continuous queue dispatch policy failed closed")
             return False
 
-    def _run_with_webui_retry(self, job: Job) -> dict | None:
+    def _run_job_callable(self, job: Job) -> dict | None:
+        """Invoke the job's callable exactly once: a failure is assessed, never replayed."""
         if self.run_callable is None:
             return None
-        max_attempts = _MAX_WEBUI_CRASH_RETRIES + 1
-        attempt = 1
-        try:
-            while attempt <= max_attempts:
-                try:
-                    result = self.run_callable(job)
-                    # Success - clear timeout tracking
-                    _clear_timeout_tracking(job.job_id)
-                    return result
-                except Exception as exc:  # noqa: BLE001
-                    crash_eligible, stage = _is_webui_crash_exception(exc, job.job_id)
-                    if not crash_eligible:
-                        raise
-                    if attempt >= max_attempts:
-                        _log_retry_exhausted(job, stage, _QUEUE_JOB_WEBUI_CRASH_SUSPECTED)
-                        raise
-                    next_attempt = attempt + 1
-                    _record_retry_attempt(
-                        job,
-                        stage=stage,
-                        attempt_index=next_attempt,
-                        reason=_QUEUE_JOB_WEBUI_CRASH_SUSPECTED,
-                        max_attempts=max_attempts,
-                    )
-                    self.job_queue.persist_runtime_state(job)
-                    log_with_ctx(
-                        logger,
-                        logging.WARNING,
-                        f"{_QUEUE_JOB_WEBUI_CRASH_SUSPECTED} | Suspected WebUI crash, restarting",
-                        ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
-                        extra_fields={
-                            "stage": stage,
-                            "attempt": next_attempt,
-                            "max_attempts": max_attempts,
-                        },
-                    )
-                    restarted = _restart_webui_process(job.job_id)
-                    if not restarted:
-                        log_with_ctx(
-                            logger,
-                            logging.ERROR,
-                            "WebUI restart failed during retry",
-                            ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
-                            extra_fields={"stage": stage, "attempt": next_attempt},
-                        )
-                    attempt += 1
-        finally:
-            # Always clean up timeout tracking when job completes (success or failure)
-            _clear_timeout_tracking(job.job_id)
-        return None
+        return self.run_callable(job)
 
     def _launch_worker(self, mode: str, job: Job | None = None) -> None:
         """Start a worker thread of ``mode``; the caller holds ``_lifecycle_lock``."""
@@ -426,7 +269,8 @@ class SingleNodeJobRunner:
         with self._lifecycle_lock:
             if self._shutting_down or self.is_running() or self.job_queue.is_paused():
                 return False
-            job = self.job_queue.get_next_job()
+            # One atomic claim: eligibility (WebUI hold) and QUEUED -> RUNNING cannot be separated by a hold change.
+            job = self.job_queue.claim_next_job()
             if job is None:
                 return False
             self._launch_worker("once", job)
@@ -509,9 +353,10 @@ class SingleNodeJobRunner:
                     break
             self._cancel_current.clear()
             self._cancel_return_to_queue = False
+            self._maybe_release_hold()
             job = self.job_queue.claim_next_job()
             if job is None:
-                time.sleep(self.poll_interval)
+                self._idle_wait()
                 continue
             start_time = time.monotonic()
             extra = {
@@ -563,7 +408,7 @@ class SingleNodeJobRunner:
                         extra_fields=job_log,
                     )
                     logger.debug("Running job via run_callable", extra={"job_id": job.job_id})
-                    result = self._run_with_webui_retry(job)
+                    result = self._run_job_callable(job)
                 else:
                     result = None
                 canonical_result = normalize_run_result(result, default_run_id=job.job_id)
@@ -611,6 +456,10 @@ class SingleNodeJobRunner:
                 error_msg = (
                     None if success else (error_message or "Job failed without error message")
                 )
+                decision = None if success else self._observe_failure(job, result=canonical_result)
+                if self._restore_if_undispatched(job, decision):
+                    self._after_failure(decision)
+                    continue
                 published_job = self.job_queue.publish_result(
                     job.job_id,
                     status=notify_status,
@@ -643,10 +492,15 @@ class SingleNodeJobRunner:
                     extra_fields={**extra, "duration_ms": duration_ms, "status": status_value},
                 )
                 self._notify(job, notify_status)
+                self._after_failure(decision)
             except Exception as exc:  # noqa: BLE001
                 if self._cancel_current.is_set() or isinstance(exc, CancellationError):
                     self.job_queue.mark_cancelled(job.job_id, "cancelled")
                     self._notify(job, JobStatus.CANCELLED)
+                    continue
+                decision = self._observe_failure(job, exc=exc)
+                if self._restore_if_undispatched(job, decision):
+                    self._after_failure(decision)
                     continue
                 duration_ms = int((time.monotonic() - start_time) * 1000)
                 log_with_ctx(
@@ -668,6 +522,7 @@ class SingleNodeJobRunner:
                 _ensure_job_envelope(job, exc)
                 self.job_queue.mark_failed(job.job_id, error_message=str(exc))
                 self._notify(job, JobStatus.FAILED)
+                self._after_failure(decision)
             finally:
                 job._cancel_token = None
                 self._current_cancel_token = None
@@ -696,9 +551,14 @@ class SingleNodeJobRunner:
         self._current_cancel_token = CancelToken()
         job._cancel_token = self._current_cancel_token
         self._current_job = job
-        if self.job_queue.mark_running(job.job_id) is None and self._queue_dispatch_fenced():
-            # Shutdown fenced admission between the one-shot decision and its RUNNING transition: the job
-            # stays durably QUEUED for the next start.
+        already_claimed = job.status is JobStatus.RUNNING  # claimed atomically by run_next_once
+        if (
+            not already_claimed
+            and self.job_queue.mark_running(job.job_id) is None
+            and (self._queue_dispatch_fenced() or self._queue_holds(job.job_id))
+        ):
+            # Shutdown fenced admission, or the WebUI hold applies, between the decision and its RUNNING
+            # transition: the job stays durably QUEUED.
             job._cancel_token = None
             self._current_cancel_token = None
             self._current_job = None
@@ -719,7 +579,7 @@ class SingleNodeJobRunner:
                 self._on_activity()
             if self.run_callable:
                 logger.debug("Running job via run_once", extra={"job_id": job.job_id})
-                result = self._run_with_webui_retry(job)
+                result = self._run_job_callable(job)
             else:
                 result = None
             canonical_result = normalize_run_result(result, default_run_id=job.job_id)
@@ -742,6 +602,10 @@ class SingleNodeJobRunner:
             )
             notify_status = JobStatus.COMPLETED if success else JobStatus.FAILED
             error_msg = None if success else error_message or "Job failed without error message"
+            decision = None if success else self._observe_failure(job, result=canonical_result)
+            if self._restore_if_undispatched(job, decision):
+                self._after_failure(decision)
+                return None
             published_job = self.job_queue.publish_result(
                 job.job_id,
                 status=notify_status,
@@ -769,6 +633,7 @@ class SingleNodeJobRunner:
             if self._on_activity:
                 self._on_activity()
             self._notify(job, notify_status)
+            self._after_failure(decision)
             return canonical_result
         except Exception as exc:  # noqa: BLE001
             if self._cancel_current.is_set() or isinstance(exc, CancellationError):
@@ -779,15 +644,24 @@ class SingleNodeJobRunner:
             if self._on_activity:
                 self._on_activity()
             logger.error("Job %s failed with error: %s", job.job_id, exc, exc_info=True)
+            decision = self._observe_failure(job, exc=exc)
+            if self._restore_if_undispatched(job, decision):
+                self._after_failure(decision)
+                return None
             _ensure_job_envelope(job, exc)
             self.job_queue.mark_failed(job.job_id, error_message=str(exc))
             self._notify(job, JobStatus.FAILED)
+            self._after_failure(decision)
             raise
         finally:
             job._cancel_token = None
             self._current_cancel_token = None
             self._current_job = None
             self._cancel_return_to_queue = False
+
+    def _queue_holds(self, job_id: str) -> bool:
+        check = getattr(self.job_queue, "is_job_held", None)
+        return callable(check) and check(job_id) is True
 
     def _queue_dispatch_fenced(self) -> bool:
         check = getattr(self.job_queue, "is_dispatch_fenced", None)

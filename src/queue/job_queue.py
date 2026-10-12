@@ -16,6 +16,7 @@ from dataclasses import replace
 from threading import Lock
 from typing import Any
 
+from src.queue.backend_dependency import DependencyAssessment, classify_job
 from src.queue.job_model import Job, JobStatus, StageCheckpoint
 from src.queue.job_repository import JobRepository
 
@@ -48,6 +49,13 @@ class JobQueue:
         # Process-lifetime dispatch fence (PR-RUNTIME-SHUTDOWN-140). Never persisted: unlike ``_paused`` it
         # must not survive the process, so jobs left QUEUED resume under the normal startup policy.
         self._dispatch_fenced = False
+        # Process-lifetime, in-memory WebUI dispatch hold (PR-QUEUE-WEBUI-171). Never persisted and never a
+        # lifecycle status: held jobs stay durably QUEUED in their original order, and independent work (native
+        # SVD / Comfy video) remains claimable. Distinct from ``_paused`` (the user's whole-queue pause).
+        self._webui_hold: dict[str, Any] | None = None
+        self._dependency_cache: dict[str, DependencyAssessment] = {}
+        # Heap counter of a claimed job, so an undispatched return restores its original position.
+        self._claimed_counters: dict[str, int] = {}
         self._history_store = self._repository
         # PR-MEMORY-001: Bounded finalized jobs (max 100) using deque for FIFO eviction
         self._finalized_jobs_order: deque[str] = deque(maxlen=100)
@@ -113,16 +121,106 @@ class JobQueue:
         with self._lock:
             return self._dispatch_fenced
 
+    # -- WebUI dispatch hold (PR-QUEUE-WEBUI-171) ---------------------------------------------------------------
+
+    def hold_webui_dispatch(self, *, reason: str, incident_id: str | None = None) -> bool:
+        """Stop claiming WebUI-dependent (and unresolved) work; independent video keeps flowing.
+
+        Returns whether the hold was newly applied. The first reason/incident is kept while a hold is active. The hold
+        is read and written under the lock that makes eligibility and the QUEUED -> RUNNING transition atomic.
+        """
+
+        with self._lock:
+            if self._webui_hold is not None:
+                return False
+            self._webui_hold = {"reason": str(reason or ""), "incident_id": incident_id}
+        self._notify_state_listeners()
+        return True
+
+    def release_webui_dispatch(self) -> bool:
+        """Make held jobs claimable again, in their original priority/FIFO order."""
+
+        with self._lock:
+            if self._webui_hold is None:
+                return False
+            self._webui_hold = None
+        self._notify_state_listeners()
+        return True
+
+    def webui_hold_info(self) -> dict[str, Any] | None:
+        with self._lock:
+            return dict(self._webui_hold) if self._webui_hold is not None else None
+
+    def is_webui_held(self) -> bool:
+        with self._lock:
+            return self._webui_hold is not None
+
+    def _assessment_locked(self, job: Job) -> DependencyAssessment:
+        assessment = self._dependency_cache.get(job.job_id)
+        if assessment is None:
+            assessment = classify_job(job)
+            self._dependency_cache[job.job_id] = assessment
+        return assessment
+
+    def _is_held_locked(self, job: Job) -> bool:
+        return self._webui_hold is not None and self._assessment_locked(job).held_by_webui_outage
+
+    def is_job_held(self, job_id: str) -> bool:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return bool(job is not None and self._is_held_locked(job))
+
+    def dispatch_summary(self) -> dict[str, Any]:
+        """Deterministic counts of QUEUED work by dispatch eligibility (projection only)."""
+
+        with self._lock:
+            queued = [job for job in self._jobs.values() if job.status == JobStatus.QUEUED]
+            held = [job for job in queued if self._is_held_locked(job)]
+            return {
+                "queued": len(queued),
+                "held_webui": len(held),
+                "eligible": len(queued) - len(held),
+                "independent": sum(
+                    1 for job in queued if not self._assessment_locked(job).held_by_webui_outage
+                ),
+                "unresolved": sum(
+                    1
+                    for job in held
+                    if self._assessment_locked(job).dependency.value == "unresolved_dependency"
+                ),
+                "hold": dict(self._webui_hold) if self._webui_hold is not None else None,
+            }
+
+    def _pop_next_eligible_locked(self) -> tuple[tuple[int, int, str], Job, list[tuple[int, int, str]]] | None:
+        """Highest-priority, FIFO eligible QUEUED entry popped from the heap; held entries are set aside intact."""
+
+        skipped: list[tuple[int, int, str]] = []
+        while self._queue:
+            item = heapq.heappop(self._queue)
+            job = self._jobs.get(item[2])
+            if job is None or job.status != JobStatus.QUEUED:
+                continue
+            if self._is_held_locked(job):
+                skipped.append(item)
+                continue
+            return item, job, skipped
+        for item in skipped:
+            heapq.heappush(self._queue, item)
+        return None
+
     def get_next_job(self) -> Job | None:
+        """Pop the next eligible job (held jobs are skipped without losing their place)."""
         with self._lock:
             if self._paused or self._dispatch_fenced:
                 return None
-            while self._queue:
-                _, _, job_id = heapq.heappop(self._queue)
-                job = self._jobs.get(job_id)
-                if job and job.status == JobStatus.QUEUED:
-                    return job
-            return None
+            found = self._pop_next_eligible_locked()
+            if found is None:
+                return None
+            item, job, skipped = found
+            for held in skipped:
+                heapq.heappush(self._queue, held)
+            self._claimed_counters[job.job_id] = item[1]
+            return job
 
     def pause(self) -> None:
         self._repository.set_setting("queue_paused", True)
@@ -181,6 +279,37 @@ class JobQueue:
             running.execution_metadata.last_control_action = "cancelled"
             self._update_status(running.job_id, JobStatus.CANCELLED, "cancelled")
         return running
+
+    def return_undispatched_to_queue(self, job_id: str, *, reason: str) -> Job | None:
+        """Restore a RUNNING job to QUEUED with its original identity and position.
+
+        Only the outage coordinator calls this, and only on positive evidence that no part of the job was dispatched.
+        Durable queue order is untouched by the transition, and the in-memory heap entry keeps its original counter.
+        """
+
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status != JobStatus.RUNNING:
+                return None
+            counter = self._claimed_counters.get(job_id)
+        job.execution_metadata.last_control_action = "outage_requeue_undispatched"
+        job.execution_metadata.return_to_queue_count += 1
+        job.progress = 0.0
+        job.eta_seconds = None
+        job.error_message = None
+        job.error_envelope = None
+        job.result = None
+        persisted = self._repository.transition_job(job, JobStatus.QUEUED)
+        with self._lock:
+            self._copy_persisted_state(job, persisted)
+            if counter is None:
+                self._counter += 1
+                counter = self._counter
+            self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != job_id]
+            heapq.heappush(self._queue, (-int(job.priority), counter, job_id))
+        self._notify_status(job, JobStatus.QUEUED)
+        self._notify_state_listeners()
+        return job
 
     def mark_running(self, job_id: str) -> Job | None:
         """Move a job to RUNNING; ``None`` when unknown or when the dispatch fence refuses a QUEUED job."""
@@ -259,8 +388,9 @@ class JobQueue:
             job = self._jobs.get(job_id)
             if job is None or (require_running and job.status != JobStatus.RUNNING):
                 return None
-            if status is JobStatus.RUNNING and self._dispatch_fenced and job.status is JobStatus.QUEUED:
-                return None
+            if status is JobStatus.RUNNING and job.status is JobStatus.QUEUED:
+                if self._dispatch_fenced or self._is_held_locked(job):
+                    return None
             transition_job = job
             if stage_checkpoints is not None:
                 execution_metadata = replace(
@@ -290,19 +420,21 @@ class JobQueue:
         with self._lock:
             if self._paused or self._dispatch_fenced:
                 return None
-            while self._queue:
-                queue_item = heapq.heappop(self._queue)
-                job = self._jobs.get(queue_item[2])
-                if job is None or job.status != JobStatus.QUEUED:
-                    continue
+            found = self._pop_next_eligible_locked()
+            if found is not None:
+                queue_item, job, skipped = found
                 try:
                     persisted = self._repository.transition_job(job, JobStatus.RUNNING)
                 except Exception:
                     heapq.heappush(self._queue, queue_item)
+                    for held in skipped:
+                        heapq.heappush(self._queue, held)
                     raise
+                for held in skipped:
+                    heapq.heappush(self._queue, held)
                 self._copy_persisted_state(job, persisted)
+                self._claimed_counters[job.job_id] = queue_item[1]
                 claimed = job
-                break
         if claimed is not None:
             self._notify_status(claimed, JobStatus.RUNNING)
             self._notify_state_listeners()
@@ -615,6 +747,8 @@ class JobQueue:
     def _prune_job(self, job_id: str) -> None:
         """Remove a terminal job from the queue heap."""
         self._jobs.pop(job_id, None)
+        self._dependency_cache.pop(job_id, None)
+        self._claimed_counters.pop(job_id, None)
         self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != job_id]
         heapq.heapify(self._queue)
 

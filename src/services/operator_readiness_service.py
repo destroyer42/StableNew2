@@ -180,8 +180,10 @@ class OperatorReadinessService:
         python_version_provider: Callable[[], tuple[int, int, int]] | None = None,
         free_threaded_provider: Callable[[], bool] | None = None,
         jit_enabled_provider: Callable[[], bool] | None = None,
+        webui_outage_provider: Callable[[], dict[str, Any] | None] | None = None,
     ) -> None:
         self._repository = repository
+        self._webui_outage_provider = webui_outage_provider
         self._webui_connection = webui_connection
         self._prompt_pack_dir_provider = prompt_pack_dir_provider
         self._output_dir_provider = output_dir_provider or (lambda: Path("output"))
@@ -329,7 +331,39 @@ class OperatorReadinessService:
             source,
         )
 
+    def _webui_outage(self) -> dict[str, Any] | None:
+        """The queue's WebUI outage projection (PR-QUEUE-WEBUI-171), only while it is not healthy."""
+
+        provider = self._webui_outage_provider
+        if provider is None:
+            return None
+        try:
+            snapshot = provider()
+        except Exception:
+            return None
+        if isinstance(snapshot, dict) and snapshot.get("status") not in (None, "healthy"):
+            return snapshot
+        return None
+
     def _webui_record(self) -> OperatorReadinessRecord:
+        outage = self._webui_outage()
+        if outage is not None:
+            held = int(outage.get("held_webui_jobs") or 0)
+            independent = int(outage.get("independent_jobs_eligible") or 0)
+            reasons = (
+                str(outage.get("message") or "WebUI dispatch is held."),
+                f"{held} WebUI job(s) held in the queue; {independent} independent video job(s) still eligible.",
+                f"Recovery attempts: {int(outage.get('recovery_attempts') or 0)}; "
+                f"last result: {outage.get('last_recovery_result') or 'none'}.",
+            )
+            return _action_record(
+                "webui",
+                "A1111 / WebUI",
+                "WebUI jobs are held in the queue; they stay queued and run once WebUI is verified ready.",
+                reasons,
+                ("Use the existing WebUI Launch or Retry controls, then refresh readiness.",),
+                "WebUIOutageCoordinator",
+            )
         if self._webui_connection is None:
             return _unknown_record(
                 "webui",

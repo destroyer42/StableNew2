@@ -124,7 +124,6 @@ from src.pipeline.config_merger_v2 import StageOverridesBundle
 from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 from src.pipeline.last_run_store_v2_5 import (
     LastRunStoreV2_5,
-    current_config_to_last_run,
     update_current_config_from_last_run,
 )
 from src.pipeline.pipeline_runner import normalize_run_result
@@ -2599,7 +2598,7 @@ class AppController:
         repository = JobRepository(self._job_repository_path)
         job_queue = JobQueue(repository=repository)
         history_service = JobHistoryService(job_queue, repository)
-        return JobService(
+        service = JobService(
             job_queue,
             runner_factory=self._single_node_runner_factory,
             history_store=repository,
@@ -2608,6 +2607,8 @@ class AppController:
             job_lifecycle_logger=self._job_lifecycle_logger,
             require_normalized_records=True,
         )
+        service.webui_outage.enable_startup_gate()  # restored WebUI jobs await a readiness proof
+        return service
 
     def _setup_queue_callbacks(self) -> None:
         if not self.job_service:
@@ -2725,10 +2726,7 @@ class AppController:
             reason = webui_ctrl.last_readiness_error or "unknown"
             message = f"WebUI not ready: {reason}"
             self._append_log(f"[queue] {message}")
-            try:
-                job.mark_status(JobStatus.FAILED, error_message=message)
-            except Exception:
-                pass
+            # The queue alone owns lifecycle (PR-QUEUE-WEBUI-171): the typed ready-gate result below is assessed there.
             result_payload: dict[str, Any] = {"error": message}
             canonical_result = normalize_run_result(result_payload, default_run_id=job.job_id)
             metadata = canonical_result.get("metadata") or {}
@@ -4492,46 +4490,6 @@ class AppController:
         self._append_log("[webui] Retry connection requested by user.")
         healthy = self.webui_process_manager.check_health()
         self._update_webui_state("connected" if healthy else "error")
-
-    def _run_pipeline_thread(self, cancel_token: CancelToken) -> None:
-        """Retired legacy helper kept only to fail loudly if called."""
-        cancel_token.cancel()
-        cancel_token.clear_stop_requirement()
-        self._cancel_token = None
-        raise RuntimeError(
-            "Legacy pipeline thread path is disabled; use the queue-backed start_run_v2 flow."
-        )
-
-    def _cache_last_run_payload(
-        self, executor_config: dict[str, Any], pipeline_config: DeprecatedPipelineConfigSnapshot
-    ) -> None:
-        """DEPRECATED (PR-CORE1-12): Legacy payload caching for pipeline_config.
-
-        This cached pipeline_config for debugging/replay. No longer used since
-        NJR jobs include full snapshots. Consider removing in future cleanup.
-        """
-        if not executor_config:
-            return
-        snapshot = self._run_config_with_lora()
-        payload: dict[str, Any] = {
-            "executor_config": deepcopy(executor_config),
-            "run_config_snapshot": snapshot,
-            "prompt": pipeline_config.prompt,
-            "pack_name": pipeline_config.pack_name,
-            "preset_name": pipeline_config.preset_name,
-        }
-        self._last_executor_config = payload["executor_config"]
-        self._last_run_snapshot = snapshot
-        try:
-            self._config_manager.write_last_run(payload)
-            if self.app_state:
-                try:
-                    last_cfg = current_config_to_last_run(self.app_state.current_config)
-                    self._last_run_store.save(last_cfg)
-                except Exception:
-                    pass
-        except Exception:
-            pass
 
     def get_last_run_config(self) -> dict[str, Any] | None:
         """Expose the last executor payload captured for the GUI helpers."""

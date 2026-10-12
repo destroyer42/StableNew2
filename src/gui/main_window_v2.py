@@ -624,11 +624,16 @@ class MainWindowV2:
             configured = getattr(controller, "_packs_dir", None)
             return Path(configured) if configured is not None else Path("packs")
 
+        def webui_outage_provider() -> dict[str, Any] | None:
+            coordinator = getattr(job_service, "webui_outage", None)
+            return coordinator.snapshot() if coordinator is not None else None
+
         return OperatorReadinessService(
             repository=repository,
             webui_connection=getattr(controller, "webui_connection_controller", None),
             prompt_pack_dir_provider=prompt_pack_dir_provider,
             output_dir_provider=output_dir_provider,
+            webui_outage_provider=webui_outage_provider,
         )
 
     def _readiness_source_image_path(self) -> str | None:
