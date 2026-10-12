@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import pytest
+
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
@@ -148,7 +150,20 @@ def test_cancelled_job_does_not_publish_late_success(tmp_path: Path) -> None:
     assert unrelated_output.read_bytes() == b"unrelated"
 
 
-def test_non_cancelled_job_publishes_result_and_final_checkpoint(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("stage_events", "expected_stage", "expected_event"),
+    [
+        pytest.param([{"stage": "txt2img", "phase": "exit"}], "txt2img", "exit", id="production-phase"),
+        pytest.param([{"stage": "txt2img", "event": "exit"}], "txt2img", "exit", id="historical-event"),
+        pytest.param([], "final_output", "final_output", id="output-only-fallback"),
+    ],
+)
+def test_non_cancelled_job_publishes_result_and_final_checkpoint(
+    tmp_path: Path,
+    stage_events: list[dict[str, str]],
+    expected_stage: str,
+    expected_event: str,
+) -> None:
     repository = JobRepository(tmp_path / "jobs.sqlite3")
     queue = JobQueue(repository=repository)
     output = tmp_path / "success.png"
@@ -158,7 +173,7 @@ def test_non_cancelled_job_publishes_result_and_final_checkpoint(tmp_path: Path)
         return {
             "run_id": job.job_id,
             "success": True,
-            "stage_events": [{"stage": "txt2img", "phase": "exit"}],
+            "stage_events": stage_events,
             "variants": [{"path": str(output)}],
         }
 
@@ -173,6 +188,7 @@ def test_non_cancelled_job_publishes_result_and_final_checkpoint(tmp_path: Path)
     assert persisted.status == JobStatus.COMPLETED
     assert persisted.result is not None and persisted.result["success"] is True
     assert repository.get_artifact_references(job.job_id) == [str(output)]
-    assert [item.stage_name for item in persisted.execution_metadata.stage_checkpoints] == [
-        "final_output"
-    ]
+    checkpoints = persisted.execution_metadata.stage_checkpoints
+    assert [item.stage_name for item in checkpoints] == [expected_stage]
+    assert checkpoints[0].output_paths == [str(output)]
+    assert checkpoints[0].metadata == {"source": "canonical_result", "event": expected_event}
