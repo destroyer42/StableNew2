@@ -170,27 +170,31 @@ def test_without_the_fence_a_normal_cancel_still_lets_the_next_job_run(stack: St
     _wait_until(lambda: stack.status("C") is JobStatus.COMPLETED)
 
 
-def test_the_one_shot_handoff_cannot_mark_a_job_running_after_the_fence(stack: Stack) -> None:
-    """Run Now: the worker is pinned just before ``mark_running``; the fence must win and the job stays QUEUED."""
+def test_the_one_shot_handoff_cannot_claim_a_job_after_the_fence(stack: Stack) -> None:
+    """Run Now: the claim is one atomic step (PR-QUEUE-WEBUI-171), pinned just before it; the fence must win."""
 
     service = stack.service
     service.auto_run_enabled = False
-    at_mark, proceed = threading.Event(), threading.Event()
-    real_mark_running = stack.queue.mark_running
+    at_claim, proceed = threading.Event(), threading.Event()
+    real_claim = stack.queue.claim_next_job
 
-    def pinned_mark_running(job_id: str):
-        at_mark.set()
+    def pinned_claim():
+        at_claim.set()
         assert proceed.wait(DEADLINE)
-        return real_mark_running(job_id)
+        return real_claim()
 
-    stack.queue.mark_running = pinned_mark_running  # type: ignore[method-assign]
-    assert service.run_next_now() is True
-    assert at_mark.wait(DEADLINE)
+    stack.queue.claim_next_job = pinned_claim  # type: ignore[method-assign]
+    outcome: list[bool] = []
+    caller = threading.Thread(target=lambda: outcome.append(service.run_next_now()))
+    caller.start()
+    assert at_claim.wait(DEADLINE)
 
     _begin_shutdown(service)
     proceed.set()
+    caller.join(DEADLINE)
     _wait_until(lambda: not stack.runner.is_running() and stack.runner.is_quiescent())
 
+    assert outcome == [False]
     assert stack.started["A"].is_set() is False
     assert stack.status("A") is JobStatus.QUEUED
     assert stack.calls == []

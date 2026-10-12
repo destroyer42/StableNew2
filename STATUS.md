@@ -4,6 +4,17 @@ Updated: 2026-10-11
 
 ## Repository
 
+- WebUI outage containment and safe recovery (PR-QUEUE-WEBUI-171, locally validated): a confirmed WebUI outage now
+  holds only WebUI-dependent work in the existing queue (in-memory, not a status or the user's pause), while native
+  SVD and Comfy video jobs keep executing one at a time. Dependency is classified from the frozen NJR; the claim is
+  atomic with eligibility (manual Run Next included) and keeps held jobs queued in their original order. Failures are
+  assessed from typed evidence (raised or normalized), one fresh read-only readiness+identity probe confirms an outage,
+  a manager-owned runtime gets one bounded restart per incident, an external runtime is never touched, and the hold
+  releases only on a fresh proof. The runner's job replay and the executor's HTTP-500 replay were removed; a job is
+  restored to QUEUED only on positive non-dispatch evidence. Status is projected through diagnostics and the operator
+  readiness WebUI record. Net controller shrink; no physical validation. See
+  `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-171_Backend_Scoped_Outage_Containment.md`.
+
 - Managed WebUI endpoint and lifecycle consistency (PR-RUNTIME-WEBUI-170, locally validated): the configured
   runtime endpoint is authoritative; the connection controller no longer scans or adopts alternate ports (nor
   does the process manager for A1111), connection attempts are single-flight, owned launches are serialized,

@@ -9,7 +9,7 @@ import pytest
 
 from src.controller.job_execution_controller import JobExecutionController
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
-from src.queue.job_model import Job, JobPriority
+from src.queue.job_model import Job, JobPriority, JobStatus
 from src.utils.error_envelope_v2 import wrap_exception
 from tests.helpers.njr_factory import make_pipeline_njr
 
@@ -131,9 +131,13 @@ def test_run_job_callback_resumes_from_checkpoint_after_retry(tmp_path: Path) ->
     job.snapshot = {"normalized_job": record.to_dict()}
     controller.get_queue().submit(job)
 
-    result = controller.get_runner().run_once(job)
+    # PR-QUEUE-WEBUI-171: a failed stage is never automatically re-invoked by the queue. The job fails with its real
+    # error, its stage checkpoint is preserved, and a retry is an explicit replay with a new identity.
+    with pytest.raises(RuntimeError, match="Connection refused"):
+        controller.get_runner().run_once(job)
 
     runner = controller._replay_engine._runner  # type: ignore[attr-defined]
-    assert runner.calls[0] == (None, [])
-    assert runner.calls[1] == ("upscale", [str(checkpoint)])
-    assert result["success"] is True
+    assert runner.calls == [(None, [])]
+    stored = controller.get_queue().get_job("resume-job")
+    assert stored is not None and stored.status is JobStatus.FAILED
+    assert [c.stage_name for c in stored.execution_metadata.stage_checkpoints] == ["adetailer"]

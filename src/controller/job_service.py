@@ -12,7 +12,7 @@ from threading import Lock
 from typing import Any, Literal, Protocol
 
 from src.config.app_config import get_process_container_config, get_watchdog_config
-from src.controller import job_service_auto_run, job_service_shutdown
+from src.controller import job_service_auto_run, job_service_outage, job_service_shutdown
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service_dispatch import dispatch_next_now
@@ -204,6 +204,7 @@ class JobService:
                     pass
             self._runner = value
             self._worker_started = False
+        job_service_outage.bind_webui_outage_containment(self, coordinator=self.webui_outage)
 
     def __init__(
         self,
@@ -256,13 +257,6 @@ class JobService:
                 is_paused=lambda: getattr(self, "_queue_status", "idle") == "paused",
             )
         self._runner = selected_runner
-        log_with_ctx(
-            logger,
-            logging.DEBUG,
-            "JobService initialized with runner",
-            ctx=LogContext(subsystem="job_service"),
-            extra_fields={"runner_type": type(self.runner).__name__},
-        )
 
         # PR-0114C-T(x): Support history service injection
         self._history_service = history_service
@@ -288,6 +282,7 @@ class JobService:
         self._worker_started = False
         self.auto_run_enabled = False
         job_service_auto_run.bind_continuous_dispatch_policy(self)
+        job_service_outage.bind_webui_outage_containment(self)
         self._event_dispatcher: Callable[[Callable[[], None]], None] | None = None
         self._completion_handlers: list[Callable[[Job, Any], None]] = []
         self._callbacks: dict[str, list[Callable[..., None]]] = {}
@@ -942,7 +937,8 @@ class JobService:
                 "current_job_id": getattr(current_job, "job_id", None),
                 "queued_job_ids": [job.job_id for job in queued_jobs],
                 "job_count": len(jobs),
-            },
+                },
+            "webui_outage": job_service_outage.snapshot(self),
             "cached_metadata": metadata_cache,
             "containers": containers,
             "active_watchdogs": list(self._active_watchdogs.keys()),
@@ -1005,7 +1001,7 @@ class JobService:
             self._notify_completion(
                 job, {"success": False, "status": status, "error": job.error_message}
             )
-        if status in {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED}:
+        if status in {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED, JobStatus.QUEUED}:
             self._stop_watchdog(job.job_id)
             self.cleanup_external_processes(job.job_id, reason=status.value.lower())
             self._destroy_container(job.job_id)

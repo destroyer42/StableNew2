@@ -22,6 +22,15 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/app_controller_services/runtime_projection_coordinator.py` /
   `src/gui/app_state_projection_sink.py` (versioned async publication) ->
   `tests/gui_v2/test_preview_draft_recovery_112.py`.
+- WebUI outage containment (PR-QUEUE-WEBUI-171):
+  `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-171_Backend_Scoped_Outage_Containment.md` ->
+  `src/queue/backend_dependency.py` (pure classifier) -> `src/queue/job_queue.py` (atomic eligibility-aware
+  claim, in-memory WebUI hold, `return_undispatched_to_queue`) -> `src/queue/single_node_runner.py` (no replay,
+  outage observer, held idle wait) -> `src/api/webui_failure_evidence.py` + `src/pipeline/pipeline_runner.py`
+  (typed evidence) -> `src/controller/webui_outage_coordinator.py` / `job_service_outage.py` (assessment,
+  one owned recovery cycle, proof-gated release, projection) -> `src/api/webui_process_manager.py::restart_webui`
+  (launch-lock serialized) -> `src/services/operator_readiness_service.py` ->
+  `tests/queue/test_webui_outage_containment_171.py`.
 - Managed WebUI endpoint/lifecycle consistency (PR-RUNTIME-WEBUI-170):
   `docs/Subsystems/Runtime/PR-RUNTIME-WEBUI-170_Managed_WebUI_Endpoint_and_Lifecycle_Consistency.md` ->
   `src/controller/webui_connection_controller.py` (single-flight, epoch-guarded, no alternate ports) ->
