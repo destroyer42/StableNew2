@@ -65,7 +65,11 @@ def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
     prepared_path = str(identity.get("prepared_path") or "")
     prepared_sha = _recorded_sha(identity.get("prepared_sha256"))
     inputs = [str(path) for path in record.input_image_paths]
-    parent_sha = _recorded_sha(record.source.parent_artifact_id)
+    # A replay's own ``source.parent_artifact_id`` is the replay's lineage and may be empty; the digest of the
+    # original source artifact survives in the (inherited) metadata, so a retry of a retry is still verified.
+    parent_sha = _recorded_sha(record.source.parent_artifact_id) or _recorded_sha(
+        metadata.get("parent_artifact_id")
+    )
     checks: list[InputCheck] = []
     for path in inputs:
         expected = None

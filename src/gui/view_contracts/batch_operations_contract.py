@@ -103,6 +103,7 @@ class BatchOperationsSession:
         self.loading = False
         self._closed = False
         self._refresh_token = 0
+        self._refresh_pending = False
 
     # -- lifecycle -----------------------------------------------------------------------------------------
 
@@ -122,8 +123,15 @@ class BatchOperationsSession:
     # -- refresh (latest request wins) -----------------------------------------------------------------------
 
     def refresh(self) -> bool:
+        """Start one read. At most one is ever in flight: a request that arrives meanwhile is remembered and
+        served by a single follow-up read, so a slow scan is never superseded by every new event."""
+
         if self._closed or self.busy:
             return False
+        if self.loading:
+            self._refresh_pending = True
+            return False
+        self._refresh_pending = False
         self._refresh_token += 1
         token, key = self._refresh_token, self.selected_key
         self.loading = True
@@ -138,10 +146,21 @@ class BatchOperationsSession:
             self.loading = False
             if outcome.error:
                 self._say(f"Refresh failed: {outcome.error}")
-                return
-            self._apply(outcome.value, key)
+            else:
+                self._apply(outcome.value, key)
+            if self._refresh_pending:
+                self.refresh()
 
-        self._runner.start(f"BatchOps-Refresh-{token}", work, done)
+        return self._spawn(f"BatchOps-Refresh-{token}", work, done)
+
+    def _spawn(self, name: str, work: Callable[[], WorkOutcome], done: Callable[[WorkOutcome], None]) -> bool:
+        try:
+            self._runner.start(name, work, done)
+        except Exception as exc:  # noqa: BLE001 - e.g. no thread available: never leave a spinner/busy stuck
+            self.loading = False
+            self.busy = ""
+            self._say(f"Could not start background work: {type(exc).__name__}: {exc}")
+            return False
         return True
 
     def _apply(self, snapshot: Any, requested: BatchKey | None) -> None:
@@ -384,7 +403,7 @@ class BatchOperationsSession:
         if refresh:
             self.refresh()
 
-    def _run(self, name: str, work: Callable[[], Any], done: Callable[[Any], None]) -> None:
+    def _run(self, name: str, work: Callable[[], Any], done: Callable[[Any], None]) -> bool:
         def outcome_work() -> WorkOutcome:
             return WorkOutcome(value=work())
 
@@ -402,14 +421,15 @@ class BatchOperationsSession:
             except Exception as exc:  # noqa: BLE001 - a hook failure is reported, never left half-applied
                 self._finish(f"{name} could not finish: {type(exc).__name__}: {exc}", refresh=False)
 
-        self._runner.start(f"BatchOps-{name}", outcome_work, on_done)
+        return self._spawn(f"BatchOps-{name}", outcome_work, on_done)
 
     def cancel_remaining(self) -> bool:
         if not self._begin("Cancel", self.cancel_state()):
             return False
         key = self.selected_key
-        self._run("Cancel", lambda: self._service.plan_cancel_remaining(key), lambda plan: self._confirm_cancel(key, plan))
-        return True
+        return self._run(
+            "Cancel", lambda: self._service.plan_cancel_remaining(key), lambda plan: self._confirm_cancel(key, plan)
+        )
 
     def _confirm_cancel(self, key: BatchKey, plan: Any) -> None:
         if not plan.target_job_ids:
@@ -428,8 +448,9 @@ class BatchOperationsSession:
         if not self._begin("Retry", self.retry_state()):
             return False
         key, ids = self.selected_key, self.selected_ids
-        self._run("Retry", lambda: self._service.preflight_retry(key, ids), lambda plan: self._review_retry(plan))
-        return True
+        return self._run(
+            "Retry", lambda: self._service.preflight_retry(key, ids), lambda plan: self._review_retry(plan)
+        )
 
     def _review_retry(self, plan: Any) -> None:
         acknowledged = self.hooks.review_retry(plan)
@@ -449,8 +470,9 @@ class BatchOperationsSession:
         if not self._begin("Outputs", gate):
             return False
         key, ids = self.selected_key, self.selected_ids
-        self._run("Outputs", lambda: self._service.resolve_outputs(key, ids), lambda res: self._hand_off(target, res))
-        return True
+        return self._run(
+            "Outputs", lambda: self._service.resolve_outputs(key, ids), lambda res: self._hand_off(target, res)
+        )
 
     def _hand_off(self, target: str, resolution: Any) -> None:
         problems = " ".join(resolution.messages)

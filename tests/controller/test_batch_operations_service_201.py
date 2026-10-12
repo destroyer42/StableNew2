@@ -432,3 +432,84 @@ def test_an_image_jobs_thumbnail_is_not_offered_to_review_but_a_video_jobs_is(st
         "primary_path": str(image), "output_paths": [str(image)], "thumbnail_path": str(small)}})
     resolution = stack.operations.resolve_outputs(REVIEW, ["t-0"])
     assert resolution.images == (str(image),)  # the thumbnail of an image job is not a second output
+
+
+# ------------------------------------------------------------------ independent-review regressions
+
+
+def test_a_retry_of_a_retry_still_verifies_the_original_source_digest(review):
+    stack, sources = review
+    first = stack.operations.submit_retry(stack.operations.preflight_retry(REVIEW, ["rev-0", "rev-2"]))
+    retry_key = first.retry_batch
+    new_ids = [pair[1] for pair in first.admitted]
+    settle_fifo(stack, {0: "failed", 1: "failed"}, count=2, result=_unavailable())  # the retries fail too
+    # (the queue also holds nothing else: rev-1/3/5 already completed, rev-0/2/4 settled earlier)
+    assert [status_of(stack, i) for i in new_ids] == [JobStatus.FAILED, JobStatus.FAILED]
+    second_gen = stack.repository.get_job_model(new_ids[0])._normalized_record
+    assert second_gen.source.parent_artifact_id is None  # the replay's own lineage field is empty ...
+    assert stack.operations.preflight_retry(retry_key, [new_ids[0]]).items[0].eligible
+    sources[0].write_bytes(sources[0].read_bytes() + b"tamper")  # ... yet the original digest still binds
+    plan = stack.operations.preflight_retry(retry_key, [new_ids[0]])
+    assert "changed since the job was created" in plan.items[0].reasons[0]
+
+
+def test_video_retry_is_revalidated_against_current_workflow_governance(stack, tmp_path):
+    source = image_file(tmp_path / "g.png")
+    admit(stack, [video_njr("g-0", "vid", 0, 2, source=source),
+                  video_njr("g-1", "vid", 1, 2, source=source, workflow_id="workflow_that_was_removed")])
+    settle_fifo(stack, {0: "failed", 1: "failed"}, result=_unavailable())
+    plan = stack.operations.preflight_retry(VIDEO, ["g-0", "g-1"])
+    assert plan.items[0].eligible
+    assert "Workflow governance would refuse it now" in plan.items[1].reasons[0]
+    assert "workflow_that_was_removed" in plan.items[1].reasons[0]
+    count = stack.repository.count()
+    with pytest.raises(BatchOperationRefused, match="Revise the selection"):
+        stack.operations.submit_retry(plan)
+    assert stack.repository.count() == count
+
+
+def test_retry_items_carry_non_blocking_notices_for_untyped_failures_and_recorded_outputs(stack, tmp_path):
+    out = image_file(tmp_path / "partial.png")
+    admit(stack, [review_njr(f"n-{i}", "rev", source_count=2) for i in range(2)])
+    settle_fifo(stack, {0: "failed", 1: "failed"}, results={
+        0: {"success": False, "error": "old failure", "metadata": {}},  # historical: no typed evidence
+        1: {**_unavailable(), "metadata": {**_unavailable()["metadata"], "completed_output_paths": [str(out)]}}})
+    plan = stack.operations.preflight_retry(REVIEW, ["n-0", "n-1"])
+    assert plan.submittable and not plan.acknowledgements  # a caution, not a gate
+    assert "not known whether the earlier request ran" in plan.items[0].notices[0]
+    assert "1 output file(s) are already recorded" in plan.items[1].notices[0]
+
+
+def test_a_plan_that_admitted_nothing_may_be_resubmitted_once_the_cause_is_gone(review):
+    stack, _ = review
+    plan = stack.operations.preflight_retry(REVIEW, ["rev-0"])
+    real = stack.service.submit_njrs
+    stack.service.submit_njrs = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("database is locked"))
+    with pytest.raises(BatchOperationRefused, match="Nothing was admitted"):
+        stack.operations.submit_retry(plan)
+    stack.service.submit_njrs = real
+    assert len(stack.operations.submit_retry(plan).admitted) == 1  # not burned by a pure pre-admission failure
+
+
+def test_an_observation_failure_after_commit_is_a_note_not_an_error(review):
+    stack, _ = review
+    stack.service.auto_run_enabled = True
+
+    def broken():
+        raise RuntimeError("runner state unavailable")
+
+    stack.runner.is_running = broken
+    stack.service.runner.is_running = broken
+    submission = stack.operations.submit_retry(stack.operations.preflight_retry(REVIEW, ["rev-0", "rev-2"]))
+    assert len(submission.admitted) == 2
+    assert any("could not be read" in note for note in submission.notes)
+
+
+def test_retry_is_refused_while_the_application_is_shutting_down(review):
+    stack, _ = review
+    plan = stack.operations.preflight_retry(REVIEW, ["rev-0"])
+    stack.queue.fence_dispatch()
+    count = stack.repository.count()
+    with pytest.raises(BatchOperationRefused, match="shutting down"):
+        stack.operations.submit_retry(plan)
+    assert stack.repository.count() == count

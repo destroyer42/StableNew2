@@ -8,10 +8,11 @@ from tkinter import ttk
 import pytest
 
 from src.controller.app_controller import AppController
+from src.controller.batch_operations_service import build_batch_operations_service
 from src.controller.job_service import JobService
 from src.gui import batch_operations_panel_v2 as panel_module
 from src.gui.app_state_v2 import AppStateV2
-from src.gui.batch_operations_panel_v2 import BatchOperationsPanelV2, build_batch_operations_service
+from src.gui.batch_operations_panel_v2 import BatchOperationsPanelV2
 from src.gui.batch_retry_dialog import BatchRetryDialog
 from src.gui.gui_invoker import GuiInvoker
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame

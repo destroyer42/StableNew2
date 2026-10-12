@@ -12,8 +12,8 @@ and native-Tk acceptance testing. No Opus/Astra escalation: no ownership or arch
 
 Controller surface assessment: `app_controller.py` (7,540), `job_service.py` (1,233), `job_history_service.py` (647) and
 `pipeline_controller.py` (1,774) are **unchanged** (ratchet OK, no ceiling raised). The one new controller,
-`src/controller/batch_operations_service.py`, is 518 lines (limit 600); the pure logic lives in `src/queue/` and
-`src/pipeline/`, the Tk view is wired from `PipelineTabFrame`, and no responsibility was added to `AppController`.
+`src/controller/batch_operations_service.py`, is 546 lines (limit 600; output resolution lives in
+`batch_output_resolution.py`); the pure logic lives in `src/queue/` and `src/pipeline/`, the Tk view is wired from `PipelineTabFrame`, and no responsibility was added to `AppController`.
 
 ## 2. Phase 0 baseline (before any source change)
 
@@ -56,10 +56,13 @@ rejection; invalid model/configuration/unsupported operation; resource exhaustio
 matched; untyped historical failures stay `Other / unclassified` and are never called safe to replay. Known limit: a
 WebUI CUDA OOM is not currently persisted as typed evidence, so it classifies as an HTTP rejection or Other.
 
-**Bounded repository reads (`JobRepository`).** `list_batch_candidate_rows(after_cursor, limit)` is one rowid-paged,
-read-only page of jobs whose snapshot mentions `"batch_id"` (`queue_order` is renumbered by reordering and cannot page);
-`list_replay_child_rows(parent_ids)` finds history-replay children. No schema change. A refresh pages through every
-candidate (default 200/page, 20,000 cap with an explicit `truncated` flag), independent of the recent-20 History list.
+**Bounded repository reads (`JobRepository`).** `read_batch_candidate_page(before_cursor, window)` is one read-only
+window (newest rowids first) of jobs whose snapshot mentions `"batch_id"`; the window bounds the rowids *examined*
+(default 2,000), so the repository lock is held for a bounded time however sparse batch jobs are. The cursor is the
+SQLite `rowid` (`queue_order` is renumbered by reordering and cannot page). `list_replay_child_rows(parent_ids)` finds
+history-replay children. No schema change. The service streams windows straight into the projection (only derived
+per-job views are retained, never every snapshot/result), independent of the recent-20 History list. The *listing* is
+capped (20,000 candidates, newest kept, explicit `truncated` notice); *operations* always scan a batch whole.
 
 **Guarded cancel (`JobQueue.cancel_if_queued` / `cancel_queued_jobs`).** The QUEUED check and the existing
 `QUEUED -> CANCELLED` transition run under the same queue lock that makes `claim_next_job`'s `QUEUED -> RUNNING`
@@ -77,10 +80,13 @@ History Replay as well. `ReplayIntent.batch` can attach a *new* `stablenew.batch
 **Selected retry (`BatchOperationsService`).** User-initiated only. `preflight_retry` assesses *every* selected job
 (ineligible ones listed with reasons, never dropped): FAILED status, reconstructable stored NJR, no existing
 queued/running/completed retry child, today's submission validation and image operation admission
-(`require_njr_operation`), and frozen inputs present and unchanged (`replay_input_verification`: recorded SHA-256 for
-the Review source artifact, prepared video source and driving video; presence for anchors/depth). `submit_retry`
-requires an explicit acknowledgement per unknown-outcome job, re-runs the whole preflight against current repository
-truth, compiles each job with `compile_replay_intent` (new id, parent lineage; >= 2 jobs share a new `selected_retry`
+(`require_njr_operation`), the video backend's own workflow governance gate run now (unknown, disabled, un-opted-in or
+unpinned workflow), and frozen inputs present and unchanged (`replay_input_verification`: recorded SHA-256 for the
+Review source artifact - also through retry-of-retry chains, via the inherited metadata digest - the prepared video
+source and driving video; presence for anchors/depth). Non-blocking notices flag an untyped failure ("not known
+whether the earlier request ran") and already-recorded outputs. `submit_retry`
+refuses during shutdown, re-runs the whole preflight against current repository truth, requires an explicit
+acknowledgement per unknown-outcome job (judged against both the reviewed and the current evidence), compiles each job with `compile_replay_intent` (new id, parent lineage; >= 2 jobs share a new `selected_retry`
 batch, a single job is an ordinary replay child), and crosses `JobService.submit_njrs` **once**. Plans are single-use and
 one submission runs at a time. A post-admission follow-up error or a runner that is not running is reported as
 *admitted with a note* (durability is judged against the identities that existed before the call); pause, auto-run and
@@ -162,6 +168,24 @@ Files: `tests/queue/test_batch_membership_201.py` (M), `test_batch_catalog_201.p
 | 35 | PR-171/172 unaffected | `tests/queue/test_webui_outage_containment_171.py`, `test_dead_forge_cascade_172.py` unchanged and green |
 | 36 | No live process / GPU / user data | fake runner (`tests/helpers/batch_ops_201.py`), one real runner with a fake callable, temporary SQLite only |
 
+## 5b. Independent aggregate review (read-only, fresh context) and dispositions
+
+One HIGH, four MEDIUM and several LOW findings, no BLOCKER; the cancel-versus-claim race, lock ordering and every other
+replay copier were checked and found correct (30 trials x 150 members against a real claiming thread: 0 errors, no
+claimed job cancelled). Dispositions (each with a regression test that fails without its fix):
+
+| Finding | Disposition |
+|---|---|
+| H1 Replays recorded before this change copy batch markers and were counted as members (inflated counts, `conflicting`, Cancel Remaining would cancel the user's replay) | **Fixed**: a `history_replay` job is a member only of a `selected_retry` batch; any other copied marker makes it a retry child (`catalog.legacy_replay_job_ids`). `test_replays_recorded_before_the_fix_are_retry_children_never_members` |
+| M1 Capped scan dropped the newest batches and operations ignored truncation | **Fixed**: newest-first listing; operations scan whole (`cap=None`). `test_windowed_reads_cover_every_member_and_a_capped_listing_keeps_the_newest` |
+| M2 Scan scaled with history (lock hold, retained rows, refresh superseding) | **Fixed**: rowid-windowed reads, streamed projection, single in-flight refresh with one coalesced follow-up. `test_repository_windows_bound_the_rows_examined…`, `test_refresh_requests_while_loading_coalesce…`. Residual: rehydration cost still grows with batch-member count (~0.2 ms per member job) |
+| M3 Retry-of-retry lost the SHA-256 integrity check | **Fixed**: digest read from the inherited metadata. `test_a_retry_of_a_retry_still_verifies_the_original_source_digest` |
+| M4 Video retry not revalidated under workflow governance | **Fixed**: registry gate run at preflight/admission. `test_video_retry_is_revalidated_against_current_workflow_governance` |
+| LOW `_queue_notes` could raise after commit; plan token burned by a pure pre-admission failure; acknowledgement judged only on the reviewed plan; stuck `busy`/`loading` when a worker cannot start; Tk module read private controller attributes | **Fixed** (observation failure is a note; token released when nothing became durable; acknowledgement also judged on fresh evidence; start failure resets state; factory moved to the controller layer using public accessors) |
+| LOW Retry bypasses `QueueSubmissionService` | **Partly addressed**: shutdown is refused; model-order sorting is not applied (retries keep selection order) |
+| LOW `replay_origin` in chains | **Documented**: it names the batch member whose batch was archived; a retry of a retry-batch member records the retry batch as origin and the older origin stays reachable through lineage |
+| LOW Typed `timeout` flag is keyword-derived upstream (`webui_failure_evidence.py`) | **Documented** (outside this change); a timeout is treated as outcome-unknown, i.e. the conservative direction |
+
 ## 5a. Scale evidence
 
 Synthetic repository of 4,000 jobs (3,000 ordinary plus 40 batches of 25, half Review and half Video): one full
@@ -172,8 +196,9 @@ batch's retry-children and file-availability detail, on a loaded CI-class VM, en
 
 - Membership is only as good as the frozen descriptors: batches created before PR-REVIEW/VID-BATCH-200 have none and
   stay ordinary jobs (by design). A Review batch has no per-job position, so rows show `-`.
-- A scan reads every job whose snapshot mentions `batch_id`; very large histories (>20,000 candidates) show a
-  truncation notice. There is still no index; a dedicated column would need an approved schema change.
+- A scan reads every job whose snapshot mentions `batch_id` (windowed, so no long lock hold); very large histories
+  (>20,000 candidates) show a truncation notice for the listing only. There is still no index; a dedicated column would
+  need an approved schema change.
 - `selected_retry` is not offered as a Review/Video *submission* path and has no recurring/automatic form.
 - Admission is serialized per process; a History Replay click racing a Retry click in the same millisecond is bounded
   by the child check, not by a shared lock (the legacy `JobExecutionController.replay` path still bypasses

@@ -41,6 +41,8 @@ class BatchRetryDialog(tk.Toplevel):
             self.rows.column(name, width=width, stretch=name == "result")
         for item in plan.items:
             verdict = "Ready" if item.eligible else "Cannot retry: " + " ".join(item.reasons)
+            if item.notices:
+                verdict += " | Note: " + " ".join(item.notices)
             self.rows.insert("", "end", iid=item.job_id, values=(item.source_label, item.failure_label, verdict))
         self.rows.grid(row=1, column=0, sticky="nsew", padx=12)
 

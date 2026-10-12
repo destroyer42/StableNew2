@@ -16,14 +16,13 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
+from src.controller.batch_output_resolution import OutputResolution, resolve_job_outputs
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.image_backends.operation_compatibility import (
     OperationNotSupportedError,
@@ -37,18 +36,19 @@ from src.queue.batch_projection import (
     BatchCatalog,
     BatchJobView,
     BatchSummary,
-    OutputKind,
     RetryChildRef,
     attach_retry_children,
     build_catalog,
     retry_children_from_rows,
     with_artifact_availability,
 )
-from src.queue.job_history_store import BatchCandidateRow
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import QueuedCancelOutcome
+from src.queue.job_repository import JobRepository
+from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
-_PAGE_SIZE = 200
+#: Rowids examined per repository call (bounds how long the repository lock is held), and the listing cap.
+_SCAN_WINDOW = 2000
 _MAX_CANDIDATES = 20_000
 #: A retry child in one of these states means the failure was already retried (or is being retried).
 _BLOCKING_CHILD_STATUSES = frozenset({JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.COMPLETED})
@@ -103,6 +103,8 @@ class RetryItem:
     failure_label: str
     reasons: tuple[str, ...]
     acknowledgement_text: str | None
+    #: Non-blocking cautions (no typed failure evidence; outputs already recorded).
+    notices: tuple[str, ...] = ()
 
     @property
     def eligible(self) -> bool:
@@ -149,15 +151,27 @@ class RetrySubmission:
         return text + (" " + " ".join(self.notes) if self.notes else "")
 
 
-@dataclass(frozen=True)
-class OutputResolution:
-    images: tuple[str, ...] = ()
-    videos: tuple[str, ...] = ()
-    folders: tuple[str, ...] = ()
-    #: ``(job_id, path, reason)`` for every referenced output that is missing, moved or not a valid image.
-    unavailable: tuple[tuple[str, str, str], ...] = ()
-    jobs_without_outputs: tuple[str, ...] = ()
-    messages: tuple[str, ...] = field(default=())
+class _LiveHold:
+    """Membership test answered by the live ``JobQueue`` at the moment a row is projected (never cached)."""
+
+    def __init__(self, queue: Any) -> None:
+        self._queue = queue
+
+    def __contains__(self, job_id: object) -> bool:
+        return bool(self._queue.is_job_held(str(job_id)))
+
+
+def build_batch_operations_service(controller: Any) -> BatchOperationsService | None:
+    """The batch service over the controller's real ``JobService``; ``None`` when none is attached."""
+
+    for source in (controller, getattr(controller, "pipeline_controller", None)):
+        job_service = getattr(source, "job_service", None)
+        getter = getattr(source, "get_job_service", None)
+        if job_service is None and callable(getter):
+            job_service = getter()
+        if isinstance(getattr(getattr(job_service, "job_queue", None), "repository", None), JobRepository):
+            return BatchOperationsService(job_service=job_service)
+    return None
 
 
 class BatchOperationsService:
@@ -165,14 +179,16 @@ class BatchOperationsService:
         self,
         *,
         job_service: Any,
-        page_size: int = _PAGE_SIZE,
+        scan_window: int = _SCAN_WINDOW,
         max_candidates: int = _MAX_CANDIDATES,
         replay_id_fn: Callable[[], str] | None = None,
         batch_id_fn: Callable[[], str] | None = None,
+        workflow_registry: WorkflowRegistry | None = None,
     ) -> None:
         self._job_service = job_service
-        self._page_size = max(1, int(page_size))
+        self._scan_window = max(1, int(scan_window))
         self._max_candidates = max(1, int(max_candidates))
+        self._workflow_registry = workflow_registry
         self._replay_id_fn = replay_id_fn
         self._batch_id_fn = batch_id_fn or (lambda: uuid.uuid4().hex)
         self._lock = threading.Lock()
@@ -191,33 +207,40 @@ class BatchOperationsService:
 
     # -- discovery / progress ---------------------------------------------------------------------------------
 
-    def _scan(self) -> BatchCatalog:
-        rows: list[BatchCandidateRow] = []
-        cursor = 0
-        truncated = False
-        while True:
-            page = self._repository.list_batch_candidate_rows(
-                after_cursor=cursor, limit=self._page_size
-            )
-            rows.extend(page)
-            if len(page) < self._page_size:
-                break
-            cursor = page[-1].cursor
-            if len(rows) >= self._max_candidates:
-                truncated = True
-                break
+    def _scan(self, *, cap: int | None) -> BatchCatalog:
+        """Stream the repository (newest rowids first, one bounded window per call) into the catalog.
+
+        Rows are consumed as they arrive, so only the derived per-job views are kept (never every snapshot and
+        result at once). ``cap`` limits the *listing*; a capped scan keeps the newest batches and sets
+        ``truncated``. Operations pass ``cap=None`` so they always see a batch whole.
+        """
+
+        state = {"truncated": False}
+
+        def rows() -> Iterator[Any]:
+            cursor = None
+            seen = 0
+            while True:
+                page = self._repository.read_batch_candidate_page(
+                    before_cursor=cursor, window=self._scan_window
+                )
+                yield from page.rows
+                seen += len(page.rows)
+                if page.exhausted:
+                    return
+                if cap is not None and seen >= cap:
+                    state["truncated"] = True
+                    return
+                cursor = page.next_cursor
+
         # The WebUI hold is the live queue's current annotation, read now - never remembered from an incident.
-        held = {
-            row.job_id
-            for row in rows
-            if row.status is JobStatus.QUEUED and self._queue.is_job_held(row.job_id)
-        }
-        return build_catalog(rows, held_job_ids=held, truncated=truncated)
+        catalog = build_catalog(rows(), held_job_ids=_LiveHold(self._queue))
+        return replace(catalog, truncated=True) if state["truncated"] else catalog
 
     def refresh(self, selected: BatchKey | None = None) -> BatchSnapshot:
         """One bounded read of the repository plus, for the selected batch, its retry children and files."""
 
-        catalog = self._scan()
+        catalog = self._scan(cap=self._max_candidates)
         detail = catalog.get(selected)
         if detail is not None:
             detail = self._describe(detail)
@@ -238,7 +261,7 @@ class BatchOperationsService:
         return with_artifact_availability(summary, {path: Path(path).is_file() for path in paths})
 
     def _require(self, key: BatchKey) -> BatchSummary:
-        summary = self._scan().get(key)
+        summary = self._scan(cap=None).get(key)
         if summary is None:
             raise BatchOperationRefused(f"{key.label} was not found in the job repository.")
         if summary.conflicting:
@@ -313,7 +336,19 @@ class BatchOperationsService:
             if job is not None and job.failure is not None
             else None
         )
-        return RetryItem(job_id, label, failure_label, tuple(reasons), acknowledgement), record
+        notices: list[str] = []
+        if job is not None and job.failure is not None and not job.failure.typed:
+            notices.append(
+                "No typed failure evidence was recorded, so it is not known whether the earlier request ran."
+            )
+        if job is not None and job.artifacts:
+            notices.append(
+                f"{len(job.artifacts)} output file(s) are already recorded; inspect them before generating again."
+            )
+        return (
+            RetryItem(job_id, label, failure_label, tuple(reasons), acknowledgement, tuple(notices)),
+            record,
+        )
 
     def _source_record(self, job_id: str, reasons: list[str]) -> NormalizedJobRecord | None:
         try:
@@ -342,7 +377,29 @@ class BatchOperationsService:
                 require_njr_operation(replay)
             except OperationNotSupportedError as exc:
                 problems.append(str(exc).splitlines()[0])
+        if governance := self._workflow_problem(record):
+            problems.append(governance)
         return problems
+
+    def _workflow_problem(self, record: NormalizedJobRecord) -> str | None:
+        """The execution backend's own governance gate (unknown / disabled / un-opted-in workflow), run now."""
+
+        block = record.config.get("video_workflow") if isinstance(record.config, Mapping) else None
+        if not isinstance(block, Mapping):
+            return None
+        execution = block.get("video_execution")
+        opted_in = bool(execution.get("experimental_opt_in")) if isinstance(execution, Mapping) else False
+        registry = self._workflow_registry or build_default_workflow_registry()
+        self._workflow_registry = registry
+        try:
+            registry.get(
+                str(block.get("workflow_id") or ""),
+                str(block.get("workflow_version") or "").strip() or None,
+                allow_experimental=opted_in,
+            )
+        except (KeyError, ValueError) as exc:
+            return f"Workflow governance would refuse it now: {exc.args[0] if exc.args else exc}"
+        return None
 
     def preflight_retry(self, key: BatchKey, job_ids: Sequence[str]) -> RetryPlan:
         """Assess EVERY selected job; ineligible ones are listed, never silently dropped."""
@@ -375,6 +432,8 @@ class BatchOperationsService:
                 raise BatchOperationRefused("A retry is already being submitted; please wait.")
             self._retry_in_flight = True
         try:
+            if self._queue.is_dispatch_fenced():
+                raise BatchOperationRefused("The application is shutting down; nothing was submitted.")
             if not plan.submittable:
                 raise BatchOperationRefused(
                     "Some selected jobs cannot be retried. Revise the selection: "
@@ -382,18 +441,20 @@ class BatchOperationsService:
                     if plan.items
                     else "No failed jobs are selected."
                 )
-            acknowledged = set(acknowledged_job_ids)
-            missing = [item for item in plan.acknowledgements if item.job_id not in acknowledged]
-            if missing:
-                raise BatchOperationRefused(
-                    "Acknowledgement required before generating again: "
-                    + "; ".join(f"{item.source_label}: {item.acknowledgement_text}" for item in missing)
-                )
             fresh, records = self._preflight(plan.key, [item.job_id for item in plan.items])
             if not fresh.submittable:
                 raise BatchOperationRefused(
                     "The selection changed since it was reviewed; review it again: "
                     + "; ".join(f"{i.source_label}: {' '.join(i.reasons)}" for i in fresh.ineligible)
+                )
+            # Acknowledgement is judged against what the repository says NOW as well as what was reviewed.
+            acknowledged = set(acknowledged_job_ids)
+            required = {item.job_id: item for item in (*plan.acknowledgements, *fresh.acknowledgements)}
+            missing = [item for job_id, item in required.items() if job_id not in acknowledged]
+            if missing:
+                raise BatchOperationRefused(
+                    "Acknowledgement required before generating again: "
+                    + "; ".join(f"{item.source_label}: {item.acknowledgement_text}" for item in missing)
                 )
             return self._admit(plan, [record for record in records if record is not None])
         finally:
@@ -431,6 +492,8 @@ class BatchOperationsService:
             durable = self._repository.identities() - existing
             admitted = tuple(pair for pair in pairs if pair[1] in durable)
             if not admitted:
+                with self._lock:
+                    self._consumed_tokens.discard(plan.token)  # nothing became durable: the plan may be retried
                 raise BatchOperationRefused(
                     f"Nothing was admitted: {type(exc).__name__}: {exc}"
                 ) from exc
@@ -442,13 +505,18 @@ class BatchOperationsService:
         return RetrySubmission(pairs, batch_key, tuple(notes))
 
     def _queue_notes(self) -> list[str]:
+        """Observations after durable admission; a failure to observe is itself a note, never an error."""
+
         service, notes = self._job_service, []
-        if self._queue.is_paused():
-            notes.append("The queue is paused; the retries wait until you resume it.")
-        elif not getattr(service, "auto_run_enabled", True):
-            notes.append("Auto-run is off; start the queue to run them.")
-        elif not service.runner.is_running():
-            notes.append("The queue worker is not running (it may have failed to start); use Resume.")
+        try:
+            if self._queue.is_paused():
+                notes.append("The queue is paused; the retries wait until you resume it.")
+            elif not getattr(service, "auto_run_enabled", True):
+                notes.append("Auto-run is off; start the queue to run them.")
+            elif not service.runner.is_running():
+                notes.append("The queue worker is not running (it may have failed to start); use Resume.")
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"The jobs are admitted; the queue state could not be read ({type(exc).__name__}).")
         return notes
 
     # -- Output navigation ----------------------------------------------------------------------------------
@@ -458,53 +526,10 @@ class BatchOperationsService:
     ) -> OutputResolution:
         """Existing, usable output files of the selected jobs, in selection order then artifact order."""
 
-        summary = self._scan().get(key)
+        summary = self._scan(cap=None).get(key)
         if summary is None:
             raise BatchOperationRefused(f"{key.label} was not found in the job repository.")
-        images: list[str] = []
-        videos: list[str] = []
-        folders: list[str] = []
-        unavailable: list[tuple[str, str, str]] = []
-        without: list[str] = []
-        for job_id in dict.fromkeys(job_ids):
-            job = summary.job(job_id)
-            if job is None or not job.artifacts:
-                without.append(job_id)
-                continue
-            for ref in job.artifacts:
-                if ref.origin == "thumbnail" and job.workload_kind != "video":
-                    continue  # a thumbnail is a Review candidate only for a video job's explicit hand-off
-                path = Path(ref.path)
-                if not path.is_file():
-                    unavailable.append((job_id, ref.path, "missing or moved"))
-                    continue
-                folder = str(path.parent)
-                if folder not in folders:
-                    folders.append(folder)
-                if ref.kind is OutputKind.VIDEO and ref.path not in videos:
-                    videos.append(ref.path)
-                elif ref.kind is OutputKind.IMAGE and ref.path not in images:
-                    if not hash_images or _is_valid_image(path):
-                        images.append(ref.path)
-                    else:
-                        unavailable.append((job_id, ref.path, "not a readable image"))
-        messages: list[str] = []
-        if without:
-            messages.append(f"{len(without)} selected job(s) have no recorded output.")
-        if unavailable:
-            messages.append(f"{len(unavailable)} recorded output file(s) are missing or unreadable.")
-        return OutputResolution(
-            tuple(images), tuple(videos), tuple(folders), tuple(unavailable), tuple(without), tuple(messages)
-        )
-
-
-def _is_valid_image(path: Path) -> bool:
-    try:
-        with Image.open(path) as image:
-            image.verify()
-    except Exception:  # noqa: BLE001 - any decode failure means "not a usable image"
-        return False
-    return True
+        return resolve_job_outputs(summary, job_ids, verify_images=hash_images)
 
 
 __all__ = [
@@ -517,4 +542,5 @@ __all__ = [
     "RetryItem",
     "RetryPlan",
     "RetrySubmission",
+    "build_batch_operations_service",
 ]

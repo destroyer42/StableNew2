@@ -27,6 +27,7 @@ from tests.helpers.batch_ops_201 import (
     plain_njr,
     review_njr,
     settle_fifo,
+    status_of,
     video_njr,
 )
 from tests.helpers.njr_factory import make_pipeline_njr
@@ -164,14 +165,74 @@ def test_recent_twenty_history_never_truncates_a_twenty_five_job_batch(stack):
     assert summary.job_count == 25 and summary.counts.completed == 25  # ...the batch view is not
 
 
-def test_pagination_covers_every_member_and_reports_truncation(tmp_path):
-    paged = make_stack(tmp_path, page_size=7)
-    key, _ = _video_batch(paged, "pages", 25)
-    snapshot = paged.operations.refresh()
+def test_windowed_reads_cover_every_member_and_a_capped_listing_keeps_the_newest(tmp_path):
+    windowed = make_stack(tmp_path, scan_window=7)
+    key, _ = _video_batch(windowed, "pages", 25)
+    snapshot = windowed.operations.refresh()
     assert snapshot.catalog.get(key).job_count == 25 and not snapshot.catalog.truncated
-    capped = make_stack(tmp_path, name="capped.sqlite3", page_size=5, max_candidates=10)
-    _video_batch(capped, "pages", 25)
-    assert capped.operations.refresh().catalog.truncated
+    capped = make_stack(tmp_path, name="capped.sqlite3", scan_window=5, max_candidates=10)
+    old_key, _ = _video_batch(capped, "older", 12, prefix="old")
+    new_key, _ = _video_batch(capped, "newer", 6, prefix="new")
+    listing = capped.operations.refresh().catalog
+    assert listing.truncated and listing.get(new_key).job_count == 6  # newest batches are kept
+    assert listing.get(old_key) is None or listing.get(old_key).job_count < 12
+    # Operations never act on a partial view: they scan the batch whole, whatever the listing cap.
+    whole = capped.operations.plan_cancel_remaining(old_key)
+    assert len(whole.target_job_ids) == 12
+    result = capped.operations.cancel_remaining(old_key)
+    assert len(result.cancelled) == 12 and status_of(capped, "old-11") is JobStatus.CANCELLED
+
+
+def test_repository_windows_bound_the_rows_examined_not_the_rows_matched(stack):
+    admit(stack, [plain_njr(f"p{i}") for i in range(30)])
+    _video_batch(stack, "sparse", 3)
+    admit(stack, [plain_njr(f"q{i}") for i in range(30)])
+    seen, cursor, windows = [], None, 0
+    while True:
+        page = stack.repository.read_batch_candidate_page(before_cursor=cursor, window=10)
+        windows += 1
+        seen.extend(row.job_id for row in page.rows)
+        if page.exhausted:
+            break
+        cursor = page.next_cursor
+    assert windows == 7  # 63 rowids / 10 per window, however sparse the matches
+    assert seen == ["sparse-02", "sparse-01", "sparse-00"]  # newest first
+
+
+def _legacy_replay(parent, job_id):
+    """What the pre-201 compiler produced: a replay that kept the parent's ACTIVE batch markers."""
+
+    from dataclasses import replace
+
+    from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
+    from src.queue.batch_membership import ACTIVE_BATCH_KEYS
+
+    child = compile_replay_intent(ReplayIntent(parent), id_fn=lambda: job_id)
+    inherited = {k: v for k, v in parent.extra_metadata.items() if k in ACTIVE_BATCH_KEYS}
+    return replace(child, provenance=replace(
+        child.provenance, metadata={**child.extra_metadata, **inherited}))
+
+
+@pytest.mark.parametrize("kind", ["video", "review"])
+def test_replays_recorded_before_the_fix_are_retry_children_never_members(stack, kind):
+    if kind == "video":
+        key, jobs = _video_batch(stack, "legacy", 3)
+    else:
+        key, jobs = _review_batch(stack, "legacy", 3)
+    settle_fifo(stack, {1: "failed"}, count=3)
+    legacy = _legacy_replay(jobs[1], "old-replay")
+    admit(stack, [legacy])
+    snapshot = stack.operations.refresh(key)
+    summary = snapshot.selected
+    assert summary.job_count == 3 and not summary.conflicting and summary.notes == ()
+    assert summary.counts.queued == 0 and summary.counts.failed == 1
+    assert snapshot.catalog.legacy_replay_job_ids == ("old-replay",)
+    assert [c.job_id for c in summary.job(jobs[1].job_id).retry_children] == ["old-replay"]
+    # Operations stay available and never touch the user's replay.
+    result = stack.operations.cancel_remaining(key)
+    assert result.cancelled == () and status_of(stack, "old-replay") is JobStatus.QUEUED
+    plan = stack.operations.preflight_retry(key, [jobs[1].job_id])
+    assert "Already retried" in plan.items[0].reasons[0]
 
 
 # ------------------------------------------------------------------ status truth (7-10)

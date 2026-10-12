@@ -199,19 +199,45 @@ def test_selection_survives_refresh_and_vanished_items_are_dropped(world):
     assert session.selected_key is None and session.selected_ids == () and session.detail is None
 
 
-def test_a_stale_refresh_cannot_overwrite_a_newer_selection(world):
+def test_only_one_read_is_ever_in_flight_and_the_latest_selection_wins(world):
     session, runner, _ = make_session(world)
     session.refresh()
     runner.drain()
-    session.select_batch(VID)  # refresh A (for VID) in flight
-    session.select_batch(REV)  # the operator moved on: refresh B (for REV) in flight
-    assert len(runner.pending) == 2
+    session.select_batch(VID)  # read A (for VID) in flight
+    session.select_batch(REV)  # the operator moved on; the slow read is NOT superseded, a follow-up is queued
+    assert len(runner.pending) == 1 and session.loading
     outcome_a, done_a = runner.run(0)
-    outcome_b, done_b = runner.run(0)
-    done_b(outcome_b)
-    done_a(outcome_a)  # late and out of order
-    assert session.selected_key == REV and session.detail.key == REV
-    assert "Review" in session.summary_text() and len(session.job_rows()) == 6
+    done_a(outcome_a)  # A lands: it was requested for VID, but the selection is REV now
+    assert session.selected_key == REV and len(runner.pending) == 1  # one follow-up read, for REV
+    runner.drain()
+    assert session.detail.key == REV and "Review" in session.summary_text() and len(session.job_rows()) == 6
+
+
+def test_refresh_requests_while_loading_coalesce_into_one_follow_up(world):
+    session, runner, _ = make_session(world)
+    assert session.refresh()
+    for _ in range(5):  # a burst of queue events while the first (slow) read is outstanding
+        assert session.refresh() is False
+    assert len(runner.pending) == 1
+    outcome, done = runner.run()
+    done(outcome)
+    assert len(runner.pending) == 1  # exactly one follow-up for the whole burst
+    runner.drain()
+    assert not session.loading and not runner.pending
+
+
+def test_failing_to_start_background_work_never_leaves_the_view_stuck(world):
+    class Refusing:
+        def start(self, *_a):
+            raise RuntimeError("can't start new thread")
+
+    session, _, _ = make_session(world, runner=Refusing())
+    assert session.refresh() is False and not session.loading
+    assert "Could not start background work" in session.message
+    session.detail = None
+    session2, runner, _ = loaded(world)
+    session2._runner = Refusing()
+    assert session2.cancel_remaining() is False and session2.busy == ""
 
 
 def test_a_selection_change_during_a_read_triggers_a_follow_up_for_the_current_batch(world):

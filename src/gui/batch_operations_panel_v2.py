@@ -14,7 +14,6 @@ from collections.abc import Callable
 from tkinter import messagebox, ttk
 from typing import Any
 
-from src.controller.batch_operations_service import BatchOperationsService
 from src.gui.batch_retry_dialog import BatchRetryDialog
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_dispatcher import TkUiDispatcher
@@ -23,7 +22,6 @@ from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunne
 from src.queue.batch_membership import BatchKey
 from src.queue.failure_triage import CATEGORY_LABELS
 from src.queue.job_model import JobStatus
-from src.queue.job_repository import JobRepository
 from src.utils.thread_registry import get_thread_registry
 
 ALL_STATUSES = "All statuses"
@@ -40,21 +38,6 @@ _JOB_COLUMNS = (
     ("model", "Model / workflow", 110), ("priority", "Priority", 58), ("outputs", "Outputs", 74),
     ("retry", "Retried as", 90),
 )
-
-
-def build_batch_operations_service(controller: Any) -> BatchOperationsService | None:
-    """The batch service over the controller's real ``JobService``; ``None`` when none is attached."""
-
-    candidates = (
-        getattr(controller, "job_service", None),
-        getattr(controller, "_job_service", None),
-        getattr(getattr(controller, "pipeline_controller", None), "_job_service", None),
-    )
-    for job_service in candidates:
-        repository = getattr(getattr(job_service, "job_queue", None), "repository", None)
-        if isinstance(repository, JobRepository):
-            return BatchOperationsService(job_service=job_service)
-    return None
 
 
 class BatchOperationsPanelV2(ttk.Frame):
@@ -406,4 +389,4 @@ class BatchOperationsPanelV2(ttk.Frame):
         opener(path)
 
 
-__all__ = ["BatchOperationsPanelV2", "build_batch_operations_service"]
+__all__ = ["BatchOperationsPanelV2"]

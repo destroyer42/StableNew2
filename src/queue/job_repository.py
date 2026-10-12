@@ -16,6 +16,7 @@ from typing import Any
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_history_store import (
     INTERRUPTED_RESTART_ACTION_REQUIRED,
+    BatchCandidatePage,
     BatchCandidateRow,
     JobHistoryEntry,
     JobHistoryStore,
@@ -715,25 +716,36 @@ class JobRepository(JobHistoryStore):
             ).fetchone()
         return self._row_to_history(row) if row is not None else None
 
-    def list_batch_candidate_rows(
-        self, *, after_cursor: int = 0, limit: int = 200
-    ) -> list[BatchCandidateRow]:
-        """One bounded, read-only page (insertion order) of jobs whose snapshot mentions a ``batch_id``.
+    def read_batch_candidate_page(
+        self, *, before_cursor: int | None = None, window: int = 2000
+    ) -> BatchCandidatePage:
+        """One bounded, read-only window (newest rowids first) of jobs whose snapshot mentions a ``batch_id``.
 
         This is a plain read of the existing ``jobs`` table: no schema change, no batch table, no lifecycle
         effect. Whether a returned job really belongs to a batch is decided by
-        ``src.queue.batch_membership``. Pass the last row's ``cursor`` as ``after_cursor`` for the next page;
-        the cursor is the SQLite ``rowid`` (``queue_order`` is renumbered by reordering and cannot page).
+        ``src.queue.batch_membership``. The window bounds the rowids *examined* (not the rows matched), so the
+        time the repository lock is held per call does not depend on how sparse batch jobs are. Continue with
+        ``before_cursor=page.next_cursor`` until ``exhausted``. The cursor is the SQLite ``rowid``
+        (``queue_order`` is renumbered by reordering and cannot page).
         """
 
-        page = max(1, min(int(limit), 1000))
+        size = max(1, int(window))
         with self._lock:
+            if before_cursor is None:
+                top = self._connection.execute("SELECT COALESCE(MAX(rowid), 0) AS top FROM jobs").fetchone()["top"]
+            else:
+                top = int(before_cursor)
+            low = max(0, int(top) - size)
             rows = self._connection.execute(
-                "SELECT rowid AS cursor, * FROM jobs WHERE rowid > ? AND instr(njr_snapshot, ?) > 0 "
-                "ORDER BY rowid ASC LIMIT ?",
-                (int(after_cursor), _BATCH_ID_MARKER, page),
+                "SELECT rowid AS cursor, * FROM jobs WHERE rowid > ? AND rowid <= ? "
+                "AND instr(njr_snapshot, ?) > 0 ORDER BY rowid DESC",
+                (low, int(top), _BATCH_ID_MARKER),
             ).fetchall()
-        return [self._row_to_batch_candidate(row) for row in rows]
+        return BatchCandidatePage(
+            rows=tuple(self._row_to_batch_candidate(row) for row in rows),
+            next_cursor=low,
+            exhausted=low <= 0,
+        )
 
     def list_replay_child_rows(self, parent_job_ids: Sequence[str]) -> list[ReplayChildRow]:
         """Jobs compiled as a history replay of any of ``parent_job_ids`` (read-only; a retry is a child)."""

@@ -108,6 +108,9 @@ def review_njr(
     }
     if top_level:
         metadata["batch_id"] = batch_id
+    if artifact_sha256:
+        # The real Review builder records the source digest in the metadata as well as on the source descriptor.
+        metadata["parent_artifact_id"] = f"sha256:{artifact_sha256}"
     inputs = tuple(str(p) for p in (sources or ((source,) if source else ())))
     record = make_pipeline_njr(
         job_id=job_id,
@@ -133,6 +136,7 @@ def video_njr(
     *,
     kind: str = "video_workflow",
     source: Path | None = None,
+    workflow_id: str = "wan22_ti2v_5b_i2v_v1",
 ) -> NormalizedJobRecord:
     """A Video Workflow job carrying the ``stablenew.batch.v1`` descriptor."""
 
@@ -145,7 +149,7 @@ def video_njr(
             "source_count": count,
         },
         "video_workflow": {
-            "workflow_id": "wan22_ti2v_5b_i2v_v1",
+            "workflow_id": workflow_id,
             "display_name": "Wan2.2 TI2V",
             "source_identity": {"original_path": str(source) if source else ""},
         },
@@ -155,8 +159,11 @@ def video_njr(
         extra_metadata=metadata,
         input_image_paths=(str(source),) if source else (),
         stage_chain=[make_stage_config(stage_type="video_workflow")],
-        config={"video_workflow": {"enabled": True, "backend_id": "comfy",
-                                   "video_execution": {"backend_id": "comfy"}}},
+        config={"video_workflow": {
+            "enabled": True, "backend_id": "comfy", "workflow_id": workflow_id,
+            "workflow_version": "1.1.0",
+            "video_execution": {"backend_id": "comfy", "experimental_opt_in": True},
+        }},
     )
 
 

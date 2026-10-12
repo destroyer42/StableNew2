@@ -12,7 +12,7 @@ inferred from an old incident). No function here performs I/O or mutates a row, 
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Container, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import Enum
@@ -210,6 +210,9 @@ class BatchCatalog:
     ambiguous_job_ids: tuple[str, ...] = ()
     candidates_scanned: int = 0
     truncated: bool = False
+    #: Replays recorded before replay stopped inheriting batch membership: they carry copied batch markers
+    #: but are retries of a member, never members themselves.
+    legacy_replay_job_ids: tuple[str, ...] = ()
 
     def get(self, key: BatchKey | None) -> BatchSummary | None:
         return next((summary for summary in self.summaries if summary.key == key), None)
@@ -230,6 +233,12 @@ def snapshot_metadata(snapshot: Mapping[str, Any] | None) -> Mapping[str, Any]:
     data = _mapping(snapshot)
     normalized = _mapping(data.get("normalized_job")) or data
     return _mapping(_mapping(normalized.get("provenance")).get("metadata"))
+
+
+def snapshot_source_kind(snapshot: Mapping[str, Any] | None) -> str:
+    data = _mapping(snapshot)
+    normalized = _mapping(data.get("normalized_job")) or data
+    return str(_mapping(normalized.get("source")).get("kind") or "")
 
 
 def classify_output(path: str, artifact_type: str | None = None) -> OutputKind:
@@ -309,7 +318,7 @@ def job_view_from_row(
     key: BatchKey,
     *,
     source_index: int | None,
-    held_job_ids: Collection[str] = (),
+    held_job_ids: Container[str] = (),
 ) -> BatchJobView:
     metadata = snapshot_metadata(row.snapshot)
     workload, sources, label, model, error = _hydrated_facts(row.snapshot)
@@ -415,7 +424,7 @@ def _summarize(key: BatchKey, jobs: list[BatchJobView], declared: list[int | Non
 def build_catalog(
     rows: Iterable[BatchCandidateRow],
     *,
-    held_job_ids: Collection[str] = (),
+    held_job_ids: Container[str] = (),
     truncated: bool = False,
 ) -> BatchCatalog:
     """Group candidate rows by composite ``(kind, batch_id)``; ordinary and ambiguous jobs join no batch."""
@@ -423,6 +432,7 @@ def build_catalog(
     grouped: dict[BatchKey, list[BatchJobView]] = {}
     declared: dict[BatchKey, list[int | None]] = {}
     ambiguous: list[str] = []
+    legacy_replays: list[str] = []
     scanned = 0
     for row in rows:
         scanned += 1
@@ -432,6 +442,15 @@ def build_catalog(
             continue
         membership = resolution.membership
         if membership is None:
+            continue
+        if (
+            snapshot_source_kind(row.snapshot) == "history_replay"
+            and membership.key.kind is not BatchKind.SELECTED_RETRY
+        ):
+            # A replay is a new submission. Only a selected-retry batch is a legitimate replay membership;
+            # any other batch marker on a replay was copied by the pre-201 compiler, so it is a retry
+            # child of its parent (found through lineage), never a member of the parent's batch.
+            legacy_replays.append(row.job_id)
             continue
         grouped.setdefault(membership.key, []).append(
             job_view_from_row(
@@ -446,6 +465,7 @@ def build_catalog(
         ambiguous_job_ids=tuple(ambiguous),
         candidates_scanned=scanned,
         truncated=truncated,
+        legacy_replay_job_ids=tuple(legacy_replays),
     )
 
 
@@ -515,5 +535,6 @@ __all__ = [
     "job_view_from_row",
     "retry_children_from_rows",
     "snapshot_metadata",
+    "snapshot_source_kind",
     "with_artifact_availability",
 ]

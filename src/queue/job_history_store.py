@@ -73,6 +73,17 @@ class BatchCandidateRow:
 
 
 @dataclass(frozen=True)
+class BatchCandidatePage:
+    """One bounded window of the repository scan (newest rowids first)."""
+
+    rows: tuple[BatchCandidateRow, ...]
+    #: Pass as ``before_cursor`` for the next (older) window.
+    next_cursor: int
+    #: True once the oldest row has been covered.
+    exhausted: bool
+
+
+@dataclass(frozen=True)
 class ReplayChildRow:
     """A persisted job whose recorded lineage parent is another job and whose source is a history replay."""
 

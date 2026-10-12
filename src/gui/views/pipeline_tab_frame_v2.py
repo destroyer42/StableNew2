@@ -6,9 +6,10 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
+from src.controller.batch_operations_service import build_batch_operations_service
 from src.controller.runtime_state import PipelineState
 from src.gui import design_system_v2 as design_system
-from src.gui.batch_operations_panel_v2 import BatchOperationsPanelV2, build_batch_operations_service
+from src.gui.batch_operations_panel_v2 import BatchOperationsPanelV2
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
 from src.gui.layout_v2 import (
