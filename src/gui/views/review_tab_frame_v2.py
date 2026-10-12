@@ -169,7 +169,7 @@ class ReviewTabFrame(ttk.Frame):
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
         header.grid(row=1, column=0, sticky="ew", padx=6, pady=(6, 4))
-        header.columnconfigure(5, weight=1)
+        header.columnconfigure(6, weight=1)
 
         ttk.Button(
             header,
@@ -208,12 +208,20 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.import_recent_button.grid(row=0, column=4, sticky="w", padx=(6, 0))
 
+        self.send_video_button = ttk.Button(
+            header,
+            text="Send Selected to Video Workflow",
+            style="Dark.TButton",
+            command=self._on_send_selected_to_video_workflow,
+        )
+        self.send_video_button.grid(row=0, column=5, sticky="w", padx=(6, 0))
+
         self.selection_label = ttk.Label(
             header,
             text="No images selected",
             style="Dark.TLabel",
         )
-        self.selection_label.grid(row=0, column=5, sticky="e")
+        self.selection_label.grid(row=0, column=6, sticky="e")
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
 
         self.workflow_hint_label = ttk.Label(
@@ -221,7 +229,7 @@ class ReviewTabFrame(ttk.Frame):
             text=self._default_workflow_hint,
             style="Dark.TLabel",
         )
-        self.workflow_hint_label.grid(row=1, column=0, columnspan=6, sticky="ew", pady=(6, 0))
+        self.workflow_hint_label.grid(row=1, column=0, columnspan=7, sticky="ew", pady=(6, 0))
         bind_wraplength(self.workflow_hint_label)
         self.action_help_panel = ActionExplainerPanel(
             header,
@@ -229,10 +237,15 @@ class ReviewTabFrame(ttk.Frame):
             app_state=self.app_state,
             wraplength=980,
         )
-        self.action_help_panel.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(8, 0))
+        self.action_help_panel.grid(row=2, column=0, columnspan=7, sticky="ew", pady=(8, 0))
         self.import_selected_tooltip = attach_tooltip(
             self.import_selected_button,
             "Move the selected reviewed images into Learning staged curation. This records them as evidence candidates; it does not queue a new reprocess job by itself.",
+        )
+        self.send_video_tooltip = attach_tooltip(
+            self.send_video_button,
+            "Send the images highlighted in the Images list to the Video Workflow tab as batch sources. "
+            "This only transfers the selection; nothing is queued until you preview and queue there.",
         )
         self.import_recent_tooltip = attach_tooltip(
             self.import_recent_button,
@@ -1417,6 +1430,55 @@ class ReviewTabFrame(ttk.Frame):
             if 0 <= int(idx) < len(self._image_index_by_row):
                 paths.append(self._image_index_by_row[int(idx)])
         return paths
+
+    def _on_send_selected_to_video_workflow(self) -> None:
+        """Hand the Listbox's highlighted rows (in list order) to the Video Workflow tab.
+
+        Uses the explicit selection only: not every imported image and not merely the image
+        currently previewed.  Intent transfer only; the Video Workflow tab owns preview/queue."""
+
+        paths = [
+            self._image_index_by_row[int(idx)]
+            for idx in self.images_list.curselection()
+            if 0 <= int(idx) < len(self._image_index_by_row)
+        ]
+        if not paths:
+            messagebox.showinfo(
+                "Send to Video Workflow",
+                "Select one or more images in the Images list first.",
+            )
+            return
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            messagebox.showerror("Send to Video Workflow", "The main window is not available.")
+            return
+        lineage: dict[str, dict[str, str]] = {}
+        for path in paths:
+            meta = self._lookup_handoff_source_metadata(path)
+            if isinstance(meta, dict):
+                hint = {
+                    key: str(meta[key])
+                    for key in ("source_job_id", "source_artifact_id")
+                    if meta.get(key)
+                }
+                if hint:
+                    lineage[str(path)] = hint
+        from src.gui.controllers.video_workspace_handoff import route_images_to_video_workflow
+
+        try:
+            route_images_to_video_workflow(
+                main_window=main_window,
+                image_paths=[str(path) for path in paths],
+                lineage_by_path=lineage,
+                status_message=(
+                    f"Loaded {len(paths)} Review image(s) into Video Workflow. "
+                    "Preview the batch before queueing."
+                    if len(paths) > 1
+                    else f"Loaded into Video Workflow tab: {paths[0].name}"
+                ),
+            )
+        except Exception as exc:
+            messagebox.showerror("Send to Video Workflow", str(exc))
 
     def _build_import_display_name(self, paths: list[Path]) -> str:
         if len(paths) == 1:

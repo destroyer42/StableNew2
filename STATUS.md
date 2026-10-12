@@ -14,6 +14,16 @@ Updated: 2026-10-12
   eligible. User queue/history and runtime configuration are untouched; no physical validation. See
   `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-172_Dead_Forge_Endpoint_Cascade_Repair.md`.
 
+- Multi-source Video Workflow batch (PR-VID-BATCH-200, locally validated): 1-25 selected files, a folder or the
+  Review Listbox's highlighted rows become independent Video Workflow jobs sharing one workflow/version/settings.
+  A read-only assessment (decode, dimensions, declared target, destination/free space, controls, seed policy) feeds
+  a prepare-and-freeze step through the existing `VideoWorkflowNjrBuilder`; every source is shown, blocked sources
+  must be excluded and re-previewed, and the whole batch is admitted by ONE `JobService.submit_njrs` after every
+  source, prepared source, driving video, anchor and depth file is re-verified by content hash. Additive
+  `stablenew.batch.v1` provenance (0-based `source_index`) and source identity are frozen in the NJR; single-source
+  and Review jobs are unchanged. Transient session, off-Tk worker, no new queue/runner/history; no physical
+  validation. See `docs/Subsystems/Video/PR-VID-BATCH-200_MultiSource_Workflow_Batch.md`.
+
 - WebUI outage containment and safe recovery (PR-QUEUE-WEBUI-171, locally validated): a confirmed WebUI outage now
   holds only WebUI-dependent work in the existing queue (in-memory, not a status or the user's pause), while native
   SVD and Comfy video jobs keep executing one at a time. Dependency is classified from the frozen NJR; the claim is
