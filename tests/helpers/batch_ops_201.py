@@ -137,6 +137,7 @@ def video_njr(
     kind: str = "video_workflow",
     source: Path | None = None,
     workflow_id: str = "wan22_ti2v_5b_i2v_v1",
+    opted_in: bool = True,
 ) -> NormalizedJobRecord:
     """A Video Workflow job carrying the ``stablenew.batch.v1`` descriptor."""
 
@@ -162,7 +163,7 @@ def video_njr(
         config={"video_workflow": {
             "enabled": True, "backend_id": "comfy", "workflow_id": workflow_id,
             "workflow_version": "1.1.0",
-            "video_execution": {"backend_id": "comfy", "experimental_opt_in": True},
+            "video_execution": {"backend_id": "comfy", "experimental_opt_in": opted_in},
         }},
     )
 

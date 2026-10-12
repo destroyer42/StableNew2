@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from src.controller.batch_output_resolution import OutputResolution, resolve_job_outputs
+from src.controller.ports import DefaultWorkflowRegistryPort
+from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.image_backends.operation_compatibility import (
     OperationNotSupportedError,
@@ -45,7 +47,6 @@ from src.queue.batch_projection import (
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import QueuedCancelOutcome
 from src.queue.job_repository import JobRepository
-from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 #: Rowids examined per repository call (bounds how long the repository lock is held), and the listing cap.
 _SCAN_WINDOW = 2000
@@ -183,7 +184,7 @@ class BatchOperationsService:
         max_candidates: int = _MAX_CANDIDATES,
         replay_id_fn: Callable[[], str] | None = None,
         batch_id_fn: Callable[[], str] | None = None,
-        workflow_registry: WorkflowRegistry | None = None,
+        workflow_registry: WorkflowRegistryPort | None = None,
     ) -> None:
         self._job_service = job_service
         self._scan_window = max(1, int(scan_window))
@@ -382,23 +383,26 @@ class BatchOperationsService:
         return problems
 
     def _workflow_problem(self, record: NormalizedJobRecord) -> str | None:
-        """The execution backend's own governance gate (unknown / disabled / un-opted-in workflow), run now."""
+        """Today's workflow governance (through the controller ports layer): is the frozen workflow still
+        registered, enabled, pinned and - when experimental - covered by the opt-in the job recorded?"""
 
         block = record.config.get("video_workflow") if isinstance(record.config, Mapping) else None
         if not isinstance(block, Mapping):
             return None
         execution = block.get("video_execution")
         opted_in = bool(execution.get("experimental_opt_in")) if isinstance(execution, Mapping) else False
-        registry = self._workflow_registry or build_default_workflow_registry()
-        self._workflow_registry = registry
+        if self._workflow_registry is None:
+            self._workflow_registry = DefaultWorkflowRegistryPort()
+        workflow_id = str(block.get("workflow_id") or "")
         try:
-            registry.get(
-                str(block.get("workflow_id") or ""),
-                str(block.get("workflow_version") or "").strip() or None,
-                allow_experimental=opted_in,
-            )
+            spec = self._workflow_registry.get(workflow_id, str(block.get("workflow_version") or "").strip() or None)
         except (KeyError, ValueError) as exc:
             return f"Workflow governance would refuse it now: {exc.args[0] if exc.args else exc}"
+        if getattr(spec, "is_experimental", False) and not opted_in:
+            return (
+                f"Workflow governance would refuse it now: '{workflow_id}' is experimental and this job "
+                "recorded no experimental opt-in."
+            )
         return None
 
     def preflight_retry(self, key: BatchKey, job_ids: Sequence[str]) -> RetryPlan:

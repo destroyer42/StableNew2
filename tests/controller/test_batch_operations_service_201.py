@@ -455,13 +455,15 @@ def test_a_retry_of_a_retry_still_verifies_the_original_source_digest(review):
 
 def test_video_retry_is_revalidated_against_current_workflow_governance(stack, tmp_path):
     source = image_file(tmp_path / "g.png")
-    admit(stack, [video_njr("g-0", "vid", 0, 2, source=source),
-                  video_njr("g-1", "vid", 1, 2, source=source, workflow_id="workflow_that_was_removed")])
-    settle_fifo(stack, {0: "failed", 1: "failed"}, result=_unavailable())
-    plan = stack.operations.preflight_retry(VIDEO, ["g-0", "g-1"])
+    admit(stack, [video_njr("g-0", "vid", 0, 3, source=source),
+                  video_njr("g-1", "vid", 1, 3, source=source, workflow_id="workflow_that_was_removed"),
+                  video_njr("g-2", "vid", 2, 3, source=source, opted_in=False)])
+    settle_fifo(stack, {0: "failed", 1: "failed", 2: "failed"}, result=_unavailable())
+    plan = stack.operations.preflight_retry(VIDEO, ["g-0", "g-1", "g-2"])
     assert plan.items[0].eligible
     assert "Workflow governance would refuse it now" in plan.items[1].reasons[0]
     assert "workflow_that_was_removed" in plan.items[1].reasons[0]
+    assert "recorded no experimental opt-in" in plan.items[2].reasons[0]
     count = stack.repository.count()
     with pytest.raises(BatchOperationRefused, match="Revise the selection"):
         stack.operations.submit_retry(plan)
