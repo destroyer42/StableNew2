@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import struct
 import time
 from collections.abc import Callable, Iterable
@@ -356,6 +357,8 @@ class AssetRegistry:
         # not wait behind multi-GB checkpoint reads. Only cache commit is locked.
         self._loaded = False
         self._load()
+        # An unreadable-for-now cache is not an empty one: stop before paying for hashes that could not be published.
+        self._require_readable_cache()
         counters = self.last_refresh = RefreshCounters()
         entries, computed, hits = self._prepare_refresh(
             kinds, checkpoint_paths, cancelled, progress, counters
@@ -367,6 +370,10 @@ class AssetRegistry:
             prune_kinds={item.value for item in selected} if checkpoint_paths is None else None,
         )
         return RefreshResult(self._snapshot, computed, hits, counters.snapshot())
+
+    def _require_readable_cache(self) -> None:
+        if self._cache_state is CacheState.UNAVAILABLE:
+            raise TimeoutError("AssetRegistry cache is temporarily unreadable; retry Preview")
 
     def _commit_entries(
         self,
@@ -380,6 +387,7 @@ class AssetRegistry:
         with registry_cache_lock(self.cache_path, cancelled=cancelled):
             self._loaded = False
             self._load()
+            self._require_readable_cache()
             if prune_kinds is not None:
                 self._entries = {
                     key: value
@@ -635,7 +643,7 @@ class AssetRegistry:
                 return CacheState.MISSING, None, {}
             except OSError:
                 if attempt == 3:
-                    return CacheState.UNREADABLE, None, {}
+                    return CacheState.UNAVAILABLE, None, {}
                 time.sleep(0.05 * (attempt + 1))
                 continue
             try:
@@ -652,7 +660,7 @@ class AssetRegistry:
             if not isinstance(entries, dict):
                 return CacheState.UNREADABLE, version, {}
             return CacheState.OK, version, entries
-        return CacheState.UNREADABLE, None, {}  # pragma: no cover - the loop always returns
+        return CacheState.UNAVAILABLE, None, {}  # pragma: no cover - the loop always returns
 
     def _load(self) -> None:
         if self._loaded:
@@ -661,29 +669,40 @@ class AssetRegistry:
         self._cache_state, _version, self._entries = self._read_cache_file()
         self._snapshot = self._make_snapshot()
 
+    @staticmethod
+    def _retry_os(action: Callable[[], Any]) -> None:
+        """Run a file operation, retrying a brief refusal (Windows: the file is momentarily held open)."""
+
+        for attempt in range(5):
+            try:
+                action()
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+
     def _save(self) -> None:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        if self._cache_state in (CacheState.UNREADABLE, CacheState.UNSUPPORTED_VERSION):
-            # Never silently destroy a cache this build could not read (a newer schema, or evidence a person may want
-            # to inspect): keep it beside the new one, once, before it is replaced.
-            try:
-                os.replace(self.cache_path, self.cache_path.with_suffix(".unreadable"))
-            except OSError:
-                pass
         temporary = self.cache_path.with_suffix(".tmp")
         temporary.write_text(
             json.dumps({"version": _CACHE_VERSION, "entries": self._entries}, sort_keys=True),
             encoding="utf-8",
         )
-        for attempt in range(5):
-            try:
-                temporary.replace(self.cache_path)
-                break
-            except PermissionError:
-                # Windows refuses to replace a file another process has open for an instant.
-                if attempt == 4:
-                    raise
-                time.sleep(0.05 * (attempt + 1))
+        try:
+            if self._cache_state in (CacheState.UNREADABLE, CacheState.UNSUPPORTED_VERSION):
+                # Never silently destroy a cache this build could not read (a newer schema, or evidence a person may
+                # want to inspect). Copy it aside *before* replacing it, so the live path is never absent and a failed
+                # copy aborts the save instead of losing the original.
+                backup = self.cache_path.with_suffix(".unreadable")
+                try:
+                    self._retry_os(lambda: shutil.copyfile(self.cache_path, backup))
+                except FileNotFoundError:
+                    pass
+            self._retry_os(lambda: temporary.replace(self.cache_path))
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
         self._cache_state = CacheState.OK
 
     def _make_snapshot(self) -> AssetRegistrySnapshot:

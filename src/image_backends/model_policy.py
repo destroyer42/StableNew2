@@ -59,6 +59,11 @@ EVIDENCE_CONFLICTING = "conflicting_evidence"
 POLICY_ID_SDXL = "sdxl"
 POLICY_ID_UNVERIFIED = "unverified_generic"
 
+#: Registry-evidenced (ordinary-checkpoint) policies whose capabilities an owner has qualified for studies that
+#: compare models. A family with evidence but no entry here (sd1, sd2, sd3, flux ...) stays labelled-but-unqualified;
+#: qualifying one means authoring its ``ModelPolicy`` and adding its id here, in this module, with owner approval.
+QUALIFIED_REGISTRY_POLICY_IDS: frozenset[str] = frozenset({POLICY_ID_SDXL})
+
 #: ``prompt_dialect`` hook values (guidance for later prompt packages; nothing rewrites a prompt here).
 DIALECT_WEIGHTED_TAGS = "sdxl_weighted_tags"
 DIALECT_NATURAL_LANGUAGE = "natural_language"

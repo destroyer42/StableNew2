@@ -180,6 +180,11 @@ def freeze_njr(settings: dict[str, Any], backend: str, *, job_id: str, output_di
 
 
 # Where the builder records job identity and the evidence location. Everything else is intent.
+#
+# A Review submission also mints a fresh random ``batch_id`` per call (top level and inside ``review_batch``), recorded in
+# both the workload and provenance metadata, so two compilations of the same intent never agree on it. It names the
+# submission, not what will be executed; ``review_batch.source_count`` / ``group_by_model`` stay part of the intent.
+# (PR-LEARN-COMPARE-145; the Klein smoke baseline has failed on this since PR-REVIEW-BATCH-200.)
 _IDENTITY_PATHS = (
     ("job_id",),
     ("output_plan",),
@@ -187,21 +192,11 @@ _IDENTITY_PATHS = (
     ("provenance", "metadata", "run_name"),
     ("workload", "metadata", "run_name"),
     ("workload", "intent_config", "requested_job_label"),
+    ("provenance", "metadata", "batch_id"),
+    ("provenance", "metadata", "review_batch", "batch_id"),
+    ("workload", "metadata", "batch_id"),
+    ("workload", "metadata", "review_batch", "batch_id"),
 )
-
-
-# Keys that are a freshly minted grouping identity wherever they appear. A Review submission mints a new random
-# ``batch_id`` (top level and inside ``review_batch``) on every call, so two compilations of the same intent never agree
-# on it; it names the submission, not what will be executed. (PR-LEARN-COMPARE-145; baseline failure since PR-REVIEW-BATCH-200.)
-_IDENTITY_KEYS = frozenset({"batch_id"})
-
-
-def _without_identity_keys(node: Any) -> Any:
-    if isinstance(node, dict):
-        return {key: _without_identity_keys(value) for key, value in node.items() if key not in _IDENTITY_KEYS}
-    if isinstance(node, (list, tuple)):
-        return [_without_identity_keys(value) for value in node]
-    return node
 
 
 def intent_digest(njr: Any) -> str:
@@ -213,7 +208,7 @@ def intent_digest(njr: Any) -> str:
         for key in path[:-1]:
             node = node.get(key) or {}
         node.pop(path[-1], None)
-    return digest(_without_identity_keys(data))
+    return digest(data)
 
 
 # --- The canonical stack (same wiring as tests/helpers/njr_queue_harness.py) ----------------------

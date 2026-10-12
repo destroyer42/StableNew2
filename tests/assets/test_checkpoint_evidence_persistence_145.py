@@ -344,8 +344,9 @@ def test_cancelled_hash_leaves_the_existing_cache_byte_identical_and_parseable(w
     assert world.cache.read_bytes() == before
     assert json.loads(world.cache.read_text(encoding="utf-8"))["version"] == 2
     assert not world.cache.with_suffix(".tmp").exists()
-    # The interrupted refresh still reports what it cost before stopping.
-    assert registry.last_refresh.hashes_computed == 0 or registry.last_refresh.bytes_hashed > 0
+    # The interrupted refresh still reports what it cost before stopping: it began hashing and published nothing.
+    assert registry.last_refresh.bytes_hashed > 0
+    assert world.open().verified_sha256(world.second) is None
 
 
 def test_diagnostics_carry_counts_but_no_paths_names_or_digests(world) -> None:
@@ -399,3 +400,96 @@ def test_replace_is_retried_when_the_cache_is_briefly_held_open(world, monkeypat
     world.open().refresh(checkpoint_paths=[world.first])
     assert failures["left"] == 0
     assert world.open().verified_sha256(world.first) == sha(world.first)
+
+
+def test_a_persistently_unreadable_cache_is_never_treated_as_empty_or_replaced(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.open().refresh(checkpoint_paths=[world.first])
+    before = world.cache.read_bytes()
+    real = Path.read_text
+
+    def held(self, *args, **kwargs):
+        if self == world.cache:
+            raise PermissionError("held open by another process")
+        return real(self, *args, **kwargs)
+
+    registry = world.open()
+    monkeypatch.setattr(Path, "read_text", held)
+    assert registry.checkpoint_status(world.second).cache_state is CacheState.UNAVAILABLE
+    with pytest.raises(TimeoutError, match="temporarily unreadable"):
+        registry.refresh(checkpoint_paths=[world.second])  # fails before paying for any hash
+    assert registry.last_refresh.bytes_hashed == 0
+    monkeypatch.undo()
+    assert world.cache.read_bytes() == before
+    assert not world.cache.with_suffix(".unreadable").exists()
+    assert world.open().verified_sha256(world.first) == sha(world.first)
+
+
+def test_a_cache_that_becomes_unreadable_only_at_commit_is_left_untouched(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.open().refresh(checkpoint_paths=[world.first])
+    before = world.cache.read_bytes()
+    registry = world.open()
+    real = Path.read_text
+    state = {"hold": False}
+
+    def held(self, *args, **kwargs):
+        if self == world.cache and state["hold"]:
+            raise PermissionError("held open by another process")
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", held)
+    registry.cached_snapshot()  # loaded fine; then the file becomes unavailable while hashing
+    original = registry._prepare_refresh
+
+    def prepare_then_hold(*args, **kwargs):
+        result = original(*args, **kwargs)
+        state["hold"] = True
+        return result
+
+    monkeypatch.setattr(registry, "_prepare_refresh", prepare_then_hold)
+    with pytest.raises(TimeoutError, match="temporarily unreadable"):
+        registry.refresh(checkpoint_paths=[world.second])
+    monkeypatch.undo()
+    assert world.cache.read_bytes() == before
+    assert not world.cache.with_suffix(".unreadable").exists()
+    assert not world.cache.with_suffix(".tmp").exists()
+
+
+def test_a_failed_backup_aborts_the_save_and_keeps_the_unreadable_cache(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.cache.parent.mkdir(parents=True, exist_ok=True)
+    world.cache.write_text("{broken", encoding="utf-8")
+    import shutil
+
+    def refuse(*args, **kwargs):
+        raise PermissionError("antivirus holds the file")
+
+    monkeypatch.setattr(shutil, "copyfile", refuse)
+    with pytest.raises(PermissionError):
+        world.open().refresh(checkpoint_paths=[world.first])
+    assert world.cache.read_text(encoding="utf-8") == "{broken"
+    assert not world.cache.with_suffix(".tmp").exists()
+
+
+def test_replacing_an_unreadable_cache_never_leaves_the_live_path_absent(
+    world, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.cache.parent.mkdir(parents=True, exist_ok=True)
+    world.cache.write_text("{broken", encoding="utf-8")
+    import shutil
+
+    real_copy = shutil.copyfile
+    seen: list[bool] = []
+
+    def copy_and_observe(source, target, *args, **kwargs):
+        seen.append(Path(source).exists())  # the live file is still in place while the backup is taken
+        return real_copy(source, target, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "copyfile", copy_and_observe)
+    world.open().refresh(checkpoint_paths=[world.first])
+    assert seen == [True]
+    assert world.cache.with_suffix(".unreadable").read_text(encoding="utf-8") == "{broken"

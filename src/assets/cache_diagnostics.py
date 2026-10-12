@@ -17,8 +17,11 @@ class CacheState(str, Enum):
     UNLOADED = "unloaded"
     MISSING = "missing"
     OK = "ok"
-    #: Present but not parseable JSON / not an object (including a transient read failure that never recovered).
+    #: Present but not parseable JSON / not an object. The content is bad; the file is read fine.
     UNREADABLE = "unreadable"
+    #: The file could not be read at all (held open by another process, permissions) even after bounded retries. Its
+    #: content is unknown and may be perfectly valid, so it is never treated as empty or replaced.
+    UNAVAILABLE = "unavailable"
     #: Parseable, but written by a schema version this build does not read.
     UNSUPPORTED_VERSION = "unsupported_version"
 

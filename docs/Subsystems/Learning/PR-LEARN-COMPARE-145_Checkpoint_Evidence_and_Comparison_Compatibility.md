@@ -31,9 +31,9 @@ persists". Code-level mechanisms that *can* cost a full read were found and are 
 | Entry without a valid digest | yes | treated as a hit (digest silently missing) | `digest_invalid`, rehash |
 | Structure contract bump or pre-structure (v1) cache | **no** — header re-read | worked, invisible | `structure_stale`, counted, no hash |
 | Sidecar edited/added/removed | **no** — sidecar re-read | worked, invisible | `sidecar_changed`, counted, no hash |
-| Transient read failure (another process replacing the file, scanner holding it) | yes, *wrongly* | read error = empty cache = rehash everything | bounded retry, then `unreadable` |
+| Transient read failure (another process replacing the file, scanner holding it) | yes, *wrongly* | read error = empty cache = rehash everything, then overwrite | bounded retry, then `unavailable`: refresh stops with a retryable `TimeoutError` before hashing and never replaces the cache |
 | Non-object JSON cache | crash (`AttributeError`) | uncaught | `unreadable` |
-| Unreadable / future-schema cache overwritten on first save | n/a | evidence silently destroyed | kept once as `*.unreadable` |
+| Unreadable (bad content) / future-schema cache overwritten on first save | n/a | evidence silently destroyed | copied to `*.unreadable` first (a failed copy aborts the save); the live path is never absent |
 | `os.replace` refused while the file is held open (Windows) | n/a | refresh failed after hashing | bounded retry |
 | Exact profile (Klein) | n/a | excluded from hashing by a Klein-only name test | policy-driven, see below |
 
@@ -74,7 +74,10 @@ was likewise a literal `family == "sdxl"` test in two places.
 - `ModelPolicy.exact_identity_authority` and `ModelPolicy.explicit_capabilities` (derived, not stored, so frozen policy
   contexts and old arms are unchanged).
 - `model_comparison.candidate_ineligibility(policy)`: the single study-eligibility rule used by readiness and by
-  `_require_candidate` (Preview and frozen Run). It reads policy content only.
+  `_require_candidate` (Preview and frozen Run). The exact-profile tier requires a real `profile_ref`; the
+  registry tier requires explicit feature positions **and** membership in
+  `model_policy.QUALIFIED_REGISTRY_POLICY_IDS` (currently `{"sdxl"}`), the one place an owner-qualified ordinary
+  family is added. A crafted/re-sealed frozen context therefore cannot widen eligibility.
 - `model_evidence_readiness`: exact-profile authority is asked of the canonical policy, not of a name test; the
   structural diagnosis stays but the family decision goes through the policy; a one-line cost summary is reported.
 - `tools/acceptance/img_forge_100_acceptance.py::intent_digest` ignores the freshly minted `batch_id` (fixes the
@@ -111,6 +114,18 @@ today; no distilled-SDXL sampler/CFG/steps policy exists to adopt and none was i
    "cancelled hash publishes nothing" contract, pinned by `test_cancelled_hash_publishes_nothing_…`). Publishing each
    verified digest as it finishes would stop that loss but changes that contract; it was prototyped, conflicted with the
    accepted test, and was **not** adopted.
+
+## Independent review dispositions
+
+A read-only reviewer found no HIGH defects. Fixed with regression tests: persistent read failure at commit could
+move a valid cache aside (now `unavailable`, retryable, never replaced); a failed backup rename was swallowed and the
+backup preceded the temporary write (now copy-first, abort on failure, live path never absent); eligibility no longer
+anchored on profile identity/family (now anchored, above); `intent_digest` stripped every nested `batch_id` (now
+the four explicit identity paths only). Accepted and recorded: an exact-profile file is identified by its served name,
+as Klein already was, with no Preview-time size check — the transformer's size and SHA-256 are verified at dispatch
+(`verify_zimage_assets` / `verify_klein_assets`) and the accepted PR-LEARN-142 fixtures use tiny stand-in files; a
+same-size/same-mtime replacement and Preview-to-Run file drift remain outside the documented trust model;
+the pre-existing in-memory prune-before-publish behaviour of a failed full refresh is unchanged.
 
 ## Behaviour that is deliberately unchanged
 

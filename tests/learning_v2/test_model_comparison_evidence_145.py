@@ -316,3 +316,56 @@ def test_a_refused_arm_admits_nothing_and_leaves_no_partial_plan(world: World) -
         controller.build_plan(exp, comparison_evidence=evidence)
     assert not exp.execution_snapshot_json and not exp.values
     assert controller.learning_state.plan == []
+
+
+# -- the eligibility rule itself, including crafted/old frozen contexts ---------------------------------------------
+
+
+def _policy(**overrides):
+    from src.image_backends.model_policy import FEATURES, FeaturePolicy, ModelPolicy, Support
+
+    values = {
+        "policy_id": "sd15", "family": "sd15", "display_name": "x", "evidence": "registry_evidence",
+        "controls": {}, "features": {name: FeaturePolicy(Support.SUPPORTED) for name in FEATURES},
+    }
+    values.update(overrides)
+    return ModelPolicy(**values)
+
+
+def test_eligibility_does_not_trust_a_family_label_or_an_unanchored_profile_tier() -> None:
+    from src.learning.model_comparison import candidate_ineligibility
+
+    assert candidate_ineligibility(_policy()) is not None  # explicit features alone do not qualify a family
+    assert candidate_ineligibility(_policy(evidence="exact_profile", profile_ref=None)) is not None
+    assert candidate_ineligibility(_policy(evidence="unknown_evidence")) is not None
+    assert candidate_ineligibility(_policy(evidence="conflicting_evidence", policy_id="sdxl", family="sdxl")) is not None
+    assert candidate_ineligibility(_policy(policy_id="sdxl", family="sdxl")) is None
+    assert (
+        candidate_ineligibility(
+            _policy(policy_id="x", family="x", evidence="exact_profile", profile_ref={"id": "x", "version": 1})
+        )
+        is None
+    )
+    assert candidate_ineligibility(_policy(policy_id="sdxl", family="sdxl", stages=("img2img",))) is not None
+
+
+def test_generic_unverified_policies_are_never_eligible_and_old_frozen_contexts_resolve_as_before() -> None:
+    from src.image_backends.model_policy import resolve_model_policy
+    from src.learning.model_capabilities import policy_context
+    from src.learning.model_comparison import candidate_ineligibility
+    from src.learning.model_policy_service import policy_from_context
+
+    def lookup(family):
+        return lambda _name: SimpleNamespace(
+            status=SimpleNamespace(value="resolved"), family=SimpleNamespace(value=family),
+            structural_error=None, checkpoint_architecture=None,
+        )
+
+    for family in ("sd1", "sd2", "sd3", "flux"):
+        assert candidate_ineligibility(resolve_model_policy("m", family_lookup=lookup(family))) is not None
+    assert candidate_ineligibility(resolve_model_policy("m")) is not None  # no evidence at all
+    for name in ("m", KLEIN, ZIMAGE):
+        policy = resolve_model_policy(name, family_lookup=lookup("sdxl"))
+        rebuilt = policy_from_context(policy_context(policy, name, "txt2img"))  # what Run reconstructs
+        assert candidate_ineligibility(policy) is None and candidate_ineligibility(rebuilt) is None, name
+        assert rebuilt.policy_id == policy.policy_id
