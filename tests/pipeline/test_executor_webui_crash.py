@@ -75,7 +75,7 @@ def test_pipeline_generates_diagnostics_bundle_on_webui_crash():
     assert kwargs["webui_tail"] == tail_payload
 
 
-def test_pipeline_retries_once_after_executor_local_webui_recovery():
+def test_dispatched_500_with_connection_label_is_never_replayed():
     diag_context = {
         "request_summary": {
             "endpoint": "/sdapi/v1/txt2img",
@@ -122,10 +122,10 @@ def test_pipeline_retries_once_after_executor_local_webui_recovery():
         patch.object(pipeline, "_ensure_webui_true_ready", return_value=None),
         patch.object(pipeline, "_check_webui_health_before_stage", return_value=None),
         patch("src.pipeline.executor.get_global_webui_process_manager", return_value=manager_stub),
+        patch("src.pipeline.executor._capture_webui_tail", return_value=None),
     ):
-        result = pipeline._generate_images("txt2img", {})
+        with pytest.raises(PipelineStageError):
+            pipeline._generate_images("txt2img", {})
 
-    assert result is not None
-    assert result["images"] == ["img"]
-    assert client.calls == 2
-    manager_stub.restart_webui.assert_called_once()
+    assert client.calls == 1
+    manager_stub.restart_webui.assert_not_called()

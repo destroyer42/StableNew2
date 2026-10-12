@@ -55,7 +55,7 @@ def _extract_stage_checkpoints(canonical_result: dict[str, Any]) -> list[StageCh
     for event in stage_events:
         if not isinstance(event, dict):
             continue
-        if str(event.get("event") or "").lower() != "exit":
+        if str(event.get("phase") or event.get("event") or "").lower() != "exit":
             continue
         stage_name = str(event.get("stage") or "").strip()
         if stage_name and stage_name not in exit_stages:
@@ -179,6 +179,8 @@ class SingleNodeJobRunner:
     def _restore_if_undispatched(self, job: Job, decision: Any | None) -> bool:
         """Restore a job to QUEUED only on positive evidence that nothing was dispatched."""
         if decision is None or not getattr(decision, "requeue", False):
+            return False
+        if job.execution_metadata.stage_checkpoints:
             return False
         restored = self.job_queue.return_undispatched_to_queue(job.job_id, reason="webui_outage")
         if restored is None:

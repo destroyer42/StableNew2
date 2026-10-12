@@ -1494,6 +1494,8 @@ class SDWebUIClient:
         codeformer_visibility: float = 0.0,
         codeformer_weight: float = 0.5,
         timeout: float | None = None,
+        *,
+        raise_on_error: bool = False,
     ) -> dict[str, Any] | None:
         """
         Upscale image using extra upscalers with optional face restoration.
@@ -1555,6 +1557,8 @@ class SDWebUIClient:
                     _log_stage_failure("upscale", exc)
                     return None
         except Exception as exc:
+            if raise_on_error:
+                raise
             _log_stage_failure("upscale", exc)
             return None
 

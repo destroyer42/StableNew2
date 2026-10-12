@@ -101,6 +101,9 @@ class BlockingConnectionController:
     def reconnect(self) -> WebUIConnectionState:
         return self._blocking("reconnect")
 
+    def refresh_health(self) -> WebUIConnectionState:
+        return self._blocking("refresh_health")
+
     def get_state(self) -> WebUIConnectionState:
         return self._state
 
@@ -229,19 +232,18 @@ def test_connection_exception_projects_error_and_clears_the_guard(open_tab) -> N
     assert window.webui_panel.states[-1] is WebUIConnectionState.READY
 
 
-def test_periodic_autoreconnect_runs_off_tk_and_is_single_flight(open_tab) -> None:
+def test_periodic_read_only_health_runs_off_tk_and_is_single_flight(open_tab) -> None:
     controller = BlockingConnectionController()
     window = _wire(controller)
     tk_thread = threading.get_ident()
 
-    # _wire already ran the initial status check (1 DISCONNECTED observation). Two more
-    # periodic ticks reach the 3-disconnect autoreconnect threshold.
+    # Periodic health observation replaces the automatic reconnect/restart counter.
     periodic = window.scheduled_after[-1]
     periodic()
     periodic()
 
     assert controller.started.wait(WAIT_S)
-    assert controller.calls[0][0] == "ensure_connected"
+    assert controller.calls[0][0] == "refresh_health"
     assert controller.calls[0][1] != tk_thread
 
     # While the attempt is in flight the controller reports CONNECTING; ticks must not pile up.

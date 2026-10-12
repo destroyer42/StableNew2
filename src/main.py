@@ -473,12 +473,15 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                 if callable(bind_readiness):
                     bind_readiness(connection_controller)
                 last_logged_state = None
-                consecutive_failures = 0
                 error_logged = False
                 refreshed_epoch = -1
                 # Single-flight guard. Only ever read or written on the Tk thread (operations start
                 # from Tk callbacks and finish through Tk-thread delivery), so no lock is needed.
                 connection_op_in_flight = False
+                outage = getattr(getattr(controller, "job_service", None), "webui_outage", None)
+                set_outage = getattr(connection_controller, "set_outage_provider", None)
+                if outage is not None and callable(set_outage):
+                    set_outage(outage.snapshot)
 
                 def start_connection_op(op_name: str, work, on_result, on_error, on_started=None) -> bool:
                     """Start one bounded WebUI connection operation off Tk, unless one is running."""
@@ -536,46 +539,12 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
 
                 def update_status(log_changes: bool = True) -> None:
                     """Update the status panel with current connection state."""
-                    nonlocal last_logged_state, consecutive_failures, error_logged, refreshed_epoch
+                    nonlocal last_logged_state, error_logged, refreshed_epoch
                     try:
                         state = connection_controller.get_state()
                         if state != last_logged_state and log_changes:
                             logging.debug(f"WebUI status update: state = {state}")
                             last_logged_state = state
-
-                        if state == WebUIConnectionState.DISCONNECTED:
-                            consecutive_failures += 1
-                        else:
-                            consecutive_failures = 0
-                            error_logged = False
-
-                        if consecutive_failures >= 3 and not connection_op_in_flight:
-
-                            def _autoreconnect_done(_new_state) -> None:
-                                nonlocal last_logged_state
-                                last_logged_state = None  # force log on change
-                                update_status()
-
-                            def _autoreconnect_failed(exc: Exception) -> None:
-                                nonlocal consecutive_failures, error_logged
-                                if not error_logged:
-                                    logging.warning(
-                                        "WebUI autostart retry failed after 3 disconnects: %s", exc
-                                    )
-                                    error_logged = True
-                                consecutive_failures = 0
-                                sync_state(WebUIConnectionState.ERROR)
-
-                            try:
-                                start_connection_op(
-                                    "autoreconnect",
-                                    lambda: connection_controller.ensure_connected(autostart=True),
-                                    _autoreconnect_done,
-                                    _autoreconnect_failed,
-                                )
-                            except Exception as exc:
-                                _autoreconnect_failed(exc)
-                                state = WebUIConnectionState.ERROR
 
                         sync_state(state)
                         last_logged_state = state
@@ -596,7 +565,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                     logging.info("Launch WebUI button clicked")
 
                     def _launched(new_state) -> None:
-                        nonlocal consecutive_failures, error_logged, last_logged_state
+                        nonlocal error_logged, last_logged_state
                         sync_state(new_state)
                         if new_state == WebUIConnectionState.READY:
                             try:
@@ -605,7 +574,6 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                                 webbrowser.open_new_tab(base_url)
                             except Exception as exc:
                                 logging.warning("Failed to open WebUI browser tab: %s", exc)
-                        consecutive_failures = 0
                         error_logged = False
                         last_logged_state = None
 
@@ -628,9 +596,8 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                     logging.info("Retry WebUI connection button clicked")
 
                     def _retried(new_state) -> None:
-                        nonlocal consecutive_failures, error_logged, last_logged_state
+                        nonlocal error_logged, last_logged_state
                         sync_state(new_state)
-                        consecutive_failures = 0
                         error_logged = False
                         last_logged_state = None
 
@@ -658,6 +625,14 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                 # Set up periodic status checking
                 def periodic_check() -> None:
                     update_status(log_changes=True)
+                    refresh = getattr(connection_controller, "refresh_health", None)
+                    if callable(refresh) and not connection_op_in_flight:
+                        start_connection_op(
+                            "health",
+                            refresh,
+                            lambda _state: update_status(),
+                            lambda _error: sync_state(WebUIConnectionState.ERROR),
+                        )
                     window.after(5000, periodic_check)  # Check every 5 seconds
 
                 window.after(1000, periodic_check)  # Start checking after 1 second

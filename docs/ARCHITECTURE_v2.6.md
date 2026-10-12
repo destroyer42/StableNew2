@@ -288,6 +288,16 @@ process heuristics are also not ownership proof. The same rule applies to
 secondary managed runtimes such as ComfyUI: only the manager that launched the
 current process/session may terminate it or its proven descendants.
 
+The existing WebUI outage coordinator confirms typed endpoint-loss evidence with a fresh configured-endpoint
+probe and holds WebUI-dependent queue claims. Retained current-launch ownership permits recovery after an
+owned child exits; process liveness is never a substitute for ownership. One incident shares one bounded
+recovery budget, including executor recovery already attempted. Release requires fresh readiness and matching
+runtime identity. An unknown dispatched outcome is terminal/action-required; a whole job can return to QUEUED
+only when no earlier output or stage checkpoint proves execution (both current `phase="exit"` and historical
+`event="exit"` records count). GUI health observation runs off Tk and projects this same coordinator, without
+an independent automatic restart watchdog. See
+`docs/Subsystems/Runtime/PR-QUEUE-WEBUI-172_Dead_Forge_Endpoint_Cascade_Repair.md`.
+
 ### 7.1 Current v2.6 implementation
 
 The first accepted production still-image path is A1111/WebUI-centric (managed Forge is the new-work default since

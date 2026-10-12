@@ -58,13 +58,14 @@ class WebUIConnectionController:
         self._flight = threading.Lock()
         self._flight_owner: int | None = None
         # Makes "publish ERROR unless READY" atomic against a manager thread publishing READY.
-        self._state_lock = threading.Lock()
+        self._state_lock = threading.RLock()
         self._health_session = requests.Session()
         self._last_strict_check_ts: float | None = None
         self._last_strict_status = False
         self._last_strict_reason: str | None = None
         self._strict_cache_ttl = STRICT_READY_CACHE_TTL
         self._last_connection_timing: dict[str, object] | None = None
+        self._outage_provider: Callable[[], dict] | None = None
 
     def _record_connection_timing(
         self,
@@ -113,7 +114,42 @@ class WebUIConnectionController:
         return None
 
     def get_state(self) -> WebUIConnectionState:
+        # Read-only projections and process.poll(), never network work on Tk.
+        if self._owned_process_exited():
+            self._set_state(WebUIConnectionState.ERROR)
+            self._last_strict_check_ts = None
+            self._last_strict_status = False
+            self._last_strict_reason = "owned process exited"
+        if self._outage_provider is not None:
+            outage = self._outage_provider()
+            if outage.get("status") == "recovering":
+                return WebUIConnectionState.CONNECTING
+            if outage.get("status") not in (None, "healthy"):
+                return WebUIConnectionState.ERROR
         return self._state
+
+    def set_outage_provider(self, provider: Callable[[], dict]) -> None:
+        self._outage_provider = provider
+
+    def _owned_process_exited(self) -> bool:
+        manager = self._process_manager
+        return bool(manager is not None and getattr(manager, "owns_process", False) and not manager.is_running())
+
+    def refresh_health(self) -> WebUIConnectionState:
+        """Fresh read-only probe, called off Tk; never starts or recovers a process."""
+        epoch = self._ready_epoch
+        endpoint = self.get_base_url()
+        ready, reason = self._evaluate_strict_readiness()
+        with self._state_lock:
+            if epoch != self._ready_epoch or endpoint != self.get_base_url():
+                return self.get_state()  # a newer launch/readiness proof owns the verdict
+            self._last_strict_status = ready
+            self._last_strict_reason = reason
+            self._last_strict_check_ts = time.monotonic()
+            # A periodic probe cannot overwrite an explicit Launch/Retry in progress.
+            if self._state is not WebUIConnectionState.CONNECTING:
+                self._state = WebUIConnectionState.READY if ready else WebUIConnectionState.ERROR
+        return self.get_state()
 
     def _set_state(self, state: WebUIConnectionState) -> None:
         with self._state_lock:
@@ -143,11 +179,12 @@ class WebUIConnectionController:
 
         self._process_pid = event.pid
         self._last_strict_check_ts = None
-        self._set_state(WebUIConnectionState.READY)
         self._notify_ready()
 
     def _notify_ready(self) -> None:
-        self._ready_epoch += 1
+        with self._state_lock:
+            self._state = WebUIConnectionState.READY
+            self._ready_epoch += 1
         callbacks = list(self._ready_callbacks)
         for callback in callbacks:
             try:
@@ -263,7 +300,6 @@ class WebUIConnectionController:
         self._set_state(WebUIConnectionState.CONNECTING)
         try:
             if wait_for_webui_ready(base_url, timeout=initial_timeout, poll_interval=retry_interval):
-                self._set_state(WebUIConnectionState.READY)
                 self._logger.debug("WebUI models/options are ready at %s", base_url)
                 self._notify_ready()
                 fast_probe_elapsed_ms = (time.monotonic() - fast_probe_started_at) * 1000.0
@@ -308,7 +344,6 @@ class WebUIConnectionController:
             )
             if self._ready_epoch == epoch_before_wait:
                 # The manager's listener did not announce it (for example an unattached test double).
-                self._set_state(WebUIConnectionState.READY)
                 self._notify_ready()
             self._logger.debug("WebUI models/options are ready at %s", base_url)
             record()
@@ -400,6 +435,8 @@ class WebUIConnectionController:
                 response.close()
 
     def _evaluate_strict_readiness(self) -> tuple[bool, str | None]:
+        if self._owned_process_exited():
+            return False, "owned process exited"
         if self._process_pid is not None and not self.is_process_alive():
             return False, "owned process not alive"
         host, port = self._extract_host_port()
@@ -416,6 +453,9 @@ class WebUIConnectionController:
     def is_webui_ready_strict(self) -> bool:
         """Return True only if process alive, port listening, and API probes succeed."""
 
+        if self._owned_process_exited():
+            self.get_state()
+            return False
         now = time.monotonic()
         if self._last_strict_check_ts and now - self._last_strict_check_ts < self._strict_cache_ttl:
             return self._last_strict_status
@@ -425,6 +465,7 @@ class WebUIConnectionController:
         self._last_strict_check_ts = now
         if not ready:
             self._logger.debug("Strict readiness check failed: %s", reason)
+            self._set_state(WebUIConnectionState.ERROR)
         return ready
 
     @property

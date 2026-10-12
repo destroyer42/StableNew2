@@ -64,7 +64,9 @@ def _isolate_global_profile():
     ("identity", "command", "working_dir"),
     [("a1111_webui", A1111_QUALIFIED, r"C:\Users\rob\stable-diffusion-webui"), ("forge_webui", FORGE_QUALIFIED, r"C:\forge\source")],
 )
-def test_an_unsupported_profile_never_changes_the_qualified_command_directory_env_or_identity(identity, command, working_dir):
+@pytest.mark.parametrize("global_profile", ["standard", "sdxl_guarded"])
+def test_an_unsupported_profile_never_changes_the_qualified_command_directory_env_or_identity(identity, command, working_dir, global_profile):
+    app_config.set_webui_launch_profile(global_profile)
     manager = WebUIProcessManager(_config(identity, command, working_dir))
     before = _snapshot(manager)
 
@@ -73,7 +75,7 @@ def test_an_unsupported_profile_never_changes_the_qualified_command_directory_en
 
     assert _snapshot(manager) == before  # byte-for-byte: command, working_dir, env, identity, profile
     assert manager._config.command == command and "webui-user.bat" not in manager._config.command
-    assert app_config.get_webui_launch_profile() != "sdxl_guarded"  # the process-global preference is untouched too
+    assert app_config.get_webui_launch_profile() == global_profile  # the process-global preference is untouched too
 
 
 @pytest.mark.parametrize("identity", ["a1111_webui", "forge_webui"])

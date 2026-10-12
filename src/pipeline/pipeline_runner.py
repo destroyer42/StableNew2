@@ -1251,20 +1251,6 @@ class PipelineRunner:
         telemetry_closed = False
         terminal_outcome: str | None = None
 
-        def _should_reraise_for_queue_retry(exc: Exception) -> bool:
-            diagnostics = getattr(exc, "diagnostics_context", None)
-            if not isinstance(diagnostics, dict):
-                return False
-            request_summary = diagnostics.get("request_summary") or {}
-            method = str(request_summary.get("method") or "").upper()
-            try:
-                status = int(request_summary.get("status"))
-            except (TypeError, ValueError):
-                status = None
-            if diagnostics.get("crash_suspected") or diagnostics.get("webui_unavailable"):
-                return True
-            return bool(status == 500 and method == "POST")
-
         def _emit_stage_checkpoint(
             stage_name: str,
             output_paths: list[str],
@@ -2035,6 +2021,11 @@ class PipelineRunner:
                 from src.api.webui_failure_evidence import METADATA_KEY, build_failure_evidence
 
                 metadata[METADATA_KEY] = build_failure_evidence(exc)
+                if metadata[METADATA_KEY].get("dispatch_certainty") == "unknown":
+                    metadata["action_required"] = True
+                metadata["completed_output_paths"] = list(current_stage_paths or []) if any(
+                    event.get("phase") == "exit" for event in stage_events
+                ) else []
             except Exception:
                 logger.debug("failure evidence unavailable", exc_info=True)
             stage_events.append(
@@ -2047,8 +2038,6 @@ class PipelineRunner:
                     "error_message": str(exc),
                 }
             )
-            if checkpoint_callback is not None and _should_reraise_for_queue_retry(exc):
-                raise
         finally:
             if survivor_telemetry is not None and not telemetry_closed:
                 survivor_telemetry.close(
@@ -2967,6 +2956,12 @@ def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[
     if isinstance(value, Mapping):
         try:
             mapping = dict(value)
+            if mapping.get("output_paths") or mapping.get("stage_outputs") or mapping.get("stage_checkpoints"):
+                # Do not erase partial-work proof while normalizing a failed adapter result.
+                metadata = dict(mapping.get("metadata") or {})
+                metadata["completed_output_paths"] = list(mapping.get("output_paths") or ())
+                metadata["completed_work"] = True
+                mapping["metadata"] = metadata
             if "success" not in mapping:
                 return {
                     "run_id": str(mapping.get("run_id") or default_run_id or ""),
