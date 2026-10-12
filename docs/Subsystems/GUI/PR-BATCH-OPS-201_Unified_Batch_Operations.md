@@ -162,6 +162,12 @@ Files: `tests/queue/test_batch_membership_201.py` (M), `test_batch_catalog_201.p
 | 35 | PR-171/172 unaffected | `tests/queue/test_webui_outage_containment_171.py`, `test_dead_forge_cascade_172.py` unchanged and green |
 | 36 | No live process / GPU / user data | fake runner (`tests/helpers/batch_ops_201.py`), one real runner with a fake callable, temporary SQLite only |
 
+## 5a. Scale evidence
+
+Synthetic repository of 4,000 jobs (3,000 ordinary plus 40 batches of 25, half Review and half Video): one full
+`BatchOperationsService.refresh()` (paged scan, projection, live hold read) took about 240 ms, and 160 ms with a selected
+batch's retry-children and file-availability detail, on a loaded CI-class VM, entirely off the Tk thread.
+
 ## 6. Debt and limits
 
 - Membership is only as good as the frozen descriptors: batches created before PR-REVIEW/VID-BATCH-200 have none and
