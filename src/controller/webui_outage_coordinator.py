@@ -24,7 +24,7 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any
 
@@ -34,6 +34,7 @@ from src.api.webui_failure_evidence import (
     FailureCategory,
     assess_exception,
     assess_result,
+    completed_work,
 )
 from src.queue.backend_dependency import BackendDependency, classify_job
 from src.queue.job_queue import JobQueue
@@ -62,6 +63,7 @@ class ProbeResult:
     reason: str = ""
     endpoint: str = ""
     identity: str = ""
+    recovery_allowed: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,20 +97,20 @@ def default_webui_probe() -> ProbeResult:
         base_url = effective_webui_base_url()
         expected = resolve_configured_webui_runtime_identity(load_backend_settings())
     except Exception as exc:  # noqa: BLE001 - an unreadable configuration is "not proven ready"
-        return ProbeResult(False, f"configuration_unreadable:{type(exc).__name__}")
+        return ProbeResult(False, f"configuration_unreadable:{type(exc).__name__}", recovery_allowed=False)
     state = probe_webui_endpoint(base_url, timeout=1.5)
     if state != "healthy":
         return ProbeResult(False, f"endpoint_{state}", base_url)
     observed = probe_endpoint_runtime_identity(base_url, timeout=2.0)
     evidence = getattr(observed, "evidence", {}) or {}
     if evidence.get("options_readable") is not True:
-        return ProbeResult(False, "options_unreadable", base_url, str(observed.identity))
+        return ProbeResult(False, "options_unreadable", base_url, str(observed.identity), recovery_allowed=False)
     try:
         assert_runtime_matches_backend(expected, observed)
     except WebUIRuntimeIdentityMismatch:
-        return ProbeResult(False, "identity_mismatch", base_url, str(observed.identity))
+        return ProbeResult(False, "identity_mismatch", base_url, str(observed.identity), recovery_allowed=False)
     except ValueError:
-        return ProbeResult(False, "identity_unsupported", base_url, str(observed.identity))
+        return ProbeResult(False, "identity_unsupported", base_url, str(observed.identity), recovery_allowed=False)
     return ProbeResult(True, "ready", base_url, str(observed.identity))
 
 
@@ -142,6 +144,7 @@ class WebUIOutageCoordinator:
         self._health = WebUIHealth.HEALTHY
         self._incident_id: str | None = None
         self._first_failure: str | None = None
+        self._first_assessment: FailureAssessment | None = None
         self._first_job_id: str | None = None
         self._affected: set[str] = set()
         self._attempts = 0
@@ -194,6 +197,12 @@ class WebUIOutageCoordinator:
             assessment = assess_exception(exc, job_runs_webui_stage=runs_webui)
         else:
             assessment = assess_result(result, job_runs_webui_stage=runs_webui)
+        if (
+            job.execution_metadata.stage_checkpoints
+            or completed_work(result or {})
+            or completed_work(getattr(job, "result", None) or {})
+        ):
+            assessment = replace(assessment, safe_to_requeue=False)
         if not runs_webui or not assessment.suspects_outage or self._fenced():
             return OutageDecision(assessment)
         probe = self._fresh_probe()
@@ -206,10 +215,14 @@ class WebUIOutageCoordinator:
             and getattr(job.execution_metadata, "return_to_queue_count", 0) < MAX_UNDISPATCHED_REQUEUES
         )
         attempted = int(self._recovery_attempted_by_executor(exc, result))
+        with self._lock:
+            self._attempts = max(self._attempts, attempted)
+            if not probe.recovery_allowed:
+                self._last_recovery = probe.reason
         return OutageDecision(
             assessment,
             requeue=requeue,
-            recover=attempted == 0,
+            recover=attempted == 0 and probe.recovery_allowed,
             outage_confirmed=True,
             incident_id=incident_id,
         )
@@ -246,6 +259,7 @@ class WebUIOutageCoordinator:
             if self._incident_id is None or self._health is WebUIHealth.HEALTHY:
                 self._incident_id = f"webui-{uuid.uuid4().hex[:8]}"
                 self._first_failure = assessment.category.value
+                self._first_assessment = assessment
                 self._first_job_id = job.job_id
                 self._attempts = 0
                 self._last_recovery = "none"
@@ -284,6 +298,7 @@ class WebUIOutageCoordinator:
             "runtime_identity": getattr(manager, "runtime_identity", None) if manager is not None else None,
             "owned": owned,
             "pid": pid if isinstance(pid, int) else None,
+            "process_running": self._process_running(manager),
             "probe_reason": probe.reason if probe else None,
             "queue": self._summary(),
             "recovery_attempts": self._attempts,
@@ -307,6 +322,13 @@ class WebUIOutageCoordinator:
             return None
 
     @staticmethod
+    def _process_running(manager: Any) -> bool | None:
+        try:
+            return bool(manager.is_running()) if manager is not None else None
+        except Exception:
+            return None
+
+    @staticmethod
     def _endpoint(manager: Any) -> str:
         try:
             return str(getattr(manager, "endpoint", "") or "")
@@ -323,11 +345,17 @@ class WebUIOutageCoordinator:
         if not self._recovery_lock.acquire(blocking=False):
             return  # another caller is already recovering this incident
         try:
+            with self._lock:
+                if decision.incident_id != self._incident_id or not self._queue.is_webui_held():
+                    return
             manager = self._safe_manager()
             self._listen_to(manager)
             owned = bool(manager is not None and getattr(manager, "owns_process", False))
             if not decision.recover or self._attempts >= self._budget:
-                self._set_unavailable(decision, "budget_exhausted" if decision.recover else "recovery_already_attempted")
+                why = "budget_exhausted" if decision.recover else (
+                    self._last_recovery if self._last_recovery != "none" else "recovery_already_attempted"
+                )
+                self._set_unavailable(decision, why)
                 return
             if not owned:
                 # An external WebUI is never restarted, stopped or adopted: observe and ask the operator.
@@ -351,7 +379,7 @@ class WebUIOutageCoordinator:
             )
             started = self._clock()
             try:
-                restarted = bool(manager.restart_webui(wait_ready=True, max_attempts=self._budget))
+                restarted = bool(manager.restart_webui(wait_ready=True, max_attempts=1))
             except Exception as exc:  # noqa: BLE001
                 logger.error("Owned WebUI recovery raised: %s", exc)
                 restarted = False
@@ -468,11 +496,16 @@ class WebUIOutageCoordinator:
                 "endpoint": (probe.endpoint if probe else "") or self._endpoint(manager),
                 "runtime_identity": getattr(manager, "runtime_identity", None) if manager is not None else None,
                 "owned_runtime": bool(getattr(manager, "owns_process", False)) if manager is not None else False,
+                "owned_pid": getattr(manager, "pid", None) if manager is not None and manager.owns_process else None,
+                "process_running": self._process_running(manager),
                 "held_webui_jobs": held,
                 "independent_jobs_eligible": int(summary["independent"]),
                 "recovery_attempts": self._attempts,
                 "last_recovery_result": self._last_recovery,
                 "first_failure_category": self._first_failure,
+                "first_failure_code": self._first_assessment.error_code if self._first_assessment else None,
+                "dispatch_certainty": self._first_assessment.certainty.value if self._first_assessment else None,
+                "identity_gap": self._first_assessment.identity_gap if self._first_assessment else None,
                 "incident_id": self._incident_id,
                 "held_jobs_remain_queued": True,
                 "last_probe_reason": probe.reason if probe else None,

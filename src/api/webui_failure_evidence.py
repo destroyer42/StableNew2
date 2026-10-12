@@ -53,6 +53,7 @@ class FailureAssessment:
     suspects_outage: bool = False
     #: Positive evidence that no part of the job executed, so restoring it to QUEUED is safe.
     safe_to_requeue: bool = False
+    identity_gap: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +64,7 @@ class FailureAssessment:
             "error_code": self.error_code,
             "suspects_outage": self.suspects_outage,
             "safe_to_requeue": self.safe_to_requeue,
+            "identity_gap": self.identity_gap,
         }
 
 
@@ -95,6 +97,12 @@ def build_failure_evidence(exc: BaseException) -> dict[str, Any]:
 
     error = getattr(exc, "error", None)
     code = getattr(error, "code", None)
+    from src.api.client import WebUIGenerationOutcomeUnknownError, WebUIUnavailableError
+
+    if isinstance(exc, WebUIGenerationOutcomeUnknownError):
+        code = GenerateErrorCode.OUTCOME_UNKNOWN
+    elif isinstance(exc, WebUIUnavailableError):
+        code = GenerateErrorCode.CONNECTION
     code_value = getattr(code, "value", code)
     details = _mapping(getattr(error, "details", None))
     diagnostics = _diagnostics_of(exc)
@@ -107,16 +115,20 @@ def build_failure_evidence(exc: BaseException) -> dict[str, Any]:
     stage = str(
         getattr(error, "stage", None) or summary.get("stage") or getattr(exc, "stage", None) or ""
     ).strip() or None
-    may_have_executed = details.get("request_may_have_executed")
+    may_have_executed = details.get("request_may_have_executed", getattr(exc, "request_may_have_executed", None))
     from src.utils.error_envelope_v2 import get_attached_envelope
 
     envelope = get_attached_envelope(exc)
     context = _mapping(envelope.context) if envelope is not None else {}
     try:
-        recovery_attempts = int(context.get("recovery_attempt_count") or 0)
+        recovery_attempts = int(context.get("recovery_attempt_count") or details.get("recovery_attempt_count") or 0)
     except (TypeError, ValueError):
         recovery_attempts = 0
-    return {
+    from src.api.webui_identity_attestation import identity_gap
+    from src.api.webui_runtime_identity import WebUIRuntimeIdentityMismatch
+
+    identity_failure = isinstance(exc, WebUIRuntimeIdentityMismatch)
+    evidence = {
         "contract": EVIDENCE_CONTRACT,
         "error_code": str(code_value) if code_value else None,
         "stage": stage,
@@ -128,16 +140,32 @@ def build_failure_evidence(exc: BaseException) -> dict[str, Any]:
         "timeout": any(keyword in message for keyword in _TIMEOUT_KEYWORDS),
         "recovery_attempts": recovery_attempts,
         "exception_type": type(exc).__name__,
+        "identity_refused": identity_failure,
+        "expected_identity": exc.backend_id if identity_failure else None,
+        "observed_identity": exc.observed.identity if identity_failure else None,
+        "identity_gap": identity_gap(exc.observed) if identity_failure else None,
+        "recovery_classification": details.get("recovery_classification"),
+        "transport_exception_type": details.get("original_exception") or (
+            type(exc.original_exception).__name__ if getattr(exc, "original_exception", None) is not None else None
+        ),
+        "generation_endpoint": details.get("endpoint", getattr(exc, "endpoint", None)),
+        "attempt_count": details.get("attempt_count", getattr(exc, "attempt_count", None)),
     }
+    evidence["dispatch_certainty"] = assess_evidence(evidence).certainty.value
+    return evidence
 
 
-def _completed_work(result: Mapping[str, Any]) -> bool:
+def completed_work(result: Mapping[str, Any]) -> bool:
     """True when the result shows any stage already produced output (re-running would duplicate it)."""
 
-    if result.get("variants"):
+    if any(result.get(key) for key in ("variants", "output_paths", "stage_outputs", "stage_checkpoints")):
+        return True
+    metadata = _mapping(result.get("metadata"))
+    if metadata.get("completed_output_paths") or metadata.get("completed_work"):
         return True
     for event in result.get("stage_events") or ():
-        if str(_mapping(event).get("event") or "").lower() == "exit":
+        record = _mapping(event)
+        if str(record.get("phase") or record.get("event") or "").lower() == "exit":
             return True
     return False
 
@@ -174,11 +202,25 @@ def assess_evidence(
             error_code=code or None,
             suspects_outage=suspects,
             safe_to_requeue=requeue and not completed_work,
+            identity_gap=str(data.get("identity_gap") or "") or None,
         )
 
     if code == GenerateErrorCode.OUTCOME_UNKNOWN.value or data.get("request_may_have_executed") is True:
         # The POST may have run: never replayed, never silently returned to the queue.
         return done(FailureCategory.OUTCOME_UNKNOWN, DispatchCertainty.UNKNOWN, suspects=True)
+    if data.get("identity_refused"):
+        from src.api.webui_identity_attestation import SETTLE_GAPS
+
+        # Missing evidence may be an outage; positive contradictory identity is never a restart/fallback signal.
+        missing = data.get("observed_identity") == "unknown" and data.get("identity_gap") in SETTLE_GAPS
+        return done(
+            FailureCategory.READINESS_FAILURE if missing else FailureCategory.ORDINARY,
+            DispatchCertainty.NOT_DISPATCHED,
+            suspects=missing,
+            requeue=missing,
+        )
+    if data.get("recovery_classification") == "true_ready_timeout":
+        return done(FailureCategory.READINESS_FAILURE, DispatchCertainty.NOT_DISPATCHED, suspects=True, requeue=True)
     if status is not None and status >= 400:
         return done(FailureCategory.DISPATCHED_HTTP_ERROR, DispatchCertainty.DISPATCHED, suspects=status >= 500)
     if data.get("crash_suspected"):
@@ -207,11 +249,11 @@ def assess_result(result: Mapping[str, Any] | None, *, job_runs_webui_stage: boo
             FailureCategory.READINESS_FAILURE,
             DispatchCertainty.NOT_DISPATCHED,
             suspects_outage=True,
-            safe_to_requeue=job_runs_webui_stage,
+            safe_to_requeue=job_runs_webui_stage and not completed_work(data),
         )
     evidence = _mapping(metadata.get(METADATA_KEY)) or _mapping(data.get(METADATA_KEY))
     return assess_evidence(
-        evidence, job_runs_webui_stage=job_runs_webui_stage, completed_work=_completed_work(data)
+        evidence, job_runs_webui_stage=job_runs_webui_stage, completed_work=completed_work(data)
     )
 
 
@@ -229,4 +271,5 @@ __all__ = [
     "assess_exception",
     "assess_result",
     "build_failure_evidence",
+    "completed_work",
 ]

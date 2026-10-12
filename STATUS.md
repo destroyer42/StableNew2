@@ -1,8 +1,18 @@
 # StableNew current state
 
-Updated: 2026-10-11
+Updated: 2026-10-12
 
 ## Repository
+
+- Dead Forge endpoint cascade repair (PR-QUEUE-WEBUI-172, local deterministic validation): typed
+  generation failures survive executor stages and normalized results; unknown identity with endpoint-loss
+  evidence enters the existing fresh-probe/hold path. Recovery uses retained manager ownership even after
+  child exit, consumes one incident budget, and never replays an ambiguous POST. Earlier outputs and current
+  or persisted stage checkpoints prevent automatic requeue. Runtime status observes fresh health off Tk
+  and projects the existing outage hold; the GUI disconnect counter no longer restarts WebUI. Synthetic
+  failed recovery leaves one interrupted job FAILED and 24 WebUI jobs queued/held, with independent video
+  eligible. User queue/history and runtime configuration are untouched; no physical validation. See
+  `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-172_Dead_Forge_Endpoint_Cascade_Repair.md`.
 
 - WebUI outage containment and safe recovery (PR-QUEUE-WEBUI-171, locally validated): a confirmed WebUI outage now
   holds only WebUI-dependent work in the existing queue (in-memory, not a status or the user's pause), while native

@@ -22,6 +22,14 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/app_controller_services/runtime_projection_coordinator.py` /
   `src/gui/app_state_projection_sink.py` (versioned async publication) ->
   `tests/gui_v2/test_preview_draft_recovery_112.py`.
+- Dead Forge endpoint cascade repair (PR-QUEUE-WEBUI-172):
+  `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-172_Dead_Forge_Endpoint_Cascade_Repair.md` ->
+  `src/pipeline/executor.py` / `src/api/client.py` (typed stage/extra-single-image errors, no ambiguous replay) ->
+  `src/api/webui_failure_evidence.py` (identity gap, dispatch certainty, completed work) ->
+  `src/pipeline/pipeline_runner.py` / `src/queue/single_node_runner.py` (normalized proof, phase/event checkpoints) ->
+  `src/controller/webui_outage_coordinator.py` (owned recovery, one incident budget) ->
+  `src/controller/webui_connection_controller.py` / `src/main.py` (fresh off-Tk health, outage projection) ->
+  `tests/queue/test_dead_forge_cascade_172.py` (offline canonical path and temporary SQLite cascade).
 - WebUI outage containment (PR-QUEUE-WEBUI-171):
   `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-171_Backend_Scoped_Outage_Containment.md` ->
   `src/queue/backend_dependency.py` (pure classifier) -> `src/queue/job_queue.py` (atomic eligibility-aware

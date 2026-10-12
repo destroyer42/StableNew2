@@ -20,14 +20,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from PIL import Image
+from requests import HTTPError
 
 from src.api.client import (
     PROGRESS_STALL_THRESHOLD_SEC,
     STALL_INTERRUPT_THRESHOLD_SEC,
+    WebUIGenerationOutcomeUnknownError,
     WebUIPayloadValidationError,
+    WebUIUnavailableError,
 )
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
+from src.api.webui_runtime_identity import WebUIRuntimeIdentityMismatch
 from src.config import app_config
 from src.pipeline.adetailer_contract import schema_issues
 from src.pipeline.adetailer_effectiveness import build_effectiveness, response_infotexts
@@ -1955,6 +1959,12 @@ class Pipeline:
         diagnostics: dict[str, Any] | None = None,
         reason_hint: str | None = None,
     ) -> tuple[bool, str | None]:
+        if error is not None:
+            from src.api.webui_failure_evidence import DispatchCertainty, assess_exception
+
+            certainty = assess_exception(PipelineStageError(error)).certainty
+            if certainty in {DispatchCertainty.DISPATCHED, DispatchCertainty.UNKNOWN}:
+                return False, "generation_dispatch_not_replayable"
         classification = self._classify_recovery_failure(
             stage=stage,
             error=error,
@@ -1976,7 +1986,7 @@ class Pipeline:
         *,
         stage: str,
         reason: str,
-        max_attempts: int = 2,
+        max_attempts: int = 1,
         base_delay: float = 1.0,
         max_delay: float = 4.0,
         profile_override: str | None = None,
@@ -2339,44 +2349,25 @@ class Pipeline:
             diag_details = (error.details or {}).get("diagnostics")
             runtime_recovery_attempted = False
             runtime_recovery_succeeded = False
-            outcome_unknown = error.code == GenerateErrorCode.OUTCOME_UNKNOWN
+            outcome_unknown = (
+                error.code == GenerateErrorCode.OUTCOME_UNKNOWN
+                or (error.details or {}).get("request_may_have_executed") is True
+            )
             if outcome_unknown:
-                # Do not replay an ambiguous generation request. Reset the existing
-                # admission gate and use process-manager recovery before a later job.
+                # Publish the ambiguity before the queue coordinator decides recovery.
+                # A prior in-flight stall escalation counts against that incident's budget.
                 self._true_ready_gated = False
                 managed_stall_escalation = self._active_managed_stall_escalation
                 recovery_already_in_progress = bool(
                     managed_stall_escalation and managed_stall_escalation.is_set()
                 )
-                recovered = False
                 runtime_recovery_attempted = recovery_already_in_progress
-                if not recovery_already_in_progress:
-                    manager = get_global_webui_process_manager()
-                    manager_owns_running_process = bool(
-                        manager is not None
-                        and getattr(manager, "owns_process", False)
-                        and manager.is_running()
-                    )
-                    if manager_owns_running_process:
-                        runtime_recovery_attempted = True
-                        recovered = self._attempt_webui_recovery(
-                            stage=stage,
-                            reason="generation_outcome_unknown",
-                        )
-                    else:
-                        logger.warning(
-                            "Generation outcome is unknown for external/unmanaged WebUI; "
-                            "process recovery is unavailable and no second WebUI will be started"
-                        )
-                runtime_recovery_succeeded = recovered
                 should_recover = False
                 recovery_reason = "generation_outcome_unknown"
                 logger.warning(
-                    "Generation outcome is unknown for stage=%s; runtime recovery=%s; "
-                    "recovery_already_in_progress=%s; "
+                    "Generation outcome is unknown for stage=%s; recovery_already_in_progress=%s; "
                     "the POST will not be replayed",
                     stage,
-                    recovered,
                     recovery_already_in_progress,
                 )
             else:
@@ -5438,6 +5429,8 @@ class Pipeline:
         except CancellationError:
             self._record_stage_event("txt2img", "cancelled", 1, 1, True)
             raise
+        except (PipelineStageError, WebUIRuntimeIdentityMismatch):
+            raise
         except Exception as e:
             logger.error(f"txt2img stage failed: {str(e)}")
             return None
@@ -5734,6 +5727,8 @@ class Pipeline:
         except CancellationError:
             self._record_stage_event("img2img", "cancelled", 1, 1, True)
             raise
+        except (PipelineStageError, WebUIRuntimeIdentityMismatch):
+            raise
         except Exception as e:
             logger.error(f"img2img stage failed: {e}")
             return None
@@ -6000,6 +5995,8 @@ class Pipeline:
             return metadata
         except CancellationError:
             self._record_stage_event("animatediff", "cancelled", 1, 1, True)
+            raise
+        except (PipelineStageError, WebUIRuntimeIdentityMismatch):
             raise
         except Exception as exc:
             logger.error("animatediff stage failed: %s", exc)
@@ -6466,6 +6463,7 @@ class Pipeline:
                     codeformer_visibility=codeformer_vis,
                     codeformer_weight=codeformer_weight,
                     timeout=300.0,
+                    raise_on_error=True,
                 )
                 stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
                 response_key = "image"
@@ -6668,6 +6666,8 @@ class Pipeline:
         except CancellationError:
             self._record_stage_event("upscale", "cancelled", 1, 1, True)
             raise
+        except (PipelineStageError, WebUIRuntimeIdentityMismatch, WebUIGenerationOutcomeUnknownError, WebUIUnavailableError, HTTPError):
+            raise
         except Exception as e:
             import traceback
 
@@ -6738,6 +6738,8 @@ class Pipeline:
             return result
         except CancellationError:
             self._record_stage_event("adetailer", "cancelled", 1, 1, True)
+            raise
+        except (PipelineStageError, WebUIRuntimeIdentityMismatch):
             raise
         except Exception as e:
             logger.error(f"adetailer stage failed: {e}")
