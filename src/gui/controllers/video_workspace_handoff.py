@@ -63,6 +63,28 @@ def route_images_to_video_workflow(
     return paths
 
 
+def route_images_to_review(
+    *,
+    main_window: Any,
+    image_paths: list[str | Path],
+    status_message: str | None = None,
+) -> list[str]:
+    """Hand an ORDERED list of existing images to Review's selection (intent only; nothing is queued)."""
+
+    paths = [str(path) for path in image_paths if str(path).strip()]
+    if not paths:
+        raise ValueError("No images were provided for the Review handoff")
+    review_tab = getattr(main_window, "review_tab", None)
+    if review_tab is None:
+        raise RuntimeError("Review tab is not available")
+    loader = getattr(review_tab, "load_selected_images", None)
+    if not callable(loader):
+        raise RuntimeError("Review tab does not support image handoff")
+    _select_tab(main_window, review_tab)
+    loader(paths, status_message=status_message)
+    return paths
+
+
 def route_bundle_to_video_workflow(
     *,
     main_window: Any,
@@ -118,5 +140,6 @@ __all__ = [
     "route_bundle_to_video_workflow",
     "route_image_to_movie_clips",
     "route_image_to_video_workflow",
+    "route_images_to_review",
     "route_images_to_video_workflow",
 ]

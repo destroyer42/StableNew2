@@ -420,3 +420,15 @@ def test_absent_evidence_gives_actionable_messages_instead_of_silent_success(sta
     resolution = stack.operations.resolve_outputs(REVIEW, ["x-0", "ghost"])
     assert not resolution.images and not resolution.videos
     assert resolution.jobs_without_outputs == ("x-0", "ghost") and resolution.messages
+
+
+def test_an_image_jobs_thumbnail_is_not_offered_to_review_but_a_video_jobs_is(stack, tmp_path):
+    image = image_file(tmp_path / "img" / "full.png", 1)
+    small = image_file(tmp_path / "img" / "full_thumb.png", 2)
+    admit(stack, [review_njr("t-0", "rev", source_count=1)])
+    stack.queue.claim_next_job()
+    stack.queue.mark_completed("t-0", {"success": True, "variants": [], "artifact": {
+        "schema": "stablenew.artifact.v2.6", "stage": "img2img", "artifact_type": "image",
+        "primary_path": str(image), "output_paths": [str(image)], "thumbnail_path": str(small)}})
+    resolution = stack.operations.resolve_outputs(REVIEW, ["t-0"])
+    assert resolution.images == (str(image),)  # the thumbnail of an image job is not a second output

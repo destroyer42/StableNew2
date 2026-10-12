@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Sequence
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
@@ -862,6 +863,26 @@ class ReviewTabFrame(ttk.Frame):
         self._set_text(self.prompt_text, self._prompt_mode_edits.get(prompt_mode, ""))
         self._set_text(self.negative_text, self._negative_mode_edits.get(negative_mode, ""))
         self._refresh_prompt_diff()
+
+    def load_selected_images(
+        self, image_paths: Sequence[str | Path], *, status_message: str | None = None
+    ) -> int:
+        """Select existing images in Review, in the given order (the Select Images picker's behavior).
+
+        Used by explicit "Open in Review" hand-offs (for example from Queue/History batches). It only changes
+        the selection, exactly as the Select Images picker does (the first image is shown with its own baseline
+        prompt); stage toggles are untouched, and a previous staged-curation hand-off's source metadata is
+        dropped so it cannot attach to unrelated images. Nothing is queued.
+        """
+
+        paths = [Path(path) for path in image_paths]
+        if not paths:
+            raise ValueError("No images were provided for Review")
+        self._active_handoff = None
+        self._set_selected_images(paths)
+        if status_message:
+            self.workflow_hint_label.config(text=status_message)
+        return len(self.selected_images)
 
     def _set_selected_images(self, paths: list[Path]) -> None:
         deduped: list[Path] = []

@@ -196,14 +196,12 @@ def resolve_batch_membership(metadata: Mapping[str, Any] | None) -> MembershipRe
     review = data.get(REVIEW_DESCRIPTOR_KEY)
     versioned = data.get(VERSIONED_DESCRIPTOR_KEY)
     top_level = _text(data.get(TOP_LEVEL_BATCH_ID_KEY))
-    has_review = isinstance(review, Mapping)
-    has_versioned = isinstance(versioned, Mapping)
-    if has_review and has_versioned:
+    if isinstance(review, Mapping) and isinstance(versioned, Mapping):
         # Two different descriptors on one record: never guess which one is the real identity.
         return MembershipResolution(MembershipState.AMBIGUOUS, reasons=("multiple_batch_descriptors",))
-    if has_review:
+    if isinstance(review, Mapping):
         return _resolve_review(review, top_level)
-    if has_versioned:
+    if isinstance(versioned, Mapping):
         return _resolve_versioned(versioned, top_level)
     return MembershipResolution(MembershipState.UNGROUPED, reasons=("no_batch_descriptor",))
 

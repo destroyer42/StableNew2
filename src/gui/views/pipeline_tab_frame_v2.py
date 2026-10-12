@@ -8,6 +8,7 @@ from typing import Any
 
 from src.controller.runtime_state import PipelineState
 from src.gui import design_system_v2 as design_system
+from src.gui.batch_operations_panel_v2 import BatchOperationsPanelV2, build_batch_operations_service
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
 from src.gui.layout_v2 import (
@@ -35,6 +36,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     should_refit_compact,
 )
 from src.gui.views.stage_cards_panel import StageCardsPanel
+from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.zone_map_v2 import get_pipeline_stage_order
@@ -212,6 +214,21 @@ class PipelineTabFrame(ttk.Frame):
         )
         self.history_panel.grid(row=0, column=0, sticky="nsew")
         self._bind_hot_surface_map_events()
+
+        # PR-BATCH-OPS-201: unified Review / Video Workflow batch operations, a collapsed disclosure that reads
+        # the repository only while open. It adds no controller or queue authority of its own.
+        batches_card = _create_card(self.right_scroll.inner)
+        batches_card.grid(row=4, column=0, sticky="ew", padx=(0, 12), pady=(8, 0))
+        batches_card.columnconfigure(0, weight=1)
+        self.batches_section = DisclosureSection(batches_card, title="Batches", expanded=False)
+        self.batches_section.grid(row=0, column=0, sticky="ew")
+        self.batches_panel = BatchOperationsPanelV2(
+            self.batches_section.body,
+            service=build_batch_operations_service(queue_controller),
+            main_window_provider=lambda: getattr(queue_controller, "main_window", None),
+        )
+        self.batches_panel.grid(row=0, column=0, sticky="nsew")
+        self.batches_section.body.columnconfigure(0, weight=1)
 
         self.right_scroll.inner.rowconfigure(4, weight=0)
 
@@ -822,6 +839,10 @@ class PipelineTabFrame(ttk.Frame):
                         logger.warning("Preview projection refresh failed: %s", exc)
                 else:
                     deferred.add("preview")
+
+        if dirty & {"queue", "history"} and hasattr(self, "batches_panel"):
+            # Debounced, and only while the Batches view is open and on screen.
+            self.batches_panel.request_refresh_if_visible()
 
         if deferred:
             self._hot_surface_dirty.update(deferred)

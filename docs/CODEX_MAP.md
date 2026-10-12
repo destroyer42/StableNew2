@@ -22,6 +22,18 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/app_controller_services/runtime_projection_coordinator.py` /
   `src/gui/app_state_projection_sink.py` (versioned async publication) ->
   `tests/gui_v2/test_preview_draft_recovery_112.py`.
+- Unified batch operations and outcome triage (PR-BATCH-OPS-201):
+  `docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md` ->
+  `src/queue/batch_membership.py` (pure composite `(kind, batch_id)` identity; `replay_origin`; `selected_retry` descriptor) ->
+  `src/queue/batch_projection.py` / `failure_triage.py` (derived counts, aggregate state, typed-evidence triage) ->
+  `src/queue/job_repository.py` (`list_batch_candidate_rows`, `list_replay_child_rows`, `transition_job(expected_status=)`) /
+  `src/queue/job_queue.py` (`cancel_if_queued`, `cancel_queued_jobs`) ->
+  `src/pipeline/replay_njr_compiler.py` (no inherited membership) / `replay_input_verification.py` ->
+  `src/controller/batch_operations_service.py` (refresh, Cancel Remaining, selected retry, output resolution) ->
+  `src/gui/view_contracts/batch_operations_contract.py` (toolkit-neutral session) ->
+  `src/gui/batch_operations_panel_v2.py` / `batch_retry_dialog.py` (Tk, mounted by `pipeline_tab_frame_v2.py`) ->
+  `src/gui/controllers/video_workspace_handoff.py::route_images_to_review` ->
+  `tests/queue/test_batch_*_201.py`, `tests/controller/test_batch_operations_service_201.py`, `tests/gui_v2/test_batch_operations_*_201.py`.
 - Dead Forge endpoint cascade repair (PR-QUEUE-WEBUI-172):
   `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-172_Dead_Forge_Endpoint_Cascade_Repair.md` ->
   `src/pipeline/executor.py` / `src/api/client.py` (typed stage/extra-single-image errors, no ambiguous replay) ->
@@ -257,6 +269,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Focused operator workspace: compact Operator Log, one-row guidance, responsive Review preview, SVD/Video primary actions, collapsible sections (PR-GUI-110) | `docs/Subsystems/GUI/PR-GUI-110_Focused_Operator_Workspace.md` -> `src/gui/view_contracts/workspace_density_contract.py` (pure sizing/disclosure rules) -> `src/gui/log_trace_panel_v2.py`, `src/gui/widgets/{tab_overview_panel,action_explainer_panel,thumbnail_widget,disclosure_section,responsive_wrap}_v2.py`, `src/gui/tooltip.py` (`install_full_value_tooltips`), `src/gui/preview_panel_v2.py` -> `review_tab_frame_v2.py`, `svd_tab_frame_v2.py`, `video_workflow_tab_frame_v2.py`; measure with `tools/qualification/gui110/measure_workspace.py` |
 | SVD geometry/presets | `src/gui/views/svd_tab_frame_v2.py` -> `src/video/svd_target.py` -> `src/video/svd_service.py` -> `src/video/svd_models.py` |
 | `PR-SVD-100` folder batch | `svd_preprocess.py` -> `svd_controller.py` -> `svd_submission_service.py` -> `app_controller.py` -> `svd_tab_frame_v2.py` -> `JobService.submit_njrs` |
+| `PR-BATCH-OPS-201` unified batch operations | `docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md` -> `src/queue/batch_membership.py` / `batch_projection.py` / `failure_triage.py` (pure, derived; nothing persisted) -> `JobRepository.list_batch_candidate_rows` + `JobQueue.cancel_queued_jobs` (guarded queued-only cancel) -> `compile_replay_intent` (archives membership as `replay_origin`; optional `selected_retry` batch) -> `BatchOperationsService` (one `JobService.submit_njrs` per retry) -> `BatchOperationsSession` / `BatchOperationsPanelV2` (off-Tk, collapsed under History) -> Review via `route_images_to_review` -> `tests/*/test_batch_*_201.py`, `tests/gui_v2/test_batch_operations_*_201.py` |
 | Queue/history recovery UX | `src/gui/panels_v2/queue_panel_v2.py` + `src/gui/job_history_panel_v2.py` -> `src/controller/job_history_service.py` / `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
 | Review whole-selection batch preflight (PR-REVIEW-BATCH-200) | `docs/Subsystems/GUI/PR-REVIEW-BATCH-200_Evidence_and_Preflight.md` -> `src/gui/views/review_tab_frame_v2.py` + `src/gui/review_batch_dialog.py` (explicit frozen-plan approval/exclusion) -> `src/controller/app_controller.py` + `review_batch_service.py` (background preflight/admission source-hash verification, stable optional model/profile order) -> existing `src/pipeline/reprocess_builder.py` + IMG-158 `operation_compatibility.assess_njr` -> `reprocess_admission.submit_reprocess_njrs` -> `JobService.submit_njrs` / SQLite; regressions `tests/gui_v2/test_review_batch_200.py` |
 | Queue Pause/Resume/Send Job control truth | `queue_panel_v2.py` buttons -> `AppController.on_pause_queue_v2` / `on_resume_queue_v2` / `on_queue_send_job_v2` (thin delegates; no direct `JobQueue` control) -> `PipelineController` -> `JobService.pause` / `resume` / `run_next_now` (`job_service_auto_run.retire_idle_runner_for_pause`: Pause never joins an active job) -> `JobQueue` (durable `queue_paused`, atomic claim refusal) -> `AppStateV2.is_queue_paused` / `auto_run_queue` -> `PipelineTabFrame` owns those subscriptions and marks the Queue surface dirty (`_on_queue_control_changed`); the managed `QueuePanelV2` does not subscribe itself; contracts: `tests/gui_v2/test_queue_pause_resume_journey_150.py`, `tests/controller/test_app_controller_queue_control_150.py`, `tests/controller/test_job_service_pause_active_job_150.py` |

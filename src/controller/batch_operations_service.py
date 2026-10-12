@@ -472,6 +472,8 @@ class BatchOperationsService:
                 without.append(job_id)
                 continue
             for ref in job.artifacts:
+                if ref.origin == "thumbnail" and job.workload_kind != "video":
+                    continue  # a thumbnail is a Review candidate only for a video job's explicit hand-off
                 path = Path(ref.path)
                 if not path.is_file():
                     unavailable.append((job_id, ref.path, "missing or moved"))

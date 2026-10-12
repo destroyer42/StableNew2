@@ -4,6 +4,22 @@ Updated: 2026-10-12
 
 ## Repository
 
+- Unified batch operations and outcome triage (PR-BATCH-OPS-201, locally validated; not pushed): a collapsed
+  "Batches" view under Queue/History lists existing Review and Video Workflow batches from the SQLite
+  repository (composite `(kind, batch_id)` identity read from frozen NJR provenance; no batch table, no persisted batch
+  status, no migration) with canonical-status counts, a derived aggregate state, job vs declared-source counts, the live
+  WebUI-hold annotation, per-job failure triage from typed evidence only (untyped history stays unclassified), partial
+  outputs of failed jobs, and retry lineage. Cancel Remaining acts through a guarded `JobQueue` operation that cancels a
+  member only while it is still QUEUED (in-memory under the claim lock and durably re-checked in the same transaction);
+  a member that started first is skipped, never cancelled. A replay no longer inherits active batch membership (the
+  parent's descriptors are archived under `replay_origin`; fixes ordinary History Replay too). Retry Selected Failed
+  previews every selected job, requires a specific acknowledgement for unknown-outcome failures, re-verifies frozen
+  inputs and repository truth at admission, compiles with `compile_replay_intent`, and admits once through
+  `JobService.submit_njrs`; two or more jobs form a new `selected_retry` batch. Outputs open through the existing
+  folder/Movie Clips seams and a new `route_images_to_review` (usable images only). No controller ceiling raised
+  (`app_controller.py`, `job_service.py`, `job_history_service.py` unchanged); no physical validation. See
+  `docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md`.
+
 - Dead Forge endpoint cascade repair (PR-QUEUE-WEBUI-172, local deterministic validation): typed
   generation failures survive executor stages and normalized results; unknown identity with endpoint-loss
   evidence enters the existing fresh-probe/hold path. Recovery uses retained manager ownership even after
