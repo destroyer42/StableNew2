@@ -4,8 +4,9 @@
 The service sits beside ``VideoWorkflowNjrBuilder`` and adds no scheduler, runner, queue, history or
 backend:
 
-1. ``assess`` is read-only.  It validates the form, decodes every source, resolves the catalog's
-   declared target size and reports the destination, without publishing anything.
+1. ``assess`` publishes nothing durable.  It validates the form, decodes every source, resolves
+   the catalog's declared target size and reports the destination; its one filesystem touch is a
+   writability probe that creates and immediately deletes an anonymous temp file.
 2. ``preview`` runs ``assess`` and, only when every source is accepted, freezes one batch through
    the builder's ``freeze_inputs`` / ``build_job`` (this is the step that may publish StableNew-owned
    prepared PNGs).  Nothing is queued.
@@ -140,37 +141,66 @@ def scan_folder(folder: str | Path, *, recursive: bool = True) -> SourceSelectio
     """Image files in a folder in a deterministic (case-insensitive relative path) order.
 
     Recursive by default, matching the Review tab's folder selection; the returned note states
-    which traversal was used so the operator is never left to guess."""
+    which traversal was used so the operator is never left to guess.
+
+    A scan that cannot finish is REFUSED, never returned as a short list: stopping at a size limit
+    or skipping a folder that could not be read would otherwise yield a batch that looks complete
+    but silently omits images (and which ones would depend on traversal order).  Linked folders
+    are followed with loop protection, so nothing reachable is skipped."""
 
     root = Path(folder).expanduser()
     if not root.is_dir():
         raise BatchRefused(f"Folder does not exist: {root}")
-    iterator = root.rglob("*") if recursive else root.iterdir()
+    unreadable: list[str] = []
+
+    def _remember(error: OSError) -> None:
+        unreadable.append(f"{getattr(error, 'filename', '') or root}: {error.strerror or error}")
+
     found: list[Path] = []
-    limited = False
+    seen_dirs: set[str] = set()
     visited = 0
-    for item in iterator:
-        visited += 1
-        try:
-            # Cheap suffix test first: a stat per non-image entry is what makes big trees slow.
-            if item.suffix.lower() in IMAGE_SUFFIXES and item.is_file():
-                found.append(item)
-        except OSError:
+    for dirpath, dirnames, filenames in os.walk(root, onerror=_remember, followlinks=True):
+        real = os.path.normcase(os.path.realpath(dirpath))
+        if real in seen_dirs:  # a linked-folder loop or repeat: already covered
+            dirnames[:] = []
             continue
-        if len(found) >= FOLDER_SCAN_LIMIT or visited >= FOLDER_VISIT_LIMIT:
-            limited = True
-            break
+        seen_dirs.add(real)
+        if not recursive:
+            dirnames[:] = []
+        visited += len(filenames) + len(dirnames)
+        for name in filenames:
+            # Cheap suffix test first: a stat per non-image entry is what makes big trees slow.
+            if os.path.splitext(name)[1].lower() in IMAGE_SUFFIXES:
+                candidate = Path(dirpath) / name
+                try:
+                    if candidate.is_file():
+                        found.append(candidate)
+                except OSError as exc:
+                    _remember(exc)
+        if len(found) >= FOLDER_SCAN_LIMIT:
+            raise BatchRefused(
+                f"The folder holds at least {FOLDER_SCAN_LIMIT} images; one batch accepts "
+                f"1 to {MAX_BATCH_SOURCES}. Choose a smaller folder or use Select Images."
+            )
+        if visited >= FOLDER_VISIT_LIMIT:
+            raise BatchRefused(
+                f"The folder scan stopped after {visited} entries without finishing, so the list "
+                "would be incomplete. Choose a smaller folder or use Select Images."
+            )
+    if unreadable:
+        raise BatchRefused(
+            f"{len(unreadable)} folder(s) could not be read (first: {unreadable[0]}), so the "
+            "list would be incomplete. Fix the access, turn off Include subfolders, or use "
+            "Select Images."
+        )
     found.sort(key=lambda p: (str(p.relative_to(root)).casefold(), str(p.relative_to(root))))
     scope = "including subfolders" if recursive else "top level only, no subfolders"
     selection = select_sources(found)
-    count_text = str(len(selection.sources))
-    if limited:
-        count_text = (
-            f"at least {len(selection.sources)} (the scan stopped early; choose a smaller folder)"
-        )
     return replace(
         selection,
-        note=f"Folder scan ({scope}): {count_text} image file(s) in {root.name or root}.",
+        note=(
+            f"Folder scan ({scope}): {len(selection.sources)} image file(s) in {root.name or root}."
+        ),
     )
 
 

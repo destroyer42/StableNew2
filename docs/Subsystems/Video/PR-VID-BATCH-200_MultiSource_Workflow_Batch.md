@@ -20,7 +20,7 @@ No new queue, scheduler, runner, history, compiler or backend. The canonical pat
 |---|---|
 | Single Image | Unchanged: editable Source Image, Browse, Use Latest Output, Queue Video Workflow. Choosing/browsing/handing off a single image returns the tab to single mode; while a batch preview, scan or queue step is still running the choice is refused with a status message instead of being half-applied. |
 | Selected Images | "Select Images..." multi-file picker. Order preserved; duplicate canonical paths (resolved, case-folded) removed and counted. |
-| Folder | "Select Folder..." with an explicit **Include subfolders** checkbox (default on, matching the Review tab's recursive folder import). Deterministic order: case-insensitive relative path. The status line states recursive or top-level-only. The walk runs on a worker (never on Tk), skips the file-stat for non-image names, and stops at 1000 matches or 20000 entries visited, saying so (more than 25 is refused anyway). |
+| Folder | "Select Folder..." with an explicit **Include subfolders** checkbox (default on, matching the Review tab's recursive folder import). Deterministic order: case-insensitive relative path. The status line states recursive or top-level-only. The walk runs on a worker (never on Tk) and skips the file-stat for non-image names. Linked folders are followed with loop protection. A scan that cannot finish - 1000 matches, 20000 entries visited, or a folder that cannot be read - is **refused**, never returned as a short list, so a batch can never look complete while silently omitting images. |
 | From Review | "Send Selected to Video Workflow" uses the Review Listbox's **highlighted rows** in list order: never every imported image and never only the previewed one. Nothing highlighted sends nothing. One image keeps the existing single-source handoff. Transfers intent only. |
 
 More than 25 sources are held whole and refused at Preview ("exclude at least N"); nothing is silently truncated.
@@ -31,7 +31,9 @@ never saved with the form.
 
 `VideoWorkflowBatchService` lives beside `VideoWorkflowNjrBuilder`; `VideoWorkflowController` only delegates.
 
-1. **Assessment (read-only; writes nothing).** Form validation through the existing builder (workflow/version,
+1. **Assessment (publishes nothing durable).** Its only filesystem touch is the writability probe
+   below, which creates and immediately deletes one anonymous temp file in the output root (or its nearest
+   existing ancestor when the root does not exist yet). Form validation through the existing builder (workflow/version,
    controls, experimental opt-in, anchors, driving video, depth input), then per source: existence, supported image
    type, full decode, EXIF-aware dimensions and orientation, the catalog-declared target size, content hash,
    prepared-image `create` vs `reuse`, duplicate-content warning. Destination: the output location is a folder that a

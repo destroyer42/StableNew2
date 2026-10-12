@@ -639,17 +639,69 @@ def test_unwritable_destination_probe_blocks(tmp_path, monkeypatch):
     assert not (tmp_path / "output" / "prepared_video_sources").exists()  # nothing published
 
 
-def test_folder_walk_is_bounded_by_entries_visited(tmp_path, monkeypatch):
+def test_a_folder_scan_that_cannot_finish_is_refused_not_returned_short(tmp_path, monkeypatch):
     import src.video.video_workflow_batch as batch_module
 
-    monkeypatch.setattr(batch_module, "FOLDER_VISIT_LIMIT", 10)
     root = tmp_path / "wide"
-    root.mkdir()
-    for index in range(40):
-        (root / f"note_{index:02d}.txt").write_text("x")
-    Image.new("RGB", (8, 8), "red").save(root / "z_last.png")
+    (root / "a_noise").mkdir(parents=True)
+    (root / "b_imgs").mkdir()
+    for index in range(30):
+        (root / "a_noise" / f"note_{index:02d}.txt").write_text("x")
+    for index in range(10):
+        Image.new("RGB", (8, 8), (index, 0, 0)).save(root / "b_imgs" / f"i{index}.png")
+
+    assert len(scan_folder(root).sources) == 10  # a finished scan keeps every image
+
+    monkeypatch.setattr(batch_module, "FOLDER_VISIT_LIMIT", 20)
+    with pytest.raises(BatchRefused, match="without finishing.*incomplete"):
+        scan_folder(root)  # previously: a quiet list of however many images came first
+
+    monkeypatch.setattr(batch_module, "FOLDER_VISIT_LIMIT", 20000)
+    monkeypatch.setattr(batch_module, "FOLDER_SCAN_LIMIT", 6)
+    with pytest.raises(BatchRefused, match="at least 6 images"):
+        scan_folder(root)
+
+
+def test_an_unreadable_subfolder_refuses_the_scan_instead_of_omitting_its_images(
+    tmp_path, monkeypatch
+):
+    import src.video.video_workflow_batch as batch_module
+
+    root = tmp_path / "lib"
+    (root / "locked").mkdir(parents=True)
+    Image.new("RGB", (8, 8), "red").save(root / "open.png")
+    Image.new("RGB", (8, 8), "blue").save(root / "locked" / "hidden.png")
+    real_walk = os.walk
+
+    def walk_with_denied_subfolder(top, onerror=None, followlinks=False):
+        for dirpath, dirnames, filenames in real_walk(
+            top, onerror=onerror, followlinks=followlinks
+        ):
+            if Path(dirpath).name == "locked":
+                if onerror is not None:
+                    onerror(PermissionError(13, "Access is denied", str(dirpath)))
+                continue
+            yield dirpath, dirnames, filenames
+
+    monkeypatch.setattr(batch_module.os, "walk", walk_with_denied_subfolder)
+    with pytest.raises(BatchRefused, match="could not be read.*incomplete"):
+        scan_folder(root)
+    # Top-level only never enters the subfolder, so it is complete and says it is top-level.
+    flat = scan_folder(root, recursive=False)
+    assert [Path(s.path).name for s in flat.sources] == ["open.png"]
+    assert "top level only" in flat.note
+
+
+def test_linked_folder_loops_are_followed_once_and_never_duplicate_sources(tmp_path):
+    root = tmp_path / "linked"
+    (root / "real").mkdir(parents=True)
+    Image.new("RGB", (8, 8), "red").save(root / "real" / "a.png")
+    try:
+        os.symlink(root, root / "real" / "loop", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is not permitted on this host")
     selection = scan_folder(root)
-    assert "scan stopped early" in selection.note  # said out loud, never silent
+    assert [Path(s.path).name for s in selection.sources] == ["a.png"]
 
 
 def test_anchor_and_depth_changes_are_refused_at_admission_not_only_by_the_builder(tmp_path):
