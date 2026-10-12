@@ -51,14 +51,6 @@ def prepare_declared_workflow_source(
 ) -> PreparedWorkflowSource:
     """Prepare a catalog-declared source using the bounded cover/crop policy."""
 
-    if str(policy.get("resize_policy") or "") != _COVER_CENTER_CROP:
-        raise ValueError("Workflow source preparation declares an unsupported resize policy.")
-    portrait_target = _dimensions(policy.get("portrait_target"), "portrait_target")
-    landscape_target = _dimensions(policy.get("landscape_target"), "landscape_target")
-    square_orientation = str(policy.get("square_orientation") or "portrait").strip().lower()
-    if square_orientation not in {"portrait", "landscape"}:
-        raise ValueError("Workflow source preparation square_orientation must be portrait or landscape.")
-
     source = Path(source_path).expanduser().resolve()
     if not source.is_file():
         raise ValueError(f"Video workflow source image does not exist: {source}")
@@ -71,10 +63,7 @@ def prepare_declared_workflow_source(
     if width <= 0 or height <= 0:
         raise ValueError("Video workflow source image dimensions must be positive.")
 
-    orientation = "landscape" if width > height else "portrait"
-    if width == height:
-        orientation = square_orientation
-    target = landscape_target if orientation == "landscape" else portrait_target
+    orientation, target, orientation_rule = resolve_declared_target(policy, width, height)
     prepared = ImageOps.fit(
         image,
         (target["width"], target["height"]),
@@ -82,12 +71,10 @@ def prepare_declared_workflow_source(
         centering=(0.5, 0.5),
     )
 
-    content_digest = hashlib.sha256(source.read_bytes()).hexdigest()[:20]
-    prepared_root = Path(output_root) / "prepared_video_sources"
+    content_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    prepared_path = prepared_source_destination(output_root, content_digest, target)
+    prepared_root = prepared_path.parent
     prepared_root.mkdir(parents=True, exist_ok=True)
-    prepared_path = prepared_root / (
-        f"{content_digest}_{target['width']}x{target['height']}_{_COVER_CENTER_CROP}.png"
-    )
     if not prepared_path.exists():
         # Each caller owns its temp, including callers in other processes. Keep it
         # beside the destination so replacement publishes a complete PNG atomically.
@@ -122,11 +109,46 @@ def prepare_declared_workflow_source(
         prepared_dimensions={"width": int(prepared.width), "height": int(prepared.height)},
         orientation=orientation,
         policy=_COVER_CENTER_CROP,
-        orientation_rule=(
-            "landscape when source width is greater than height; otherwise portrait"
-            if square_orientation == "portrait"
-            else "landscape when source width is greater than or equal to height; otherwise portrait"
-        ),
+        orientation_rule=orientation_rule,
+    )
+
+
+def resolve_declared_target(
+    policy: Mapping[str, Any], width: int, height: int
+) -> tuple[str, dict[str, int], str]:
+    """Orientation, target dimensions and orientation rule the policy assigns to a source size.
+
+    Pure and read-only: the same decision ``prepare_declared_workflow_source`` applies, available
+    without decoding or writing anything so a preview can report it truthfully."""
+
+    if str(policy.get("resize_policy") or "") != _COVER_CENTER_CROP:
+        raise ValueError("Workflow source preparation declares an unsupported resize policy.")
+    portrait_target = _dimensions(policy.get("portrait_target"), "portrait_target")
+    landscape_target = _dimensions(policy.get("landscape_target"), "landscape_target")
+    square_orientation = str(policy.get("square_orientation") or "portrait").strip().lower()
+    if square_orientation not in {"portrait", "landscape"}:
+        raise ValueError("Workflow source preparation square_orientation must be portrait or landscape.")
+    orientation = "landscape" if width > height else "portrait"
+    if width == height:
+        orientation = square_orientation
+    target = landscape_target if orientation == "landscape" else portrait_target
+    rule = (
+        "landscape when source width is greater than height; otherwise portrait"
+        if square_orientation == "portrait"
+        else "landscape when source width is greater than or equal to height; otherwise portrait"
+    )
+    return orientation, dict(target), rule
+
+
+def prepared_source_destination(
+    output_root: str | Path, source_sha256: str, target: Mapping[str, int]
+) -> Path:
+    """Content-addressed path of the prepared PNG for a source hash and target size."""
+
+    return (
+        Path(output_root)
+        / "prepared_video_sources"
+        / f"{str(source_sha256)[:20]}_{target['width']}x{target['height']}_{_COVER_CENTER_CROP}.png"
     )
 
 
@@ -143,4 +165,9 @@ def _dimensions(value: Any, field_name: str) -> dict[str, int]:
     return {"width": width, "height": height}
 
 
-__all__ = ["PreparedWorkflowSource", "prepare_declared_workflow_source"]
+__all__ = [
+    "PreparedWorkflowSource",
+    "prepare_declared_workflow_source",
+    "prepared_source_destination",
+    "resolve_declared_target",
+]
