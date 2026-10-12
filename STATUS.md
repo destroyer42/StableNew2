@@ -4,6 +4,23 @@ Updated: 2026-10-12
 
 ## Repository
 
+- SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210, locally validated deterministically; not pushed; no physical
+  generation): a PromptPack slot may carry one optional, versioned `controlnet_openpose` declaration (`openpose.v1`) naming a
+  pre-rendered OpenPose image from the new scannable library `<WebUI root>/models/OpenPose` (`AssetKind.OPENPOSE_IMAGE`,
+  per-kind extension filtering; distinct from the `models/ControlNet` weights). The compiler gates the target (SDXL on
+  Forge, base txt2img only; Klein, Z-Image, A1111 and unidentified/non-SDXL checkpoints are refused, never silently
+  dropped), reads the image once, and freezes its verified SHA-256 plus a job-owned content-addressed snapshot into the
+  immutable NJR config (no base64). The Forge backend admits the job read-only against the running Forge
+  (`/controlnet/model_list`, `/controlnet/module_list`, exact advertised model, `None` preprocessor, weight-header SDXL
+  evidence) and the executor sends exactly one ControlNet unit (`module="None"`) in `alwayson_scripts.ControlNet`
+  alongside any existing scripts, after re-verifying the snapshot by hash. A missing/changed input, absent extension or
+  unlisted model fails before any generation POST with no fallback. Replay keeps the frozen input and lineage. The Prompt tab
+  gains a picker (thumbnail, search, refresh, model, strength, guidance, modes, remove, target state; a saved selection is
+  kept when the target cannot run it) and a preview section. Learning/Model Comparison refuse rows with enabled
+  conditioning rather than dropping it. No controller ceiling raised and the persisted model-policy contract is unchanged.
+  One owner-authorized physical Forge run is still required to confirm the pose influences the image. See
+  `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md`.
+
 - Unified batch operations and outcome triage (PR-BATCH-OPS-201, locally validated; not pushed): a collapsed
   "Batches" view under Queue/History lists existing Review and Video Workflow batches from the SQLite
   repository (composite `(kind, batch_id)` identity read from frozen NJR provenance; no batch table, no persisted batch

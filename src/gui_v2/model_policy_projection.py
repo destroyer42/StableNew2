@@ -24,6 +24,7 @@ from src.image_backends.model_policy import (
     resolve_model_policy,
 )
 from src.image_backends.model_policy_lora import assess_lora_selection
+from src.image_backends.openpose_capability import OpenPoseTarget, assess_openpose_target
 
 _BACKEND_LABELS = {"forge_webui": "Forge WebUI", "a1111_webui": "A1111 WebUI"}
 
@@ -50,6 +51,8 @@ class ModelControlProjection:
     lora_annotations: dict[str, str] = field(default_factory=dict)
     #: Non-empty when the current LoRA selection would be rejected before generation (shown, never auto-removed).
     lora_blocking: str = ""
+    #: Whether this checkpoint + configured backend may run OpenPose ControlNet conditioning (PR-IMG-CNET-210).
+    openpose: OpenPoseTarget | None = None
 
     def state(self, name: str) -> ControlState:
         return self.controls.get(name, ControlState())
@@ -107,6 +110,7 @@ def project_model_controls(
         blocking=blocking,
         lora_annotations=annotations,
         lora_blocking=lora_blocking,
+        openpose=assess_openpose_target(policy, backend_id),
     )
 
 

@@ -40,6 +40,34 @@ def _extract_image(payload: dict[str, Any] | None) -> str | None:
     return None
 
 
+_SCRIPT_IMAGE_LIMIT = 256
+
+
+def _redact_script_images(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A copy of ``payload`` whose always-on script units carry no image bytes (PR-IMG-CNET-210).
+
+    A ControlNet unit nests its (base64) pose image under ``alwayson_scripts.<script>.args[*].image``. Failure records are
+    shown in a text widget and kept in memory, so large nested images are replaced by a size marker; every other field,
+    and the top-level ``image``/``init_images`` handling, is untouched.
+    """
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("alwayson_scripts"), dict):
+        return payload
+    scripts: dict[str, Any] = {}
+    for name, script in payload["alwayson_scripts"].items():
+        args = script.get("args") if isinstance(script, dict) else None
+        if not isinstance(args, list):
+            scripts[name] = script
+            continue
+        cleaned = []
+        for arg in args:
+            if isinstance(arg, dict) and isinstance(arg.get("image"), str) and len(arg["image"]) > _SCRIPT_IMAGE_LIMIT:
+                arg = {**arg, "image": f"<{len(arg['image'])} base64 characters omitted>"}
+            cleaned.append(arg)
+        scripts[name] = {**script, "args": cleaned}
+    return {**payload, "alwayson_scripts": scripts}
+
+
 @dataclass
 class ApiFailureRecord:
     timestamp: float
@@ -72,6 +100,7 @@ class ApiFailureStore:
         error_message: str,
     ) -> None:
         image_b64 = _extract_image(payload)
+        payload = _redact_script_images(payload)
         record = ApiFailureRecord(
             timestamp=time.time(),
             stage=stage,

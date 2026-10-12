@@ -33,6 +33,10 @@ from src.api.client import SDWebUIClient
 logger = logging.getLogger(__name__)
 
 SD_MODULES_ENDPOINT = "/sdapi/v1/sd-modules"
+#: Read-only ControlNet capability endpoints of the built-in Forge ControlNet extension (PR-IMG-CNET-210).
+CONTROLNET_MODELS_ENDPOINT = "/controlnet/model_list"
+CONTROLNET_MODULES_ENDPOINT = "/controlnet/module_list"
+CONTROLNET_VERSION_ENDPOINT = "/controlnet/version"
 FORGE_MODULES_OPTION = "forge_additional_modules"
 _AUTOMATIC_VAE_NAMES = frozenset({"", "automatic", "none"})
 _MODULE_EXTENSIONS = (".safetensors", ".sft", ".pt", ".pth", ".ckpt", ".bin", ".gguf")
@@ -150,6 +154,45 @@ class ForgeWebUIClient(SDWebUIClient):
             for item in data
             if isinstance(item, dict)
         ]
+
+    def _read_controlnet_json(self, endpoint: str) -> Any:
+        """One fresh, single-attempt, read-only GET of a ControlNet endpoint; ``None`` when it did not answer."""
+
+        try:
+            with self._request_context("get", endpoint, timeout=10, max_retries=1) as response:
+                if response is None:
+                    return None
+                try:
+                    return response.json()
+                except ValueError:
+                    return None
+        except Exception:  # noqa: BLE001 - an unavailable extension is an absent capability, never a crash
+            logger.debug("ControlNet endpoint %s could not be read", endpoint, exc_info=True)
+            return None
+
+    def get_controlnet_catalog(self) -> dict[str, Any]:
+        """What the running Forge advertises for ControlNet (read-only; never installs, enables or edits anything).
+
+        ``models`` / ``modules`` are lists of exact advertised names, or ``None`` when that endpoint did not answer
+        (the extension is not registered, Forge is busy or the response was malformed). ``version`` is the extension's
+        API version when reported. Every value is fresh: nothing is cached because dispatch must not trust a stale read.
+        """
+
+        def names(payload: Any, key: str) -> list[str] | None:
+            raw = payload.get(key) if isinstance(payload, dict) else payload
+            if not isinstance(raw, list):
+                return None
+            return [str(item) for item in raw if isinstance(item, str) and item.strip()]
+
+        models = names(self._read_controlnet_json(CONTROLNET_MODELS_ENDPOINT), "model_list")
+        modules = names(self._read_controlnet_json(CONTROLNET_MODULES_ENDPOINT), "module_list")
+        version_payload = self._read_controlnet_json(CONTROLNET_VERSION_ENDPOINT)
+        version = version_payload.get("version") if isinstance(version_payload, dict) else None
+        return {
+            "models": models,
+            "modules": modules,
+            "version": version if isinstance(version, int) and not isinstance(version, bool) else None,
+        }
 
     def _resolve_module_name(self, requested: str, *, noun: str = "VAE") -> str:
         """Map a requested module name onto an exact Forge module name, or raise."""
@@ -284,6 +327,9 @@ class ForgeWebUIClient(SDWebUIClient):
 
 
 __all__ = [
+    "CONTROLNET_MODELS_ENDPOINT",
+    "CONTROLNET_MODULES_ENDPOINT",
+    "CONTROLNET_VERSION_ENDPOINT",
     "FORGE_MODULES_OPTION",
     "ForgeVAEError",
     "ForgeWebUIClient",

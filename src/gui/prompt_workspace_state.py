@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -223,6 +224,19 @@ class PromptWorkspaceState:
         slot.loras = loras.copy()
         self.dirty = True
 
+    def set_slot_openpose(self, index: int, declaration: Mapping[str, object] | None) -> None:
+        """Set (or clear, with ``None``) the OpenPose conditioning declaration of the slot at ``index``."""
+        if not self.current_pack:
+            raise RuntimeError("No prompt pack loaded")
+        slot = self.current_pack.get_slot(index)
+        slot.openpose = copy.deepcopy(dict(declaration)) if declaration is not None else None
+        self.dirty = True
+
+    def get_slot_openpose(self, index: int) -> object | None:
+        if not self.current_pack:
+            return None
+        return copy.deepcopy(self.current_pack.get_slot(index).openpose)
+
     def set_slot_embeddings(
         self, index: int, positive: list[tuple[str, float]], negative: list[tuple[str, float]]
     ) -> None:
@@ -274,7 +288,7 @@ class PromptWorkspaceState:
 
             original = self.current_pack.get_slot(index)
             # Create a deep copy
-            copy = replace(
+            duplicate = replace(
                 original,
                 text=original.text,
                 negative=getattr(original, "negative", ""),
@@ -283,6 +297,7 @@ class PromptWorkspaceState:
                 positive_embeddings=getattr(original, "positive_embeddings", []).copy(),
                 negative_embeddings=getattr(original, "negative_embeddings", []).copy(),
                 loras=getattr(original, "loras", []).copy(),
+                openpose=copy.deepcopy(getattr(original, "openpose", None)),
             )
-            self.current_pack.slots.insert(index + 1, copy)
+            self.current_pack.slots.insert(index + 1, duplicate)
             self.dirty = True

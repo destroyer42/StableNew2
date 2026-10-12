@@ -122,6 +122,9 @@ class ImageBackendCapabilities:
     #: False for a runtime that has no Hypernetwork support (the pinned Forge Neo removed them): such work is refused
     #: before dispatch and the Randomizer does not present the feature.
     supports_hypernetworks: bool = True
+    #: True only for a runtime that can execute a pre-rendered OpenPose ControlNet unit on the base txt2img stage
+    #: (PR-IMG-CNET-210). Anything else refuses such work before dispatch rather than silently dropping it.
+    supports_openpose_conditioning: bool = False
 
 
 @dataclass(slots=True)

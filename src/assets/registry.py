@@ -31,6 +31,9 @@ from src.assets.observation import ObservationRoot, ObservationScan, ScanLimits,
 from src.state.workspace_paths import workspace_paths
 
 _EXTENSIONS = frozenset({".bin", ".ckpt", ".onnx", ".pt", ".pth", ".safetensors"})
+#: Reference images (PR-IMG-CNET-210). Deliberately a different, per-kind filter: image files must never be indexed as
+#: model weights, and weight files must never be indexed as reference images.
+_IMAGE_EXTENSIONS = frozenset({".jpeg", ".jpg", ".png", ".webp"})
 _CHUNK = 1024 * 1024
 _CACHE_VERSION = 2
 _SUPPORTED_CACHE_VERSIONS = (1, 2)
@@ -52,6 +55,15 @@ class AssetKind(str, Enum):
     CONTROLNET = "controlnet"
     BLIP = "blip"
     ADETAILER = "adetailer"
+    #: Pre-rendered OpenPose reference images under ``models/OpenPose`` (conditioning input, never a model weight).
+    OPENPOSE_IMAGE = "openpose_image"
+
+
+_IMAGE_KINDS = frozenset({AssetKind.OPENPOSE_IMAGE})
+
+
+def _extensions_for(kind: AssetKind) -> frozenset[str]:
+    return _IMAGE_EXTENSIONS if kind in _IMAGE_KINDS else _EXTENSIONS
 
 
 @dataclass(frozen=True)
@@ -129,6 +141,23 @@ def _safetensors_metadata(path: Path) -> tuple[dict[str, Any], str | None]:
         return {}, f"{type(exc).__name__}: {exc}"
 
 
+_CHECKPOINT_NAME_SUFFIXES = (".safetensors", ".sft", ".ckpt", ".pt", ".pth")
+
+
+def _checkpoint_name_key(value: str) -> str:
+    """Case-insensitive identity of a selected model name: path-free, no ``[hash]`` suffix, no weight extension."""
+
+    base = str(value or "").strip().replace("\\", "/")
+    base = base.rsplit("/", 1)[-1]
+    if base.endswith("]") and " [" in base:
+        base = base[: base.rindex(" [")]
+    lowered = base.strip().lower()
+    for suffix in _CHECKPOINT_NAME_SUFFIXES:
+        if lowered.endswith(suffix):
+            return lowered[: -len(suffix)]
+    return lowered
+
+
 def _sidecar_candidates(path: Path) -> tuple[Path, Path]:
     """Deterministic sidecar precedence, matching tools/asset_census.py."""
 
@@ -136,6 +165,29 @@ def _sidecar_candidates(path: Path) -> tuple[Path, Path]:
         path.with_suffix(path.suffix + ".civitai.info"),
         path.with_name(f"{path.stem}.civitai.info"),
     )
+
+
+_NO_SIDECAR: dict[str, Any] = {
+    "sidecar_path": None,
+    "sidecar_metadata": {},
+    "sidecar_provenance": None,
+    "sidecar_error": None,
+    "sidecar_fingerprint": None,
+}
+
+
+def _contained(kind: AssetKind, root: Path, path: Path) -> bool:
+    """Reference images must resolve inside their library: a link that leaves it is never indexed.
+
+    Model-weight kinds are deliberately unchanged (their existing scan semantics are not part of this contract).
+    """
+
+    if kind not in _IMAGE_KINDS:
+        return True
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except OSError:
+        return False
 
 
 def _sidecar_fingerprint(path: Path) -> dict[str, int] | None:
@@ -246,6 +298,7 @@ class AssetRegistry:
             (AssetKind.CONTROLNET, models / "ControlNet"),
             (AssetKind.BLIP, models / "BLIP"),
             (AssetKind.ADETAILER, models / "adetailer"),
+            (AssetKind.OPENPOSE_IMAGE, models / "OpenPose"),
         )
 
     def observation_roots(self) -> tuple[ObservationRoot, ...]:
@@ -410,6 +463,42 @@ class AssetRegistry:
             record.locations, record.structural_evidence,
         )
 
+    def locate_checkpoint(self, model_name: str) -> Path | None:
+        """The single local checkpoint file a selected model name identifies, or ``None`` (no match or ambiguous).
+
+        Worker-only and read-only: it lists ``models/Stable-diffusion`` by name (stat only, no hashing, no header read
+        and no cache write). A name that matches more than one file is ambiguous and is never resolved by picking one.
+        """
+
+        if self.webui_root is None:
+            return None
+        key = _checkpoint_name_key(model_name)
+        root = self.webui_root / "models" / "Stable-diffusion"
+        if not key or not root.is_dir():
+            return None
+        matches = [
+            path
+            for path in root.rglob("*")
+            if path.suffix.lower() in _CHECKPOINT_NAME_SUFFIXES
+            and _checkpoint_name_key(path.name) == key
+            and path.is_file()
+        ]
+        return matches[0] if len(matches) == 1 else None
+
+    def inspect_named_checkpoint(self, model_name: str) -> CheckpointInspection | None:
+        """Header-only family evidence for the checkpoint a model name identifies (see ``locate_checkpoint``).
+
+        No byte identity is produced or persisted; ``None`` when the file is absent, ambiguous or unreadable.
+        """
+
+        path = self.locate_checkpoint(model_name)
+        if path is None:
+            return None
+        try:
+            return self.inspect_checkpoint(path)
+        except (OSError, ValueError):
+            return None
+
     def _prepare_refresh(
         self,
         kinds: Iterable[AssetKind] | None,
@@ -435,7 +524,9 @@ class AssetRegistry:
                         (
                             path
                             for path in root.rglob("*")
-                            if path.is_file() and path.suffix.lower() in _EXTENSIONS
+                            if path.is_file()
+                            and path.suffix.lower() in _extensions_for(kind)
+                            and _contained(kind, root, path)
                         ),
                         key=str,
                     ),
@@ -447,7 +538,7 @@ class AssetRegistry:
             for path in paths:
                 if cancelled and cancelled():
                     raise InterruptedError("Checkpoint evidence refresh cancelled")
-                if path.suffix.lower() not in _EXTENSIONS:
+                if path.suffix.lower() not in _extensions_for(kind):
                     raise ValueError("Unsupported checkpoint file type")
                 key = str(path.resolve())
                 stat = path.stat()
@@ -458,7 +549,11 @@ class AssetRegistry:
                     and cached.get("mtime_ns") == stat.st_mtime_ns
                     and cached.get("kind") == kind.value
                 )
-                sidecar_fields = _resolve_sidecar(path, cached if model_valid else None)
+                sidecar_fields = (
+                    dict(_NO_SIDECAR)
+                    if kind in _IMAGE_KINDS
+                    else _resolve_sidecar(path, cached if model_valid else None)
+                )
                 header_fields = (
                     checkpoint_header_evidence(path)
                     if kind is AssetKind.CHECKPOINT and (
@@ -485,7 +580,9 @@ class AssetRegistry:
                         read_bytes += len(chunk)
                         if progress:
                             progress(path, read_bytes, stat.st_size)
-                if header_fields is not None:
+                if kind in _IMAGE_KINDS:
+                    metadata, error = {}, None  # an image carries no model metadata
+                elif header_fields is not None:
                     metadata, error = header_fields["metadata"], header_fields["metadata_error"]
                 else:
                     metadata, error = (
@@ -592,6 +689,9 @@ class AssetRegistry:
     ) -> AssetRecord:
         ordered = tuple(sorted(locations, key=lambda item: str(item.path).lower()))
         metadata, provenance, metadata_error = content
+        if ordered and all(item.kind in _IMAGE_KINDS for item in ordered):
+            # A reference image has byte identity only: no family/compatibility evidence is meaningful for it.
+            return AssetRecord(digest, ordered, {}, None, None, None, {})
 
         evidence: list[FamilyEvidence] = []
         evidence.extend(embedded_metadata_evidence(metadata))

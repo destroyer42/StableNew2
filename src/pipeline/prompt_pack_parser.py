@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from src.utils.embedding_prompt_utils import extract_embedding_entries, strip_embedding_entries
 
@@ -18,6 +19,9 @@ class PackRow:
     lora_tags: tuple[tuple[str, float], ...]
     negative_embeddings: tuple[tuple[str, float], ...]
     negative_phrases: tuple[str, ...]
+    #: The slot's raw ``controlnet_openpose`` declaration (PR-IMG-CNET-210), exactly as authored; ``None`` when the slot has
+    #: none. Structural conditioning input, never prompt text, so TXT/TSV interchange (which has no field for it) is lossy.
+    conditioning: Any = field(default=None, hash=False)
 
 
 def _parse_line_embeddings(line: str) -> list[tuple[str, float]]:

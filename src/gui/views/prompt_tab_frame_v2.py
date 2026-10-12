@@ -44,6 +44,7 @@ from src.gui.view_contracts.prompt_editor_contract import (
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
+from src.gui.widgets.openpose_picker_panel import OpenPosePickerPanel
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
 from src.image_backends.image_backend_types import configured_image_backend_id
 from src.image_backends.model_policy import resolve_model_policy
@@ -215,6 +216,11 @@ class PromptTabFrame(ttk.Frame):
         if hasattr(self, "lora_picker"):
             try:
                 self.lora_picker.set_content_visibility_mode(self._content_visibility_mode)
+            except Exception:
+                pass
+        if hasattr(self, "openpose_picker"):
+            try:
+                self.openpose_picker.set_content_visibility_mode(self._content_visibility_mode)
             except Exception:
                 pass
         self._refresh_pack_list()
@@ -498,6 +504,13 @@ class PromptTabFrame(ttk.Frame):
             webui_root=STABLENEW_WEBUI_ROOT or None,
         )
         self.embedding_picker.grid(row=5, column=1, sticky="nsew", padx=(3, 0))
+
+        # OpenPose reference picker (row 6, full width): structural conditioning for this slot (PR-IMG-CNET-210).
+        self.openpose_picker = OpenPosePickerPanel(
+            self.prompts_tab,
+            on_change_callback=self._on_openpose_changed,
+        )
+        self.openpose_picker.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
     def _build_template_panel(self) -> None:
         self.template_panel = ttk.LabelFrame(self.prompts_tab, text="Cinematic Template", padding=6)
@@ -1116,6 +1129,10 @@ class PromptTabFrame(ttk.Frame):
                 self.embedding_picker.set_positive_embeddings(pos_embeds)
                 self.embedding_picker.set_negative_embeddings(neg_embeds)
 
+            # Update OpenPose picker (a programmatic load: never marks the pack modified)
+            if hasattr(self, "openpose_picker"):
+                self.openpose_picker.set_declaration(getattr(slot, "openpose", None))
+
             # Refresh matrix tab if it exists
             if hasattr(self, "matrix_tab_panel"):
                 self.matrix_tab_panel.refresh()
@@ -1183,6 +1200,19 @@ class PromptTabFrame(ttk.Frame):
             self._mark_pack_modified()
         except Exception:
             pass
+        self._refresh_metadata()
+
+    def _on_openpose_changed(self) -> None:
+        """Persist the OpenPose picker's declaration onto the current slot (a plain JSON value; never prompt text)."""
+        if self._suppress_editor_change:
+            return
+        try:
+            self.workspace_state.set_slot_openpose(
+                self.workspace_state.get_current_slot_index(), self.openpose_picker.get_declaration()
+            )
+            self._mark_pack_modified()
+        except Exception:
+            logger.debug("Could not store the slot's OpenPose declaration", exc_info=True)
         self._refresh_metadata()
 
     def _on_embeddings_changed(self) -> None:
@@ -1342,6 +1372,8 @@ class PromptTabFrame(ttk.Frame):
                     preview_lines.append("Global Negative (appended):")
                     preview_lines.append(f"  {global_neg.strip()}")
 
+        preview_lines.extend(self._openpose_preview_lines(current_slot, resolver))
+
         preview_lines.extend(
             [
                 "",
@@ -1371,11 +1403,42 @@ class PromptTabFrame(ttk.Frame):
         self.meta_text.insert("1.0", "\n".join(preview_lines))
         self.meta_text.config(state="disabled")
 
+    def _openpose_preview_lines(self, current_slot, resolver) -> list[str]:
+        """The effective OpenPose conditioning of this slot, or nothing (no scan, no file read)."""
+
+        raw = getattr(current_slot, "openpose", None)
+        if raw is None:
+            return []
+        from src.gui_v2.openpose_conditioning_view import effective_summary
+
+        lines = ["", "━━━ CONTROLNET OPENPOSE ━━━"]
+        picker = getattr(self, "openpose_picker", None)
+        view = picker.current_view() if picker is not None else None
+        selection = getattr(view, "selection", None)
+        if selection is None:
+            lines.append("The saved OpenPose declaration is not valid and is kept unchanged.")
+            return lines
+        shown = resolver.redact_text(selection.asset, item={"name": selection.asset})
+        lines.extend(
+            line.replace(selection.asset, shown) if shown != selection.asset else line
+            for line in effective_summary(selection)
+        )
+        if not selection.enabled:
+            lines.append("Status: switched off for this slot (the selection is kept).")
+        elif view.executable:
+            lines.append("Status: will be sent to Forge as one ControlNet unit on the base txt2img stage.")
+        else:
+            lines.append("Status: will not run as saved:")
+            lines.extend(f"  - {line.text}" for line in view.lines if line.severity != "ok")
+        return lines
+
     # Model-aware prompt compatibility (PR-IMG-130B) -------------------------
     def on_model_projection(self, projection) -> None:
         """Receive the Base Generation model-policy projection (read-only context; never changes authoring state)."""
 
         self._model_projection = projection
+        if hasattr(self, "openpose_picker"):
+            self.openpose_picker.set_target(getattr(projection, "openpose", None))
         self._refresh_metadata(scan_style=False)
 
     def _snapshot_prompt_state(self) -> PromptStateSnapshot:

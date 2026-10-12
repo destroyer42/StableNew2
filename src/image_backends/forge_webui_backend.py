@@ -9,7 +9,10 @@ falls back to A1111 and is never selected for historical records without an imag
 to A1111, ``LEGACY_MISSING_IMAGE_BACKEND_ID``); only newly constructed work defaults to it.
 
 Capabilities are exactly the four still-image stages StableNew's executor already drives. ControlNet
-is deliberately not a StableNew image stage.
+is deliberately not a StableNew image stage. The one bounded exception is conditioning, not a stage
+(PR-IMG-CNET-210): a frozen PromptPack OpenPose unit on the *base txt2img request*, admitted read-only against
+the running Forge's own ControlNet extension before dispatch (``forge_controlnet``) and refused, never
+dropped, anywhere else.
 
 Model-specific Forge translation lives here (PR-IMG-116): when ``backend_options.image.model_profile``
 names the qualified FLUX.2 Klein 4B FP8 profile, the backend validates the immutable intent against the
@@ -36,11 +39,23 @@ from typing import Any
 from src.api.forge_client import ForgeVAEError, module_set_key
 from src.api.webui_identity_attestation import ManagedWebUIIdentityAttestor
 from src.assets.component_evidence import ComponentEvidence, inspect_component_file
+from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_FIELD
+from src.conditioning.openpose_snapshot import FrozenOpenPose, verify_frozen
 from src.image_backends.exact_model_profile import (
     ExactModelProfile,
     resolve_model_profile,
     validate_profile_intent,
 )
+from src.image_backends.forge_controlnet import (
+    CODE_BACKEND,
+    RUNTIME_KEY,
+    ControlNetCatalog,
+    OpenPoseAdmission,
+    OpenPoseDispatchError,
+    admit_openpose,
+    validate_openpose_intent,
+)
+from src.image_backends.forge_controlnet import declared as openpose_declared
 from src.image_backends.forge_klein_assets import (
     _active_manager,
     verify_klein_assets,
@@ -184,6 +199,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         backend_id=backend_id,
         stage_types=("txt2img", "img2img", "adetailer", "upscale"),
         supports_hypernetworks=False,  # the pinned Forge Neo removed Hypernetworks
+        supports_openpose_conditioning=True,  # built-in ControlNet extension; one pre-rendered unit, base txt2img only
     )
     transition_target = RUNTIME_FORGE_WEBUI
 
@@ -194,9 +210,12 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         memory_probe: Callable[[], HostMemorySnapshot] | None = None,
         lora_resolver: LoraResolver | None = None,
         identity_attestor: ManagedWebUIIdentityAttestor | None = None,
+        controlnet_root: Path | str | None = None,
     ) -> None:
         super().__init__(transition=transition, identity_attestor=identity_attestor)
         self._memory_probe = memory_probe
+        self._controlnet_root_override = controlnet_root
+        self._openpose: dict[str | None, OpenPoseAdmission] = {}
         self._lora_resolver = lora_resolver
         self._lora_evidence: dict[
             str | None, tuple[tuple[KleinLoraDecision, ...], tuple[LoraTag, ...]]
@@ -267,6 +286,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         backend_options = getattr(njr, "backend_options", None) or {}
         config = getattr(njr, "config", None) or {}
         config = config if isinstance(config, Mapping) else {}
+        self._validate_openpose_njr(njr, backend_options, config, stage_names)
         hypernetworks = requested_hypernetworks_for_njr(njr)
         if hypernetworks and not self.capabilities.supports_hypernetworks:
             raise ForgeUnsupportedIntentError(
@@ -330,6 +350,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             )
 
     def _validate_request(self, request: ImageExecutionRequest) -> None:
+        if request.stage_name == "txt2img":
+            self._validate_openpose_request(request)
         profile = self._profile_for(request.backend_options)
         if profile is None and is_zimage_transformer_name(request.selected_model):
             raise ZImageProfileError("Z-Image requires its immutable execution profile; no generic fallback")
@@ -453,6 +475,88 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             logger.debug("Could not read Forge's LoRA log lines", exc_info=True)
             return {"consumed": None, "source": "unavailable"}
 
+    # ------------------------------------------------------------------ OpenPose conditioning (PR-IMG-CNET-210)
+
+    def _validate_openpose_njr(
+        self, njr: Any, backend_options: Any, config: Mapping[str, Any], stage_names: list[str]
+    ) -> None:
+        """Pure intent check: conditioning must be exactly the frozen record, on a txt2img stage, for an ordinary model."""
+
+        frozen = validate_openpose_intent(
+            config, stage_names, backend_id=self.backend_id, backend_supported=True
+        )
+        if frozen is None:
+            return
+        model_name = getattr(njr, "base_model", None)
+        if (
+            self._profile_for(backend_options) is not None
+            or is_klein_transformer_name(model_name)
+            or is_zimage_transformer_name(model_name)
+        ):
+            raise OpenPoseDispatchError(
+                CODE_BACKEND,
+                "This exact-profile model does not support ControlNet conditioning, so the job was not dispatched. "
+                "Select an SDXL checkpoint or remove the OpenPose conditioning.",
+            )
+
+    def _validate_openpose_request(self, request: ImageExecutionRequest) -> None:
+        frozen = validate_openpose_intent(
+            request.execution_config, (request.stage_name,), backend_id=self.backend_id, backend_supported=True
+        )
+        if frozen is None:
+            return
+        if request.input_image_path is not None:
+            raise OpenPoseDispatchError(
+                CODE_BACKEND, "OpenPose conditioning applies to initial txt2img generation, not to image edits."
+            )
+        if (
+            self._profile_for(request.backend_options) is not None
+            or is_klein_transformer_name(request.selected_model)
+            or is_zimage_transformer_name(request.selected_model)
+        ):
+            raise OpenPoseDispatchError(
+                CODE_BACKEND,
+                "This exact-profile model does not support ControlNet conditioning, so the job was not dispatched.",
+            )
+
+    def _controlnet_root(self) -> Path | None:
+        if self._controlnet_root_override is not None:
+            return Path(self._controlnet_root_override)
+        try:
+            from src.assets import AssetRegistry
+
+            webui_root = AssetRegistry().webui_root
+        except Exception:  # noqa: BLE001 - an unreadable configuration only means "unverified", never a crash
+            return None
+        return None if webui_root is None else Path(webui_root) / "models" / "ControlNet"
+
+    def _admit_openpose(self, pipeline: Any, request: ImageExecutionRequest) -> OpenPoseAdmission:
+        """Read-only admission against the running Forge (the executor re-verifies the bytes at the wire)."""
+
+        frozen = FrozenOpenPose.from_config(request.execution_config.get(OPENPOSE_FIELD))
+        verify_frozen(frozen)  # missing/changed snapshot: refuse now, before anything is selected or written
+        client = getattr(pipeline, "client", None)
+        reader = getattr(client, "get_controlnet_catalog", None)
+        if not callable(reader):
+            raise OpenPoseDispatchError(
+                "runtime_unavailable",
+                "This Forge client cannot read the ControlNet capability; the conditioned job was not dispatched.",
+            )
+        raw = reader()
+        raw = raw if isinstance(raw, Mapping) else {}
+
+        def names(key: str) -> tuple[str, ...] | None:
+            value = raw.get(key)
+            return tuple(str(item) for item in value) if isinstance(value, list) else None
+
+        version = raw.get("version")
+        catalog = ControlNetCatalog(
+            models=names("models"),
+            modules=names("modules"),
+            version=version if isinstance(version, int) and not isinstance(version, bool) else None,
+        )
+        return admit_openpose(frozen, catalog, controlnet_root=self._controlnet_root())
+
     # ------------------------------------------------------------------ module baseline (D110)
 
     def _requested_vae(self, request: ImageExecutionRequest) -> str:
@@ -571,6 +675,9 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             raise ForgeUnqualifiedModelError(readiness)
 
     def _before_dispatch(self, pipeline: Any, request: ImageExecutionRequest) -> None:
+        if request.stage_name == "txt2img" and openpose_declared(request.execution_config):
+            # Read-only and first: a refusal here happens before any module write or generation POST.
+            self._openpose[request.job_id] = self._admit_openpose(pipeline, request)
         profile = self._profile_for(request.backend_options)
         if profile is None:
             if request.stage_name in self.capabilities.stage_types:
@@ -665,6 +772,10 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     ) -> dict[str, Any]:
         profile = self._profile_for(request.backend_options)
         if profile is None:
+            admitted = self._openpose.get(request.job_id)
+            if admitted is not None and request.stage_name == "txt2img":
+                # The executor sends exactly the model name Forge advertised (never the operator's spelling).
+                return {**config, RUNTIME_KEY: {"model": admitted.unit_model}}
             return config
         projected = dict(config)
         for key in ("vae", "sd_vae", "vae_name"):
@@ -724,10 +835,14 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 self._verified_source,
                 self._module_baseline,
                 self._lora_evidence,
+                self._openpose,
             ):
                 scratch.pop(request.job_id, None)
             raise
         profile = self._profile_for(request.backend_options)
+        admitted = self._openpose.pop(request.job_id, None)
+        if admitted is not None and result is not None:
+            result.backend_metadata["openpose_conditioning"] = admitted.evidence
         baseline = self._module_baseline.pop(request.job_id, None)
         if profile is None and result is not None and baseline is not None:
             result.backend_metadata["forge_module_baseline"] = baseline
