@@ -12,13 +12,26 @@ from __future__ import annotations
 import heapq
 from collections import deque
 from collections.abc import Callable, Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from threading import Lock
 from typing import Any
 
 from src.queue.backend_dependency import DependencyAssessment, classify_job
 from src.queue.job_model import Job, JobStatus, StageCheckpoint
-from src.queue.job_repository import JobRepository
+from src.queue.job_repository import JobRepository, JobStatusChanged
+
+
+@dataclass(frozen=True, slots=True)
+class QueuedCancelOutcome:
+    """What a guarded queued-only cancel actually did to one job."""
+
+    job_id: str
+    #: ``cancelled`` (this call performed QUEUED -> CANCELLED), ``skipped`` (not QUEUED at the transition
+    #: or unknown to the queue) or ``error`` (the repository refused the write).
+    outcome: str
+    #: The status the job was observed in when it was skipped.
+    observed_status: JobStatus | None = None
+    detail: str = ""
 
 
 class JobQueue:
@@ -383,10 +396,13 @@ class JobQueue:
         result: dict | None = None,
         stage_checkpoints: list[StageCheckpoint] | None = None,
         require_running: bool = False,
+        require_queued: bool = False,
     ) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None or (require_running and job.status != JobStatus.RUNNING):
+                return None
+            if require_queued and job.status != JobStatus.QUEUED:
                 return None
             if status is JobStatus.RUNNING and job.status is JobStatus.QUEUED:
                 if self._dispatch_fenced or self._is_held_locked(job):
@@ -403,6 +419,7 @@ class JobQueue:
                 status,
                 error_message=error_message,
                 result=result,
+                expected_status=JobStatus.QUEUED if require_queued else None,
             )
             self._copy_persisted_state(job, persisted)
             should_prune = status in self._FINAL_STATUSES
@@ -413,6 +430,51 @@ class JobQueue:
         self._notify_status(job, status)
         self._notify_state_listeners()
         return job
+
+    def cancel_if_queued(self, job_id: str, reason: str | None = None) -> QueuedCancelOutcome:
+        """Cancel ``job_id`` only if it is still QUEUED at the moment of the transition.
+
+        The in-memory check and the durable transition both run under the lock that makes
+        ``claim_next_job``'s QUEUED -> RUNNING atomic, and the repository re-checks the durable status in
+        the same transaction that writes CANCELLED. A job that a worker claimed first is therefore skipped,
+        never cancelled: its generation, process and cancellation token are not touched. The ordinary
+        status callbacks, persistence and heap cleanup of ``mark_cancelled`` apply to a job that is cancelled.
+        """
+
+        try:
+            cancelled = self._update_status(
+                job_id, JobStatus.CANCELLED, reason or "cancelled", require_queued=True
+            )
+        except JobStatusChanged as changed:
+            return QueuedCancelOutcome(job_id, "skipped", changed.actual, "status changed")
+        except Exception as exc:  # noqa: BLE001 - reported per job; the rest of a batch continues
+            return QueuedCancelOutcome(job_id, "error", None, f"{type(exc).__name__}: {exc}")
+        if cancelled is not None:
+            return QueuedCancelOutcome(job_id, "cancelled", JobStatus.CANCELLED)
+        with self._lock:
+            live = self._jobs.get(job_id)
+            observed = live.status if live is not None else None
+        if observed is None:
+            stored = self._repository.get_job(job_id)
+            observed = stored.status if stored is not None else None
+        if observed is None:
+            detail = "unknown job"
+        elif observed is JobStatus.QUEUED:
+            detail = "queued but not in the runnable projection"
+        else:
+            detail = "status changed"
+        return QueuedCancelOutcome(job_id, "skipped", observed, detail)
+
+    def cancel_queued_jobs(
+        self, job_ids: Iterable[str], *, reason: str | None = None
+    ) -> list[QueuedCancelOutcome]:
+        """Guarded queued-only cancel of exactly ``job_ids`` (no other job is considered), in order."""
+
+        outcomes: list[QueuedCancelOutcome] = []
+        with self.coalesce_state_notifications():
+            for job_id in dict.fromkeys(job_ids):
+                outcomes.append(self.cancel_if_queued(job_id, reason))
+        return outcomes
 
     def claim_next_job(self) -> Job | None:
         """Atomically claim the next runnable job for the single-node worker."""

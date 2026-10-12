@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from src.cluster.worker_model import WorkerId
-from src.queue.job_model import Job, JobStatus
+from src.queue.job_model import Job, JobExecutionMetadata, JobStatus
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 
 if TYPE_CHECKING:
@@ -45,6 +45,42 @@ class JobHistoryEntry:
     snapshot: dict[str, Any] | None = None
     duration_ms: int | None = None
     error_envelope: UnifiedErrorEnvelope | None = None
+
+
+@dataclass(frozen=True)
+class BatchCandidateRow:
+    """Raw persisted facts of a job that *may* belong to a batch (PR-BATCH-OPS-201).
+
+    The repository returns every job whose immutable snapshot mentions a ``batch_id``; whether that is a
+    valid, unambiguous batch identity is decided by ``src.queue.batch_membership``, not here.
+    """
+
+    job_id: str
+    status: JobStatus
+    priority: int
+    queue_order: int
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    error_message: str | None
+    error_envelope: UnifiedErrorEnvelope | None
+    result: dict[str, Any] | None
+    execution_metadata: JobExecutionMetadata
+    snapshot: dict[str, Any]
+    #: Stable insertion cursor (SQLite ``rowid``). ``queue_order`` is renumbered by queue reordering, so it
+    #: cannot page a scan.
+    cursor: int = 0
+
+
+@dataclass(frozen=True)
+class ReplayChildRow:
+    """A persisted job whose recorded lineage parent is another job and whose source is a history replay."""
+
+    job_id: str
+    parent_job_id: str
+    status: JobStatus
+    created_at: datetime
+    snapshot: dict[str, Any]
 
 
 def job_history_entry_from_run_config(
