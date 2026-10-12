@@ -174,6 +174,26 @@ class ModelPolicy:
         return self.profile_ref is not None
 
     @property
+    def exact_identity_authority(self) -> bool:
+        """The canonical exact profile, not a local byte hash, is this selection's checkpoint-identity authority."""
+
+        return self.profile_ref is not None and self.evidence == EVIDENCE_PROFILE
+
+    @property
+    def explicit_capabilities(self) -> bool:
+        """Whether the policy takes an explicit position on every optional feature.
+
+        False only for the conservative generic projection (``unverified_generic``): a family label backed by evidence,
+        but no qualification states what the model can execute, so nothing may be built on it. Derived from the
+        policy's own content, so a frozen policy context needs no new field and an old frozen arm resolves exactly as
+        it did before.
+        """
+
+        return bool(self.features) and all(
+            feature.support is not Support.UNVERIFIED for feature in self.features.values()
+        )
+
+    @property
     def constrained(self) -> bool:
         """Whether any value control is fixed or unsupported (the Base Generation panel must project it)."""
 

@@ -190,6 +190,20 @@ _IDENTITY_PATHS = (
 )
 
 
+# Keys that are a freshly minted grouping identity wherever they appear. A Review submission mints a new random
+# ``batch_id`` (top level and inside ``review_batch``) on every call, so two compilations of the same intent never agree
+# on it; it names the submission, not what will be executed. (PR-LEARN-COMPARE-145; baseline failure since PR-REVIEW-BATCH-200.)
+_IDENTITY_KEYS = frozenset({"batch_id"})
+
+
+def _without_identity_keys(node: Any) -> Any:
+    if isinstance(node, dict):
+        return {key: _without_identity_keys(value) for key, value in node.items() if key not in _IDENTITY_KEYS}
+    if isinstance(node, (list, tuple)):
+        return [_without_identity_keys(value) for value in node]
+    return node
+
+
 def intent_digest(njr: Any) -> str:
     """Digest of the execution intent: job identity and evidence location are not intent."""
 
@@ -199,7 +213,7 @@ def intent_digest(njr: Any) -> str:
         for key in path[:-1]:
             node = node.get(key) or {}
         node.pop(path[-1], None)
-    return digest(data)
+    return digest(_without_identity_keys(data))
 
 
 # --- The canonical stack (same wiring as tests/helpers/njr_queue_harness.py) ----------------------
