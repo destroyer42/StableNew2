@@ -186,12 +186,12 @@ class SingleNodeJobRunner:
         self._notify(restored, JobStatus.QUEUED)
         return True
 
-    def _maybe_release_hold(self) -> None:
+    def _maybe_release_hold(self, *, force: bool = False) -> None:
         observer = self._outage_observer
         if observer is None:
             return
         try:
-            observer.maybe_release()
+            observer.maybe_release(force=force)
         except Exception:  # noqa: BLE001
             logger.debug("WebUI hold release check failed", exc_info=True)
 
@@ -269,6 +269,8 @@ class SingleNodeJobRunner:
         with self._lifecycle_lock:
             if self._shutting_down or self.is_running() or self.job_queue.is_paused():
                 return False
+            # Operator intent: with auto-run off no worker loop is checking, so ask for a fresh readiness proof.
+            self._maybe_release_hold(force=True)
             # One atomic claim: eligibility (WebUI hold) and QUEUED -> RUNNING cannot be separated by a hold change.
             job = self.job_queue.claim_next_job()
             if job is None:

@@ -503,6 +503,18 @@ def test_run_next_cannot_bypass_the_hold_and_claims_eligible_work(make_stack):
     assert stack.status("img-1") is JobStatus.QUEUED
 
 
+def test_run_next_with_auto_run_off_asks_for_a_fresh_proof_and_dispatches_when_ready(make_stack):
+    stack = make_stack(up=False, startup_gate=True)
+    stack.submit(image("img-1"))
+    assert stack.runner.run_next_once() is False  # WebUI still down: held, nothing dispatched
+    assert stack.status("img-1") is JobStatus.QUEUED
+
+    stack.backend.up = True  # no worker loop is running; the manual press itself re-verifies readiness
+    assert stack.runner.run_next_once() is True
+    wait_for(lambda: stack.status("img-1") is JobStatus.COMPLETED)
+    assert stack.queue.is_webui_held() is False
+
+
 def test_a_hold_applied_between_selection_and_transition_cannot_dispatch_held_work(make_stack):
     stack = make_stack(up=True)
     stack.submit(image("img-1"))

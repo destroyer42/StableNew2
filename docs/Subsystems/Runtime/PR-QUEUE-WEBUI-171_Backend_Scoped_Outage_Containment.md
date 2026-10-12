@@ -73,7 +73,7 @@ fail-fast on a definite HTTP response to a generation POST.
 
 ## Acceptance evidence
 
-`tests/queue/test_webui_outage_containment_171.py` (64): classifier table, evidence and assessment, 25-job cascade,
+`tests/queue/test_webui_outage_containment_171.py` (66): classifier table, evidence and assessment, 25-job cascade,
 structured/raised/ready-gate shapes, mixed sequence, priority/FIFO resume, Run Next and transition atomicity, idle
 without spin, successful/failed owned recovery, one-cycle budget, external runtime untouched, HTTP 500 and
 outcome-unknown never replayed, ordinary/SVD/Comfy failures never recover, ambiguous dependency held, concurrent
