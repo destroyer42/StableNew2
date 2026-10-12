@@ -16,8 +16,11 @@ from typing import Any
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_history_store import (
     INTERRUPTED_RESTART_ACTION_REQUIRED,
+    BatchCandidatePage,
+    BatchCandidateRow,
     JobHistoryEntry,
     JobHistoryStore,
+    ReplayChildRow,
 )
 from src.queue.job_model import (
     Job,
@@ -34,6 +37,10 @@ from src.utils.error_envelope_v2 import (
 )
 
 REPOSITORY_SCHEMA_VERSION = 1
+# Every batch identity (Review, versioned descriptor, top-level) is stored under a JSON key of this name.
+# Matching the key alone keeps the prefilter independent of the serializer's whitespace.
+_BATCH_ID_MARKER = '"batch_id"'
+_IN_CHUNK = 400
 _TERMINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 _ALLOWED_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.QUEUED: {JobStatus.RUNNING, JobStatus.CANCELLED},
@@ -59,6 +66,18 @@ class JobConflictError(JobRepositoryError):
 
 class InvalidLifecycleTransition(JobRepositoryError):
     """Raised when a lifecycle transition violates the canonical state machine."""
+
+
+class JobStatusChanged(InvalidLifecycleTransition):
+    """Raised when a guarded transition finds the job no longer in the status the caller expected."""
+
+    def __init__(self, job_id: str, expected: JobStatus, actual: JobStatus) -> None:
+        super().__init__(
+            f"Job {job_id} is {actual.value}, not {expected.value}; the guarded transition was skipped"
+        )
+        self.job_id = job_id
+        self.expected = expected
+        self.actual = actual
 
 
 def _json_dumps(value: Any) -> str:
@@ -462,7 +481,14 @@ class JobRepository(JobHistoryStore):
         *,
         error_message: str | None = None,
         result: dict[str, Any] | None = None,
+        expected_status: JobStatus | None = None,
     ) -> Job:
+        """Apply one lifecycle transition atomically.
+
+        ``expected_status`` makes the transition conditional: the durable status is read inside the same
+        transaction that writes it, and a different status raises ``JobStatusChanged`` before any write.
+        """
+
         with self.transaction() as connection:
             row = connection.execute(
                 "SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)
@@ -470,6 +496,8 @@ class JobRepository(JobHistoryStore):
             if row is None:
                 raise JobRepositoryError(f"Unknown job identity {job.job_id!r}")
             current = JobStatus(row["status"])
+            if expected_status is not None and current != expected_status:
+                raise JobStatusChanged(job.job_id, expected_status, current)
             if status != current and status not in _ALLOWED_TRANSITIONS[current]:
                 raise InvalidLifecycleTransition(
                     f"Cannot transition {job.job_id} from {current.value} to {status.value}"
@@ -687,6 +715,87 @@ class JobRepository(JobHistoryStore):
                 "SELECT * FROM jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
         return self._row_to_history(row) if row is not None else None
+
+    def read_batch_candidate_page(
+        self, *, before_cursor: int | None = None, window: int = 2000
+    ) -> BatchCandidatePage:
+        """One bounded, read-only window (newest rowids first) of jobs whose snapshot mentions a ``batch_id``.
+
+        This is a plain read of the existing ``jobs`` table: no schema change, no batch table, no lifecycle
+        effect. Whether a returned job really belongs to a batch is decided by
+        ``src.queue.batch_membership``. The window bounds the rowids *examined* (not the rows matched), so the
+        time the repository lock is held per call does not depend on how sparse batch jobs are. Continue with
+        ``before_cursor=page.next_cursor`` until ``exhausted``. The cursor is the SQLite ``rowid``
+        (``queue_order`` is renumbered by reordering and cannot page).
+        """
+
+        size = max(1, int(window))
+        with self._lock:
+            if before_cursor is None:
+                top = self._connection.execute("SELECT COALESCE(MAX(rowid), 0) AS top FROM jobs").fetchone()["top"]
+            else:
+                top = int(before_cursor)
+            low = max(0, int(top) - size)
+            rows = self._connection.execute(
+                "SELECT rowid AS cursor, * FROM jobs WHERE rowid > ? AND rowid <= ? "
+                "AND instr(njr_snapshot, ?) > 0 ORDER BY rowid DESC",
+                (low, int(top), _BATCH_ID_MARKER),
+            ).fetchall()
+        return BatchCandidatePage(
+            rows=tuple(self._row_to_batch_candidate(row) for row in rows),
+            next_cursor=low,
+            exhausted=low <= 0,
+        )
+
+    def list_replay_child_rows(self, parent_job_ids: Sequence[str]) -> list[ReplayChildRow]:
+        """Jobs compiled as a history replay of any of ``parent_job_ids`` (read-only; a retry is a child)."""
+
+        ordered = list(dict.fromkeys(str(job_id) for job_id in parent_job_ids if job_id))
+        children: list[ReplayChildRow] = []
+        for start in range(0, len(ordered), _IN_CHUNK):
+            chunk = ordered[start : start + _IN_CHUNK]
+            marks = ",".join("?" for _ in chunk)
+            with self._lock:
+                rows = self._connection.execute(
+                    "SELECT job_id, parent_job_id, status, created_at, njr_snapshot FROM jobs "
+                    f"WHERE parent_job_id IN ({marks}) ORDER BY rowid ASC",
+                    tuple(chunk),
+                ).fetchall()
+            for row in rows:
+                snapshot = _json_loads(row["njr_snapshot"], {})
+                normalized = snapshot.get("normalized_job") if isinstance(snapshot, dict) else None
+                source = normalized.get("source") if isinstance(normalized, dict) else None
+                if not isinstance(source, dict) or source.get("kind") != "history_replay":
+                    continue
+                children.append(
+                    ReplayChildRow(
+                        job_id=str(row["job_id"]),
+                        parent_job_id=str(row["parent_job_id"]),
+                        status=JobStatus(row["status"]),
+                        created_at=_parse_datetime(row["created_at"]) or datetime.utcnow(),
+                        snapshot=snapshot,
+                    )
+                )
+        return children
+
+    def _row_to_batch_candidate(self, row: sqlite3.Row) -> BatchCandidateRow:
+        return BatchCandidateRow(
+            job_id=str(row["job_id"]),
+            status=JobStatus(row["status"]),
+            priority=int(row["priority"]),
+            queue_order=int(row["queue_order"]),
+            created_at=_parse_datetime(row["created_at"]) or datetime.utcnow(),
+            started_at=_parse_datetime(row["started_at"]),
+            completed_at=_parse_datetime(row["completed_at"]),
+            error_message=row["error_message"],
+            error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None)),
+            result=_json_loads(row["result_json"], None),
+            execution_metadata=_execution_metadata_from_dict(
+                _json_loads(row["execution_metadata"], {})
+            ),
+            snapshot=_json_loads(row["njr_snapshot"], {}),
+            cursor=int(row["cursor"]),
+        )
 
     def record_status_change(
         self,
@@ -962,5 +1071,6 @@ __all__ = [
     "JobConflictError",
     "JobRepository",
     "JobRepositoryError",
+    "JobStatusChanged",
     "REPOSITORY_SCHEMA_VERSION",
 ]
