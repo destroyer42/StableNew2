@@ -227,6 +227,7 @@ class PipelineTabFrame(ttk.Frame):
             self.batches_section.body,
             service=build_batch_operations_service(queue_controller),
             main_window_provider=lambda: getattr(queue_controller, "main_window", None),
+            visibility_mode=lambda: getattr(self.app_state, "content_visibility_mode", "nsfw"),
         )
         self.batches_panel.grid(row=0, column=0, sticky="nsew")
         self.batches_section.body.columnconfigure(0, weight=1)
@@ -326,6 +327,9 @@ class PipelineTabFrame(ttk.Frame):
                 self.app_state.subscribe("auto_run_queue", self._on_queue_control_changed)
                 self.app_state.subscribe("history_items", self._on_history_items_changed)
                 self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
+                self.app_state.subscribe(
+                    "content_visibility_mode", lambda *_: self.batches_panel.on_visibility_changed()
+                )
             except Exception:
                 pass
             self._on_app_state_resources_changed(self.app_state.resources)

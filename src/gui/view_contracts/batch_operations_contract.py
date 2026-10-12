@@ -8,12 +8,14 @@ stale background result can never overwrite newer selection or state. Dialogs an
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import PurePath
 from typing import Any
 
+from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.queue.batch_membership import KIND_LABELS, BatchKey
 from src.queue.batch_projection import BatchJobView, BatchSummary, OutputKind
@@ -21,6 +23,7 @@ from src.queue.failure_triage import CATEGORY_LABELS, TriageCategory
 from src.queue.job_model import JobStatus
 
 MAX_LISTED_OUTPUTS = 8
+_SEPARATORS = re.compile(r"[_\-./\\]+")
 
 
 @dataclass(frozen=True)
@@ -87,8 +90,10 @@ class BatchOperationsSession:
         runner: BackgroundWorkRunner,
         hooks: BatchViewHooks | None = None,
         on_change: Callable[[], None] | None = None,
+        visibility_mode: Callable[[], Any] | None = None,
     ) -> None:
         self._service = service
+        self._visibility_mode = visibility_mode or (lambda: "nsfw")
         self._runner = runner
         self.hooks = hooks or BatchViewHooks()
         self._on_change = on_change or (lambda: None)
@@ -117,7 +122,32 @@ class BatchOperationsSession:
             self._on_change()
 
     def _say(self, text: str) -> None:
-        self.message = text
+        self.message = self._safe(text)
+        self._changed()
+
+    # -- content visibility (the same policy History applies) -----------------------------------------------
+
+    def _resolver(self) -> ContentVisibilityResolver:
+        return ContentVisibilityResolver(self._visibility_mode())
+
+    def _safe(self, text: str) -> str:
+        """Free text shown to the operator: redacted whole when it contains explicit terms in SFW mode."""
+
+        if not text:
+            return text
+        # Paths and file names are "_"/"-"/"."-separated, which defeats the resolver's word boundaries: classify
+        # a separator-normalized copy, but redact (or keep) the original text as a whole.
+        return self._resolver().redact_text(text, item={"prompt": _SEPARATORS.sub(" ", text)})
+
+    def _hidden(self, job: BatchJobView) -> bool:
+        """A job the shared policy would hide in the current mode: none of its content is displayed or opened."""
+
+        resolver = self._resolver()
+        return not resolver.decide({**job.visibility_subject, "label": _SEPARATORS.sub(" ", job.source_label)}).visible
+
+    def notify_visibility_changed(self) -> None:
+        """The global SFW/NSFW mode toggled: everything displayed is re-derived from the same state."""
+
         self._changed()
 
     # -- refresh (latest request wins) -----------------------------------------------------------------------
@@ -182,7 +212,7 @@ class BatchOperationsSession:
             notes.append("The scan limit was reached; older batches may be missing.")
         if catalog.ambiguous_job_ids:
             notes.append(f"{len(catalog.ambiguous_job_ids)} job(s) have conflicting batch identifiers.")
-        self.message = " ".join(notes) or self.message
+        self.message = self._safe(" ".join(notes)) or self.message
         self._changed()
         if stale_detail:  # selection moved while the read was in flight: load the current one's detail
             self.refresh()
@@ -251,6 +281,7 @@ class BatchOperationsSession:
     def job_rows(self) -> tuple[JobRow, ...]:
         rows = []
         for job in self.visible_jobs():
+            hidden = self._hidden(job)
             produced = [ref for ref in job.artifacts if ref.available is not False]
             missing = len(job.artifacts) - len(produced)
             outputs = "none" if not job.artifacts else f"{len(produced)} file(s)" + (
@@ -261,8 +292,9 @@ class BatchOperationsSession:
                 JobRow(
                     job.job_id,
                     "-" if job.source_index is None else str(job.source_index + 1),
-                    job.source_label or job.job_id[:8], job.model_label, status, job.priority_label,
-                    job.failure.label if job.failure else "", outputs, retry,
+                    REDACTED_TEXT if hidden else self._safe(job.source_label) or job.job_id[:8],
+                    REDACTED_TEXT if hidden else self._safe(job.model_label), status, job.priority_label,
+                    job.failure.label if job.failure else "", "hidden" if hidden else outputs, retry,
                 )
             )
         return tuple(rows)
@@ -297,22 +329,29 @@ class BatchOperationsSession:
         if not jobs:
             return "Select a job to see its details."
         job = jobs[-1]
+        hidden = self._hidden(job)
         lines = [
             f"Job {job.job_id}  -  {job.status.value.upper()}  -  priority {job.priority_label}  -  "
             f"queue order {job.queue_order}",
-            f"Source: {', '.join(job.source_paths) or '-'}",
-            f"Model / workflow: {job.model_label or '-'}",
-            f"Created {_when(job.created_at)}  Started {_when(job.started_at)}  Finished {_when(job.completed_at)}",
         ]
-        if job.hydration_error:
-            lines.append(job.hydration_error)
+        if hidden:
+            lines.append(f"Content hidden in SFW mode ({REDACTED_TEXT}): source, model, message and outputs are not shown.")
+        else:
+            lines.append(f"Source: {self._safe(', '.join(job.source_paths)) or '-'}")
+            lines.append(f"Model / workflow: {self._safe(job.model_label) or '-'}")
+        lines.append(
+            f"Created {_when(job.created_at)}  Started {_when(job.started_at)}  Finished {_when(job.completed_at)}"
+        )
+        if job.hydration_error and not hidden:
+            lines.append(self._safe(job.hydration_error))
         if job.failure is not None:
             failure = job.failure
             lines.append(
                 f"Failure: {failure.label}" + ("" if failure.typed else " (no typed evidence; not classified)")
                 + (f"  Stage: {failure.stage}" if failure.stage else "")
             )
-            lines.append(f"Message: {failure.summary}")
+            if not hidden:
+                lines.append(f"Message: {self._safe(failure.summary)}")
             lines.append(f"Dispatch certainty: {failure.dispatch_certainty}")
             if failure.acknowledgement_text:
                 lines.append("! " + failure.acknowledgement_text)
@@ -321,11 +360,12 @@ class BatchOperationsSession:
         if job.checkpoints:
             lines.append("Stage checkpoints: " + ", ".join(
                 f"{c.stage_name} ({c.output_count} output(s))" for c in job.checkpoints))
-        for ref in job.artifacts[:MAX_LISTED_OUTPUTS]:
-            state = {True: "available", False: "missing or moved", None: "not checked"}[ref.available]
-            lines.append(f"Output [{ref.kind.value}, {state}]: {PurePath(ref.path).name}  ({ref.path})")
-        if len(job.artifacts) > MAX_LISTED_OUTPUTS:
-            lines.append(f"... and {len(job.artifacts) - MAX_LISTED_OUTPUTS} more output(s)")
+        if not hidden:
+            for ref in job.artifacts[:MAX_LISTED_OUTPUTS]:
+                state = {True: "available", False: "missing or moved", None: "not checked"}[ref.available]
+                lines.append(self._safe(f"Output [{ref.kind.value}, {state}]: {PurePath(ref.path).name}  ({ref.path})"))
+            if len(job.artifacts) > MAX_LISTED_OUTPUTS:
+                lines.append(f"... and {len(job.artifacts) - MAX_LISTED_OUTPUTS} more output(s)")
         if job.parent_job_id:
             lines.append(f"Parent job: {job.parent_job_id}")
         if job.replay_origin is not None and job.replay_origin.key is not None:
@@ -371,9 +411,11 @@ class BatchOperationsSession:
         if not selected:
             return ActionState(False, "Select one or more jobs.")
         usable = [
-            ref for job in selected for ref in job.artifacts
+            ref for job in selected if not self._hidden(job) for ref in job.artifacts
             if ref.available is not False and (kind is None or ref.kind is kind)
         ]
+        if not usable and any(self._hidden(job) for job in selected):
+            return ActionState(False, "Outputs of content hidden in SFW mode are not opened.")
         return ActionState(bool(usable), "Uses the selected jobs' recorded outputs." if usable else empty)
 
     def review_state(self) -> ActionState:
@@ -398,7 +440,7 @@ class BatchOperationsSession:
 
     def _finish(self, text: str, *, refresh: bool = True) -> None:
         self.busy = ""
-        self.message = text
+        self.message = self._safe(text)
         self._changed()
         if refresh:
             self.refresh()
@@ -452,8 +494,24 @@ class BatchOperationsSession:
             "Retry", lambda: self._service.preflight_retry(key, ids), lambda plan: self._review_retry(plan)
         )
 
+    def _redacted_plan(self, plan: Any) -> Any:
+        """The retry review shows hidden jobs' content as redacted; eligibility and tokens are unchanged."""
+
+        by_id = {job.job_id: job for job in (self.detail.jobs if self.detail else ())}
+        items = []
+        for item in plan.items:
+            job = by_id.get(item.job_id)
+            hidden = job is not None and self._hidden(job)
+            items.append(replace(
+                item,
+                source_label=REDACTED_TEXT if hidden else self._safe(item.source_label),
+                reasons=tuple(REDACTED_TEXT if hidden else self._safe(r) for r in item.reasons),
+                notices=tuple(REDACTED_TEXT if hidden else self._safe(n) for n in item.notices),
+            ))
+        return replace(plan, items=tuple(items))
+
     def _review_retry(self, plan: Any) -> None:
-        acknowledged = self.hooks.review_retry(plan)
+        acknowledged = self.hooks.review_retry(self._redacted_plan(plan))
         if acknowledged is None or not plan.submittable:
             self._finish("Retry was not submitted; nothing changed.", refresh=False)
             return
@@ -469,7 +527,9 @@ class BatchOperationsSession:
         gate = {"review": self.review_state, "folder": self.folder_state, "movie_clips": self.movie_clips_state}[target]()
         if not self._begin("Outputs", gate):
             return False
-        key, ids = self.selected_key, self.selected_ids
+        key = self.selected_key
+        # Content the shared policy hides is never resolved, opened or handed to Review/Movie Clips.
+        ids = tuple(job.job_id for job in self.selected_jobs() if not self._hidden(job))
         return self._run(
             "Outputs", lambda: self._service.resolve_outputs(key, ids), lambda res: self._hand_off(target, res)
         )

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Container, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from pathlib import PurePath
@@ -152,6 +152,9 @@ class BatchJobView:
     retry_children: tuple[RetryChildRef, ...] = ()
     last_control_action: str | None = None
     hydration_error: str | None = None
+    #: Classification inputs for the shared content-visibility policy (prompts, pack name, recorded rating).
+    #: Never displayed; a presentation layer hands it to ``ContentVisibilityResolver``.
+    visibility_subject: Mapping[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @property
     def priority_label(self) -> str:
@@ -287,17 +290,19 @@ def collect_artifact_refs(
     return tuple(refs)
 
 
-def _hydrated_facts(snapshot: Mapping[str, Any]) -> tuple[str, tuple[str, ...], str, str, str | None]:
-    """``(workload_kind, source_paths, source_label, model_label, error)`` from the reconstructed NJR."""
+def _hydrated_facts(
+    snapshot: Mapping[str, Any],
+) -> tuple[str, tuple[str, ...], str, str, str | None, dict[str, Any]]:
+    """``(workload_kind, source_paths, source_label, model_label, error, visibility_subject)`` from the NJR."""
 
     from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
     try:
         record = normalized_job_from_snapshot(dict(snapshot))
     except Exception as exc:  # noqa: BLE001 - one corrupt snapshot must not hide the rest of the batch
-        return "unknown", (), "", "", f"Stored job record cannot be reconstructed: {exc}"
+        return "unknown", (), "", "", f"Stored job record cannot be reconstructed: {exc}", {}
     if record is None:
-        return "unknown", (), "", "", "Stored job record cannot be reconstructed."
+        return "unknown", (), "", "", "Stored job record cannot be reconstructed.", {}
     metadata = record.extra_metadata
     workflow = _mapping(metadata.get("video_workflow"))
     identity = _mapping(workflow.get("source_identity"))
@@ -310,7 +315,13 @@ def _hydrated_facts(snapshot: Mapping[str, Any]) -> tuple[str, tuple[str, ...], 
         model = str(workflow.get("display_name") or workflow.get("workflow_id") or "")
     else:
         model = str(record.base_model or "")
-    return record.workload_kind.value, sources, label, model, None
+    subject = {
+        "name": str(record.prompt_pack_name or ""),
+        "positive_prompt": record.positive_prompt,
+        "negative_prompt": record.negative_prompt,
+        "content_visibility": metadata.get("content_visibility"),
+    }
+    return record.workload_kind.value, sources, label, model, None, subject
 
 
 def job_view_from_row(
@@ -321,7 +332,7 @@ def job_view_from_row(
     held_job_ids: Container[str] = (),
 ) -> BatchJobView:
     metadata = snapshot_metadata(row.snapshot)
-    workload, sources, label, model, error = _hydrated_facts(row.snapshot)
+    workload, sources, label, model, error, subject = _hydrated_facts(row.snapshot)
     checkpoints = tuple(row.execution_metadata.stage_checkpoints)
     normalized = _mapping(_mapping(row.snapshot).get("normalized_job"))
     parent_job_id = str(_mapping(normalized.get("source")).get("parent_job_id") or "") or None
@@ -358,6 +369,7 @@ def job_view_from_row(
         replay_origin=replay_origin_of(metadata),
         last_control_action=row.execution_metadata.last_control_action,
         hydration_error=error,
+        visibility_subject=subject,
     )
 
 

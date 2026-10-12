@@ -99,6 +99,7 @@ def review_njr(
     sources: tuple[Path, ...] = (),
     top_level: bool = True,
     artifact_sha256: str | None = None,
+    prompt: str = "test prompt",
 ) -> NormalizedJobRecord:
     """A Review-shaped job: ``review_batch`` descriptor plus the associated top-level ``batch_id``."""
 
@@ -116,6 +117,7 @@ def review_njr(
         job_id=job_id,
         extra_metadata=metadata,
         input_image_paths=inputs,
+        positive_prompt=prompt,
         source_kind="reprocess",
         base_model="sdxl-review.safetensors",
         stage_chain=[make_stage_config(stage_type="img2img")],

@@ -49,6 +49,7 @@ class BatchOperationsPanelV2(ttk.Frame):
         *,
         service: Any,
         main_window_provider: Callable[[], Any] | None = None,
+        visibility_mode: Callable[[], Any] | None = None,
         folder_opener: Callable[[str], None] | None = None,
         runner: BackgroundWorkRunner | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -82,6 +83,7 @@ class BatchOperationsPanelV2(ttk.Frame):
                 open_movie_clips=self._open_movie_clips,
             ),
             on_change=self._render,
+            visibility_mode=visibility_mode,
         )
         self.bind("<Destroy>", self._on_destroy, add="+")
         self.bind("<Map>", lambda _event: self.request_refresh_if_visible(), add="+")
@@ -198,6 +200,12 @@ class BatchOperationsPanelV2(ttk.Frame):
             return
         if visible and self._clock() - self._last_refresh >= self.REFRESH_MIN_INTERVAL_S:
             self.refresh()
+
+    def on_visibility_changed(self) -> None:
+        """The global SFW/NSFW mode toggled (called on the Tk thread by the owning tab)."""
+
+        if self.session is not None and not self._destroyed:
+            self.session.notify_visibility_changed()
 
     def cancel_remaining(self) -> None:
         if self.session is not None:

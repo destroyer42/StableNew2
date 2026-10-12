@@ -92,6 +92,15 @@ one submission runs at a time. A post-admission follow-up error or a runner that
 *admitted with a note* (durability is judged against the identities that existed before the call); pause, auto-run and
 the WebUI hold are respected by the existing queue. No batch-specific runner exists.
 
+**Content visibility (SFW mode).** The view applies the same `ContentVisibilityResolver` policy as History, driven by
+`AppState.content_visibility_mode` (re-derived immediately when the mode toggles). Counts, statuses and structure are
+never falsified. A job the policy would hide shows `[Hidden in SFW mode]` for source/model/outputs, its detail shows only
+id, status, priority, times, the generic failure category and lineage (no message, paths or outputs), and its outputs are
+never resolved, opened in Review/Movie Clips or revealed in a folder. Every displayed free-text field (source, model,
+failure message, output names/paths, operator messages) is also redacted whole when it contains explicit terms, and the
+retry review shows hidden jobs' labels and reasons redacted while eligibility and tokens stay unchanged. Covered by
+`tests/gui_v2/test_batch_operations_visibility_201.py`.
+
 **Outputs.** `resolve_outputs` returns existing files in selection order then artifact order; missing/moved/unreadable
 files are reported (`PIL` header verify for images), never silently handed off. Review: `route_images_to_review`
 (beside the Video/Movie Clips routes) -> `ReviewTabFrame.load_selected_images`, a thin public wrapper over the existing
@@ -204,6 +213,8 @@ batch's retry-children and file-availability detail, on a loaded CI-class VM, en
   by the child check, not by a shared lock (the legacy `JobExecutionController.replay` path still bypasses
   `JobService.submit_njrs`; it is untouched here).
 - WebUI CUDA OOM is not typed in persisted evidence (see §3 triage).
-- The view shows no prompt text, but a failure message is displayed as recorded (first line, <=240 characters): a backend
-  message that itself echoes a prompt would appear. The History panel's content-visibility redaction is not applied to it.
+- Content visibility reuses the shared `ContentVisibilityResolver` heuristic (explicit-term matching plus recorded
+  rating), so it inherits its limits; this view additionally classifies a separator-normalized copy of file
+  names/paths (`nude_study.png`), which the shared word-boundary match misses (History has that gap too; the shared
+  resolver is untouched).
 - Hosted Python 3.14 CI has not run for this branch; nothing was pushed.
