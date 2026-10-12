@@ -390,13 +390,13 @@ class BatchOperationsService:
         if not isinstance(block, Mapping):
             return None
         execution = block.get("video_execution")
-        opted_in = bool(execution.get("experimental_opt_in")) if isinstance(execution, Mapping) else False
+        opted_in = execution.get("experimental_opt_in") is True if isinstance(execution, Mapping) else False
         if self._workflow_registry is None:
             self._workflow_registry = DefaultWorkflowRegistryPort()
         workflow_id = str(block.get("workflow_id") or "")
         try:
             spec = self._workflow_registry.get(workflow_id, str(block.get("workflow_version") or "").strip() or None)
-        except (KeyError, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 - any registry refusal means 'would not be admitted'
             return f"Workflow governance would refuse it now: {exc.args[0] if exc.args else exc}"
         if getattr(spec, "is_experimental", False) and not opted_in:
             return (

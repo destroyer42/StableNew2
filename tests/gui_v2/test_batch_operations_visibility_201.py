@@ -201,3 +201,58 @@ def test_the_real_tab_rerenders_when_the_global_mode_toggles(tk_root, tmp_path, 
         invoker.dispose()
         service.stop()
         repository.close()
+
+
+# ------------------------------------------------------------------ independent-review regressions (S1-S4)
+
+
+def test_a_message_written_before_the_toggle_is_redacted_when_the_mode_becomes_sfw(world):
+    stack, explicit_out, _ = world
+    mode = {"value": "nsfw"}
+    session, _, _ = _session(stack, mode)
+    session._say(f"Opened {explicit_out.parent}.")  # e.g. an Open Output Folder result for hidden-in-SFW v0
+    assert str(explicit_out.parent) in session.message
+    mode["value"] = "sfw"
+    session.notify_visibility_changed()
+    assert session.message == REDACTED_TEXT  # re-derived at read time, not frozen at write time
+    mode["value"] = "nsfw"
+    assert str(explicit_out.parent) in session.message
+
+
+def test_service_refusals_that_name_a_hidden_job_are_redacted_even_with_innocuous_file_names(world):
+    stack, _, _ = world
+    stack_dir = stack.path.parent
+    image_file(stack_dir / "s0.png", 3)  # v0's source now exists, so the retry plan is eligible
+    mode = {"value": "sfw"}
+    session, runner, recorder = _session(stack, mode)
+    session.set_job_selection(["v0"])
+    recorder.retry_answer = ()
+    assert session.retry_selected()
+    outcome, done = runner.run()
+    done(outcome)  # the review dialog was accepted; the submit worker is queued
+    (stack_dir / "s0.png").unlink()  # the source disappears before admission
+    runner.drain()
+    assert "s0.png" not in session.message and session.message == REDACTED_TEXT
+    mode["value"] = "nsfw"
+    assert "s0.png" in session.message  # the same raw text is shown when the policy allows it
+
+
+def test_an_outputs_completion_that_lands_after_switching_to_sfw_hands_nothing_off(world):
+    stack, explicit_out, _ = world
+    mode = {"value": "nsfw"}
+    session, runner, recorder = _session(stack, mode)
+    session.set_job_selection(["v0"])
+    assert session.open_outputs("review")
+    mode["value"] = "sfw"  # toggled while the worker was resolving
+    runner.drain()
+    assert recorder.reviewed == [] and "display mode changed" in session.message
+    assert str(explicit_out) not in session.message
+
+
+def test_a_job_under_a_hidden_directory_is_hidden_even_with_a_clean_prompt_and_file_name(tmp_path):
+    stack = make_stack(tmp_path)
+    admit(stack, [review_njr("d0", "vis", source=tmp_path / "nude" / "IMG1.png", source_count=1,
+                             prompt="a mountain landscape")])
+    mode = {"value": "sfw"}
+    session, _, _ = _session(stack, mode)
+    assert session.job_rows()[0].source == REDACTED_TEXT

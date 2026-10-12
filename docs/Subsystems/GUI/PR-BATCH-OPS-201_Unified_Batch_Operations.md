@@ -195,6 +195,28 @@ claimed job cancelled). Dispositions (each with a regression test that fails wit
 | LOW `replay_origin` in chains | **Documented**: it names the batch member whose batch was archived; a retry of a retry-batch member records the retry batch as origin and the older origin stays reachable through lineage |
 | LOW Typed `timeout` flag is keyword-derived upstream (`webui_failure_evidence.py`) | **Documented** (outside this change); a timeout is treated as outcome-unknown, i.e. the conservative direction |
 
+### Final aggregate review (read-only, at `3eb4fbb`) and dispositions
+
+Cancellation/dispatch races, replay lineage and Tk thread safety: no findings (race stress and lock order re-verified;
+every `compile_replay_intent` caller checked). SFW visibility: three reproduced leaks, all fixed with regression tests that
+fail on the pre-fix source:
+
+| Finding | Disposition |
+|---|---|
+| S1 (blocker) status line kept pre-toggle text after switching to SFW | **Fixed**: the message is stored raw and redacted at read time against the current mode and hidden jobs |
+| S2 (blocker) retry refusal/error text embedded a hidden job's label and paths (innocuous file name, hidden by prompt) | **Fixed**: any message naming a hidden job's source, file, path or folder is redacted whole in SFW mode |
+| S3 (high) an outputs completion landing after switching to SFW still handed images to Review | **Fixed**: the hand-off re-checks visibility when it completes and opens nothing if a requested job became hidden |
+| S4 (low) classification ignored directory names | **Fixed**: job classification includes source/output paths; a job under a hidden directory is hidden |
+| Hardening (low) | experimental opt-in must be exactly `true`; any registry refusal is a preflight problem; mid-anchor files are presence-checked |
+
+Accepted/documented (LOW): video preflight is weaker than the backend on accepted-control, backend-id, frame-count and
+launch-flag checks (a retry that fails there fails again and is classified, never silently replayed); Review jobs with
+several inputs, anchors and depth maps are presence-checked only (no recorded digest, or no single parent digest); a
+Folder hand-off opens a directory that may also hold hidden jobs' files; the mode defaults to NSFW when no app state is
+attached (same as History); `parent_job_id` has no index (about 12 ms per 400-id chunk at 6k jobs) and a full refresh of
+6,000 member jobs takes about 2.3 s off the Tk thread (about 8 s at the 20,000 cap); the job table inserts all rows of the
+selected batch.
+
 ## 5a. Scale evidence
 
 Synthetic repository of 4,000 jobs (3,000 ordinary plus 40 batches of 25, half Review and half Video): one full

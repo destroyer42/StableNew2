@@ -104,7 +104,7 @@ class BatchOperationsSession:
         self.status_filter: JobStatus | None = None
         self.category_filter: TriageCategory | None = None
         self.busy = ""
-        self.message = ""
+        self._message = ""
         self.loading = False
         self._closed = False
         self._refresh_token = 0
@@ -121,8 +121,15 @@ class BatchOperationsSession:
         if not self._closed:
             self._on_change()
 
+    @property
+    def message(self) -> str:
+        """The operator message, redacted at READ time against the CURRENT mode and hidden jobs, so a message
+        written before an SFW toggle can never keep showing content the policy now hides."""
+
+        return self._safe(self._message)
+
     def _say(self, text: str) -> None:
-        self.message = self._safe(text)
+        self._message = text
         self._changed()
 
     # -- content visibility (the same policy History applies) -----------------------------------------------
@@ -135,15 +142,34 @@ class BatchOperationsSession:
 
         if not text:
             return text
+        if self._mentions_hidden_content(text):
+            return REDACTED_TEXT
         # Paths and file names are "_"/"-"/"."-separated, which defeats the resolver's word boundaries: classify
         # a separator-normalized copy, but redact (or keep) the original text as a whole.
         return self._resolver().redact_text(text, item={"prompt": _SEPARATORS.sub(" ", text)})
 
+    def _mentions_hidden_content(self, text: str) -> bool:
+        """True when ``text`` names a hidden job's source, file or path (service errors embed those verbatim)."""
+
+        if self.detail is None or self._resolver().mode.value != "sfw":
+            return False
+        for job in self.detail.jobs:
+            if not self._hidden(job):
+                continue
+            names = {job.source_label, *job.source_paths}
+            for ref in job.artifacts:
+                names.update((ref.path, PurePath(ref.path).name, str(PurePath(ref.path).parent)))
+            if any(name and name in text for name in names):
+                return True
+        return False
+
     def _hidden(self, job: BatchJobView) -> bool:
         """A job the shared policy would hide in the current mode: none of its content is displayed or opened."""
 
-        resolver = self._resolver()
-        return not resolver.decide({**job.visibility_subject, "label": _SEPARATORS.sub(" ", job.source_label)}).visible
+        # Everything that names the job's content takes part (file name AND directories of sources/outputs).
+        named = " ".join([job.source_label, *job.source_paths, *(ref.path for ref in job.artifacts)])
+        label = _SEPARATORS.sub(" ", named)
+        return not self._resolver().decide({**job.visibility_subject, "label": label}).visible
 
     def notify_visibility_changed(self) -> None:
         """The global SFW/NSFW mode toggled: everything displayed is re-derived from the same state."""
@@ -212,7 +238,7 @@ class BatchOperationsSession:
             notes.append("The scan limit was reached; older batches may be missing.")
         if catalog.ambiguous_job_ids:
             notes.append(f"{len(catalog.ambiguous_job_ids)} job(s) have conflicting batch identifiers.")
-        self.message = self._safe(" ".join(notes)) or self.message
+        self._message = " ".join(notes) or self._message
         self._changed()
         if stale_detail:  # selection moved while the read was in flight: load the current one's detail
             self.refresh()
@@ -440,7 +466,7 @@ class BatchOperationsSession:
 
     def _finish(self, text: str, *, refresh: bool = True) -> None:
         self.busy = ""
-        self.message = self._safe(text)
+        self._message = text
         self._changed()
         if refresh:
             self.refresh()
@@ -531,10 +557,17 @@ class BatchOperationsSession:
         # Content the shared policy hides is never resolved, opened or handed to Review/Movie Clips.
         ids = tuple(job.job_id for job in self.selected_jobs() if not self._hidden(job))
         return self._run(
-            "Outputs", lambda: self._service.resolve_outputs(key, ids), lambda res: self._hand_off(target, res)
+            "Outputs",
+            lambda: self._service.resolve_outputs(key, ids),
+            lambda res: self._hand_off(target, res, ids),
         )
 
-    def _hand_off(self, target: str, resolution: Any) -> None:
+    def _hand_off(self, target: str, resolution: Any, requested: tuple[str, ...] = ()) -> None:
+        by_id = {job.job_id: job for job in (self.detail.jobs if self.detail else ())}
+        if any(job_id in by_id and self._hidden(by_id[job_id]) for job_id in requested):
+            # The mode (or the data) changed while the files were being resolved: hand nothing off.
+            self._finish("The display mode changed while outputs were being resolved; nothing was opened.", refresh=False)
+            return
         problems = " ".join(resolution.messages)
         if target == "review":
             if not resolution.images:

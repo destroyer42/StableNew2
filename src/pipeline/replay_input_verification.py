@@ -82,6 +82,9 @@ def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
     if pose.get("path"):
         checks.append(InputCheck("driving video", str(pose["path"]), _recorded_sha(pose.get("sha256"))))
     config = _mapping(_mapping(record.config).get("video_workflow"))
+    for mid in config.get("mid_anchor_paths") or ():
+        if isinstance(mid, str) and mid:
+            checks.append(InputCheck("mid anchor", mid))
     if config.get("end_anchor_path"):
         checks.append(InputCheck("end anchor", str(config["end_anchor_path"])))
     depth = _mapping(config.get("depth_input"))
