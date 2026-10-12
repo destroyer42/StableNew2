@@ -11,12 +11,14 @@ from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
+from src.gui.view_contracts.video_batch_contract import VideoBatchSession
 from src.gui.view_contracts.video_experiment_contract import VideoExperimentSession
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
 )
 from src.gui.view_contracts.workspace_density_contract import changed_value_count
+from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
@@ -150,6 +152,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             ),
             build_preview=lambda **kw: self._experiment_controller().preview_experiment(**kw),
             submit_plan=lambda plan: self._experiment_controller().submit_experiment(plan),
+        )
+        # Transient multi-source batch state (PR-VID-BATCH-200); never saved with the form.
+        self._batch_session = VideoBatchSession(
+            build_preview=lambda **kw: self._experiment_controller().preview_batch(**kw),
+            submit_plan=lambda plan: self._experiment_controller().submit_batch(plan),
+            select_sources=lambda paths, lineage=None, review_origin=False: (
+                self._experiment_controller().select_batch_sources(
+                    paths, lineage, review_origin=review_origin
+                )
+            ),
+            scan_folder=lambda folder, recursive=True: (
+                self._experiment_controller().scan_batch_folder(folder, recursive=recursive)
+            ),
         )
 
         self.columnconfigure(0, weight=1)
@@ -317,6 +332,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.effective_settings_label.grid(row=0, column=0, sticky="ew")
         bind_wraplength(self.effective_settings_label)
+        self._header_frame = header
 
     def _build_body(self) -> None:
         # PR-GUI-100: the workflow body keeps growing with workflow controls; it scrolls instead of growing the window.
@@ -324,7 +340,22 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._body_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
         self._body_scroll.inner.columnconfigure(0, weight=1)
         body = ttk.Frame(self._body_scroll.inner, style="Panel.TFrame", padding=8)
-        body.grid(row=0, column=0, sticky="nsew")
+        body.grid(row=1, column=0, sticky="nsew")
+        # Multi-source batch: a one-row source strip in the fixed header, its Preview/Queue buttons
+        # in the header's action bar, and the (taller) source table at the top of the scrolled body.
+        self.batch_panel = WorkflowBatchPanel(
+            self._header_frame,
+            details_parent=self._body_scroll.inner,
+            session=self._batch_session,
+            read_form=self._read_batch_form,
+            action_parent=self._action_bar,
+            action_before=self.status_label,
+            on_queued=self._on_batch_queued,
+            on_mode_change=self._on_batch_mode_change,
+            on_status=self.status_var.set,
+        )
+        self.batch_panel.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        self.batch_panel.place_details(row=0, column=0, sticky="ew", padx=8, pady=(8, 0))
         configure_grid_columns(
             body,
             build_form_column_specs(
@@ -665,7 +696,30 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.workflow_var.set(values[0])
         self._refresh_workspace_summary()
 
+    def _leave_batch_mode(self) -> bool:
+        """A single-image choice makes single-image mode authoritative again.
+
+        Returns False (and says why) while a batch step is still running: the batch is then left
+        untouched and the single-image choice is not applied, so the form never claims one mode
+        while the other is in force."""
+
+        session = getattr(self, "_batch_session", None)
+        panel = getattr(self, "batch_panel", None)
+        if session is None or not session.active:
+            return True
+        if session.busy:
+            self.status_var.set(
+                "A batch step is still running; wait for it to finish before choosing a single image."
+            )
+            return False
+        session.clear()
+        if panel is not None:
+            panel.refresh()
+        return True
+
     def set_source_image_path(self, image_path: str, *, status_message: str | None = None) -> None:
+        if not self._leave_batch_mode():
+            return
         self.source_image_var.set(str(image_path))
         self._source_bundle = None
         if status_message:
@@ -687,6 +741,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         best_path = extract_source_image_for_handoff(bundle) if isinstance(bundle, dict) else None
         if best_path:
+            if not self._leave_batch_mode():
+                return
             self._source_bundle = dict(bundle)
             self.source_image_var.set(str(best_path))
             self.status_var.set(
@@ -894,10 +950,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             bundle=self._source_bundle,
         )
         detail = summary.detail.strip()
+        headline = summary.headline
+        batch_session = getattr(self, "_batch_session", None)
+        if batch_session is not None and batch_session.active:
+            headline = f"Source: batch of {batch_session.count} image(s)"
         if detail:
-            self.source_summary_var.set(f"{summary.headline} | {detail}")
+            self.source_summary_var.set(f"{headline} | {detail}")
         else:
-            self.source_summary_var.set(summary.headline or summary.empty_state)
+            self.source_summary_var.set(headline or summary.empty_state)
         workflow_value = self.workflow_var.get().strip() or "none"
         workflow_source = (
             "default"
@@ -1026,6 +1086,48 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         panel = getattr(self, "experiment_panel", None)
         if panel is not None:
             panel.invalidate_if_changed()
+        batch_panel = getattr(self, "batch_panel", None)
+        if batch_panel is not None:
+            batch_panel.invalidate_if_changed()
+
+    def _read_batch_form(self) -> dict[str, Any]:
+        # The batch owns its sources; the single-image field is not part of the batch inputs.
+        form = self.get_video_workflow_state(for_submission=True)
+        form.pop("source_image_path", None)
+        return form
+
+    def _on_batch_mode_change(self, active: bool) -> None:
+        # One authoritative source mode at a time: batch mode disables the single-image queue.
+        self.queue_workflow_button.configure(state="disabled" if active else "normal")
+        if hasattr(self, "workflow_controls_panel"):  # the body is built after the header
+            self._refresh_workspace_summary()
+
+    def _on_batch_queued(self, job_ids: list[str]) -> None:
+        # Admission ran on a worker; refreshing GUI-visible queue state happens here, on Tk.
+        sync = getattr(self.app_controller, "sync_queue_state_after_direct_submission", None)
+        if callable(sync):
+            sync()
+        if not job_ids:
+            return  # a refusal: the session message (already shown) is the status
+        result = self._batch_session.last_result
+        batch_id = getattr(result, "batch_id", "")
+        self.status_var.set(
+            f"Queued {len(job_ids)} video jobs as batch {batch_id}. See Queue / History."
+        )
+
+    def set_source_batch(
+        self,
+        paths: list[str],
+        *,
+        lineage_by_path: dict[str, dict[str, str]] | None = None,
+        status_message: str | None = None,
+    ) -> bool:
+        """Accept an ordered Review selection as batch sources (intent only; nothing is queued)."""
+
+        accepted = self.batch_panel.set_review_selection(list(paths), dict(lineage_by_path or {}))
+        if accepted and status_message:
+            self.status_var.set(status_message)
+        return accepted
 
     def _on_experiment_queued(self, job_ids: list[str]) -> None:
         # Admission ran on a worker; refreshing GUI-visible queue state happens here, on Tk.
@@ -1061,6 +1163,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         if path:
             self._last_folder = str(Path(path).parent)
+            if not self._leave_batch_mode():
+                return
             self.source_image_var.set(path)
 
     def _on_browse_pose_video(self) -> None:
@@ -1115,6 +1219,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         getter = getattr(controller, "get_latest_output_image_path", None)
         latest = getter() if callable(getter) else None
         if latest:
+            if not self._leave_batch_mode():
+                return
             self._source_bundle = None
             self.source_image_var.set(str(latest))
             self.status_var.set(f"Loaded latest output: {Path(str(latest)).name}")

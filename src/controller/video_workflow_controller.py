@@ -8,6 +8,15 @@ from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPo
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
+from src.video.video_workflow_batch import (
+    BatchAdmissionResult,
+    BatchPlan,
+    BatchSource,
+    SourceSelection,
+    VideoWorkflowBatchService,
+    scan_folder,
+    select_sources,
+)
 from src.video.video_workflow_experiment import (
     ExperimentAdmissionResult,
     ExperimentPlan,
@@ -38,6 +47,7 @@ class VideoWorkflowController:
             output_dir_provider=lambda: getattr(self._app_controller, "output_dir", None),
         )
         self._experiments = VideoWorkflowExperimentService(self._njr_builder)
+        self._batches = VideoWorkflowBatchService(self._njr_builder)
 
     @staticmethod
     def _version_key(version: str) -> tuple[Any, ...]:
@@ -191,3 +201,39 @@ class VideoWorkflowController:
         refreshes GUI-visible queue state afterwards, on the UI thread."""
 
         return self._experiments.admit(plan, self._job_service())
+
+    # ---------------------------------------------------------------- multi-source batches
+
+    @staticmethod
+    def select_batch_sources(
+        paths: Sequence[str | Path],
+        lineage_by_path: Mapping[str, Mapping[str, str]] | None = None,
+        *,
+        review_origin: bool = False,
+    ) -> SourceSelection:
+        """Order-preserving, duplicate-free source list (nothing is read or queued)."""
+
+        return select_sources(paths, lineage_by_path, review_origin=review_origin)
+
+    @staticmethod
+    def scan_batch_folder(folder: str | Path, *, recursive: bool = True) -> SourceSelection:
+        return scan_folder(folder, recursive=recursive)
+
+    def preview_batch(
+        self,
+        *,
+        sources: Sequence[BatchSource],
+        form_data: dict[str, Any],
+        duplicates_omitted: int = 0,
+    ) -> BatchPlan:
+        """Assess every source and, only when all are accepted, prepare and freeze the batch.
+
+        Worker-thread safe: it reads files and writes only StableNew-owned prepared sources."""
+
+        return self._batches.preview(form_data, sources, duplicates_omitted=duplicates_omitted)
+
+    def submit_batch(self, plan: BatchPlan) -> BatchAdmissionResult:
+        """Admit a previewed batch through ONE ``JobService.submit_njrs`` call (worker-safe; the
+        caller refreshes GUI-visible queue state afterwards, on the UI thread)."""
+
+        return self._batches.admit(plan, self._job_service())

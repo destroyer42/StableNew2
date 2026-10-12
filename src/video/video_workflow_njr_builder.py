@@ -210,6 +210,17 @@ class FrozenVideoInputs:
     source_preparation: Mapping[str, Any] | None
     prepared_source_path: str
     prepared_source_sha256: str
+    # (label, path, sha256) of file-backed end/mid anchors and an uploaded depth map the workflow
+    # actually uses.  Evidence only: re-hashed by ``verify_unchanged``, never stored in the NJR.
+    shared_files: tuple[tuple[str, str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class SharedFrozenInputs:
+    """Inputs that do not depend on the source image, frozen once and shared by a whole batch."""
+
+    driving_video: Mapping[str, str] | None  # {"path", "sha256"}
+    files: tuple[tuple[str, str, str], ...]  # (label, path, sha256)
 
 
 @dataclass(frozen=True)
@@ -236,6 +247,11 @@ class VideoWorkflowNjrBuilder:
 
     def _output_dir(self) -> str:
         return str(self._output_dir_provider() or "output")
+
+    def output_dir(self) -> str:
+        """The StableNew output root a job (and its prepared sources) is built against."""
+
+        return self._output_dir()
 
     def spec_for(self, form_data: Mapping[str, Any]) -> Any:
         workflow_id = str(form_data.get("workflow_id") or "").strip()
@@ -323,15 +339,14 @@ class VideoWorkflowNjrBuilder:
 
     # ------------------------------------------------------------------ freezing
 
-    def freeze_inputs(
-        self, source_image_path: str | Path, form_data: Mapping[str, Any]
-    ) -> FrozenVideoInputs:
-        """Validate, then freeze the admission-scoped inputs (a random seed becomes concrete)."""
+    def freeze_shared_inputs(self, form_data: Mapping[str, Any]) -> SharedFrozenInputs:
+        """Freeze the source-independent inputs (driving video, anchors, uploaded depth map).
 
-        self._require_valid(source_image_path, form_data)
+        Hashed once and reusable by every job of a batch, so a large shared clip is not re-read
+        per source.  The caller validates the form first (``freeze_inputs`` does)."""
+
         spec = self.spec_for(form_data)
         declared_inputs = set(spec.declared_input_names)
-
         driving: dict[str, str] | None = None
         driving_text = str(form_data.get("pose_video_path") or "").strip()
         if "pose_video" in declared_inputs and driving_text:
@@ -339,6 +354,45 @@ class VideoWorkflowNjrBuilder:
             # backend as a copy), and provenance records exactly which clip drove the motion.
             driving_path = Path(driving_text).expanduser().resolve()
             driving = {"path": str(driving_path), "sha256": sha256_file(driving_path)}
+
+        files: list[tuple[str, str, str]] = []
+
+        def add(label: str, raw_path: str) -> None:
+            path = Path(raw_path).expanduser()
+            try:
+                files.append((label, str(path), sha256_file(path)))
+            except OSError as exc:
+                raise ValueError(f"The {label} is not readable: {path}") from exc
+
+        end_anchor_text = str(form_data.get("end_anchor_path") or "").strip()
+        if "end_anchor" in declared_inputs and end_anchor_text:
+            add("end anchor", end_anchor_text)
+        if "mid_anchors" in declared_inputs:
+            for position, candidate in enumerate(mid_anchor_list(form_data.get("mid_anchor_paths"))):
+                add(f"mid anchor {position + 1}", candidate)
+        if any(name in declared_inputs for name in ("depth_map", "controlnet_model")):
+            depth_input = _normalize_depth_input(form_data)
+            if depth_input["mode"] == "upload" and depth_input["path"]:
+                add("depth map", depth_input["path"])
+        return SharedFrozenInputs(driving_video=driving, files=tuple(files))
+
+    def freeze_inputs(
+        self,
+        source_image_path: str | Path,
+        form_data: Mapping[str, Any],
+        *,
+        shared: SharedFrozenInputs | None = None,
+    ) -> FrozenVideoInputs:
+        """Validate, then freeze the admission-scoped inputs (a random seed becomes concrete).
+
+        ``shared`` lets a batch reuse one hash of the source-independent inputs for every source;
+        omitted, they are frozen here exactly as a single submission always did."""
+
+        self._require_valid(source_image_path, form_data)
+        spec = self.spec_for(form_data)
+        declared_inputs = set(spec.declared_input_names)
+        if shared is None:
+            shared = self.freeze_shared_inputs(form_data)
 
         prepared_source_path = str(Path(source_image_path).expanduser())
         source_preparation: dict[str, Any] | None = None
@@ -364,24 +418,15 @@ class VideoWorkflowNjrBuilder:
             source_image_path=str(Path(source_image_path).expanduser()),
             source_sha256=sha256_file(source_image_path),
             seed=seed,
-            driving_video=driving,
+            driving_video=shared.driving_video,
             source_preparation=source_preparation,
             prepared_source_path=prepared_source_path,
             prepared_source_sha256=sha256_file(prepared_source_path),
+            shared_files=shared.files,
         )
 
     @staticmethod
-    def verify_unchanged(frozen: FrozenVideoInputs) -> None:
-        """Refuse when a frozen input's bytes changed since it was frozen."""
-
-        checks = [
-            ("source image", frozen.source_image_path, frozen.source_sha256),
-            ("prepared source image", frozen.prepared_source_path, frozen.prepared_source_sha256),
-        ]
-        if frozen.driving_video is not None:
-            checks.append(
-                ("driving video", frozen.driving_video["path"], frozen.driving_video["sha256"])
-            )
+    def _verify_files(checks: list[tuple[str, str, str]]) -> None:
         for label, path, expected in checks:
             try:
                 actual = sha256_file(path)
@@ -389,6 +434,38 @@ class VideoWorkflowNjrBuilder:
                 raise ValueError(f"The {label} is no longer readable: {path}") from exc
             if actual != expected:
                 raise ValueError(f"The {label} changed after it was frozen: {path}")
+
+    @staticmethod
+    def _shared_checks(
+        driving_video: Mapping[str, str] | None, files: tuple[tuple[str, str, str], ...]
+    ) -> list[tuple[str, str, str]]:
+        checks = list(files)
+        if driving_video is not None:
+            checks.insert(0, ("driving video", driving_video["path"], driving_video["sha256"]))
+        return checks
+
+    @staticmethod
+    def verify_unchanged(frozen: FrozenVideoInputs, *, include_shared: bool = True) -> None:
+        """Refuse when a frozen input's bytes changed since it was frozen.
+
+        ``include_shared=False`` checks only this source's own files; a batch verifies the shared
+        inputs once (``verify_shared_unchanged``) instead of once per job."""
+
+        checks = [
+            ("source image", frozen.source_image_path, frozen.source_sha256),
+            ("prepared source image", frozen.prepared_source_path, frozen.prepared_source_sha256),
+        ]
+        if include_shared:
+            checks.extend(
+                VideoWorkflowNjrBuilder._shared_checks(frozen.driving_video, frozen.shared_files)
+            )
+        VideoWorkflowNjrBuilder._verify_files(checks)
+
+    @staticmethod
+    def verify_shared_unchanged(shared: SharedFrozenInputs) -> None:
+        VideoWorkflowNjrBuilder._verify_files(
+            VideoWorkflowNjrBuilder._shared_checks(shared.driving_video, shared.files)
+        )
 
     # ------------------------------------------------------------------ building
 
@@ -398,7 +475,15 @@ class VideoWorkflowNjrBuilder:
         frozen: FrozenVideoInputs,
         *,
         learning_context: LearningJobContext | None = None,
+        batch: Mapping[str, Any] | None = None,
+        lineage: Mapping[str, Any] | None = None,
     ) -> VideoWorkflowBuild:
+        """Build one immutable NJR.
+
+        ``batch`` (a ``stablenew.batch.v1`` descriptor) and ``lineage`` (trustworthy source
+        job/artifact ids) are additive provenance supplied by a multi-source submission; omitted,
+        the job is exactly what it always was."""
+
         self._require_valid(frozen.source_image_path, form_data)
         spec = self.spec_for(form_data)
         workflow_id = str(form_data.get("workflow_id") or "").strip()
@@ -517,6 +602,24 @@ class VideoWorkflowNjrBuilder:
             )
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
+        if batch is not None:
+            extra_metadata["batch"] = dict(batch)
+            identity: dict[str, Any] = {
+                "original_path": frozen.source_image_path,
+                "original_sha256": frozen.source_sha256,
+                "prepared_path": frozen.prepared_source_path,
+                "prepared_sha256": frozen.prepared_source_sha256,
+                "preparation_policy": str((source_preparation or {}).get("policy") or "none"),
+            }
+            parent_job = str((lineage or {}).get("source_job_id") or "").strip()
+            parent_artifact = str((lineage or {}).get("source_artifact_id") or "").strip()
+            if parent_job:
+                identity["source_job_id"] = parent_job
+                extra_metadata["parent_job_id"] = parent_job
+            if parent_artifact:
+                identity["source_artifact_id"] = parent_artifact
+                extra_metadata["parent_artifact_id"] = parent_artifact
+            extra_metadata["video_workflow"]["source_identity"] = identity
 
         njr = ReprocessJobBuilder().build_reprocess_job(
             input_image_paths=[frozen.prepared_source_path],
@@ -541,6 +644,7 @@ class VideoWorkflowNjrBuilder:
 __all__ = [
     "HASH_CHUNK_BYTES",
     "FrozenVideoInputs",
+    "SharedFrozenInputs",
     "VideoWorkflowBuild",
     "VideoWorkflowNjrBuilder",
     "sha256_file",
