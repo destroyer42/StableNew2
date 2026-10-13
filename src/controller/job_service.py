@@ -925,7 +925,8 @@ class JobService:
             job_id: container.inspect() for job_id, container in self._process_containers.items()
         }
         current_job = getattr(self.runner, "current_job", None)
-        queue_paused = bool(getattr(self.job_queue, "is_paused", lambda: False)())
+        paused_getter = getattr(self.job_queue, "is_paused", None)
+        queue_paused = bool(paused_getter()) if callable(paused_getter) else False
         queued_jobs = self.job_queue.list_jobs(status_filter=JobStatus.QUEUED)
         return {
             "jobs": jobs,
@@ -937,8 +938,7 @@ class JobService:
                 "queued_job_ids": [job.job_id for job in queued_jobs],
                 "job_count": len(jobs),
                 },
-            "webui_outage": job_service_outage.snapshot(self),
-            "gpu_device_loss": job_service_outage.gpu_snapshot(self),
+            **job_service_outage.diagnostics(self),
             "cached_metadata": metadata_cache,
             "containers": containers,
             "active_watchdogs": list(self._active_watchdogs.keys()),

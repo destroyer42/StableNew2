@@ -19,6 +19,7 @@ import io
 import os
 import shutil
 import subprocess
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -119,30 +120,75 @@ def classify_nvidia_smi_output(returncode: int, stdout: str, stderr: str) -> Hos
     return _unavailable("unrecognized_output")
 
 
+#: Extra time the caller waits after the query's own timeout (kill + collect) before it abandons the query.
+_HARD_BOUND_GRACE_S = 1.0
+
+
+class ProbeGate:
+    """Single-flight guard for the host query.
+
+    ``subprocess.run(timeout=...)`` kills the child and then waits for it *without* a bound, so a query stuck in an
+    uninterruptible driver call (the very failure this feature exists for) could block its caller indefinitely. The
+    query therefore runs on a daemon thread that the caller abandons at a hard deadline, and a still-stuck thread is
+    never stacked under a second one: while it lives, further probes answer ``probe_busy`` immediately.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+
+    def launch(self, target: Callable[[], None]) -> threading.Thread | None:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return None
+            thread = threading.Thread(target=target, name="GpuHostProbe", daemon=True)
+            self._thread = thread
+            thread.start()
+            return thread
+
+
+_DEFAULT_GATE = ProbeGate()
+
+
 def probe_host_gpu(
     *,
     timeout_s: float = DEFAULT_TIMEOUT_S,
     which: Callable[[str], str | None] = shutil.which,
     run: Callable[..., Any] = subprocess.run,
+    gate: ProbeGate | None = None,
 ) -> HostGpuEvidence:
-    """One bounded, read-only NVIDIA enumeration query; every failure to obtain evidence is ``UNAVAILABLE``."""
+    """One read-only NVIDIA enumeration query, hard-bounded; failure to obtain evidence is ``UNAVAILABLE``."""
 
     executable = which("nvidia-smi")
     if not executable:
         return _unavailable("nvidia_smi_missing")
-    try:
-        completed = run(
-            [executable, _QUERY, _FORMAT],
-            capture_output=True,
-            text=True,
-            timeout=max(0.5, float(timeout_s)),
-            check=False,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except subprocess.TimeoutExpired:
-        return _unavailable("probe_timeout")
-    except Exception:  # noqa: BLE001 - evidence is best-effort; a failed query is "unavailable"
-        return _unavailable("probe_error")
+    bound = max(0.5, float(timeout_s))
+    outcome: dict[str, Any] = {}
+
+    def query() -> None:
+        try:
+            outcome["completed"] = run(
+                [executable, _QUERY, _FORMAT],
+                capture_output=True,
+                text=True,
+                timeout=bound,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except subprocess.TimeoutExpired:
+            outcome["reason"] = "probe_timeout"
+        except Exception:  # noqa: BLE001 - evidence is best-effort; a failed query is "unavailable"
+            outcome["reason"] = "probe_error"
+
+    worker = (gate or ProbeGate()).launch(query)
+    if worker is None:
+        return _unavailable("probe_busy")
+    worker.join(bound + _HARD_BOUND_GRACE_S)
+    if worker.is_alive():
+        return _unavailable("probe_timeout")  # abandoned; the gate answers probe_busy until it ends
+    completed = outcome.get("completed")
+    if completed is None:
+        return _unavailable(str(outcome.get("reason") or "probe_error"))
     return classify_nvidia_smi_output(
         int(getattr(completed, "returncode", 1)),
         str(getattr(completed, "stdout", "") or ""),
@@ -155,7 +201,7 @@ def default_host_probe() -> HostGpuEvidence:
 
     if os.environ.get(PROBE_ENV, "").strip().lower() in {"0", "false", "no", "off"}:
         return _unavailable("host_probe_disabled")
-    return probe_host_gpu()
+    return probe_host_gpu(gate=_DEFAULT_GATE)
 
 
 class AcceleratorFault(str, Enum):
@@ -223,6 +269,7 @@ __all__ = [
     "AcceleratorFault",
     "HostGpuEvidence",
     "HostGpuState",
+    "ProbeGate",
     "classify_accelerator_fault",
     "classify_nvidia_smi_output",
     "default_host_probe",

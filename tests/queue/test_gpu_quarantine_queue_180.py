@@ -146,8 +146,45 @@ def test_unpersistable_incident_is_still_enforced_in_memory(repository, monkeypa
     assert queue.quarantine_gpu_dispatch(INCIDENT) is True  # safety first: effective before it is durable
     assert queue.claim_next_job() is None
     assert queue.gpu_quarantine_info()["persisted"] is False
-    assert queue.release_gpu_quarantine(INCIDENT["incident_id"]) is False  # cannot durably release either
-    assert queue.is_gpu_quarantined()
+    # Nothing durable exists to clear, so a still-failing store must not trap the operator in the quarantine.
+    assert queue.release_gpu_quarantine(INCIDENT["incident_id"]) is True
+    assert not queue.is_gpu_quarantined()
+    assert queue.claim_next_job().job_id == "a"
+
+
+def test_a_durable_quarantine_that_cannot_be_cleared_stays_in_force(repository, monkeypatch):
+    queue = JobQueue(repository=repository)
+    queue.submit(image("a"))
+    assert queue.quarantine_gpu_dispatch(INCIDENT) is True
+    assert queue.gpu_quarantine_info().get("persisted") is not False
+
+    def refuse(key, value):
+        raise OSError("database is locked")
+
+    monkeypatch.setattr(repository, "set_setting", refuse)
+    # A record IS on disk: releasing only in memory would let the next restart disagree with the operator's view.
+    assert queue.release_gpu_quarantine(INCIDENT["incident_id"]) is False
+    assert queue.is_gpu_quarantined() and queue.claim_next_job() is None
+
+
+def test_idle_polling_does_not_build_the_dispatch_summary_while_nothing_is_held(repository, monkeypatch):
+    queue = JobQueue(repository=repository)
+    runner = SingleNodeJobRunner(queue, lambda job: {"success": True}, poll_interval=0.001, held_poll_interval=0.001)
+    calls = {"n": 0}
+    real = queue.dispatch_summary
+
+    def counting():
+        calls["n"] += 1
+        return real()
+
+    monkeypatch.setattr(queue, "dispatch_summary", counting)
+    for _ in range(5):
+        runner._idle_wait()
+    assert calls["n"] == 0  # the O(queue) summary is only built while a hold or quarantine can explain the idle
+    queue.submit(image("a"))
+    queue.quarantine_gpu_dispatch(INCIDENT)
+    runner._idle_wait()
+    assert calls["n"] == 1
 
 
 def test_webui_hold_and_gpu_quarantine_are_independent(repository):

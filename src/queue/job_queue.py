@@ -228,9 +228,12 @@ class JobQueue:
                     return False
             try:
                 self._repository.set_setting(GPU_QUARANTINE_SETTING, None)
-            except Exception:  # noqa: BLE001 - a release that cannot be made durable must not be half-applied
-                logger.exception("GPU quarantine %s could not be durably released", current.get("incident_id"))
-                return False
+            except Exception:  # noqa: BLE001 - a durable record that cannot be cleared must not be half-released
+                if current.get("persisted") is not False:
+                    logger.exception("GPU quarantine %s could not be durably released", current.get("incident_id"))
+                    return False
+                # The apply never became durable, so no record exists to clear: the in-memory flag stays releasable.
+                logger.warning("GPU quarantine %s was never persisted; releasing in memory", current.get("incident_id"))
             with self._lock:
                 self._gpu_quarantine = None
         self._notify_state_listeners()
@@ -264,6 +267,18 @@ class JobQueue:
         with self._lock:
             job = self._jobs.get(job_id)
             return bool(job is not None and self._is_held_locked(job))
+
+    def is_job_held_by_webui(self, job_id: str) -> bool:
+        """Held by the WebUI outage hold specifically (projections must not blame the WebUI for a GPU hold)."""
+
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return bool(job is not None and self._held_by_webui_locked(job))
+
+    def is_job_held_by_gpu_loss(self, job_id: str) -> bool:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return bool(job is not None and self._held_by_gpu_loss_locked(job))
 
     def dispatch_summary(self) -> dict[str, Any]:
         """Deterministic counts of QUEUED work by dispatch eligibility (projection only)."""

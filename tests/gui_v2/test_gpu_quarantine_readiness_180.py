@@ -93,11 +93,11 @@ def test_without_the_application_callback_there_is_no_release_control(tk_root: t
     assert "confirm_gpu_recovery" not in panel.record_widgets["gpu_device"]
 
 
-def test_main_window_release_runs_confirmed_and_delivers_on_the_ui_thread(monkeypatch):
-    released = SimpleNamespace(to_dict=lambda: {"released": True, "reason": "released"})
-    coordinator = SimpleNamespace(release=Mock(return_value=released))
+def test_main_window_release_goes_through_the_application_controller(monkeypatch):
+    confirm = Mock(return_value={"released": True, "reason": "released"})
     window = MainWindowV2.__new__(MainWindowV2)
-    window.app_controller = SimpleNamespace(job_service=SimpleNamespace(gpu_loss=coordinator))
+    # The controller exposes only the delegate: the window has no path to the job service, queue or coordinator.
+    window.app_controller = SimpleNamespace(confirm_gpu_recovery=confirm)
     delivered: list = []
     window.run_in_main_thread = lambda fn: fn()  # the Tk marshal, synchronous here
 
@@ -108,31 +108,71 @@ def test_main_window_release_runs_confirmed_and_delivers_on_the_ui_thread(monkey
 
     monkeypatch.setattr("src.utils.thread_registry.get_thread_registry", lambda: _Registry())
     window._release_gpu_quarantine_async(delivered.append)
-    coordinator.release.assert_called_once_with(operator_confirmed=True)
+    confirm.assert_called_once_with()
     assert delivered == [{"released": True, "reason": "released"}]
 
 
-def test_main_window_surfaces_a_new_quarantine_once(monkeypatch):
-    listeners: list = []
-    state = {"info": None}
-    queue = SimpleNamespace(
-        register_state_listener=listeners.append,
-        is_gpu_quarantined=lambda: state["info"] is not None,
-        gpu_quarantine_info=lambda: state["info"],
-    )
+def test_main_window_release_failure_is_reported_not_raised(monkeypatch):
     window = MainWindowV2.__new__(MainWindowV2)
-    window._is_test_mode = True
-    window.app_controller = SimpleNamespace(job_service=SimpleNamespace(job_queue=queue))
+    window.app_controller = SimpleNamespace(confirm_gpu_recovery=Mock(side_effect=RuntimeError("boom")))
+    delivered: list = []
+    window.run_in_main_thread = lambda fn: fn()
+
+    class _Registry:
+        def spawn(self, *, target, **_kwargs):
+            target()
+            return SimpleNamespace()
+
+    monkeypatch.setattr("src.utils.thread_registry.get_thread_registry", lambda: _Registry())
+    window._release_gpu_quarantine_async(delivered.append)
+    assert delivered == [{"released": False, "reason": "release_error"}]
+    missing = MainWindowV2.__new__(MainWindowV2)
+    missing.app_controller = SimpleNamespace()
+    missing._release_gpu_quarantine_async(delivered.append)
+    assert delivered[-1] == {"released": False, "reason": "not_quarantined"}
+
+
+def test_main_window_surfaces_a_quarantine_through_the_application_controller():
+    registered: list = []
+
+    def add(listener, *, replay_active=False):
+        registered.append((listener, replay_active))
+
+    window = MainWindowV2.__new__(MainWindowV2)
+    window._is_test_mode = False
+    window.app_controller = SimpleNamespace(add_gpu_quarantine_listener=add)
     opened: list = []
     window.run_in_main_thread = lambda fn: opened.append(fn)
     window._watch_gpu_quarantine()
-    assert len(listeners) == 1 and opened == []
-    listeners[0]()  # nothing quarantined yet
+    assert len(registered) == 1 and registered[0][1] is True  # a restored incident is announced at startup
     assert opened == []
-    state["info"] = {"incident_id": "gpu-1"}
-    listeners[0]()
-    listeners[0]()  # a second notification for the same incident does not re-open the window
-    assert len(opened) == 1 and opened[0] == window.open_operator_readiness
-    state["info"] = {"incident_id": "gpu-2"}
-    listeners[0]()
-    assert len(opened) == 2
+    registered[0][0]({"status": "quarantined", "incident_id": "gpu-1"})
+    assert opened == [window.open_operator_readiness]
+
+    under_test = MainWindowV2.__new__(MainWindowV2)
+    under_test._is_test_mode = True
+    under_test.app_controller = SimpleNamespace(add_gpu_quarantine_listener=add)
+    under_test._watch_gpu_quarantine()
+    assert registered[-1][1] is False
+    # No controller delegate (a stub application): nothing is registered and nothing fails.
+    bare = MainWindowV2.__new__(MainWindowV2)
+    bare._is_test_mode = True
+    bare.app_controller = SimpleNamespace()
+    bare._watch_gpu_quarantine()
+
+
+def test_application_controller_delegates_to_the_coordinator_only():
+    from src.controller.app_controller import AppController
+
+    outcome = SimpleNamespace(to_dict=lambda: {"released": False, "reason": "no_positive_recovery_evidence"})
+    coordinator = SimpleNamespace(release=Mock(return_value=outcome), add_incident_listener=Mock())
+    controller = AppController.__new__(AppController)
+    controller.job_service = SimpleNamespace(gpu_loss=coordinator)
+    assert controller.confirm_gpu_recovery() == {"released": False, "reason": "no_positive_recovery_evidence"}
+    coordinator.release.assert_called_once_with(operator_confirmed=True)
+
+    def listener(_snapshot):
+        return None
+
+    controller.add_gpu_quarantine_listener(listener, replay_active=True)
+    coordinator.add_incident_listener.assert_called_once_with(listener, replay_active=True)

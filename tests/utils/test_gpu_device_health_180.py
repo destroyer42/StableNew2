@@ -151,3 +151,57 @@ def test_device_fault_wins_over_numeric_and_oom_text_but_ignores_generic_advice_
         is AcceleratorFault.DEVICE_FAULT
     )
     assert health.classify_accelerator_fault("CUDA kernel errors might be asynchronously reported") is None
+
+
+def test_a_hung_query_is_abandoned_at_the_hard_bound_and_never_stacked(monkeypatch):
+    import threading
+    import time
+
+    monkeypatch.setattr(health, "_HARD_BOUND_GRACE_S", 0.1)
+    release = threading.Event()
+
+    def wedged(argv, **kwargs):
+        # ``subprocess.run`` kills the child after its timeout and then waits for it without a bound; a query
+        # stuck in the driver never comes back, so this call does not return until the test releases it.
+        release.wait(10)
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+
+    gate = health.ProbeGate()
+    started = time.monotonic()
+    evidence = health.probe_host_gpu(timeout_s=0.5, which=lambda name: name, run=wedged, gate=gate)
+    elapsed = time.monotonic() - started
+    assert (evidence.state, evidence.reason) == (HostGpuState.UNAVAILABLE, "probe_timeout")
+    assert elapsed < 0.5 + 0.1 + 1.0  # bound + grace + scheduling slack, not the 10 s the query would take
+
+    calls: list[int] = []
+    busy = health.probe_host_gpu(
+        timeout_s=0.5, which=lambda name: name, run=lambda *a, **k: calls.append(1), gate=gate
+    )
+    assert (busy.state, busy.reason) == (HostGpuState.UNAVAILABLE, "probe_busy")
+    assert calls == []  # a stuck query is never stacked under a second one
+
+    release.set()
+    healthy = SimpleNamespace(returncode=0, stdout=HEALTHY_ROW, stderr="")
+    deadline = time.monotonic() + 3
+    while True:
+        again = health.probe_host_gpu(
+            timeout_s=0.5, which=lambda name: name, run=lambda *a, **k: healthy, gate=gate
+        )
+        if again.reason != "probe_busy" or time.monotonic() > deadline:
+            break
+        time.sleep(0.01)
+    assert again.state is HostGpuState.HEALTHY  # the gate frees itself once the stuck query ends
+
+
+def test_the_default_probe_shares_one_gate(monkeypatch):
+    monkeypatch.delenv("STABLENEW_GPU_HOST_PROBE", raising=False)
+    seen: list[object] = []
+
+    def capture(**kwargs):
+        seen.append(kwargs.get("gate"))
+        return health.HostGpuEvidence(HostGpuState.HEALTHY, "gpu_enumerated", device_count=1)
+
+    monkeypatch.setattr(health, "probe_host_gpu", capture)
+    health.default_host_probe()
+    health.default_host_probe()
+    assert seen[0] is seen[1] and isinstance(seen[0], health.ProbeGate)

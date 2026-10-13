@@ -163,6 +163,14 @@ class Incident:
         self.stack = Stack(tmp_path, behavior=execute, manager=self.manager, repository=repository)
         self.queue = self.stack.queue
         self.repository = self.stack.repository
+        self.idles = 0
+        original_idle = self.stack.runner._idle_wait
+
+        def counted_idle() -> None:
+            self.idles += 1
+            original_idle()
+
+        self.stack.runner._idle_wait = counted_idle
         self.gpu = GpuLossCoordinator(self.queue, probe=self.host.probe)
         self.service = JobService(self.queue, runner=self.stack.runner)
         bind_webui_outage_containment(self.service, coordinator=self.stack.coordinator, gpu_loss=self.gpu)
@@ -185,20 +193,31 @@ class Incident:
     def statuses(self, ids: list[str]) -> list[str]:
         return [self.status(job_id).value for job_id in ids]
 
-    def drain_until_quiet(self, settle: float = 0.25) -> None:
-        """Run the auto-run worker and wait until it has nothing left it is allowed to claim."""
+    def _quiet(self) -> bool:
+        """No job is claimed or executing, no iteration is mid-failure-handling, and nothing is claimable."""
 
+        return (
+            not self.queue.list_jobs(JobStatus.RUNNING)
+            and self.stack.runner.current_job is None
+            and self.queue.dispatch_summary()["eligible"] == 0
+        )
+
+    def drain_until_quiet(self, timeout: float = 15.0) -> None:
+        """Run the auto-run worker until it has demonstrably idled with nothing left it may claim.
+
+        State-based, not wall-clock: quiet means no RUNNING job, an idle worker (``current_job`` is cleared only after
+        the failure handling of an iteration, including recovery) and zero eligible jobs, observed after the worker
+        has gone through at least two idle iterations. A worker that never settles fails the test.
+        """
+
+        baseline = self.idles
         self.stack.start()
-        end = time.monotonic() + 8
-        last = (-1, -1)
-        stable_since = time.monotonic()
-        while time.monotonic() < end:
-            state = (len(self.posts), sum(s == "queued" for s in self.stack.statuses().values()))
-            if state != last:
-                last, stable_since = state, time.monotonic()
-            elif time.monotonic() - stable_since >= settle:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.idles >= baseline + 2 and self._quiet():
                 return
-            time.sleep(0.01)
+            time.sleep(0.005)
+        raise AssertionError(f"worker did not settle: {self.stack.statuses()}")
 
     def close(self) -> None:
         self.stack.close()
@@ -505,3 +524,106 @@ def test_default_job_service_wires_the_gpu_observer_and_survives_runner_replacem
         assert second._gpu_loss_observer is coordinator and service.gpu_loss is coordinator
     finally:
         repository.close()
+
+
+# -- incident notification, release outcomes and projections (review follow-ups) ---------------------------------------
+
+
+def test_incident_listener_hears_each_new_incident_once_and_replays_a_restored_one(tmp_path):
+    from tests.queue.test_webui_outage_containment_171 import failed, image
+
+    stack = Stack(tmp_path)
+    host = HostGpu(LOST)
+    coordinator = GpuLossCoordinator(stack.queue, probe=host.probe)
+    heard: list[dict] = []
+    coordinator.add_incident_listener(heard.append)
+    job = image("one")
+    stack.queue.submit(job)
+    assert coordinator.assess_failure(job, result=failed(accelerator_fault="device_fault")).confirmed
+    stack.queue.submit(image("noise"))  # unrelated queue notifications do not re-announce the incident
+    assert len(heard) == 1
+    assert heard[0]["status"] == "quarantined" and heard[0]["incident_id"] == stack.queue.gpu_quarantine_info()["incident_id"]
+
+    host.set(HEALTHY)
+    assert coordinator.release(operator_confirmed=True).released
+    host.set(LOST)
+    second = image("two")
+    stack.queue.submit(second)
+    assert coordinator.assess_failure(second, result=failed(accelerator_fault="device_fault")).confirmed
+    assert len(heard) == 2 and heard[1]["incident_id"] != heard[0]["incident_id"]
+
+    # A listener registered later can ask for an already-active (for example restored) incident.
+    late: list[dict] = []
+    coordinator.add_incident_listener(late.append)
+    assert late == []
+    replayed: list[dict] = []
+    coordinator.add_incident_listener(replayed.append, replay_active=True)
+    assert len(replayed) == 1 and replayed[0]["status"] == "quarantined"
+    stack.close()
+
+
+def test_a_failing_incident_listener_cannot_affect_containment(tmp_path):
+    from tests.queue.test_webui_outage_containment_171 import failed, image
+
+    stack = Stack(tmp_path)
+    coordinator = GpuLossCoordinator(stack.queue, probe=HostGpu(LOST).probe)
+
+    def explode(_snapshot):
+        raise RuntimeError("UI is gone")
+
+    coordinator.add_incident_listener(explode)
+    job = image("one")
+    stack.queue.submit(job)
+    assert coordinator.assess_failure(job, result=failed(accelerator_fault="device_fault")).confirmed
+    assert stack.queue.is_gpu_quarantined()
+    stack.close()
+
+
+def test_a_concurrent_release_is_reported_as_such_not_as_a_save_failure(tmp_path):
+    stack = Stack(tmp_path)
+    stack.queue.quarantine_gpu_dispatch({"incident_id": "gpu-race", "evidence_class": "confirmed_device_loss"})
+    host = HostGpu(HEALTHY)
+    coordinator = GpuLossCoordinator(stack.queue, probe=host.probe)
+    real_release = stack.queue.release_gpu_quarantine
+
+    def lose_the_race(incident_id=None):
+        real_release(incident_id)  # another caller (a double click) wins first
+        return False  # ...so this call finds nothing to release
+
+    stack.queue.release_gpu_quarantine = lose_the_race
+    outcome = coordinator.release(operator_confirmed=True)
+    assert (outcome.released, outcome.reason) == (False, gpu_coord.NOT_QUARANTINED)
+    assert not stack.queue.is_gpu_quarantined()
+    assert coordinator.snapshot()["last_release_refusal"] is None  # nothing to refuse: it is already released
+    stack.close()
+
+
+def test_a_genuine_durable_failure_is_still_reported_as_not_durable(tmp_path, monkeypatch):
+    stack = Stack(tmp_path)
+    stack.queue.quarantine_gpu_dispatch({"incident_id": "gpu-disk", "evidence_class": "confirmed_device_loss"})
+    coordinator = GpuLossCoordinator(stack.queue, probe=HostGpu(HEALTHY).probe)
+
+    def refuse(key, value):
+        raise OSError("database is locked")
+
+    monkeypatch.setattr(stack.repository, "set_setting", refuse)
+    outcome = coordinator.release(operator_confirmed=True)
+    assert (outcome.released, outcome.reason) == (False, gpu_coord.RELEASE_NOT_DURABLE)
+    assert stack.queue.is_gpu_quarantined()
+    stack.close()
+
+
+def test_webui_projection_does_not_claim_video_continues_while_the_gpu_is_quarantined(tmp_path):
+    from tests.queue.test_webui_outage_containment_171 import CONNECTION, failed, image, svd
+
+    stack = Stack(tmp_path, manager=FakeManager(Backend(False)))
+    job = image("img")
+    stack.queue.submit(job)
+    stack.queue.submit(svd("vid"))
+    stack.coordinator.assess(job, result=failed(**CONNECTION))
+    assert "independent video jobs continue" in stack.coordinator.snapshot()["message"]
+    stack.queue.quarantine_gpu_dispatch({"incident_id": "gpu-msg", "evidence_class": "confirmed_device_loss"})
+    snapshot = stack.coordinator.snapshot()
+    assert "independent video jobs continue" not in snapshot["message"]
+    assert "GPU quarantine" in snapshot["message"] and snapshot["independent_jobs_eligible"] == 0
+    stack.close()

@@ -294,8 +294,15 @@ class BatchOperationsSession:
         for item in self.snapshot.catalog.summaries:
             declared = item.declared_source_count
             jobs = _plural(item.job_count, "job") + (f" / {_plural(declared, 'source')}" if declared else "")
-            note = "conflicting membership" if item.conflicting else (
-                f"{item.held_count} held (WebUI)" if item.held_count else "")
+            holds = ", ".join(
+                part
+                for part in (
+                    f"{item.gpu_held_count} held (GPU quarantine)" if item.gpu_held_count else "",
+                    f"{item.held_count} held (WebUI)" if item.held_count else "",
+                )
+                if part
+            )
+            note = "conflicting membership" if item.conflicting else holds
             rows.append(
                 BatchRow(
                     item.key.to_token(), KIND_LABELS[item.key.kind], item.key.short_id, jobs,
@@ -313,7 +320,8 @@ class BatchOperationsSession:
             outputs = "none" if not job.artifacts else f"{len(produced)} file(s)" + (
                 f", {missing} missing" if missing else "")
             retry = ", ".join(f"{c.job_id[:8]} ({c.status.value})" for c in job.retry_children)
-            status = job.status.value.upper() + (" (held)" if job.held_by_webui else "")
+            held = " (held - GPU)" if job.held_by_gpu_loss else (" (held)" if job.held_by_webui else "")
+            status = job.status.value.upper() + held
             rows.append(
                 JobRow(
                     job.job_id,
@@ -337,7 +345,12 @@ class BatchOperationsSession:
             + (f", {item.covered_source_count} source image(s) in jobs" if item.key.kind.value == "review" else ""),
             f"Queued {counts.queued} - Running {counts.running} - Completed {counts.completed} - "
             f"Failed {counts.failed} - Cancelled {counts.cancelled}"
-            + (f" - {item.held_count} queued job(s) held by a WebUI outage" if item.held_count else ""),
+            + (f" - {item.held_count} queued job(s) held by a WebUI outage" if item.held_count else "")
+            + (
+                f" - {item.gpu_held_count} queued job(s) held by a GPU device-loss quarantine"
+                if item.gpu_held_count
+                else ""
+            ),
             f"First job created {_when(item.first_created_at)} UTC (batches are not stored; this is the "
             "earliest job record)",
         ]

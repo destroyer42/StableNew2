@@ -501,9 +501,15 @@ class WebUIOutageCoordinator:
                     "independent video jobs continue."
                 ),
             }
+            message = messages[health]
+            if int(summary.get("held_gpu_loss") or 0):
+                # PR-QUEUE-GPU-180: a GPU quarantine holds video jobs too, so nothing "continues" meanwhile.
+                message = message.replace(
+                    "independent video jobs continue", "video jobs are also held by the GPU quarantine"
+                )
             return {
                 "status": health.value,
-                "message": messages[health],
+                "message": message,
                 "endpoint": (probe.endpoint if probe else "") or self._endpoint(manager),
                 "runtime_identity": getattr(manager, "runtime_identity", None) if manager is not None else None,
                 "owned_runtime": bool(getattr(manager, "owns_process", False)) if manager is not None else False,

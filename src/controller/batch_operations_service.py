@@ -153,13 +153,21 @@ class RetrySubmission:
 
 
 class _LiveHold:
-    """Membership test answered by the live ``JobQueue`` at the moment a row is projected (never cached)."""
+    """Membership test answered by the live ``JobQueue`` at the moment a row is projected (never cached).
 
-    def __init__(self, queue: Any) -> None:
+    ``source`` selects which hold is asked about, so a GPU quarantine is never presented as a WebUI outage.
+    """
+
+    def __init__(self, queue: Any, source: str = "webui") -> None:
         self._queue = queue
+        self._source = source
 
     def __contains__(self, job_id: object) -> bool:
-        return bool(self._queue.is_job_held(str(job_id)))
+        if self._source == "gpu":
+            ask = getattr(self._queue, "is_job_held_by_gpu_loss", None)
+            return bool(ask(str(job_id))) if callable(ask) else False
+        ask = getattr(self._queue, "is_job_held_by_webui", None) or self._queue.is_job_held
+        return bool(ask(str(job_id)))
 
 
 def build_batch_operations_service(controller: Any) -> BatchOperationsService | None:
@@ -234,8 +242,12 @@ class BatchOperationsService:
                     return
                 cursor = page.next_cursor
 
-        # The WebUI hold is the live queue's current annotation, read now - never remembered from an incident.
-        catalog = build_catalog(rows(), held_job_ids=_LiveHold(self._queue))
+        # The holds are the live queue's current annotations, read now - never remembered from an incident.
+        catalog = build_catalog(
+            rows(),
+            held_job_ids=_LiveHold(self._queue),
+            gpu_held_job_ids=_LiveHold(self._queue, "gpu"),
+        )
         return replace(catalog, truncated=True) if state["truncated"] else catalog
 
     def refresh(self, selected: BatchKey | None = None) -> BatchSnapshot:

@@ -221,8 +221,12 @@ class SingleNodeJobRunner:
     def _idle_wait(self) -> None:
         """Wait for work; when only held work remains (WebUI hold or GPU quarantine), wait longer (no hot spin)."""
         try:
-            summary = self.job_queue.dispatch_summary()
-            held_only = summary["held"] > 0 and summary["eligible"] == 0
+            gpu_quarantined = getattr(self.job_queue, "is_gpu_quarantined", None)
+            held_only = False
+            # The full summary is O(queue): only build it while a hold or quarantine can be the reason for idling.
+            if self.job_queue.is_webui_held() or (callable(gpu_quarantined) and gpu_quarantined()):
+                summary = self.job_queue.dispatch_summary()
+                held_only = summary["held"] > 0 and summary["eligible"] == 0
         except Exception:  # noqa: BLE001
             held_only = False
         if held_only:

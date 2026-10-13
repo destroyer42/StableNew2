@@ -46,3 +46,9 @@ def snapshot(service: JobService) -> dict[str, Any]:
 def gpu_snapshot(service: JobService) -> dict[str, Any]:
     coordinator = getattr(service, "gpu_loss", None)
     return coordinator.snapshot() if coordinator is not None else {}
+
+
+def diagnostics(service: JobService) -> dict[str, Any]:
+    """Both containment projections under their stable diagnostics keys."""
+
+    return {"webui_outage": snapshot(service), "gpu_device_loss": gpu_snapshot(service)}

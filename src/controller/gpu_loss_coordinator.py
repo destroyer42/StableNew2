@@ -104,6 +104,52 @@ class GpuLossCoordinator:
         self._last: GpuLossAssessment | None = None
         self._last_refusal: dict[str, Any] | None = None
         self._events: deque[dict[str, Any]] = deque(maxlen=8)
+        self._listeners: list[Callable[[dict[str, Any]], None]] = []
+        self._announced: str | None = None
+        self._queue_hooked = False
+
+    # -- incident notification ---------------------------------------------------------------------------------------
+
+    def add_incident_listener(
+        self, listener: Callable[[dict[str, Any]], None], *, replay_active: bool = False
+    ) -> None:
+        """Call ``listener(snapshot)`` once per newly applied (or restored) quarantine incident.
+
+        The callback runs on whichever thread changed the queue (normally the worker); a UI adapter marshals it.
+        ``replay_active`` also announces an incident that is already in force, such as one restored at startup.
+        """
+
+        with self._lock:
+            self._listeners.append(listener)
+            hook = not self._queue_hooked
+            self._queue_hooked = True
+        if hook:
+            register = getattr(self._queue, "register_state_listener", None)
+            if callable(register):
+                register(self._on_queue_state)
+        info = self._queue.gpu_quarantine_info() if replay_active and hasattr(self._queue, "gpu_quarantine_info") else None
+        if info:
+            with self._lock:
+                self._announced = str(info.get("incident_id") or "")
+            try:
+                listener(self.snapshot())
+            except Exception:  # noqa: BLE001 - an observer can never affect containment
+                logger.debug("GPU incident listener failed", exc_info=True)
+
+    def _on_queue_state(self) -> None:
+        info = self._queue.gpu_quarantine_info() if hasattr(self._queue, "gpu_quarantine_info") else None
+        incident = str(info.get("incident_id") or "") if info else ""
+        with self._lock:
+            if not incident or incident == self._announced:
+                return
+            self._announced = incident
+            listeners = list(self._listeners)
+        snapshot = self.snapshot()
+        for listener in listeners:
+            try:
+                listener(snapshot)
+            except Exception:  # noqa: BLE001 - an observer can never affect containment
+                logger.debug("GPU incident listener failed", exc_info=True)
 
     # -- host evidence -----------------------------------------------------------------------------------------------
 
@@ -199,6 +245,12 @@ class GpuLossCoordinator:
         if not host.positive_recovery:
             return self._refuse(NO_POSITIVE_EVIDENCE, active, host)
         if not self._queue.release_gpu_quarantine(active):
+            # Distinguish "someone already released / replaced it" (a double click) from a real durable failure.
+            now = self._queue.gpu_quarantine_info()
+            if now is None:
+                return GpuReleaseResult(False, NOT_QUARANTINED, active, host)
+            if str(now.get("incident_id") or "") != active:
+                return self._refuse(INCIDENT_MISMATCH, str(now.get("incident_id") or ""), host)
             return self._refuse(RELEASE_NOT_DURABLE, active, host)
         with self._lock:
             self._last_refusal = None

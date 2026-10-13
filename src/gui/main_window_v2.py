@@ -645,47 +645,36 @@ class MainWindowV2:
     def _watch_gpu_quarantine(self) -> None:
         """Surface a GPU device-loss quarantine (PR-QUEUE-GPU-180) in Operator Readiness when it is applied.
 
-        Observation only: the queue's state listener fires on the worker thread, so the window is opened via the
-        Tk-thread marshal. A quarantine restored from a previous session is surfaced once the GUI is up.
+        Observation only, through the application controller: each incident is announced once on the queue's
+        thread, so the window is opened via the Tk-thread marshal. A quarantine restored from a previous session is
+        announced as soon as the GUI registers (not under test).
         """
 
-        controller = getattr(self, "app_controller", None)
-        queue = getattr(getattr(controller, "job_service", None), "job_queue", None)
-        if queue is None or not callable(getattr(queue, "is_gpu_quarantined", None)):
+        add = getattr(getattr(self, "app_controller", None), "add_gpu_quarantine_listener", None)
+        if not callable(add):
             return
-        shown = {"incident": None}
-
-        def check() -> None:
-            info = queue.gpu_quarantine_info() if queue.is_gpu_quarantined() else None
-            incident = info.get("incident_id") if info else None
-            if incident is None or incident == shown["incident"]:
-                return
-            shown["incident"] = incident
-            self.run_in_main_thread(self.open_operator_readiness)
-
         try:
-            queue.register_state_listener(check)
+            add(
+                lambda _snapshot: self.run_in_main_thread(self.open_operator_readiness),
+                replay_active=not self._is_test_mode,
+            )
         except Exception:
             logger.debug("GPU quarantine watch could not be registered", exc_info=True)
-            return
-        if not self._is_test_mode:
-            check()
 
     def _release_gpu_quarantine_async(self, done: Callable[[dict[str, Any]], None]) -> None:
         """Run the operator-confirmed GPU release off the Tk thread; ``done`` is delivered on the Tk thread."""
 
-        controller = getattr(self, "app_controller", None)
-        coordinator = getattr(getattr(controller, "job_service", None), "gpu_loss", None)
+        confirm = getattr(getattr(self, "app_controller", None), "confirm_gpu_recovery", None)
 
         def work() -> None:
             try:
-                outcome = coordinator.release(operator_confirmed=True).to_dict()
+                outcome = confirm()
             except Exception:
                 logger.exception("GPU quarantine release failed")
                 outcome = {"released": False, "reason": "release_error"}
             self.run_in_main_thread(lambda: done(outcome))
 
-        if coordinator is None:
+        if not callable(confirm):
             done({"released": False, "reason": "not_quarantined"})
             return
         from src.utils.thread_registry import get_thread_registry
