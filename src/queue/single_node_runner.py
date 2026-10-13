@@ -113,6 +113,7 @@ class SingleNodeJobRunner:
         continuous_dispatch_allowed: Callable[[], bool] | None = None,
         outage_observer: Any | None = None,
         held_poll_interval: float = 1.0,
+        gpu_loss_observer: Any | None = None,
     ) -> None:
         self.job_queue = job_queue
         self.run_callable = run_callable
@@ -138,6 +139,8 @@ class SingleNodeJobRunner:
         # runner never replays a job: a failed job is published once, or restored to QUEUED on positive
         # evidence that nothing was dispatched.
         self._outage_observer = outage_observer
+        # PR-QUEUE-GPU-180: confirmed GPU device loss applies the queue's dispatch quarantine before the next claim.
+        self._gpu_loss_observer = gpu_loss_observer
         self._held_poll_interval = max(0.01, float(held_poll_interval))
         # Worker lifecycle handoff state. All transitions happen under
         # ``_lifecycle_lock`` so a thread's decision to retire and a concurrent
@@ -155,9 +158,27 @@ class SingleNodeJobRunner:
         """Bind the service-owned WebUI outage coordinator (assessment + bounded owned recovery)."""
         self._outage_observer = observer
 
+    def set_gpu_loss_observer(self, observer: Any | None) -> None:
+        """Bind the service-owned GPU device-loss coordinator (assessment + queue quarantine)."""
+        self._gpu_loss_observer = observer
+
+    def _observe_gpu_loss(
+        self, job: Job, *, result: dict | None = None, exc: BaseException | None = None
+    ) -> None:
+        observer = self._gpu_loss_observer
+        if observer is None:
+            return
+        try:
+            observer.assess_failure(job, result=result, exc=exc)
+        except Exception:  # noqa: BLE001 - containment must never break the worker
+            logger.exception("GPU device-loss assessment failed; the job result is published unchanged")
+
     def _observe_failure(
         self, job: Job, *, result: dict | None = None, exc: BaseException | None = None
     ) -> Any | None:
+        # Device loss first: it must be in force before any other assessment or recovery can act, and before the
+        # worker's next claim.
+        self._observe_gpu_loss(job, result=result, exc=exc)
         observer = self._outage_observer
         if observer is None:
             return None
@@ -198,9 +219,10 @@ class SingleNodeJobRunner:
             logger.debug("WebUI hold release check failed", exc_info=True)
 
     def _idle_wait(self) -> None:
-        """Wait for work; when only WebUI-held work remains, wait longer (no hot spin) and stay stop-responsive."""
+        """Wait for work; when only held work remains (WebUI hold or GPU quarantine), wait longer (no hot spin)."""
         try:
-            held_only = self.job_queue.is_webui_held() and self.job_queue.dispatch_summary()["held_webui"] > 0
+            summary = self.job_queue.dispatch_summary()
+            held_only = summary["held"] > 0 and summary["eligible"] == 0
         except Exception:  # noqa: BLE001
             held_only = False
         if held_only:

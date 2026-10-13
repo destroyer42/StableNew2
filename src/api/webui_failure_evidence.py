@@ -126,8 +126,16 @@ def build_failure_evidence(exc: BaseException) -> dict[str, Any]:
         recovery_attempts = 0
     from src.api.webui_identity_attestation import identity_gap
     from src.api.webui_runtime_identity import WebUIRuntimeIdentityMismatch
+    from src.utils.gpu_device_health import classify_accelerator_fault
 
     identity_failure = isinstance(exc, WebUIRuntimeIdentityMismatch)
+    # Fixed-vocabulary code only (PR-QUEUE-GPU-180): a suspicion that gates the host GPU probe, never message text.
+    fault = classify_accelerator_fault(
+        diagnostics.get("error_message"),
+        summary.get("response_snippet"),
+        getattr(error, "message", None),
+        str(exc),
+    )
     evidence = {
         "contract": EVIDENCE_CONTRACT,
         "error_code": str(code_value) if code_value else None,
@@ -136,6 +144,7 @@ def build_failure_evidence(exc: BaseException) -> dict[str, Any]:
         "method": str(summary.get("method") or "").upper() or None,
         "webui_unavailable": bool(diagnostics.get("webui_unavailable")),
         "crash_suspected": bool(diagnostics.get("crash_suspected")),
+        "accelerator_fault": fault.value if fault is not None else None,
         "request_may_have_executed": bool(may_have_executed) if may_have_executed is not None else None,
         "timeout": any(keyword in message for keyword in _TIMEOUT_KEYWORDS),
         "recovery_attempts": recovery_attempts,

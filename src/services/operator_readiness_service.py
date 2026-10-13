@@ -181,9 +181,11 @@ class OperatorReadinessService:
         free_threaded_provider: Callable[[], bool] | None = None,
         jit_enabled_provider: Callable[[], bool] | None = None,
         webui_outage_provider: Callable[[], dict[str, Any] | None] | None = None,
+        gpu_loss_provider: Callable[[], dict[str, Any] | None] | None = None,
     ) -> None:
         self._repository = repository
         self._webui_outage_provider = webui_outage_provider
+        self._gpu_loss_provider = gpu_loss_provider
         self._webui_connection = webui_connection
         self._prompt_pack_dir_provider = prompt_pack_dir_provider
         self._output_dir_provider = output_dir_provider or (lambda: Path("output"))
@@ -201,9 +203,12 @@ class OperatorReadinessService:
         preflight = self._svd_preflight_provider(
             self._svd_config_provider(), source_image_path=source_image_path
         )
+        gpu_record = self._gpu_device_record()
         return OperatorReadinessSnapshot(
             support_surfaces=product_support_surfaces(),
             records=(
+                # An active GPU device-loss quarantine is the most urgent condition: it is listed first.
+                *((gpu_record,) if gpu_record is not None else ()),
                 self._python_runtime_record(),
                 self._repository_record(),
                 self._path_record(
@@ -329,6 +334,47 @@ class OperatorReadinessService:
             (detail,),
             (f"Create or select a readable, writable {display_name.lower()} location.",),
             source,
+        )
+
+    def _gpu_device_record(self) -> OperatorReadinessRecord | None:
+        """The GPU device-loss quarantine (PR-QUEUE-GPU-180), only while one is active.
+
+        Independent of the WebUI record by design: a healthy WebUI endpoint is a different subject and never
+        clears or softens a confirmed GPU loss.
+        """
+
+        provider = self._gpu_loss_provider
+        if provider is None:
+            return None
+        try:
+            gpu = provider()
+        except Exception:
+            return None
+        if not isinstance(gpu, dict) or gpu.get("status") != "quarantined":
+            return None
+        trigger = gpu.get("trigger") if isinstance(gpu.get("trigger"), dict) else {}
+        host = gpu.get("host_evidence") if isinstance(gpu.get("host_evidence"), dict) else {}
+        refusal = gpu.get("last_release_refusal") if isinstance(gpu.get("last_release_refusal"), dict) else None
+        reasons = [
+            f"Incident {gpu.get('incident_id')}: {gpu.get('evidence_class')} "
+            f"(host GPU query: {host.get('reason') or 'unavailable'}; "
+            f"first failed job {trigger.get('job_id') or 'unknown'}, stage {trigger.get('stage') or 'unknown'}).",
+            f"{int(gpu.get('held_gpu_jobs') or 0)} GPU job(s) are held in the queue, unchanged and in their "
+            "original order. Previously failed jobs are not retried.",
+            "Release requires positive host GPU evidence and your explicit confirmation; "
+            "a reboot or a responsive WebUI alone does not release it.",
+        ]
+        if refusal is not None:
+            reasons.append(f"Last release attempt was refused: {gpu_release_message(refusal)}")
+        if gpu.get("persisted") is False:
+            reasons.append("The quarantine could not be saved and will not survive an application restart.")
+        return _action_record(
+            "gpu_device",
+            "GPU device",
+            "GPU device loss was confirmed; GPU jobs stay queued until the GPU has recovered and you confirm it.",
+            tuple(reasons),
+            tuple(str(step) for step in gpu.get("recovery_steps") or ()),
+            "GpuLossCoordinator",
         )
 
     def _webui_outage(self) -> dict[str, Any] | None:
@@ -520,6 +566,26 @@ class OperatorReadinessService:
         )
 
 
+_GPU_RELEASE_MESSAGES = {
+    "released": "GPU jobs are released and will run in their original order.",
+    "not_quarantined": "No GPU device-loss quarantine is active.",
+    "operator_confirmation_required": "Explicit operator confirmation is required.",
+    "incident_mismatch": "The quarantine changed since the confirmation was requested; review it and retry.",
+    "no_positive_recovery_evidence": (
+        "The GPU does not yet enumerate correctly on the host. Recover the GPU (a lost GPU needs a system "
+        "reboot) and retry."
+    ),
+    "release_not_durable": "The release could not be saved; the quarantine stays in force.",
+}
+
+
+def gpu_release_message(result: dict[str, Any] | None) -> str:
+    """Toolkit-neutral operator wording for a GPU quarantine release outcome (code -> sentence)."""
+
+    code = str((result or {}).get("reason") or "")
+    return _GPU_RELEASE_MESSAGES.get(code, "The release was not performed.")
+
+
 def _accepted_svd_baseline_config() -> SVDConfig:
     """Return the accepted baseline only for read-only SVD preflight projection."""
 
@@ -626,5 +692,6 @@ __all__ = [
     "OperatorReadinessState",
     "ProductSupportState",
     "ProductSupportSurface",
+    "gpu_release_message",
     "product_support_surfaces",
 ]

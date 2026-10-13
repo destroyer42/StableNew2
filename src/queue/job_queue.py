@@ -9,9 +9,11 @@ PR-CORE1-060: queue runtime is NJR-only for active jobs. Queue items rely on
 
 from __future__ import annotations
 
+import copy
 import heapq
+import logging
 from collections import deque
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from threading import Lock
 from typing import Any
@@ -19,6 +21,11 @@ from typing import Any
 from src.queue.backend_dependency import DependencyAssessment, classify_job
 from src.queue.job_model import Job, JobStatus, StageCheckpoint
 from src.queue.job_repository import JobRepository, JobStatusChanged
+
+logger = logging.getLogger(__name__)
+
+#: Repository setting that persists the GPU device-loss dispatch quarantine (PR-QUEUE-GPU-180).
+GPU_QUARANTINE_SETTING = "gpu_dispatch_quarantine"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +73,11 @@ class JobQueue:
         # lifecycle status: held jobs stay durably QUEUED in their original order, and independent work (native
         # SVD / Comfy video) remains claimable. Distinct from ``_paused`` (the user's whole-queue pause).
         self._webui_hold: dict[str, Any] | None = None
+        # GPU device-loss dispatch quarantine (PR-QUEUE-GPU-180). Unlike the WebUI hold it IS persisted through the
+        # repository's settings, so a reboot cannot silently authorize execution; it is still not a lifecycle
+        # status, not the user's whole-queue pause and not the auto-run preference.
+        self._gpu_quarantine: dict[str, Any] | None = None
+        self._quarantine_lock = Lock()
         self._dependency_cache: dict[str, DependencyAssessment] = {}
         # Heap counter of a claimed job, so an undispatched return restores its original position.
         self._claimed_counters: dict[str, int] = {}
@@ -90,6 +102,9 @@ class JobQueue:
             self._jobs[job.job_id] = job
             heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
         self._paused = bool(self._repository.get_setting("queue_paused", False))
+        stored = self._repository.get_setting(GPU_QUARANTINE_SETTING, None)
+        if isinstance(stored, dict) and stored.get("incident_id"):
+            self._gpu_quarantine = dict(stored)
 
     def submit(self, job: Job) -> None:
         self.submit_many([job])
@@ -168,6 +183,67 @@ class JobQueue:
         with self._lock:
             return self._webui_hold is not None
 
+    # -- GPU device-loss dispatch quarantine (PR-QUEUE-GPU-180) -------------------------------------------------------
+
+    def quarantine_gpu_dispatch(self, incident: Mapping[str, Any]) -> bool:
+        """Stop claiming GPU-dependent work after a confirmed device loss; first incident wins.
+
+        The quarantine is effective in memory under the claim lock *before* it is made durable, so there is no
+        window in which a claim can slip through while the write is in flight, and a failed write cannot weaken it.
+        Returns whether it was newly applied. Queued jobs keep their identity, status and order.
+        """
+
+        record = copy.deepcopy(dict(incident))
+        if not str(record.get("incident_id") or ""):
+            raise ValueError("a GPU quarantine requires an incident_id")
+        # ``_quarantine_lock`` keeps the durable write and the projection of one apply/release together, so a
+        # concurrent release can never leave the persisted record and the in-memory flag disagreeing. It is only
+        # ever taken before ``_lock`` and never held across a listener notification.
+        with self._quarantine_lock:
+            with self._lock:
+                if self._gpu_quarantine is not None:
+                    return False
+                self._gpu_quarantine = record
+            try:
+                self._repository.set_setting(GPU_QUARANTINE_SETTING, record)
+            except Exception:  # noqa: BLE001 - containment must hold even when it cannot be made durable
+                logger.exception("GPU quarantine %s could not be persisted", record["incident_id"])
+                with self._lock:
+                    if self._gpu_quarantine is not None:
+                        self._gpu_quarantine = {**self._gpu_quarantine, "persisted": False}
+        self._notify_state_listeners()
+        return True
+
+    def release_gpu_quarantine(self, incident_id: str | None = None) -> bool:
+        """Make GPU work claimable again, in original priority/FIFO order (durable first, then in memory).
+
+        ``incident_id`` (when given) must name the active incident, so a stale approval releases nothing. Policy
+        (positive evidence, operator confirmation) belongs to the caller; this only performs the transition.
+        """
+
+        with self._quarantine_lock:
+            with self._lock:
+                current = self._gpu_quarantine
+                if current is None or (incident_id is not None and current.get("incident_id") != incident_id):
+                    return False
+            try:
+                self._repository.set_setting(GPU_QUARANTINE_SETTING, None)
+            except Exception:  # noqa: BLE001 - a release that cannot be made durable must not be half-applied
+                logger.exception("GPU quarantine %s could not be durably released", current.get("incident_id"))
+                return False
+            with self._lock:
+                self._gpu_quarantine = None
+        self._notify_state_listeners()
+        return True
+
+    def gpu_quarantine_info(self) -> dict[str, Any] | None:
+        with self._lock:
+            return copy.deepcopy(self._gpu_quarantine) if self._gpu_quarantine is not None else None
+
+    def is_gpu_quarantined(self) -> bool:
+        with self._lock:
+            return self._gpu_quarantine is not None
+
     def _assessment_locked(self, job: Job) -> DependencyAssessment:
         assessment = self._dependency_cache.get(job.job_id)
         if assessment is None:
@@ -175,8 +251,14 @@ class JobQueue:
             self._dependency_cache[job.job_id] = assessment
         return assessment
 
-    def _is_held_locked(self, job: Job) -> bool:
+    def _held_by_webui_locked(self, job: Job) -> bool:
         return self._webui_hold is not None and self._assessment_locked(job).held_by_webui_outage
+
+    def _held_by_gpu_loss_locked(self, job: Job) -> bool:
+        return self._gpu_quarantine is not None and self._assessment_locked(job).held_by_gpu_loss
+
+    def _is_held_locked(self, job: Job) -> bool:
+        return self._held_by_gpu_loss_locked(job) or self._held_by_webui_locked(job)
 
     def is_job_held(self, job_id: str) -> bool:
         with self._lock:
@@ -191,10 +273,15 @@ class JobQueue:
             held = [job for job in queued if self._is_held_locked(job)]
             return {
                 "queued": len(queued),
-                "held_webui": len(held),
+                "held_webui": sum(1 for job in queued if self._held_by_webui_locked(job)),
+                "held_gpu_loss": sum(1 for job in queued if self._held_by_gpu_loss_locked(job)),
+                "held": len(held),
                 "eligible": len(queued) - len(held),
                 "independent": sum(
-                    1 for job in queued if not self._assessment_locked(job).held_by_webui_outage
+                    1
+                    for job in queued
+                    if not self._assessment_locked(job).held_by_webui_outage
+                    and not self._held_by_gpu_loss_locked(job)
                 ),
                 "unresolved": sum(
                     1
@@ -202,6 +289,9 @@ class JobQueue:
                     if self._assessment_locked(job).dependency.value == "unresolved_dependency"
                 ),
                 "hold": dict(self._webui_hold) if self._webui_hold is not None else None,
+                "gpu_quarantine": (
+                    copy.deepcopy(self._gpu_quarantine) if self._gpu_quarantine is not None else None
+                ),
             }
 
     def _pop_next_eligible_locked(self) -> tuple[tuple[int, int, str], Job, list[tuple[int, int, str]]] | None:

@@ -447,6 +447,7 @@ class MainWindowV2:
         self._wire_learning_model_target()
         self.operator_readiness_service = self._build_operator_readiness_service()
         self._operator_readiness_window: tk.Toplevel | None = None
+        self._watch_gpu_quarantine()
 
         self._dropdown_loader_v2 = DropdownLoaderV2(
             getattr(self.app_controller, "_config_manager", None)
@@ -628,12 +629,72 @@ class MainWindowV2:
             coordinator = getattr(job_service, "webui_outage", None)
             return coordinator.snapshot() if coordinator is not None else None
 
+        def gpu_loss_provider() -> dict[str, Any] | None:
+            coordinator = getattr(job_service, "gpu_loss", None)
+            return coordinator.snapshot() if coordinator is not None else None
+
         return OperatorReadinessService(
             repository=repository,
             webui_connection=getattr(controller, "webui_connection_controller", None),
             prompt_pack_dir_provider=prompt_pack_dir_provider,
             output_dir_provider=output_dir_provider,
             webui_outage_provider=webui_outage_provider,
+            gpu_loss_provider=gpu_loss_provider,
+        )
+
+    def _watch_gpu_quarantine(self) -> None:
+        """Surface a GPU device-loss quarantine (PR-QUEUE-GPU-180) in Operator Readiness when it is applied.
+
+        Observation only: the queue's state listener fires on the worker thread, so the window is opened via the
+        Tk-thread marshal. A quarantine restored from a previous session is surfaced once the GUI is up.
+        """
+
+        controller = getattr(self, "app_controller", None)
+        queue = getattr(getattr(controller, "job_service", None), "job_queue", None)
+        if queue is None or not callable(getattr(queue, "is_gpu_quarantined", None)):
+            return
+        shown = {"incident": None}
+
+        def check() -> None:
+            info = queue.gpu_quarantine_info() if queue.is_gpu_quarantined() else None
+            incident = info.get("incident_id") if info else None
+            if incident is None or incident == shown["incident"]:
+                return
+            shown["incident"] = incident
+            self.run_in_main_thread(self.open_operator_readiness)
+
+        try:
+            queue.register_state_listener(check)
+        except Exception:
+            logger.debug("GPU quarantine watch could not be registered", exc_info=True)
+            return
+        if not self._is_test_mode:
+            check()
+
+    def _release_gpu_quarantine_async(self, done: Callable[[dict[str, Any]], None]) -> None:
+        """Run the operator-confirmed GPU release off the Tk thread; ``done`` is delivered on the Tk thread."""
+
+        controller = getattr(self, "app_controller", None)
+        coordinator = getattr(getattr(controller, "job_service", None), "gpu_loss", None)
+
+        def work() -> None:
+            try:
+                outcome = coordinator.release(operator_confirmed=True).to_dict()
+            except Exception:
+                logger.exception("GPU quarantine release failed")
+                outcome = {"released": False, "reason": "release_error"}
+            self.run_in_main_thread(lambda: done(outcome))
+
+        if coordinator is None:
+            done({"released": False, "reason": "not_quarantined"})
+            return
+        from src.utils.thread_registry import get_thread_registry
+
+        get_thread_registry().spawn(
+            target=work,
+            name="GpuQuarantineRelease",
+            daemon=False,
+            purpose="Operator-confirmed, read-only GPU recovery check and quarantine release",
         )
 
     def _readiness_source_image_path(self) -> str | None:
@@ -697,6 +758,7 @@ class MainWindowV2:
             source_image_path_provider=self._readiness_source_image_path,
             on_close=close,
             on_open_diagnostics=diagnostics if callable(diagnostics) else None,
+            on_confirm_gpu_recovery=self._release_gpu_quarantine_async,
         )
         panel.pack(fill=tk.BOTH, expand=True)
         self._operator_readiness_window = dialog

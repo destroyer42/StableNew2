@@ -1,15 +1,16 @@
-"""WebUI outage containment owned at the JobService boundary (PR-QUEUE-WEBUI-171).
+"""WebUI outage and GPU device-loss containment owned at the JobService boundary (PR-QUEUE-WEBUI-171, PR-QUEUE-GPU-180).
 
-``JobService`` already owns continuous-dispatch policy and the shutdown fence; this is the counterpart for a WebUI
-outage. It binds the transient :class:`WebUIOutageCoordinator` to the service's one runner. It adds no queue, runner or
-lifecycle authority and persists nothing: the queue's in-memory hold decides eligibility, the single worker executes,
-and ``WebUIProcessManager`` remains the only process owner.
+``JobService`` already owns continuous-dispatch policy and the shutdown fence; this is the counterpart for backend
+outages. It binds the transient :class:`WebUIOutageCoordinator` and the :class:`GpuLossCoordinator` to the service's one
+runner. It adds no queue, runner or lifecycle authority: the queue's eligibility flags decide claims, the single worker
+executes, and the process managers remain the only process owners.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from src.controller.gpu_loss_coordinator import GpuLossCoordinator
 from src.controller.webui_outage_coordinator import WebUIOutageCoordinator
 
 if TYPE_CHECKING:
@@ -17,18 +18,31 @@ if TYPE_CHECKING:
 
 
 def bind_webui_outage_containment(
-    service: JobService, *, coordinator: WebUIOutageCoordinator | None = None
+    service: JobService,
+    *,
+    coordinator: WebUIOutageCoordinator | None = None,
+    gpu_loss: GpuLossCoordinator | None = None,
 ) -> WebUIOutageCoordinator:
-    """Create (or adopt) the coordinator and hand it to the runner as its outage observer."""
+    """Create (or adopt) the coordinators and hand each to the runner as its observer."""
 
     bound = coordinator or WebUIOutageCoordinator(service.job_queue)
     service.webui_outage = bound
     configure = getattr(service.runner, "set_outage_observer", None)
     if callable(configure):
         configure(bound)
+    gpu = gpu_loss or getattr(service, "gpu_loss", None) or GpuLossCoordinator(service.job_queue)
+    service.gpu_loss = gpu
+    configure_gpu = getattr(service.runner, "set_gpu_loss_observer", None)
+    if callable(configure_gpu):
+        configure_gpu(gpu)
     return bound
 
 
 def snapshot(service: JobService) -> dict[str, Any]:
     coordinator = getattr(service, "webui_outage", None)
+    return coordinator.snapshot() if coordinator is not None else {}
+
+
+def gpu_snapshot(service: JobService) -> dict[str, Any]:
+    coordinator = getattr(service, "gpu_loss", None)
     return coordinator.snapshot() if coordinator is not None else {}

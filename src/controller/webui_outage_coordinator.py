@@ -171,6 +171,12 @@ class WebUIOutageCoordinator:
         except Exception:
             return False
 
+    def _gpu_quarantined(self) -> bool:
+        try:
+            return self._queue.is_gpu_quarantined() is True
+        except Exception:
+            return False
+
     def enable_startup_gate(self, *, reason: str = "startup_unverified") -> None:
         """Hold WebUI claims until a fresh readiness+identity proof (after an application restart)."""
 
@@ -348,6 +354,11 @@ class WebUIOutageCoordinator:
             with self._lock:
                 if decision.incident_id != self._incident_id or not self._queue.is_webui_held():
                     return
+            if self._gpu_quarantined():
+                # PR-QUEUE-GPU-180: a confirmed GPU loss cannot be repaired by restarting the WebUI, and a runtime
+                # must not be (re)started onto a lost device. Observe and wait for the operator.
+                self._set_unavailable(decision, "gpu_device_loss_quarantine")
+                return
             manager = self._safe_manager()
             self._listen_to(manager)
             owned = bool(manager is not None and getattr(manager, "owns_process", False))

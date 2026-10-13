@@ -1,8 +1,22 @@
 # StableNew current state
 
-Updated: 2026-10-12
+Updated: 2026-10-13
 
 ## Repository
+
+- GPU device-loss dispatch containment (PR-QUEUE-GPU-180, local deterministic validation; not published): after the
+  2026-10-12 incident (Forge stayed HTTP-responsive on a lost RTX 4070 Ti and 14 queued jobs were consumed), the first
+  failed GPU-dependent job that shows a device fault or typed outage suspicion triggers one bounded, read-only
+  `nvidia-smi` enumeration; only host-reported device loss confirms. A confirmed loss quarantines every GPU-dependent
+  claim (Forge/A1111 image, native SVD, Comfy video, AnimateDiff, training and unresolved work) inside `JobQueue`'s
+  existing atomic claim predicate, so auto-run, manual Run Next and Run Now are all refused. The quarantine is persisted
+  in the repository settings (not a status, not the user's pause, not the WebUI hold), survives restart with SQLite
+  identities and order intact, and is released only by an explicit operator confirmation backed by fresh positive host
+  evidence (a reboot, a healthy WebUI or a READY epoch alone never releases it). Operator Readiness lists it first with
+  incident, evidence class, held count and recovery steps. Owned WebUI restarts are skipped while it is active. A
+  suspected loss (GPU still enumerates, or evidence unavailable) does not quarantine. Earlier FAILED jobs are never
+  altered or retried; no controller ceiling raised; no physical validation. See
+  `docs/Subsystems/Runtime/PR-QUEUE-GPU-180_GPU_Loss_Dispatch_Containment.md`.
 
 - Forge vs. Comfy still-image qualification (PR-IMG-BACKEND-QUAL-100, offline decision): pinned source capability,
   installed model identities and deterministic graph/protocol tooling support CONDITIONAL architecture feasibility.
