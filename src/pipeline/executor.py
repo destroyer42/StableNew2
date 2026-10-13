@@ -5163,6 +5163,21 @@ class Pipeline:
                 logger.error("txt2img failed - no images returned")
                 return None
 
+            if conditioning_evidence is not None:
+                # Forge's ControlNet appends each unit's detect map AFTER the generated image(s) (verified by the
+                # PR-IMG-CNET-210 physical check: image 0 = result, image 1 = byte-identical pose map). Those are
+                # control inputs, not results: keep exactly the requested number of generated images.
+                generated_expected = max(
+                    1, int(payload.get("batch_size", 1) or 1) * int(payload.get("n_iter", 1) or 1)
+                )
+                returned_images = response.get("images")
+                if isinstance(returned_images, list) and len(returned_images) > generated_expected:
+                    conditioning_evidence = {
+                        **conditioning_evidence,
+                        "control_images_discarded": len(returned_images) - generated_expected,
+                    }
+                    response["images"] = returned_images[:generated_expected]
+
             gen_info = self._extract_generation_info(response) if response else {}
 
             # Log how many images were actually generated

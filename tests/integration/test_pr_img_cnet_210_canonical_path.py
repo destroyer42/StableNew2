@@ -57,12 +57,16 @@ def _client(transport: FakeWebUITransport) -> ForgeWebUIClient:
     return client
 
 
-def _transport(*, models: list[str] | None = None, modules: list[str] | None = None) -> FakeWebUITransport:
+def _transport(
+    *, models: list[str] | None = None, modules: list[str] | None = None, detect_maps: bool = True
+) -> FakeWebUITransport:
     return FakeWebUITransport(
         flavor="forge",
         checkpoint=SDXL,
         controlnet_models=[ADVERTISED, "other_model"] if models is None else models,
         controlnet_modules=MODULES if modules is None else modules,
+        # Real Forge returns the generated image first and each unit's detect map after it (PR-IMG-CNET-210 physical check).
+        append_controlnet_detect_maps=detect_maps,
     )
 
 
@@ -294,3 +298,17 @@ def test_replay_input_verification_names_the_conditioning_image(webui: Harness) 
     issues = verify_inputs(checks)
     assert [issue.label for issue in issues] == ["OpenPose conditioning image"]
     assert "changed since the job was created" in issues[0].describe()
+
+
+def test_the_detect_map_forge_appends_is_not_recorded_as_a_second_result(webui: Harness, tmp_path: Path) -> None:
+    njr = webui.build([_slot(0, "a person", controlnet_openpose=POSE_A)])[0]
+    transport = _transport(detect_maps=True)
+
+    entry = _run(njr, transport, tmp_path)
+
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    variants = _variants(entry)
+    assert len(variants) == 1  # the job's artifact set is the generated image only
+    assert variants[0]["controlnet_openpose"]["control_images_discarded"] == 1
+    saved = [p for p in (tmp_path / "run").rglob("*.png") if "batch1" in p.name]
+    assert saved == []

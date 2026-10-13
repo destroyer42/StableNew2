@@ -76,6 +76,7 @@ class FakeWebUITransport:
         controlnet_models: list[str] | None = None,
         controlnet_modules: list[str] | None = None,
         controlnet_version: int | None = 3,
+        append_controlnet_detect_maps: bool = False,
     ) -> None:
         if flavor not in {"forge", "a1111"}:
             raise ValueError(flavor)
@@ -110,6 +111,8 @@ class FakeWebUITransport:
         self.controlnet_models = None if controlnet_models is None else list(controlnet_models)
         self.controlnet_modules = None if controlnet_modules is None else list(controlnet_modules)
         self.controlnet_version = controlnet_version
+        # Forge's ControlNet appends one detected map per used unit AFTER the generated image(s) in ``images``.
+        self.append_controlnet_detect_maps = append_controlnet_detect_maps
         self.generation_module_state: list[list[str]] = []
         self.rejected_generations: list[str] = []
         self.generation_started = threading.Event()
@@ -223,7 +226,11 @@ class FakeWebUITransport:
             if path == "/sdapi/v1/extra-single-image":
                 return FakeResponse({"image": TINY_PNG_B64, "html_info": ""})
             info = {"seed": self.seed, "all_seeds": [self.seed], "all_subseeds": [0]}
-            return FakeResponse({"images": [TINY_PNG_B64], "info": json.dumps(info)})
+            images = [TINY_PNG_B64]
+            if self.append_controlnet_detect_maps and path == "/sdapi/v1/txt2img":
+                units = (((body or {}).get("alwayson_scripts") or {}).get("ControlNet") or {}).get("args") or []
+                images.extend(str(unit.get("image") or TINY_PNG_B64) for unit in units if unit.get("enabled"))
+            return FakeResponse({"images": images, "info": json.dumps(info)})
         return FakeResponse({})
 
     def _apply_options(self, body: dict[str, Any]) -> None:

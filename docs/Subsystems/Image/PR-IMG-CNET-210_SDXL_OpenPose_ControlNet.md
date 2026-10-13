@@ -6,7 +6,7 @@ Standard: a substantial cross-file implementation with input-integrity risk, ent
 existing ownership (PromptPack storage, the compiler, the immutable NJR, the Forge
 backend/executor, the asset registry). No new queue, runner, history, compiler or lifecycle
 authority, so no architectural decision was needed. Codex: GPT-6.1 Sol XHigh. Claude Code: Sonnet 5.5 XHigh. Preferred host: local
-desktop. Physical generation was **not** performed and needs separate owner authorization.
+desktop. One owner-authorized physical Forge check was performed after the deterministic work (see *Physical verification*).
 
 ## Controller Surface Assessment
 
@@ -191,6 +191,11 @@ conditioning width) must not prove a non-SDXL model. Absent extension, absent or
 and a missing `None` module each fail the job with an actionable message and **no fallback to
 ordinary txt2img**.
 
+Forge returns the generated image(s) first and appends each used unit's detect map after them (verified
+physically: with `module="None"` the appended map is byte-identical to the input pose). The executor therefore keeps exactly
+`batch_size x n_iter` generated images and records `control_images_discarded` in the conditioning evidence; the control
+map is never saved as a result artifact.
+
 The image bytes exist only in the request: the executor logs and manifests use the unit-free copy
 plus content-free evidence (`controlnet_openpose` in the manifest/variant,
 `image_backend_metadata.openpose_conditioning` for admission evidence), failure records keep the
@@ -223,12 +228,41 @@ producing images that ignore the pose.
 SQLite -> runner -> Forge backend -> executor -> fake Forge transport, mixed three-slot batch,
 replay, refusals, ADetailer/upscale coexistence).
 
+## Physical verification (2026-10-12, owner-authorized, single pose)
+
+Run against the already-running managed Forge Neo `neo-d70373eb` (extension `Version: neo-2.29.2`) through the canonical
+stack (PromptPack compile -> NJR -> JobService -> temp SQLite -> `PipelineRunner.run_njr` -> Forge backend -> executor -> real
+`ForgeWebUIClient`). The harness used a client with option writes disabled (so it could not switch a model, write a module or
+change any option), no WebUI process manager, no interrupt, and a temp library; the live Forge's model, VAE, modules and
+option values were identical before and after.
+
+| Item | Value |
+|---|---|
+| Checkpoint | `colossusProjectXLSFW_12cExperimental3` (SDXL, header-identified at compile) |
+| ControlNet model | `thibaud_xl_openpose` (advertised by Forge; SDXL by header evidence) |
+| Pose | one synthetic asymmetric OpenPose COCO-18 skeleton, 1024x1024 PNG (raised arm, lowered arm, stepped-out leg) |
+| Request | one `POST /sdapi/v1/txt2img`, one unit: `module "None"`, weight 1.0, guidance 0.0-1.0, Balanced, Resize and Fill, `pixel_perfect false`; seed 424242, Euler a, 20 steps, CFG 6 |
+
+Observed:
+
+* Forge accepted exactly the unit fields above (HTTP 200 with images) and its own infotext records
+  `ControlNet 0: Module: None, Model: thibaud_xl_openpose, Weight: 1.0, Resize Mode: Resize and Fill, Guidance Start: 0.0,
+  Guidance End: 1.0, Pixel Perfect: False, Control Mode: Balanced`.
+* The generated image follows the supplied pose (raised hand at the skeleton's raised wrist, the other arm lowered at the
+  side, legs apart with the stepped-out leg on the skeleton's side). This is a visual judgement; no automated pose metric was
+  computed and only one pose and one checkpoint were tried.
+* The response held two images: the generated image, then a map byte-identical to the input pose. Before this record's fix
+  StableNew would have saved the map as `_batch1`; it now keeps only the generated image and records
+  `control_images_discarded`.
+* `/controlnet/version` is `404` on this Forge; the version is optional evidence and its absence does not refuse a job.
+
+An earlier attempt the same day reached Forge but its output could not be written because the harness output path (266
+characters) exceeded the Windows path limit; it produced no usable evidence and nothing was replayed automatically.
+
 ## Not claimed / remaining
 
-* **Physical verification is outstanding.** Mocked tests prove the request contract and lifecycle,
-  not that a real Forge Neo (pinned `d70373eb`) accepts exactly these unit field names or that the
-  pose measurably influences an SDXL image. One owner-authorized physical Forge run (one pose, one
-  SDXL checkpoint, one SDXL OpenPose model) is required before this is called physically validated.
+* Physical verification covers one pose, one SDXL checkpoint and one SDXL OpenPose model on one managed Forge; other
+  checkpoints, ControlNet models, hires-fix and multi-image batches rely on the deterministic suites only.
 * Snapshots are content-addressed and small but are not garbage-collected; pruning is a follow-up.
 * The header family check for an unidentified checkpoint matches by file name under
   `models/Stable-diffusion`; the Forge-served file is not independently re-read at dispatch.

@@ -4,8 +4,8 @@ Updated: 2026-10-12
 
 ## Repository
 
-- SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210, locally validated deterministically; not pushed; no physical
-  generation): a PromptPack slot may carry one optional, versioned `controlnet_openpose` declaration (`openpose.v1`) naming a
+- SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210, draft PR #97; deterministic gate green and one owner-authorized
+  physical Forge generation verified): a PromptPack slot may carry one optional, versioned `controlnet_openpose` declaration (`openpose.v1`) naming a
   pre-rendered OpenPose image from the new scannable library `<WebUI root>/models/OpenPose` (`AssetKind.OPENPOSE_IMAGE`,
   per-kind extension filtering; distinct from the `models/ControlNet` weights). The compiler gates the target (SDXL on
   Forge, base txt2img only; Klein, Z-Image, A1111 and unidentified/non-SDXL checkpoints are refused, never silently
@@ -18,7 +18,9 @@ Updated: 2026-10-12
   gains a picker (thumbnail, search, refresh, model, strength, guidance, modes, remove, target state; a saved selection is
   kept when the target cannot run it) and a preview section. Learning/Model Comparison refuse rows with enabled
   conditioning rather than dropping it. No controller ceiling raised and the persisted model-policy contract is unchanged.
-  One owner-authorized physical Forge run is still required to confirm the pose influences the image. See
+  The physical check (managed Forge Neo `neo-d70373eb`, SDXL checkpoint, `thibaud_xl_openpose`, one pose) accepted the
+  exact unit and followed the pose; it also showed Forge appends the detect map after the result, which is now discarded.
+  Only one pose/checkpoint was tried and no automated pose metric exists. See
   `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md`.
 
 - Unified batch operations and outcome triage (PR-BATCH-OPS-201, locally validated; not pushed): a collapsed
