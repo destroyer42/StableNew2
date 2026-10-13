@@ -45,7 +45,9 @@ in artifact/history provenance and replay.
    sure the Forge runtime lists it (`GET /controlnet/model_list`). StableNew never downloads,
    installs, enables or restarts anything. The editor lists installed weights and labels each by
    header evidence: *SDXL*, *not SDXL* (refused) or *unverified* (not identifiable from its header;
-   still allowed, clearly labelled).
+   still allowed, clearly labelled). A model name that is absent from the installed list *after that list was read* is
+   shown as an error and makes the selection non-executable (the choice is kept); when the list is unavailable (not scanned,
+   folder missing) the editor claims nothing and the backend still resolves the name against what Forge advertises.
 4. **Runtime and checkpoint.** The configured image backend must be **Forge** (the built-in Forge Neo
    ControlNet extension) and the selected checkpoint must be an **SDXL** base checkpoint. A1111,
    FLUX.2 Klein and Z-Image are refused (see the matrix below).
@@ -258,6 +260,29 @@ Observed:
 
 An earlier attempt the same day reached Forge but its output could not be written because the harness output path (266
 characters) exceeded the Windows path limit; it produced no usable evidence and nothing was replayed automatically.
+
+## Operational limitation: Forge's ControlNet batch-directory override
+
+Assessed against the pinned Forge Neo source (`extensions-builtin/sd_forge_controlnet/scripts/controlnet.py`,
+`get_input_data`, "BATCH DIR OVERRIDE", and `lib_controlnet/controlnet_ui/controlnet_ui_group.py`).
+
+* **Behavior.** When the process-global `ControlNetUiGroup.GLOBAL_CONTROLNET_BATCH_DIR` names an existing directory, Forge
+  loads an image from that directory for **every unit and ignores the unit's own `image`**: it matches the source file stem
+  (img2img) or, otherwise (always for txt2img), walks the directory's images round-robin. The supplied image is used only if
+  nothing matches or loads.
+* **How it gets set.** Only by the "batch input directory" textboxes of Forge's own UI (a `blur` event). It defaults to
+  empty, lives in memory only (a Forge restart clears it), is not an `/options` key and is not reported by any REST endpoint.
+* **Consequence.** If an operator has typed a directory there in the managed runtime's UI, an API-supplied OpenPose image is
+  silently replaced by a file from that directory. StableNew's `image_sha256_sent` evidence then proves what was *sent*, not
+  what Forge *used*; the generated image would follow the wrong pose without any error.
+* **Why there is no guard.** The value is unobservable through the read-only APIs StableNew uses, and clearing it would mean
+  mutating Forge UI state, which this feature does not do. The only after-the-fact signal is Forge's INFO log line
+  `[Batch Dir] (unit=..., idx=...) <source> <- <matched file>`, readable only for a runtime StableNew's own manager launched;
+  a log-tail check was deliberately not added (it is post-hoc, depends on log level and format, and would widen scope).
+* **Operator rule.** Keep the ControlNet "batch input directory" and the img2img batch input directory **empty** in the
+  managed Forge UI; restart the managed runtime to clear a stray value; if a conditioned image ignores its pose, look for
+  `[Batch Dir]` in the Forge output. The physical check's result (the image followed the supplied pose) is consistent with the
+  override being unset on that runtime.
 
 ## Not claimed / remaining
 

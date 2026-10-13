@@ -341,3 +341,70 @@ def test_a_flagged_name_never_leaks_through_a_status_line_in_sfw_mode(tk_root, l
         assert panel.get_declaration()["asset"] == "Gone/nude pose.png"
     finally:
         panel.destroy()
+
+
+def _supported_target() -> OpenPoseTarget:
+    from src.image_backends.openpose_capability import STATUS_SUPPORTED
+
+    return OpenPoseTarget(STATUS_SUPPORTED, "supported", "SDXL on Forge: supported.", family="sdxl")
+
+
+def test_a_known_missing_controlnet_model_blocks_and_the_status_says_so(tk_root, library, tmp_path) -> None:
+    panel, changes = _panel(tk_root, library, tmp_path)  # the ControlNet folder was read: two models are installed
+    try:
+        panel.listbox.selection_set(0)
+        panel._on_list_select()
+        panel.model_var.set("thibaud_not_installed")
+        panel._on_model_changed()
+        panel.set_target(_supported_target())
+        changes.clear()
+
+        view = panel.current_view()
+
+        assert view.executable is False
+        assert "Attention" in panel.summary_var.get()
+        assert "is not installed in models/ControlNet" in panel.notes_var.get()
+        assert panel.get_declaration()["model"] == "thibaud_not_installed"  # kept, not removed or replaced
+        assert changes == []
+    finally:
+        panel.destroy()
+
+
+def test_unavailable_model_evidence_does_not_block_the_picker(tk_root, tmp_path) -> None:
+    bare = tmp_path / "bare"
+    make_library(bare, {"Standing/relaxed.png": png_bytes()})  # no models/ControlNet folder at all
+    panel, _changes = _panel(tk_root, bare, tmp_path)
+    try:
+        assert list(panel.model_combo["values"]) == []  # nothing was read: evidence is unavailable, not "missing"
+        panel.listbox.selection_set(0)
+        panel._on_list_select()
+        panel.model_var.set("whatever_forge_serves")
+        panel._on_model_changed()
+        panel.set_target(_supported_target())
+
+        view = panel.current_view()
+
+        assert view.executable is True
+        assert panel.summary_var.get().startswith("Ready")
+        assert "not installed" not in panel.notes_var.get()
+    finally:
+        panel.destroy()
+
+
+def test_installing_the_model_after_a_refresh_clears_the_block(tk_root, library, tmp_path) -> None:
+    panel, _changes = _panel(tk_root, library, tmp_path)
+    try:
+        panel.listbox.selection_set(0)
+        panel._on_list_select()
+        panel.model_var.set("late_arrival_sdxl")
+        panel._on_model_changed()
+        panel.set_target(_supported_target())
+        assert panel.current_view().executable is False
+
+        write_controlnet_weights(library / "models" / "ControlNet" / "late_arrival_sdxl.safetensors", "sdxl")
+        panel.refresh_library()
+
+        assert panel.current_view().executable is True
+        assert panel.summary_var.get().startswith("Ready")
+    finally:
+        panel.destroy()

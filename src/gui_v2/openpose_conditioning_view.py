@@ -34,7 +34,9 @@ SEVERITY_OK = "ok"
 SEVERITY_INFO = "info"
 SEVERITY_WARNING = "warning"
 SEVERITY_ERROR = "error"
-#: Model-status value the view uses for "a model name is selected but no such weight is installed".
+#: Model-status value the view uses for "the installed list was read and the selected model is not in it". It is
+#: positive evidence of absence. ``None`` means the evidence is unavailable (not scanned, folder unreadable/empty) and
+#: never blocks: the backend still resolves the model against what the running Forge advertises.
 MODEL_MISSING = "missing"
 
 
@@ -104,10 +106,13 @@ def describe_openpose(
         blocked = True
         lines.append(StatusLine(SEVERITY_WARNING, "Choose a ControlNet model (an SDXL OpenPose model)."))
     elif model_status == MODEL_MISSING:
+        # Known-missing (the installed list was read and the model is not in it) is not "unknown": it cannot run.
+        blocked = True
         lines.append(
             StatusLine(
-                SEVERITY_WARNING,
-                f"ControlNet model '{selection.model}' was not found in models/ControlNet; Forge must list it at run time.",
+                SEVERITY_ERROR,
+                f"ControlNet model '{selection.model}' is not installed in models/ControlNet. The selection is kept, but "
+                "the job cannot run until the model is installed or another one is chosen.",
             )
         )
     elif model_status == STATUS_NOT_SDXL:

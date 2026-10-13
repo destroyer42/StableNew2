@@ -157,3 +157,101 @@ def test_batched_results_are_kept_and_only_the_trailing_maps_are_dropped(tmp_pat
     assert result is not None
     assert [path.name for path in saved] == ["img_batch0.png", "img_batch1.png"]
     assert result["controlnet_openpose"]["control_images_discarded"] == 1
+
+
+def _png_b64(width: int, height: int) -> str:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), (12, 34, 56)).save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _record(payload: dict):
+    store = ApiFailureStore()
+    store.record(
+        stage="txt2img", endpoint="/sdapi/v1/txt2img", method="POST", payload=payload,
+        status_code=500, response_text=None, error_message="boom",
+    )
+    return store.get_recent(1)[0]
+
+
+def _unit(**fields) -> dict:
+    return {"enabled": True, "module": "None", "model": "thibaud_xl_openpose", "weight": 1.0, **fields}
+
+
+def test_a_small_valid_png_unit_image_is_redacted_whatever_its_length() -> None:
+    small = _png_b64(1, 1)
+    assert 0 < len(small) < 256  # the length-gated redaction used to leave exactly this one in the record
+
+    kept = _record({"alwayson_scripts": {"ControlNet": {"args": [_unit(image=small)]}}}).payload
+    unit = kept["alwayson_scripts"]["ControlNet"]["args"][0]
+
+    assert unit["image"] == f"<{len(small)} base64 characters omitted>"
+    assert small not in json.dumps(kept)
+
+
+def test_a_larger_unit_image_is_redacted_too() -> None:
+    large = _png_b64(256, 256)
+    assert len(large) > 256
+
+    kept = _record({"alwayson_scripts": {"ControlNet": {"args": [_unit(image=large)]}}}).payload
+
+    assert kept["alwayson_scripts"]["ControlNet"]["args"][0]["image"] == f"<{len(large)} base64 characters omitted>"
+    assert large[:48] not in json.dumps(kept)
+
+
+def test_every_unit_image_field_and_the_dict_form_are_redacted() -> None:
+    tiny = _png_b64(1, 1)
+    unit = _unit(
+        image={"image": tiny, "mask": tiny, "note": "keep"}, mask_image=tiny, image_fg=tiny, mask_image_fg=tiny
+    )
+
+    kept = _record({"alwayson_scripts": {"ControlNet": {"args": [unit]}}}).payload
+    redacted = kept["alwayson_scripts"]["ControlNet"]["args"][0]
+
+    assert tiny not in json.dumps(kept)
+    assert redacted["mask_image"] == redacted["image_fg"] == redacted["mask_image_fg"] == f"<{len(tiny)} base64 characters omitted>"
+    assert redacted["image"] == {
+        "image": f"<{len(tiny)} base64 characters omitted>",
+        "mask": f"<{len(tiny)} base64 characters omitted>",
+        "note": "keep",
+    }
+
+
+def test_other_script_fields_and_scripts_are_preserved_and_the_callers_payload_is_untouched() -> None:
+    tiny = _png_b64(1, 1)
+    adetailer = {"args": [True, {"ad_model": "face_yolov8n.pt", "ad_confidence": 0.3}]}
+    payload = {
+        "prompt": "p",
+        "steps": 20,
+        "alwayson_scripts": {
+            "ControlNet": {"args": [_unit(image=tiny, guidance_end=0.8), _unit(image="")], "extra": 1},
+            "ADetailer": adetailer,
+        },
+    }
+    snapshot = json.dumps(payload, sort_keys=True)
+
+    kept = _record(payload).payload
+
+    scripts = kept["alwayson_scripts"]
+    assert scripts["ADetailer"] == adetailer
+    assert scripts["ControlNet"]["extra"] == 1
+    first, second = scripts["ControlNet"]["args"]
+    assert (first["model"], first["weight"], first["guidance_end"], first["module"]) == ("thibaud_xl_openpose", 1.0, 0.8, "None")
+    assert second["image"] == ""  # an empty value is not data and is left alone
+    assert (kept["prompt"], kept["steps"]) == ("p", 20)
+    assert json.dumps(payload, sort_keys=True) == snapshot
+
+
+def test_payloads_without_scripts_and_the_top_level_image_preview_behave_as_before() -> None:
+    tiny = _png_b64(1, 1)
+
+    plain = _record({"prompt": "p", "init_images": [tiny]})
+    scripted_without_args = _record({"prompt": "p", "alwayson_scripts": {"Other": "not-a-dict"}})
+
+    assert plain.payload == {"prompt": "p", "init_images": [tiny]}  # top-level images are an existing, separate path
+    assert plain.image_base64 == tiny
+    assert scripted_without_args.payload == {"prompt": "p", "alwayson_scripts": {"Other": "not-a-dict"}}

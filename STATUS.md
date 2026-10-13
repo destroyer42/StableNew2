@@ -20,7 +20,9 @@ Updated: 2026-10-12
   conditioning rather than dropping it. No controller ceiling raised and the persisted model-policy contract is unchanged.
   The physical check (managed Forge Neo `neo-d70373eb`, SDXL checkpoint, `thibaud_xl_openpose`, one pose) accepted the
   exact unit and followed the pose; it also showed Forge appends the detect map after the result, which is now discarded.
-  Only one pose/checkpoint was tried and no automated pose metric exists. See
+  Only one pose/checkpoint was tried and no automated pose metric exists. Known operational limitation: Forge's own
+  UI "batch input directory" (a process-global, REST-invisible setting) would silently replace the supplied pose; keep it
+  empty on the managed runtime (documented, not guardable read-only). See
   `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md`.
 
 - Unified batch operations and outcome triage (PR-BATCH-OPS-201, locally validated; not pushed): a collapsed
