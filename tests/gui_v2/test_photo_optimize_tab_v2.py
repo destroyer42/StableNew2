@@ -211,12 +211,22 @@ def test_photo_optimize_defers_asset_refresh_until_mapped(tk_root: tk.Tk, tmp_pa
     image_path = tmp_path / "source" / "portrait.png"
     _write_image(image_path)
     asset = store.import_photo(image_path)
+    selected_photo = tmp_path / "source" / "selected.png"
+    completed_photo = tmp_path / "source" / "completed.png"
+    _write_image(selected_photo)
+    _write_image(completed_photo)
+    selected_asset = store.import_photo(selected_photo)
+    completed_asset = store.import_photo(completed_photo)
 
     tab = PhotoOptimizeTabFrameV2(tk_root, store=store)
     try:
-        tab._refresh_assets = Mock()
+        tab.assets_list.selection_clear(0, tk.END)
+        for asset_id in (asset.asset_id, selected_asset.asset_id):
+            tab.assets_list.selection_set(tab._asset_index_by_row.index(asset_id))
+        tab._show_asset(asset.asset_id)
+        tab._refresh_assets = Mock(wraps=tab._refresh_assets)
 
-        tab.on_assets_updated([asset.asset_id])
+        tab.on_assets_updated([completed_asset.asset_id])
 
         tab._refresh_assets.assert_not_called()
         assert tab._pending_asset_refresh_target == asset.asset_id
@@ -225,6 +235,11 @@ def test_photo_optimize_defers_asset_refresh_until_mapped(tk_root: tk.Tk, tmp_pa
         tk_root.update_idletasks()
         tk_root.update()
 
-        tab._refresh_assets.assert_called_once_with(select_asset_id=asset.asset_id)
+        tab._refresh_assets.assert_called_once_with()
+        assert tab._pending_asset_refresh_target is None
+        assert set(tab._selected_asset_ids(batch_all=False)) == {
+            asset.asset_id, selected_asset.asset_id,
+        }
+        assert tab._current_asset_id == asset.asset_id
     finally:
         tab.destroy()

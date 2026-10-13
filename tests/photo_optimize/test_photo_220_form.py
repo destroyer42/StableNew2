@@ -197,7 +197,8 @@ def test_resources_reload_cannot_persist_draft(tmp_path):
     assert tab.store.sidecar_path(tab._current_asset_id).read_bytes() == before
 
 
-def test_multi_selection_survives_refresh_and_other_photo_completion(tmp_path):
+@pytest.mark.parametrize("mapped", [True, False])
+def test_multi_selection_survives_refresh_and_other_photo_completion(tmp_path, mapped):
     tab = form(tmp_path)
     second = tab.store.import_photo(image(tmp_path / "second.png"))
     third = tab.store.import_photo(image(tmp_path / "third.png"))
@@ -205,7 +206,23 @@ def test_multi_selection_survives_refresh_and_other_photo_completion(tmp_path):
     tab.assets_list.selection_set(1)
     selected = set(tab._selected_asset_ids(batch_all=False))
     active = tab._current_asset_id
+    tab.winfo_ismapped = lambda: mapped
+    tab._pending_asset_refresh_target = None
+    tab._pending_resources_payload = None
+    tab._pending_visibility_refresh = False
+    callbacks = []
+    tab.after_idle = callbacks.append
+    tab._refresh_assets = Mock(wraps=tab._refresh_assets)
     tab.on_assets_updated([third.asset_id])
+    if not mapped:
+        tab._refresh_assets.assert_not_called()
+        assert tab._pending_asset_refresh_target == active
+        tab._on_map()
+        tab._refresh_assets.assert_not_called()
+        assert len(callbacks) == 1
+        callbacks[0]()
+    tab._refresh_assets.assert_called_once_with()
+    assert tab._pending_asset_refresh_target is None
     assert set(tab._selected_asset_ids(batch_all=False)) == selected
     assert tab._current_asset_id == active
 
