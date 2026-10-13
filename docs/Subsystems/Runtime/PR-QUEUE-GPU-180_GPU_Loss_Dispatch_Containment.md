@@ -89,16 +89,31 @@ Reproduction: `C:/Users/rob/qual/QUEUE180-evidence/test_baseline_180.py` (log `b
 
 ## Acceptance evidence
 
-`tests/queue/test_gpu_loss_containment_180.py` (21, canonical path), `test_gpu_quarantine_queue_180.py` (11, queue),
+`tests/queue/test_gpu_loss_containment_180.py` (21, canonical path), `test_gpu_quarantine_queue_180.py` (13, queue),
 `test_gpu_loss_assessment_180.py` (23, decision table), `tests/utils/test_gpu_device_health_180.py` (36, incident output
 shapes and vocabulary), `tests/services/test_operator_readiness_gpu_180.py` (4) and
-`tests/gui_v2/test_gpu_quarantine_readiness_180.py` (4): 99 new tests. Mutation checks (runner never consults the
+`tests/gui_v2/test_gpu_quarantine_readiness_180.py` (4): 101 new tests. Mutation checks (runner never consults the
 observer, eligibility ignores the quarantine, healthy host confirms, unavailable probe confirms, release without
 confirmation, release without positive evidence, no persistence, WebUI release lifts it, owned recovery ignores it,
 out-of-memory asks the host, GPU-free allowance dropped, restore ignored) are each detected.
 
 Affected suites (`tests/queue`, `tests/controller`, `tests/services`, `tests/utils`, `tests/api`) pass unchanged,
 including PR-QUEUE-WEBUI-171 (65) and -172 (31), cancellation, shutdown fencing and the ambiguous-POST protections.
+
+The queue serializes apply/release (durable write and in-memory flag together) under one extra lock. A concurrent
+apply/release interleaving that would desynchronize them was **not** reproduced in 12 stress trials with the lock
+removed; the lock and `test_concurrent_apply_and_release_keep_durable_and_memory_state_identical` are a defensive
+invariant, not a demonstrated bug fix.
+
+## Gate evidence (exact commit `b5051dbe`, local; hosted CI not run — nothing was published)
+
+`python tools/ci/run_pr_gate.py` (Python 3.14.8, Ruff 0.14.9): repository completeness OK (574 files), controller
+surface ratchet OK (`job_service.py` unchanged at its 1233 ceiling), Ruff clean, mypy smoke clean (10 files), isolated
+collection 9,381 tests (repository unchanged), required smoke 386 passed (repository unchanged); `git diff --check`
+clean. Security review (processes/persistence/untrusted input): no required fixes; one low defense-in-depth note —
+`shutil.which("nvidia-smi")` searches the working directory first on Windows, a pattern already used by
+`process_inspector_v2.collect_gpu_survivor_snapshot`, which this probe shares and whose output the release gate now
+trusts. Evidence files: `C:/Users/rob/qual/QUEUE180-evidence/` (`baseline.log`, `test_baseline_180.py`, `pr-gate.log`).
 
 ## Unresolved failure classes (honest limits)
 
