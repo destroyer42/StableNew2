@@ -59,6 +59,11 @@ EVIDENCE_CONFLICTING = "conflicting_evidence"
 POLICY_ID_SDXL = "sdxl"
 POLICY_ID_UNVERIFIED = "unverified_generic"
 
+#: Registry-evidenced (ordinary-checkpoint) policies whose capabilities an owner has qualified for studies that
+#: compare models. A family with evidence but no entry here (sd1, sd2, sd3, flux ...) stays labelled-but-unqualified;
+#: qualifying one means authoring its ``ModelPolicy`` and adding its id here, in this module, with owner approval.
+QUALIFIED_REGISTRY_POLICY_IDS: frozenset[str] = frozenset({POLICY_ID_SDXL})
+
 #: ``prompt_dialect`` hook values (guidance for later prompt packages; nothing rewrites a prompt here).
 DIALECT_WEIGHTED_TAGS = "sdxl_weighted_tags"
 DIALECT_NATURAL_LANGUAGE = "natural_language"
@@ -172,6 +177,26 @@ class ModelPolicy:
         """An exact executable profile exists; this never establishes broad hardware qualification."""
 
         return self.profile_ref is not None
+
+    @property
+    def exact_identity_authority(self) -> bool:
+        """The canonical exact profile, not a local byte hash, is this selection's checkpoint-identity authority."""
+
+        return self.profile_ref is not None and self.evidence == EVIDENCE_PROFILE
+
+    @property
+    def explicit_capabilities(self) -> bool:
+        """Whether the policy takes an explicit position on every optional feature.
+
+        False only for the conservative generic projection (``unverified_generic``): a family label backed by evidence,
+        but no qualification states what the model can execute, so nothing may be built on it. Derived from the
+        policy's own content, so a frozen policy context needs no new field and an old frozen arm resolves exactly as
+        it did before.
+        """
+
+        return bool(self.features) and all(
+            feature.support is not Support.UNVERIFIED for feature in self.features.values()
+        )
 
     @property
     def constrained(self) -> bool:

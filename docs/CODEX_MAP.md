@@ -22,6 +22,14 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/app_controller_services/runtime_projection_coordinator.py` /
   `src/gui/app_state_projection_sink.py` (versioned async publication) ->
   `tests/gui_v2/test_preview_draft_recovery_112.py`.
+- Persistent checkpoint evidence and Model Comparison compatibility (PR-LEARN-COMPARE-145):
+  `docs/Subsystems/Learning/PR-LEARN-COMPARE-145_Checkpoint_Evidence_and_Comparison_Compatibility.md` ->
+  `src/assets/registry.py` (`checkpoint_status`, `describe_cache`, `RefreshResult.counters`; sole hash/cache authority) /
+  `src/assets/cache_diagnostics.py` (path-free miss reasons and counters) ->
+  `src/learning/model_evidence_readiness.py` (exact-profile identity authority via `ModelPolicy.exact_identity_authority`) ->
+  `src/learning/model_comparison.py::candidate_ineligibility` (one policy-derived eligibility rule;
+  `ModelPolicy.explicit_capabilities`) -> `tools/diagnose_asset_registry_cache.py` (read-only owner diagnosis) ->
+  `tests/assets/test_checkpoint_evidence_persistence_145.py` / `tests/learning_v2/test_model_comparison_evidence_145.py`.
 - Unified batch operations and outcome triage (PR-BATCH-OPS-201):
   `docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md` ->
   `src/queue/batch_membership.py` (pure composite `(kind, batch_id)` identity; `replay_origin`; `selected_retry` descriptor) ->

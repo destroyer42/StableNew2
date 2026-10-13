@@ -11,6 +11,7 @@ from src.learning.variable_selection_contract import resource_entry_internal
 if TYPE_CHECKING:
     from src.assets import AssetRecord, AssetRegistry
     from src.assets.registry import CheckpointInspection
+    from src.image_backends.model_policy import ModelPolicy
     from src.pipeline.compile_evidence import CompileEvidence
 
 
@@ -20,15 +21,24 @@ def _model_label(model: str, index: int, show_names: bool) -> str:
     return f"Model {index}: {name}" if show_names else f"Model {index}"
 
 
-def _require_supported_record(record: AssetRecord | CheckpointInspection, label: str) -> None:
-    """Study-only evidence completeness; canonical ModelPolicy still resolves targets."""
+def _require_supported_record(
+    model: str, record: AssetRecord | CheckpointInspection, label: str
+) -> ModelPolicy:
+    """Explain unusable family evidence precisely, then let the canonical ``ModelPolicy`` decide eligibility.
+
+    The branches below only diagnose *why* a header/sidecar yields no resolved family (conflict, unreadable, refiner or
+    inpaint, nothing recognizable) so the operator gets actionable guidance. Whether a resolved family may take part
+    in a study is not decided here: the policy resolved from this very evidence is asked through
+    ``candidate_ineligibility`` and nothing else.
+    """
     from src.assets.compatibility import (
         CompatibilityStatus,
         EvidenceConfidence,
-        ModelFamily,
         embedded_metadata_field_present,
         sidecar_metadata_field_present,
     )
+    from src.image_backends.model_policy import resolve_model_policy
+    from src.learning.model_comparison import candidate_ineligibility
 
     profile = record.compatibility
     assert profile is not None
@@ -50,10 +60,13 @@ def _require_supported_record(record: AssetRecord | CheckpointInspection, label:
             reason = "unclassified family metadata and unrecognized structure; supply authoritative supported base-model metadata or select a supported SDXL base checkpoint"
         else:
             reason = "family metadata missing and structure unrecognized; select a supported safetensors SDXL base checkpoint or supply authoritative metadata"
-    elif profile.family is not ModelFamily.SDXL:
-        reason = "family is not qualified for Model Comparison; select registry-evidenced SDXL or an exact qualified profile"
     else:
-        return
+        # A resolved family: the policy it resolves to (from this evidence alone) says whether a study may use it.
+        policy = resolve_model_policy(model, family_lookup=lambda _name: profile)
+        reason = candidate_ineligibility(policy)
+        if reason is None:
+            return policy
+        reason += "; select a registry-evidenced model with an explicit capability policy or an exact qualified profile"
     raise ValueError(f"{label}: {reason}; rebuild Preview")
 
 
@@ -128,12 +141,15 @@ def prepare_comparison_evidence(
     No WebUI/network calls, full scans, runtime changes, or family guesses.
     First-time hashing reads all bytes of selected files; cancellation is checked
     every registry chunk. Returned CompileEvidence is one pinned cache context.
+
+    A selection whose canonical ``ModelPolicy`` is an exact qualified profile has that profile as its identity
+    authority: its checkpoint is neither fingerprinted, inspected nor hashed here. Every other selection is admitted only
+    when the policy resolved from its own header/sidecar evidence is eligible (``candidate_ineligibility``).
     """
     from src.assets import AssetKind, AssetRegistry
     from src.image_backends.forge_klein_lora import RegistryLoraResolver
-    from src.image_backends.forge_klein_profile import is_klein_transformer_name
-    from src.image_backends.model_policy import RegistryFamilyLookup
-    from src.learning.model_comparison import candidate_models
+    from src.image_backends.model_policy import RegistryFamilyLookup, resolve_model_policy
+    from src.learning.model_comparison import candidate_ineligibility, candidate_models
     from src.pipeline.compile_evidence import CompileEvidence
 
     models = candidate_models(models)
@@ -143,10 +159,12 @@ def prepare_comparison_evidence(
         paths[model], catalog[model] = _selection_path(
             model, resources, index, show_names=show_names
         )
+    # The canonical policy for an exact profile is a whole-name match that needs no registry evidence.
+    exact_authority = {model for model in models if resolve_model_policy(model).exact_identity_authority}
     stale = [
         paths[model]
         for model in models
-        if not is_klein_transformer_name(model) and not registry.checkpoint_is_current(paths[model])
+        if model not in exact_authority and not registry.checkpoint_is_current(paths[model])
     ]
     # Inspect only selected stale headers before paying for byte identity. Warm
     # evidence is pinned below without any header read or redundant hashing.
@@ -163,7 +181,7 @@ def prepare_comparison_evidence(
                 raise ValueError(
                     f"{label}: checkpoint header unavailable; verify local file access and retry Preview"
                 ) from None
-            _require_supported_record(inspection, label)
+            _require_supported_record(model, inspection, label)
     if stale:
         if progress:
             progress(
@@ -179,7 +197,14 @@ def prepare_comparison_evidence(
                 )
 
         try:
-            registry.refresh(checkpoint_paths=stale, cancelled=cancelled, progress=reading)
+            refreshed = registry.refresh(checkpoint_paths=stale, cancelled=cancelled, progress=reading)
+            if progress:
+                cost = refreshed.counters
+                progress(
+                    f"Checkpoint evidence ready: {cost.hashes_computed} byte identity computed, "
+                    f"{cost.hash_cache_hits} reused ({cost.header_reads} header and {cost.sidecar_reads} sidecar "
+                    f"refresh, {cost.hash_seconds:.1f}s hashing)"
+                )
         except OSError as exc:
             if isinstance(exc, (InterruptedError, TimeoutError)):
                 raise
@@ -205,7 +230,7 @@ def prepare_comparison_evidence(
     for index, model in enumerate(models, 1):
         label = _model_label(model, index, show_names)
         policy = evidence.policy_for(model)
-        if policy.qualified:
+        if policy.exact_identity_authority:
             identities[model] = {
                 "authority": "exact_profile",
                 "profile_ref": dict(policy.profile_ref or {}),
@@ -231,8 +256,9 @@ def prepare_comparison_evidence(
             raise ValueError(
                 f"{label}: WebUI hash disagrees with local checkpoint; refresh WebUI resources and verify the served file"
             )
-        _require_supported_record(record, label)
-        if policy.family != "sdxl" or policy.evidence != "registry_evidence":
+        _require_supported_record(model, record, label)
+        ineligible = candidate_ineligibility(policy)
+        if ineligible is not None or policy.evidence != "registry_evidence":
             raise ValueError(f"{label}: canonical target policy is unverified; rebuild Preview")
         assert record.compatibility is not None
         provenance = [
@@ -248,6 +274,6 @@ def prepare_comparison_evidence(
         }
         if progress:
             sources = ", ".join(dict.fromkeys(item["source"] for item in provenance))
-            progress(f"{label}: ready; SDXL evidence from {sources}")
+            progress(f"{label}: ready; {policy.family.upper()} evidence from {sources}")
     evidence.model_identities = identities
     return evidence
