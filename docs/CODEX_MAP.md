@@ -7,6 +7,11 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 
 ## Canonical runtime
 
+- Forge/Comfy still-image qualification (offline, no runtime driver):
+  `docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md` ->
+  `tools/qualification/img_backend_qual_100/` (frozen comparison, cited capability ledger, pure Comfy graphs,
+  read-only model inventory, proposed protocol and stdout-only packet CLI) -> `tests/tools/test_img_backend_qual_100.py`.
+
 `Intent -> Compiler -> NJR -> JobService -> Queue/Repository -> PipelineRunner.run_njr -> Handler -> Artifacts/History`
 
 - GUI intent and application wiring: `src/controller/app_controller.py`,

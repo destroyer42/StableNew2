@@ -539,7 +539,11 @@ qualification infrastructure, so both belong here when selected.
    deterministic replay/provenance, cancellation and ambiguous outcomes,
    artifact ownership, operator complexity, workflow/versioning burden, and
    suitability for future image/video runtime convergence. Qualification alone
-   does not change the default backend.
+   does not change the default backend. Offline phase completed in PR-IMG-BACKEND-QUAL-100:
+   architecture CONDITIONAL, quality/performance INCONCLUSIVE, physical execution HOLD after the
+   October 12 GPU device-loss incident. Clear the fault and obtain separately authorized matched
+   evidence before implementing PR-IMG-COMFY-100. See
+   `docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md`.
 4. If controlled evidence supports Comfy promotion, `PR-IMG-COMFY-100` becomes
    the bounded production still-image slice. ComfyUI must remain behind
    StableNew-owned intent/compiler/NJR/JobService/SQLite/PipelineRunner/

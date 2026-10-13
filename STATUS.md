@@ -4,6 +4,14 @@ Updated: 2026-10-12
 
 ## Repository
 
+- Forge vs. Comfy still-image qualification (PR-IMG-BACKEND-QUAL-100, offline decision): pinned source capability,
+  installed model identities and deterministic graph/protocol tooling support CONDITIONAL architecture feasibility.
+  Quality/performance remain INCONCLUSIVE; physical execution is HOLD after the October 12 GPU device-loss incident.
+  Forge remains the production default, with no runtime/backend/queue behavior changes. Exact Klein 4B files exist
+  under managed Forge but its transformer/encoder folders are absent from Comfy's configured search paths. A future
+  Comfy image slice requires resource/fault clearance and separately authorized matched evidence. See
+  `docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md`.
+
 - SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210, PR #97; deterministic gate green and one owner-authorized
   physical Forge generation verified): a PromptPack slot may carry one optional, versioned `controlnet_openpose` declaration (`openpose.v1`) naming a
   pre-rendered OpenPose image from the new scannable library `<WebUI root>/models/OpenPose` (`AssetKind.OPENPOSE_IMAGE`,
