@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import copy
 import json
 from dataclasses import replace
@@ -23,6 +24,18 @@ from tests.integration.test_pr_img_cnet_210_canonical_path import (
     webui as source_webui,
 )
 from tests.pipeline.test_openpose_compile_210 import POSE_A, POSE_DISABLED, _slot
+
+
+@pytest.fixture(autouse=True)
+def _classifier_without_numpy(monkeypatch):
+    original = builtins.__import__
+
+    def no_numpy(name, *args, **kwargs):
+        if name == "numpy" or name.startswith("numpy."):
+            raise ModuleNotFoundError("NumPy deliberately unavailable in the canonical regression", name=name)
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_numpy)
 
 
 @pytest.fixture

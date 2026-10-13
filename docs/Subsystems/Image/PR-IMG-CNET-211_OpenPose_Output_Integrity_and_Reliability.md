@@ -106,7 +106,35 @@ Evidence: `C:/Users/rob/qual/cnet211-focused.log`, `cnet211-openpose-final.log`,
 `cnet211-pr-gate.log` and `cnet211-security.md`. The initial sandbox run encountered Windows path-resolution
 denials in test-owned temporary directories; the same suite ran with ordinary filesystem access and fake requests.
 Security review (backend response deserialization/artifact-write classification): **PASS**, no required fix. Low
-non-blocking hardening: aggregate response memory budget and temporary RGBA arrays, recorded in the residual limits.
+non-blocking hardening at the original head: aggregate response memory budget and temporary RGBA arrays. The bounded
+dependency repair below removes those full float arrays; the aggregate response budget remains outside scope.
+
+## Bounded dependency repair on PR #101
+
+Reviewed head `c2f559817907dbb46437fe2376ebb70eff447897`, base unchanged at `bbf855d4`. Hosted run
+`38470336257` passed required Python 3.14, but its informational census recorded 29 failures: 14 pixel-classifier,
+10 canonical-path and 4 executor/hygiene failures share the new undeclared `numpy` import. The remaining
+`tests/tools/test_img_backend_qual_100.py::test_inventory_relative_yaml_and_file_hash_are_not_name_proof` failure is
+preexisting qualification debt (`ModuleNotFoundError: yaml`); this test and qualification code already exist at the base.
+Neither dependency is added to application requirements and YAML debt is not repaired by this package.
+
+`_pixels` now decodes with required Pillow and hashes row-major RGB bytes in conversion chunks of at most 65,536
+pixels. A lazily cached 64 KiB standard-library table rounds each operation to IEEE binary32 and then truncates exactly
+as pinned Forge HWC3 does for RGBA-to-white. Ordinary Pillow alpha compositing rounds, and rational integer floor
+differs for 405 of 65,536 channel/alpha pairs; neither is silently substituted. A reference captured independently from
+the original float32 expression is frozen as SHA-256
+`af1f7a5c38ec1113b47a968bd93444a02070873e46118f86db886cecb8d9067d` over RGB for all channel/alpha pairs.
+
+Focused repair validation: **68 passed** (one optional local Torch warning when deliberately blocked NumPy is
+unavailable). Explicit import blockers cover RGB, opaque RGBA, transparent/partial/palette pixels, every channel/alpha
+pair, row/chunk boundaries and the canonical queue path. Original response/refusal tests, per-image seed evidence,
+no-result-artifact-on-refusal, scripts/stages and replay also pass. Unchanged earlier broader evidence is reused.
+Follow-up read-only security review: **PASS**, no required fix; no aggregate budget or runtime policy is introduced.
+The required local PR gate ran once for this repair: **PASS**, completeness/ratchet/Ruff/mypy, **9,499 collected** and
+**386 required smoke passed**, repository unchanged. Exact repair SHA and hosted post-push census verdict are recorded
+in the external closeout and PR body. The incremental executable diff is restricted to the classifier and
+regressions; controllers, queue/runner/compiler/NJR/runtime/GPU policy, defaults and model support stay byte-identical.
+No merge, physical generation, restart or another PR is authorized.
 
 ## Residual compatibility and quality limits
 

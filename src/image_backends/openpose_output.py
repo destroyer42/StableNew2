@@ -7,14 +7,43 @@ import binascii
 import hashlib
 import io
 import json
+import struct
 import warnings
 from collections.abc import Mapping
+from functools import lru_cache
 from typing import Any, NoReturn
 
 from src.conditioning.openpose import ConditioningError
 
 MAX_RESULT_BYTES = 64 * 1024 * 1024
 MAX_RESULT_PIXELS = 64 * 1024 * 1024
+_HASH_CHUNK_PIXELS = 65536
+
+
+@lru_cache(maxsize=1)
+def _forge_alpha_tables() -> tuple[bytes, ...]:
+    """64 KiB table reproducing Forge's float32 multiply/add and uint8 truncation, without NumPy.
+
+    Pillow's alpha_composite rounds rather than truncates. Even integer floor differs at float32 boundaries, so round
+    each arithmetic operation to IEEE binary32, as pinned HWC3 does. Every channel/alpha byte pair is regression-tested.
+    """
+
+    binary32 = struct.Struct("<f")
+
+    def f32(value: float) -> float:
+        return binary32.unpack(binary32.pack(value))[0]
+
+    tables = []
+    for alpha_byte in range(256):
+        alpha = f32(alpha_byte / 255.0)
+        white = f32(255.0 * f32(1.0 - alpha))
+        tables.append(
+            bytes(
+                int(min(255.0, max(0.0, f32(f32(channel * alpha) + white))))
+                for channel in range(256)
+            )
+        )
+    return tuple(tables)
 
 
 class OpenPoseResponseError(ConditioningError):
@@ -34,7 +63,6 @@ class OpenPoseResponseError(ConditioningError):
 def _pixels(data: bytes) -> tuple[tuple[int, int], str]:
     """A decoded pixel identity, independent of PNG metadata/encoding, using Forge HWC3 alpha semantics."""
 
-    import numpy as np
     from PIL import Image
 
     if len(data) > MAX_RESULT_BYTES:
@@ -46,16 +74,33 @@ def _pixels(data: bytes) -> tuple[tuple[int, int], str]:
                 raise ValueError("image pixel limit")
             image.load()
             size = image.size
-            if "A" in image.getbands() or "transparency" in image.info:
-                rgba = np.asarray(image.convert("RGBA"))
-                alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0
-                rgb = (rgba[:, :, :3].astype(np.float32) * alpha + 255.0 * (1.0 - alpha)).astype(
-                    np.uint8
-                )
-                pixels = rgb.tobytes()
-            else:
-                pixels = image.convert("RGB").tobytes()
-    return size, hashlib.sha256(pixels).hexdigest()
+            digest = hashlib.sha256()
+            # Hash bounded row-major chunks; do not allocate full RGBA/float arrays. Wide images use row segments.
+            rows = max(1, _HASH_CHUNK_PIXELS // image.width)
+            for top in range(0, image.height, rows):
+                for left in range(0, image.width, _HASH_CHUNK_PIXELS):
+                    block = image.crop(
+                        (
+                            left,
+                            top,
+                            min(image.width, left + _HASH_CHUNK_PIXELS),
+                            min(image.height, top + rows),
+                        )
+                    )
+                    if "A" not in block.getbands() and "transparency" not in block.info:
+                        digest.update(block.convert("RGB").tobytes())
+                        continue
+                    rgba = block.convert("RGBA").tobytes()
+                    rgb = bytearray(len(rgba) // 4 * 3)
+                    tables = _forge_alpha_tables()
+                    for offset in range(0, len(rgba), 4):
+                        table = tables[rgba[offset + 3]]
+                        target = offset // 4 * 3
+                        rgb[target] = table[rgba[offset]]
+                        rgb[target + 1] = table[rgba[offset + 1]]
+                        rgb[target + 2] = table[rgba[offset + 2]]
+                    digest.update(rgb)
+    return size, digest.hexdigest()
 
 
 def _decode(value: Any) -> bytes:
