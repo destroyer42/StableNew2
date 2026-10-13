@@ -136,15 +136,43 @@ def _arm_failure(index: int, exc: Exception) -> str:
     )
 
 
-def _require_candidate(policy: Any) -> None:
-    if not (policy.qualified and policy.evidence == "exact_profile") and not (
-        policy.family == "sdxl" and policy.evidence == "registry_evidence"
+def candidate_ineligibility(policy: Any) -> str | None:
+    """Why a canonical ``ModelPolicy`` cannot be a Model Comparison arm, or ``None`` when it can.
+
+    The decision is read from the policy's own content (evidence tier, an explicit position on every optional feature,
+    qualified stages); no family or file name is consulted here. A family with registry evidence but only the generic
+    projection (``explicit_capabilities`` false) is not eligible until an owner-qualified policy exists for it.
+    """
+    from src.image_backends.model_policy import (
+        EVIDENCE_PROFILE,
+        EVIDENCE_REGISTRY,
+        QUALIFIED_REGISTRY_POLICY_IDS,
+    )
+
+    if not (
+        (policy.evidence == EVIDENCE_PROFILE and policy.exact_identity_authority)
+        or policy.evidence == EVIDENCE_REGISTRY
     ):
-        raise ValueError(
-            "Model Comparison requires an exact qualified profile or registry-evidenced SDXL; target evidence is unavailable or conflicting"
+        return (
+            "Model Comparison requires an exact qualified profile or a registry-evidenced model with an explicit "
+            "capability policy; target evidence is unavailable or conflicting"
+        )
+    if not policy.explicit_capabilities or (
+        policy.evidence == EVIDENCE_REGISTRY and policy.policy_id not in QUALIFIED_REGISTRY_POLICY_IDS
+    ):
+        return (
+            f"family {policy.family} is not qualified for Model Comparison: it has registry evidence but no "
+            "explicit executable capability policy yet"
         )
     if "txt2img" not in policy.stages:
-        raise ValueError("Candidate does not support txt2img Model Comparison")
+        return "Candidate does not support txt2img Model Comparison"
+    return None
+
+
+def _require_candidate(policy: Any) -> None:
+    reason = candidate_ineligibility(policy)
+    if reason is not None:
+        raise ValueError(reason)
 
 
 def _require_envelope(policy: Any, config: dict, backend: str, geometry: dict) -> None:

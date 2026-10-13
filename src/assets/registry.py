@@ -6,13 +6,22 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import struct
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.assets.cache_diagnostics import (
+    CacheDescription,
+    CacheState,
+    CheckpointMiss,
+    CheckpointStatus,
+    RefreshCounters,
+)
 from src.assets.cache_lock import registry_cache_lock
 from src.assets.checkpoint_structure import STRUCTURE_CONTRACT, checkpoint_header_evidence
 from src.assets.compatibility import (
@@ -109,6 +118,8 @@ class RefreshResult:
     snapshot: AssetRegistrySnapshot
     hashes_computed: int
     hash_cache_hits: int
+    #: Path-free cost/miss accounting of this refresh (see ``cache_diagnostics``).
+    counters: RefreshCounters = field(default_factory=RefreshCounters)
 
 
 @dataclass(frozen=True)
@@ -279,6 +290,15 @@ class AssetRegistry:
         self._entries: dict[str, dict[str, Any]] = {}
         self._loaded = False
         self._snapshot = AssetRegistrySnapshot(())
+        self._cache_state = CacheState.UNLOADED
+        #: Accounting of the most recent ``refresh`` (kept even when that refresh was cancelled or failed).
+        self.last_refresh = RefreshCounters()
+
+    @property
+    def cache_state(self) -> CacheState:
+        """Condition of the persisted cache as last loaded; ``UNLOADED`` before any read."""
+
+        return self._cache_state
 
     def supported_roots(self) -> tuple[tuple[AssetKind, Path], ...]:
         if self.webui_root is None:
@@ -390,18 +410,42 @@ class AssetRegistry:
         # not wait behind multi-GB checkpoint reads. Only cache commit is locked.
         self._loaded = False
         self._load()
+        # An unreadable-for-now cache is not an empty one: stop before paying for hashes that could not be published.
+        self._require_readable_cache()
+        counters = self.last_refresh = RefreshCounters()
         entries, computed, hits = self._prepare_refresh(
-            kinds, checkpoint_paths, cancelled, progress
+            kinds, checkpoint_paths, cancelled, progress, counters
         )
+        selected = set(kinds) if kinds is not None else set(AssetKind)
+        self._commit_entries(
+            entries,
+            cancelled=cancelled,
+            prune_kinds={item.value for item in selected} if checkpoint_paths is None else None,
+        )
+        return RefreshResult(self._snapshot, computed, hits, counters.snapshot())
+
+    def _require_readable_cache(self) -> None:
+        if self._cache_state is CacheState.UNAVAILABLE:
+            raise TimeoutError("AssetRegistry cache is temporarily unreadable; retry Preview")
+
+    def _commit_entries(
+        self,
+        entries: dict[str, dict[str, Any]],
+        *,
+        cancelled: Callable[[], bool] | None,
+        prune_kinds: set[str] | None = None,
+    ) -> None:
+        """Merge verified entries into the latest persisted cache under the cross-process writer lock."""
+
         with registry_cache_lock(self.cache_path, cancelled=cancelled):
             self._loaded = False
             self._load()
-            selected = set(kinds) if kinds is not None else set(AssetKind)
-            if checkpoint_paths is None:
+            self._require_readable_cache()
+            if prune_kinds is not None:
                 self._entries = {
                     key: value
                     for key, value in self._entries.items()
-                    if value.get("kind") not in {item.value for item in selected}
+                    if value.get("kind") not in prune_kinds
                 }
             for entry in entries.values():
                 stat = Path(entry["path"]).stat()
@@ -412,32 +456,78 @@ class AssetRegistry:
             self._entries.update(entries)
             self._snapshot = self._make_snapshot()
             self._save()
-            return RefreshResult(self._snapshot, computed, hits)
 
-    def checkpoint_is_current(self, path: Path) -> bool:
-        """Worker-only fingerprint check of one exact path; no directory traversal or hash."""
+    def _identity_reason(
+        self, cached: dict[str, Any] | None, kind: AssetKind, stat: os.stat_result
+    ) -> CheckpointMiss:
+        """Whether a cached entry's byte identity still applies to a file with this fingerprint (never hashes)."""
+
+        if not cached:
+            return CheckpointMiss.NO_ENTRY
+        if cached.get("kind") != kind.value:
+            return CheckpointMiss.KIND_CHANGED
+        if cached.get("size") != stat.st_size:
+            return CheckpointMiss.SIZE_CHANGED
+        if cached.get("mtime_ns") != stat.st_mtime_ns:
+            return CheckpointMiss.MTIME_CHANGED
+        digest = cached.get("sha256")
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            return CheckpointMiss.DIGEST_INVALID
+        return CheckpointMiss.CURRENT
+
+    def checkpoint_status(self, path: Path) -> CheckpointStatus:
+        """Worker-only, read-only explanation of one exact checkpoint's cached evidence.
+
+        Distinguishes the misses that really need a full SHA-256 read (no entry, different size/mtime/kind, invalid
+        digest) from those that only need a bounded header or sidecar re-read while the fingerprint-bound digest
+        stays valid. No directory traversal, no hashing, no write.
+        """
+
         self._load()
-        key = str(path.resolve())
-        cached = self._entries.get(key)
         try:
             stat = path.stat()
         except OSError:
-            return False
-        if (
-            not cached
-            or cached.get("kind") != AssetKind.CHECKPOINT.value
-            or (cached.get("size"), cached.get("mtime_ns")) != (stat.st_size, stat.st_mtime_ns)
-            or not _structure_is_current(cached)
-        ):
-            return False
+            return CheckpointStatus(CheckpointMiss.FILE_UNAVAILABLE, self._cache_state)
+        cached = self._entries.get(str(path.resolve()))
+        reason = self._identity_reason(cached, AssetKind.CHECKPOINT, stat)
+        if reason is not CheckpointMiss.CURRENT:
+            return CheckpointStatus(reason, self._cache_state)
+        assert cached is not None
+        if not _structure_is_current(cached):
+            return CheckpointStatus(CheckpointMiss.STRUCTURE_STALE, self._cache_state)
         for candidate in _sidecar_candidates(path):
             fingerprint = _sidecar_fingerprint(candidate)
             if fingerprint is not None:
-                return (
+                current = (
                     cached.get("sidecar_path") == str(candidate)
                     and cached.get("sidecar_fingerprint") == fingerprint
                 )
-        return cached.get("sidecar_path") is None
+                return CheckpointStatus(
+                    CheckpointMiss.CURRENT if current else CheckpointMiss.SIDECAR_CHANGED,
+                    self._cache_state,
+                )
+        reason = CheckpointMiss.CURRENT if cached.get("sidecar_path") is None else CheckpointMiss.SIDECAR_CHANGED
+        return CheckpointStatus(reason, self._cache_state)
+
+    def checkpoint_is_current(self, path: Path) -> bool:
+        """Worker-only fingerprint check of one exact path; no directory traversal or hash."""
+        return self.checkpoint_status(path).current
+
+    def describe_cache(self) -> CacheDescription:
+        """Read-only description of the persisted cache file; independent of (and not changing) in-memory state."""
+
+        state, version, entries = self._read_cache_file()
+        checkpoints = [
+            item
+            for item in entries.values()
+            if isinstance(item, dict) and item.get("kind") == AssetKind.CHECKPOINT.value
+        ]
+        with_digest = sum(
+            1
+            for item in checkpoints
+            if isinstance(item.get("sha256"), str) and re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
+        )
+        return CacheDescription(state, version, len(entries), len(checkpoints), with_digest)
 
     def inspect_checkpoint(self, path: Path) -> CheckpointInspection:
         """Worker-only header/sidecar preflight, without byte identity.
@@ -505,6 +595,7 @@ class AssetRegistry:
         checkpoint_paths: Iterable[Path] | None,
         cancelled: Callable[[], bool] | None,
         progress: Callable[[Path, int, int], None] | None,
+        counters: RefreshCounters,
     ) -> tuple[dict[str, dict[str, Any]], int, int]:
         selected = set(kinds) if kinds is not None else set(AssetKind)
         next_entries: dict[str, dict[str, Any]] = {}
@@ -543,25 +634,41 @@ class AssetRegistry:
                 key = str(path.resolve())
                 stat = path.stat()
                 cached = self._entries.get(key)
-                model_valid = bool(
-                    cached
-                    and cached.get("size") == stat.st_size
-                    and cached.get("mtime_ns") == stat.st_mtime_ns
-                    and cached.get("kind") == kind.value
-                )
+                reason = self._identity_reason(cached, kind, stat)
+                model_valid = reason is CheckpointMiss.CURRENT
+                # A reference image has no sidecar contract: it is never searched for, read or fingerprinted.
                 sidecar_fields = (
                     dict(_NO_SIDECAR)
                     if kind in _IMAGE_KINDS
                     else _resolve_sidecar(path, cached if model_valid else None)
                 )
+                sidecar_changed = model_valid and cached is not None and (
+                    sidecar_fields["sidecar_path"] != cached.get("sidecar_path")
+                    or sidecar_fields["sidecar_fingerprint"] != cached.get("sidecar_fingerprint")
+                )
+                structure_stale = (
+                    kind is AssetKind.CHECKPOINT
+                    and model_valid
+                    and cached is not None
+                    and not _structure_is_current(cached)
+                )
+                if model_valid:
+                    # The digest is reusable; record why (if at all) the evidence needed any refresh.
+                    counters.note(
+                        CheckpointMiss.STRUCTURE_STALE if structure_stale
+                        else CheckpointMiss.SIDECAR_CHANGED if sidecar_changed
+                        else CheckpointMiss.CURRENT
+                    )
+                else:
+                    counters.note(reason)
+                if sidecar_fields["sidecar_path"] and (not model_valid or sidecar_changed):
+                    counters.sidecar_reads += 1
                 header_fields = (
                     checkpoint_header_evidence(path)
-                    if kind is AssetKind.CHECKPOINT and (
-                        not model_valid
-                        or cached is None
-                        or not _structure_is_current(cached)
-                    ) else None
+                    if kind is AssetKind.CHECKPOINT and (not model_valid or structure_stale) else None
                 )
+                if header_fields is not None:
+                    counters.header_reads += 1
                 if model_valid and cached is not None:
                     entry = dict(cached)
                     entry.update(sidecar_fields)
@@ -569,17 +676,23 @@ class AssetRegistry:
                         entry.update(header_fields)
                     next_entries[key] = entry
                     hits += 1
+                    counters.hash_cache_hits += 1
                     continue
                 digest = hashlib.sha256()
                 read_bytes = 0
-                with path.open("rb") as stream:
-                    for chunk in iter(lambda: stream.read(_CHUNK), b""):
-                        if cancelled and cancelled():
-                            raise InterruptedError("Checkpoint evidence refresh cancelled")
-                        digest.update(chunk)
-                        read_bytes += len(chunk)
-                        if progress:
-                            progress(path, read_bytes, stat.st_size)
+                started = time.monotonic()
+                try:
+                    with path.open("rb") as stream:
+                        for chunk in iter(lambda: stream.read(_CHUNK), b""):
+                            if cancelled and cancelled():
+                                raise InterruptedError("Checkpoint evidence refresh cancelled")
+                            digest.update(chunk)
+                            read_bytes += len(chunk)
+                            if progress:
+                                progress(path, read_bytes, stat.st_size)
+                finally:
+                    counters.hash_seconds += time.monotonic() - started
+                    counters.bytes_hashed += read_bytes
                 if kind in _IMAGE_KINDS:
                     metadata, error = {}, None  # an image carries no model metadata
                 elif header_fields is not None:
@@ -609,23 +722,63 @@ class AssetRegistry:
                     raise ValueError("Checkpoint changed during evidence refresh; retry Preview")
                 next_entries[key] = entry
                 computed += 1
+                counters.hashes_computed += 1
         if cancelled and cancelled():
             raise InterruptedError("Checkpoint evidence refresh cancelled")
         return next_entries, computed, hits
+
+    def _read_cache_file(self) -> tuple[CacheState, int | None, dict[str, dict[str, Any]]]:
+        """Parse the persisted cache without touching in-memory state; says why when it yields nothing.
+
+        A *transient* read error (another process replacing the file, a scanner holding it open) is retried briefly
+        rather than being mistaken for an empty cache: an empty cache means every checkpoint is rehashed in full.
+        """
+
+        for attempt in range(4):
+            try:
+                text = self.cache_path.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                return CacheState.MISSING, None, {}
+            except OSError:
+                if attempt == 3:
+                    return CacheState.UNAVAILABLE, None, {}
+                time.sleep(0.05 * (attempt + 1))
+                continue
+            try:
+                data = json.loads(text)
+            except (ValueError, TypeError):
+                return CacheState.UNREADABLE, None, {}
+            if not isinstance(data, dict):
+                return CacheState.UNREADABLE, None, {}
+            version = data.get("version")
+            version = version if isinstance(version, int) and not isinstance(version, bool) else None
+            if version not in _SUPPORTED_CACHE_VERSIONS:
+                return CacheState.UNSUPPORTED_VERSION, version, {}
+            entries = data.get("entries", {})
+            if not isinstance(entries, dict):
+                return CacheState.UNREADABLE, version, {}
+            return CacheState.OK, version, entries
+        return CacheState.UNAVAILABLE, None, {}  # pragma: no cover - the loop always returns
 
     def _load(self) -> None:
         if self._loaded:
             return
         self._loaded = True
-        entries: Any = {}
-        try:
-            data = json.loads(self.cache_path.read_text(encoding="utf-8"))
-            if data.get("version") in _SUPPORTED_CACHE_VERSIONS:
-                entries = data.get("entries", {})
-        except (OSError, ValueError, TypeError):
-            entries = {}
-        self._entries = entries if isinstance(entries, dict) else {}
+        self._cache_state, _version, self._entries = self._read_cache_file()
         self._snapshot = self._make_snapshot()
+
+    @staticmethod
+    def _retry_os(action: Callable[[], Any]) -> None:
+        """Run a file operation, retrying a brief refusal (Windows: the file is momentarily held open)."""
+
+        for attempt in range(5):
+            try:
+                action()
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
 
     def _save(self) -> None:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -634,7 +787,21 @@ class AssetRegistry:
             json.dumps({"version": _CACHE_VERSION, "entries": self._entries}, sort_keys=True),
             encoding="utf-8",
         )
-        temporary.replace(self.cache_path)
+        try:
+            if self._cache_state in (CacheState.UNREADABLE, CacheState.UNSUPPORTED_VERSION):
+                # Never silently destroy a cache this build could not read (a newer schema, or evidence a person may
+                # want to inspect). Copy it aside *before* replacing it, so the live path is never absent and a failed
+                # copy aborts the save instead of losing the original.
+                backup = self.cache_path.with_suffix(".unreadable")
+                try:
+                    self._retry_os(lambda: shutil.copyfile(self.cache_path, backup))
+                except FileNotFoundError:
+                    pass
+            self._retry_os(lambda: temporary.replace(self.cache_path))
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+        self._cache_state = CacheState.OK
 
     def _make_snapshot(self) -> AssetRegistrySnapshot:
         grouped: dict[str, list[AssetLocation]] = {}

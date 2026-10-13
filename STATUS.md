@@ -25,7 +25,21 @@ Updated: 2026-10-12
   empty on the managed runtime (documented, not guardable read-only). See
   `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md`.
 
-- Unified batch operations and outcome triage (PR-BATCH-OPS-201, locally validated; not pushed): a collapsed
+- Persistent checkpoint evidence and Model Comparison compatibility (PR-LEARN-COMPARE-145, locally validated; not
+  pushed): AssetRegistry now explains every checkpoint-evidence miss with a path-free reason and per-refresh counters
+  (`no_entry`, `size_changed`, `mtime_changed`, `digest_invalid` need a full SHA-256 read; `structure_stale` and
+  `sidecar_changed` provably do not), reads a transiently unavailable cache with bounded retries instead of treating it
+  as empty, never silently overwrites an unreadable/future-schema cache, and retries Windows replace refusals. A
+  genuine two-process test shows an unchanged checkpoint is not rehashed after restart. Model Comparison readiness now
+  asks the canonical `ModelPolicy` whether an exact profile is the identity authority (Klein **and** Z-Image: no hash,
+  header read or SDXL gate) and decides study eligibility through one policy-derived rule
+  (`candidate_ineligibility`); evidenced SDXL derivatives are admitted by evidence, never by file name. SD1/SD2/other
+  evidenced families stay fail-closed pending an owner-qualified capability policy. Also fixes the baseline-red Klein
+  acceptance-driver digest (random Review `batch_id`). The owner's Windows cache was not inspected (cloud host);
+  `tools/diagnose_asset_registry_cache.py` does it read-only. See
+  `docs/Subsystems/Learning/PR-LEARN-COMPARE-145_Checkpoint_Evidence_and_Comparison_Compatibility.md`.
+
+- Unified batch operations and outcome triage (PR-BATCH-OPS-201, merged in PR #96): a collapsed
   "Batches" view under Queue/History lists existing Review and Video Workflow batches from the SQLite
   repository (composite `(kind, batch_id)` identity read from frozen NJR provenance; no batch table, no persisted batch
   status, no migration) with canonical-status counts, a derived aggregate state, job vs declared-source counts, the live

@@ -180,6 +180,11 @@ def freeze_njr(settings: dict[str, Any], backend: str, *, job_id: str, output_di
 
 
 # Where the builder records job identity and the evidence location. Everything else is intent.
+#
+# A Review submission also mints a fresh random ``batch_id`` per call (top level and inside ``review_batch``), recorded in
+# both the workload and provenance metadata, so two compilations of the same intent never agree on it. It names the
+# submission, not what will be executed; ``review_batch.source_count`` / ``group_by_model`` stay part of the intent.
+# (PR-LEARN-COMPARE-145; the Klein smoke baseline has failed on this since PR-REVIEW-BATCH-200.)
 _IDENTITY_PATHS = (
     ("job_id",),
     ("output_plan",),
@@ -187,6 +192,10 @@ _IDENTITY_PATHS = (
     ("provenance", "metadata", "run_name"),
     ("workload", "metadata", "run_name"),
     ("workload", "intent_config", "requested_job_label"),
+    ("provenance", "metadata", "batch_id"),
+    ("provenance", "metadata", "review_batch", "batch_id"),
+    ("workload", "metadata", "batch_id"),
+    ("workload", "metadata", "review_batch", "batch_id"),
 )
 
 
