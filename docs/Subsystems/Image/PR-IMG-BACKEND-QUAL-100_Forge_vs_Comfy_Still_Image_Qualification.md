@@ -155,7 +155,15 @@ whether shared transport/lifecycle extraction is required; no unsupported human-
 
 ## Validation
 
-Focused offline contracts: 29 passed before final documentation. Affected Ruff passes. Seven-module supplemental
+Focused offline contracts: **29 passed**; adjacent fake IMG-115/Comfy transport regressions: **103 passed** in total.
+The first adjacent run hit sandbox hard-link/socket restrictions; the permitted fake-only run passed.
+Affected Ruff passes. Seven-module supplemental
 mypy has no code diagnostics when the two missing third-party stub boundaries are excluded; strict supplemental
-mypy reports missing PyYAML/psutil stubs. No install/environment change was made. The required canonical mypy
-smoke and final PR gate results are reported at closeout. Physical readiness remains HOLD regardless of test results.
+mypy reports missing PyYAML/psutil stubs. No install/environment change was made. Required canonical mypy smoke:
+**10 source files passed**. Full canonical PR gate: **PASS** on exact source commit `d12e0545` in clean detached
+checkout `C:/Users/rob/qual/img-backend-qual-100-gate` (571 source files, unchanged controller ratchet, Ruff,
+9,280 collected, 386 required tests passed, one warning; repository unchanged). The initial live-workspace
+invocation was discontinued after its content guard spent minutes hashing retained outputs; only verified
+agent-owned validation processes were stopped. The application, Forge and actual queue were untouched.
+Final aggregate review confirms no src/config/.github/pytest-policy changes; documentation-only evidence
+closeout reuses the accepted source checks. Physical readiness remains HOLD regardless of test results.
