@@ -124,15 +124,19 @@ apply/release interleaving that would desynchronize them was **not** reproduced 
 removed; the lock and `test_concurrent_apply_and_release_keep_durable_and_memory_state_identical` are a defensive
 invariant, not a demonstrated bug fix.
 
-## Gate evidence (exact commit `b5051dbe`, local; hosted CI not run — nothing was published)
+## Gate evidence (local; hosted CI awaits the published PR head)
 
-`python tools/ci/run_pr_gate.py` (Python 3.14.8, Ruff 0.14.9): repository completeness OK (574 files), controller
-surface ratchet OK (`job_service.py` unchanged at its 1233 ceiling), Ruff clean, mypy smoke clean (10 files), isolated
-collection 9,381 tests (repository unchanged), required smoke 386 passed (repository unchanged); `git diff --check`
-clean. Security review (processes/persistence/untrusted input): no required fixes; one low defense-in-depth note —
-`shutil.which("nvidia-smi")` searches the working directory first on Windows, a pattern already used by
-`process_inspector_v2.collect_gpu_survivor_snapshot`, which this probe shares and whose output the release gate now
-trusts. Evidence files: `C:/Users/rob/qual/QUEUE180-evidence/` (`baseline.log`, `test_baseline_180.py`, `pr-gate.log`).
+Initial implementation at `b5051dbe`: gate OK (574 files, 9,381 collected, 386 smoke). After the review of PR #100 and
+the merge of `main` (PR #99), exact commit `8454fb76`: `python tools/ci/run_pr_gate.py` (Python 3.14.8, Ruff 0.14.9)
+repository completeness OK (578 files), controller surface ratchet OK (`job_service.py` unchanged at 1233,
+`app_controller.py` 7427 -> 7421), Ruff clean, mypy smoke clean (10 files), isolated collection 9,442 tests
+(repository unchanged), required smoke 386 passed (repository unchanged); `git diff --check` clean. Affected suites
+(`tests/queue`, `controller`, `services`, `utils`, `api`, the architecture-enforcement test and the readiness and
+batch-operations GUI tests): 1,972 passed. Security review (processes/persistence/untrusted input): no required fixes;
+one low defense-in-depth note — `shutil.which("nvidia-smi")` searches the working directory first on Windows, a
+pattern already used by `process_inspector_v2.collect_gpu_survivor_snapshot`, which this probe shares and whose output
+the release gate now trusts. Evidence files: `C:/Users/rob/qual/QUEUE180-evidence/` (`baseline.log`,
+`test_baseline_180.py`, `pr-gate.log`, `pr-gate-2.log`).
 
 ## Unresolved failure classes (honest limits)
 
