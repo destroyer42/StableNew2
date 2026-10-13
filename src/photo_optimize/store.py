@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import tempfile
 import uuid
 from copy import deepcopy
 from datetime import datetime
@@ -11,6 +12,7 @@ from typing import Any
 
 from src.state.workspace_paths import workspace_paths as _wp
 
+from .migration import MigrationReport, migrate_assets
 from .models import (
     PHOTO_OPTIMIZE_SCHEMA_VERSION,
     PhotoOptimizeAsset,
@@ -39,11 +41,32 @@ class PhotoOptimizeStore:
         self._root = Path(root) if root else PHOTO_OPTIMIZE_ROOT
         self._assets_dir = io_path(self._root / "assets")
         self._staging_dir = io_path(self._root / "staging_runs")
-        self._assets_dir.mkdir(parents=True, exist_ok=True)
-        self._staging_dir.mkdir(parents=True, exist_ok=True)
-        if legacy_root is not None:
-            from .migration import migrate_assets
-            migrate_assets(Path(legacy_root), self._root)
+        self._legacy_root = Path(legacy_root) if legacy_root is not None else None
+        self._migration_lock = Lock()
+        self.migration_report = MigrationReport()
+        self._check_writable()
+        if self._legacy_root is not None:
+            self.retry_migration()
+
+    def _check_writable(self) -> None:
+        try:
+            for directory in (self._root, self._assets_dir, self._staging_dir):
+                io_path(directory, force=True).mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryFile(dir=io_path(directory, force=True)) as probe:
+                    probe.write(b"Photo workspace write check")
+                    probe.flush()
+        except OSError as exc:
+            raise OSError(f"Photo Optimize workspace is not writable at {self._root}: {exc}. "
+                          "Check folder permissions and free space; no fallback store was opened.") from exc
+
+    def retry_migration(self) -> MigrationReport:
+        """Worker-side retry of retained legacy inputs, through this same store."""
+        with self._migration_lock:
+            self._check_writable()
+            if self._legacy_root is not None:
+                self.migration_report = migrate_assets(self._legacy_root, self._root)
+            self._check_writable()
+            return self.migration_report
 
     @property
     def root(self) -> Path:

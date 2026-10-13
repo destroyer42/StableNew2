@@ -268,7 +268,8 @@ def test_migration_preserves_queued_inputs_and_history_and_is_idempotent(tmp_pat
     )
     frozen_before = queued_njr.to_dict()
     target = tmp_path / "output" / "PhotoOptimize" / "workspace"
-    assert migrate_assets(legacy.root, target) == [asset.asset_id]
+    first = migrate_assets(legacy.root, target)
+    assert first.migrated == [asset.asset_id] and not first.failures
     migrated = PhotoOptimizeStore(target).get_asset(asset.asset_id)
     assert migrated.current_input_path.is_relative_to(target)
     assert migrated.current_input_path.read_bytes() == original_before
@@ -276,7 +277,8 @@ def test_migration_preserves_queued_inputs_and_history_and_is_idempotent(tmp_pat
     assert queued_njr.to_dict() == frozen_before
     assert queued_input.read_bytes() == original_before
     assert legacy.sidecar_path(asset.asset_id).read_bytes() == sidecar_before
-    assert migrate_assets(legacy.root, target) == []
+    repeated = migrate_assets(legacy.root, target)
+    assert repeated.migrated == [] and repeated.already_present == [asset.asset_id] and not repeated.failures
     assert [entry.to_dict() for entry in migrated.history] == history_before
     assert [entry.to_dict() for entry in migrated.baseline_snapshots] == snapshots_before
 
@@ -290,8 +292,9 @@ def test_migration_collision_leaves_both_trees_untouched(tmp_path):
     user_data = collision / "owner.txt"
     user_data.write_text("keep")
     before = legacy.sidecar_path(asset.asset_id).read_bytes()
-    with pytest.raises(FileExistsError, match="collision"):
-        migrate_assets(legacy.root, target)
+    report = migrate_assets(legacy.root, target)
+    assert len(report.failures) == 1 and "collision" in report.failures[0].error
+    assert not report.migrated
     assert user_data.read_text() == "keep"
     assert legacy.sidecar_path(asset.asset_id).read_bytes() == before
 
@@ -301,8 +304,9 @@ def test_failed_migration_never_publishes_partial_asset(tmp_path):
     asset = legacy.import_photo(image(tmp_path / "source.png"))
     target = tmp_path / "target"
     with patch("src.photo_optimize.migration.shutil.copytree", side_effect=OSError("copy failed")):
-        with pytest.raises(OSError, match="copy failed"):
-            migrate_assets(legacy.root, target)
+        report = migrate_assets(legacy.root, target)
+    assert len(report.failures) == 1 and "copy failed" in report.failures[0].error
+    assert not report.migrated
     assert not (target / "assets" / asset.asset_id).exists()
     assert legacy.get_asset(asset.asset_id) is not None
     assert asset.current_input_path.exists()
@@ -386,7 +390,8 @@ def test_migration_handles_long_windows_provenance_names(tmp_path):
     migrated = PhotoOptimizeStore(target).get_asset(asset.asset_id)
     assert migrated.current_input_path.read_bytes() == long_output.read_bytes()
     assert resolve_geometry(migrated.baseline, migrated.current_input_path)["width"] == 40
-    assert migrate_assets(legacy.root, target) == []
+    repeated = migrate_assets(legacy.root, target)
+    assert repeated.migrated == [] and not repeated.failures
 
 
 def test_cleared_model_uses_live_pipeline_instead_of_stale_nested_identity(tmp_path):

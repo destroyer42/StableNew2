@@ -87,6 +87,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.show_archived_var = tk.BooleanVar(value=False)
         self.settings_error_var = tk.StringVar()
         self.submission_summary_var = tk.StringVar(value="Select photos; each retains its own target settings.")
+        self.migration_status_var = tk.StringVar(value="")
         self.adetailer_model_var = tk.StringVar()
         self.adetailer_confidence_var = tk.DoubleVar(value=0.35)
         self.adetailer_steps_var = tk.IntVar(value=28)
@@ -166,6 +167,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.bind_app_state(app_state)
         self._apply_content_visibility_mode()
         self._refresh_assets()
+        self._render_migration_report()
         if self.store is None:
             self.submission_summary_var.set("Loading and verifying Photo Optimize workspace…")
             self._workspace_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="photo-workspace")
@@ -180,6 +182,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         try:
             self.store = self._workspace_future.result()
             self.submission_summary_var.set("Workspace ready. Select photos; each retains its own target settings.")
+            self._render_migration_report()
             self._refresh_assets(select_asset_id=self._restored_asset_id)
         except Exception as exc:
             self.submission_summary_var.set(f"Workspace unavailable: {exc}")
@@ -192,6 +195,25 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             return True
         messagebox.showwarning("Workspace unavailable", self.submission_summary_var.get())
         return False
+
+    def _render_migration_report(self) -> None:
+        variable = self.__dict__.get("migration_status_var")
+        if variable is not None and self.store is not None:
+            variable.set(self.store.migration_report.summary())
+
+    def _show_migration_details(self) -> None:
+        if self._workspace_ready():
+            messagebox.showinfo("Legacy photo migration", self.store.migration_report.details())
+
+    def _retry_legacy_migration(self) -> None:
+        if not self._workspace_ready():
+            return
+
+        def completed(_report):
+            self._render_migration_report()
+            self._refresh_assets()
+
+        self._run_photo_operation(self.store.retry_migration, completed)
 
     def _run_photo_operation(self, operation, completed) -> None:
         if self._operation_future is not None:
@@ -285,6 +307,12 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.selection_label.grid(row=0, column=8, sticky="e")
         ttk.Label(header, textvariable=self.submission_summary_var, style="Dark.TLabel",
                   wraplength=1000).grid(row=1, column=0, columnspan=9, sticky="ew", pady=(6, 0))
+        ttk.Label(header, textvariable=self.migration_status_var, style="Dark.TLabel",
+                  wraplength=750).grid(row=2, column=0, columnspan=7, sticky="ew", pady=(4, 0))
+        ttk.Button(header, text="Migration Details", style="Dark.TButton",
+                   command=self._show_migration_details).grid(row=2, column=7, padx=(4, 0))
+        ttk.Button(header, text="Retry Legacy Migration", style="Dark.TButton",
+                   command=self._retry_legacy_migration).grid(row=2, column=8, padx=(4, 0))
 
     def _build_body(self) -> None:
         self.body_scroll = ScrollableFrame(self, style="Panel.TFrame")

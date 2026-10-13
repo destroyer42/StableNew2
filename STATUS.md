@@ -4,6 +4,15 @@ Updated: 2026-10-13
 
 ## Repository
 
+- Photo Optimize Windows migration recovery (PR-IMG-PHOTO-221, local implementation): a legacy
+  asset failure is reported without disabling a writable workspace or import. Verified copies publish
+  without replacing existing destinations; Windows errors 5/32/33 receive at most three attempts,
+  checking the destination between attempts. Failed staging and all legacy originals remain intact;
+  Retry Legacy Migration creates fresh verified staging. Persistent migration status/details appear
+  in the Photo Optimize tab; an unwritable workspace still fails clearly. Native temporary-root tests
+  reproduce access-denied and sharing violations; the operator incident's lock owner is unproved.
+  See `docs/Subsystems/Image/PR-IMG-PHOTO-221_Windows_Migration_Recovery.md`.
+
 - OpenPose output integrity (PR-IMG-CNET-211, local deterministic validation and required gate green): the supported Forge unit explicitly suppresses
   detect maps; response classification checks generation metadata, counts and decoded pose identity before saving,
   excludes a leading grid, and refuses missing/ambiguous generations or unidentified extras. Conditioned image
