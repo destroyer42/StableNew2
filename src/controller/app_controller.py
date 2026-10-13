@@ -2725,13 +2725,6 @@ class AppController:
             return
         self._runtime_projection_coordinator.publish_queue_refresh()
 
-    def _should_refresh_queue_async(self) -> bool:
-        return bool(
-            getattr(self, "threaded", False)
-            and getattr(self, "main_window", None) is not None
-            and getattr(self, "_thread_registry", None) is not None
-        )
-
     def _record_queue_projection_timing(
         self,
         *,
@@ -3044,6 +3037,14 @@ class AppController:
         PR-GUI-F3: Send Job button. The durable queue (not the AppState projection) decides legality.
         """
         return bool(self.pipeline_controller.on_queue_send_job_v2())
+
+    def confirm_gpu_recovery(self) -> dict[str, Any]:
+        """Operator-confirmed GPU quarantine release (PR-QUEUE-GPU-180; blocking: call off the Tk thread)."""
+        return self.job_service.gpu_loss.release(operator_confirmed=True).to_dict()
+
+    def add_gpu_quarantine_listener(self, listener: Any, *, replay_active: bool = False) -> None:
+        """Be called (on the queue's thread) with a snapshot when a GPU device-loss quarantine is applied."""
+        self.job_service.gpu_loss.add_incident_listener(listener, replay_active=replay_active)
 
     def refresh_job_history(self, limit: int | None = None) -> None:
         """Trigger a manual history refresh (exposed to GUI)."""
@@ -4149,13 +4150,6 @@ class AppController:
             "[controller] run_pipeline is deprecated; normalizing to the queue-backed start_run_v2 flow."
         )
         return self.start_run_v2()
-
-    def _run_via_pipeline_controller(self) -> Any:
-        """Delegate pipeline execution to PipelineController for modern V2 stack."""
-        if not hasattr(self, "pipeline_controller") or self.pipeline_controller is None:
-            raise RuntimeError("PipelineController not initialized")
-
-        raise RuntimeError("run_pipeline is disabled in NJR-only mode")
 
     def _execute_pipeline_via_runner(self, pipeline_config: Any) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy pipeline_config execution removed.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from typing import Any
 
 from src.services.operator_readiness_service import (
@@ -13,6 +13,7 @@ from src.services.operator_readiness_service import (
     OperatorReadinessSnapshot,
     OperatorReadinessState,
     ProductSupportState,
+    gpu_release_message,
 )
 from src.services.ui_state_store import UIStateStore, get_ui_state_store
 
@@ -57,6 +58,7 @@ class OperatorReadinessPanelV2(ttk.Frame):
         source_image_path_provider: Callable[[], str | None] | None = None,
         on_close: Callable[[], None] | None = None,
         on_open_diagnostics: Callable[[], None] | None = None,
+        on_confirm_gpu_recovery: Callable[[Callable[[dict[str, Any]], None]], None] | None = None,
         ui_state_store: UIStateStore | None = None,
         **kwargs: Any,
     ) -> None:
@@ -65,6 +67,9 @@ class OperatorReadinessPanelV2(ttk.Frame):
         self._source_image_path_provider = source_image_path_provider
         self._on_close_callback = on_close
         self._on_open_diagnostics_callback = on_open_diagnostics
+        # PR-QUEUE-GPU-180: starts the explicit, off-Tk release and calls back (on the Tk thread) with its outcome.
+        self._on_confirm_gpu_recovery = on_confirm_gpu_recovery
+        self._gpu_release_note = ""
         self._ui_state_store = ui_state_store or get_ui_state_store()
         self.snapshot: OperatorReadinessSnapshot | None = None
         self.record_widgets: dict[str, dict[str, tk.Widget]] = {}
@@ -210,8 +215,17 @@ class OperatorReadinessPanelV2(ttk.Frame):
             detail_lines.append("Blocking: " + "; ".join(record.blocking_reasons))
         if record.operator_actions:
             detail_lines.append("Next: " + "; ".join(record.operator_actions))
+        is_gpu_quarantine = record.id == "gpu_device"
+        if is_gpu_quarantine and self._gpu_release_note:
+            detail_lines.append(self._gpu_release_note)
+        with_action = is_gpu_quarantine and self._on_confirm_gpu_recovery is not None
+        cell: tk.Misc = self.records_frame
+        if with_action:
+            cell = ttk.Frame(self.records_frame)
+            cell.columnconfigure(0, weight=1)
+            cell.grid(row=row, column=2, sticky="ew")
         detail_label = ttk.Label(
-            self.records_frame,
+            cell,
             text="\n".join(detail_lines),
             justify=tk.LEFT,
             anchor="w",
@@ -219,12 +233,53 @@ class OperatorReadinessPanelV2(ttk.Frame):
         )
         badge_label.grid(row=row, column=0, sticky="nw", padx=8, pady=3)
         name_label.grid(row=row, column=1, sticky="nw", padx=8, pady=3)
-        detail_label.grid(row=row, column=2, sticky="ew", padx=8, pady=3)
+        if with_action:
+            detail_label.grid(row=0, column=0, sticky="ew", padx=8, pady=3)
+        else:
+            detail_label.grid(row=row, column=2, sticky="ew", padx=8, pady=3)
         self.record_widgets[record.id] = {
             "badge": badge_label,
             "name": name_label,
             "detail": detail_label,
         }
+        if with_action:
+            button = ttk.Button(
+                cell, text="Confirm GPU recovered...", command=self._confirm_gpu_recovery
+            )
+            button.grid(row=1, column=0, sticky="w", padx=8, pady=(0, 6))
+            self.record_widgets[record.id]["confirm_gpu_recovery"] = button
+
+    def _confirm_gpu_recovery(self) -> None:
+        """The explicit operator action: confirm, then release off the Tk thread (never a probe on this thread)."""
+
+        callback = self._on_confirm_gpu_recovery
+        if callback is None:
+            return
+        if not messagebox.askokcancel(
+            "Confirm GPU recovery",
+            "Confirm that the GPU has been recovered (a lost GPU needs a system reboot).\n\n"
+            "StableNew will check, read-only, that the GPU enumerates again. If it does, held GPU jobs "
+            "resume in their original order. StableNew does not restart Forge, reset the driver or reboot.",
+            parent=self,
+        ):
+            return
+        button = self.record_widgets.get("gpu_device", {}).get("confirm_gpu_recovery")
+        if button is not None:
+            try:
+                button.state(["disabled"])
+            except Exception:
+                pass
+        self._gpu_release_note = "Checking the GPU..."
+        callback(self._gpu_release_finished)
+
+    def _gpu_release_finished(self, result: dict[str, Any]) -> None:
+        """Runs on the Tk thread with the release outcome."""
+
+        self._gpu_release_note = f"Result: {gpu_release_message(result)}"
+        try:
+            self.refresh()
+        except Exception:
+            pass
 
     def _dismiss_intro_if_selected(self) -> None:
         if self.dismiss_intro_var.get():

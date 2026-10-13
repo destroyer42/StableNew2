@@ -938,7 +938,7 @@ class JobService:
                 "queued_job_ids": [job.job_id for job in queued_jobs],
                 "job_count": len(jobs),
                 },
-            "webui_outage": job_service_outage.snapshot(self),
+            **job_service_outage.diagnostics(self),
             "cached_metadata": metadata_cache,
             "containers": containers,
             "active_watchdogs": list(self._active_watchdogs.keys()),

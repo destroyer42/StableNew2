@@ -69,6 +69,21 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/gui/batch_operations_panel_v2.py` / `batch_retry_dialog.py` (Tk, mounted by `pipeline_tab_frame_v2.py`) ->
   `src/gui/controllers/video_workspace_handoff.py::route_images_to_review` ->
   `tests/queue/test_batch_*_201.py`, `tests/controller/test_batch_operations_service_201.py`, `tests/gui_v2/test_batch_operations_*_201.py`.
+- GPU device-loss dispatch containment (PR-QUEUE-GPU-180):
+  `docs/Subsystems/Runtime/PR-QUEUE-GPU-180_GPU_Loss_Dispatch_Containment.md` ->
+  `src/utils/gpu_device_health.py` (hard-bounded, single-flight read-only `nvidia-smi` enumeration, fault vocabulary) ->
+  `src/api/webui_failure_evidence.py` (`accelerator_fault` code) -> `src/queue/gpu_loss_assessment.py` (pure decision
+  table; host is queried only for a device fault or typed outage suspicion) -> `src/queue/backend_dependency.py`
+  (`held_by_gpu_loss`) / `src/queue/job_queue.py` (persisted `gpu_dispatch_quarantine` inside the atomic claim
+  predicate; `is_job_held_by_gpu_loss` / `is_job_held_by_webui`) -> `src/queue/single_node_runner.py`
+  (`_observe_gpu_loss`, ahead of the WebUI assessment) -> `src/controller/gpu_loss_coordinator.py` (apply,
+  operator-gated release, incident listener, projection; bound in `job_service_outage.py`) ->
+  `src/controller/webui_outage_coordinator.py` (no owned restart under quarantine) ->
+  `src/controller/app_controller.py` (`confirm_gpu_recovery`, `add_gpu_quarantine_listener`: the only GUI seam) ->
+  `src/services/operator_readiness_service.py` / `src/gui/panels_v2/operator_readiness_panel_v2.py` /
+  `src/gui/main_window_v2.py` (readiness record, confirm action, off-Tk release) and
+  `src/queue/batch_projection.py` / `src/gui/view_contracts/batch_operations_contract.py` (hold-source labels) ->
+  `tests/queue/test_gpu_loss_containment_180.py`, `test_gpu_quarantine_queue_180.py`, `test_gpu_loss_assessment_180.py`.
 - Dead Forge endpoint cascade repair (PR-QUEUE-WEBUI-172):
   `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-172_Dead_Forge_Endpoint_Cascade_Repair.md` ->
   `src/pipeline/executor.py` / `src/api/client.py` (typed stage/extra-single-image errors, no ambiguous replay) ->

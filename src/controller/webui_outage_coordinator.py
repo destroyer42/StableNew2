@@ -171,6 +171,12 @@ class WebUIOutageCoordinator:
         except Exception:
             return False
 
+    def _gpu_quarantined(self) -> bool:
+        try:
+            return self._queue.is_gpu_quarantined() is True
+        except Exception:
+            return False
+
     def enable_startup_gate(self, *, reason: str = "startup_unverified") -> None:
         """Hold WebUI claims until a fresh readiness+identity proof (after an application restart)."""
 
@@ -348,6 +354,11 @@ class WebUIOutageCoordinator:
             with self._lock:
                 if decision.incident_id != self._incident_id or not self._queue.is_webui_held():
                     return
+            if self._gpu_quarantined():
+                # PR-QUEUE-GPU-180: a confirmed GPU loss cannot be repaired by restarting the WebUI, and a runtime
+                # must not be (re)started onto a lost device. Observe and wait for the operator.
+                self._set_unavailable(decision, "gpu_device_loss_quarantine")
+                return
             manager = self._safe_manager()
             self._listen_to(manager)
             owned = bool(manager is not None and getattr(manager, "owns_process", False))
@@ -490,9 +501,15 @@ class WebUIOutageCoordinator:
                     "independent video jobs continue."
                 ),
             }
+            message = messages[health]
+            if int(summary.get("held_gpu_loss") or 0):
+                # PR-QUEUE-GPU-180: a GPU quarantine holds video jobs too, so nothing "continues" meanwhile.
+                message = message.replace(
+                    "independent video jobs continue", "video jobs are also held by the GPU quarantine"
+                )
             return {
                 "status": health.value,
-                "message": messages[health],
+                "message": message,
                 "endpoint": (probe.endpoint if probe else "") or self._endpoint(manager),
                 "runtime_identity": getattr(manager, "runtime_identity", None) if manager is not None else None,
                 "owned_runtime": bool(getattr(manager, "owns_process", False)) if manager is not None else False,

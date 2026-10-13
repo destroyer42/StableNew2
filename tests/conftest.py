@@ -136,6 +136,8 @@ def _pin_host_runtime_autostart_off(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("STABLENEW_WEBUI_AUTOSTART", "0")
     monkeypatch.setenv("STABLENEW_COMFY_AUTOSTART", "0")
+    # PR-QUEUE-GPU-180: the queue's GPU device-loss assessment never runs the host's ``nvidia-smi`` under pytest.
+    monkeypatch.setenv("STABLENEW_GPU_HOST_PROBE", "0")
     try:
         import src.config.app_config as app_config
 

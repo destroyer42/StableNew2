@@ -152,6 +152,8 @@ class BatchJobView:
     retry_children: tuple[RetryChildRef, ...] = ()
     last_control_action: str | None = None
     hydration_error: str | None = None
+    #: Transient: queued AND currently held by the GPU device-loss quarantine (PR-QUEUE-GPU-180).
+    held_by_gpu_loss: bool = False
     #: Classification inputs for the shared content-visibility policy (prompts, pack name, recorded rating).
     #: Never displayed; a presentation layer hands it to ``ContentVisibilityResolver``.
     visibility_subject: Mapping[str, Any] = field(default_factory=dict, compare=False, repr=False)
@@ -189,6 +191,8 @@ class BatchSummary:
     failure_categories: tuple[tuple[TriageCategory, int], ...]
     conflicting: bool
     notes: tuple[str, ...]
+    #: Queued members held by the GPU device-loss quarantine (``held_count`` is the WebUI hold's).
+    gpu_held_count: int = 0
 
     @property
     def job_count(self) -> int:
@@ -330,6 +334,7 @@ def job_view_from_row(
     *,
     source_index: int | None,
     held_job_ids: Container[str] = (),
+    gpu_held_job_ids: Container[str] = (),
 ) -> BatchJobView:
     metadata = snapshot_metadata(row.snapshot)
     workload, sources, label, model, error, subject = _hydrated_facts(row.snapshot)
@@ -369,6 +374,7 @@ def job_view_from_row(
         replay_origin=replay_origin_of(metadata),
         last_control_action=row.execution_metadata.last_control_action,
         hydration_error=error,
+        held_by_gpu_loss=row.status is JobStatus.QUEUED and row.job_id in gpu_held_job_ids,
         visibility_subject=subject,
     )
 
@@ -423,6 +429,7 @@ def _summarize(key: BatchKey, jobs: list[BatchJobView], declared: list[int | Non
         failure_categories=tuple(sorted(failures.items(), key=lambda item: item[0].value)),
         conflicting=conflicting,
         notes=tuple(notes),
+        gpu_held_count=sum(1 for job in ordered if job.held_by_gpu_loss),
     )
     missing = summary.missing_member_count
     if missing:
@@ -437,6 +444,7 @@ def build_catalog(
     rows: Iterable[BatchCandidateRow],
     *,
     held_job_ids: Container[str] = (),
+    gpu_held_job_ids: Container[str] = (),
     truncated: bool = False,
 ) -> BatchCatalog:
     """Group candidate rows by composite ``(kind, batch_id)``; ordinary and ambiguous jobs join no batch."""
@@ -466,7 +474,11 @@ def build_catalog(
             continue
         grouped.setdefault(membership.key, []).append(
             job_view_from_row(
-                row, membership.key, source_index=membership.source_index, held_job_ids=held_job_ids
+                row,
+                membership.key,
+                source_index=membership.source_index,
+                held_job_ids=held_job_ids,
+                gpu_held_job_ids=gpu_held_job_ids,
             )
         )
         declared.setdefault(membership.key, []).append(membership.declared_source_count)

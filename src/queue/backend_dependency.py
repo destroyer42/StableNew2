@@ -12,7 +12,7 @@ it never mutates or recompiles a historical record. Work whose dependency cannot
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Any
 
@@ -27,6 +27,10 @@ _IMAGE_STAGES = frozenset({"txt2img", "img2img", "adetailer", "upscale"})
 _VIDEO_EXECUTION_KEY = "video_execution"
 SVD_NATIVE_BACKEND_ID = "svd_native"
 COMFY_BACKEND_ID = "comfy"
+#: Stage types proven to execute without the GPU (PR-QUEUE-GPU-180). Deliberately empty: every stage an NJR can
+#: carry today (image, video, training) uses the GPU, so a GPU device-loss quarantine holds all of it. An entry
+#: requires a frozen-identity proof of independence, never an inference from a missing field.
+_GPU_FREE_STAGES: frozenset[str] = frozenset()
 
 
 class BackendDependency(str, Enum):
@@ -40,12 +44,20 @@ class DependencyAssessment:
     dependency: BackendDependency
     #: Stable, content-free reason code.
     reason: str
+    #: Every enabled stage is proven GPU-free. ``INDEPENDENT_VIDEO`` is independent of the WebUI, not of the GPU.
+    gpu_free: bool = False
 
     @property
     def held_by_webui_outage(self) -> bool:
         """Whether an unavailable WebUI must keep this job queued (everything not proven independent)."""
 
         return self.dependency is not BackendDependency.INDEPENDENT_VIDEO
+
+    @property
+    def held_by_gpu_loss(self) -> bool:
+        """Whether a GPU device-loss quarantine must keep this job queued (everything not proven GPU-free)."""
+
+        return not self.gpu_free
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
@@ -57,6 +69,19 @@ def _video_block(config: Mapping[str, Any], stage: str) -> Mapping[str, Any]:
 
 
 def classify_frozen_identity(
+    workload_kind: Any,
+    enabled_stages: list[str],
+    config: Mapping[str, Any],
+    backend_options: Mapping[str, Any],
+) -> DependencyAssessment:
+    assessment = _classify_dependency(workload_kind, enabled_stages, config, backend_options)
+    stages = set(enabled_stages)
+    if stages and stages <= _GPU_FREE_STAGES:
+        return replace(assessment, gpu_free=True)
+    return assessment
+
+
+def _classify_dependency(
     workload_kind: Any,
     enabled_stages: list[str],
     config: Mapping[str, Any],
