@@ -4,6 +4,16 @@ Updated: 2026-10-12
 
 ## Repository
 
+- Photo Optimize settings/workspace repair (PR-IMG-PHOTO-220, local implementation): imports use decoded
+  working-image geometry with explicit Auto/Custom policy; stored settings preserve zero/False and synchronized
+  aliases. Pipeline copy uses live stage settings for the selected photos, preserving prompts, notes, tags,
+  history and per-photo geometry policy. Mixed selections retain their own stage/config/model/VAE intent,
+  partition through the existing ReprocessJobBuilder and admit once after whole-request compatibility preflight.
+  Managed files now live under `<configured output root>/PhotoOptimize/workspace`; verified copy-only legacy
+  migration retains old paths for queued inputs/history. Archive/restore is persistent; output scanners and
+  rebalancing exclude the workspace. Local validation only; hosted CI awaits separately authorized publication.
+  See `docs/Subsystems/Image/PR-IMG-PHOTO-220_Photo_Optimize_Settings_and_Workspace.md`.
+
 - Forge vs. Comfy still-image qualification (PR-IMG-BACKEND-QUAL-100, offline decision): pinned source capability,
   installed model identities and deterministic graph/protocol tooling support CONDITIONAL architecture feasibility.
   Quality/performance remain INCONCLUSIVE; physical execution is HOLD after the October 12 GPU device-loss incident.

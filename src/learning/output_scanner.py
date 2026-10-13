@@ -22,6 +22,7 @@ from typing import Any
 from src.controller.content_visibility_resolver import build_content_visibility_payload
 from src.learning.discovered_review_models import OutputScanIndexEntry
 from src.learning.output_scan_models import ScanRecord, _utc_now_iso
+from src.state.output_routing import is_photo_optimize_workspace
 from src.utils.image_metadata import (
     extract_embedded_metadata,
     resolve_model_vae_fields,
@@ -314,6 +315,8 @@ class OutputScanner:
         """Return new ScanRecords for artifacts not yet in the index."""
         records: list[ScanRecord] = []
         for manifest_path in sorted(self.output_root.glob(self.MANIFEST_GLOB)):
+            if is_photo_optimize_workspace(manifest_path):
+                continue
             artifact_path = self._artifact_for_manifest(manifest_path)
             if artifact_path is None:
                 continue
@@ -333,6 +336,8 @@ class OutputScanner:
         """Return ScanRecords for every artifact regardless of index state."""
         records: list[ScanRecord] = []
         for manifest_path in sorted(self.output_root.glob(self.MANIFEST_GLOB)):
+            if is_photo_optimize_workspace(manifest_path):
+                continue
             artifact_path = self._artifact_for_manifest(manifest_path)
             if artifact_path is None:
                 continue
@@ -344,6 +349,8 @@ class OutputScanner:
         # Image-only fallback for files with no matched manifest
         matched_artifacts = {r.artifact_path for r in records}
         for img_path in sorted(self.output_root.glob(self.IMAGE_GLOB)):
+            if is_photo_optimize_workspace(img_path):
+                continue
             if str(img_path) in matched_artifacts:
                 continue
             if img_path.suffix.lower() not in _IMAGE_EXTENSIONS:

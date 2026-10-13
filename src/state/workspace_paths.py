@@ -44,12 +44,22 @@ class WorkspacePaths:
             path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def photo_optimize_root(self, *, create: bool = True) -> Path:
+    def photo_optimize_root(
+        self, *, output_root: Path | str | None = None, create: bool = True
+    ) -> Path:
         """Return the photo-optimization workspace root."""
-        path = self._root / "data" / "photo_optimize"
+        from src.state.output_routing import OUTPUT_ROUTE_PHOTO_OPTIMIZE, get_output_route_root
+
+        output = Path(output_root) if output_root is not None else Path("output")
+        if not output.is_absolute():
+            output = self._root / output
+        path = get_output_route_root(output, OUTPUT_ROUTE_PHOTO_OPTIMIZE, create=False) / "workspace"
         if create:
             path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def legacy_photo_optimize_root(self) -> Path:
+        return self._root / "data" / "photo_optimize"
 
     def state_dir(self, *, create: bool = True) -> Path:
         """Return the mutable runtime-state directory."""
