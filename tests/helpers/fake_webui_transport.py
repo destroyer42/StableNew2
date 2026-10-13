@@ -77,6 +77,7 @@ class FakeWebUITransport:
         controlnet_modules: list[str] | None = None,
         controlnet_version: int | None = 3,
         append_controlnet_detect_maps: bool = False,
+        ignore_controlnet_save_detected_map: bool = False,
     ) -> None:
         if flavor not in {"forge", "a1111"}:
             raise ValueError(flavor)
@@ -113,6 +114,7 @@ class FakeWebUITransport:
         self.controlnet_version = controlnet_version
         # Forge's ControlNet appends one detected map per used unit AFTER the generated image(s) in ``images``.
         self.append_controlnet_detect_maps = append_controlnet_detect_maps
+        self.ignore_controlnet_save_detected_map = ignore_controlnet_save_detected_map
         self.generation_module_state: list[list[str]] = []
         self.rejected_generations: list[str] = []
         self.generation_started = threading.Event()
@@ -225,11 +227,17 @@ class FakeWebUITransport:
                 raise self.generation_error
             if path == "/sdapi/v1/extra-single-image":
                 return FakeResponse({"image": TINY_PNG_B64, "html_info": ""})
-            info = {"seed": self.seed, "all_seeds": [self.seed], "all_subseeds": [0]}
-            images = [TINY_PNG_B64]
+            count = max(1, int((body or {}).get("batch_size", 1)) * int((body or {}).get("n_iter", 1)))
+            info = {
+                "seed": self.seed, "all_seeds": [self.seed + i for i in range(count)],
+                "all_subseeds": [0] * count, "index_of_first_image": 0, "infotexts": ["fake generation"] * count,
+            }
+            images = [TINY_PNG_B64] * count
             if self.append_controlnet_detect_maps and path == "/sdapi/v1/txt2img":
                 units = (((body or {}).get("alwayson_scripts") or {}).get("ControlNet") or {}).get("args") or []
-                images.extend(str(unit.get("image") or TINY_PNG_B64) for unit in units if unit.get("enabled"))
+                images.extend(str(unit.get("image") or TINY_PNG_B64) for unit in units
+                              if unit.get("enabled") and (unit.get("save_detected_map", True)
+                                                         or self.ignore_controlnet_save_detected_map))
             return FakeResponse({"images": images, "info": json.dumps(info)})
         return FakeResponse({})
 

@@ -109,6 +109,7 @@ class OpenPosePickerPanel(ttk.LabelFrame):
         self._photo: tk.PhotoImage | None = None
         self._shown_identity = ""
         self._pending_identity = ""
+        self._image_facts: dict[str, Any] | None = None
         self._first_map_done = not refresh_on_map
         self._build_ui()
         self._render()
@@ -189,6 +190,7 @@ class OpenPosePickerPanel(ttk.LabelFrame):
         attach_tooltip(
             self.model_combo,
             "The SDXL OpenPose ControlNet model (from models/ControlNet). "
+            "SDXL architecture does not prove OpenPose training; depth/tile models cannot use this map. "
             "The exact name Forge advertises is used when the job runs.",
         )
 
@@ -214,6 +216,12 @@ class OpenPosePickerPanel(ttk.LabelFrame):
         )
         self.resize_mode_combo.grid(row=1, column=4, columnspan=2, sticky="w", padx=(4, 0), pady=(4, 0))
         self.resize_mode_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_choice_changed())
+        attach_tooltip(self.control_mode_combo,
+                       "Balanced balances prompt and pose. ControlNet is more important increases pose priority; "
+                       "strength and guidance end can exaggerate input influence. Defaults and saved values are kept.")
+        attach_tooltip(self.resize_mode_combo,
+                       "Just Resize stretches; Crop and Resize may cut off limbs; Resize and Fill pads borders. "
+                       "Match pose and generation aspect ratios for predictable framing.")
         ttk.Label(
             settings, text="Preprocessor: None (pre-rendered OpenPose image)", foreground="#a0a0a0"
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
@@ -284,6 +292,7 @@ class OpenPosePickerPanel(ttk.LabelFrame):
             target=self._target,
             library_identities=identities,
             model_status=self._model_status(selection.model) if selection is not None else None,
+            image_facts=self._image_facts if selection is not None and selection.asset == self._shown_identity else None,
         )
 
     def refresh_library(self) -> None:
@@ -430,7 +439,7 @@ class OpenPosePickerPanel(ttk.LabelFrame):
             self.notes_var.set("" if self._target is None else self._target.message)
             return
         if view.executable:
-            self.summary_var.set("Ready: this slot will be conditioned on the selected pose.")
+            self.summary_var.set("Ready for dispatch; review conditioning warnings below.")
         elif view.worst == SEVERITY_ERROR:
             self.summary_var.set("Attention: this selection cannot run as saved.")
         elif view.worst == SEVERITY_WARNING:
@@ -481,13 +490,16 @@ class OpenPosePickerPanel(ttk.LabelFrame):
         self._thumb_request += 1
         request = self._thumb_request
         self._pending_identity = identity
+        self._image_facts = None
         self._show_thumbnail(None, "Loading preview…")
         registry = self._registry_factory_safe()
         root = library_root(getattr(registry, "webui_root", None)) if registry is not None else None
 
-        def work() -> bytes:
+        def work() -> tuple[bytes, dict[str, Any]]:
+            from src.conditioning.openpose_diagnostics import input_image_facts
+
             _path, image = read_library_image(root, identity)
-            return thumbnail_png(image.data, _THUMB_EDGE)
+            return thumbnail_png(image.data, _THUMB_EDGE), input_image_facts(image.data)
 
         def done(result: Any, error: Exception | None) -> None:
             if not self._alive() or request != self._thumb_request:
@@ -499,7 +511,9 @@ class OpenPosePickerPanel(ttk.LabelFrame):
                 self._show_thumbnail(None, "Missing or unreadable image" if isinstance(error, OpenPoseInputError) else reason)
                 return
             self._shown_identity = identity
-            self._show_thumbnail(result)
+            png, self._image_facts = result
+            self._show_thumbnail(png)
+            self._render_status()
 
         self._runner(work, done)
 
@@ -548,7 +562,10 @@ class OpenPosePickerPanel(ttk.LabelFrame):
                 return  # invalid saved value: Remove first
             model = self.model_var.get().strip()
             if not model:
-                verified = [o.name for o in self._models if o.evidence.status == STATUS_SDXL]
+                from src.conditioning.openpose_diagnostics import pose_model_hint
+
+                verified = [o.name for o in self._models if o.evidence.status == STATUS_SDXL
+                            and pose_model_hint(o.name).status != "incompatible"]
                 model = verified[0] if len(verified) == 1 else ""
             try:
                 self._declaration = new_declaration(identity, model=model)

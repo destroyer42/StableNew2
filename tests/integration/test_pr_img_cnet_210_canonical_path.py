@@ -101,6 +101,7 @@ def test_a_promptpack_pose_reaches_forge_as_exactly_one_verified_unit(webui: Har
     assert {k: v for k, v in unit.items() if k != "image"} == {
         "enabled": True, "module": "None", "model": ADVERTISED, "weight": 1.0, "guidance_start": 0.0,
         "guidance_end": 1.0, "control_mode": "Balanced", "resize_mode": "Resize and Fill", "pixel_perfect": False,
+        "save_detected_map": False,
     }
     payload = transport.payloads["/sdapi/v1/txt2img"][0]
     assert set(payload["alwayson_scripts"]) == {"ControlNet"}
@@ -303,6 +304,8 @@ def test_replay_input_verification_names_the_conditioning_image(webui: Harness) 
 def test_the_detect_map_forge_appends_is_not_recorded_as_a_second_result(webui: Harness, tmp_path: Path) -> None:
     njr = webui.build([_slot(0, "a person", controlnet_openpose=POSE_A)])[0]
     transport = _transport(detect_maps=True)
+    # An older/misbehaving extension ignores the explicit suppression. Identify the map, never truncate blindly.
+    transport.ignore_controlnet_save_detected_map = True
 
     entry = _run(njr, transport, tmp_path)
 

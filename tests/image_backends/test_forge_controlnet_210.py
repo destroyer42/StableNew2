@@ -156,6 +156,7 @@ def test_exactly_one_unit_with_the_verified_bytes_and_settings(tmp_path: Path) -
     assert unit == {
         "enabled": True, "module": "None", "model": ADVERTISED, "weight": 0.8, "guidance_start": 0.1,
         "guidance_end": 0.9, "control_mode": "Balanced", "resize_mode": "Resize and Fill", "pixel_perfect": False,
+        "save_detected_map": False,
     }
     assert evidence is not None and evidence["image_sha256_sent"] == hashlib.sha256(data).hexdigest()
     assert evidence["units"] == 1

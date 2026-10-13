@@ -4,6 +4,14 @@ Updated: 2026-10-13
 
 ## Repository
 
+- OpenPose output integrity (PR-IMG-CNET-211, local deterministic validation and required gate green): the supported Forge unit explicitly suppresses
+  detect maps; response classification checks generation metadata, counts and decoded pose identity before saving,
+  excludes a leading grid, and refuses missing/ambiguous generations or unidentified extras. Conditioned image
+  manifests retain each image's own seed. Known depth/tile model names are refused for this OpenPose selection; SDXL
+  architecture is not modality qualification. The picker reports modality uncertainty, alpha/geometry and strength
+  semantics while preserving saved settings and frozen NJRs. No support expansion, controller changes or physical work.
+  See `docs/Subsystems/Image/PR-IMG-CNET-211_OpenPose_Output_Integrity_and_Reliability.md`.
+
 - GPU device-loss dispatch containment (PR-QUEUE-GPU-180, draft PR #100, local deterministic validation): after the
   2026-10-12 incident (Forge stayed HTTP-responsive on a lost RTX 4070 Ti and 14 queued jobs were consumed), the first
   failed GPU-dependent job that shows a device fault or typed outage suspicion triggers one bounded, read-only

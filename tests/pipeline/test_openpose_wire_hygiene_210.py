@@ -59,7 +59,7 @@ def test_the_executor_never_logs_the_image(tmp_path: Path, caplog: pytest.LogCap
 
     def fake_generate(self, stage, payload):
         sent.append(payload)
-        return {"images": ["aGVsbG8="], "info": "{}"}
+        return {"images": [_png_b64(64, 96)], "info": _generation_info(1)}
 
     healthy = {"schema": "stablenew.runtime-admission.v1", "status": "healthy", "reasons": [], "cause_codes": []}
     config = {
@@ -83,6 +83,7 @@ def test_the_executor_never_logs_the_image(tmp_path: Path, caplog: pytest.LogCap
     assert len(sent) == 1
     unit = sent[0]["alwayson_scripts"]["ControlNet"]["args"][0]
     assert unit["image"] == encoded and unit["model"] == "m [abcd1234]"
+    assert unit["save_detected_map"] is False
     assert encoded[:48] not in caplog.text  # neither the debug payload dump nor any other log line
     assert result is not None
     assert encoded[:48] not in json.dumps(result, default=str)  # manifest/metadata carry evidence, not bytes
@@ -122,9 +123,16 @@ def _run_conditioned_stage(tmp_path: Path, images: list[str], *, batch: int = 1,
         saved.append(image_path)
         return image_path
 
+    # Supply real images and Forge metadata instead of the old symbolic bytes, preserving artifact assertions.
+    image_values = {
+        "R0=": _png_b64(64, 96), "R1=": _png_b64(96, 64),
+        "TUFQ": base64.b64encode(png_bytes(128, 192)).decode("ascii"),
+    }
+    images = [image_values[value] for value in images]
     with (
         patch("src.pipeline.executor.save_image_from_base64", side_effect=fake_save),
-        patch.object(Pipeline, "_generate_images", lambda self, stage, payload: {"images": list(images), "info": "{}"}),
+        patch.object(Pipeline, "_generate_images",
+                     lambda self, stage, payload: {"images": list(images), "info": _generation_info(batch * n_iter)}),
         patch.object(Pipeline, "_ensure_webui_true_ready"),
         patch.object(Pipeline, "_ensure_runtime_admissible", return_value=healthy),
         patch.object(Pipeline, "_apply_webui_defaults_once"),
@@ -148,7 +156,8 @@ def test_a_response_with_exactly_the_requested_images_is_untouched(tmp_path: Pat
     result, saved = _run_conditioned_stage(tmp_path, ["R0="])
 
     assert result is not None and len(saved) == 1
-    assert "control_images_discarded" not in result["controlnet_openpose"]
+    assert result["controlnet_openpose"]["control_images_discarded"] == 0
+    assert result["controlnet_openpose"]["generated_images"] == 1
 
 
 def test_batched_results_are_kept_and_only_the_trailing_maps_are_dropped(tmp_path: Path) -> None:
@@ -167,6 +176,11 @@ def _png_b64(width: int, height: int) -> str:
     buffer = io.BytesIO()
     Image.new("RGB", (width, height), (12, 34, 56)).save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _generation_info(count: int) -> str:
+    return json.dumps({"index_of_first_image": 0, "all_seeds": list(range(count)),
+                       "infotexts": [f"generation {index}" for index in range(count)]})
 
 
 def _record(payload: dict):
