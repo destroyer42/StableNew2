@@ -90,6 +90,17 @@ def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
     depth = _mapping(config.get("depth_input"))
     if str(depth.get("mode") or "") == "upload" and depth.get("path"):
         checks.append(InputCheck("depth map", str(depth["path"])))
+    # PR-IMG-CNET-210: the job-owned OpenPose snapshot is content-addressed, so its recorded digest is always checkable.
+    conditioning = _mapping(_mapping(record.config).get("controlnet_openpose"))
+    snapshot = _mapping(conditioning.get("snapshot"))
+    if snapshot.get("path"):
+        checks.append(
+            InputCheck(
+                "OpenPose conditioning image",
+                str(snapshot["path"]),
+                _recorded_sha(conditioning.get("asset_sha256")),
+            )
+        )
     return checks
 
 

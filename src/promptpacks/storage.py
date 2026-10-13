@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import csv
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -18,6 +19,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_SLOT_FIELD
 from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.utils.embedding_prompt_utils import (
     normalize_embedding_entries,
@@ -25,6 +27,8 @@ from src.utils.embedding_prompt_utils import (
     serialize_embedding_entries,
 )
 from src.utils.prompt_templates import compose_prompt_text
+
+logger = logging.getLogger(__name__)
 
 CURRENT_PROMPTPACK_SCHEMA_VERSION = 1
 
@@ -176,9 +180,22 @@ def prompt_pack_rows(document: dict[str, Any]) -> list[PackRow]:
                     lora_tags=tuple(loras),
                     negative_embeddings=negative_embeddings,
                     negative_phrases=negative_phrases,
+                    # Conditioning travels with its slot's row (matrix variants and row-index selection included).
+                    conditioning=copy.deepcopy(raw_slot.get(OPENPOSE_SLOT_FIELD)),
                 )
             )
     return rows
+
+
+def slots_with_conditioning(document: dict[str, Any]) -> list[int]:
+    """Zero-based persisted indexes of the slots that carry a ``controlnet_openpose`` declaration."""
+
+    slots = (document.get("pack_data") or {}).get("slots", [])
+    return [
+        int(slot.get("index", position)) if isinstance(slot.get("index", position), int) else position
+        for position, slot in enumerate(slots)
+        if isinstance(slot, dict) and slot.get(OPENPOSE_SLOT_FIELD) is not None
+    ]
 
 
 def prompt_pack_row_by_index(document: dict[str, Any], index: int) -> PackRow:
@@ -379,6 +396,16 @@ def export_prompt_pack(source: str | Path, target: str | Path) -> Path:
     document = load_prompt_pack_document(source)
     target_path = Path(target)
     suffix = target_path.suffix.lower()
+    dropped = slots_with_conditioning(document)
+    if dropped and suffix in {".txt", ".tsv"}:
+        # Flattened interchange has no representation for structured conditioning; say so rather than losing it silently.
+        logger.warning(
+            "Exporting %s as flattened %s drops the OpenPose conditioning of %d slot(s); "
+            "the native JSON PromptPack keeps it.",
+            Path(source).name,
+            suffix.lstrip(".").upper(),
+            len(dropped),
+        )
     if suffix == ".txt":
         output = _render_txt_document(document)
     elif suffix == ".tsv":

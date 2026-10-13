@@ -71,6 +71,16 @@ def freeze_prompt_pack_source(
         row = prompt_pack_row_by_index(document, int(source.get("selected_prompt_index", 0) or 0))
     except (OSError, PromptPackFormatError, ValueError) as exc:
         raise ValueError(f"Selected PromptPack cannot be frozen: {exc}") from exc
+    conditioning = getattr(row, "conditioning", None)
+    if conditioning is not None and not (
+        isinstance(conditioning, Mapping) and conditioning.get("enabled") is False
+    ):
+        # Learning/Model Comparison freeze prompt text only; running this row would silently drop its structural
+        # conditioning, so it is refused rather than producing images that ignore the selected pose.
+        raise ValueError(
+            "Selected PromptPack row has OpenPose conditioning, which Learning experiments and Model Comparison "
+            "do not support. Choose a row without it, or disable its OpenPose conditioning in the PromptPack editor."
+        )
     matrix_config = dict(document.get("pack_data", {}).get("matrix", {}) or {})
     mode = str(matrix_config.get("mode") or "sequential")
     referenced = list(

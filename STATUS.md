@@ -4,8 +4,30 @@ Updated: 2026-10-12
 
 ## Repository
 
-- Persistent checkpoint evidence and Model Comparison compatibility (PR-LEARN-COMPARE-145, locally validated; not
-  pushed): AssetRegistry now explains every checkpoint-evidence miss with a path-free reason and per-refresh counters
+- SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210, PR #97; deterministic gate green and one owner-authorized
+  physical Forge generation verified): a PromptPack slot may carry one optional, versioned `controlnet_openpose` declaration (`openpose.v1`) naming a
+  pre-rendered OpenPose image from the new scannable library `<WebUI root>/models/OpenPose` (`AssetKind.OPENPOSE_IMAGE`,
+  per-kind extension filtering; distinct from the `models/ControlNet` weights). The compiler gates the target (SDXL on
+  Forge, base txt2img only; Klein, Z-Image, A1111 and unidentified/non-SDXL checkpoints are refused, never silently
+  dropped), reads the image once, and freezes its verified SHA-256 plus a job-owned content-addressed snapshot into the
+  immutable NJR config (no base64). The Forge backend admits the job read-only against the running Forge
+  (`/controlnet/model_list`, `/controlnet/module_list`, exact advertised model, `None` preprocessor, weight-header SDXL
+  evidence) and the executor sends exactly one ControlNet unit (`module="None"`) in `alwayson_scripts.ControlNet`
+  alongside any existing scripts, after re-verifying the snapshot by hash. A missing/changed input, absent extension or
+  unlisted model fails before any generation POST with no fallback. Replay keeps the frozen input and lineage. The Prompt tab
+  gains a picker (thumbnail, search, refresh, model, strength, guidance, modes, remove, target state; a saved selection is
+  kept when the target cannot run it) and a preview section. Learning/Model Comparison refuse rows with enabled
+  conditioning rather than dropping it. No controller ceiling raised and the persisted model-policy contract is unchanged.
+  The physical check (managed Forge Neo `neo-d70373eb`, SDXL checkpoint, `thibaud_xl_openpose`, one pose) accepted the
+  exact unit and followed the pose; it also showed Forge appends the detect map after the result, which is now discarded.
+  Only one pose/checkpoint was tried and no automated pose metric exists. Known operational limitation: Forge's own
+  UI "batch input directory" (a process-global, REST-invisible setting) would silently replace the supplied pose; keep it
+  empty on the managed runtime (documented, not guardable read-only). The owner accepted this limitation on 2026-10-12:
+  provenance proves what StableNew submitted, not necessarily what Forge used. See
+  `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md`.
+
+- Persistent checkpoint evidence and Model Comparison compatibility (PR-LEARN-COMPARE-145, merged in PR #98):
+  AssetRegistry now explains every checkpoint-evidence miss with a path-free reason and per-refresh counters
   (`no_entry`, `size_changed`, `mtime_changed`, `digest_invalid` need a full SHA-256 read; `structure_stale` and
   `sidecar_changed` provably do not), reads a transiently unavailable cache with bounded retries instead of treating it
   as empty, never silently overwrites an unreadable/future-schema cache, and retries Windows replace refusals. A

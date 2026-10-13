@@ -20,7 +20,10 @@ from src.api.webui_identity_attestation import (
     default_attestor,
     verify_backend_runtime_identity,
 )
+from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_FIELD
 from src.image_backends.exact_model_profile import resolve_model_profile
+from src.image_backends.forge_controlnet import declared as openpose_declared
+from src.image_backends.forge_controlnet import validate_openpose_intent
 from src.image_backends.forge_klein_profile import KleinProfileError
 from src.image_backends.image_backend_types import (
     ImageBackendCapabilities,
@@ -157,6 +160,10 @@ class WebUIFamilyImageBackend:
         ):
             if key in execution:
                 config[key] = execution[key]
+        if openpose_declared(execution):
+            # Not every execution field is forwarded here: structural conditioning must be carried explicitly or the
+            # executor would never see it (admission and the wire step both read this key).
+            config[OPENPOSE_FIELD] = dict(execution[OPENPOSE_FIELD])
         return {key: value for key, value in config.items() if value is not None}
 
     # -- Identity-specific hooks (no-ops here; ``ForgeWebUIImageBackend`` overrides for model profiles) --
@@ -176,11 +183,24 @@ class WebUIFamilyImageBackend:
         """Reject work this backend cannot run, before the runner dispatches any stage."""
 
         self._reject_foreign_model_profile(getattr(njr, "backend_options", None))
+        validate_openpose_intent(
+            getattr(njr, "config", None),
+            stage_names,
+            backend_id=self.backend_id,
+            backend_supported=self.capabilities.supports_openpose_conditioning,
+        )
 
     def _validate_request(self, request: ImageExecutionRequest) -> None:
         """Pure intent check, run before any runtime side effect (raise to refuse)."""
 
         self._reject_foreign_model_profile(request.backend_options)
+        if request.stage_name == "txt2img":
+            validate_openpose_intent(
+                request.execution_config,
+                (request.stage_name,),
+                backend_id=self.backend_id,
+                backend_supported=self.capabilities.supports_openpose_conditioning,
+            )
 
     def _before_dispatch(self, pipeline: Any, request: ImageExecutionRequest) -> None:
         """Last check before the first generation POST of this stage (raise to refuse)."""

@@ -73,6 +73,10 @@ class FakeWebUITransport:
         checkpoint_files: dict[str, str] | None = None,
         models_listing_status: int = 200,
         modules_listing_status: int = 200,
+        controlnet_models: list[str] | None = None,
+        controlnet_modules: list[str] | None = None,
+        controlnet_version: int | None = 3,
+        append_controlnet_detect_maps: bool = False,
     ) -> None:
         if flavor not in {"forge", "a1111"}:
             raise ValueError(flavor)
@@ -102,6 +106,13 @@ class FakeWebUITransport:
         self.checkpoint_files = dict(checkpoint_files or {})
         self.models_listing_status = models_listing_status
         self.modules_listing_status = modules_listing_status  # != 200: GET /sd-modules fails (Forge only)
+        # PR-IMG-CNET-210: the built-in ControlNet extension's read-only endpoints. ``None`` models/modules mean the
+        # extension is not registered (the endpoints 404), which is what a Forge without ControlNet reports.
+        self.controlnet_models = None if controlnet_models is None else list(controlnet_models)
+        self.controlnet_modules = None if controlnet_modules is None else list(controlnet_modules)
+        self.controlnet_version = controlnet_version
+        # Forge's ControlNet appends one detected map per used unit AFTER the generated image(s) in ``images``.
+        self.append_controlnet_detect_maps = append_controlnet_detect_maps
         self.generation_module_state: list[list[str]] = []
         self.rejected_generations: list[str] = []
         self.generation_started = threading.Event()
@@ -150,6 +161,18 @@ class FakeWebUITransport:
             return FakeResponse(self.modules) if self.flavor == "forge" else FakeResponse({}, 404)
         if path == "/sdapi/v1/loras":
             return FakeResponse(list(self.loras))
+        if path == "/controlnet/model_list":
+            if self.controlnet_models is None:
+                return FakeResponse({"detail": "Not Found"}, 404)
+            return FakeResponse({"model_list": list(self.controlnet_models)})
+        if path == "/controlnet/module_list":
+            if self.controlnet_modules is None:
+                return FakeResponse({"detail": "Not Found"}, 404)
+            return FakeResponse({"module_list": list(self.controlnet_modules)})
+        if path == "/controlnet/version":
+            if self.controlnet_models is None or self.controlnet_version is None:
+                return FakeResponse({"detail": "Not Found"}, 404)
+            return FakeResponse({"version": self.controlnet_version})
         if path == "/sdapi/v1/sd-vae":
             if self.flavor == "a1111":
                 return FakeResponse(list(self.modules))
@@ -203,7 +226,11 @@ class FakeWebUITransport:
             if path == "/sdapi/v1/extra-single-image":
                 return FakeResponse({"image": TINY_PNG_B64, "html_info": ""})
             info = {"seed": self.seed, "all_seeds": [self.seed], "all_subseeds": [0]}
-            return FakeResponse({"images": [TINY_PNG_B64], "info": json.dumps(info)})
+            images = [TINY_PNG_B64]
+            if self.append_controlnet_detect_maps and path == "/sdapi/v1/txt2img":
+                units = (((body or {}).get("alwayson_scripts") or {}).get("ControlNet") or {}).get("args") or []
+                images.extend(str(unit.get("image") or TINY_PNG_B64) for unit in units if unit.get("enabled"))
+            return FakeResponse({"images": images, "info": json.dumps(info)})
         return FakeResponse({})
 
     def _apply_options(self, body: dict[str, Any]) -> None:

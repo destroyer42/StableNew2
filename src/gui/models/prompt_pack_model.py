@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_SLOT_FIELD
 from src.promptpacks.storage import (
     CURRENT_PROMPTPACK_SCHEMA_VERSION,
     export_prompt_pack,
@@ -50,6 +51,9 @@ class PromptSlot:
     positive_embeddings: list[tuple[str, float]] = field(default_factory=list)
     negative_embeddings: list[tuple[str, float]] = field(default_factory=list)
     loras: list[tuple[str, float]] = field(default_factory=list)  # [(name, strength), ...]
+    #: Raw ``controlnet_openpose`` JSON value (PR-IMG-CNET-210). ``None`` means absent. Kept verbatim (a malformed value is
+    #: preserved and surfaced by validation, never silently dropped) and edited only by the OpenPose picker.
+    openpose: Any = None
 
 
 @dataclass
@@ -152,6 +156,7 @@ class PromptPackModel:
                     slot.get("negative_embeddings", [])
                 ),
                 loras=loras,
+                openpose=copy.deepcopy(slot.get(OPENPOSE_SLOT_FIELD)),
             )
         slot_count = max(min_slots, max_index + 1, len(raw_slots))
         slots = [
@@ -197,6 +202,7 @@ class PromptPackModel:
             or slot.negative_embeddings
             or slot.loras
             or bool(slot.template_id)
+            or getattr(slot, "openpose", None) is not None
         ]
 
         # Build pack data section (matrix, slots, etc.)
@@ -228,6 +234,13 @@ class PromptPackModel:
                     "loras": [[name, weight] for name, weight in getattr(slot, "loras", [])],
                 }
             )
+            # Explicit set-or-remove: an unknown-field carry-over by index must never resurrect a cleared declaration
+            # or attach one slot's declaration to another after clone/reorder.
+            openpose = getattr(slot, "openpose", None)
+            if openpose is None:
+                serialized_slot.pop(OPENPOSE_SLOT_FIELD, None)
+            else:
+                serialized_slot[OPENPOSE_SLOT_FIELD] = copy.deepcopy(openpose)
             serialized_slots.append(serialized_slot)
 
         pack_data = {

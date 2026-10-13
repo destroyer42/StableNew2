@@ -32,6 +32,8 @@ from src.api.client import (
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.api.webui_runtime_identity import WebUIRuntimeIdentityMismatch
+from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_SLOT_FIELD
+from src.conditioning.openpose import ConditioningError
 from src.config import app_config
 from src.pipeline.adetailer_contract import schema_issues
 from src.pipeline.adetailer_effectiveness import build_effectiveness, response_infotexts
@@ -5141,9 +5143,17 @@ class Pipeline:
 
             payload = project_zimage_wire_payload(config, payload, prompt=original_positive_prompt)
             zimage_selection = verify_zimage_dispatch_state(config, self.client)
+            # PR-IMG-CNET-210: one ControlNet unit joins alwayson_scripts only on the request that is actually sent. The
+            # unit-free ``payload`` stays the copy used for logs and manifests (it never carries image bytes), and the
+            # snapshot is re-verified by hash here, immediately before the POST.
+            from src.image_backends.forge_controlnet import apply_openpose_wire_unit
+
+            wire_payload, conditioning_evidence = apply_openpose_wire_unit(
+                config if config.get(OPENPOSE_SLOT_FIELD) is not None else txt2img_config, payload
+            )
             response = self._generate_images_with_progress(
                 "txt2img",
-                payload,
+                wire_payload,
                 poll_interval=0.5,
                 progress_callback=on_txt2img_progress,
                 stage_label="txt2img",
@@ -5152,6 +5162,21 @@ class Pipeline:
             if not response or "images" not in response or not response["images"]:
                 logger.error("txt2img failed - no images returned")
                 return None
+
+            if conditioning_evidence is not None:
+                # Forge's ControlNet appends each unit's detect map AFTER the generated image(s) (verified by the
+                # PR-IMG-CNET-210 physical check: image 0 = result, image 1 = byte-identical pose map). Those are
+                # control inputs, not results: keep exactly the requested number of generated images.
+                generated_expected = max(
+                    1, int(payload.get("batch_size", 1) or 1) * int(payload.get("n_iter", 1) or 1)
+                )
+                returned_images = response.get("images")
+                if isinstance(returned_images, list) and len(returned_images) > generated_expected:
+                    conditioning_evidence = {
+                        **conditioning_evidence,
+                        "control_images_discarded": len(returned_images) - generated_expected,
+                    }
+                    response["images"] = returned_images[:generated_expected]
 
             gen_info = self._extract_generation_info(response) if response else {}
 
@@ -5221,6 +5246,8 @@ class Pipeline:
                         "reasons": list(runtime_admission.get("reasons") or []),
                     }
                 ]
+            if conditioning_evidence is not None:
+                base_metadata["controlnet_openpose"] = dict(conditioning_evidence)
             saved_variants: list[tuple[Path, dict[str, Any]]] = []
             response_images = response.get("images") if isinstance(response, dict) else None
             if not isinstance(response_images, list):
@@ -5404,6 +5431,8 @@ class Pipeline:
                             "reasons": list(runtime_admission.get("reasons") or []),
                         }
                     ]
+                if conditioning_evidence is not None:
+                    metadata["controlnet_openpose"] = dict(conditioning_evidence)
             if adaptive_refinement:
                 metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
                     adaptive_refinement,
@@ -5429,7 +5458,7 @@ class Pipeline:
         except CancellationError:
             self._record_stage_event("txt2img", "cancelled", 1, 1, True)
             raise
-        except (PipelineStageError, WebUIRuntimeIdentityMismatch):
+        except (PipelineStageError, WebUIRuntimeIdentityMismatch, ConditioningError):
             raise
         except Exception as e:
             logger.error(f"txt2img stage failed: {str(e)}")

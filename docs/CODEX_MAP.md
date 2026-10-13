@@ -15,6 +15,18 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/pipeline_controller.py`,
   `src/controller/app_controller_services/run_submission_service.py`, and
   `src/controller/pipeline_controller_services/`.
+- SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210):
+  `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md` ->
+  `src/conditioning/openpose.py` (versioned slot declaration, identity rules) ->
+  `src/promptpacks/storage.py::prompt_pack_rows` / `src/gui/models/prompt_pack_model.py` (per-slot persistence, row conditioning) ->
+  `src/pipeline/openpose_compile.py` (target gate + verify + freeze, called by `prompt_pack_job_builder.py::_freeze_conditioning`) ->
+  `src/conditioning/openpose_library.py` / `openpose_snapshot.py` (bounded read, content-addressed job-owned snapshot, frozen record) ->
+  `src/assets/registry.py` (`AssetKind.OPENPOSE_IMAGE`) / `src/conditioning/openpose_catalog.py` (editor listing) ->
+  `src/image_backends/openpose_capability.py` (target eligibility over `ModelPolicy`) ->
+  `src/image_backends/forge_controlnet.py` + `forge_webui_backend.py` (read-only admission, one wire unit) /
+  `src/api/forge_client.py::get_controlnet_catalog` -> `src/pipeline/executor.py::run_txt2img_stage` (final re-verification) ->
+  `src/gui/widgets/openpose_picker_panel.py` / `src/gui_v2/openpose_conditioning_view.py` (editor) ->
+  `tests/*/test_*_210.py` (+ `tests/integration/test_pr_img_cnet_210_canonical_path.py`).
 - Preview draft recovery (PR-GUI-112):
   `docs/Subsystems/GUI/PR-GUI-112_Preview_Draft_Recovery.md` ->
   `src/gui/preview_panel_v2.py` (independent Clear/queue eligibility and errors) ->
@@ -198,6 +210,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 |---|---|
 | Z-Image canonical acceptance preparation (PR-IMG-MODELS-156) | `docs/Subsystems/Image/PR-IMG-MODELS-156_ZImage_Canonical_Production_Acceptance.md` -> `tools/acceptance/img_156_zimage_acceptance.py` (one frozen NJR, separate owner permission, existing canonical stack, managed adapter, observed actual POST/artifacts and independent outcome dimensions) -> `tests/tools/test_img_156_zimage_acceptance.py`; physical attempt separately authorized |
 | Z-Image-Turbo exact-bundle Forge execution (PR-IMG-MODELS-155) | `docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md` -> `src/image_backends/forge_zimage_profile.py` (immutable v1, pure intent/wire checks) + `exact_model_profile.py` (bounded Klein/Z-Image resolver) -> existing `model_policy.py`, compiler/NJR normalization, `forge_webui_backend.py`, served-path hash cache and `managed_forge_runtime.verify_pinned_launch` -> `executor.run_txt2img_stage` (profile-specific actual POST/readback) -> normal artifacts/history; GUI `model_policy_panel_projection.py`, `zimage_optional_control_projection.py`; no physical qualification authority or experimental ledger in production |
+| PromptPack OpenPose ControlNet conditioning (PR-IMG-CNET-210) | `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md` -> `src/conditioning/` (declaration, library, snapshot) -> `src/pipeline/openpose_compile.py` (compile-time gate/freeze) -> `src/image_backends/forge_controlnet.py` / `forge_webui_backend.py` (admission + wire unit) -> `executor.run_txt2img_stage`; editor in `src/gui/widgets/openpose_picker_panel.py`; Forge-only, SDXL-only, base txt2img only; physical verification separately authorized |
 | PromptPack behavior | `paths.py` -> `storage.py` -> `prompt_pack_model.py` -> `prompt_pack_job_builder.py` |
 | Matrix/randomization | `config_variant_plan_v2.py` -> `src/randomizer/` |
 | GUI submission | `app_controller.py` -> `run_submission_service.py` -> `job_service.py` |

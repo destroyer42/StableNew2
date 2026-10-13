@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
+from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_SLOT_FIELD
 from src.contracts import PackJobEntry
 from src.image_backends.forge_klein_lora import LoraResolver
 from src.image_backends.forge_klein_profile import klein_selected
@@ -50,6 +51,7 @@ from src.pipeline.job_models_v2 import (
     StageConfig,
     WorkloadKind,
 )
+from src.pipeline.openpose_compile import CompiledConditioning, OpenPoseCompiler
 from src.pipeline.prompt_pack_parser import PackRow
 from src.pipeline.resolution_layer import (
     PackPromptIntent,
@@ -115,6 +117,8 @@ class _PreparedPrompt:
     global_positive: str = ""
     global_positive_enabled: bool = False
     normalizations: tuple[dict[str, Any], ...] = ()
+    #: The slot's verified, frozen OpenPose conditioning (PR-IMG-CNET-210); ``None`` when the slot has none.
+    conditioning: CompiledConditioning | None = None
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -152,7 +156,9 @@ class PromptPackNormalizedJobBuilder:
         lora_resolver: LoraResolver | None = None,
         lora_selection_policy: bool = False,
         selection_review: Any = None,
+        openpose_compiler: OpenPoseCompiler | None = None,
     ) -> None:
+        self._openpose_compiler = openpose_compiler
         self._config_manager = config_manager
         self._job_builder = job_builder
         self._prompt_resolver = prompt_resolver or UnifiedPromptResolver()
@@ -206,6 +212,8 @@ class PromptPackNormalizedJobBuilder:
                 )
                 if prompt is not None:
                     prepared.append(prompt)
+
+        self._freeze_conditioning(prepared, evidence)
 
         assessments: list[KleinLoraAssessment] = []
         targets: list[_PreparedPrompt] = []
@@ -591,6 +599,15 @@ class PromptPackNormalizedJobBuilder:
             record_metadata,
             resolved_style_lora,
         )
+        if prepared.conditioning is not None:
+            # Structured conditioning is frozen next to the other execution settings (never prompt text, never bytes).
+            config_for_builder[OPENPOSE_SLOT_FIELD] = prepared.conditioning.frozen.to_config()
+            provenance_metadata["conditioning"] = {
+                OPENPOSE_SLOT_FIELD: {
+                    **prepared.conditioning.frozen.evidence(),
+                    "target": dict(prepared.conditioning.target),
+                }
+            }
 
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
         batch_settings = self._build_batch_settings(merged_config)
@@ -750,13 +767,7 @@ class PromptPackNormalizedJobBuilder:
         ``config`` is the effective (model-compile-policy) config; it receives the legacy global-prompt flag exactly as before.
         """
 
-        pack_rows = self._load_pack_rows(entry.pack_id)
-        row_index = entry.pack_row_index or 0
-        pack_row = None
-        if pack_rows:
-            if row_index >= len(pack_rows):
-                row_index = len(pack_rows) - 1
-            pack_row = pack_rows[row_index]
+        pack_row = self._selected_pack_row(entry)
         if pack_row is None:
             pack_row = PackRow(
                 embeddings=(),
@@ -787,6 +798,48 @@ class PromptPackNormalizedJobBuilder:
             apply_global_negative=bool(apply_global),
         )
         return intent
+
+    def _selected_pack_row(self, entry: PackJobEntry) -> PackRow | None:
+        """The structured row this entry compiles (the persisted row index, clamped to the last row), if any."""
+
+        pack_rows = self._load_pack_rows(entry.pack_id)
+        if not pack_rows:
+            return None
+        row_index = entry.pack_row_index or 0
+        if row_index >= len(pack_rows):
+            row_index = len(pack_rows) - 1
+        return pack_rows[row_index]
+
+    def _freeze_conditioning(self, prepared: list[_PreparedPrompt], evidence: CompileEvidence) -> None:
+        """Verify and freeze every slot's OpenPose conditioning before any NJR exists (one defect aborts the build)."""
+
+        build = None
+        for prompt in prepared:
+            row = self._selected_pack_row(prompt.entry)
+            raw = getattr(row, "conditioning", None) if row is not None else None
+            if raw is None:
+                continue
+            if build is None:
+                if self._openpose_compiler is None:
+                    self._openpose_compiler = OpenPoseCompiler()
+                # A session per build: library images read here are never reused by a later build.
+                build = self._openpose_compiler.begin()
+            model_name = self._selected_model_name(prompt.source_config)
+            backend_id = normalize_image_backend_options(
+                derive_backend_options(prompt.config), model_name=model_name
+            )["image"]["backend_id"]
+            label = (
+                f"PromptPack '{prompt.entry.pack_name or prompt.entry.pack_id}' row "
+                f"{(prompt.entry.pack_row_index or 0) + 1}"
+                + (f" / variant {prompt.matrix_index + 1}" if prompt.matrix_count > 1 else "")
+            )
+            prompt.conditioning = build.compile_slot(
+                raw,
+                label=label,
+                model_name=model_name,
+                backend_id=str(backend_id),
+                policy_for=evidence.policy_for,
+            )
 
     @staticmethod
     def _selected_model_name(source_config: dict[str, Any]) -> str | None:

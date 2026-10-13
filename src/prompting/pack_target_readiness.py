@@ -17,8 +17,15 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from src.conditioning.openpose import declaration_enabled, declaration_problems, parse_declaration
 from src.image_backends.exact_model_profile import profile_prompt_refusal
 from src.image_backends.model_policy import ModelPolicy, resolve_model_profile_for_policy
+from src.image_backends.openpose_capability import (
+    STATUS_UNVERIFIED as OPENPOSE_TARGET_UNVERIFIED,
+)
+from src.image_backends.openpose_capability import (
+    assess_openpose_target,
+)
 from src.image_backends.operation_compatibility import OperationRequest, assess_operation
 from src.prompting.prompt_adaptation import (
     EFFECT_DROPPED,
@@ -89,6 +96,16 @@ def validate_pack_structure(pack: Any) -> PackStructure:
                 errors.append("Matrix slot missing name")
             elif not getattr(slot, "values", None):
                 warnings.append(f"Matrix slot '{name}' has no values")
+    for prompt_slot in getattr(pack, "slots", []) or []:
+        raw = getattr(prompt_slot, "openpose", None)
+        if raw is None:
+            continue
+        row = int(getattr(prompt_slot, "index", 0)) + 1
+        problems = declaration_problems(raw)
+        if problems:
+            errors.append(f"Slot {row}: OpenPose conditioning is invalid: {'; '.join(problems)}")
+        elif declaration_enabled(raw) and not parse_declaration(raw).model:
+            warnings.append(f"Slot {row}: OpenPose conditioning has no ControlNet model selected")
     return PackStructure(tuple(errors), tuple(warnings))
 
 
@@ -181,12 +198,26 @@ def assess_pack_readiness(
                 if message:
                     refusals.append(f"row {int(getattr(slot, 'index', 0)) + 1}: {message}")
                     break
+    openpose_unverified = False
+    openpose_target = assess_openpose_target(policy, backend_id)
+    for slot in getattr(pack, "slots", []) or []:
+        raw = getattr(slot, "openpose", None)
+        if raw is None or declaration_problems(raw) or not declaration_enabled(raw):
+            continue  # invalid declarations are structural errors; disabled ones are not executed
+        if openpose_target.blocked:
+            refusals.append(f"row {int(getattr(slot, 'index', 0)) + 1}: {openpose_target.message}")
+        elif openpose_target.status == OPENPOSE_TARGET_UNVERIFIED:
+            openpose_unverified = True
     return PackReadiness(
         evaluated="unsaved editor state" if dirty else "saved pack file",
         structure=validate_pack_structure(pack),
         target_label=target_label(policy, model_name),
         refusals=tuple(dict.fromkeys(refusals)),
-        notes=(*sorted(adapted), *(("lora_evidence_incomplete_kept_unchanged",) if incomplete else ())),
+        notes=(
+            *sorted(adapted),
+            *(("lora_evidence_incomplete_kept_unchanged",) if incomplete else ()),
+            *(("openpose_target_unverified_checked_at_preview",) if openpose_unverified else ()),
+        ),
         target_checked=policy.qualified or not target_is_unverified(policy),
         limits=(
             "Execution readiness is confirmed by Preview: the compiler also applies the Pipeline-tab stages, "

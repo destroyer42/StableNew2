@@ -40,6 +40,58 @@ def _extract_image(payload: dict[str, Any] | None) -> str | None:
     return None
 
 
+#: Always-on script unit fields that carry (base64) image bytes. The pinned Forge ControlNet unit accepts the pose as
+#: ``image`` (a string, or the older ``{"image": ..., "mask": ...}`` dict) and the optional masks/foregrounds below.
+_SCRIPT_IMAGE_KEYS = ("image", "mask_image", "image_fg", "mask_image_fg")
+_SCRIPT_IMAGE_MEMBERS = ("image", "mask")
+
+
+def _omitted(value: str) -> str:
+    return f"<{len(value)} base64 characters omitted>"
+
+
+def _redact_script_image_value(value: Any) -> Any:
+    """The value with any non-empty image string replaced by a size marker (length is irrelevant: a small PNG is data)."""
+
+    if isinstance(value, str):
+        return _omitted(value) if value else value
+    if isinstance(value, dict):
+        return {
+            key: _omitted(member) if key in _SCRIPT_IMAGE_MEMBERS and isinstance(member, str) and member else member
+            for key, member in value.items()
+        }
+    return value
+
+
+def _redact_script_images(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A copy of ``payload`` whose always-on script units carry no image bytes (PR-IMG-CNET-210).
+
+    A ControlNet unit nests its (base64) images under ``alwayson_scripts.<script>.args[*]`` (``image``, ``mask_image``,
+    ``image_fg``, ``mask_image_fg``). Failure records are shown in a text widget and kept in memory, so every non-empty
+    image string there is replaced by a size marker whatever its encoded length; every other field, and the top-level
+    ``image``/``init_images`` handling, is untouched. The caller's payload is never mutated.
+    """
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("alwayson_scripts"), dict):
+        return payload
+    scripts: dict[str, Any] = {}
+    for name, script in payload["alwayson_scripts"].items():
+        args = script.get("args") if isinstance(script, dict) else None
+        if not isinstance(args, list):
+            scripts[name] = script
+            continue
+        cleaned = []
+        for arg in args:
+            if isinstance(arg, dict):
+                arg = {
+                    key: _redact_script_image_value(value) if key in _SCRIPT_IMAGE_KEYS else value
+                    for key, value in arg.items()
+                }
+            cleaned.append(arg)
+        scripts[name] = {**script, "args": cleaned}
+    return {**payload, "alwayson_scripts": scripts}
+
+
 @dataclass
 class ApiFailureRecord:
     timestamp: float
@@ -72,6 +124,7 @@ class ApiFailureStore:
         error_message: str,
     ) -> None:
         image_b64 = _extract_image(payload)
+        payload = _redact_script_images(payload)
         record = ApiFailureRecord(
             timestamp=time.time(),
             stage=stage,
