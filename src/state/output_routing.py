@@ -171,16 +171,24 @@ def resolve_output_artifact_path(
     return raw
 
 
+def is_photo_optimize_workspace(path: str | Path) -> bool:
+    parts = [part.lower() for part in Path(path).parts]
+    return any(pair == ["photooptimize", "workspace"] for pair in (
+        parts[index:index + 2] for index in range(len(parts) - 1)
+    ))
+
+
 def iter_output_run_dirs(base_output_dir: str | Path = "output") -> list[Path]:
     root = get_output_root(base_output_dir, create=False)
-    if not root.exists():
+    if not root.exists() or is_photo_optimize_workspace(root):
         return []
     run_dirs: list[Path] = []
     for child in root.iterdir():
         if not child.is_dir():
             continue
         if child.name in KNOWN_OUTPUT_ROUTE_DIRS:
-            run_dirs.extend(grandchild for grandchild in child.iterdir() if grandchild.is_dir())
+            run_dirs.extend(grandchild for grandchild in child.iterdir()
+                            if grandchild.is_dir() and not is_photo_optimize_workspace(grandchild))
         else:
             run_dirs.append(child)
     run_dirs.sort(key=lambda path: path.stat().st_mtime, reverse=True)
@@ -326,6 +334,8 @@ def classify_existing_output_dir(run_dir: str | Path) -> str:
 
 
 def migrate_legacy_output_tree(base_output_dir: str | Path = "output") -> dict[str, list[str]]:
+    if is_photo_optimize_workspace(base_output_dir):
+        return {"moved": [], "skipped": []}
     root = get_output_root(base_output_dir, create=True)
     moved: list[str] = []
     skipped: list[str] = []
@@ -348,6 +358,8 @@ def migrate_legacy_output_tree(base_output_dir: str | Path = "output") -> dict[s
 
 
 def rebalance_output_tree(base_output_dir: str | Path = "output") -> dict[str, list[str]]:
+    if is_photo_optimize_workspace(base_output_dir):
+        return {"moved": [], "skipped": []}
     root = get_output_root(base_output_dir, create=True)
     moved: list[str] = []
     skipped: list[str] = []
@@ -358,6 +370,8 @@ def rebalance_output_tree(base_output_dir: str | Path = "output") -> dict[str, l
             continue
         for child in sorted(route_root.iterdir()):
             if not child.is_dir():
+                continue
+            if is_photo_optimize_workspace(child):
                 continue
             target_route = classify_existing_output_dir(child)
             if target_route == route:

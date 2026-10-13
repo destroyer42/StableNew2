@@ -53,6 +53,7 @@ def test_photo_optimize_use_current_pipeline_settings_updates_baseline(
     tab = PhotoOptimizeTabFrameV2(tk_root, app_controller=controller, store=store)
     try:
         tab._show_asset(asset.asset_id)
+        tab._run_photo_operation = lambda operation, completed: completed(operation())
         tab._use_current_pipeline_settings()
         reloaded = store.get_asset(asset.asset_id)
         assert reloaded is not None
@@ -99,6 +100,7 @@ def test_photo_optimize_stage_config_fields_persist_to_sidecar(
         tab.img2img_steps_var.set(32)
         tab.img2img_cfg_var.set(6.5)
         tab.img2img_denoise_var.set(0.42)
+        tab.geometry_mode_var.set("custom")
         tab.img2img_width_var.set(768)
         tab.img2img_height_var.set(1024)
         tab.adetailer_model_var.set("face_yolov8n.pt")
@@ -146,6 +148,7 @@ def test_photo_optimize_header_exposes_submit_buttons(tk_root: tk.Tk, tmp_path: 
     try:
         tab._show_asset(asset.asset_id)
         with patch("src.gui.views.photo_optimize_tab_frame_v2.messagebox.showinfo"):
+            tab._run_photo_operation = lambda operation, completed: completed(operation())
             tab.optimize_selected_header_btn.invoke()
         controller.on_optimize_photo_assets.assert_called_once()
     finally:
@@ -208,12 +211,22 @@ def test_photo_optimize_defers_asset_refresh_until_mapped(tk_root: tk.Tk, tmp_pa
     image_path = tmp_path / "source" / "portrait.png"
     _write_image(image_path)
     asset = store.import_photo(image_path)
+    selected_photo = tmp_path / "source" / "selected.png"
+    completed_photo = tmp_path / "source" / "completed.png"
+    _write_image(selected_photo)
+    _write_image(completed_photo)
+    selected_asset = store.import_photo(selected_photo)
+    completed_asset = store.import_photo(completed_photo)
 
     tab = PhotoOptimizeTabFrameV2(tk_root, store=store)
     try:
-        tab._refresh_assets = Mock()
+        tab.assets_list.selection_clear(0, tk.END)
+        for asset_id in (asset.asset_id, selected_asset.asset_id):
+            tab.assets_list.selection_set(tab._asset_index_by_row.index(asset_id))
+        tab._show_asset(asset.asset_id)
+        tab._refresh_assets = Mock(wraps=tab._refresh_assets)
 
-        tab.on_assets_updated([asset.asset_id])
+        tab.on_assets_updated([completed_asset.asset_id])
 
         tab._refresh_assets.assert_not_called()
         assert tab._pending_asset_refresh_target == asset.asset_id
@@ -222,6 +235,11 @@ def test_photo_optimize_defers_asset_refresh_until_mapped(tk_root: tk.Tk, tmp_pa
         tk_root.update_idletasks()
         tk_root.update()
 
-        tab._refresh_assets.assert_called_once_with(select_asset_id=asset.asset_id)
+        tab._refresh_assets.assert_called_once_with()
+        assert tab._pending_asset_refresh_target is None
+        assert set(tab._selected_asset_ids(batch_all=False)) == {
+            asset.asset_id, selected_asset.asset_id,
+        }
+        assert tab._current_asset_id == asset.asset_id
     finally:
         tab.destroy()

@@ -244,9 +244,9 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             "vae": normalized_vae,
             "vae_name": normalized_vae,
             "sampler_name": self.sampler_var.get().strip(),
-            "steps": int(self.steps_var.get() or 20),
-            "cfg_scale": float(self.cfg_var.get() or 7.0),
-            "denoising_strength": float(self.denoise_var.get() or 0.3),
+            "steps": int(self.steps_var.get()),
+            "cfg_scale": float(self.cfg_var.get()),
+            "denoising_strength": float(self.denoise_var.get()),
         }
         if self.width_var.get():
             payload["width"] = int(self.width_var.get())

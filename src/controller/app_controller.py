@@ -2045,34 +2045,15 @@ class AppController:
         return submitted_count
 
     def build_photo_optimize_defaults(self) -> dict[str, Any]:
-        config = self._build_reprocess_config(["img2img", "adetailer", "upscale"])
-        txt2img_cfg = config.get("txt2img", {}) if isinstance(config, dict) else {}
-        img2img_cfg = config.get("img2img", {}) if isinstance(config, dict) else {}
-        model = (
-            (img2img_cfg.get("model") if isinstance(img2img_cfg, dict) else None)
-            or (txt2img_cfg.get("model") if isinstance(txt2img_cfg, dict) else None)
-            or config.get("model")
-            or ""
-        )
-        vae = (
-            (img2img_cfg.get("vae") if isinstance(img2img_cfg, dict) else None)
-            or (txt2img_cfg.get("vae") if isinstance(txt2img_cfg, dict) else None)
-            or config.get("vae")
-            or ""
-        )
-        return {
-            "prompt": "",
-            "negative_prompt": "",
-            "model": str(model or ""),
-            "vae": str(vae or ""),
-            "stage_defaults": {
-                "img2img": True,
-                "adetailer": False,
-                "upscale": False,
-            },
-            "config": config,
-            "source": "manual",
-        }
+        from src.photo_optimize.submission import pipeline_defaults
+
+        config = self._collect_current_stage_configs()
+        tab = getattr(getattr(self, "main_window", None), "pipeline_tab", None)
+        for stage in ("img2img", "adetailer", "upscale"):
+            flag = getattr(tab, f"{stage}_enabled", None)
+            if flag is not None:
+                config.setdefault(stage, {})["enabled"] = bool(flag.get())
+        return pipeline_defaults(config)
 
     def interrogate_photo_path(self, image_path: str | Path, *, model: str = "clip") -> str:
         image_file = Path(image_path)
@@ -2097,128 +2078,34 @@ class AppController:
         return caption
 
     def on_optimize_photo_assets(
-        self,
-        *,
-        assets: list[dict[str, Any]],
-        stages: list[str],
-        prompt_delta: str = "",
-        negative_prompt_delta: str = "",
-        prompt_mode: str = "append",
-        negative_prompt_mode: str = "append",
+        self, *, assets: list[dict[str, Any]], stages: list[str],
+        prompt_delta: str = "", negative_prompt_delta: str = "",
+        prompt_mode: str = "append", negative_prompt_mode: str = "append",
         batch_size: int = 1,
+        pipeline_defaults_snapshot: dict[str, Any] | None = None,
     ) -> int:
-        if not assets:
-            raise ValueError("No photo assets were provided for optimization")
-        if not stages:
-            raise ValueError("No stages specified for photo optimization")
-        valid_stages = {"adetailer", "upscale", "img2img"}
-        invalid_stages = set(stages) - valid_stages
-        if invalid_stages:
-            raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
-        if prompt_mode not in {"append", "replace", "modify"}:
-            raise ValueError("prompt_mode must be 'append', 'replace', or 'modify'")
-        if negative_prompt_mode not in {"append", "replace", "modify"}:
-            raise ValueError("negative_prompt_mode must be 'append', 'replace', or 'modify'")
-        if batch_size <= 0:
-            raise ValueError("batch_size must be >= 1")
+        from src.photo_optimize.submission import describe_photo_plan, prepare_photo_plan
 
-        fallback_config = self._build_reprocess_config(stages)
-        builder = ReprocessJobBuilder()
-        store = get_photo_optimize_store()
-        items: list[ReprocessSourceItem] = []
-
-        for asset in assets:
-            asset_id = str(asset.get("asset_id") or "")
-            if not asset_id:
-                raise ValueError("Photo asset is missing asset_id")
-            baseline = asset.get("baseline") or {}
-            if hasattr(baseline, "to_dict"):
-                baseline = baseline.to_dict()
-            if not isinstance(baseline, dict):
-                baseline = {}
-            input_image_path = str(
-                asset.get("input_image_path")
-                or baseline.get("working_image_path")
-                or asset.get("managed_original_path")
-                or ""
-            )
-            if not input_image_path:
-                raise ValueError(f"Photo asset '{asset_id}' is missing input_image_path")
-            base_prompt = str(baseline.get("prompt") or "")
-            base_negative_prompt = str(baseline.get("negative_prompt") or "")
-            base_model = str(baseline.get("model") or "")
-            base_vae = str(baseline.get("vae") or "")
-            base_config = baseline.get("config") if isinstance(baseline.get("config"), dict) else {}
-            effective_prompt = self._apply_prompt_delta(base_prompt, prompt_delta, prompt_mode)
-            effective_negative_prompt = self._apply_prompt_delta(
-                base_negative_prompt,
-                negative_prompt_delta,
-                negative_prompt_mode,
-            )
-            config_snapshot = ReprocessJobBuilder._merge_nested_dicts(fallback_config, base_config)
-            ReprocessJobBuilder.apply_model_vae_to_config(
-                config_snapshot,
-                model=base_model or None,
-                vae=base_vae or None,
-            )
-            items.append(
-                ReprocessSourceItem(
-                    input_image_path=input_image_path,
-                    prompt=effective_prompt,
-                    negative_prompt=effective_negative_prompt,
-                    model=base_model or None,
-                    vae=base_vae or None,
-                    config=base_config,
-                    metadata={
-                        "photo_asset": {
-                            "asset_id": asset_id,
-                            "input_image_path": input_image_path,
-                            "effective_prompt": effective_prompt,
-                            "effective_negative_prompt": effective_negative_prompt,
-                            "config_snapshot": config_snapshot,
-                            "stages": list(stages),
-                        }
-                    },
-                )
-            )
-
-        def _output_dir_factory(_chunk: list[ReprocessSourceItem]) -> str:
-            return str(store.create_staging_run_dir("photo_optimize"))
-
-        def _extra_metadata_builder(chunk: list[ReprocessSourceItem], job_output_dir: str) -> dict[str, Any]:
-            return {
-                "photo_optimize": {
-                    "source": "photo_optimize_tab",
-                    "run_id": Path(job_output_dir).name,
-                    "stages": list(stages),
-                    "prompt_mode": prompt_mode,
-                    "prompt_delta": prompt_delta,
-                    "negative_prompt_mode": negative_prompt_mode,
-                    "negative_prompt_delta": negative_prompt_delta,
-                    "assets": [
-                        deepcopy((item.metadata or {}).get("photo_asset") or {})
-                        for item in chunk
-                    ],
-                }
-            }
-
-        plan = builder.build_grouped_reprocess_jobs(
-            items=items,
-            stages=stages,
-            fallback_config=fallback_config,
-            batch_size=batch_size,
-            pack_name="PhotoOptimize",
-            source="photo_optimize_tab",
-            output_dir_factory=_output_dir_factory,
-            extra_metadata_builder=_extra_metadata_builder,
+        # Runtime fallback is live Pipeline intent, independent of pack overrides.
+        fallback = (pipeline_defaults_snapshot or self.build_photo_optimize_defaults())["config"]
+        plan = prepare_photo_plan(
+            assets=assets, stages=stages, fallback_config=fallback,
+            store=get_photo_optimize_store(), batch_size=batch_size,
+            prompt_delta=prompt_delta, negative_prompt_delta=negative_prompt_delta,
+            prompt_mode=prompt_mode, negative_prompt_mode=negative_prompt_mode,
         )
-
-        submitted_count = self._submit_reprocess_njrs(plan.jobs, source="photo_optimize_tab")
-        self._append_log(
-            f"[photo_optimize] Submitted {submitted_count} job(s) across "
-            f"{plan.group_count} compatibility group(s), batch_size={batch_size}"
-        )
-        return submitted_count
+        summary = describe_photo_plan(plan)
+        tab = getattr(getattr(self, "main_window", None), "photo_optimize_tab", None)
+        show = getattr(tab, "show_submission_summary", None)
+        if callable(show):
+            self._ui_dispatch(lambda: show(summary))
+        self._ui_dispatch(lambda: self._append_log(summary))
+        submitted = self._submit_reprocess_njrs(plan.jobs, source="photo_optimize_tab")
+        self._ui_dispatch(lambda: self._append_log(
+            f"[photo_optimize] Submitted {len(assets)} photo(s) in {submitted} job(s), "
+            f"{plan.group_count} compatible workload group(s), batch limit={batch_size}"
+        ))
+        return submitted
 
     def _extract_reprocess_baseline_from_image(self, image_path: Path) -> dict[str, Any]:
         from src.utils.image_metadata import (

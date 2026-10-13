@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -13,6 +14,12 @@ from src.gui.ui_tokens import TOKENS
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.photo_optimize import PhotoOptimizeAsset, PhotoOptimizeBaseline, get_photo_optimize_store
+from src.photo_optimize.settings import (
+    copy_pipeline_settings,
+    normalize_settings,
+    resolve_geometry,
+    validate_settings,
+)
 
 
 class PhotoOptimizeTabFrameV2(ttk.Frame):
@@ -28,12 +35,23 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         super().__init__(master, **kwargs)
         self.app_controller = app_controller
         self.app_state = None
-        self.store = store or get_photo_optimize_store()
+        manager = getattr(app_controller, "_config_manager", None)
+        loader = getattr(manager, "load_settings", None)
+        settings = loader() if callable(loader) else {}
+        output_root = settings.get("output_dir") if isinstance(settings, dict) else None
+        self.store = store
+        self._workspace_executor = None
+        self._workspace_future = None
+        self._workspace_poll_id = None
+        self._operation_executor = None
+        self._operation_future = None
+        self._operation_poll_id = None
         self._workflow_adapter = ReviewWorkflowAdapter()
         self._asset_index_by_row: list[str] = []
         self._current_asset_id: str | None = None
         self._current_asset: PhotoOptimizeAsset | None = None
         self._restored_asset_id: str | None = None
+        self._restored_asset_ids: list[str] | None = None
         self._history_index_by_row: list[int] = []
         self._suspend_asset_persist = False
         self._app_state_resource_listener: Any = None
@@ -65,6 +83,10 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.img2img_denoise_var = tk.DoubleVar(value=0.3)
         self.img2img_width_var = tk.IntVar(value=0)
         self.img2img_height_var = tk.IntVar(value=0)
+        self.geometry_mode_var = tk.StringVar(value="auto")
+        self.show_archived_var = tk.BooleanVar(value=False)
+        self.settings_error_var = tk.StringVar()
+        self.submission_summary_var = tk.StringVar(value="Select photos; each retains its own target settings.")
         self.adetailer_model_var = tk.StringVar()
         self.adetailer_confidence_var = tk.DoubleVar(value=0.35)
         self.adetailer_steps_var = tk.IntVar(value=28)
@@ -104,6 +126,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             self.img2img_denoise_var,
             self.img2img_width_var,
             self.img2img_height_var,
+            self.geometry_mode_var,
             self.adetailer_model_var,
             self.adetailer_confidence_var,
             self.adetailer_steps_var,
@@ -143,6 +166,54 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.bind_app_state(app_state)
         self._apply_content_visibility_mode()
         self._refresh_assets()
+        if self.store is None:
+            self.submission_summary_var.set("Loading and verifying Photo Optimize workspace…")
+            self._workspace_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="photo-workspace")
+            self._workspace_future = self._workspace_executor.submit(get_photo_optimize_store, output_root=output_root)
+            self._workspace_poll_id = self.after(50, self._poll_workspace)
+
+    def _poll_workspace(self) -> None:
+        self._workspace_poll_id = None
+        if not self._workspace_future.done():
+            self._workspace_poll_id = self.after(50, self._poll_workspace)
+            return
+        try:
+            self.store = self._workspace_future.result()
+            self.submission_summary_var.set("Workspace ready. Select photos; each retains its own target settings.")
+            self._refresh_assets(select_asset_id=self._restored_asset_id)
+        except Exception as exc:
+            self.submission_summary_var.set(f"Workspace unavailable: {exc}")
+            messagebox.showerror("Photo workspace unavailable", str(exc))
+        finally:
+            self._workspace_executor.shutdown(wait=False)
+
+    def _workspace_ready(self) -> bool:
+        if self.store is not None:
+            return True
+        messagebox.showwarning("Workspace unavailable", self.submission_summary_var.get())
+        return False
+
+    def _run_photo_operation(self, operation, completed) -> None:
+        if self._operation_future is not None:
+            messagebox.showwarning("Photo operation pending", "Wait for the current photo operation to finish.")
+            return
+        self._operation_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="photo-intent")
+        self._operation_future = self._operation_executor.submit(operation)
+        future = self._operation_future
+        executor = self._operation_executor
+        def poll():
+            self._operation_poll_id = None
+            if not future.done():
+                self._operation_poll_id = self.after(50, poll)
+                return
+            try:
+                completed(future.result())
+            except Exception as exc:
+                messagebox.showerror("Photo operation failed", str(exc))
+            finally:
+                executor.shutdown(wait=False)
+                self._operation_future = None
+        self._operation_poll_id = self.after(50, poll)
 
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
@@ -163,7 +234,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         ).grid(row=0, column=1, sticky="w", padx=(0, 6))
         ttk.Button(
             header,
-            text="Use Current Pipeline Settings",
+            text="Copy Pipeline Settings to Selected",
             style="Dark.TButton",
             command=self._use_current_pipeline_settings,
         ).grid(row=0, column=2, sticky="w", padx=(0, 6))
@@ -212,6 +283,8 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             style="Dark.TLabel",
         )
         self.selection_label.grid(row=0, column=8, sticky="e")
+        ttk.Label(header, textvariable=self.submission_summary_var, style="Dark.TLabel",
+                  wraplength=1000).grid(row=1, column=0, columnspan=9, sticky="ew", pady=(6, 0))
 
     def _build_body(self) -> None:
         self.body_scroll = ScrollableFrame(self, style="Panel.TFrame")
@@ -246,6 +319,16 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         )
         assets_scroll.grid(row=0, column=1, sticky="ns")
         self.assets_list.configure(yscrollcommand=assets_scroll.set)
+        list_controls = ttk.Frame(assets_frame, style="Panel.TFrame")
+        list_controls.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        for text, action in (
+            ("Remove Selected", lambda: self._archive_assets(clear_all=False)),
+            ("Clear List", lambda: self._archive_assets(clear_all=True)),
+            ("Restore Selected", self._restore_assets),
+        ):
+            ttk.Button(list_controls, text=text, command=action, style="Dark.TButton").pack(anchor="w")
+        ttk.Checkbutton(list_controls, text="Show Archived", variable=self.show_archived_var,
+                        command=self._refresh_assets, style="Dark.TCheckbutton").pack(anchor="w")
 
         preview_frame = ttk.LabelFrame(
             body,
@@ -297,7 +380,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
 
         baseline_box = ttk.LabelFrame(
             controls,
-            text="Baseline Editor",
+            text="Active Photo Editor (edits this photo only)",
             style="Dark.TLabelframe",
             padding=8,
         )
@@ -381,6 +464,15 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         ).pack(side="left")
 
         self._build_stage_config_editor(baseline_box, row=6)
+        geometry_row = ttk.Frame(baseline_box, style="Panel.TFrame")
+        geometry_row.grid(row=11, column=0, sticky="ew", pady=(6, 0))
+        ttk.Label(geometry_row, text="Geometry", style="Dark.TLabel").pack(side="left")
+        ttk.Combobox(geometry_row, textvariable=self.geometry_mode_var, values=["auto", "custom"],
+                     state="readonly", width=8, style="Dark.TCombobox").pack(side="left", padx=6)
+        ttk.Label(geometry_row, text="Auto = working image; Custom = width/height above",
+                  style="Dark.TLabel").pack(side="left")
+        ttk.Label(baseline_box, textvariable=self.settings_error_var, style="Dark.TLabel",
+                  wraplength=420).grid(row=12, column=0, sticky="ew")
 
         ttk.Label(baseline_box, text="Tags (comma-separated)", style="Dark.TLabel").grid(
             row=7, column=0, sticky="w", pady=(0, 4)
@@ -600,6 +692,8 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         ).pack(side="left", fill="x", expand=True)
 
     def _on_import_photos(self) -> None:
+        if not self._workspace_ready():
+            return
         files = filedialog.askopenfilenames(
             title="Import photos for Photo Optomize",
             filetypes=[
@@ -610,11 +704,21 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         if not files:
             return
         defaults = self._build_import_defaults()
-        imported_ids: list[str] = []
-        for file_path in files:
-            asset = self.store.import_photo(file_path, baseline_defaults=defaults)
-            imported_ids.append(asset.asset_id)
-        self._refresh_assets(select_asset_id=imported_ids[0] if imported_ids else None)
+        def import_files():
+            imported_ids, errors = [], []
+            for file_path in files:
+                try:
+                    asset = self.store.import_photo(file_path, baseline_defaults=defaults)
+                    imported_ids.append(asset.asset_id)
+                except (OSError, ValueError) as exc:
+                    errors.append(str(exc))
+            return imported_ids, errors
+        def imported(result):
+            ids, errors = result
+            self._refresh_assets(select_asset_id=ids[0] if ids else None)
+            if errors:
+                messagebox.showerror("Import failed", "\n".join(errors))
+        self._run_photo_operation(import_files, imported)
 
     def _build_import_defaults(self) -> dict[str, Any]:
         controller = self.app_controller
@@ -703,7 +807,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         ttk.Label(img2img_box, text="Width", style="Dark.TLabel").grid(
             row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
         )
-        ttk.Spinbox(
+        self.geometry_width_entry = ttk.Spinbox(
             img2img_box,
             from_=0,
             to=4096,
@@ -711,11 +815,12 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             textvariable=self.img2img_width_var,
             width=8,
             style="Dark.TSpinbox",
-        ).grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
+        )
+        self.geometry_width_entry.grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
         ttk.Label(img2img_box, text="Height", style="Dark.TLabel").grid(
             row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0)
         )
-        ttk.Spinbox(
+        self.geometry_height_entry = ttk.Spinbox(
             img2img_box,
             from_=0,
             to=4096,
@@ -723,7 +828,8 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             textvariable=self.img2img_height_var,
             width=8,
             style="Dark.TSpinbox",
-        ).grid(row=2, column=3, sticky="ew", pady=(6, 0))
+        )
+        self.geometry_height_entry.grid(row=2, column=3, sticky="ew", pady=(6, 0))
 
         adetailer_box = ttk.LabelFrame(
             frame,
@@ -910,11 +1016,17 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self._refresh_resource_options()
 
     def _refresh_assets(self, select_asset_id: str | None = None) -> None:
-        assets = self.store.list_assets()
+        if self.store is None:
+            return
+        had_assets = bool(self._asset_index_by_row)
+        selected = self._selected_asset_ids(batch_all=False)
+        assets = self.store.list_assets(include_archived=self.show_archived_var.get())
         self.assets_list.delete(0, tk.END)
         self._asset_index_by_row = []
         for asset in assets:
             label = asset.source_filename
+            if asset.archived:
+                label = f"[Archived] {label}"
             if asset.history:
                 label = f"{label} ({len(asset.history)})"
             self.assets_list.insert(tk.END, label)
@@ -922,6 +1034,27 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.selection_label.config(text=f"{len(assets)} asset(s)")
 
         target_asset_id = select_asset_id or self._restored_asset_id or self._current_asset_id
+        if self._restored_asset_ids is not None:
+            restored = [asset_id for asset_id in self._restored_asset_ids
+                        if asset_id in self._asset_index_by_row]
+            self._restored_asset_ids = None
+            for asset_id in restored:
+                self.assets_list.selection_set(self._asset_index_by_row.index(asset_id))
+            if restored:
+                self._show_asset(target_asset_id if target_asset_id in restored else restored[0])
+            else:
+                self._clear_selection()
+            self._restored_asset_id = None
+            return
+        retained = [asset_id for asset_id in selected if asset_id in self._asset_index_by_row]
+        if retained and select_asset_id is None:
+            for asset_id in retained:
+                self.assets_list.selection_set(self._asset_index_by_row.index(asset_id))
+            self._show_asset(target_asset_id if target_asset_id in retained else retained[0])
+            return
+        if had_assets and not retained and select_asset_id is None:
+            self._clear_selection()
+            return
         if target_asset_id and target_asset_id in self._asset_index_by_row:
             index = self._asset_index_by_row.index(target_asset_id)
             self.assets_list.selection_clear(0, tk.END)
@@ -936,6 +1069,25 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             self._show_asset(self._asset_index_by_row[0])
         else:
             self._clear_selection()
+
+    def _archive_assets(self, *, clear_all: bool) -> None:
+        if not self._workspace_ready():
+            return
+        ids = self._selected_asset_ids(batch_all=clear_all)
+        try:
+            self.store.archive_assets(ids)
+            self._refresh_assets()
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Archive failed", str(exc))
+
+    def _restore_assets(self) -> None:
+        if not self._workspace_ready():
+            return
+        try:
+            self.store.restore_assets(self._selected_asset_ids(batch_all=False))
+            self._refresh_assets()
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Restore failed", str(exc))
 
     def _clear_selection(self) -> None:
         self._current_asset_id = None
@@ -960,6 +1112,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
     def _on_asset_select(self, _event: tk.Event) -> None:
         idxs = list(self.assets_list.curselection())
         if not idxs:
+            self._clear_selection()
             return
         idx = int(idxs[0])
         if idx < 0 or idx >= len(self._asset_index_by_row):
@@ -970,6 +1123,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         asset = self.store.get_asset(asset_id)
         if asset is None:
             return
+        previous_asset_id = self._current_asset_id
         self._current_asset_id = asset.asset_id
         self._current_asset = asset
         self._suspend_asset_persist = True
@@ -987,14 +1141,23 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
                 or ("Automatic" if not asset.baseline.vae else asset.baseline.vae)
             )
             self.tags_var.set(", ".join(asset.tags))
+            self.geometry_mode_var.set(asset.baseline.geometry_policy)
+            self._update_geometry_controls()
             self.stage_img2img_var.set(bool(asset.baseline.stage_defaults.get("img2img", True)))
             self.stage_adetailer_var.set(
                 bool(asset.baseline.stage_defaults.get("adetailer", False))
             )
             self.stage_upscale_var.set(bool(asset.baseline.stage_defaults.get("upscale", False)))
-            self._load_baseline_config_form(asset.baseline.config)
+            try:
+                displayed_config = resolve_geometry(asset.baseline, asset.current_input_path)
+                self.settings_error_var.set("")
+            except ValueError as exc:
+                displayed_config = asset.baseline.config
+                self.settings_error_var.set(str(exc))
+            self._load_baseline_config_form(displayed_config)
             self._apply_content_visibility_mode()
-            self._reset_prompt_mode_state(asset)
+            if previous_asset_id != asset.asset_id:
+                self._reset_prompt_mode_state(asset)
             self._populate_history(asset)
             self._refresh_preview(asset)
             self._refresh_prompt_diff()
@@ -1023,7 +1186,10 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
                 f"Asset: {asset.source_filename}\n"
                 f"Working image: {working_name}\n"
                 f"Model: {asset.baseline.model or '(pipeline fallback)'} | "
-                f"VAE: {asset.baseline.vae or '(pipeline fallback)'}\n"
+                f"VAE: {asset.baseline.vae or 'Automatic'}\n"
+                f"Editing this photo only | {len(self._selected_asset_ids(batch_all=False))} selected\n"
+                f"Geometry: {asset.baseline.geometry_policy} | "
+                f"{self.img2img_width_var.get()} x {self.img2img_height_var.get()}\n"
                 f"History entries: {len(asset.history)} | Last run: {last_run}"
             )
         )
@@ -1057,8 +1223,6 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         for idx in idxs:
             if 0 <= int(idx) < len(self._asset_index_by_row):
                 asset_ids.append(self._asset_index_by_row[int(idx)])
-        if not asset_ids and self._current_asset_id:
-            asset_ids = [self._current_asset_id]
         return asset_ids
 
     def _selected_stages(self) -> list[str]:
@@ -1072,15 +1236,16 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         return stages
 
     def _optimize(self, *, batch_all: bool) -> None:
-        self._persist_current_asset_baseline()
+        if not self._workspace_ready():
+            return
+        if not self._persist_current_asset_baseline():
+            messagebox.showerror("Invalid settings", self.settings_error_var.get())
+            return
         asset_ids = self._selected_asset_ids(batch_all=batch_all)
         if not asset_ids:
             messagebox.showwarning("No assets", "Select one or more assets first.")
             return
         stages = self._selected_stages()
-        if not stages:
-            messagebox.showwarning("No stages", "Select at least one stage.")
-            return
         controller = self.app_controller
         handler = getattr(controller, "on_optimize_photo_assets", None)
         if not callable(handler):
@@ -1093,13 +1258,15 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         for asset_id in asset_ids:
             asset = self.store.get_asset(asset_id)
             if asset is None:
-                continue
+                messagebox.showerror("Missing photo", "A selected photo is unavailable; refresh the list.")
+                return
             assets_payload.append(
                 {
                     "asset_id": asset.asset_id,
                     "managed_original_path": asset.managed_original_path,
                     "input_image_path": str(asset.current_input_path),
                     "baseline": asset.baseline.to_dict(),
+                    "archived": asset.archived,
                 }
             )
         if not assets_payload:
@@ -1107,36 +1274,49 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             return
 
         try:
-            submitted = handler(
-                assets=assets_payload,
-                stages=stages,
-                prompt_delta=self._get_text(self.prompt_delta_text),
-                negative_prompt_delta=self._get_text(self.negative_delta_text),
-                prompt_mode=self.prompt_mode_var.get(),
-                negative_prompt_mode=self.negative_mode_var.get(),
-                batch_size=max(1, int(self.batch_size_var.get() or 1)),
+            # Capture Tk intent once, then compile/decode/admit off the GUI thread.
+            arguments = {
+                "assets": assets_payload,
+                "stages": stages,
+                "prompt_delta": self._get_text(self.prompt_delta_text),
+                "negative_prompt_delta": self._get_text(self.negative_delta_text),
+                "prompt_mode": self.prompt_mode_var.get(),
+                "negative_prompt_mode": self.negative_mode_var.get(),
+                "batch_size": int(self.batch_size_var.get()),
+                "pipeline_defaults_snapshot": controller.build_photo_optimize_defaults(),
+            }
+            self._run_photo_operation(
+                lambda: handler(**arguments),
+                lambda submitted: messagebox.showinfo(
+                    "Submitted", f"Submitted {len(assets_payload)} photos in {submitted} job(s). "
+                    "Each photo retains its own stages and target settings.",
+                ),
             )
-            messagebox.showinfo("Submitted", f"Submitted {submitted} photo optimize job(s).")
         except Exception as exc:
             messagebox.showerror("Optimize failed", str(exc))
 
     def _use_current_pipeline_settings(self) -> None:
-        if self._current_asset is None:
-            messagebox.showwarning("No asset", "Select an asset first.")
+        ids = self._selected_asset_ids(batch_all=False)
+        if not ids:
+            messagebox.showwarning("No assets", "Select photos to receive live Pipeline settings.")
             return
-        defaults = self._build_import_defaults()
-        baseline = PhotoOptimizeBaseline.from_dict(self._current_asset.baseline.to_dict())
-        baseline.model = str(defaults.get("model") or "")
-        baseline.vae = str(defaults.get("vae") or "")
-        baseline.config = deepcopy(defaults.get("config") or {})
-        baseline.stage_defaults = dict(defaults.get("stage_defaults") or baseline.stage_defaults)
-        self.store.update_asset_fields(
-            self._current_asset.asset_id,
-            notes=self._current_asset.notes,
-            tags=list(self._current_asset.tags),
-            baseline=baseline,
-        )
-        self._show_asset(self._current_asset.asset_id)
+        try:
+            source = getattr(self.app_controller, "build_photo_optimize_defaults", None)
+            if not callable(source):
+                raise ValueError("Pipeline settings source is unavailable; open Pipeline and retry")
+            defaults = source()
+            def copy_selected():
+                copies = []
+                for asset_id in ids:
+                    asset = self.store.get_asset(asset_id)
+                    if asset is None:
+                        raise ValueError("A selected photo is unavailable; refresh the list")
+                    copies.append((asset_id, copy_pipeline_settings(asset.baseline, defaults)))
+                for asset_id, baseline in copies:
+                    self.store.update_asset_fields(asset_id, baseline=baseline)
+            self._run_photo_operation(copy_selected, lambda result: self._refresh_assets())
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("Pipeline copy failed", str(exc))
 
     def _show_interrogate_unavailable(self) -> None:
         messagebox.showinfo(
@@ -1169,20 +1349,24 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
     def _show_batch_logic_help(self) -> None:
         messagebox.showinfo(
             "Batch Logic",
-            "How Photo Optomize batching works:\n\n"
-            "- Selected assets are grouped only when their final prompt, model, and merged config match.\n"
+            "How Photo Optimize batching works:\n\n"
+            "- The editor changes the active photo only; selection controls submission and Pipeline copy.\n"
+            "- Each photo uses its own stages, Auto/Custom geometry, model, VAE and config.\n"
+            "- Jobs group only identical full workloads, including prompts, stages and dimensions.\n"
+            "- Batch is the maximum photos per compatible job; all jobs preflight together.\n"
             "- Compatible assets can share one queue job.\n"
             "- Incompatible assets are split into separate queue jobs automatically.\n"
             "- After completion, each asset still gets its own copied output and history entry.",
         )
 
-    def _persist_current_asset_baseline(self) -> None:
+    def _persist_current_asset_baseline(self) -> bool:
         if self._suspend_asset_persist or self._current_asset is None:
-            return
+            return True
         asset = self.store.get_asset(self._current_asset.asset_id)
         if asset is None:
-            return
+            return False
         baseline = PhotoOptimizeBaseline.from_dict(asset.baseline.to_dict())
+        self._update_geometry_controls()
         baseline.prompt = self._get_text(self.baseline_prompt_text)
         baseline.negative_prompt = self._get_text(self.baseline_negative_text)
         baseline.model = self._internal_for_display(self.model_var.get(), self._model_name_map)
@@ -1192,10 +1376,17 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             "adetailer": bool(self.stage_adetailer_var.get()),
             "upscale": bool(self.stage_upscale_var.get()),
         }
-        baseline.config = self._merge_nested_dicts(
-            baseline.config if isinstance(baseline.config, dict) else {},
-            self._collect_baseline_config_from_form(),
-        )
+        try:
+            baseline.geometry_policy = self.geometry_mode_var.get()
+            baseline.config = self._merge_nested_dicts(
+                baseline.config if isinstance(baseline.config, dict) else {},
+                self._collect_baseline_config_from_form(),
+            )
+            baseline.config = resolve_geometry(baseline, asset.current_input_path)
+            validate_settings(baseline.config)
+        except (ValueError, TypeError, tk.TclError) as exc:
+            self.settings_error_var.set(str(exc))
+            return False
         if not baseline.working_image_path:
             baseline.working_image_path = asset.managed_original_path
         updated = self.store.update_asset_fields(
@@ -1205,9 +1396,31 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             baseline=baseline,
         )
         self._current_asset = updated
+        if baseline.geometry_policy == "auto":
+            suspended = self._suspend_asset_persist
+            self._suspend_asset_persist = True
+            try:
+                self.img2img_width_var.set(baseline.config["img2img"]["width"])
+                self.img2img_height_var.set(baseline.config["img2img"]["height"])
+            finally:
+                self._suspend_asset_persist = suspended
         self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
         self._refresh_preview(updated)
+        self.settings_error_var.set("")
+        return True
+
+    def _update_geometry_controls(self) -> None:
+        mode = "normal" if self.geometry_mode_var.get() == "custom" else "disabled"
+        self.geometry_width_entry.configure(state=mode)
+        self.geometry_height_entry.configure(state=mode)
+
+    def show_submission_summary(self, summary: str) -> None:
+        lines = summary.splitlines()
+        concise = "\n".join(lines[:5])
+        if len(lines) > 5:
+            concise += f"\n{len(lines) - 5} more job targets; see Operator Log for all settings."
+        self.submission_summary_var.set(concise)
 
     def _interrogate_current_asset(self) -> None:
         if self._current_asset is None:
@@ -1358,116 +1571,27 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         return widget.get("1.0", tk.END).strip()
 
     def _load_baseline_config_form(self, config: dict[str, Any] | None) -> None:
-        data = config if isinstance(config, dict) else {}
-        img2img = data.get("img2img") if isinstance(data.get("img2img"), dict) else {}
-        adetailer = data.get("adetailer") if isinstance(data.get("adetailer"), dict) else {}
-        upscale = data.get("upscale") if isinstance(data.get("upscale"), dict) else {}
-
-        self.img2img_sampler_var.set(
-            str(
-                img2img.get("sampler_name")
-                or data.get("img2img_sampler_name")
-                or data.get("sampler_name")
-                or ""
-            )
-        )
-        self.img2img_steps_var.set(
-            self._safe_int(
-                img2img.get("steps") or data.get("img2img_steps") or data.get("steps"), 20
-            )
-        )
-        self.img2img_cfg_var.set(
-            self._safe_float(
-                img2img.get("cfg_scale") or data.get("img2img_cfg_scale") or data.get("cfg_scale"),
-                7.0,
-            )
-        )
-        self.img2img_denoise_var.set(
-            self._safe_float(
-                img2img.get("denoising_strength") or data.get("img2img_denoising_strength"),
-                0.3,
-            )
-        )
-        self.img2img_width_var.set(self._safe_int(img2img.get("width"), 0))
-        self.img2img_height_var.set(self._safe_int(img2img.get("height"), 0))
-
-        self.adetailer_model_var.set(
-            str(adetailer.get("adetailer_model") or adetailer.get("ad_model") or "")
-        )
-        self.adetailer_confidence_var.set(
-            self._safe_float(
-                adetailer.get("adetailer_confidence") or adetailer.get("ad_confidence"),
-                0.35,
-            )
-        )
-        self.adetailer_steps_var.set(
-            self._safe_int(
-                adetailer.get("adetailer_steps")
-                or adetailer.get("ad_steps")
-                or data.get("adetailer_steps"),
-                28,
-            )
-        )
-        self.adetailer_cfg_var.set(
-            self._safe_float(
-                adetailer.get("adetailer_cfg")
-                or adetailer.get("ad_cfg_scale")
-                or data.get("adetailer_cfg_scale"),
-                7.0,
-            )
-        )
-        self.adetailer_denoise_var.set(
-            self._safe_float(
-                adetailer.get("adetailer_denoise")
-                or adetailer.get("ad_denoising_strength")
-                or data.get("adetailer_denoising_strength"),
-                0.4,
-            )
-        )
-        self.adetailer_sampler_var.set(
-            str(
-                adetailer.get("adetailer_sampler")
-                or adetailer.get("ad_sampler")
-                or data.get("adetailer_sampler_name")
-                or ""
-            )
-        )
-        self.adetailer_scheduler_var.set(
-            str(
-                adetailer.get("scheduler") or adetailer.get("ad_scheduler") or "Use sampler default"
-            )
-        )
-
-        self.upscale_upscaler_var.set(str(upscale.get("upscaler") or data.get("upscaler") or ""))
-        self.upscale_factor_var.set(
-            self._safe_float(
-                upscale.get("upscaling_resize")
-                or upscale.get("upscale_factor")
-                or upscale.get("upscale_by")
-                or data.get("upscale_factor"),
-                2.0,
-            )
-        )
-        self.upscale_steps_var.set(
-            self._safe_int(upscale.get("steps") or data.get("upscale_steps"), 20)
-        )
-        self.upscale_denoise_var.set(
-            self._safe_float(
-                upscale.get("denoising_strength") or data.get("upscale_denoising_strength"),
-                0.35,
-            )
-        )
-        self.upscale_sampler_var.set(
-            str(upscale.get("sampler_name") or data.get("upscale_sampler_name") or "Euler a")
-        )
-        self.upscale_scheduler_var.set(
-            str(upscale.get("scheduler") or data.get("upscale_scheduler") or "normal")
-        )
-        self.upscale_tile_size_var.set(self._safe_int(upscale.get("tile_size"), 0))
-        self.upscale_face_restore_var.set(bool(upscale.get("face_restore", False)))
-        self.upscale_face_restore_method_var.set(
-            str(upscale.get("face_restore_method") or "CodeFormer")
-        )
+        suspended = self._suspend_asset_persist
+        self._suspend_asset_persist = True
+        try:
+            data = normalize_settings(config or {})
+            fields = {
+                "img2img": {"sampler": "sampler_name", "steps": "steps", "cfg": "cfg_scale",
+                           "denoise": "denoising_strength", "width": "width", "height": "height"},
+                "adetailer": {"model": "adetailer_model", "confidence": "adetailer_confidence",
+                             "steps": "adetailer_steps", "cfg": "adetailer_cfg",
+                             "denoise": "adetailer_denoise", "sampler": "adetailer_sampler",
+                             "scheduler": "scheduler"},
+                "upscale": {"upscaler": "upscaler", "factor": "upscaling_resize", "steps": "steps",
+                           "denoise": "denoising_strength", "sampler": "sampler_name",
+                           "scheduler": "scheduler", "tile_size": "tile_size",
+                           "face_restore": "face_restore", "face_restore_method": "face_restore_method"},
+            }
+            for stage, mapping in fields.items():
+                for name, key in mapping.items():
+                    getattr(self, f"{stage}_{name}_var").set(data[stage][key])
+        finally:
+            self._suspend_asset_persist = suspended
 
     def _collect_baseline_config_from_form(self) -> dict[str, Any]:
         img2img_cfg: dict[str, Any] = {
@@ -1478,10 +1602,8 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         }
         width = self._safe_int(self.img2img_width_var.get(), 0)
         height = self._safe_int(self.img2img_height_var.get(), 0)
-        if width > 0:
-            img2img_cfg["width"] = width
-        if height > 0:
-            img2img_cfg["height"] = height
+        img2img_cfg["width"] = width
+        img2img_cfg["height"] = height
 
         adetailer_cfg: dict[str, Any] = {
             "adetailer_model": self.adetailer_model_var.get().strip(),
@@ -1538,6 +1660,14 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         return config
 
     def _refresh_resource_options(self, resources: dict[str, list[Any]] | None = None) -> None:
+        suspended = self._suspend_asset_persist
+        self._suspend_asset_persist = True
+        try:
+            self._project_resource_options(resources)
+        finally:
+            self._suspend_asset_persist = suspended
+
+    def _project_resource_options(self, resources: dict[str, list[Any]] | None = None) -> None:
         resource_map = resources
         if resource_map is None:
             resource_map = (
@@ -1701,21 +1831,20 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
 
     @staticmethod
     def _safe_int(value: Any, default: int) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
+        number = float(value)
+        if not number.is_integer():
+            raise ValueError("Setting must be an integer")
+        return int(number)
 
     @staticmethod
     def _safe_float(value: Any, default: float) -> float:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        return float(value)
 
     def get_photo_optimize_state(self) -> dict[str, Any]:
         return {
             "selected_asset_id": self._current_asset_id,
+            "selected_asset_ids": self._selected_asset_ids(batch_all=False),
+            "show_archived": self.show_archived_var.get(),
         }
 
     def _on_app_state_resources_changed(
@@ -1776,21 +1905,23 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         if not isinstance(payload, dict):
             return False
         selected_asset_id = payload.get("selected_asset_id")
+        if "selected_asset_ids" in payload:
+            self._restored_asset_ids = [str(asset_id) for asset_id in payload["selected_asset_ids"]]
+        self.show_archived_var.set(bool(payload.get("show_archived", False)))
         if selected_asset_id:
             self._restored_asset_id = str(selected_asset_id)
             self._refresh_assets(select_asset_id=self._restored_asset_id)
             return True
+        self._refresh_assets()
         return False
 
     def on_assets_updated(self, asset_ids: list[str] | None = None) -> None:
         target = self._current_asset_id
-        if asset_ids and target not in set(asset_ids):
-            target = asset_ids[0]
         if not bool(self.winfo_ismapped()):
-            self._pending_asset_refresh_target = target
+            self._pending_asset_refresh_target = target or ""
             return
         self._pending_asset_refresh_target = None
-        self._refresh_assets(select_asset_id=target)
+        self._refresh_assets()
 
     def _on_map(self, _event: Any = None) -> None:
         if self._pending_resources_payload is not None:
@@ -1798,15 +1929,22 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             self._pending_resources_payload = None
             self.after_idle(lambda resources=resources: self._refresh_resource_options(resources))
         if self._pending_asset_refresh_target is not None:
-            target = self._pending_asset_refresh_target
             self._pending_asset_refresh_target = None
-            self.after_idle(lambda target=target: self._refresh_assets(select_asset_id=target))
+            self.after_idle(self._refresh_assets)
         if self._pending_visibility_refresh:
             self.after_idle(
                 lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode)
             )
 
     def destroy(self) -> None:
+        if self._operation_poll_id is not None:
+            self.after_cancel(self._operation_poll_id)
+        if self._operation_executor is not None:
+            self._operation_executor.shutdown(wait=False, cancel_futures=True)
+        if self._workspace_poll_id is not None:
+            self.after_cancel(self._workspace_poll_id)
+        if self._workspace_executor is not None:
+            self._workspace_executor.shutdown(wait=False, cancel_futures=True)
         if (
             self.app_state is not None
             and self._app_state_resource_listener is not None

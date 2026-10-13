@@ -65,7 +65,7 @@ class TestPathStructure:
 
     def test_photo_optimize_root_correct_path(self, wp, tmp_path):
         p = wp.photo_optimize_root(create=False)
-        assert p == (tmp_path / "data" / "photo_optimize").resolve()
+        assert p == (tmp_path / "output" / "PhotoOptimize" / "workspace").resolve()
 
     def test_state_dir_correct_path(self, wp, tmp_path):
         p = wp.state_dir(create=False)

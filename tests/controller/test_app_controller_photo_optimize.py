@@ -34,7 +34,7 @@ def _build_controller() -> AppController:
     controller.cancel_token = None
     controller.main_window = None
     controller._ui_dispatch = lambda callback: callback()
-    controller._build_reprocess_config = Mock(
+    controller._collect_current_stage_configs = Mock(
         return_value={
             "txt2img": {"model": "baseModel", "vae": "baseVae"},
             "img2img": {"denoising_strength": 0.2},

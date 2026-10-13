@@ -26,6 +26,7 @@ class PhotoOptimizeBaseline:
     config: dict[str, Any] = field(default_factory=dict)
     source: str = "manual"
     working_image_path: str = ""
+    geometry_policy: str = "auto"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -37,6 +38,7 @@ class PhotoOptimizeBaseline:
             "config": deepcopy(self.config or {}),
             "source": self.source,
             "working_image_path": self.working_image_path,
+            "geometry_policy": self.geometry_policy,
         }
 
     @classmethod
@@ -47,10 +49,14 @@ class PhotoOptimizeBaseline:
             negative_prompt=str(data.get("negative_prompt") or ""),
             model=str(data.get("model") or ""),
             vae=str(data.get("vae") or ""),
-            stage_defaults=dict(data.get("stage_defaults") or default_stage_defaults()),
+            stage_defaults=dict(data.get("stage_defaults", default_stage_defaults())),
             config=deepcopy(data.get("config") or {}),
             source=str(data.get("source") or "manual"),
             working_image_path=str(data.get("working_image_path") or ""),
+            geometry_policy=str(data.get("geometry_policy") or (
+                "custom" if (data.get("config") or {}).get("img2img", {}).get("width")
+                and (data.get("config") or {}).get("img2img", {}).get("height") else "auto"
+            )),
         )
 
 
@@ -152,6 +158,7 @@ class PhotoOptimizeAsset:
     notes: str = ""
     schema_version: str = PHOTO_OPTIMIZE_SCHEMA_VERSION
     asset_type: str = "external_photo"
+    archived: bool = False
 
     @property
     def current_input_path(self) -> Path:
@@ -176,6 +183,7 @@ class PhotoOptimizeAsset:
             "original_path_at_import": self.original_path_at_import,
             "managed_original_path": self.managed_original_path,
             "asset_type": self.asset_type,
+            "archived": self.archived,
             "baseline": self.baseline.to_dict(),
             "history": [entry.to_dict() for entry in self.history],
             "baseline_snapshots": [entry.to_dict() for entry in self.baseline_snapshots],
@@ -204,6 +212,7 @@ class PhotoOptimizeAsset:
             original_path_at_import=str(data.get("original_path_at_import") or ""),
             managed_original_path=str(data.get("managed_original_path") or ""),
             asset_type=str(data.get("asset_type") or "external_photo"),
+            archived=bool(data.get("archived", False)),
             baseline=PhotoOptimizeBaseline.from_dict(data.get("baseline") or {}),
             history=history,
             baseline_snapshots=snapshots,
