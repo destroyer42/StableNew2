@@ -92,5 +92,3 @@ def test_validation_never_edits_the_pack() -> None:
     _assess(model, KLEIN)
 
     assert json.dumps(model.slots[0].openpose, sort_keys=True) == before
-
-

@@ -437,9 +437,10 @@ class OpenPosePickerPanel(ttk.LabelFrame):
             self.summary_var.set("Selection kept, but it will not run on the current target.")
         else:
             self.summary_var.set("OpenPose selection saved.")
-        self.notes_var.set("\n".join(line.text for line in view.lines if line.severity != SEVERITY_OK) or "")
-        if view.worst == SEVERITY_OK and not view.lines:
-            self.notes_var.set("")
+        notes = "\n".join(line.text for line in view.lines if line.severity != SEVERITY_OK)
+        if view.selection is not None and self._is_hidden(view.selection.asset):
+            notes = notes.replace(view.selection.asset, REDACTED_TEXT)  # a flagged name never leaks via a status line
+        self.notes_var.set(notes)
 
     def _apply_filter(self) -> None:
         entries = [entry for entry in self._listing.entries if not self._is_hidden(entry.identity)]

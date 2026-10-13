@@ -233,3 +233,9 @@ replay, refusals, ADetailer/upscale coexistence).
 * The header family check for an unidentified checkpoint matches by file name under
   `models/Stable-diffusion`; the Forge-served file is not independently re-read at dispatch.
 * ControlNet weight SDXL evidence is header-observational, not a model qualification.
+* Defense in depth not taken in this PR: the frozen `snapshot.path` is required to be the content-addressed
+  `<sha256>.<ext>` name (and its bytes must hash to that digest) but is not confined to StableNew's snapshot
+  directory, and a library file is resolved then opened as two steps (a local writer with access to the user's own
+  `models/OpenPose` folder could race a link swap). Both need a hostile local writer or a tampered job record whose
+  target is already named by its own SHA-256; confining the path to `state/conditioning_inputs/openpose` is a cheap
+  follow-up.

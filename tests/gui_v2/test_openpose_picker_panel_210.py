@@ -320,3 +320,24 @@ def test_scan_failure_is_shown_not_raised(tk_root, tmp_path) -> None:
         assert panel.get_declaration() is None and changes == []
     finally:
         panel.destroy()
+
+
+def test_a_flagged_name_never_leaks_through_a_status_line_in_sfw_mode(tk_root, library, tmp_path) -> None:
+    panel, _changes = _panel(tk_root, library, tmp_path)
+    try:
+        panel.set_declaration(
+            {
+                "contract": "openpose.v1", "enabled": True, "asset": "Gone/nude pose.png", "model": CN,
+                "weight": 1.0, "guidance_start": 0.0, "guidance_end": 1.0, "control_mode": "Balanced",
+                "resize_mode": "Resize and Fill", "preprocessor": "None",
+            }
+        )
+        assert "Gone/nude pose.png" in panel.notes_var.get()  # NSFW mode: shown as before
+
+        panel.set_content_visibility_mode("sfw")
+
+        assert "nude" not in panel.notes_var.get()
+        assert "not in the OpenPose library" in panel.notes_var.get()
+        assert panel.get_declaration()["asset"] == "Gone/nude pose.png"
+    finally:
+        panel.destroy()

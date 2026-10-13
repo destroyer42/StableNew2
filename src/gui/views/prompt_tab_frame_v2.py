@@ -1429,7 +1429,9 @@ class PromptTabFrame(ttk.Frame):
             lines.append("Status: will be sent to Forge as one ControlNet unit on the base txt2img stage.")
         else:
             lines.append("Status: will not run as saved:")
-            lines.extend(f"  - {line.text}" for line in view.lines if line.severity != "ok")
+            lines.extend(
+                f"  - {line.text.replace(selection.asset, shown)}" for line in view.lines if line.severity != "ok"
+            )
         return lines
 
     # Model-aware prompt compatibility (PR-IMG-130B) -------------------------

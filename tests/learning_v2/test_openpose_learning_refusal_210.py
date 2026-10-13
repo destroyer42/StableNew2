@@ -41,5 +41,3 @@ def test_learning_still_freezes_rows_without_or_with_disabled_conditioning(tmp_p
 
     assert plain["rendered_positive_prompt"] == "a person"
     assert disabled["rendered_positive_prompt"] == "a person"
-
-

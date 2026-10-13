@@ -231,3 +231,16 @@ def test_a_pack_loaded_with_a_hand_written_declaration_is_shown(tab, tmp_path: P
 
     assert frame.openpose_picker.get_declaration()["asset"] == "Walking/forward.png"
     assert frame.openpose_picker.selected_var.get() == "Walking/forward.png"
+
+
+def test_the_preview_redacts_a_flagged_pose_name_in_sfw_mode(tab) -> None:
+    frame = tab
+    frame.on_model_projection(_projection(KLEIN))  # not executable: the status lines name the image when it is missing
+    frame.workspace_state.set_slot_openpose(0, new_declaration("Gone/nude pose.png", model=CN))
+    frame._refresh_editor()
+    frame.on_content_visibility_mode_changed("sfw")
+
+    text = frame.meta_text.get("1.0", "end")
+
+    assert "CONTROLNET OPENPOSE" in text
+    assert "nude" not in text.lower().replace("hidden in sfw", "")
