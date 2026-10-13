@@ -31,6 +31,9 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/app_controller_services/run_submission_service.py`, and
   `src/controller/pipeline_controller_services/`.
 - SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210):
+  Follow-up output integrity/conditioning diagnostics: `docs/Subsystems/Image/PR-IMG-CNET-211_OpenPose_Output_Integrity_and_Reliability.md` ->
+  `src/image_backends/openpose_output.py` (response classification before save) / `src/conditioning/openpose_diagnostics.py`
+  (model-name hints, input/geometry facts) -> existing Forge admission, executor and GUI view; no new authority.
   `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md` ->
   `src/conditioning/openpose.py` (versioned slot declaration, identity rules) ->
   `src/promptpacks/storage.py::prompt_pack_rows` / `src/gui/models/prompt_pack_model.py` (per-slot persistence, row conditioning) ->

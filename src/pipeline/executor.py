@@ -5159,24 +5159,23 @@ class Pipeline:
                 stage_label="txt2img",
                 cancel_token=cancel_token,
             )
-            if not response or "images" not in response or not response["images"]:
-                logger.error("txt2img failed - no images returned")
-                return None
-
             if conditioning_evidence is not None:
-                # Forge's ControlNet appends each unit's detect map AFTER the generated image(s) (verified by the
-                # PR-IMG-CNET-210 physical check: image 0 = result, image 1 = byte-identical pose map). Those are
-                # control inputs, not results: keep exactly the requested number of generated images.
+                from src.conditioning.openpose_snapshot import FrozenOpenPose, verify_frozen
+                from src.image_backends.openpose_output import classify_openpose_response
+
                 generated_expected = max(
                     1, int(payload.get("batch_size", 1) or 1) * int(payload.get("n_iter", 1) or 1)
                 )
-                returned_images = response.get("images")
-                if isinstance(returned_images, list) and len(returned_images) > generated_expected:
-                    conditioning_evidence = {
-                        **conditioning_evidence,
-                        "control_images_discarded": len(returned_images) - generated_expected,
-                    }
-                    response["images"] = returned_images[:generated_expected]
+                pose_config = config if config.get(OPENPOSE_SLOT_FIELD) is not None else txt2img_config
+                response, output_evidence = classify_openpose_response(
+                    response, expected=generated_expected,
+                    input_bytes=verify_frozen(FrozenOpenPose.from_config(pose_config[OPENPOSE_SLOT_FIELD])),
+                )
+                conditioning_evidence = {**conditioning_evidence, **output_evidence}
+
+            if not response or "images" not in response or not response["images"]:
+                logger.error("txt2img failed - no images returned")
+                return None
 
             gen_info = self._extract_generation_info(response) if response else {}
 
@@ -5283,6 +5282,12 @@ class Pipeline:
                     image_path.name,
                 )
                 image_metadata = dict(base_metadata)
+                if conditioning_evidence is not None:
+                    # Classification substantiated one seed per generation; use that image's seed in its manifest.
+                    image_metadata["actual_seed"] = gen_info["all_seeds"][batch_idx]
+                    subseeds = gen_info.get("all_subseeds")
+                    if isinstance(subseeds, list) and len(subseeds) == num_images_received:
+                        image_metadata["actual_subseed"] = subseeds[batch_idx]
                 image_metadata["name"] = batch_image_name
                 image_metadata["path"] = str(image_path)
                 image_metadata["output_path"] = str(image_path)

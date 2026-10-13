@@ -173,6 +173,12 @@ compile refuses before any NJR exists.
 
 ## Forge request
 
+Current output handling and compatibility diagnostics are superseded by
+`PR-IMG-CNET-211_OpenPose_Output_Integrity_and_Reliability.md`: the unit explicitly sends `save_detected_map=False`,
+and generated-image metadata/identity classification replaces the simple trimming described below. Known incompatible
+depth/tile model names now refuse; SDXL architecture alone remains no proof of OpenPose training modality. Historical
+physical observations and frozen `openpose.v1` records below are retained unchanged.
+
 For admitted work the base `POST /sdapi/v1/txt2img` gains exactly one unit; other
 `alwayson_scripts` entries (for example the Aesthetic script) are preserved and an existing
 `ControlNet` entry is never overwritten:

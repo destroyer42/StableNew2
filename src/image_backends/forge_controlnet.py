@@ -35,6 +35,11 @@ from src.conditioning.openpose import (
     ConditioningError,
     OpenPoseDeclarationError,
 )
+from src.conditioning.openpose_diagnostics import (
+    geometry_feedback,
+    input_image_facts,
+    pose_model_hint,
+)
 from src.conditioning.openpose_snapshot import FrozenOpenPose, verify_frozen
 
 SCRIPT_KEY = "ControlNet"
@@ -52,6 +57,7 @@ CODE_MODULE = "module_missing"
 CODE_SDXL_MISMATCH = "model_not_sdxl"
 CODE_CONFLICT = "script_conflict"
 CODE_UNADMITTED = "not_admitted"
+CODE_MODALITY = "model_not_openpose"
 
 
 class OpenPoseDispatchError(ConditioningError):
@@ -189,6 +195,14 @@ def admit_openpose(
             f"The ControlNet model '{unit_model}' is not an SDXL model ({sdxl.detail}); an SDXL checkpoint needs an "
             "SDXL OpenPose ControlNet. This job was not dispatched.",
         )
+    modality = pose_model_hint(unit_model)
+    if modality.status == "incompatible":
+        raise OpenPoseDispatchError(
+            CODE_MODALITY,
+            f"ControlNet '{unit_model}' is a known {modality.detail} model name, not an OpenPose model. "
+            "SDXL tensor widths establish architecture, not pose training modality. Choose an SDXL OpenPose "
+            "model and rebuild Preview; the saved selection and frozen job remain unchanged.",
+        )
     return OpenPoseAdmission(
         unit_model=unit_model,
         evidence={
@@ -198,6 +212,7 @@ def admit_openpose(
             "module": PREPROCESSOR_NONE,
             "controlnet_version": catalog.version,
             "model_sdxl": {"status": sdxl.status, "detail": sdxl.detail, "source": sdxl.source},
+            "model_modality": {"status": modality.status, "source": modality.source, "detail": modality.detail},
         },
     )
 
@@ -219,6 +234,7 @@ def build_unit(frozen: FrozenOpenPose, *, model: str, image_bytes: bytes) -> dic
         "control_mode": frozen.control_mode,
         "resize_mode": frozen.resize_mode,
         "pixel_perfect": False,
+        "save_detected_map": False,
     }
 
 
@@ -265,6 +281,12 @@ def apply_openpose_wire_unit(
         "module": PREPROCESSOR_NONE,
         "image_sha256_sent": hashlib.sha256(image_bytes).hexdigest(),
         "pixel_perfect": False,
+        "save_detected_map": False,
+        "input_diagnostics": input_image_facts(image_bytes),
+        "geometry": geometry_feedback(
+            frozen.width, frozen.height, frozen.resize_mode,
+            target=(int(payload.get("width") or 0), int(payload.get("height") or 0)),
+        ),
     }
     return wire, evidence
 

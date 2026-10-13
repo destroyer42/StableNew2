@@ -21,6 +21,7 @@ from src.conditioning.openpose import (
     declaration_problems,
     parse_declaration,
 )
+from src.conditioning.openpose_diagnostics import geometry_feedback, pose_model_hint
 from src.image_backends.openpose_capability import (
     STATUS_SUPPORTED,
     STATUS_UNSUPPORTED,
@@ -66,6 +67,7 @@ def describe_openpose(
     target: OpenPoseTarget | None = None,
     library_identities: Collection[str] | None = None,
     model_status: str | None = None,
+    image_facts: Mapping[str, Any] | None = None,
 ) -> OpenPoseView:
     """The editor view of one raw slot declaration (``None`` means the slot has no conditioning)."""
 
@@ -132,6 +134,48 @@ def describe_openpose(
         )
     elif model_status == STATUS_SDXL:
         lines.append(StatusLine(SEVERITY_OK, f"ControlNet model '{selection.model}' is identified as SDXL."))
+    if selection.model:
+        modality = pose_model_hint(selection.model)
+        if modality.status == "incompatible":
+            blocked = True
+            lines.append(StatusLine(
+                SEVERITY_ERROR,
+                f"'{selection.model}' is a known {modality.detail} model name and cannot consume an OpenPose map. "
+                "SDXL architecture evidence is not pose-modality evidence. Choose an SDXL OpenPose model; "
+                "the saved choice is kept.",
+            ))
+        else:
+            lines.append(StatusLine(
+                SEVERITY_WARNING,
+                "OpenPose training modality is unverified; SDXL tensor widths and a model name do not qualify it. "
+                "Confirm the model's documented input is a pre-rendered OpenPose map.",
+            ))
+    lines.append(StatusLine(
+        SEVERITY_INFO,
+        "Preprocessor None passes the supplied pixels; a photograph, depth map or stylized skeleton is not "
+        "automatically converted to the model's OpenPose format. Use its documented colored skeleton on black.",
+    ))
+    mode_help = {
+        "Balanced": "balances prompt and pose influence",
+        "My prompt is more important": "reduces pose priority relative to the prompt",
+        "ControlNet is more important": "prioritizes conditioning and can overpower the prompt",
+    }
+    lines.append(StatusLine(
+        SEVERITY_INFO,
+        f"Strength {selection.weight:g}, guidance {selection.guidance_start:g}-{selection.guidance_end:g}. "
+        f"{selection.control_mode} {mode_help[selection.control_mode]}. Increasing strength/end can exaggerate "
+        "conditioning; it cannot repair a model/input mismatch. Saved values are unchanged.",
+    ))
+    if image_facts is not None:
+        lines.append(StatusLine(SEVERITY_INFO, geometry_feedback(
+            int(image_facts["width"]), int(image_facts["height"]), selection.resize_mode,
+        )))
+        if image_facts.get("has_transparency"):
+            lines.append(StatusLine(
+                SEVERITY_WARNING,
+                "This map has transparent pixels. Pinned Forge composites them on white, not black; use an "
+                "opaque map with the model's documented background. StableNew does not rewrite it.",
+            ))
     if target is not None:
         if target.status == STATUS_SUPPORTED:
             lines.append(StatusLine(SEVERITY_OK, "The selected checkpoint and backend can run OpenPose conditioning."))
@@ -153,6 +197,7 @@ def effective_summary(selection: OpenPoseSelection) -> tuple[str, ...]:
         f"Weight {selection.weight:g}, guidance {selection.guidance_start:g}-{selection.guidance_end:g}, "
         f"control mode '{selection.control_mode}', resize '{selection.resize_mode}'",
         f"Preprocessor: {selection.preprocessor} (pre-rendered OpenPose map)",
+        "SDXL compatibility does not establish OpenPose training modality; use a documented SDXL OpenPose model.",
     )
 
 
