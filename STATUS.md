@@ -4,7 +4,7 @@ Updated: 2026-10-12
 
 ## Repository
 
-- SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210, draft PR #97; deterministic gate green and one owner-authorized
+- SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210, PR #97; deterministic gate green and one owner-authorized
   physical Forge generation verified): a PromptPack slot may carry one optional, versioned `controlnet_openpose` declaration (`openpose.v1`) naming a
   pre-rendered OpenPose image from the new scannable library `<WebUI root>/models/OpenPose` (`AssetKind.OPENPOSE_IMAGE`,
   per-kind extension filtering; distinct from the `models/ControlNet` weights). The compiler gates the target (SDXL on
@@ -22,11 +22,12 @@ Updated: 2026-10-12
   exact unit and followed the pose; it also showed Forge appends the detect map after the result, which is now discarded.
   Only one pose/checkpoint was tried and no automated pose metric exists. Known operational limitation: Forge's own
   UI "batch input directory" (a process-global, REST-invisible setting) would silently replace the supplied pose; keep it
-  empty on the managed runtime (documented, not guardable read-only). See
+  empty on the managed runtime (documented, not guardable read-only). The owner accepted this limitation on 2026-10-12:
+  provenance proves what StableNew submitted, not necessarily what Forge used. See
   `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md`.
 
-- Persistent checkpoint evidence and Model Comparison compatibility (PR-LEARN-COMPARE-145, locally validated; not
-  pushed): AssetRegistry now explains every checkpoint-evidence miss with a path-free reason and per-refresh counters
+- Persistent checkpoint evidence and Model Comparison compatibility (PR-LEARN-COMPARE-145, merged in PR #98):
+  AssetRegistry now explains every checkpoint-evidence miss with a path-free reason and per-refresh counters
   (`no_entry`, `size_changed`, `mtime_changed`, `digest_invalid` need a full SHA-256 read; `structure_stale` and
   `sidecar_changed` provably do not), reads a transiently unavailable cache with bounded retries instead of treating it
   as empty, never silently overwrites an unreadable/future-schema cache, and retries Windows replace refusals. A

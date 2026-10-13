@@ -283,6 +283,10 @@ Assessed against the pinned Forge Neo source (`extensions-builtin/sd_forge_contr
   managed Forge UI; restart the managed runtime to clear a stray value; if a conditioned image ignores its pose, look for
   `[Batch Dir]` in the Forge output. The physical check's result (the image followed the supplied pose) is consistent with the
   override being unset on that runtime.
+* **Owner risk acceptance (2026-10-12).** The owner accepted this limitation for this bounded SDXL feature on the explicit
+  understanding that `image_sha256_sent` and the frozen provenance prove what StableNew *submitted*, not necessarily what
+  Forge *used*. Closing it would need a Forge-side signal (an API or option that exposes the batch directory) or a
+  separately authorized runtime change; neither is part of this package.
 
 ## Not claimed / remaining
 
