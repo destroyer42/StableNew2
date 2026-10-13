@@ -292,9 +292,9 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             "upscale": {
                 "upscaler": upscaler_name,
                 "upscale_mode": self.mode_var.get().strip(),
-                "steps": int(self.steps_var.get() or 20),
-                "denoising_strength": float(self.denoise_var.get() or 0.35),
-                "upscaling_resize": float(self.factor_var.get() or 2.0),
+                "steps": int(self.steps_var.get()),
+                "denoising_strength": float(self.denoise_var.get()),
+                "upscaling_resize": float(self.factor_var.get()),
                 "tile_size": int(self.tile_size_var.get() or 0),
                 "face_restore": bool(self.face_restore_var.get()),
                 "face_restore_method": self.face_restore_method_var.get(),

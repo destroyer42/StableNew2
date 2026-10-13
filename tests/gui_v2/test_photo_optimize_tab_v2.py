@@ -53,6 +53,7 @@ def test_photo_optimize_use_current_pipeline_settings_updates_baseline(
     tab = PhotoOptimizeTabFrameV2(tk_root, app_controller=controller, store=store)
     try:
         tab._show_asset(asset.asset_id)
+        tab._run_photo_operation = lambda operation, completed: completed(operation())
         tab._use_current_pipeline_settings()
         reloaded = store.get_asset(asset.asset_id)
         assert reloaded is not None
@@ -99,6 +100,7 @@ def test_photo_optimize_stage_config_fields_persist_to_sidecar(
         tab.img2img_steps_var.set(32)
         tab.img2img_cfg_var.set(6.5)
         tab.img2img_denoise_var.set(0.42)
+        tab.geometry_mode_var.set("custom")
         tab.img2img_width_var.set(768)
         tab.img2img_height_var.set(1024)
         tab.adetailer_model_var.set("face_yolov8n.pt")
@@ -146,6 +148,7 @@ def test_photo_optimize_header_exposes_submit_buttons(tk_root: tk.Tk, tmp_path: 
     try:
         tab._show_asset(asset.asset_id)
         with patch("src.gui.views.photo_optimize_tab_frame_v2.messagebox.showinfo"):
+            tab._run_photo_operation = lambda operation, completed: completed(operation())
             tab.optimize_selected_header_btn.invoke()
         controller.on_optimize_photo_assets.assert_called_once()
     finally:

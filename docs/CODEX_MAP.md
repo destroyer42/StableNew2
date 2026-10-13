@@ -16,6 +16,16 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 
 - GUI intent and application wiring: `src/controller/app_controller.py`,
   `src/gui/app_state_v2.py`, and `src/gui/views/`.
+- Photo Optimize settings, geometry, batching and workspace (PR-IMG-PHOTO-220):
+  `src/gui/views/photo_optimize_tab_frame_v2.py` -> `src/photo_optimize/settings.py`
+  (explicit settings/alias precedence and Auto/Custom geometry) / `submission.py`
+  (per-photo stage partitions; existing `ReprocessJobBuilder`, frozen-plan summary) ->
+  `AppController.on_optimize_photo_assets` -> `reprocess_admission.submit_reprocess_njrs`
+  (one whole-request preflight/admission). `models.py` / `store.py` own photo draft/archive
+  sidecars and copied artifact associations; `migration.py` / `paths.py` verify nondestructive
+  Windows-safe legacy copies. `WorkspacePaths.photo_optimize_root` places the managed workspace
+  below the configured routed output root; `output_routing.py` / `OutputScanner` exclude it.
+  Focused regressions: `tests/photo_optimize/`, `tests/controller/test_app_controller_photo_optimize.py`.
 - PromptPack draft and submission coordination:
   `src/controller/pipeline_controller.py`,
   `src/controller/app_controller_services/run_submission_service.py`, and

@@ -429,6 +429,19 @@ Artifacts carry stable job identity, workload kind, stage identity, source
 provenance, model/config fingerprints, seeds where applicable, and parentage.
 Produced paths and mutable inspection state live in execution results.
 
+Photo Optimize sidecars own photo draft settings, archive visibility and copies of
+canonical job artifacts, never job lifecycle state. Each selected photo retains its
+own effective stages, decoded Auto geometry or explicit Custom dimensions, model,
+VAE and configuration. A Photo Optimize service partitions intent by stage plan and
+delegates grouping/NJR construction to the existing `ReprocessJobBuilder`; all NJRs
+cross one whole-request `submit_reprocess_njrs` preflight and `JobService` admission.
+`WorkspacePaths` places managed photo files at
+`<configured output root>/PhotoOptimize/workspace`. Output-run discovery, recursive
+artifact scanning and rebalancing exclude this workspace. Legacy migration copies
+and verifies assets without deleting originals or rewriting queued NJRs/history;
+only current managed paths are redirected after a complete copy. Archive controls
+change photo visibility without deleting source files or canonical history.
+
 Replay creates or hydrates a valid NJR, records parent lineage, and submits it
 through `JobService`. Learning consumes canonical artifacts and history; it does
 not modify PromptPacks or NJRs in place.
