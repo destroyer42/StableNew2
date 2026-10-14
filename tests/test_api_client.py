@@ -181,25 +181,153 @@ class TestSDWebUIClient:
             assert updated["ok"] is True
             assert m.last_request.json() == payload
 
-    def test_apply_upscale_performance_defaults_posts_options(self):
-        """Ensure upscale defaults call POST /options exactly once."""
+    def _upscale_defaults_client(self) -> SDWebUIClient:
         client = SDWebUIClient()
         client.set_options_write_enabled(True)
-        context = MagicMock()
-        context.__enter__.return_value = object()
-        context.__exit__.return_value = None
-        client._request_context = MagicMock(return_value=context)
+        client._sleep = MagicMock()  # retry backoff is not under test
+        return client
 
-        client.apply_upscale_performance_defaults()
+    @staticmethod
+    def _options_posts(mocker: requests_mock.Mocker) -> list:
+        return [
+            r
+            for r in mocker.request_history
+            if r.method == "POST" and r.path == "/sdapi/v1/options"
+        ]
 
-        client._request_context.assert_called_once()
-        args, kwargs = client._request_context.call_args
-        assert args[0] == "post"
-        assert args[1] == "/sdapi/v1/options"
-        payload = kwargs["json"]
-        assert payload["img_max_size_mp"] == 8.0
-        assert "ESRGAN_tile" in payload
-        assert "DAT_tile" in payload
+    def test_apply_upscale_performance_defaults_posts_all_options_when_advertised(self):
+        """A WebUI that advertises every option receives the full conservative payload once."""
+        client = self._upscale_defaults_client()
+        with requests_mock.Mocker() as m:
+            m.get(
+                f"{API_BASE_URL}/sdapi/v1/options",
+                json={
+                    "img_max_size_mp": 200,
+                    "ESRGAN_tile": 192,
+                    "ESRGAN_tile_overlap": 8,
+                    "DAT_tile": 192,
+                    "DAT_tile_overlap": 8,
+                    "upscaling_max_images_in_cache": 5,
+                },
+            )
+            m.post(f"{API_BASE_URL}/sdapi/v1/options", json={})
+
+            outcome = client.apply_upscale_performance_defaults()
+
+            posts = self._options_posts(m)
+            assert len(posts) == 1
+            assert posts[0].json() == {
+                "img_max_size_mp": 8.0,
+                "ESRGAN_tile": 768,
+                "ESRGAN_tile_overlap": 64,
+                "DAT_tile": 768,
+                "DAT_tile_overlap": 64,
+                "upscaling_max_images_in_cache": 4,
+            }
+        assert set(outcome.applied) == set(posts[0].json())
+        assert outcome.unsupported == ()
+        assert outcome.skipped_reason is None and outcome.error is None
+
+    def test_apply_upscale_performance_defaults_omits_options_the_webui_does_not_advertise(self):
+        """Forge answers an unknown option key with HTTP 500 and rejects the write; send none."""
+        client = self._upscale_defaults_client()
+        with requests_mock.Mocker() as m:
+            m.get(
+                f"{API_BASE_URL}/sdapi/v1/options",
+                json={
+                    "img_max_size_mp": 200,
+                    "ESRGAN_tile": 192,
+                    "ESRGAN_tile_overlap": 8,
+                    "upscaling_max_images_in_cache": 5,
+                    "jpeg_quality": 80,
+                },
+            )
+            m.post(f"{API_BASE_URL}/sdapi/v1/options", json={})
+
+            outcome = client.apply_upscale_performance_defaults()
+
+            posts = self._options_posts(m)
+            assert len(posts) == 1
+            assert posts[0].json() == {
+                "img_max_size_mp": 8.0,
+                "ESRGAN_tile": 768,
+                "ESRGAN_tile_overlap": 64,
+                "upscaling_max_images_in_cache": 4,
+            }
+        assert set(outcome.applied) == {
+            "img_max_size_mp",
+            "ESRGAN_tile",
+            "ESRGAN_tile_overlap",
+            "upscaling_max_images_in_cache",
+        }
+        assert set(outcome.unsupported) == {"DAT_tile", "DAT_tile_overlap"}
+        assert outcome.error is None
+
+    def test_apply_upscale_performance_defaults_skips_write_when_nothing_is_advertised(self):
+        client = self._upscale_defaults_client()
+        with requests_mock.Mocker() as m:
+            m.get(f"{API_BASE_URL}/sdapi/v1/options", json={"jpeg_quality": 80})
+            post_mock = m.post(f"{API_BASE_URL}/sdapi/v1/options", json={})
+
+            outcome = client.apply_upscale_performance_defaults()
+
+            assert post_mock.called is False
+        assert outcome.applied == ()
+        assert outcome.skipped_reason == "no_supported_options"
+        assert set(outcome.unsupported) == {
+            "img_max_size_mp",
+            "ESRGAN_tile",
+            "ESRGAN_tile_overlap",
+            "DAT_tile",
+            "DAT_tile_overlap",
+            "upscaling_max_images_in_cache",
+        }
+
+    def test_apply_upscale_performance_defaults_does_not_write_blind_when_options_unreadable(self):
+        """An unreadable options listing is not "everything unsupported" and is not cached."""
+        client = self._upscale_defaults_client()
+        with requests_mock.Mocker() as m:
+            m.get(f"{API_BASE_URL}/sdapi/v1/options", status_code=500, text="boom")
+            post_mock = m.post(f"{API_BASE_URL}/sdapi/v1/options", json={})
+
+            outcome = client.apply_upscale_performance_defaults()
+
+            assert post_mock.called is False
+        assert outcome.applied == ()
+        assert outcome.error
+
+        # the failure must not poison later reads: a healthy listing is picked up afresh
+        with requests_mock.Mocker() as m:
+            m.get(f"{API_BASE_URL}/sdapi/v1/options", json={"ESRGAN_tile": 192})
+            m.post(f"{API_BASE_URL}/sdapi/v1/options", json={})
+            client._last_options_post_ts = float("-inf")  # the interval throttle is not under test
+
+            outcome = client.apply_upscale_performance_defaults()
+
+            assert self._options_posts(m)[0].json() == {"ESRGAN_tile": 768}
+        assert outcome.applied == ("ESRGAN_tile",)
+
+    def test_apply_upscale_performance_defaults_reports_a_rejected_write_without_raising(self):
+        client = self._upscale_defaults_client()
+        with requests_mock.Mocker() as m:
+            m.get(f"{API_BASE_URL}/sdapi/v1/options", json={"ESRGAN_tile": 192})
+            m.post(f"{API_BASE_URL}/sdapi/v1/options", status_code=500, text="KeyError")
+
+            outcome = client.apply_upscale_performance_defaults()
+
+        assert outcome.applied == ()
+        assert outcome.error
+        assert outcome.skipped_reason is None
+
+    def test_apply_upscale_performance_defaults_is_silent_in_safe_mode(self):
+        client = self._upscale_defaults_client()
+        client.set_options_write_enabled(False)
+        with requests_mock.Mocker() as m:
+            outcome = client.apply_upscale_performance_defaults()
+
+            assert m.request_history == []
+        assert outcome.applied == ()
+        assert outcome.skipped_reason == "safe_mode"
 
     def test_ensure_safe_upscale_defaults_clamps_values(self):
         """ensure_safe_upscale_defaults should clamp oversized values and POST payload."""

@@ -4,6 +4,15 @@ Updated: 2026-10-13
 
 ## Repository
 
+- Forge supported-option defaults integrity (PR-IMG-FORGE-230, local deterministic validation and required gate
+  green): the once-per-run upscale defaults write only options the WebUI advertises in `/sdapi/v1/options`. The
+  managed Forge lacks `DAT_tile`/`DAT_tile_overlap` and refuses a write naming them with HTTP 500, which left the
+  conservative ESRGAN/cache defaults unconfirmed and unreported. Unadvertised options are left unchanged and reported
+  through a `WebUIDefaultsOutcome`; an unreadable listing writes nothing and is no longer cached as empty. The executor's
+  once-per-run flag, retry policy and gating are unchanged; no runtime write, restart or physical validation, and no
+  device-loss causation is claimed. See
+  `docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md`.
+
 - Photo Optimize Windows migration recovery (PR-IMG-PHOTO-221, local implementation): a legacy
   asset failure is reported without disabling a writable workspace or import. Verified copies publish
   without replacing existing destinations; Windows errors 5/32/33 receive at most three attempts,
