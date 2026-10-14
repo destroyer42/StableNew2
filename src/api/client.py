@@ -65,6 +65,21 @@ class ProgressInfo:
         )
 
 
+@dataclass(frozen=True)
+class WebUIDefaultsOutcome:
+    """What a best-effort WebUI options write actually did.
+
+    ``applied`` lists options the WebUI acknowledged; ``unsupported`` lists options it does not
+    advertise and were therefore left unchanged. ``skipped_reason`` (no request sent) and
+    ``error`` (a request failed, effective values unverified) are mutually exclusive.
+    """
+
+    applied: tuple[str, ...] = ()
+    unsupported: tuple[str, ...] = ()
+    skipped_reason: str | None = None
+    error: str | None = None
+
+
 POOL_CONNECTIONS = 20
 POOL_MAXSIZE = 20
 POOL_BLOCK = True
@@ -1012,23 +1027,27 @@ class SDWebUIClient:
         keys = self._ensure_option_keys()
         return key in keys
 
-    def _ensure_option_keys(self) -> set[str]:
-        """Fetch and cache the option keys from the API."""
+    def _ensure_option_keys(self, *, refresh: bool = False) -> set[str]:
+        """Fetch and cache the option keys from the API.
 
-        if self._option_keys is not None:
+        An unreadable or unparseable listing returns an empty set and is not cached, so a
+        transient failure is retried later instead of making every option look unsupported for
+        the life of the client. ``refresh`` re-reads the listing: a restarted WebUI may advertise
+        different options.
+        """
+
+        if self._option_keys is not None and not refresh:
             return self._option_keys
 
         with self._request_context("get", "/sdapi/v1/options", timeout=10) as response:
             if response is None:
-                self._option_keys = set()
-                return self._option_keys
+                return set()
 
             try:
                 data = response.json()
             except ValueError as exc:
                 logger.warning(f"Failed to parse options metadata: {exc}")
-                self._option_keys = set()
-                return self._option_keys
+                return set()
 
         self._option_keys = {str(k) for k in data.keys()}
         return self._option_keys
@@ -1110,17 +1129,22 @@ class SDWebUIClient:
         summary = ", ".join(f"{name}={after}" for name, (_before, after) in changes.items())
         logger.info("Applied safe WebUI upscale defaults: %s", summary)
 
-    def apply_upscale_performance_defaults(self) -> None:
+    def apply_upscale_performance_defaults(self) -> WebUIDefaultsOutcome:
         """
         Apply conservative tiling and resolution defaults to the WebUI options.
 
         These are SAFE defaults that prevent memory explosion during upscaling.
         Smaller tiles = less VRAM per chunk = more stable upscaling.
 
-        Best-effort: failures are logged but do not raise.
+        Only options the WebUI advertises in ``/sdapi/v1/options`` are written. Forge refuses a
+        write that names an option it lacks (``DAT_tile``) with HTTP 500, so one unknown key would
+        leave every default unconfirmed. Options it does not advertise are left unchanged and
+        reported in the returned outcome; when the listing cannot be read nothing is written.
+
+        Best-effort: failures are logged and reported in the outcome but do not raise.
         """
 
-        payload = {
+        desired = {
             "img_max_size_mp": 8.0,  # 8 megapixels max (2828x2828) - safe for most GPUs
             "ESRGAN_tile": 768,  # 768px tiles = 589k pixels per tile (SAFE)
             "ESRGAN_tile_overlap": 64,  # Moderate overlap for quality
@@ -1132,7 +1156,29 @@ class SDWebUIClient:
         can_send, reason = self._options_can_send()
         if not can_send:
             logger.debug("Skipping upscale defaults; reason=%s", reason)
-            return
+            return WebUIDefaultsOutcome(skipped_reason=reason or "unknown")
+
+        try:
+            advertised = self._ensure_option_keys(refresh=True)
+        except Exception as exc:  # noqa: BLE001 - log and continue
+            logger.warning(
+                "Could not read WebUI options; upscale defaults were not written: %s", exc
+            )
+            return WebUIDefaultsOutcome(error=f"options_unreadable: {exc}")
+        if not advertised:
+            logger.warning("WebUI options listing was empty; upscale defaults were not written")
+            return WebUIDefaultsOutcome(skipped_reason="options_unreadable")
+
+        payload = {key: value for key, value in desired.items() if key in advertised}
+        unsupported = tuple(key for key in desired if key not in advertised)
+        if not payload:
+            logger.warning(
+                "WebUI advertises none of the upscale default options (%s); nothing written",
+                ", ".join(unsupported),
+            )
+            return WebUIDefaultsOutcome(
+                unsupported=unsupported, skipped_reason="no_supported_options"
+            )
 
         try:
             with self._request_context(
@@ -1143,15 +1189,22 @@ class SDWebUIClient:
             ) as response:
                 if response is None:
                     raise RuntimeError("No response from /sdapi/v1/options")
-
-            logger.info(
-                "Applied SAFE WebUI upscale defaults: img_max_size_mp=%.1f, ESRGAN_tile=%s, DAT_tile=%s (768px tiles = 589k pixels/tile, SAFE for memory)",
-                payload.get("img_max_size_mp"),
-                payload.get("ESRGAN_tile"),
-                payload.get("DAT_tile"),
-            )
         except Exception as exc:  # noqa: BLE001 - log and continue
-            logger.warning("Failed to apply WebUI upscale defaults: %s", exc)
+            logger.warning(
+                "Failed to apply WebUI upscale defaults (effective values unverified): %s", exc
+            )
+            return WebUIDefaultsOutcome(
+                unsupported=unsupported, error=str(exc) or type(exc).__name__
+            )
+
+        logger.info(
+            "Applied WebUI upscale defaults: %s%s",
+            ", ".join(f"{key}={value}" for key, value in payload.items()),
+            f" (not advertised by this WebUI, left unchanged: {', '.join(unsupported)})"
+            if unsupported
+            else "",
+        )
+        return WebUIDefaultsOutcome(applied=tuple(payload), unsupported=unsupported)
 
     def free_vram(
         self,

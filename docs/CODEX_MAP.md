@@ -31,6 +31,12 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   status/details and retry. See `docs/Subsystems/Image/PR-IMG-PHOTO-221_Windows_Migration_Recovery.md`
   and `tests/photo_optimize/test_migration_recovery_221.py`.
   Focused regressions: `tests/photo_optimize/`, `tests/controller/test_app_controller_photo_optimize.py`.
+- Forge supported-option defaults (PR-IMG-FORGE-230):
+  `docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md` ->
+  `src/api/client.py` (`apply_upscale_performance_defaults` filters to advertised options and returns
+  `WebUIDefaultsOutcome`; `_ensure_option_keys` does not cache a failed listing) <-
+  `src/pipeline/executor.py` (`_apply_webui_defaults_once`, unchanged). Regressions:
+  `tests/test_api_client.py`, `tests/pipeline/test_forge_supported_option_defaults_230.py`.
 - PromptPack draft and submission coordination:
   `src/controller/pipeline_controller.py`,
   `src/controller/app_controller_services/run_submission_service.py`, and
