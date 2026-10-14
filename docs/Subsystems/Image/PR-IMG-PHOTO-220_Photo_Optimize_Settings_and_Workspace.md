@@ -75,8 +75,10 @@ into unique migration staging. Hash every copied file, check that the source sid
 change, redirect only current managed paths, write migration evidence, then rename into an
 absent destination. Repeated migration validates the retained copied files and skips an
 already migrated asset. Windows extended I/O paths support long provenance filenames.
-Collisions, corrupt/unsupported sidecars, missing current files, links, changed copies and
-I/O errors stop with actionable errors. Failed staging is retained. Unknown files outside
+PR-IMG-PHOTO-221 supersedes the original fail-fast initialization behavior: collisions,
+corrupt/unsupported sidecars, missing current files, links, changed copies and I/O errors
+are reported per asset while a writable workspace remains available for new imports.
+See `PR-IMG-PHOTO-221_Windows_Migration_Recovery.md`. Failed staging is retained. Unknown files outside
 recognized assets are untouched. Originals, historical paths and baseline snapshots remain
 at their legacy locations, so existing queued/replay inputs and evidence remain usable.
 

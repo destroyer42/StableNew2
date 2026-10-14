@@ -25,6 +25,11 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   sidecars and copied artifact associations; `migration.py` / `paths.py` verify nondestructive
   Windows-safe legacy copies. `WorkspacePaths.photo_optimize_root` places the managed workspace
   below the configured routed output root; `output_routing.py` / `OutputScanner` exclude it.
+  Windows migration recovery (PR-IMG-PHOTO-221): `migration.py` reports per-asset failures and
+  bounds rename retries; `paths.py` publishes without replacement; `store.py` probes workspace
+  writability and retries through the same store. The existing GUI worker projects migration
+  status/details and retry. See `docs/Subsystems/Image/PR-IMG-PHOTO-221_Windows_Migration_Recovery.md`
+  and `tests/photo_optimize/test_migration_recovery_221.py`.
   Focused regressions: `tests/photo_optimize/`, `tests/controller/test_app_controller_photo_optimize.py`.
 - PromptPack draft and submission coordination:
   `src/controller/pipeline_controller.py`,
