@@ -3,11 +3,18 @@
 The preparation happens before queue admission.  The immutable NJR therefore
 references a StableNew-owned prepared image and retains enough provenance to
 replay the same geometry without asking a backend to reinterpret the source.
+
+``transform_declared_workflow_source`` is the one side-effect-free transformation (EXIF transpose,
+RGB conversion, declared target selection, LANCZOS cover resize with a centred crop).  Both the
+queue-time ``prepare_declared_workflow_source`` and the operator-facing
+``preview_declared_workflow_source`` call it, so a preview can never disagree with the PNG that
+admission later publishes, and the reported crop rectangle is the one the resize actually used.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -17,6 +24,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 _COVER_CENTER_CROP = "cover_resize_center_crop"
+_EXIF_ORIENTATION_TAG = 0x0112
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +51,146 @@ class PreparedWorkflowSource:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class WorkflowSourceGeometry:
+    """What the declared preparation does to one source, as plain numbers.
+
+    ``crop_box`` is ``(left, top, right, bottom)`` in EXIF-transposed source pixels: the exact
+    region the resize consumed.  ``stored_dimensions`` is the pixel grid as stored in the file;
+    it differs from ``source_dimensions`` only when an EXIF orientation tag rotated the image.
+    """
+
+    stored_dimensions: dict[str, int]
+    source_dimensions: dict[str, int]
+    exif_orientation: int
+    target_dimensions: dict[str, int]
+    prepared_dimensions: dict[str, int]
+    source_orientation: str  # landscape | portrait | square, from the pixels alone
+    orientation: str  # the policy's orientation decision (a square follows the policy)
+    orientation_rule: str
+    policy: str
+    crop_box: tuple[float, float, float, float]
+
+    @property
+    def crop_dimensions(self) -> tuple[float, float]:
+        left, top, right, bottom = self.crop_box
+        return right - left, bottom - top
+
+    @property
+    def retained_fraction(self) -> float:
+        crop_width, crop_height = self.crop_dimensions
+        total = self.source_dimensions["width"] * self.source_dimensions["height"]
+        return min(1.0, (crop_width * crop_height) / total) if total else 0.0
+
+    @property
+    def discarded_fraction(self) -> float:
+        return max(0.0, 1.0 - self.retained_fraction)
+
+    @property
+    def exif_transposed(self) -> bool:
+        return self.exif_orientation not in (0, 1)
+
+
+@dataclass(frozen=True, slots=True)
+class TransformedWorkflowSource:
+    """The prepared pixels (RGB) and the geometry that produced them; nothing is written."""
+
+    image: Image.Image
+    geometry: WorkflowSourceGeometry
+
+    def to_png_bytes(self) -> bytes:
+        """The prepared image encoded exactly as a published prepared PNG is (no metadata)."""
+
+        buffer = io.BytesIO()
+        self.image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+
+def cover_crop_box(
+    source_size: tuple[int, int], target_size: tuple[int, int]
+) -> tuple[float, float, float, float]:
+    """Centred crop rectangle of a cover resize: ``ImageOps.fit(..., centering=(0.5, 0.5))``.
+
+    The arithmetic is the one Pillow's ``ImageOps.fit`` applies (no bleed, centred), kept as the
+    single definition so the pixels and the reported geometry cannot diverge; tests pin it to
+    ``ImageOps.fit`` itself.  Pure: dimensions in, rectangle out."""
+
+    source_width, source_height = float(source_size[0]), float(source_size[1])
+    source_ratio = source_width / source_height
+    target_ratio = target_size[0] / target_size[1]
+    if source_ratio == target_ratio:
+        crop_width, crop_height = source_width, source_height
+    elif source_ratio >= target_ratio:
+        crop_width, crop_height = target_ratio * source_height, source_height
+    else:
+        crop_width, crop_height = source_width, source_width / target_ratio
+    left = (source_width - crop_width) * 0.5
+    top = (source_height - crop_height) * 0.5
+    return left, top, left + crop_width, top + crop_height
+
+
+def _source_orientation(width: int, height: int) -> str:
+    if width == height:
+        return "square"
+    return "landscape" if width > height else "portrait"
+
+
+def transform_declared_workflow_source(
+    *, source_path: str | Path, policy: Mapping[str, Any]
+) -> TransformedWorkflowSource:
+    """Apply the catalog-declared preparation to ``source_path`` in memory.
+
+    Reads the source file and nothing else: no output root, no hashing, no temporary file, no
+    write of any kind.  Raises ``ValueError`` with the operator-facing reason on a bad source or
+    policy, exactly as ``prepare_declared_workflow_source`` always did."""
+
+    source = Path(source_path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"Video workflow source image does not exist: {source}")
+    try:
+        with Image.open(source) as opened:
+            stored_width, stored_height = opened.size
+            exif_orientation = int(opened.getexif().get(_EXIF_ORIENTATION_TAG, 1) or 1)
+            image = ImageOps.exif_transpose(opened).convert("RGB")
+    except Exception as exc:
+        raise ValueError(f"Failed to open video workflow source image: {exc}") from exc
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        raise ValueError("Video workflow source image dimensions must be positive.")
+
+    orientation, target, orientation_rule = resolve_declared_target(policy, width, height)
+    crop_box = cover_crop_box((width, height), (target["width"], target["height"]))
+    prepared = image.resize(
+        (target["width"], target["height"]),
+        Image.Resampling.LANCZOS,
+        box=crop_box,
+    )
+    geometry = WorkflowSourceGeometry(
+        stored_dimensions={"width": int(stored_width), "height": int(stored_height)},
+        source_dimensions={"width": int(width), "height": int(height)},
+        exif_orientation=exif_orientation,
+        target_dimensions=dict(target),
+        prepared_dimensions={"width": int(prepared.width), "height": int(prepared.height)},
+        source_orientation=_source_orientation(width, height),
+        orientation=orientation,
+        orientation_rule=orientation_rule,
+        policy=_COVER_CENTER_CROP,
+        crop_box=crop_box,
+    )
+    return TransformedWorkflowSource(image=prepared, geometry=geometry)
+
+
+def preview_declared_workflow_source(
+    *, source_path: str | Path, policy: Mapping[str, Any]
+) -> TransformedWorkflowSource:
+    """The exact prepared image and geometry admission would publish, without publishing.
+
+    Same transformation as ``prepare_declared_workflow_source``; creates no file and leaves the
+    source untouched, so it is safe to call repeatedly from a worker while an operator browses."""
+
+    return transform_declared_workflow_source(source_path=source_path, policy=policy)
+
+
 def prepare_declared_workflow_source(
     *,
     source_path: str | Path,
@@ -52,24 +200,12 @@ def prepare_declared_workflow_source(
     """Prepare a catalog-declared source using the bounded cover/crop policy."""
 
     source = Path(source_path).expanduser().resolve()
-    if not source.is_file():
-        raise ValueError(f"Video workflow source image does not exist: {source}")
-    try:
-        with Image.open(source) as opened:
-            image = ImageOps.exif_transpose(opened).convert("RGB")
-    except Exception as exc:
-        raise ValueError(f"Failed to open video workflow source image: {exc}") from exc
-    width, height = image.size
-    if width <= 0 or height <= 0:
-        raise ValueError("Video workflow source image dimensions must be positive.")
-
-    orientation, target, orientation_rule = resolve_declared_target(policy, width, height)
-    prepared = ImageOps.fit(
-        image,
-        (target["width"], target["height"]),
-        method=Image.Resampling.LANCZOS,
-        centering=(0.5, 0.5),
-    )
+    transformed = transform_declared_workflow_source(source_path=source, policy=policy)
+    prepared = transformed.image
+    geometry = transformed.geometry
+    width, height = geometry.source_dimensions["width"], geometry.source_dimensions["height"]
+    orientation, target = geometry.orientation, geometry.target_dimensions
+    orientation_rule = geometry.orientation_rule
 
     content_digest = hashlib.sha256(source.read_bytes()).hexdigest()
     prepared_path = prepared_source_destination(output_root, content_digest, target)
@@ -167,7 +303,12 @@ def _dimensions(value: Any, field_name: str) -> dict[str, int]:
 
 __all__ = [
     "PreparedWorkflowSource",
+    "TransformedWorkflowSource",
+    "WorkflowSourceGeometry",
+    "cover_crop_box",
     "prepare_declared_workflow_source",
     "prepared_source_destination",
+    "preview_declared_workflow_source",
     "resolve_declared_target",
+    "transform_declared_workflow_source",
 ]

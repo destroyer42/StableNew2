@@ -62,7 +62,9 @@ def _truncate(text: str, limit: int) -> str:
     return f"{normalized[: max(0, limit - 3)].rstrip()}..."
 
 
-def _resolve_ffprobe_executable() -> Path | None:
+def resolve_ffprobe_executable() -> Path | None:
+    """FFprobe beside the resolved FFmpeg, else the one on PATH (the repository's one convention)."""
+
     ffmpeg_path = resolve_ffmpeg_executable()
     if ffmpeg_path is not None:
         ffprobe_name = "ffprobe.exe" if os.name == "nt" else "ffprobe"
@@ -73,6 +75,9 @@ def _resolve_ffprobe_executable() -> Path | None:
     if which_path:
         return Path(which_path)
     return None
+
+
+_resolve_ffprobe_executable = resolve_ffprobe_executable  # historical private name; tests patch it
 
 
 def build_public_media_payload(
