@@ -54,6 +54,9 @@ MAX_STDERR_BYTES = 2 * 1024
 PREVIEW_FRAME_COUNT = 3
 PREVIEW_MAX_EDGE = 160
 MAX_REASONABLE_DIMENSION = 65535
+# FFmpeg allocates a full frame before it scales it down; above this many pixels (a little over
+# 8K DCI) no preview is decoded, so a crafted header cannot ask a child process for gigabytes.
+MAX_PREVIEW_DECODE_PIXELS = 40_000_000
 MAX_REASONABLE_FPS = 1000.0
 _CANCEL_POLL_SECONDS = 0.05
 _KILL_WAIT_SECONDS = 5.0
@@ -78,6 +81,7 @@ ISSUE_FRAME_RATE_UNKNOWN = "frame_rate_unknown"
 ISSUE_FRAME_COUNT_UNKNOWN = "frame_count_unknown"
 ISSUE_DURATION_UNKNOWN = "duration_unknown"
 ISSUE_FRAME_DECODE_FAILED = "frame_decode_failed"
+ISSUE_FRAME_TOO_LARGE = "frame_too_large"
 ISSUE_FRAME_TIMEOUT = "frame_timeout"
 ISSUE_DEADLINE_EXCEEDED = "deadline_exceeded"
 ISSUE_CANCELLED = "cancelled"
@@ -550,11 +554,11 @@ def _decode_preview(png_bytes: bytes, max_edge: int) -> tuple[int, int] | None:
 
     try:
         with Image.open(io.BytesIO(png_bytes)) as image:
+            width, height = image.size  # the header is checked before any pixel is decoded
+            if width <= 0 or height <= 0 or width > max_edge or height > max_edge:
+                return None
             image.load()
-            width, height = image.size
     except Exception:
-        return None
-    if width <= 0 or height <= 0 or width > max_edge or height > max_edge:
         return None
     return width, height
 
@@ -673,6 +677,14 @@ def inspect_driving_video(
     ffmpeg_executable = ffmpeg if ffmpeg is not None else resolve_ffmpeg_executable()
     if wanted == 0:
         pass
+    elif facts.coded_width * facts.coded_height > MAX_PREVIEW_DECODE_PIXELS:
+        issues.append(
+            InspectionIssue(
+                ISSUE_FRAME_TOO_LARGE,
+                f"Frames are {facts.coded_width}x{facts.coded_height}; preview decoding is "
+                f"skipped above {MAX_PREVIEW_DECODE_PIXELS / 1e6:.0f} megapixels.",
+            )
+        )
     elif ffmpeg_executable is None:
         issues.append(
             InspectionIssue(

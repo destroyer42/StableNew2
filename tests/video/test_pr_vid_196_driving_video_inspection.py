@@ -31,11 +31,13 @@ from src.video.driving_video_inspection import (
     ISSUE_FILE_MISSING,
     ISSUE_FRAME_DECODE_FAILED,
     ISSUE_FRAME_TIMEOUT,
+    ISSUE_FRAME_TOO_LARGE,
     ISSUE_NO_VIDEO_STREAM,
     ISSUE_PROBE_FAILED,
     ISSUE_PROBE_OUTPUT_TOO_LARGE,
     ISSUE_PROBE_TIMEOUT,
     ISSUE_PROBE_UNREADABLE,
+    MAX_PREVIEW_DECODE_PIXELS,
     PREVIEW_MAX_EDGE,
     STATUS_FAILED,
     STATUS_OK,
@@ -308,6 +310,43 @@ def test_oversized_decoded_frame_is_rejected(tmp_path):
         clip, ScriptedRunner(ProcessOutcome(returncode=0, stdout=_probe_json()), frames), frame_count=1
     )
     assert result.frames == () and result.issues[0].code == ISSUE_FRAME_DECODE_FAILED
+
+
+def test_frames_above_the_decode_pixel_cap_are_never_requested(tmp_path):
+    clip = _clip(tmp_path)
+    side = int(MAX_PREVIEW_DECODE_PIXELS**0.5) + 1
+    runner = ScriptedRunner(
+        ProcessOutcome(returncode=0, stdout=_probe_json(width=side, height=side))
+    )
+    result = _inspect(clip, runner)
+    assert result.status == STATUS_PARTIAL and result.frames == ()
+    assert result.facts is not None and result.facts.display_width == side  # facts still reported
+    assert [issue.code for issue in result.issues] == [ISSUE_FRAME_TOO_LARGE]
+    assert len(runner.calls) == 1  # FFprobe only: no child was asked to allocate the frame
+
+    at_cap = int(MAX_PREVIEW_DECODE_PIXELS**0.5)
+    runner = ScriptedRunner(
+        ProcessOutcome(returncode=0, stdout=_probe_json(width=at_cap, height=at_cap)),
+        [ProcessOutcome(returncode=0, stdout=_png(160, 160))],
+    )
+    result = _inspect(clip, runner, frame_count=1)
+    assert len(result.frames) == 1 and len(runner.calls) == 2
+
+
+def test_an_oversized_png_header_is_rejected_before_pixels_are_decoded(monkeypatch):
+    oversized, fits = _png(PREVIEW_MAX_EDGE + 1, 4), _png(PREVIEW_MAX_EDGE, 4)
+    seen = {"loaded": False}
+    real_load = Image.Image.load
+
+    def tracking_load(self, *args, **kwargs):
+        seen["loaded"] = True
+        return real_load(self, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "load", tracking_load)
+    assert dvi._decode_preview(oversized, PREVIEW_MAX_EDGE) is None
+    assert seen["loaded"] is False
+    assert dvi._decode_preview(fits, PREVIEW_MAX_EDGE) == (PREVIEW_MAX_EDGE, 4)
+    assert seen["loaded"] is True
 
 
 def test_a_stalled_frame_decode_stops_further_decoding(tmp_path):

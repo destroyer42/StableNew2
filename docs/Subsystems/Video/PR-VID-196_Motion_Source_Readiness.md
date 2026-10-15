@@ -62,6 +62,7 @@ as `container_metadata.resolve_ffprobe_executable`). Bounds, all named constants
 | Probe / per-frame timeout | 10 s each; whole inspection deadline 30 s; cooperative cancel |
 | Probe stdout / frame stdout / stderr kept | 64 KiB / 512 KiB (+ FFmpeg `-fs`) / 2 KiB (drained, not stored) |
 | Preview frames / edge | at most 3 / at most 160 px (scaled inside FFmpeg, never decoded at source size) |
+| Decode pixel cap | no frame is requested above 40 megapixels (`MAX_PREVIEW_DECODE_PIXELS`); facts are still reported |
 | Input protocols | `-protocol_whitelist file`; argv list, no shell, `-nostdin` |
 | Writes | none; output goes to a pipe |
 
@@ -154,7 +155,7 @@ below 260 lines: 239 → 257 lines (+18: three imports, one projection key, two 
 | Suite | Cases |
 |---|---|
 | `tests/video/test_pr_vid_196_source_preview.py` | 32 — parity, PNG equality, crop box, EXIF, no writes, errors |
-| `tests/video/test_pr_vid_196_driving_video_inspection.py` | 39 — parsing, commands, orchestration, bounded processes, real FFmpeg fixtures |
+| `tests/video/test_pr_vid_196_driving_video_inspection.py` | 41 — parsing, commands, orchestration, bounds, bounded processes, real FFmpeg fixtures |
 | `tests/video/test_pr_vid_196_readiness_and_guidance.py` | 34 (+1 optional) — thresholds, timing, verification, guidance, isolation, spec digests |
 | `tests/video/test_pr_vid_196_workflow_integrity.py` | 6 — frozen NJR, admission, projection keys, experiment/batch unchanged |
 | `tests/gui_v2/test_video_workflow_motion_readiness_ui.py` | 24 — session staleness, Tk thread marshalling, hidden/unsupported, wrapping, real clip |
