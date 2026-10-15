@@ -4,12 +4,22 @@ import tkinter as tk
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
 from PIL import Image
 
 from src.api.webui_resources import WebUIResource, WebUIResourceType
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
+from src.photo_optimize.editing import pipeline_mask
 from src.photo_optimize.store import PhotoOptimizeStore
+
+
+@pytest.fixture(autouse=True)
+def unexpected_dialogs_fail(monkeypatch):
+    def unexpected(*args, **kwargs):
+        raise AssertionError(f"Unexpected GUI dialog: {args}")
+    monkeypatch.setattr("src.gui.views.photo_optimize_scope.messagebox.showerror", unexpected)
+    monkeypatch.setattr("src.gui.views.photo_optimize_scope.messagebox.showwarning", unexpected)
 
 
 def _write_image(path: Path, color: tuple[int, int, int] = (80, 100, 120)) -> None:
@@ -54,7 +64,14 @@ def test_photo_optimize_use_current_pipeline_settings_updates_baseline(
     try:
         tab._show_asset(asset.asset_id)
         tab._run_photo_operation = lambda operation, completed: completed(operation())
-        tab._use_current_pipeline_settings()
+        tab.after_idle = lambda callback: callback()
+        with (
+            patch("src.gui.views.photo_optimize_scope.pipeline_copy_dialog",
+                  side_effect=lambda parent, snapshot, scope, review: review(pipeline_mask(snapshot, {"model", "vae", "stages", "img2img", "adetailer", "upscale"}))),
+            patch("src.gui.views.photo_optimize_scope.review_dialog", return_value=True),
+            patch("src.gui.views.photo_optimize_scope.messagebox.showinfo"),
+        ):
+            tab._use_current_pipeline_settings()
         reloaded = store.get_asset(asset.asset_id)
         assert reloaded is not None
         assert reloaded.baseline.model == "realisticVision"
@@ -143,14 +160,23 @@ def test_photo_optimize_header_exposes_submit_buttons(tk_root: tk.Tk, tmp_path: 
     asset = store.import_photo(image_path)
     controller = Mock()
     controller.on_optimize_photo_assets.return_value = 1
+    controller.build_photo_optimize_defaults.return_value = {"config": {"img2img": {}}}
+    from src.photo_optimize.submission import prepare_photo_plan
+    plan = prepare_photo_plan(assets=[asset.to_dict()], stages=["img2img"], fallback_config={"img2img": {}},
+                              store=store, batch_size=1)
+    controller.prepare_photo_optimize_plan.return_value = plan
+    controller.submit_prepared_photo_plan.return_value = len(plan.jobs)
 
     tab = PhotoOptimizeTabFrameV2(tk_root, app_controller=controller, store=store)
     try:
         tab._show_asset(asset.asset_id)
-        with patch("src.gui.views.photo_optimize_tab_frame_v2.messagebox.showinfo"):
+        with (patch("src.gui.views.photo_optimize_tab_frame_v2.messagebox.showinfo"),
+              patch("src.gui.views.photo_optimize_scope.review_dialog", return_value=True)):
             tab._run_photo_operation = lambda operation, completed: completed(operation())
+            tab.after_idle = lambda callback: callback()
             tab.optimize_selected_header_btn.invoke()
-        controller.on_optimize_photo_assets.assert_called_once()
+        controller.prepare_photo_optimize_plan.assert_called_once()
+        controller.submit_prepared_photo_plan.assert_called_once_with(plan)
     finally:
         tab.destroy()
 

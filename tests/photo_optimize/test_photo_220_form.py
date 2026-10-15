@@ -8,9 +8,18 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
+from src.photo_optimize.editing import pipeline_mask
 from src.photo_optimize.store import PhotoOptimizeStore
 
 from .test_photo_220 import image
+
+
+@pytest.fixture(autouse=True)
+def unexpected_dialogs_fail(monkeypatch):
+    def unexpected(*args, **kwargs):
+        raise AssertionError(f"Unexpected headless dialog: {args}")
+    monkeypatch.setattr("src.gui.views.photo_optimize_scope.messagebox.showerror", unexpected)
+    monkeypatch.setattr("src.gui.views.photo_optimize_scope.messagebox.showwarning", unexpected)
 
 
 class Variable:
@@ -63,6 +72,12 @@ def form(tmp_path):
     tab._current_asset = asset
     tab._current_asset_id = asset.asset_id
     tab._suspend_asset_persist = False
+    tab._content_visibility_mode = "nsfw"
+    tab.show_image_previews_var = Variable(True)
+    tab.edit_scope_var = Variable("Batch Edit")
+    tab.edit_workspaces = Mock()
+    tab.single_workspace = Mock()
+    tab.batch_workspace = Mock()
     tab._model_name_map = {}
     tab._vae_name_map = {"Automatic": ""}
     for name in (
@@ -80,6 +95,7 @@ def form(tmp_path):
         "show_archived",
         "submission_summary",
         "img2img_sampler",
+        "img2img_scheduler",
         "img2img_steps",
         "img2img_cfg",
         "img2img_denoise",
@@ -133,9 +149,11 @@ def form(tmp_path):
     tab.assets_list.rows = [asset.source_filename]
     tab.assets_list.selection_set(0)
     tab.selection_label = Mock()
+    tab.active_photo_combo = Mock()
     tab._restored_asset_id = None
     tab._restored_asset_ids = None
     tab._run_photo_operation = lambda operation, completed: completed(operation())
+    tab.after_idle = lambda callback: callback()
     tab._show_asset = Mock(side_effect=lambda asset_id: setattr(tab, "_current_asset_id", asset_id))
     tab._clear_selection = Mock(side_effect=lambda: setattr(tab, "_current_asset_id", None))
     tab.winfo_ismapped = lambda: True
@@ -251,7 +269,13 @@ def test_pipeline_copy_targets_all_selected_preserving_notes_and_prompts(tmp_pat
             "stage_defaults": {"img2img": True, "adetailer": True, "upscale": False},
         }
     )
-    tab._use_current_pipeline_settings()
+    with (
+        patch("src.gui.views.photo_optimize_scope.pipeline_copy_dialog",
+              side_effect=lambda parent, snapshot, scope, review: review(pipeline_mask(snapshot, {"model", "vae", "stages", "img2img", "adetailer", "upscale"}))),
+        patch("src.gui.views.photo_optimize_scope.review_dialog", return_value=True),
+        patch("src.gui.views.photo_optimize_scope.messagebox.showinfo"),
+    ):
+        tab._use_current_pipeline_settings()
     assert tab.store.get_asset(second.asset_id).baseline.prompt == "second prompt"
     assert tab.store.get_asset(second.asset_id).baseline.model == "copied"
     assert tab.store.get_asset(second.asset_id).baseline.config["width"] == 800

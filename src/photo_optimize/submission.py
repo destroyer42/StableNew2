@@ -22,6 +22,7 @@ def pipeline_defaults(config: dict[str, Any]) -> dict[str, Any]:
         isinstance(config.get(stage), dict) for stage in STAGES
     ):
         raise ValueError("Live Pipeline stage settings are unavailable; open Pipeline and retry")
+    captured_config = deepcopy(config)
     config = normalize_settings(config)
     img = config["img2img"]
     txt = config.get("txt2img", {})
@@ -47,6 +48,7 @@ def pipeline_defaults(config: dict[str, Any]) -> dict[str, Any]:
         },
         "config": config,
         "source": "pipeline_copy",
+        "captured_config": captured_config,
     }
 
 

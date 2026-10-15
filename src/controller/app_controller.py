@@ -2084,28 +2084,21 @@ class AppController:
         batch_size: int = 1,
         pipeline_defaults_snapshot: dict[str, Any] | None = None,
     ) -> int:
-        from src.photo_optimize.submission import describe_photo_plan, prepare_photo_plan
-
-        # Runtime fallback is live Pipeline intent, independent of pack overrides.
-        fallback = (pipeline_defaults_snapshot or self.build_photo_optimize_defaults())["config"]
-        plan = prepare_photo_plan(
-            assets=assets, stages=stages, fallback_config=fallback,
-            store=get_photo_optimize_store(), batch_size=batch_size,
+        plan = self.prepare_photo_optimize_plan(
+            assets=assets, stages=stages, batch_size=batch_size,
             prompt_delta=prompt_delta, negative_prompt_delta=negative_prompt_delta,
             prompt_mode=prompt_mode, negative_prompt_mode=negative_prompt_mode,
+            pipeline_defaults_snapshot=pipeline_defaults_snapshot,
         )
-        summary = describe_photo_plan(plan)
-        tab = getattr(getattr(self, "main_window", None), "photo_optimize_tab", None)
-        show = getattr(tab, "show_submission_summary", None)
-        if callable(show):
-            self._ui_dispatch(lambda: show(summary))
-        self._ui_dispatch(lambda: self._append_log(summary))
-        submitted = self._submit_reprocess_njrs(plan.jobs, source="photo_optimize_tab")
-        self._ui_dispatch(lambda: self._append_log(
-            f"[photo_optimize] Submitted {len(assets)} photo(s) in {submitted} job(s), "
-            f"{plan.group_count} compatible workload group(s), batch limit={batch_size}"
-        ))
-        return submitted
+        return self.submit_prepared_photo_plan(plan)
+
+    def prepare_photo_optimize_plan(self, **intent):
+        from src.controller.photo_optimize_submission import prepare
+        return prepare(self, get_photo_optimize_store(), **intent)
+
+    def submit_prepared_photo_plan(self, plan):
+        from src.controller.photo_optimize_submission import submit
+        return submit(self, plan)
 
     def _extract_reprocess_baseline_from_image(self, image_path: Path) -> dict[str, Any]:
         from src.utils.image_metadata import (

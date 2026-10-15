@@ -17,6 +17,14 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 - GUI intent and application wiring: `src/controller/app_controller.py`,
   `src/gui/app_state_v2.py`, and `src/gui/views/`.
 - Photo Optimize settings, geometry, batching and workspace (PR-IMG-PHOTO-220):
+  Scope-aware editing (PR-IMG-PHOTO-222): `photo_optimize_layout.py` builds the Single Photo /
+  Batch Edit workspaces; `photo_optimize_editors.py` provides masks and complete review dialogs;
+  `photo_optimize_scope.py` captures UI intent and coordinates the existing worker.
+  `src/photo_optimize/editing.py` preflights masked draft diffs and reports per-asset write outcomes
+  through the existing store. `src/controller/photo_optimize_submission.py` extracts preparation /
+  admission delegates; confirmed plans use the same compiler and one admission without recompilation.
+  See `docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md` and
+  `tests/{photo_optimize/test_scope_editing_222,gui_v2/test_photo_scope_222}.py`.
   `src/gui/views/photo_optimize_tab_frame_v2.py` -> `src/photo_optimize/settings.py`
   (explicit settings/alias precedence and Auto/Custom geometry) / `submission.py`
   (per-photo stage partitions; existing `ReprocessJobBuilder`, frozen-plan summary) ->
