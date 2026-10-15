@@ -308,6 +308,9 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
             self.assets_list.insert(tk.END, label)
             self._asset_index_by_row.append(asset.asset_id)
         self.selection_label.config(text=f"{len(assets)} asset(s)")
+        self.active_photo_combo.configure(values=[
+            f"{asset.source_filename} [{asset.asset_id}]" for asset in assets
+        ])
 
         target_asset_id = select_asset_id or self._restored_asset_id or self._current_asset_id
         if self._restored_asset_ids is not None:
@@ -316,8 +319,10 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
             self._restored_asset_ids = None
             for asset_id in restored:
                 self.assets_list.selection_set(self._asset_index_by_row.index(asset_id))
-            if restored:
-                self._show_asset(target_asset_id if target_asset_id in restored else restored[0])
+            if target_asset_id in self._asset_index_by_row:
+                self._show_asset(target_asset_id)
+            elif restored:
+                self._show_asset(restored[0])
             else:
                 self._clear_selection()
             self._restored_asset_id = None
@@ -326,10 +331,13 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
         if retained and select_asset_id is None:
             for asset_id in retained:
                 self.assets_list.selection_set(self._asset_index_by_row.index(asset_id))
-            self._show_asset(target_asset_id if target_asset_id in retained else retained[0])
+            self._show_asset(target_asset_id if target_asset_id in self._asset_index_by_row else retained[0])
             return
         if had_assets and not retained and select_asset_id is None:
-            self._clear_selection()
+            if target_asset_id in self._asset_index_by_row:
+                self._show_asset(target_asset_id)
+            else:
+                self._clear_selection()
             return
         if target_asset_id and target_asset_id in self._asset_index_by_row:
             index = self._asset_index_by_row.index(target_asset_id)
@@ -368,6 +376,7 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
     def _clear_selection(self) -> None:
         self._current_asset_id = None
         self._current_asset = None
+        self.active_photo_combo.set("")
         self._refresh_scope_selection()
         self.original_preview.clear()
         self.latest_preview.clear()
@@ -387,12 +396,21 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
     def _on_asset_select(self, _event: tk.Event) -> None:
         idxs = list(self.assets_list.curselection())
         if not idxs:
-            self._clear_selection()
+            self._refresh_scope_selection()
+            if self._current_asset is not None:
+                self._refresh_preview(self._current_asset)
             return
         idx = int(idxs[0])
+        if self._current_asset_id in self._asset_index_by_row:
+            idx = self._asset_index_by_row.index(self._current_asset_id)
         if idx < 0 or idx >= len(self._asset_index_by_row):
             return
         self._show_asset(self._asset_index_by_row[idx])
+
+    def _on_active_photo_choice(self, _event: tk.Event) -> None:
+        index = self.active_photo_combo.current()
+        if 0 <= index < len(self._asset_index_by_row):
+            self._show_asset(self._asset_index_by_row[index])
 
     def _show_asset(self, asset_id: str) -> None:
         asset = self.store.get_asset(asset_id)
@@ -400,6 +418,8 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
             return
         self._current_asset_id = asset.asset_id
         self._current_asset = asset
+        if asset_id in self._asset_index_by_row:
+            self.active_photo_combo.current(self._asset_index_by_row.index(asset_id))
         self._refresh_scope_selection()
         self._suspend_asset_persist = True
         try:
@@ -444,7 +464,7 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
                    "name": asset.source_filename}
         resolver = self._visibility_resolver()
         visible = show and resolver.is_visible(subject)
-        frame = self.__dict__.get("preview_frame")
+        frame = self.__dict__.get("image_previews_frame")
         if frame is not None:
             frame.grid() if show else frame.grid_remove()
         if visible:

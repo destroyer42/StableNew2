@@ -100,7 +100,7 @@ class PhotoOptimizeLayoutMixin:
         body.columnconfigure(2, weight=2, uniform="photo_optimize")
         body.rowconfigure(0, weight=1)
 
-        assets_frame = ttk.LabelFrame(body, text="Assets", style="Dark.TLabelframe", padding=8)
+        assets_frame = ttk.LabelFrame(body, text="Assets — batch selection", style="Dark.TLabelframe", padding=8)
         assets_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         assets_frame.columnconfigure(0, weight=1)
         assets_frame.rowconfigure(0, weight=1)
@@ -126,6 +126,12 @@ class PhotoOptimizeLayoutMixin:
         self.assets_list.configure(yscrollcommand=assets_scroll.set)
         list_controls = ttk.Frame(assets_frame, style="Panel.TFrame")
         list_controls.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Label(list_controls, text="Active Single Photo", style="Dark.TLabel").pack(anchor="w")
+        self.active_photo_combo = ttk.Combobox(list_controls, state="readonly", style="Dark.TCombobox")
+        self.active_photo_combo.pack(fill="x")
+        self.active_photo_combo.bind("<<ComboboxSelected>>", self._on_active_photo_choice)
+        ttk.Label(list_controls, text="Changes editor only; batch highlights stay.",
+                  style="Dark.TLabel", wraplength=240).pack(anchor="w", pady=(0, 6))
         for text, action in (
             ("Remove Selected", lambda: self._archive_assets(clear_all=False)),
             ("Clear List", lambda: self._archive_assets(clear_all=True)),
@@ -145,23 +151,29 @@ class PhotoOptimizeLayoutMixin:
         preview_frame.grid(row=0, column=1, sticky="nsew", padx=(0, 6))
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.columnconfigure(1, weight=1)
-        preview_frame.rowconfigure(1, weight=1)
+        preview_frame.rowconfigure(0, weight=1)
 
-        ttk.Label(preview_frame, text="Original", style="Dark.TLabel").grid(
+        self.image_previews_frame = ttk.Frame(preview_frame, style="Panel.TFrame")
+        self.image_previews_frame.grid(row=0, column=0, columnspan=2, sticky="nsew")
+        self.image_previews_frame.columnconfigure(0, weight=1)
+        self.image_previews_frame.columnconfigure(1, weight=1)
+        self.image_previews_frame.rowconfigure(1, weight=1)
+
+        ttk.Label(self.image_previews_frame, text="Original", style="Dark.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 4)
         )
-        ttk.Label(preview_frame, text="History Output", style="Dark.TLabel").grid(
+        ttk.Label(self.image_previews_frame, text="History Output", style="Dark.TLabel").grid(
             row=0, column=1, sticky="w", pady=(0, 4)
         )
         self.original_preview = ThumbnailWidget(
-            preview_frame,
+            self.image_previews_frame,
             width=220,
             height=220,
             placeholder_text="Import a photo",
         )
         self.original_preview.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
         self.latest_preview = ThumbnailWidget(
-            preview_frame,
+            self.image_previews_frame,
             width=220,
             height=220,
             placeholder_text="No optimize output yet",
@@ -175,7 +187,7 @@ class PhotoOptimizeLayoutMixin:
             justify="left",
             wraplength=460,
         )
-        self.meta_label.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.meta_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
         controls = ttk.Frame(body, style="Panel.TFrame")
         controls.grid(row=0, column=2, sticky="nsew")

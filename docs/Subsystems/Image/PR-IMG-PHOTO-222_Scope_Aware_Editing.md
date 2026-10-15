@@ -8,7 +8,7 @@ aliases and frozen submission parity. No persistence or execution authority expa
 Controller Surface Assessment: AppController delegates photo preparation and admission through
 `src/controller/photo_optimize_submission.py`, retaining its existing public submission method.
 Physical lines decrease from 7421 to 7414; the checked-in ceiling decreases accordingly.
-The photo tab decreases from 2001 to 1181 lines. Cohesive layout, editing widgets and scope/worker
+The photo tab decreases from 2001 to 1201 lines. Cohesive layout, editing widgets and scope/worker
 coordination move to three view modules; toolkit-neutral draft/diff logic lives in
 `src/photo_optimize/editing.py`. The extracted helper has no lifecycle or persistence state.
 
@@ -21,7 +21,11 @@ No live runtime, generation or operator asset validation. Hosted CI awaits publi
 ## Scope and draft contract
 
 One tab and asset library retain an active photo independently of the selected set. Switching
-Single Photo / Batch Edit changes presentation only. Single Photo autosaves only the active draft.
+Single Photo / Batch Edit changes presentation only. The Active Single Photo chooser changes the
+editor without changing batch highlights; list highlights select batch targets only. The chooser
+projects the existing row-to-asset index and current asset ID, with no second selection authority.
+Both identities survive refresh and UI-state restart, even when the active photo is outside the
+batch set or the batch is empty. Single Photo autosaves only the active draft.
 Batch Edit projects Same/Mixed values; checked fields apply, unchecked fields remain unchanged.
 Explicit masks include stage flags, model/VAE, stage configuration and saved positive/negative
 prompt transformations. Pending checked fields survive selection/scope projection.
@@ -55,7 +59,8 @@ each baseline with that transformation and never saves it. Queue review shows ev
 The img2img scheduler dropdown projects resources, loads/saves aliases and reaches the frozen NJR.
 
 Show Image Previews is persisted with editing scope and selected IDs in existing UI state.
-Hiding clears thumbnails without modifying assets. Content visibility still applies: the selected
+Hiding removes only the thumbnail subframe and clears images without modifying assets. Metadata
+stays visible and the Single Photo history remains available. Content visibility still applies: the selected
 history output is independently classified using effective prompts, output identity, snapshot and
 deltas, so a safe current baseline cannot authorize a flagged historical image. History selection
 survives preview toggling. Classification uses the existing text resolver, not image recognition.
@@ -69,6 +74,11 @@ per-photo stage/config/model/prompt grouping and whole-request compatibility pre
 scrollable review lists frozen per-photo settings and IDs before Queue. Confirmation passes that
 same prepared plan to the existing `_submit_reprocess_njrs` boundary exactly once. No new NJR,
 queue, runner, history or batching authority; existing queued snapshots are untouched.
+
+Known non-blocking output-allocation debt: preparing a queue review can allocate an empty staging
+directory before confirmation; canceling may leave that directory behind. This is existing output
+allocation behavior. Cleanup and output lifecycle redesign are outside this PR; no directory deletion
+or new lifecycle authority is introduced.
 
 ## Evidence and limits
 
@@ -90,3 +100,24 @@ Log: `C:/Users/rob/qual/photo222-pr-gate.log`. Security re-review passed after i
 gating historical thumbnails; aggregate diff and whitespace checks passed. No visual-quality or physical
 backend claim follows from deterministic Tk tests. Draft writes remain per-asset; confirmation does
 not make them a transaction. No additional product decision is required for this bounded outcome.
+
+## Bounded GUI review repairs
+
+Execution Profile + Model/Reasoning Recommendation: Narrow, two known view defects. Codex
+GPT-6.1 Sol Medium / Claude Code Sonnet 5.5 Medium, existing Local/Desktop session; Medium fits
+the bounded state/projection repair without repeating the unchanged subsystem investigation.
+Controller Surface Assessment: no controller changes; AppController remains 7414 lines.
+Token-Efficient Validation Plan: reuse green required and affected hosted CI at reviewed head
+`28f9d0d4929b3042eb10bc9d12609e8eb67d1b37` (run 38770701822). Add failing-before real Tk
+regressions, run focused photo/store GUI tests and the final canonical PR gate, then inspect the
+aggregate diff. No new runtime or physical testing.
+
+At the reviewed head, three Tk regression cases failed: a selection notification replaced active B
+with first-highlighted A (both A/B/C and A/C batch sets), and hiding previews hid metadata. The
+repair adds an explicit active chooser and a thumbnails-only frame. Focused acceptance: 110 passed,
+covering all/partial/single/empty batch sets across workspace switches, refresh and restart; active-only
+refinement; visible metadata/retained history with images hidden; and preserved historical-output
+content checks. Logs: `C:/Users/rob/qual/photo222-r1-before.log` and `photo222-r1-focused.log`.
+Final repair PR gate passed: completeness, unchanged controller ratchet, Ruff, ten-file mypy,
+9704-test collection and 386 required smoke/contract tests. Log:
+`C:/Users/rob/qual/photo222-r1-pr-gate.log`. Aggregate diff and whitespace checks passed.

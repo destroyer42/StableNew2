@@ -8,6 +8,7 @@ import pytest
 
 from src.gui.views.photo_optimize_editors import pipeline_copy_dialog, review_dialog
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
+from src.photo_optimize.models import PhotoOptimizeHistoryEntry
 from tests.controller.test_app_controller_photo_optimize import _build_controller
 from tests.photo_optimize.test_scope_editing_222 import make_photos
 
@@ -114,6 +115,10 @@ def test_run_only_transform_is_shared_without_rewriting_saved_prompts(tk_root, p
         before = [store.sidecar_path(i).read_bytes() for i in ids]
         tab.prompt_delta_text.insert("1.0", "studio")
         select(tab, [ids[1]])
+        tab.active_photo_combo.current(tab._asset_index_by_row.index(ids[1]))
+        tab.active_photo_combo.event_generate("<<ComboboxSelected>>")
+        tk_root.update()
+        assert tab._current_asset_id == ids[1]
         assert tab._get_text(tab.prompt_delta_text) == "studio"
         tab._refresh_prompt_diff()
         assert "studio" in tab.diff_after_label.cget("text")
@@ -124,13 +129,25 @@ def test_run_only_transform_is_shared_without_rewriting_saved_prompts(tk_root, p
 
 def test_preview_preference_and_scope_restart_do_not_change_assets(tk_root, photos):
     store, ids = photos
+    active = store.list_assets()[0]
+    active.history = [
+        PhotoOptimizeHistoryEntry(
+            "retained", "today", str(active.current_input_path), effective_prompt="portrait"
+        )
+    ]
+    store.save_asset(active)
     before = [store.sidecar_path(i).read_bytes() for i in ids]
     tab = PhotoOptimizeTabFrameV2(tk_root, store=store)
     try:
         select(tab, ids)
         tab.show_image_previews_var.set(False)
         tab._toggle_image_previews()
-        assert tab.preview_frame.winfo_manager() == ""
+        assert tab.preview_frame.winfo_manager() == "grid"
+        assert tab.meta_label.winfo_manager() == "grid"
+        assert tab.meta_label.cget("text").startswith("Asset:")
+        assert tab.history_list.winfo_manager() == "grid"
+        assert tab.history_list.size() == 1
+        assert tab.image_previews_frame.winfo_manager() == ""
         tab.edit_workspaces.select(tab.batch_workspace)
         tk_root.update()
         state = tab.get_photo_optimize_state()
@@ -141,6 +158,12 @@ def test_preview_preference_and_scope_restart_do_not_change_assets(tk_root, phot
         assert restarted.restore_photo_optimize_state(state)
         tk_root.update()
         assert restarted.show_image_previews_var.get() is False
+        assert restarted.preview_frame.winfo_manager() == "grid"
+        assert restarted.meta_label.winfo_manager() == "grid"
+        assert restarted.meta_label.cget("text").startswith("Asset:")
+        assert restarted.history_list.winfo_manager() == "grid"
+        assert restarted.history_list.size() == 1
+        assert restarted.image_previews_frame.winfo_manager() == ""
         assert restarted.edit_scope_var.get() == "Batch Edit"
         assert set(restarted._selected_asset_ids(batch_all=False)) == set(ids)
         assert [store.sidecar_path(i).read_bytes() for i in ids] == before
@@ -152,6 +175,65 @@ def test_preview_preference_and_scope_restart_do_not_change_assets(tk_root, phot
             restarted.show_image_previews_var.set(True)
             restarted.on_content_visibility_mode_changed("sfw")
             load.assert_not_called()
+        assert restarted.image_previews_frame.winfo_manager() == "grid"
+        assert restarted.preview_frame.winfo_manager() == "grid"
+    finally:
+        restarted.destroy()
+
+
+@pytest.mark.parametrize("batch_selection", ["all", "others", "one", "empty"])
+def test_explicit_active_photo_preserves_batch_across_scope_refresh_restart(
+    tk_root, photos, batch_selection
+):
+    store, _ = photos
+    tab = PhotoOptimizeTabFrameV2(tk_root, store=store)
+    ids = list(tab._asset_index_by_row)
+    active = ids[1]
+    selected = {"all": ids, "others": [ids[0], ids[2]], "one": [ids[0]], "empty": []}[
+        batch_selection
+    ]
+    before = {i: store.sidecar_path(i).read_bytes() for i in ids}
+    try:
+        select(tab, selected)
+        assert tab._current_asset_id == ids[0]
+        tab._show_asset(active)
+        tab._on_asset_select(None)
+        assert tab._current_asset_id == active  # reviewed head resets this to first highlighted A
+        tab._show_asset(ids[0])
+        tab.active_photo_combo.current(tab._asset_index_by_row.index(active))
+        tab.active_photo_combo.event_generate("<<ComboboxSelected>>")
+        tk_root.update()
+        assert tab._current_asset_id == active
+        assert set(tab._selected_asset_ids(batch_all=False)) == set(selected)
+        # A selection notification must not reset an explicitly chosen active editor to A.
+        tab._on_asset_select(None)
+        for workspace in (tab.batch_workspace, tab.single_workspace):
+            tab.edit_workspaces.select(workspace)
+            tk_root.update()
+            assert tab._current_asset_id == active
+            assert set(tab._selected_asset_ids(batch_all=False)) == set(selected)
+        tab._refresh_assets()
+        assert tab._current_asset_id == active
+        assert tab.active_photo_combo.current() == tab._asset_index_by_row.index(active)
+        assert set(tab._selected_asset_ids(batch_all=False)) == set(selected)
+        assert {i: store.sidecar_path(i).read_bytes() for i in ids} == before
+        state = tab.get_photo_optimize_state()
+    finally:
+        tab.destroy()
+    restarted = PhotoOptimizeTabFrameV2(tk_root, store=store)
+    try:
+        assert restarted.restore_photo_optimize_state(state)
+        tk_root.update()
+        assert restarted._current_asset_id == active
+        assert restarted.active_photo_combo.current() == restarted._asset_index_by_row.index(active)
+        assert set(restarted._selected_asset_ids(batch_all=False)) == set(selected)
+        assert {i: store.sidecar_path(i).read_bytes() for i in ids} == before
+        restarted.img2img_steps_var.set(29)
+        assert store.get_asset(active).baseline.config["img2img"]["steps"] == 29
+        assert {i: store.sidecar_path(i).read_bytes() for i in ids if i != active} == {
+            i: value for i, value in before.items() if i != active
+        }
+        assert set(restarted._selected_asset_ids(batch_all=False)) == set(selected)
     finally:
         restarted.destroy()
 
@@ -191,8 +273,6 @@ def test_pipeline_copy_dialog_can_select_exactly_one_field(tk_root, photos):
 def test_history_previews_use_effective_prompts_and_selected_entry(tk_root, photos):
     from pathlib import Path
 
-    from src.photo_optimize.models import PhotoOptimizeHistoryEntry
-
     store, ids = photos
     asset = store.get_asset(ids[0])
     asset.history = [
@@ -216,6 +296,10 @@ def test_history_previews_use_effective_prompts_and_selected_entry(tk_root, phot
     tab = PhotoOptimizeTabFrameV2(tk_root, store=store)
     try:
         select(tab, [ids[0]])
+        tab.active_photo_combo.current(tab._asset_index_by_row.index(ids[0]))
+        tab.active_photo_combo.event_generate("<<ComboboxSelected>>")
+        tk_root.update()
+        assert tab._current_asset_id == ids[0]
         with (
             patch.object(tab.latest_preview, "set_image_from_path") as load,
             patch.object(tab.latest_preview, "clear") as clear,

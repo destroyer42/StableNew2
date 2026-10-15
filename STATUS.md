@@ -5,11 +5,12 @@ Updated: 2026-10-15
 ## Repository
 
 - Photo Optimize scoped editing (PR-IMG-PHOTO-222, local implementation): Single Photo edits the
-  active draft; Batch Edit applies only checked fields to the selected set after a complete confirmed
+  active draft chosen independently through the Active Single Photo chooser; batch highlights survive
+  active changes, workspace switches, refresh and restart. Batch Edit applies only checked fields after a complete confirmed
   diff. Live Pipeline copy supports groups and individual exported fields, with explicit Custom geometry
   override. Saved prompt transformations and shared run-only overrides use Review semantics; img2img
-  scheduler round-trips to frozen NJRs. Persisted thumbnail visibility also checks historical effective
-  prompts. Queue review shows every frozen target before one existing whole-request admission. Draft
+  scheduler round-trips to frozen NJRs. Persisted thumbnail visibility keeps metadata/history available
+  and checks historical effective prompts. Queue review shows every frozen target before one existing whole-request admission. Draft
   writes retain per-asset outcomes rather than claiming transactionality. No new persistence/compiler/
   queue authority or physical generation. See
   `docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md`.

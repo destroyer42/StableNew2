@@ -149,6 +149,7 @@ def form(tmp_path):
     tab.assets_list.rows = [asset.source_filename]
     tab.assets_list.selection_set(0)
     tab.selection_label = Mock()
+    tab.active_photo_combo = Mock()
     tab._restored_asset_id = None
     tab._restored_asset_ids = None
     tab._run_photo_operation = lambda operation, completed: completed(operation())
