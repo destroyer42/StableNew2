@@ -1,8 +1,18 @@
 # StableNew current state
 
-Updated: 2026-10-13
+Updated: 2026-10-15
 
 ## Repository
+
+- Photo Optimize scoped editing (PR-IMG-PHOTO-222, local implementation): Single Photo edits the
+  active draft; Batch Edit applies only checked fields to the selected set after a complete confirmed
+  diff. Live Pipeline copy supports groups and individual exported fields, with explicit Custom geometry
+  override. Saved prompt transformations and shared run-only overrides use Review semantics; img2img
+  scheduler round-trips to frozen NJRs. Persisted thumbnail visibility also checks historical effective
+  prompts. Queue review shows every frozen target before one existing whole-request admission. Draft
+  writes retain per-asset outcomes rather than claiming transactionality. No new persistence/compiler/
+  queue authority or physical generation. See
+  `docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md`.
 
 - Forge supported-option defaults integrity (PR-IMG-FORGE-230, local deterministic validation and required gate
   green): the once-per-run upscale defaults write only options the WebUI advertises in `/sdapi/v1/options`. The

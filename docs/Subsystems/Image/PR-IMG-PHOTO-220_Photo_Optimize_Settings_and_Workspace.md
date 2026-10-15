@@ -1,5 +1,10 @@
 # PR-IMG-PHOTO-220 — Photo Optimize settings and workspace
 
+PR-IMG-PHOTO-222 supersedes the original selected-set Pipeline copy and submission-review UI:
+see `PR-IMG-PHOTO-222_Scope_Aware_Editing.md` for explicit Single Photo / Batch Edit scope,
+per-field copy masks, confirmed draft diffs and complete frozen-target review. Settings,
+geometry, grouping, persistence and migration authorities below remain in effect.
+
 Execution Profile + Model/Reasoning Recommendation: Standard/substantial, known
 architecture with bounded persistence implications. Codex GPT-6.1 Sol High or Claude
 Code Sonnet 5.5 High; retain the productive Local/Desktop session. These recommendations
