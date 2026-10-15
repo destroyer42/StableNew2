@@ -26,6 +26,16 @@ from PIL import Image, ImageOps
 _COVER_CENTER_CROP = "cover_resize_center_crop"
 _EXIF_ORIENTATION_TAG = 0x0112
 
+# Input-pixel budget of the operator-facing readiness *preview* only.  Decoding, transposing and
+# converting a source holds several full-size buffers at once, so an automatic preview declines an
+# image whose header reports more pixels than this and never decodes it.  Queue-time preparation
+# has no such budget: an oversized image is still prepared and generated normally.
+PREVIEW_MAX_SOURCE_PIXELS = 64_000_000
+
+
+class SourceTooLargeForPreview(ValueError):
+    """The preview declined a source above its pixel budget; preparation is unaffected."""
+
 
 @dataclass(frozen=True, slots=True)
 class PreparedWorkflowSource:
@@ -136,22 +146,37 @@ def _source_orientation(width: int, height: int) -> str:
 
 
 def transform_declared_workflow_source(
-    *, source_path: str | Path, policy: Mapping[str, Any]
+    *,
+    source_path: str | Path,
+    policy: Mapping[str, Any],
+    max_source_pixels: int | None = None,
 ) -> TransformedWorkflowSource:
     """Apply the catalog-declared preparation to ``source_path`` in memory.
 
     Reads the source file and nothing else: no output root, no hashing, no temporary file, no
     write of any kind.  Raises ``ValueError`` with the operator-facing reason on a bad source or
-    policy, exactly as ``prepare_declared_workflow_source`` always did."""
+    policy, exactly as ``prepare_declared_workflow_source`` always did.  ``max_source_pixels`` is
+    a header-first budget for the preview only; ``None`` (what preparation passes) is unbounded,
+    exactly as before."""
 
     source = Path(source_path).expanduser().resolve()
     if not source.is_file():
         raise ValueError(f"Video workflow source image does not exist: {source}")
     try:
         with Image.open(source) as opened:
-            stored_width, stored_height = opened.size
+            stored_width, stored_height = opened.size  # header only: nothing is decoded yet
+            if max_source_pixels is not None and stored_width * stored_height > max_source_pixels:
+                megapixels = stored_width * stored_height / 1e6
+                raise SourceTooLargeForPreview(
+                    f"The source image is {stored_width}x{stored_height} ({megapixels:.0f} "
+                    f"megapixels), above the {max_source_pixels / 1e6:.0f}-megapixel limit for "
+                    "the readiness preview, so no preview is shown. Queueing is unaffected: the "
+                    "image is prepared normally."
+                )
             exif_orientation = int(opened.getexif().get(_EXIF_ORIENTATION_TAG, 1) or 1)
             image = ImageOps.exif_transpose(opened).convert("RGB")
+    except SourceTooLargeForPreview:
+        raise
     except Exception as exc:
         raise ValueError(f"Failed to open video workflow source image: {exc}") from exc
     width, height = image.size
@@ -181,14 +206,23 @@ def transform_declared_workflow_source(
 
 
 def preview_declared_workflow_source(
-    *, source_path: str | Path, policy: Mapping[str, Any]
+    *,
+    source_path: str | Path,
+    policy: Mapping[str, Any],
+    max_source_pixels: int | None = None,
 ) -> TransformedWorkflowSource:
     """The exact prepared image and geometry admission would publish, without publishing.
 
     Same transformation as ``prepare_declared_workflow_source``; creates no file and leaves the
-    source untouched, so it is safe to call repeatedly from a worker while an operator browses."""
+    source untouched, so it is safe to call repeatedly from a worker while an operator browses.
+    A source whose header reports more than ``max_source_pixels`` (default
+    ``PREVIEW_MAX_SOURCE_PIXELS``) raises ``SourceTooLargeForPreview`` before any pixel is
+    decoded; that is a preview-only limit and never applies to preparation."""
 
-    return transform_declared_workflow_source(source_path=source_path, policy=policy)
+    budget = PREVIEW_MAX_SOURCE_PIXELS if max_source_pixels is None else max_source_pixels
+    return transform_declared_workflow_source(
+        source_path=source_path, policy=policy, max_source_pixels=budget
+    )
 
 
 def prepare_declared_workflow_source(
@@ -302,7 +336,9 @@ def _dimensions(value: Any, field_name: str) -> dict[str, int]:
 
 
 __all__ = [
+    "PREVIEW_MAX_SOURCE_PIXELS",
     "PreparedWorkflowSource",
+    "SourceTooLargeForPreview",
     "TransformedWorkflowSource",
     "WorkflowSourceGeometry",
     "cover_crop_box",

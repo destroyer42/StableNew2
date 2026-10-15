@@ -7,14 +7,18 @@ from __future__ import annotations
 
 import hashlib
 import os
+import struct
 import tempfile
+import zlib
 from pathlib import Path
 
 import pytest
-from PIL import Image, ImageOps
+from PIL import Image, ImageFile, ImageOps
 
 from src.video import workflow_source_preparation as preparation
 from src.video.workflow_source_preparation import (
+    PREVIEW_MAX_SOURCE_PIXELS,
+    SourceTooLargeForPreview,
     cover_crop_box,
     prepare_declared_workflow_source,
     preview_declared_workflow_source,
@@ -280,3 +284,100 @@ def test_preview_errors_match_preparation_errors(tmp_path):
     with pytest.raises(ValueError, match="unsupported resize policy"):
         preview_declared_workflow_source(source_path=good, policy={"resize_policy": "stretch"})
     assert not os.path.exists(tmp_path / "out")
+
+
+# ------------------------------------------------------------------ preview-only input budget
+
+
+def _header_only_png(width: int, height: int) -> bytes:
+    """A 65-byte PNG whose header claims ``width`` x ``height``: size metadata with no pixel data."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])  # PNG signature
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(b""))
+        + chunk(b"IEND", b"")
+    )
+
+
+def test_a_header_claiming_a_huge_image_is_declined_before_any_pixel_is_decoded(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "claims_72_megapixels.png"
+    path.write_bytes(_header_only_png(9000, 8000))
+    assert path.stat().st_size < 200  # the size comes from the header, not from pixel data
+    assert 9000 * 8000 > PREVIEW_MAX_SOURCE_PIXELS
+
+    decodes: list[tuple[int, int]] = []
+    transposes: list[bool] = []
+    real_load = ImageFile.ImageFile.load
+    real_transpose = ImageOps.exif_transpose
+
+    def counting_load(self, *args, **kwargs):
+        decodes.append(self.size)
+        return real_load(self, *args, **kwargs)
+
+    def counting_transpose(*args, **kwargs):
+        transposes.append(True)
+        return real_transpose(*args, **kwargs)
+
+    monkeypatch.setattr(ImageFile.ImageFile, "load", counting_load)
+    monkeypatch.setattr(ImageOps, "exif_transpose", counting_transpose)
+
+    with pytest.raises(SourceTooLargeForPreview) as raised:
+        preview_declared_workflow_source(source_path=path, policy=POLICY)
+    assert decodes == [] and transposes == []  # not even EXIF (PNG EXIF reads would decode)
+    message = str(raised.value)
+    assert isinstance(raised.value, ValueError)
+    assert "9000x8000" in message and "72 megapixels" in message
+    assert "64-megapixel" in message and "Queueing is unaffected" in message
+
+    # Without the budget the same file *is* decoded: that is the work the budget avoids.
+    with pytest.raises(ValueError, match="Failed to open video workflow source image"):
+        transform_declared_workflow_source(source_path=path, policy=POLICY)
+    assert decodes == [(9000, 8000)]
+
+
+def test_the_budget_is_inclusive_and_parity_holds_at_the_boundary(tmp_path):
+    source = _image(tmp_path, (60, 80))  # 4800 pixels
+    at_budget = preview_declared_workflow_source(
+        source_path=source, policy=POLICY, max_source_pixels=4800
+    )
+    prepared = prepare_declared_workflow_source(
+        source_path=source, output_root=tmp_path / "out", policy=POLICY
+    )
+    assert at_budget.to_png_bytes() == Path(prepared.prepared_image_path).read_bytes()
+    with pytest.raises(SourceTooLargeForPreview):
+        preview_declared_workflow_source(source_path=source, policy=POLICY, max_source_pixels=4799)
+
+
+def test_the_default_budget_is_the_named_constant(tmp_path, monkeypatch):
+    assert PREVIEW_MAX_SOURCE_PIXELS == 64_000_000
+    source = _image(tmp_path, (60, 80))
+    monkeypatch.setattr(preparation, "PREVIEW_MAX_SOURCE_PIXELS", 4799)
+    with pytest.raises(SourceTooLargeForPreview):
+        preview_declared_workflow_source(source_path=source, policy=POLICY)
+    monkeypatch.setattr(preparation, "PREVIEW_MAX_SOURCE_PIXELS", 4800)
+    assert preview_declared_workflow_source(source_path=source, policy=POLICY).image.size == (48, 80)
+
+
+def test_an_image_above_the_preview_budget_is_still_prepared_normally(tmp_path, monkeypatch):
+    source = _image(tmp_path, (200, 90))
+    monkeypatch.setattr(preparation, "PREVIEW_MAX_SOURCE_PIXELS", 1000)  # 18,000 px is "oversized"
+    with pytest.raises(SourceTooLargeForPreview):
+        preview_declared_workflow_source(source_path=source, policy=POLICY)
+    prepared = prepare_declared_workflow_source(
+        source_path=source, output_root=tmp_path / "out", policy=POLICY
+    )
+    unbudgeted = transform_declared_workflow_source(source_path=source, policy=POLICY)
+    assert prepared.prepared_dimensions == {"width": 80, "height": 48}
+    assert Path(prepared.prepared_image_path).read_bytes() == unbudgeted.to_png_bytes()
+    # Declining a preview wrote nothing of its own.
+    assert [p.name for p in (tmp_path / "out" / "prepared_video_sources").iterdir()] == [
+        Path(prepared.prepared_image_path).name
+    ]

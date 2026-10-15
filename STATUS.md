@@ -134,7 +134,7 @@ Updated: 2026-10-13
   and Review jobs are unchanged. Transient session, off-Tk worker, no new queue/runner/history; no physical
   validation. See `docs/Subsystems/Video/PR-VID-BATCH-200_MultiSource_Workflow_Batch.md`.
 
-- Motion source readiness (PR-VID-196, locally validated; not pushed): the Video Workflow tab gains a read-only
+- Motion source readiness (PR-VID-196, PR #104 open, locally validated; not merged): the Video Workflow tab gains a read-only
   readiness section that shows the exact prepared source image and crop rectangle (one side-effect-free transform
   shared with queue-time preparation, so preview and published PNG are pixel- and byte-identical), bounded
   off-Tk driving-video facts (reported dimensions/fps/frames/duration kept apart from measured decoded preview
@@ -142,7 +142,8 @@ Updated: 2026-10-13
   timing observations, and workflow-aware motion guidance qualified by accepted PR-VID-150/192 evidence (tested
   gesture gains separated from unresolved locomotion; unsupported workflows say so). Driving-frame timing is stated
   only where the pinned ComfyUI node source (v0.37.0 and v0.38.0 revisions) was read; otherwise it is unknown.
-  Nothing changes generation, NJR fields, catalog versions, the one-variable experiment gate or batch admission, and
+  The preview alone declines sources above 64 MP from the header, before decoding; queueing is unaffected. Nothing
+  changes generation, NJR fields, catalog versions, the one-variable experiment gate or batch admission, and
   prompts are never edited. Validation is CPU plus real FFmpeg on disposable clips; no physical generation, so no
   motion-quality claim. See `docs/Subsystems/Video/PR-VID-196_Motion_Source_Readiness.md`.
 

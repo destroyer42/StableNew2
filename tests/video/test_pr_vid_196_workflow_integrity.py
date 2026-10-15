@@ -17,10 +17,12 @@ import pytest
 from PIL import Image
 
 from src.controller.video_workflow_controller import VideoWorkflowController
+from src.video import workflow_source_preparation as preparation
 from src.video.workflow_catalog_wan_animate2 import (
     WAN_ANIMATE2_DRIVE_ID,
     WAN_ANIMATE2_RUNTIME_VERSION,
 )
+from src.video.workflow_source_preparation import SourceTooLargeForPreview
 
 TI2V_ID = "wan22_ti2v_5b_i2v_v1"
 
@@ -224,3 +226,25 @@ def test_guidance_does_not_touch_the_prompt_the_builder_freezes(tmp_path):
         source_image_path=source, form_data=_form(clip, prompt=prompt)
     )
     assert service.calls[1][0].config["video_workflow"]["prompt"] == prompt.strip()
+
+
+def test_a_source_above_the_preview_budget_is_declined_for_preview_but_still_queued(
+    tmp_path, monkeypatch
+):
+    controller, service = _stack(tmp_path)
+    source, clip = _inputs(tmp_path)  # 900x600 = 540,000 px
+    monkeypatch.setattr(preparation, "PREVIEW_MAX_SOURCE_PIXELS", 100_000)
+    drive = next(
+        r for r in controller.list_workflow_specs() if r["workflow_id"] == WAN_ANIMATE2_DRIVE_ID
+    )
+    declared = drive["motion_readiness"]["source_preparation"]
+    with pytest.raises(SourceTooLargeForPreview, match="prepared normally"):
+        controller.preview_motion_source(source, declared)
+
+    job_id = controller.submit_video_workflow_job(source_image_path=source, form_data=_form(clip))
+    assert job_id and len(service.calls) == 1
+    [njr] = service.calls[0]
+    prepared = Path(njr.input_image_paths[0])
+    assert prepared.is_file() and Image.open(prepared).size == (832, 480)
+    stage = njr.config["video_workflow"]["source_preparation"]
+    assert stage["source_dimensions"] == {"width": 900, "height": 600}

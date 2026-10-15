@@ -30,6 +30,7 @@ from src.gui.view_contracts.video_motion_readiness_contract import (
 )
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.pipeline.video import resolve_ffmpeg_executable
+from src.video import workflow_source_preparation as preparation
 from src.video.driving_video_inspection import (
     DrivingVideoFacts,
     DrivingVideoInspection,
@@ -330,6 +331,30 @@ def test_refresh_has_no_prompt_input():
     import inspect
 
     assert "prompt" not in " ".join(inspect.signature(MotionReadinessSession.refresh).parameters)
+
+
+def test_an_oversized_source_preview_is_a_readable_error_and_leaves_the_video_channel_alone(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(preparation, "PREVIEW_MAX_SOURCE_PIXELS", 1000)
+    big = _image(tmp_path, (200, 90), "big.png")  # 18,000 px: above the (patched) preview budget
+    io = Scripted()
+    session = MotionReadinessSession(
+        preview_source=lambda path, policy: preview_declared_workflow_source(
+            source_path=path, policy=policy
+        ),
+        inspect_video=io.inspect,
+    )
+    source_work, video_work = _refresh(session, source=str(big), video="clip.mp4")
+    outcome = session.run_source(source_work)
+    assert outcome.value is None and "megapixels" in outcome.error
+    session.finish_source(source_work, outcome)
+    session.finish_video(video_work, session.run_video(video_work))
+    view = session.view()
+    assert view.source_state == STATE_ERROR and view.source_png is None
+    assert "Queueing is unaffected" in view.source_message
+    assert view.video_state == STATE_READY  # the other channel is independent
+    assert view.guidance_title == "Guidance title"
 
 
 # ------------------------------------------------------------------ real controller + Tk tab
@@ -670,3 +695,32 @@ def test_a_real_driving_clip_is_inspected_and_rendered(tk_root, tmp_path):
     assert any("Uses 41 of 60 driving frames" in line for line in view.timing_lines)
     assert any("orientation" in line.lower() or "landscape" in line for line in view.advisory_lines)
     assert clip.read_bytes() == before
+
+
+@pytest.mark.gui
+def test_a_declined_source_preview_never_blocks_queueing_the_same_source(
+    tk_root, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(preparation, "PREVIEW_MAX_SOURCE_PIXELS", 1000)
+    tab, panel, runner, _app_stub, controller, service = _tab(tk_root, tmp_path)
+    source = _image(tmp_path, (200, 90), "big.png")
+    clip = tmp_path / "drive.mp4"
+    clip.write_bytes(bytes([0, 0, 0, 0x18]) + b"ftypmp42 placeholder")
+    tab.set_source_image_path(str(source))
+    panel.request_refresh(force=True)
+    runner.drain()
+
+    view = panel.last_view
+    assert view is not None and view.source_state == STATE_ERROR
+    shown = panel.source_text_var.get()
+    assert shown.startswith("Source preview unavailable:") and "prepared normally" in shown
+    assert str(tab.queue_workflow_button.cget("state")) == "normal"  # nothing is disabled
+
+    tab.pose_video_var.set(str(clip))
+    tab.experimental_opt_in_var.set(True)
+    tab._set_text_value(tab.prompt_text, "A person in a studio")
+    form = tab.get_video_workflow_state(for_submission=True)
+    job_id = controller.submit_video_workflow_job(source_image_path=source, form_data=form)
+    assert job_id and len(service.calls) == 1
+    [njr] = service.calls[0]
+    assert Path(njr.input_image_paths[0]).is_file()  # the oversized source was prepared normally
