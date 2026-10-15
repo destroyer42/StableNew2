@@ -8,6 +8,7 @@ from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPo
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
+from src.video.driving_video_inspection import inspect_driving_video as _inspect_video
 from src.video.video_workflow_batch import (
     BatchAdmissionResult,
     BatchPlan,
@@ -29,6 +30,8 @@ from src.video.video_workflow_intent import (
 from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
 from src.video.workflow_controls import operator_controls_projection
 from src.video.workflow_frame_count import frame_count_projection
+from src.video.workflow_motion_guidance import motion_readiness_projection
+from src.video.workflow_source_preparation import preview_declared_workflow_source
 
 
 class VideoWorkflowController:
@@ -94,6 +97,7 @@ class VideoWorkflowController:
                     "form_visibility": form_visibility(spec),
                     "frame_count": frame_count_projection(spec),
                     "operator_controls": operator_controls_projection(spec),
+                    "motion_readiness": motion_readiness_projection(spec),
                     "operator_projection": self._mapping_dict(
                         (getattr(spec, "backend_defaults", None) or {}).get("operator_projection")
                     ),
@@ -237,3 +241,17 @@ class VideoWorkflowController:
         caller refreshes GUI-visible queue state afterwards, on the UI thread)."""
 
         return self._batches.admit(plan, self._job_service())
+
+    # ---------------------------------------------------------------- motion-source readiness
+
+    @staticmethod
+    def preview_motion_source(path: str | Path, policy: Mapping[str, Any]) -> Any:
+        """Exact prepared pixels and crop geometry; writes nothing (worker-thread safe)."""
+
+        return preview_declared_workflow_source(source_path=path, policy=policy)
+
+    @staticmethod
+    def inspect_driving_video(video_path: str | Path, cancel: Any = None) -> Any:
+        """Bounded, read-only probe plus small preview frames (worker-thread safe)."""
+
+        return _inspect_video(video_path, cancel=cancel)

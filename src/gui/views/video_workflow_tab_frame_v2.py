@@ -13,6 +13,7 @@ from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
 from src.gui.view_contracts.video_batch_contract import VideoBatchSession
 from src.gui.view_contracts.video_experiment_contract import VideoExperimentSession
+from src.gui.view_contracts.video_motion_readiness_contract import MotionReadinessSession
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
@@ -21,6 +22,7 @@ from src.gui.view_contracts.workspace_density_contract import changed_value_coun
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
+from src.gui.views.video_workflow_motion_readiness_panel_v2 import WorkflowMotionReadinessPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
@@ -164,6 +166,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             ),
             scan_folder=lambda folder, recursive=True: (
                 self._experiment_controller().scan_batch_folder(folder, recursive=recursive)
+            ),
+        )
+
+        # Read-only source/driving-video readiness (PR-VID-196): display state only, never saved
+        # with the form and never part of what is submitted.
+        self._motion_readiness_session = MotionReadinessSession(
+            preview_source=lambda path, policy: self._experiment_controller().preview_motion_source(
+                path, policy
+            ),
+            inspect_video=lambda path, cancel: self._experiment_controller().inspect_driving_video(
+                path, cancel
             ),
         )
 
@@ -366,8 +379,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 secondary_weight=1,
             ),
         )
-        body.rowconfigure(8, weight=1)
         body.rowconfigure(9, weight=1)
+        body.rowconfigure(10, weight=1)
         self._body_frame = body
 
         self.workflow_combo: ttk.Combobox = cast(
@@ -483,10 +496,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             values=_OUTPUT_ROUTES,
             help_key="output_route",
         )
+        # PR-VID-196: exact prepared-source preview, bounded driving-video facts, geometry/timing
+        # advisories and workflow-aware motion guidance.  Read-only; hidden until there is content.
+        self.motion_readiness_panel = WorkflowMotionReadinessPanel(
+            body,
+            session=self._motion_readiness_session,
+            read_inputs=self._read_motion_readiness_inputs,
+        )
+        self.motion_readiness_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.motion_readiness_panel.grid_remove()
         # PR-GUI-110: collapsible; every control and value stays alive while collapsed, and a collapsed header
         # that hides non-default values says so (see _refresh_conditioning_status).
         self.conditioning_section = DisclosureSection(body, title="Advanced Conditioning")
-        self.conditioning_section.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(6, 6))
+        self.conditioning_section.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(6, 6))
         conditioning_frame = self.conditioning_section.body
         self.conditioning_frame = conditioning_frame
         configure_grid_columns(
@@ -575,18 +597,18 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             app_state=self.app_state,
             wraplength=900,
         )
-        self.workflow_help_panel.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(8, 6))
+        self.workflow_help_panel.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(8, 6))
 
         prompt_label = ttk.Label(body, text="Prompt", style="Dark.TLabel")
         self.prompt_label = prompt_label  # relabelled from the workflow's operator projection
-        prompt_label.grid(row=8, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
+        prompt_label.grid(row=9, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
         self.prompt_text = tk.Text(
             body,
             height=5,
             wrap="word",
         )
         style_text_widget(self.prompt_text, elevated=True)
-        self.prompt_text.grid(row=8, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
+        self.prompt_text.grid(row=9, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
         self._attach_setting_help(
             "prompt",
             VIDEO_WORKFLOW_SETTING_HELP["prompt"],
@@ -595,14 +617,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
 
         negative_label = ttk.Label(body, text="Negative", style="Dark.TLabel")
-        negative_label.grid(row=9, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
+        negative_label.grid(row=10, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
         self.negative_prompt_text = tk.Text(
             body,
             height=4,
             wrap="word",
         )
         style_text_widget(self.negative_prompt_text, elevated=True)
-        self.negative_prompt_text.grid(row=9, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
+        self.negative_prompt_text.grid(row=10, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
         self._attach_setting_help(
             "negative",
             VIDEO_WORKFLOW_SETTING_HELP["negative"],
@@ -614,7 +636,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.workflow_controls_panel = WorkflowControlsPanel(
             body, on_change=self._refresh_workspace_summary
         )
-        self.workflow_controls_panel.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.workflow_controls_panel.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.workflow_controls_panel.grid_remove()
 
         self.experiment_panel = WorkflowExperimentPanel(
@@ -626,7 +648,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             ),
             on_queued=self._on_experiment_queued,
         )
-        self.experiment_panel.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.experiment_panel.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.experiment_panel.grid_remove()
 
     def _add_labeled_entry(
@@ -1045,6 +1067,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.effective_settings_section.set_status(" | ".join(effective_parts[:2])[:72])
         self._refresh_conditioning_status(workflow_meta)
         self._invalidate_experiment_preview()
+        readiness_panel = getattr(self, "motion_readiness_panel", None)
+        if readiness_panel is not None:
+            readiness_panel.request_refresh()  # debounced; the session de-duplicates unchanged inputs
 
     def _refresh_conditioning_status(self, workflow_meta: dict[str, Any]) -> None:
         """Collapsed-header hint: say so when hidden conditioning is active or edited from its default."""
@@ -1081,6 +1106,20 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def _experiment_controller(self) -> Any:
         getter = getattr(self.app_controller, "get_video_workflow_controller", None)
         return getter() if callable(getter) else None
+
+    def _read_motion_readiness_inputs(self) -> dict[str, Any]:
+        """Plain snapshot of what the readiness panel shows (Tk reads happen here, never on a worker)."""
+
+        meta = self._workflow_map.get(self.workflow_var.get(), {})
+        readiness = meta.get("motion_readiness")
+        selected = self._frame_count_labels.get(self.frame_count_var.get())
+        return {
+            "source_path": self.source_image_var.get().strip(),
+            "video_path": self.pose_video_var.get().strip(),
+            "readiness": readiness if isinstance(readiness, dict) else None,
+            "frame_count": meta.get("frame_count"),
+            "selected_frames": selected,
+        }
 
     def _invalidate_experiment_preview(self) -> None:
         panel = getattr(self, "experiment_panel", None)
