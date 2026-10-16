@@ -162,6 +162,9 @@ def test_pipeline_tab_pack_add_preview_and_queue_projection(
             lambda: not controller.app_state.queue_jobs and tab.queue_panel.job_listbox.size() == 0,
         )
         queue = controller.job_service.queue
+        # Production composition holds WebUI claims until a readiness proof; this test is about queue projection, so
+        # it applies the proof's effect (the release the coordinator performs after a fresh probe) before claiming.
+        assert queue.release_webui_dispatch()
         controller.on_set_auto_run_v2(False)
         controller.job_service.auto_run_enabled = False
 
@@ -263,6 +266,7 @@ def test_queue_panel_manual_and_auto_run_worker_lifecycle(
     try:
         panel = window.pipeline_tab.queue_panel
         queue = controller.job_service.queue
+        assert queue.release_webui_dispatch()  # simulate the readiness proof that releases the production startup hold
         set_auto_run(False)
         submit("manual-a", "manual-b")
         _pump_until(tk_root, lambda: panel.send_job_button.instate(["!disabled"]))
