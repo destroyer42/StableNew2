@@ -4,6 +4,16 @@ Updated: 2026-10-15
 
 ## Repository
 
+- Photo Optimize historical result promotion (PR-IMG-PHOTO-223, local implementation): the Single
+  Photo browser lists the imported original, current working baseline and each recorded run output.
+  Selection previews only. Confirmed promotion chooses Image + recorded prompt/settings or Image only
+  + retain current prompt/settings; exact membership, managed containment, image readability, available
+  hashes and stale reviews are checked before one sidecar replacement saves the previous snapshot and
+  new baseline together. Verified migration copies retain recorded lexical output identity. New imports
+  retain original settings/hash; new history retains output hashes and frozen geometry policy. Missing
+  legacy metadata produces explicit limitations; historical artifacts and frozen NJRs are preserved.
+  No physical generation. See `docs/Subsystems/Image/PR-IMG-PHOTO-223_Historical_Result_Promotion.md`.
+
 - Photo Optimize scoped editing (PR-IMG-PHOTO-222, local implementation): Single Photo edits the
   active draft chosen independently through the Active Single Photo chooser; batch highlights survive
   active changes, workspace switches, refresh and restart. Batch Edit applies only checked fields after a complete confirmed

@@ -103,6 +103,8 @@ class PhotoOptimizeHistoryEntry:
     config_snapshot: dict[str, Any] = field(default_factory=dict)
     job_ids: list[str] = field(default_factory=list)
     manifest_paths: list[str] = field(default_factory=list)
+    output_sha256: dict[str, str] = field(default_factory=dict)
+    geometry_policy: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -120,6 +122,8 @@ class PhotoOptimizeHistoryEntry:
             "config_snapshot": deepcopy(self.config_snapshot or {}),
             "job_ids": list(self.job_ids or []),
             "manifest_paths": list(self.manifest_paths or []),
+            **({"output_sha256": dict(self.output_sha256)} if self.output_sha256 else {}),
+            **({"geometry_policy": self.geometry_policy} if self.geometry_policy else {}),
         }
 
     @classmethod
@@ -141,6 +145,8 @@ class PhotoOptimizeHistoryEntry:
             config_snapshot=deepcopy(payload.get("config_snapshot") or {}),
             job_ids=[str(item) for item in payload.get("job_ids") or []],
             manifest_paths=[str(item) for item in payload.get("manifest_paths") or []],
+            output_sha256=dict(payload.get("output_sha256") or {}),
+            geometry_policy=str(payload.get("geometry_policy") or ""),
         )
 
 
@@ -159,6 +165,8 @@ class PhotoOptimizeAsset:
     schema_version: str = PHOTO_OPTIMIZE_SCHEMA_VERSION
     asset_type: str = "external_photo"
     archived: bool = False
+    original_baseline: PhotoOptimizeBaseline | None = None
+    original_sha256: str = ""
 
     @property
     def current_input_path(self) -> Path:
@@ -187,6 +195,8 @@ class PhotoOptimizeAsset:
             "baseline": self.baseline.to_dict(),
             "history": [entry.to_dict() for entry in self.history],
             "baseline_snapshots": [entry.to_dict() for entry in self.baseline_snapshots],
+            **({"original_baseline": self.original_baseline.to_dict()} if self.original_baseline is not None else {}),
+            **({"original_sha256": self.original_sha256} if self.original_sha256 else {}),
             "tags": list(self.tags or []),
             "notes": self.notes,
         }
@@ -213,6 +223,9 @@ class PhotoOptimizeAsset:
             managed_original_path=str(data.get("managed_original_path") or ""),
             asset_type=str(data.get("asset_type") or "external_photo"),
             archived=bool(data.get("archived", False)),
+            original_baseline=(PhotoOptimizeBaseline.from_dict(data["original_baseline"])
+                               if isinstance(data.get("original_baseline"), dict) else None),
+            original_sha256=str(data.get("original_sha256") or ""),
             baseline=PhotoOptimizeBaseline.from_dict(data.get("baseline") or {}),
             history=history,
             baseline_snapshots=snapshots,

@@ -17,6 +17,13 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 - GUI intent and application wiring: `src/controller/app_controller.py`,
   `src/gui/app_state_v2.py`, and `src/gui/views/`.
 - Photo Optimize settings, geometry, batching and workspace (PR-IMG-PHOTO-220):
+  Historical result promotion (PR-IMG-PHOTO-223): `src/photo_optimize/results.py` projects exact
+  original/working/history-output candidates and validates contained images, available integrity
+  evidence and reviewed promotion plans. `store.py` saves snapshot + baseline together through its
+  existing atomic sidecar path. `photo_optimize_results.py` owns the browser, read-only preview
+  worker and confirmed intent; existing completion passes frozen geometry policy into history.
+  See `docs/Subsystems/Image/PR-IMG-PHOTO-223_Historical_Result_Promotion.md` and
+  `tests/{photo_optimize/test_historical_results_223,gui_v2/test_photo_results_223}.py`.
   Scope-aware editing (PR-IMG-PHOTO-222): `photo_optimize_layout.py` builds the Single Photo /
   Batch Edit workspaces; `photo_optimize_editors.py` provides masks and complete review dialogs;
   `photo_optimize_scope.py` captures UI intent and coordinates the existing worker.

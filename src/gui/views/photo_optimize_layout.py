@@ -162,7 +162,7 @@ class PhotoOptimizeLayoutMixin:
         ttk.Label(self.image_previews_frame, text="Original", style="Dark.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 4)
         )
-        ttk.Label(self.image_previews_frame, text="History Output", style="Dark.TLabel").grid(
+        ttk.Label(self.image_previews_frame, text="Selected candidate (preview only)", style="Dark.TLabel").grid(
             row=0, column=1, sticky="w", pady=(0, 4)
         )
         self.original_preview = ThumbnailWidget(
@@ -482,7 +482,7 @@ class PhotoOptimizeLayoutMixin:
 
         history_box = ttk.LabelFrame(
             self.single_workspace,
-            text="Asset History",
+            text="Original, Working Baseline and Recorded Results",
             style="Dark.TLabelframe",
             padding=8,
         )
@@ -513,16 +513,22 @@ class PhotoOptimizeLayoutMixin:
         actions.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         ttk.Button(
             actions,
-            text="Promote Latest Result",
+            text="Use Selected Result as Working Baseline…",
             style="Dark.TButton",
-            command=self._promote_latest_result,
+            command=self._promote_selected_result,
         ).pack(side="left", fill="x", expand=True, padx=(0, 4))
         ttk.Button(
             actions,
-            text="Revert Baseline",
+            text="Restore Previous Baseline",
             style="Dark.TButton",
             command=self._revert_baseline,
         ).pack(side="left", fill="x", expand=True)
+        ttk.Radiobutton(history_box, text="Image + recorded prompt/settings", variable=self.promotion_mode_var,
+                        value="recorded").grid(row=2, column=0, sticky="w")
+        ttk.Radiobutton(history_box, text="Image only + retain current prompt/settings", variable=self.promotion_mode_var,
+                        value="image_only").grid(row=3, column=0, sticky="w")
+        ttk.Label(history_box, textvariable=self.result_status_var, wraplength=460,
+                  style="Dark.TLabel").grid(row=4, column=0, columnspan=2, sticky="ew")
 
 
     def _build_stage_config_editor(self, parent: ttk.LabelFrame, *, row: int) -> None:

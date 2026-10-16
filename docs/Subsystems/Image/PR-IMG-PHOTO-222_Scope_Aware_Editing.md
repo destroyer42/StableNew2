@@ -1,5 +1,9 @@
 # PR-IMG-PHOTO-222 — Scope-aware Single/Batch Photo Optimize
 
+PR-IMG-PHOTO-223 extends historical browsing to every recorded output and replaces latest-only
+GUI promotion with an explicit confirmed working-baseline action. See
+`PR-IMG-PHOTO-223_Historical_Result_Promotion.md`; PHOTO-222 editing/queue authorities remain intact.
+
 Execution Profile + Model/Reasoning Recommendation: Standard/substantial, existing architecture.
 Codex GPT-6.1 Sol High / Claude Code Sonnet 5.5 High, Local/Desktop for real Windows Tk and
 filesystem acceptance. High effort targets total successful-work cost across UI intent, persisted
