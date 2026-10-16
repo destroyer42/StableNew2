@@ -4,6 +4,14 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Windows platform-contract lane (audit P1-3, local deterministic validation; hosted run pending): CI gains a `windows`
+  job on `windows-latest` that runs `tools/ci/run_windows_lane.py`, an explicit positive list of the OS-dependent tests
+  (anonymous job objects and process ownership, atomic replacement and sharing violations, Windows paths and JSON-escaped
+  backslashes, SQLite on NTFS, Photo Optimize Windows migration recovery, the production construction path and a Tk
+  construction smoke); 926 tests pass locally on Windows. It is a separate check name, never masks a failure, and is not
+  yet a required check. The startup-gate release-path test is made hermetic (it no longer depends on a leftover process
+  global WebUI manager replaying its ready event, which made the call's return value order-dependent).
+
 - Pinned development environment (audit P1-2, local deterministic validation): `requirements-dev.txt` is the one exact-pin
   authority for the gate tools (pytest, pytest-timeout, pytest-xvfb on Linux, ruff, mypy, types-requests); hosted CI
   installs it instead of unpinned `pip install pytest ...` lines, `run_pr_gate.py`'s tooling-blocker message names the

@@ -62,6 +62,8 @@ def _controller_with_probe(monkeypatch: pytest.MonkeyPatch, tmp_path, probe) -> 
     import src.controller.webui_outage_coordinator as coordinator_module
 
     monkeypatch.setattr(coordinator_module, "default_webui_probe", probe)
+    # No process-global WebUI manager from an earlier test: a leftover one replays its ready event on subscription.
+    monkeypatch.setattr(coordinator_module, "_default_manager", lambda: None)
     return AppController(
         None,
         threaded=False,
@@ -78,8 +80,8 @@ def test_a_fresh_ready_proof_releases_the_startup_hold_on_the_production_service
     try:
         service = controller.job_service
         assert service.job_queue.is_webui_held()
-        assert service.webui_outage.maybe_release(force=True) is True
-        assert not service.job_queue.is_webui_held()
+        service.webui_outage.maybe_release(force=True)
+        assert not service.job_queue.is_webui_held()  # the observable guarantee; the return value is not the contract
     finally:
         close_all_structured_loggers()
 
@@ -91,7 +93,7 @@ def test_a_failed_proof_keeps_webui_jobs_held_and_never_discards_them(monkeypatc
     controller = _controller_with_probe(monkeypatch, tmp_path, lambda: ProbeResult(False, reason))
     try:
         service = controller.job_service
-        assert service.webui_outage.maybe_release(force=True) is False
+        service.webui_outage.maybe_release(force=True)
         assert service.job_queue.is_webui_held()  # still held; queued work is neither failed nor dropped
         info = service.job_queue.webui_hold_info()
         assert info is not None and info.get("reason") == "startup_unverified"

@@ -126,6 +126,12 @@ execution is explicitly authorized.
   claimed by hosted CI; it stays opt-in local acceptance. See
   `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md` for the historical routing
   design this replaced.
+  The `windows` job (audit P1-3) runs the OS-dependent platform contract on a Windows runner
+  (`python tools/ci/run_windows_lane.py`, an explicit positive target list): process containment and
+  ownership, atomic replacement and sharing violations, Windows paths and JSON-escaped backslashes,
+  SQLite on NTFS, the production construction path and a Tk construction smoke. It never masks a
+  failure; whether it is a required check is a branch-protection decision. It does not replace
+  opt-in GPU/Forge/SVD hardware qualification.
   The full census executes in deterministic file-level shards (PR-DEVEX-CENSUS-140):
   three independent `full-suite-shard` jobs (own runner, Python process, Xvfb and
   JUnit) partition the active test files by `sha256(repo-relative path) % 3`, and the
