@@ -1,8 +1,17 @@
 # StableNew current state
 
-Updated: 2026-10-15
+Updated: 2026-10-16
 
 ## Repository
+
+- Crash-safe state writes (audit P0-5, local deterministic validation): the Learning experiment, Discovered-review,
+  feedback, run-metadata, UI-state, LoRA-manifest and preview/sidebar stores used `Path.write_text` (truncate then write),
+  so a hard reset mid-write left a zero-filled file (a real Learning `session.json` was found as 100,884 NUL bytes).
+  They now publish through `src/utils/atomic_io.py` (same-directory temp file, fsync, atomic replace with a bounded retry
+  for transient Windows sharing denials); a failure keeps the previous file and removes the temp file. A learning record
+  that cannot be appended is now logged as a warning and `append_record` returns `False`; `record_rating` raises so the
+  Review panel shows "Error saving rating" instead of caching a rating that was never stored. `ConfigManager` JSON writes
+  and the other lower-value writers are unchanged (follow-up). No new persistence authority or format change.
 
 - Photo Optimize historical result promotion (PR-IMG-PHOTO-223, local implementation): the Single
   Photo browser lists the imported original, current working baseline and each recorded run output.

@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_text
+
 
 def record_feedback(
     run_id: str,
@@ -47,5 +49,5 @@ def record_feedback(
     }
     existing.append(entry)
 
-    feedback_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic_write_text(feedback_path, json.dumps(existing, indent=2, ensure_ascii=False))
     return feedback_path

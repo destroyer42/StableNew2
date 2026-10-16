@@ -23,6 +23,7 @@ from src.gui.theme_v2 import (
 )
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.state.workspace_paths import workspace_paths
+from src.utils.atomic_io import atomic_write_text
 from src.utils.file_io import read_prompt_pack
 
 from .base_generation_panel_v2 import BaseGenerationPanelV2
@@ -1441,8 +1442,7 @@ class SidebarPanelV2(ttk.Frame):
                 "selected_packs": selected_packs,
                 "schema_version": "2.6",
             }
-            SIDEBAR_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            SIDEBAR_STATE_PATH.write_text(json.dumps(state, indent=2))
+            atomic_write_text(SIDEBAR_STATE_PATH, json.dumps(state, indent=2))
         except Exception as e:
             logger.warning(f"Failed to save sidebar state: {e}")
 

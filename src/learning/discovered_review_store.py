@@ -35,6 +35,7 @@ from src.learning.discovered_review_models import (
     _utc_now_iso,
 )
 from src.state.output_routing import resolve_output_artifact_path
+from src.utils.atomic_io import atomic_write_text
 
 logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -456,8 +457,7 @@ class DiscoveredReviewStore:
 
     @staticmethod
     def _write_json(path: Path, data: Any) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+        atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))
 
     @staticmethod
     def _read_json(path: Path) -> Any:

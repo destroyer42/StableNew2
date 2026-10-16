@@ -2266,8 +2266,9 @@ class LearningController:
             },
         )
 
-        # Write the record
-        self._learning_record_writer.append_record(record)
+        # Write the record; a rating that was not stored must never be reported (or cached) as saved.
+        if self._learning_record_writer.append_record(record) is False:
+            raise OSError("The rating could not be written to the learning records file; see the log for details.")
 
         # Update rating cache
         self._rating_cache[image_ref] = rating

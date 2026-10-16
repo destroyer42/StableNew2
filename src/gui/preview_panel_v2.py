@@ -39,6 +39,7 @@ from src.gui.view_contracts.workspace_density_contract import (
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.state.workspace_paths import workspace_paths
+from src.utils.atomic_io import atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -1565,8 +1566,7 @@ class PreviewPanelV2(ttk.Frame):
         """Save preview panel state to disk."""
         try:
             state = {"show_preview": self._show_preview_var.get(), "schema_version": "2.6"}
-            PREVIEW_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            PREVIEW_STATE_PATH.write_text(json.dumps(state, indent=2))
+            atomic_write_text(PREVIEW_STATE_PATH, json.dumps(state, indent=2))
         except Exception as e:
             logger.warning(f"Failed to save preview panel state: {e}")
 
