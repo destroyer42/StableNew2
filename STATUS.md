@@ -4,6 +4,16 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Pinned development environment (audit P1-2, local deterministic validation): `requirements-dev.txt` is the one exact-pin
+  authority for the gate tools (pytest, pytest-timeout, pytest-xvfb on Linux, ruff, mypy, types-requests); hosted CI
+  installs it instead of unpinned `pip install pytest ...` lines, `run_pr_gate.py`'s tooling-blocker message names the
+  install command, and `tests/system/test_dev_environment_pins.py` keeps it consistent with `pyproject.toml`,
+  pre-commit and the Windows runtime constraints. The dead `ttkbootstrap`/`tkinterdnd2` dependencies (imported nowhere)
+  are removed from `requirements.txt` and from the runtime constraints; a guard test requires every third-party module
+  `src` and the CI/runtime tools import to be declared (with a negative case). Also fixes a Windows-only defect in
+  `test_diagnose_asset_registry_cache_145` (JSON-escaped backslashes made its path assertions vacuous/impossible).
+  The LICENSE file and a single version number are owner decisions and are not changed here.
+
 - Phase 0 follow-ups (post-critique, local deterministic validation): the production startup hold now has a negative-case
   proof on the real construction path (a fresh ready probe releases it; unready, identity-mismatch and unreadable-options
   probes keep WebUI jobs held and queued, never failed or dropped). `docs/runbooks/ZOMBIE_PROCESS_RECOVERY.md` and

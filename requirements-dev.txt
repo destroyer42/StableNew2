@@ -1,0 +1,15 @@
+# Development and CI tooling (exact pins). Install with: pip install -r requirements.txt -r requirements-dev.txt
+#
+# This is the one authority for the tools that gate a change (lint, types, test plugins). Hosted CI and a developer
+# machine install the same set, so a fresh checkout can run `python tools/ci/run_pr_gate.py`. It deliberately does not
+# repeat runtime packages: those live in requirements*.txt, and the Windows runtime's exact pins in
+# constraints/windows-py314-cu130.txt (pytest, mypy and friends are pinned here, not in the runtime constraints).
+# A deliberate upgrade of any pin is its own reviewed change; tests/system/test_dev_environment_pins.py keeps this
+# file, pyproject.toml, .pre-commit-config.yaml and the workflows from drifting apart.
+
+pytest==9.1.1
+pytest-timeout==2.4.0
+pytest-xvfb==3.1.1; sys_platform == "linux"
+ruff==0.14.9
+mypy==2.4.0
+types-requests==2.33.0.20261006

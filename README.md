@@ -60,7 +60,9 @@ or downloaded at import time.
 
 ## Verify changes
 
-`pyproject.toml` is the only pytest configuration authority. Run:
+`pyproject.toml` is the only pytest configuration authority. Install the pinned gate tools once
+(`pip install -r requirements.txt -r requirements-dev.txt`; hosted CI installs the same files), then run
+`python tools/ci/run_pr_gate.py`, or the individual steps:
 
 ```text
 python tools/ci/check_repository_completeness.py

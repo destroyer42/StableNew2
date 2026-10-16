@@ -42,8 +42,8 @@ def preflight_tools() -> bool:
         file=sys.stderr,
     )
     print(
-        "Install the pinned tools or use the supported CI environment before "
-        "running the full PR gate.",
+        "Install the pinned tools with `pip install -r requirements-dev.txt` (or use the supported CI "
+        "environment) before running the full PR gate.",
         file=sys.stderr,
     )
     return False
