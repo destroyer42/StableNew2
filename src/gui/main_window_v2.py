@@ -764,10 +764,18 @@ class MainWindowV2:
                 frame = frame_or_factory(self.center_notebook)
             else:
                 frame = frame_or_factory
-        except Exception:
-            # Best-effort: fall back to a simple empty frame
+        except Exception as exc:
+            # A failed tab must be visible: log the traceback and show a placeholder that names the tab and the error
+            # (a silently empty tab looks like dead buttons and leaves nothing in the log).
+            logger.exception("Tab %r failed to build", tab_id)
             try:
                 frame = ttk.Frame(self.center_notebook)
+                ttk.Label(
+                    frame,
+                    text=f"The {title} tab failed to load: {type(exc).__name__}: {exc}\nSee the log for the full traceback.",
+                    justify="left",
+                    wraplength=600,
+                ).pack(anchor="nw", padx=16, pady=16)
             except Exception:
                 frame = tk.Frame(self.center_notebook)
         try:
