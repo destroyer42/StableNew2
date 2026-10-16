@@ -11,6 +11,16 @@ Updated: 2026-10-16
   uniquely, an autouse conftest fixture gives test-built managers a no-op container, and
   `tests/utils/test_job_object_isolation.py` proves one container cannot reach another's processes. No runtime,
   queue or ownership-rule change; no physical validation.
+- Main-green and silent-failure repairs (audit P0-6, local deterministic validation): `PyYAML` and `numpy` are declared
+  (`requirements.txt`, `pyproject.toml`; both were already pinned in the core runtime profile), which fixes the only red
+  test on the main census (`ModuleNotFoundError: yaml`). The Klein acceptance-driver test no longer derives a job id from
+  `time.time()` (it failed intermittently at a second boundary), and the review-feedback test writes its sidecar under
+  `tmp_path`, so the `/*.review.json` ignore rule that hid the leak is removed. `PipelineController`'s state-fallback no
+  longer calls the nonexistent `_extract_state_overrides()` inside a silent `except` (batch/output settings were always
+  defaults there; the dead blocks are deleted and the ceiling lowered to 1757; whether the GUI "batch runs" control should
+  apply on that path is an owner decision). A tab that fails to build is logged with its traceback and shows a placeholder
+  naming the error instead of an empty frame, and the Learning discovered-output scan now completes on the Tk thread via
+  the application controller's dispatcher and runs as a tracked non-daemon thread. No behavior change on healthy paths.
 
 - Photo Optimize historical result promotion (PR-IMG-PHOTO-223, local implementation): the Single
   Photo browser lists the imported original, current working baseline and each recorded run output.
