@@ -4,6 +4,14 @@ Updated: 2026-10-16
 
 ## Repository
 
+- CI census gate (PR-DEVEX-CI-160, local deterministic validation and required gate green): the sharded full census
+  (`full-suite`, three file-level shards) is now a blocking check for every executable change, alongside `required`;
+  nothing in the workflow uses `continue-on-error`. The affected-lane job and its per-lane routing are removed:
+  `tools/ci/validation_plan.py` only separates docs-only changes (cheap path, evidence reuse) from executable ones.
+  CI also runs on every push to main, jobs have timeouts, every third-party action is pinned to a commit SHA, and the
+  unused `codex-autofix` workflow (it ran fork code from an `issue_comment` trigger with repository secrets in scope)
+  and its runner are deleted. Branch protection on `main` is a repository setting applied separately by the owner.
+  See `docs/audits/2026-10-16_repo_audit_and_roadmap.md` (P0-2, P1-1).
 - Production startup gate wiring (audit P0-4, local deterministic validation and required gate green): the documented
   WebUI startup hold and NJR strictness were enabled only in `AppController._build_job_service()`, which production never
   runs (`AppController` adopts the `JobService` that `PipelineController` builds). `AppController` now enables the startup

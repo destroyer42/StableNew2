@@ -24,13 +24,12 @@ def test_ci_workflow_uses_named_required_smoke_script() -> None:
     assert "git diff --exit-code" in workflow
 
 
-def test_affected_ci_bounds_wall_time_and_uses_thread_test_timeout() -> None:
-    affected = _ci_section("  affected:", "  full-suite-shard:")
-    match = re.search(r"^    timeout-minutes: (\d+)$", affected, flags=re.MULTILINE)
+def test_census_shards_bound_wall_time_with_a_job_deadline_and_a_per_test_timeout() -> None:
+    shards = _ci_section("  full-suite-shard:", "  full-suite:")
+    match = re.search(r"^    timeout-minutes: (\d+)$", shards, flags=re.MULTILINE)
     assert match is not None
     assert 5 < int(match.group(1)) <= 30
-    assert "--timeout=300" in affected
-    assert "--timeout-method=thread" in affected
+    assert "--timeout=300" in " ".join(_census_shards_module().PYTEST_ARGS)
 
 
 def test_pytest_has_one_strict_configuration_authority() -> None:
@@ -91,12 +90,12 @@ def test_legacy_journey_lane_is_retired_and_workflows_are_intentional() -> None:
     assert "tests/system/test_shutdown_no_leaks.py" in shutdown
 
 
-def test_full_suite_lane_is_informational_and_not_fail_fast() -> None:
+def test_full_suite_lane_is_the_blocking_merge_gate_and_not_fail_fast() -> None:
     workflow = _read(".github/workflows/ci.yml")
     full_suite = workflow[workflow.index("  full-suite-shard:") :]
     shards = _census_shards_module()
 
-    assert full_suite.count("continue-on-error: true") == 2  # the shard job and the aggregate verdict
+    assert "continue-on-error" not in workflow  # PR-DEVEX-CI-160: the census blocks; no job masks its failure
     assert "--maxfail" not in full_suite and "--maxfail" not in " ".join(shards.PYTEST_ARGS)
     assert "pytest-timeout" in full_suite
     assert "--timeout=300" in shards.PYTEST_ARGS
@@ -106,13 +105,12 @@ def test_xvfb_action_commands_start_with_the_executable_not_a_comment() -> None:
     """xvfb-action hands the first `run:` line to xvfb-run; a leading comment exits 127."""
     workflow = _read(".github/workflows/ci.yml")
     blocks = re.findall(
-        r"uses: GabrielBB/xvfb-action@v1\n\s+with:\n\s+run: \|\n((?:\s{10,}.*\n?)+)", workflow
+        r"uses: GabrielBB/xvfb-action@[0-9a-f]{40}[^\n]*\n\s+with:\n\s+run: \|\n((?:\s{10,}.*\n?)+)", workflow
     )
-    assert len(blocks) >= 2
+    assert len(blocks) >= 1
     for block in blocks:
         first = next(line.strip() for line in block.splitlines() if line.strip())
         assert first.startswith("python "), first
-    assert "python -m pytest" in _ci_section("  affected:", "  full-suite-shard:")
 
 
 def _ci_section(start: str, end: str | None = None) -> str:
@@ -129,7 +127,7 @@ def test_ci_is_python_312_only_with_no_version_matrix() -> None:
     assert "python-version: [" not in workflow
     assert "3.11" not in workflow
     assert "3.12" not in workflow and "3.13" not in workflow
-    assert workflow.count('python-version: "3.14"') == 4  # required + affected + full-suite-shard + full-suite
+    assert workflow.count('python-version: "3.14"') == 3  # required + full-suite-shard + full-suite
 
 
 def test_census_shard_count_is_consistent_between_the_matrix_and_every_command() -> None:
@@ -147,26 +145,25 @@ def test_ci_runs_once_per_pull_request_head_including_stacked_prs() -> None:
     assert "pull_request:" in triggers
     assert 'branches: [ "**" ]' in triggers  # stacked PRs may target a feature branch
     assert "workflow_dispatch:" in triggers
-    assert "push:" not in triggers  # a branch push plus its PR would duplicate every run
+    assert "push:\n    branches: [ main ]" in triggers  # only pushes to main (a commit that bypasses a PR); feature-branch pushes would duplicate PR runs
 
 
 def test_superseded_ci_runs_are_cancelled_per_pull_request() -> None:
     concurrency = _ci_section("\nconcurrency:", "\njobs:")
 
-    assert "cancel-in-progress: true" in concurrency
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in concurrency
     assert "github.event.pull_request.number" in concurrency
 
 
-def test_ci_has_one_required_job_one_affected_lane_job_and_one_full_suite_job() -> None:
+def test_ci_has_one_required_job_and_a_sharded_blocking_census() -> None:
     jobs = _ci_section("\njobs:")
 
     assert re.findall(r"^  ([a-z][a-z-]*):\s*$", jobs, flags=re.MULTILINE) == [
         "required",
-        "affected",
         "full-suite-shard",
         "full-suite",
     ]
-    required = _ci_section("  required:", "  affected:")
+    required = _ci_section("  required:", "  full-suite-shard:")
     assert "continue-on-error" not in required  # the required gate is never masked
 
 
