@@ -6,3 +6,5 @@ requests-mock>=1.11.0
 ttkbootstrap>=1.10.0
 tkinterdnd2>=0.3.5
 psutil>=5.9.0
+numpy>=2.0.0
+PyYAML>=6.0.0

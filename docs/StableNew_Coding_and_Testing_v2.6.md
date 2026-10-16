@@ -74,10 +74,9 @@ GUI modal tests use the isolated `tk_root` fixture so masterless Tk variables
 and widgets share one Tcl interpreter, even when another test keeps a root alive.
 Scheduled callback failures must close the modal wait and reach pytest; error
 popups and desktop browser/viewer dispatch must be mocked at the owning test seam.
-Tk can catch pytest's signal-mode timeout exception inside a callback. The
-affected job therefore keeps its 300-second per-test budget with a thread timer
-and adds a 30-minute job deadline. A timed-out thread timer terminates the test
-process with failure; it does not convert a stall into a skipped or passing test.
+Tk can catch pytest's signal-mode timeout exception inside a callback. Each census
+shard therefore keeps its 300-second per-test budget and adds a 30-minute job
+deadline, so a stall fails the job; it is never converted into a skipped or passing test.
 
 ## Standard gate
 
@@ -113,44 +112,32 @@ execution is explicitly authorized.
   collection and the required positive-list smoke. Its pytest gates print one
   compact line on success and the complete pytest output on failure. Reuse
   exact-source green evidence; do not rerun it after docs-only edits.
-- **Level 3 - risk-proportionate GitHub CI (PR-DEVEX-CI-110).** Each pull-request head
-  runs one workflow on Python 3.14 whose routing comes from the repository-owned
-  `tools/ci/validation_plan.py` (base-to-head change set -> additive coarse lanes).
-  Docs-only changes take a cheap path with no Python environment. Every executable PR
-  runs the required gate (repository quality plus the small cross-boundary contract
-  suite in `tools/ci/run_required_smoke.py`), then only the affected lanes. Broad or
-  unbounded changes (dependencies, pytest/CI configuration, shared test
-  infrastructure, the validation policy itself, unknown impact) run the required gate
-  and then one full census, which subsumes the affected lanes. The one exception inside
-  `tools/ci` is the controller-surface ratchet baseline
-  (`tools/ci/controller_surface_baseline.json`, exempted by exact path as data checked by the
-  required gate): lowering a ceiling runs the required gate plus its ratchet test, never a census.
-  The full census also
-  runs on main Monday/Wednesday/Friday, on `workflow_dispatch`, before releases, and
-  for any PR labelled `full-census` or whose head commit carries `[full-census]`.
-  Branch pushes do not start a duplicate run, stacked PRs are covered, and a newer
-  head cancels the superseded run. Physical GPU/A1111/Forge/Comfy/SVD behavior is
-  never claimed by hosted CI; it stays opt-in local acceptance. See
-  `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md`.
+- **Level 3 - GitHub CI with a blocking full census (PR-DEVEX-CI-160).** Each pull-request
+  head runs one workflow on Python 3.14. `tools/ci/validation_plan.py` only separates
+  documentation-only changes from executable ones: docs-only changes take a cheap path with no
+  Python environment, and every executable change runs the required gate (repository quality
+  plus the small cross-boundary contract suite in `tools/ci/run_required_smoke.py`) and then
+  the full census. There is no per-lane routing: every active test file runs for every
+  executable change. The census also runs on every push to main (a commit that bypasses a PR is
+  never untested), on main Monday/Wednesday/Friday and on `workflow_dispatch`. A docs-only
+  follow-up commit over a head whose `required` and `full-suite` checks are green reuses that
+  evidence. Feature-branch pushes do not start a duplicate run, stacked PRs are covered, and a
+  newer head cancels the superseded run. Physical GPU/A1111/Forge/Comfy/SVD behavior is never
+  claimed by hosted CI; it stays opt-in local acceptance. See
+  `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md` for the historical routing
+  design this replaced.
   The full census executes in deterministic file-level shards (PR-DEVEX-CENSUS-140):
   three independent `full-suite-shard` jobs (own runner, Python process, Xvfb and
   JUnit) partition the active test files by `sha256(repo-relative path) % 3`, and the
   aggregate `full-suite` job fails closed unless every active file is assigned to
-  exactly one shard, every shard artifact is present and every shard passed. The
-  required gate and affected-lane routing are unchanged, and census elapsed time means
-  the slowest shard's wall, not the sum of worker times. For a complete local census
+  exactly one shard, every shard artifact is present and every shard passed. Census elapsed
+  time means the slowest shard's wall, not the sum of worker times. For a complete local census
   run `python tools/ci/run_sharded_census.py` (two isolated worker checkouts by
   default). See `docs/Subsystems/Testing/PR-DEVEX-CENSUS-140_Parallel_Sharded_Full_Census.md`.
 
 Use `python -m pytest -q <targets>` for focused changed behavior. Run
 real-backend acceptance only when the PR outcome requires it. Do not claim a
 full green suite when environment-dependent tests were not executed.
-
-Affected-routing efficiency debt: broad directory targets can coexist with
-individual files already inside those directories. Coverage and routing stay
-unchanged; target compaction belongs to a separate DEVEX package. CI-authority
-changes still select the full census, which subsumes affected coverage, rather
-than silently bypassing the normal policy to force an affected job.
 
 Evidence reuse: exact-SHA green focused or required evidence remains reusable
 while the relevant source is unchanged. A docs-only commit does not require
@@ -172,14 +159,12 @@ Use `docs/CODEX_WORK_PACKAGE_TEMPLATE.md` for the standard closeout shape.
 
 ## Integration verdict
 
-GitHub required CI runs the required gate once, on Python 3.14, and it must pass
-before integration. The affected-lane job and the broader configured suite are
-informational lanes (the census runs only for broad/unbounded changes, on schedule,
-on dispatch and on request): each runs once to completion (no `--maxfail`) with `pytest-timeout` and a quiet
-summary (`-q -rfE --tb=short`), and its failures are
-reported but do not block merges or broaden an unrelated PR. Because the stale-fixture debt
-was repaired in PR-TEST-TRUTH-200, a failure there is a signal to investigate; promote
-the lane to required only after it is proven green. Tests must isolate host
+GitHub required CI must pass before integration: the `required` gate (once, on Python 3.14) and, for
+every executable change, the `full-suite` census verdict. Both are blocking checks; no job
+masks its failure. The census runs each shard once to completion (no `--maxfail`) with
+`pytest-timeout` and a quiet summary (`-q -rfE --tb=short`). A failure is a signal to fix the
+test or the code, never to re-run until green: a flaky test is repaired or quarantined with
+an owner and an expiry, not ignored. Tests must isolate host
 state: PromptPacks via `STABLENEW_PROMPTPACK_DIR`/injected `packs_dir`, runtime transitions via
 fake owner managers, and never read or write the owner's real data.
 
@@ -323,11 +308,10 @@ models or alter user data.
 ## Current evidence
 
 Current exact collection and smoke counts are taken from the latest required CI
-recorded in `STATUS.md` or the applicable acceptance report. The broader suite
-and bounded Ruff/mypy debt remain informational and non-blocking for unrelated
-PRs while their known legacy or environment-dependent failures remain. Update
-the recorded evidence only after comparable required CI or a documented
-acceptance run.
+recorded in `STATUS.md` or the applicable acceptance report. The full census is a
+blocking merge gate (PR-DEVEX-CI-160); a red census on main is repaired before further
+feature work. Update the recorded evidence only after comparable required CI or a
+documented acceptance run.
 
 Runtime-transition tests must inject endpoint-presence probes and use temporary
 state: a test must not inherit a developer's live A1111 or Comfy endpoint. Cover

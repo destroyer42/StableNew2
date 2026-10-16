@@ -230,28 +230,11 @@ class PipelineController(CorePipelineController):
         except Exception as exc:
             _logger.debug("Could not extract randomization plan: %s", exc)
 
-        # Extract batch settings from state
+        # Batch/output settings use their defaults on this path. The state-override extraction that used to be
+        # attempted here no longer exists (its call raised AttributeError into a silent except), so nothing was ever
+        # read from state; whether the GUI "batch runs" control should apply here is an owner decision.
         batch_settings = BatchSettings()
-        try:
-            overrides = self._extract_state_overrides()
-            batch_size = getattr(overrides, "batch_size", 1) or 1
-            batch_runs = self._get_batch_runs()
-            batch_settings = BatchSettings(batch_size=batch_size, batch_runs=batch_runs)
-        except Exception as exc:
-            _logger.debug("Could not extract batch settings: %s", exc)
-
-        # Extract output settings from state
         output_settings = OutputSettings()
-        try:
-            overrides = self._extract_state_overrides()
-            output_dir = getattr(overrides, "output_dir", "") or "output"
-            filename_pattern = getattr(overrides, "filename_pattern", "") or "{seed}"
-            output_settings = OutputSettings(
-                base_output_dir=output_dir,
-                filename_template=filename_pattern,
-            )
-        except Exception as exc:
-            _logger.debug("Could not extract output settings: %s", exc)
 
         # PR-CORE-E: Extract config sweep plan from state
         config_variant_plan = None
@@ -734,7 +717,7 @@ class PipelineController(CorePipelineController):
         self._job_service = (
             job_service
             if job_service is not None
-            else JobService(queue, runner, history_store, history_service=history_service)
+            else JobService(queue, runner, history_store, history_service=history_service, require_normalized_records=True)
         )
         if self._job_lifecycle_logger and hasattr(self._job_service, "set_job_lifecycle_logger"):
             try:
