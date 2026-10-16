@@ -56,6 +56,49 @@ def test_the_production_path_refuses_jobs_without_a_normalized_record(production
         service.submit_job_with_run_mode(job)
 
 
+def _controller_with_probe(monkeypatch: pytest.MonkeyPatch, tmp_path, probe) -> AppController:
+    """Build the production path with the coordinator's default probe replaced (the probe is captured at construction)."""
+
+    import src.controller.webui_outage_coordinator as coordinator_module
+
+    monkeypatch.setattr(coordinator_module, "default_webui_probe", probe)
+    return AppController(
+        None,
+        threaded=False,
+        structured_logger=StructuredLogger(output_dir=str(tmp_path / "structured_logs")),
+    )
+
+
+def test_a_fresh_ready_proof_releases_the_startup_hold_on_the_production_service(monkeypatch, tmp_path) -> None:
+    """The negative case of the gate: holding is only safe if the real release path works on the same service."""
+
+    from src.controller.webui_outage_coordinator import ProbeResult
+
+    controller = _controller_with_probe(monkeypatch, tmp_path, lambda: ProbeResult(True, "ready", "http://127.0.0.1:7860"))
+    try:
+        service = controller.job_service
+        assert service.job_queue.is_webui_held()
+        assert service.webui_outage.maybe_release(force=True) is True
+        assert not service.job_queue.is_webui_held()
+    finally:
+        close_all_structured_loggers()
+
+
+@pytest.mark.parametrize("reason", ["endpoint_unreachable", "identity_mismatch", "options_unreadable"])
+def test_a_failed_proof_keeps_webui_jobs_held_and_never_discards_them(monkeypatch, tmp_path, reason: str) -> None:
+    from src.controller.webui_outage_coordinator import ProbeResult
+
+    controller = _controller_with_probe(monkeypatch, tmp_path, lambda: ProbeResult(False, reason))
+    try:
+        service = controller.job_service
+        assert service.webui_outage.maybe_release(force=True) is False
+        assert service.job_queue.is_webui_held()  # still held; queued work is neither failed nor dropped
+        info = service.job_queue.webui_hold_info()
+        assert info is not None and info.get("reason") == "startup_unverified"
+    finally:
+        close_all_structured_loggers()
+
+
 class _InjectedService:
     """Minimal injected JobService (the pattern other AppController tests use) that records gate calls."""
 
