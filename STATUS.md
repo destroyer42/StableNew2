@@ -4,6 +4,13 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Phase 0 follow-ups (post-critique, local deterministic validation): the production startup hold now has a negative-case
+  proof on the real construction path (a fresh ready probe releases it; unready, identity-mismatch and unreadable-options
+  probes keep WebUI jobs held and queued, never failed or dropped). `docs/runbooks/ZOMBIE_PROCESS_RECOVERY.md` and
+  `scripts/kill_orphan_pythons.ps1` are deleted: both force-killed any `python` older than an hour or over 10 GB (a
+  long-running managed Forge matches), which contradicts the rule that StableNew never terminates a process its own
+  manager did not launch. Nothing referenced either file.
+
 - Crash-safe state writes (audit P0-5, local deterministic validation): the Learning experiment, Discovered-review,
   feedback, run-metadata, UI-state, LoRA-manifest and preview/sidebar stores used `Path.write_text` (truncate then write),
   so a hard reset mid-write left a zero-filled file (a real Learning `session.json` was found as 100,884 NUL bytes).
