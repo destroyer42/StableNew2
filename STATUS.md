@@ -4,6 +4,13 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Process-container isolation (audit P0-3, local deterministic validation): `WindowsJobObject` is now an anonymous job
+  object (its name is a diagnostic label only). Previously every `WebUIProcessManager` opened the same session-wide
+  named job `StableNewJob-webui_process_manager`, so `stop_webui()` in a test, tool or second instance could terminate
+  another instance's managed Forge (reproduced with two handles to one name). Each manager now labels its container
+  uniquely, an autouse conftest fixture gives test-built managers a no-op container, and
+  `tests/utils/test_job_object_isolation.py` proves one container cannot reach another's processes. No runtime,
+  queue or ownership-rule change; no physical validation.
 - Main-green and silent-failure repairs (audit P0-6, local deterministic validation): `PyYAML` and `numpy` are declared
   (`requirements.txt`, `pyproject.toml`; both were already pinned in the core runtime profile), which fixes the only red
   test on the main census (`ModuleNotFoundError: yaml`). The Klein acceptance-driver test no longer derives a job id from
