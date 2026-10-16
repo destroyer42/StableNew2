@@ -1,48 +1,47 @@
 name: StableNew CI
 
 # One workflow per pull-request head: every PR base is covered (including stacked PRs that
-# target another feature branch), so ordinary branch pushes do not start a duplicate run.
-# Use workflow_dispatch for an explicit rerun, recovery, a full census of any ref, or release validation.
+# target another feature branch). A push to main also runs it, so a commit that bypasses a PR is never untested.
 #
-# Risk-proportionate validation (PR-DEVEX-CI-110). tools/ci/validation_plan.py (repository-owned policy)
+# The full census is the merge gate (PR-DEVEX-CI-160). tools/ci/validation_plan.py (repository-owned policy)
 # classifies the base-to-head change set; this workflow only consumes its plan:
 #   docs-only         -> cheap checks, no Python environment, no tests
-#   executable PR     -> `required` (repository quality + cross-boundary contract gate), then the affected lanes
-#   broad / unbounded -> `required`, then ONE full census (it subsumes the affected lanes; they are not run twice)
-# The full census also runs on main three times a week (cron below; cadence is policy, edit it here),
-# on manual dispatch, and for any PR carrying the `full-census` label or a `[full-census]` head-commit marker.
+#   executable change -> `required` (repository quality + cross-boundary contract gate), then ONE blocking full census
+#                        (three independent file-level shards plus the aggregate `full-suite` verdict)
+# There is no per-lane routing: every active test file runs for every executable change.
+# The census also runs on main three times a week (cron below), on every push to main and on manual dispatch.
 on:
   pull_request:
     branches: [ "**" ]
+  push:
+    branches: [ main ]
   workflow_dispatch:
   schedule:
-    - cron: "0 7 * * 1,3,5"  # Mon/Wed/Fri 07:00 UTC; raise the frequency here if routing proves unstable
+    - cron: "0 7 * * 1,3,5"  # Mon/Wed/Fri 07:00 UTC; cadence is policy, edit it here
 
-# A newer head for the same PR (or manual ref) supersedes the run still in flight.
+# A newer head for the same PR supersedes the run still in flight; runs for main are never cancelled.
 permissions:
   contents: read
   checks: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Required gate: repository truth + lint/types + the cross-boundary contract suite. This job MUST pass and is
   # always present (its check name is the branch-protection identity), but it is cheap for docs-only changes.
   required:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
       docs_only: ${{ steps.plan.outputs.docs_only }}
       cheap_path: ${{ steps.plan.outputs.cheap_path }}
       full_census: ${{ steps.plan.outputs.full_census }}
-      run_affected: ${{ steps.plan.outputs.run_affected }}
-      lanes: ${{ steps.plan.outputs.lanes }}
-      targets: ${{ steps.plan.outputs.targets }}
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       with:
         fetch-depth: 0
 
@@ -65,16 +64,14 @@ jobs:
         PREVIOUS_GREEN: ${{ steps.prev.outputs.green }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
       run: |
         set -euo pipefail
         args=(--event "$EVENT" --github-output "$GITHUB_OUTPUT")
         if [ "$EVENT" = "pull_request" ]; then
-          args+=(--base "$BASE_SHA" --head "$HEAD_SHA" "--commit-message=$(git log -1 --format=%B "$HEAD_SHA")")
-          for label in $PR_LABELS; do args+=("--label=$label"); done  # '=' form: a value is never parsed as an option
+          args+=(--base "$BASE_SHA" --head "$HEAD_SHA")
           if [ "$PREVIOUS_GREEN" = "true" ]; then args+=(--before "$BEFORE_SHA" --previous-green); fi
         else
-          args+=(--files tools/ci/validation_plan.py)  # periodic/manual runs are always a full census
+          args+=(--files tools/ci/validation_plan.py)  # periodic, manual and post-merge runs are always a full census
         fi
         python3 tools/ci/validation_plan.py "${args[@]}" | tee "$RUNNER_TEMP/plan.json"  # outside the checkout: it must stay clean
 
@@ -93,7 +90,7 @@ jobs:
 
     - name: Set up Python 3.14
       if: steps.plan.outputs.cheap_path != 'true'
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
       with:
         python-version: "3.14"
 
@@ -141,71 +138,25 @@ jobs:
         test -z "$(git status --porcelain --untracked-files=all)"
 
     - name: Upload validation plan
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       if: always()
       with:
         name: validation-plan
         path: ${{ runner.temp }}/plan.json
 
-  # Affected deterministic lanes for a bounded executable PR. Starts only after the required gate succeeds
-  # and is skipped when the full census runs (the census subsumes it). Informational like the census: it
-  # reports without blocking until the routing is proven.
-  affected:
-    needs: required
-    if: needs.required.outputs.run_affected == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    continue-on-error: true
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Python 3.14
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.14"
-
-    - name: Install system deps for Tk (required for GUI tests)
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y python3-tk xvfb
-
-    - name: Install pip tools
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest pytest-xvfb pytest-timeout ruff==0.14.9
-
-    - name: Write the affected pytest targets
-      env:
-        AFFECTED_TARGETS: ${{ needs.required.outputs.targets }}
-      run: |
-        printf '%s\n' "$AFFECTED_TARGETS" > affected-targets.txt
-        cat affected-targets.txt
-
-    # Tk callbacks can catch the signal-mode failure; the thread timer exits the test process.
-    # The action passes the first `run:` line to xvfb-run, so it must be the executable.
-    - name: Run the affected lanes (Xvfb)
-      uses: GabrielBB/xvfb-action@v1
-      with:
-        run: |
-          python -m pytest -q -rfE --tb=short --timeout=300 --timeout-method=thread @affected-targets.txt
-
-  # Informational gate: the broader configured suite (headless-safe GUI v2, fake-backend integration, tools,
-  # video). PR-DEVEX-CENSUS-140: the census runs as THREE independent file-level shards (separate runner, Python
+  # Blocking gate: the full configured suite (headless-safe GUI v2, fake-backend integration, tools, video).
+  # PR-DEVEX-CENSUS-140: the census runs as THREE independent file-level shards (separate runner, Python
   # process, Xvfb and JUnit each) so its wall time is the slowest shard, not the whole suite. The partition is
   # `sha256(repo-relative test path) % 3` over the same active test files pytest collects (tools/ci/census_shards.py);
   # a new test file is assigned automatically. Each shard runs ordinary pytest to completion (no --maxfail) with a
-  # per-test timeout. The aggregate `full-suite` job below is the human-visible census verdict: it fails closed if
-  # any shard artifact is missing, any active file is unassigned or doubly assigned, or any shard failed, and it
-  # publishes one merged census. It runs only for broad/unbounded changes, periodically on main, on manual
-  # dispatch and on explicit request, and only after the required gate succeeds. Informational: not a merge gate.
+  # per-test timeout. The aggregate `full-suite` job below is the census verdict and the branch-protection identity:
+  # it fails closed if any shard artifact is missing, any active file is unassigned or doubly assigned, or any shard
+  # failed, and it publishes one merged census. It runs for every executable change after the required gate succeeds.
   full-suite-shard:
     needs: required
     if: needs.required.outputs.full_census == 'true'
     runs-on: ubuntu-latest
-    continue-on-error: true
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -213,10 +164,10 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
       with:
         python-version: "3.14"
 
@@ -232,13 +183,13 @@ jobs:
         pip install pytest pytest-xvfb pytest-timeout ruff==0.14.9
 
     - name: Run census shard ${{ matrix.shard }} of 3 (Xvfb)
-      uses: GabrielBB/xvfb-action@v1
+      uses: GabrielBB/xvfb-action@86d97bde4a65fe9b290c0b3fb92c2c4ed0e5302d  # v1
       with:
         run: |
           python tools/ci/census_shards.py run-shard --shards 3 --index ${{ matrix.shard }} --out-dir census-shard-results
 
     - name: Upload shard results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       if: always()
       with:
         name: census-shard-${{ matrix.shard }}
@@ -248,19 +199,19 @@ jobs:
     needs: [required, full-suite-shard]
     if: ${{ always() && needs.required.result == 'success' && needs.required.outputs.full_census == 'true' }}
     runs-on: ubuntu-latest
-    continue-on-error: true
+    timeout-minutes: 10
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
       with:
         python-version: "3.14"
 
     - name: Download shard results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
       with:
         pattern: census-shard-*
         merge-multiple: true
@@ -272,7 +223,7 @@ jobs:
         python tools/ci/census_shards.py verify --shards 3 --results-dir census-results --json census-summary.json | tee -a "$GITHUB_STEP_SUMMARY"
 
     - name: Upload full test results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       if: always()
       with:
         name: full-test-results
