@@ -571,6 +571,9 @@ class AppController:
             self.job_service = pipeline_job_service
         elif self.job_service is None:
             self.job_service = self._build_job_service()
+        outage = getattr(self.job_service, "webui_outage", None)
+        if job_service is None and outage is not None:  # not injected: restored WebUI jobs await a readiness proof
+            outage.enable_startup_gate()
 
         if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
             self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
@@ -2486,7 +2489,6 @@ class AppController:
             job_lifecycle_logger=self._job_lifecycle_logger,
             require_normalized_records=True,
         )
-        service.webui_outage.enable_startup_gate()  # restored WebUI jobs await a readiness proof
         return service
 
     def _setup_queue_callbacks(self) -> None:
@@ -4155,109 +4157,6 @@ class AppController:
             RuntimeError: Always - pipeline_config execution is disabled.
         """
         raise RuntimeError("Legacy runner path is disabled in NJR-only mode")
-
-    def _run_pipeline_from_tab(self, pipeline_tab: Any, pipeline_config: Any) -> Any:
-        """DEPRECATED (PR-CORE1-12): Legacy tab-based pipeline_config execution.
-
-        This method routed execution based on pipeline_tab flags. No longer used
-        since GUI V2 uses PipelineController for all execution.
-
-        Consider removing in future cleanup after GUI V1 removal.
-        """
-        flags = {
-            "txt2img": self._coerce_bool(getattr(pipeline_tab, "txt2img_enabled", None)),
-            "img2img": self._coerce_bool(getattr(pipeline_tab, "img2img_enabled", None)),
-            "adetailer": self._coerce_bool(getattr(pipeline_tab, "adetailer_enabled", None)),
-            "upscale": self._coerce_bool(getattr(pipeline_tab, "upscale_enabled", None)),
-        }
-        factor, model, tile_size = self._get_pipeline_tab_upscale_params(pipeline_tab)
-        prompt = self._get_pipeline_tab_prompt(pipeline_tab)
-        if flags["upscale"] and not (flags["txt2img"] or flags["img2img"] or flags["adetailer"]):
-            input_image_path = getattr(pipeline_tab, "input_image_path", "") or ""
-            return self._run_standalone_upscale(
-                input_image_path=input_image_path,
-                factor=factor,
-                model=model,
-                tile_size=tile_size,
-                prompt=prompt,
-            )
-
-        if flags["txt2img"] and flags["upscale"]:
-            return self._run_txt2img_then_upscale(
-                prompt=prompt,
-                factor=factor,
-                model=model,
-                tile_size=tile_size,
-            )
-
-        raise RuntimeError("Legacy pipeline tab execution is disabled in NJR-only mode")
-
-    def _run_standalone_upscale(
-        self,
-        *,
-        input_image_path: str,
-        factor: float,
-        model: str,
-        tile_size: int,
-        prompt: str,
-    ) -> dict[str, Any]:
-        if not input_image_path:
-            raise ValueError("No input image provided for standalone upscale.")
-        image_path = Path(input_image_path)
-        if not image_path.exists():
-            raise FileNotFoundError(f"Input image not found: {image_path}")
-        api = self._ensure_webui_api()
-        kwargs: dict[str, Any] = {
-            "image": str(image_path),
-            "upscale_factor": factor,
-            "model": model,
-            "tile_size": tile_size,
-            "prompt": prompt,
-        }
-        self._append_log("[controller] Performing standalone upscale via WebUI API.")
-        response = api.upscale_image(**kwargs)
-        return {
-            "mode": "standalone_upscale",
-            "input_image": str(image_path),
-            "factor": factor,
-            "model": model,
-            "tile_size": tile_size,
-            "prompt": prompt,
-            "response": response,
-        }
-
-    def _run_txt2img_then_upscale(
-        self,
-        *,
-        prompt: str,
-        factor: float,
-        model: str,
-        tile_size: int,
-    ) -> dict[str, Any]:
-        api = self._ensure_webui_api()
-        txt_kwargs: dict[str, Any] = {"prompt": prompt or ""}
-        txt_response = api.txt2img(**txt_kwargs)
-        self._append_log("[controller] Completed txt2img stage via WebUI API.")
-        images = txt_response.get("images") or []
-        upscaled_results: list[dict[str, Any]] = []
-        for image in images:
-            upscale_kwargs: dict[str, Any] = {
-                "image": image,
-                "upscale_factor": factor,
-                "model": model,
-                "tile_size": tile_size,
-                "prompt": prompt,
-            }
-            upscaled_results.append(api.upscale_image(**upscale_kwargs))
-        return {
-            "mode": "txt2img_then_upscale",
-            "prompt": prompt,
-            "factor": factor,
-            "model": model,
-            "tile_size": tile_size,
-            "txt2img": txt_response,
-            "upscaled": upscaled_results,
-        }
 
     def _run_pipeline_via_runner_only(self, pipeline_config: Any) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy fallback execution - NO LONGER USED.
