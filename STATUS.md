@@ -8,7 +8,10 @@ Updated: 2026-10-16
   job on `windows-latest` that runs `tools/ci/run_windows_lane.py`, an explicit positive list of the OS-dependent tests
   (anonymous job objects and process ownership, atomic replacement and sharing violations, Windows paths and JSON-escaped
   backslashes, SQLite on NTFS, Photo Optimize Windows migration recovery, the production construction path and a Tk
-  construction smoke); 926 tests pass locally on Windows. It is a separate check name, never masks a failure, and is not
+  construction smoke); 926 tests pass locally on Windows through the same isolated gate runner CI uses. The first hosted
+  run found six tests that only passed from the repository root (they opened `src/...`/`packs/...` relative to the working
+  directory); they are now anchored to the repository, and the runner tolerates scratch-directory cleanup errors that
+  Windows long-path tests leave behind. It is a separate check name, never masks a failure, and is not
   yet a required check. The startup-gate release-path test is made hermetic (it no longer depends on a leftover process
   global WebUI manager replaying its ready event, which made the call's return value order-dependent).
 

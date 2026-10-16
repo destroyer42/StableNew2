@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]  # anchor to the repository, not the working directory
+
 CORE_FILES = [
-    Path("src/controller/core_pipeline_controller.py"),
-    Path("src/controller/pipeline_controller.py"),
-    Path("src/controller/job_service.py"),
-    Path("src/pipeline/executor.py"),
-    Path("src/pipeline/pipeline_runner.py"),
+    ROOT / "src/controller/core_pipeline_controller.py",
+    ROOT / "src/controller/pipeline_controller.py",
+    ROOT / "src/controller/job_service.py",
+    ROOT / "src/pipeline/executor.py",
+    ROOT / "src/pipeline/pipeline_runner.py",
 ]
 
 FORBIDDEN_TOKENS = (

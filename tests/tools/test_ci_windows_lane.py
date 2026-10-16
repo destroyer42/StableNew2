@@ -41,6 +41,8 @@ def test_the_lane_covers_each_platform_contract_it_exists_for() -> None:
 def test_the_lane_uses_the_isolated_pollution_detecting_runner_with_a_per_test_timeout() -> None:
     source = (ROOT / "tools" / "ci" / "run_windows_lane.py").read_text(encoding="utf-8")
     assert "run_pytest_gate" in source and "subprocess" not in source  # no second pytest runner
+    runner = (ROOT / "tools" / "ci" / "run_collection_gate.py").read_text(encoding="utf-8")
+    assert "ignore_cleanup_errors=True" in runner  # Windows long/locked test paths must not fail a green gate on cleanup
     command = lane.build_command()
     assert "--timeout=300" in command and "-x" not in command  # runs to completion, like the census
 

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]  # anchor to the repository, not the working directory
+
 FILES = [
-    Path("src/ai/settings_generator_contract.py"),
-    Path("src/ai/settings_generator_driver.py"),
-    Path("src/ai/settings_generator_adapter.py"),
-    Path("src/controller/settings_suggestion_controller.py"),
+    ROOT / "src/ai/settings_generator_contract.py",
+    ROOT / "src/ai/settings_generator_driver.py",
+    ROOT / "src/ai/settings_generator_adapter.py",
+    ROOT / "src/controller/settings_suggestion_controller.py",
 ]
 
 
