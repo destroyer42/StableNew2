@@ -75,10 +75,18 @@ kernel32.SetInformationJobObject.argtypes = [
 
 
 class WindowsJobObject:
+    """One anonymous Windows job object owned by exactly one container.
+
+    ``name`` is only a diagnostic label. The job object itself is never named: a named job object is a
+    session-wide kernel object, so a second container (another StableNew process, a test, a tool) that used
+    the same name would silently open the *same* job and ``kill_all`` would terminate the first owner's
+    processes. An anonymous job can only be reached through the handle this instance holds.
+    """
+
     def __init__(self, name: str, memory_limit_mb: float | None = None) -> None:
         self._name = name
         self._memory_limit_mb = memory_limit_mb
-        self._handle = kernel32.CreateJobObjectW(None, self._name)
+        self._handle = kernel32.CreateJobObjectW(None, None)
         if not self._handle:
             error = ctypes.get_last_error()
             raise OSError(f"CreateJobObjectW failed: {error}")

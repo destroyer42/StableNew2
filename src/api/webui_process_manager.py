@@ -7,6 +7,7 @@ import socket
 import subprocess
 import threading
 import time
+import uuid
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -245,7 +246,7 @@ class WebUIProcessManager:
         """Create an OS-level process container for deterministic WebUI lifecycle."""
         try:
             self._process_container = build_process_container(
-                "webui_process_manager",
+                f"webui_process_manager-{uuid.uuid4().hex}",
                 ProcessContainerConfig(enabled=True),
             )
         except Exception as exc:

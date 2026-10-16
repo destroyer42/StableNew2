@@ -147,6 +147,30 @@ def _pin_host_runtime_autostart_off(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _never_create_real_process_containers_for_webui_managers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A test-built ``WebUIProcessManager`` must never own a real OS job object / cgroup.
+
+    ``stop_webui()`` terminates every process in its container. Tests that mark a fake process as owned and stop
+    the manager therefore exercise a real ``TerminateJobObject``/cgroup kill unless the container is a no-op.
+    Container behavior itself is covered by ``tests/utils/test_job_object_isolation.py`` and
+    ``tests/utils/test_process_container_v2.py``, which call the factory directly. Tests that need a specific
+    container still replace this with their own ``monkeypatch.setattr`` (they run after this fixture).
+    """
+
+    try:
+        import src.api.webui_process_manager as webui_process_manager
+        from src.utils.process_container_v2 import NullProcessContainer
+
+        monkeypatch.setattr(
+            webui_process_manager,
+            "build_process_container",
+            lambda job_id, config: NullProcessContainer(job_id, config),
+        )
+    except Exception:  # pragma: no cover - isolation must never break collection
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _isolate_global_prompt_user_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Pytest never reads or writes the operator's per-user Global Prompt store.
 
