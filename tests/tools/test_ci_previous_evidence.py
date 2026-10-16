@@ -17,7 +17,7 @@ def run(name: str, conclusion: str | None, *, status: str = "completed", id: int
     return {"id": id, "name": name, "status": status, "conclusion": conclusion, "app": {"slug": app}}
 
 
-GREEN = [run("required", "success", id=10), run("affected", "skipped", id=11), run("full-suite", "success", id=12)]
+GREEN = [run("required", "success", id=10), run("full-suite", "success", id=12)]
 
 
 def decide(runs: list[dict], *, ancestor: bool = True) -> pe.Decision:
@@ -26,53 +26,46 @@ def decide(runs: list[dict], *, ancestor: bool = True) -> pe.Decision:
 
 def test_all_selected_checks_green_is_eligible() -> None:
     assert decide(GREEN).green
-    assert decide([run("required", "success"), run("affected", "success"), run("full-suite", "skipped")]).green
+    assert decide([run("required", "success"), run("full-suite", "skipped")]).green
 
 
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "timed_out", "action_required", "neutral", "stale", "startup_failure", None])
 def test_a_completed_but_not_successful_census_blocks_reuse(conclusion: str | None) -> None:
     """The historical bug: full-suite was status=completed, conclusion=failure and still counted as green."""
 
-    runs = [run("required", "success"), run("affected", "skipped"), run("full-suite", conclusion)]
+    runs = [run("required", "success"), run("full-suite", conclusion)]
     decision = decide(runs)
     assert not decision.green and "full-suite" in decision.reason
 
 
-@pytest.mark.parametrize("conclusion", ["failure", "cancelled", "timed_out", "action_required", None])
-def test_a_completed_but_not_successful_affected_lane_blocks_reuse(conclusion: str | None) -> None:
-    decision = decide([run("required", "success"), run("affected", conclusion), run("full-suite", "skipped")])
-    assert not decision.green and "affected" in decision.reason
-
-
 @pytest.mark.parametrize("status", ["queued", "in_progress", "waiting", "pending"])
 def test_in_flight_jobs_cannot_be_reused(status: str) -> None:
-    for name in ("required", "affected", "full-suite"):
-        runs = [run(n, "success" if n != name else None, status=status if n == name else "completed") for n in ("required", "affected", "full-suite")]
+    for name in ("required", "full-suite"):
+        runs = [run(n, "success" if n != name else None, status=status if n == name else "completed") for n in ("required", "full-suite")]
         assert not decide(runs).green, name
 
 
 @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "timed_out", "skipped", None])
 def test_a_required_check_that_is_not_success_blocks_reuse(conclusion: str | None) -> None:
-    assert not decide([run("required", conclusion), run("affected", "skipped"), run("full-suite", "skipped")]).green
+    assert not decide([run("required", conclusion), run("full-suite", "skipped")]).green
 
 
 def test_missing_checks_block_reuse() -> None:
     assert not decide([]).green
-    assert not decide([run("required", "success")]).green  # no affected / full-suite records at all (e.g. a pre-CI-110 head)
-    assert not decide([run("required", "success"), run("affected", "skipped")]).green
+    assert not decide([run("required", "success")]).green  # no full-suite record at all (e.g. a pre-CI-110 head)
 
 
 def test_the_latest_github_actions_check_run_wins_not_the_first_match() -> None:
-    old_failure_new_success = [run("required", "failure", id=1), run("required", "success", id=9), run("affected", "skipped"), run("full-suite", "skipped")]
+    old_failure_new_success = [run("required", "failure", id=1), run("required", "success", id=9), run("full-suite", "skipped")]
     assert decide(old_failure_new_success).green
-    old_success_new_failure = [run("required", "success", id=1), run("required", "failure", id=9), run("affected", "skipped"), run("full-suite", "skipped")]
+    old_success_new_failure = [run("required", "success", id=1), run("required", "failure", id=9), run("full-suite", "skipped")]
     assert not decide(old_success_new_failure).green
     rerun = [*GREEN, run("full-suite", "failure", id=99)]  # a later failing rerun supersedes the earlier success
     assert not decide(rerun).green
 
 
 def test_only_github_actions_check_runs_count() -> None:
-    forged = [run("required", "success", app="some-other-app"), run("affected", "skipped"), run("full-suite", "skipped")]
+    forged = [run("required", "success", app="some-other-app"), run("full-suite", "skipped")]
     assert not decide(forged).green
     assert decide([*forged, run("required", "success", id=5)]).green  # the Actions-owned run is what counts
 

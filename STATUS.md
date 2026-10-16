@@ -12,6 +12,40 @@ Updated: 2026-10-16
   that cannot be appended is now logged as a warning and `append_record` returns `False`; `record_rating` raises so the
   Review panel shows "Error saving rating" instead of caching a rating that was never stored. `ConfigManager` JSON writes
   and the other lower-value writers are unchanged (follow-up). No new persistence authority or format change.
+- CI census gate (PR-DEVEX-CI-160, local deterministic validation and required gate green): the sharded full census
+  (`full-suite`, three file-level shards) is now a blocking check for every executable change, alongside `required`;
+  nothing in the workflow uses `continue-on-error`. The affected-lane job and its per-lane routing are removed:
+  `tools/ci/validation_plan.py` only separates docs-only changes (cheap path, evidence reuse) from executable ones.
+  CI also runs on every push to main, jobs have timeouts, every third-party action is pinned to a commit SHA, and the
+  unused `codex-autofix` workflow (it ran fork code from an `issue_comment` trigger with repository secrets in scope)
+  and its runner are deleted. Branch protection on `main` is a repository setting applied separately by the owner.
+  See `docs/audits/2026-10-16_repo_audit_and_roadmap.md` (P0-2, P1-1).
+- Production startup gate wiring (audit P0-4, local deterministic validation and required gate green): the documented
+  WebUI startup hold and NJR strictness were enabled only in `AppController._build_job_service()`, which production never
+  runs (`AppController` adopts the `JobService` that `PipelineController` builds). `AppController` now enables the startup
+  gate on whichever service the non-injected path ends up with, and `PipelineController`'s default service requires
+  normalized records, so restored WebUI jobs again wait for a fresh readiness+identity proof and a job without an NJR is
+  refused. An injected service is untouched. Two `build_v2_app` queue tests now simulate the proof's release explicitly.
+  The dead `_run_pipeline_from_tab` / `_run_standalone_upscale` / `_run_txt2img_then_upscale` chain (no callers; it called
+  the WebUI API directly) is deleted and the `app_controller.py` ceiling is lowered to 7312. A wiring test through the
+  real construction path proves one JobService, an active hold and NJR strictness. No physical validation.
+- Process-container isolation (audit P0-3, local deterministic validation): `WindowsJobObject` is now an anonymous job
+  object (its name is a diagnostic label only). Previously every `WebUIProcessManager` opened the same session-wide
+  named job `StableNewJob-webui_process_manager`, so `stop_webui()` in a test, tool or second instance could terminate
+  another instance's managed Forge (reproduced with two handles to one name). Each manager now labels its container
+  uniquely, an autouse conftest fixture gives test-built managers a no-op container, and
+  `tests/utils/test_job_object_isolation.py` proves one container cannot reach another's processes. No runtime,
+  queue or ownership-rule change; no physical validation.
+- Main-green and silent-failure repairs (audit P0-6, local deterministic validation): `PyYAML` and `numpy` are declared
+  (`requirements.txt`, `pyproject.toml`; both were already pinned in the core runtime profile), which fixes the only red
+  test on the main census (`ModuleNotFoundError: yaml`). The Klein acceptance-driver test no longer derives a job id from
+  `time.time()` (it failed intermittently at a second boundary), and the review-feedback test writes its sidecar under
+  `tmp_path`, so the `/*.review.json` ignore rule that hid the leak is removed. `PipelineController`'s state-fallback no
+  longer calls the nonexistent `_extract_state_overrides()` inside a silent `except` (batch/output settings were always
+  defaults there; the dead blocks are deleted and the ceiling lowered to 1757; whether the GUI "batch runs" control should
+  apply on that path is an owner decision). A tab that fails to build is logged with its traceback and shows a placeholder
+  naming the error instead of an empty frame, and the Learning discovered-output scan now completes on the Tk thread via
+  the application controller's dispatcher and runs as a tracked non-daemon thread. No behavior change on healthy paths.
 
 - Photo Optimize historical result promotion (PR-IMG-PHOTO-223, local implementation): the Single
   Photo browser lists the imported original, current working baseline and each recorded run output.

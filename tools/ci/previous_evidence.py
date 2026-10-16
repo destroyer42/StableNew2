@@ -8,8 +8,8 @@ Reuse is allowed only when ALL of the following hold, otherwise the normal valid
 * the current PR base is already an ancestor of the previous head (reused integration evidence was earned on a tree that
   already contains the current base; it is not reused once the base has advanced past the previously validated head);
 * the latest GitHub-Actions ``required`` check run for the previous head concluded ``success``;
-* the latest ``affected`` and ``full-suite`` check runs for the previous head concluded ``success`` or ``skipped`` (skipped
-  means the plan did not select that job). A check merely having ``status == completed`` is never enough: failure, cancelled,
+* the latest ``full-suite`` check run for the previous head concluded ``success`` or ``skipped`` (skipped means the plan
+  did not select the census). A check merely having ``status == completed`` is never enough: failure, cancelled,
   timed_out, action_required, neutral, stale, an in-progress run or a missing run all block reuse;
 * only check runs created by the GitHub Actions app count, and the latest one per name wins (not an arbitrary first match).
 
@@ -29,7 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 GITHUB_ACTIONS_APP = "github-actions"
 REQUIRED_CHECK = "required"
-SELECTED_CHECKS = ("affected", "full-suite")
+SELECTED_CHECKS = ("full-suite",)
 SELECTED_OK = frozenset({"success", "skipped"})
 
 
