@@ -717,7 +717,7 @@ class PipelineController(CorePipelineController):
         self._job_service = (
             job_service
             if job_service is not None
-            else JobService(queue, runner, history_store, history_service=history_service)
+            else JobService(queue, runner, history_store, history_service=history_service, require_normalized_records=True)
         )
         if self._job_lifecycle_logger and hasattr(self._job_service, "set_job_lifecycle_logger"):
             try:

@@ -4,6 +4,15 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Production startup gate wiring (audit P0-4, local deterministic validation and required gate green): the documented
+  WebUI startup hold and NJR strictness were enabled only in `AppController._build_job_service()`, which production never
+  runs (`AppController` adopts the `JobService` that `PipelineController` builds). `AppController` now enables the startup
+  gate on whichever service the non-injected path ends up with, and `PipelineController`'s default service requires
+  normalized records, so restored WebUI jobs again wait for a fresh readiness+identity proof and a job without an NJR is
+  refused. An injected service is untouched. Two `build_v2_app` queue tests now simulate the proof's release explicitly.
+  The dead `_run_pipeline_from_tab` / `_run_standalone_upscale` / `_run_txt2img_then_upscale` chain (no callers; it called
+  the WebUI API directly) is deleted and the `app_controller.py` ceiling is lowered to 7312. A wiring test through the
+  real construction path proves one JobService, an active hold and NJR strictness. No physical validation.
 - Process-container isolation (audit P0-3, local deterministic validation): `WindowsJobObject` is now an anonymous job
   object (its name is a diagnostic label only). Previously every `WebUIProcessManager` opened the same session-wide
   named job `StableNewJob-webui_process_manager`, so `stop_webui()` in a test, tool or second instance could terminate
