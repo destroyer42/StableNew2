@@ -40,7 +40,7 @@ def _host(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _args(tmp_path: Path, smoke: str, **extra) -> argparse.Namespace:
     return argparse.Namespace(
-        smoke=smoke, reports_dir=tmp_path / f"rep-{smoke}-{extra.pop('tag', '0')}", job_id="",
+        smoke=smoke, reports_dir=tmp_path / f"rep-{smoke}-{extra.pop('tag', '0')}", job_id=f"img116-klein-test-{smoke.lower()}",
         approved_intent_sha256=extra.pop("approved_intent_sha256", ""),
         timeout_seconds=60.0, dry=extra.pop("dry", True), forge_data_dir=tmp_path / "data", source_artifact=extra.pop("source", None),
         endpoint="http://127.0.0.1:7871", **extra,

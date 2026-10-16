@@ -54,9 +54,10 @@ def test_save_review_feedback_persists_record(tmp_path) -> None:
 
 def test_list_recent_review_feedback_returns_newest_first(tmp_path) -> None:
     controller = _build_controller(tmp_path)
+    image = str(tmp_path / "img_a.png")  # a bare relative name would write its review sidecar into the repo root
     controller.save_review_feedback(
         {
-            "image_path": "img_a.png",
+            "image_path": image,
             "rating": 2,
             "quality_label": "poor",
             "base_prompt": "a",
@@ -65,7 +66,7 @@ def test_list_recent_review_feedback_returns_newest_first(tmp_path) -> None:
     )
     controller.save_review_feedback(
         {
-            "image_path": "img_a.png",
+            "image_path": image,
             "rating": 5,
             "quality_label": "excellent",
             "base_prompt": "a",
@@ -73,7 +74,7 @@ def test_list_recent_review_feedback_returns_newest_first(tmp_path) -> None:
         }
     )
 
-    rows = controller.list_recent_review_feedback(limit=5, image_path="img_a.png")
+    rows = controller.list_recent_review_feedback(limit=5, image_path=image)
     assert len(rows) == 2
     assert rows[0]["rating"] == 5
     assert rows[1]["rating"] == 2
