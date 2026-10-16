@@ -125,6 +125,11 @@ to narrate a commit.
 
 ## 7. Agent operating-model pointer
 
+Product/engineering assessments start at [docs/assessments/README.md](docs/assessments/README.md):
+Lightweight, Focused, or Comprehensive, with v1.2 critical-control and
+method-diverse challenge requirements. Dated reports support decisions; they
+do not supersede `STATUS.md` or authorize implementation or publication.
+
 `docs/AGENT_OPERATING_MODEL.md` defines the single-lane default workflow
 (one primary Claude Code or Codex session; specialists optional), local
 feature-branch lifecycle, worktree ownership, checkpoint/stop discipline,

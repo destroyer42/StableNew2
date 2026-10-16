@@ -5,6 +5,11 @@ from the task row, and do not expand into adjacent subsystems without
 evidence. Read `STATUS.md`, this map, and only the relevant section of
 `docs/ARCHITECTURE_v2.6.md` before exploring implementation.
 
+Product/value/priority assessment: [assessment entry point](assessments/README.md)
+-> [v1.2 playbook](assessments/ASSESSMENT_PLAYBOOK.md) ->
+[template](assessments/ASSESSMENT_TEMPLATE.md). Select Lightweight, Focused, or
+Comprehensive; dated reports are evidence, not current priority authority.
+
 ## Canonical runtime
 
 - Forge/Comfy still-image qualification (offline, no runtime driver):

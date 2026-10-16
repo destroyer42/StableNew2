@@ -1,10 +1,20 @@
 # StableNew current state
 
-Updated: 2026-10-15
+Updated: 2026-10-16
+
+Assessment guidance: [v1.2 entry point](docs/assessments/README.md) and
+[dated findings/correction](docs/assessments/COMPREHENSIVE_ASSESSMENT_2026-10-15.md#2026-10-16-integration-verification-and-governance-correction).
+GitHub rechecked 2026-10-16: [`main` is protected](https://api.github.com/repos/destroyer42/StableNew2/branches/main),
+with `required` enforced for non-admins; rulesets are empty, and protection-detail
+access returns 403 (privileged bypass remains unverified). The earlier
+"unprotected main" finding is superseded. Unresolved assessment findings concern
+privileged AutoFix, CI job/enforcement gaps, Windows process ownership, production
+startup admission and Learning file writes. These are dated assessment findings,
+not confirmed incident causes or authorization to fix them; refresh before selection.
 
 ## Repository
 
-- Photo Optimize historical result promotion (PR-IMG-PHOTO-223, local implementation): the Single
+- Photo Optimize historical result promotion (PR-IMG-PHOTO-223, merged PR #106): the Single
   Photo browser lists the imported original, current working baseline and each recorded run output.
   Selection previews only. Confirmed promotion chooses Image + recorded prompt/settings or Image only
   + retain current prompt/settings; exact membership, managed containment, image readability, available
@@ -14,7 +24,7 @@ Updated: 2026-10-15
   legacy metadata produces explicit limitations; historical artifacts and frozen NJRs are preserved.
   No physical generation. See `docs/Subsystems/Image/PR-IMG-PHOTO-223_Historical_Result_Promotion.md`.
 
-- Photo Optimize scoped editing (PR-IMG-PHOTO-222, local implementation): Single Photo edits the
+- Photo Optimize scoped editing (PR-IMG-PHOTO-222, merged PR #105): Single Photo edits the
   active draft chosen independently through the Active Single Photo chooser; batch highlights survive
   active changes, workspace switches, refresh and restart. Batch Edit applies only checked fields after a complete confirmed
   diff. Live Pipeline copy supports groups and individual exported fields, with explicit Custom geometry
@@ -51,7 +61,7 @@ Updated: 2026-10-15
   semantics while preserving saved settings and frozen NJRs. No support expansion, controller changes or physical work.
   See `docs/Subsystems/Image/PR-IMG-CNET-211_OpenPose_Output_Integrity_and_Reliability.md`.
 
-- GPU device-loss dispatch containment (PR-QUEUE-GPU-180, draft PR #100, local deterministic validation): after the
+- GPU device-loss dispatch containment (PR-QUEUE-GPU-180, merged PR #100; deterministic validation): after the
   2026-10-12 incident (Forge stayed HTTP-responsive on a lost RTX 4070 Ti and 14 queued jobs were consumed), the first
   failed GPU-dependent job that shows a device fault or typed outage suspicion triggers one bounded, read-only
   `nvidia-smi` enumeration; only host-reported device loss confirms. A confirmed loss quarantines every GPU-dependent
@@ -155,7 +165,7 @@ Updated: 2026-10-15
   and Review jobs are unchanged. Transient session, off-Tk worker, no new queue/runner/history; no physical
   validation. See `docs/Subsystems/Video/PR-VID-BATCH-200_MultiSource_Workflow_Batch.md`.
 
-- Motion source readiness (PR-VID-196, PR #104 open, locally validated; not merged): the Video Workflow tab gains a read-only
+- Motion source readiness (PR-VID-196, merged PR #104; locally validated): the Video Workflow tab gains a read-only
   readiness section that shows the exact prepared source image and crop rectangle (one side-effect-free transform
   shared with queue-time preparation, so preview and published PNG are pixel- and byte-identical), bounded
   off-Tk driving-video facts (reported dimensions/fps/frames/duration kept apart from measured decoded preview
