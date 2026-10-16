@@ -145,7 +145,7 @@ def test_promotion_recomputes_auto_and_preserves_custom(tmp_path, policy, expect
         effective_prompt="portrait",
         effective_negative_prompt="",
         stages=["img2img"],
-        config_snapshot=asset.baseline.config,
+        config_snapshot={**asset.baseline.config, "model": "test-model", "vae": ""},
         job_ids=["job"],
     )
     promoted = store.promote_latest_output_as_baseline(asset.asset_id)
@@ -256,7 +256,7 @@ def test_migration_preserves_queued_inputs_and_history_and_is_idempotent(tmp_pat
         source_output_paths=[str(image(tmp_path / "old_result.png"))],
         prompt_mode="append", prompt_delta="", negative_prompt_mode="append",
         negative_prompt_delta="", effective_prompt="old prompt", effective_negative_prompt="",
-        stages=["img2img"], config_snapshot=asset.baseline.config, job_ids=["old_job"],
+        stages=["img2img"], config_snapshot={**asset.baseline.config, "model": "test-model", "vae": ""}, job_ids=["old_job"],
     )
     asset = legacy.promote_latest_output_as_baseline(asset.asset_id)
     history_before = [entry.to_dict() for entry in asset.history]

@@ -3,7 +3,6 @@ from __future__ import annotations
 import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
@@ -17,10 +16,11 @@ from src.photo_optimize.settings import (
 )
 
 from .photo_optimize_layout import PhotoOptimizeLayoutMixin
+from .photo_optimize_results import PhotoOptimizeResultsMixin
 from .photo_optimize_scope import PhotoOptimizeScopeMixin
 
 
-class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin, ttk.Frame):
+class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin, ttk.Frame):
     def __init__(
         self,
         master: tk.Misc,
@@ -50,7 +50,11 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
         self._current_asset: PhotoOptimizeAsset | None = None
         self._restored_asset_id: str | None = None
         self._restored_asset_ids: list[str] | None = None
-        self._history_index_by_row: list[int] = []
+        self._result_candidates = []
+        self._result_preview_executor = None
+        self._result_preview_future = None
+        self._result_preview_poll_id = None
+        self._result_preview_token = 0
         self._suspend_asset_persist = False
         self._app_state_resource_listener: Any = None
         self._app_state_visibility_listener: Any = None
@@ -78,6 +82,8 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
         self.img2img_sampler_var = tk.StringVar()
         self.img2img_scheduler_var = tk.StringVar(value="normal")
         self.show_image_previews_var = tk.BooleanVar(value=True)
+        self.result_status_var = tk.StringVar()
+        self.promotion_mode_var = tk.StringVar(value="image_only")
         self.edit_scope_var = tk.StringVar(value="Single Photo")
         self.img2img_steps_var = tk.IntVar(value=20)
         self.img2img_cfg_var = tk.DoubleVar(value=7.0)
@@ -378,11 +384,10 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
         self._current_asset = None
         self.active_photo_combo.set("")
         self._refresh_scope_selection()
-        self.original_preview.clear()
-        self.latest_preview.clear()
+        self._clear_result_preview()
         self.meta_label.config(text="Metadata: n/a")
         self.history_list.delete(0, tk.END)
-        self._history_index_by_row = []
+        self._result_candidates = []
         self._set_text(self.baseline_prompt_text, "")
         self._set_text(self.baseline_negative_text, "")
         self._set_text(self.notes_text, "")
@@ -457,81 +462,8 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
         finally:
             self._suspend_asset_persist = False
 
-    def _refresh_preview(self, asset: PhotoOptimizeAsset, history_index: int | None = None) -> None:
-        preference = self.__dict__.get("show_image_previews_var")
-        show = preference is None or preference.get()
-        subject = {"positive_prompt": asset.baseline.prompt, "negative_prompt": asset.baseline.negative_prompt,
-                   "name": asset.source_filename}
-        resolver = self._visibility_resolver()
-        visible = show and resolver.is_visible(subject)
-        frame = self.__dict__.get("image_previews_frame")
-        if frame is not None:
-            frame.grid() if show else frame.grid_remove()
-        if visible:
-            self.original_preview.set_image_from_path(Path(asset.managed_original_path))
-        else:
-            self.original_preview.clear()
-        history_entry = None
-        if history_index is None:
-            selected = self.history_list.curselection()
-            if selected and int(selected[0]) < len(self._history_index_by_row):
-                history_index = self._history_index_by_row[int(selected[0])]
-        if history_index is not None and 0 <= history_index < len(asset.history):
-            history_entry = asset.history[history_index]
-        elif asset.history:
-            history_entry = asset.history[-1]
-        history_visible = False
-        if history_entry and history_entry.output_paths:
-            history_visible = resolver.is_visible({
-                "positive_prompt": history_entry.effective_prompt,
-                "negative_prompt": history_entry.effective_negative_prompt,
-                "name": Path(history_entry.output_paths[-1]).name,
-                "description": str((history_entry.config_snapshot, history_entry.prompt_delta,
-                                    history_entry.negative_prompt_delta)),
-            })
-        if visible and history_visible:
-            self.latest_preview.set_image_from_path(Path(history_entry.output_paths[-1]))
-        else:
-            self.latest_preview.clear()
-        last_run = asset.history[-1].run_id if asset.history else "none"
-        working_name = (
-            Path(asset.current_input_path).name
-            if asset.current_input_path
-            else asset.source_filename
-        )
-        self.meta_label.config(
-            text=resolver.redact_text((
-                f"Asset: {asset.source_filename}\n"
-                f"Working image: {working_name}\n"
-                f"Model: {asset.baseline.model or '(pipeline fallback)'} | "
-                f"VAE: {asset.baseline.vae or 'Automatic'}\n"
-                f"Editing this photo only | {len(self._selected_asset_ids(batch_all=False))} selected\n"
-                f"Geometry: {asset.baseline.geometry_policy} | "
-                f"{self.img2img_width_var.get()} x {self.img2img_height_var.get()}\n"
-                f"History entries: {len(asset.history)} | Last run: {last_run}"
-            ), item=subject)
-        )
 
-    def _populate_history(self, asset: PhotoOptimizeAsset) -> None:
-        self.history_list.delete(0, tk.END)
-        self._history_index_by_row = []
-        for idx, entry in enumerate(reversed(asset.history)):
-            display_index = len(asset.history) - idx - 1
-            label = f"{entry.created_at} | {entry.run_id} | {', '.join(entry.stages or [])}"
-            self.history_list.insert(tk.END, label)
-            self._history_index_by_row.append(display_index)
 
-    def _on_history_select(self, _event: tk.Event) -> None:
-        if self._current_asset is None:
-            return
-        idxs = list(self.history_list.curselection())
-        if not idxs:
-            return
-        row = int(idxs[0])
-        if row < 0 or row >= len(self._history_index_by_row):
-            return
-        history_index = self._history_index_by_row[row]
-        self._refresh_preview(self._current_asset, history_index=history_index)
 
     def _selected_asset_ids(self, *, batch_all: bool) -> list[str]:
         if batch_all:
@@ -561,27 +493,7 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
             "Prompt interrogation is not wired in this MVP. Set the baseline prompt manually.",
         )
 
-    def _promote_latest_result(self) -> None:
-        if self._current_asset is None:
-            messagebox.showwarning("No asset", "Select an asset first.")
-            return
-        try:
-            self.store.promote_latest_output_as_baseline(self._current_asset.asset_id)
-            self._show_asset(self._current_asset.asset_id)
-            messagebox.showinfo("Promoted", "Latest result promoted as the working baseline.")
-        except Exception as exc:
-            messagebox.showerror("Promote failed", str(exc))
 
-    def _revert_baseline(self) -> None:
-        if self._current_asset is None:
-            messagebox.showwarning("No asset", "Select an asset first.")
-            return
-        try:
-            self.store.revert_baseline(self._current_asset.asset_id)
-            self._show_asset(self._current_asset.asset_id)
-            messagebox.showinfo("Reverted", "Baseline reverted to the previous snapshot.")
-        except Exception as exc:
-            messagebox.showerror("Revert failed", str(exc))
 
     def _show_batch_logic_help(self) -> None:
         messagebox.showinfo(
@@ -1165,6 +1077,7 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin,
             )
 
     def destroy(self) -> None:
+        self._dispose_result_preview()
         if self._operation_poll_id is not None:
             self.after_cancel(self._operation_poll_id)
         if self._operation_executor is not None:

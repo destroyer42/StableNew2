@@ -184,6 +184,7 @@ def test_photo_optimize_completion_records_asset_history_and_refreshes_ui(tmp_pa
                             "input_image_path": asset.managed_original_path,
                             "effective_prompt": "portrait, straight teeth",
                             "effective_negative_prompt": "blurry, extra fingers",
+                            "geometry_policy": "custom",
                             "config_snapshot": {"img2img": {"denoising_strength": 0.2}},
                             "stages": ["img2img"],
                         }
@@ -200,4 +201,6 @@ def test_photo_optimize_completion_records_asset_history_and_refreshes_ui(tmp_pa
     assert reloaded is not None
     assert len(reloaded.history) == 1
     assert Path(reloaded.history[0].output_paths[0]).exists()
+    assert reloaded.history[0].geometry_policy == "custom"
+    assert reloaded.history[0].output_sha256[reloaded.history[0].output_paths[0]]
     assert refreshed == [[asset.asset_id]]

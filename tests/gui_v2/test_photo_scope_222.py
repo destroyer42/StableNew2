@@ -5,6 +5,7 @@ import tkinter as tk
 from unittest.mock import Mock, patch
 
 import pytest
+from PIL import Image
 
 from src.gui.views.photo_optimize_editors import pipeline_copy_dialog, review_dialog
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
@@ -32,9 +33,13 @@ def pump(root, tab):
     until = time.monotonic() + 10
     while time.monotonic() < until:
         root.update()
-        if tab._operation_future is None and tab._operation_poll_id is None:
+        if (
+            tab._operation_future is None
+            and tab._operation_poll_id is None
+            and tab._result_preview_poll_id is None
+        ):
             root.update()
-            if tab._operation_future is None:
+            if tab._operation_future is None and tab._result_preview_poll_id is None:
                 return
         time.sleep(0.01)
     raise AssertionError("Photo worker failed to settle")
@@ -146,7 +151,7 @@ def test_preview_preference_and_scope_restart_do_not_change_assets(tk_root, phot
         assert tab.meta_label.winfo_manager() == "grid"
         assert tab.meta_label.cget("text").startswith("Asset:")
         assert tab.history_list.winfo_manager() == "grid"
-        assert tab.history_list.size() == 1
+        assert tab.history_list.size() == 3  # original, working, retained empty history entry
         assert tab.image_previews_frame.winfo_manager() == ""
         tab.edit_workspaces.select(tab.batch_workspace)
         tk_root.update()
@@ -162,7 +167,7 @@ def test_preview_preference_and_scope_restart_do_not_change_assets(tk_root, phot
         assert restarted.meta_label.winfo_manager() == "grid"
         assert restarted.meta_label.cget("text").startswith("Asset:")
         assert restarted.history_list.winfo_manager() == "grid"
-        assert restarted.history_list.size() == 1
+        assert restarted.history_list.size() == 3
         assert restarted.image_previews_frame.winfo_manager() == ""
         assert restarted.edit_scope_var.get() == "Batch Edit"
         assert set(restarted._selected_asset_ids(batch_all=False)) == set(ids)
@@ -171,9 +176,10 @@ def test_preview_preference_and_scope_restart_do_not_change_assets(tk_root, phot
         asset.baseline.prompt = "nsfw"
         store.save_asset(asset)
         restarted._show_asset(ids[0])
-        with patch.object(restarted.original_preview, "set_image_from_path") as load:
+        with patch.object(restarted.original_preview, "set_image") as load:
             restarted.show_image_previews_var.set(True)
             restarted.on_content_visibility_mode_changed("sfw")
+            pump(tk_root, restarted)
             load.assert_not_called()
         assert restarted.image_previews_frame.winfo_manager() == "grid"
         assert restarted.preview_frame.winfo_manager() == "grid"
@@ -271,23 +277,25 @@ def test_pipeline_copy_dialog_can_select_exactly_one_field(tk_root, photos):
 
 
 def test_history_previews_use_effective_prompts_and_selected_entry(tk_root, photos):
-    from pathlib import Path
-
     store, ids = photos
     asset = store.get_asset(ids[0])
+    safe = store.outputs_dir(asset.asset_id) / "safe-output.png"
+    flagged = store.outputs_dir(asset.asset_id) / "output.png"
+    Image.new("RGB", (16, 16), "blue").save(safe)
+    Image.new("RGB", (16, 16), "red").save(flagged)
     asset.history = [
         PhotoOptimizeHistoryEntry(
             "safe",
             "today",
             str(asset.current_input_path),
-            output_paths=["safe-output.png"],
+            output_paths=[str(safe)],
             effective_prompt="landscape",
         ),
         PhotoOptimizeHistoryEntry(
             "flagged",
             "today",
             str(asset.current_input_path),
-            output_paths=["output.png"],
+            output_paths=[str(flagged)],
             effective_prompt="nude portrait",
         ),
     ]
@@ -301,32 +309,49 @@ def test_history_previews_use_effective_prompts_and_selected_entry(tk_root, phot
         tk_root.update()
         assert tab._current_asset_id == ids[0]
         with (
-            patch.object(tab.latest_preview, "set_image_from_path") as load,
+            patch.object(tab.latest_preview, "set_image") as load,
             patch.object(tab.latest_preview, "clear") as clear,
         ):
+
+            def select_history(index):
+                row = next(
+                    i
+                    for i, c in enumerate(tab._result_candidates)
+                    if c.kind == "history" and c.history_index == index
+                )
+                tab.history_list.selection_clear(0, "end")
+                tab.history_list.selection_set(row)
+
+            select_history(1)
             tab.on_content_visibility_mode_changed("sfw")
+            pump(tk_root, tab)
             load.assert_not_called()
             clear.assert_called()
             tab.show_image_previews_var.set(False)
             tab._toggle_image_previews()
             tab.show_image_previews_var.set(True)
             tab._toggle_image_previews()
+            pump(tk_root, tab)
             load.assert_not_called()
-            # History list is newest first. Selecting the safe entry permits only its output.
-            tab.history_list.selection_set(1)
+            # Selecting the safe entry permits only its validated output.
+            select_history(0)
             tab._on_history_select(None)
-            load.assert_called_once_with(Path("safe-output.png"))
+            pump(tk_root, tab)
+            load.assert_called_once()
+            assert load.call_args.args[0].getpixel((0, 0)) == (0, 0, 255)
             load.reset_mock()
             tab.show_image_previews_var.set(False)
             tab._toggle_image_previews()
             load.assert_not_called()
             tab.show_image_previews_var.set(True)
             tab._toggle_image_previews()
-            load.assert_called_once_with(Path("safe-output.png"))
+            pump(tk_root, tab)
+            load.assert_called_once()
+            assert load.call_args.args[0].getpixel((0, 0)) == (0, 0, 255)
             load.reset_mock()
-            tab.history_list.selection_clear(0, "end")
-            tab.history_list.selection_set(0)
+            select_history(1)
             tab._on_history_select(None)
+            pump(tk_root, tab)
             load.assert_not_called()
         assert store.sidecar_path(ids[0]).read_bytes() == before
     finally:

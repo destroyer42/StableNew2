@@ -22,6 +22,7 @@ from .models import (
     default_stage_defaults,
 )
 from .paths import io_path
+from .results import digest, list_candidates, prepare_promotion
 from .settings import decoded_geometry, resolve_geometry
 
 PHOTO_OPTIMIZE_ROOT: Path = _wp.photo_optimize_root(create=False)
@@ -182,6 +183,8 @@ class PhotoOptimizeStore:
             original_path_at_import=str(source.resolve()),
             managed_original_path=str(destination),
             baseline=baseline,
+            original_baseline=deepcopy(baseline),
+            original_sha256=digest(destination),
         )
         return self.save_asset(asset)
 
@@ -204,21 +207,32 @@ class PhotoOptimizeStore:
             asset.baseline = baseline
         return self.save_asset(asset)
 
-    def append_baseline_snapshot(
-        self, asset_id: str, *, reason: str
-    ) -> PhotoOptimizeBaselineSnapshot:
+    def list_result_candidates(self, asset_id):
         asset = self.get_asset(asset_id)
-        if asset is None:
-            raise KeyError(asset_id)
-        snapshot = PhotoOptimizeBaselineSnapshot(
-            snapshot_id=f"baseline_{uuid.uuid4().hex[:8]}",
-            created_at=_utc_now(),
-            reason=reason,
-            baseline=PhotoOptimizeBaseline.from_dict(asset.baseline.to_dict()),
-        )
-        asset.baseline_snapshots.append(snapshot)
-        self.save_asset(asset)
-        return snapshot
+        if asset is None or asset.asset_id != asset_id:
+            raise ValueError("Photo identity is missing or invalid")
+        return list_candidates(asset)
+
+    def prepare_result_promotion(self, asset_id, candidate, *, mode):
+        return prepare_promotion(self, asset_id, candidate, mode=mode)
+
+    def apply_result_promotion(self, plan):
+        fresh = prepare_promotion(self, plan.asset_id, plan.candidate, mode=plan.mode)
+        if (fresh.fingerprint != plan.fingerprint or fresh.image_sha256 != plan.image_sha256
+                or fresh.after.to_dict() != plan.after.to_dict()):
+            raise ValueError("Photo or result changed since review; nothing promoted, review again")
+        asset = self.get_asset(plan.asset_id)
+        if asset is None or digest(self.sidecar_path(plan.asset_id)) != plan.fingerprint:
+            raise ValueError("Photo changed since review; nothing promoted")
+        if not fresh.changed:
+            return asset
+        asset.baseline_snapshots.append(PhotoOptimizeBaselineSnapshot(
+            snapshot_id=f"baseline_{uuid.uuid4().hex[:8]}", created_at=_utc_now(),
+            reason=f"promote {plan.candidate.label()} ({plan.mode})",
+            baseline=deepcopy(asset.baseline),
+        ))
+        asset.baseline = deepcopy(fresh.after)
+        return self.save_asset(asset)
 
     def promote_latest_output_as_baseline(self, asset_id: str) -> PhotoOptimizeAsset:
         asset = self.get_asset(asset_id)
@@ -226,25 +240,10 @@ class PhotoOptimizeStore:
             raise KeyError(asset_id)
         if not asset.history or not asset.history[-1].output_paths:
             raise ValueError("Asset has no optimize output to promote")
-        decoded_geometry(asset.history[-1].output_paths[-1])
-        self.append_baseline_snapshot(asset_id, reason="promote_latest_output")
-        asset = self.get_asset(asset_id)
-        assert asset is not None
-        latest = asset.history[-1]
-        promoted = PhotoOptimizeBaseline.from_dict(asset.baseline.to_dict())
-        promoted.prompt = latest.effective_prompt
-        promoted.negative_prompt = latest.effective_negative_prompt
-        promoted.config = deepcopy(latest.config_snapshot or {})
-        promoted.stage_defaults = {
-            "img2img": "img2img" in latest.stages,
-            "adetailer": "adetailer" in latest.stages,
-            "upscale": "upscale" in latest.stages,
-        }
-        promoted.working_image_path = latest.output_paths[-1]
-        promoted.source = "restored"
-        promoted.config = resolve_geometry(promoted, promoted.working_image_path)
-        asset.baseline = promoted
-        return self.save_asset(asset)
+        candidate = next(c for c in list_candidates(asset) if c.kind == "history"
+                         and c.history_index == len(asset.history) - 1
+                         and c.output_index == len(asset.history[-1].output_paths) - 1)
+        return self.apply_result_promotion(self.prepare_result_promotion(asset_id, candidate, mode="recorded"))
 
     def revert_baseline(self, asset_id: str) -> PhotoOptimizeAsset:
         asset = self.get_asset(asset_id)
@@ -272,6 +271,7 @@ class PhotoOptimizeStore:
         stages: list[str],
         config_snapshot: dict[str, Any] | None,
         job_ids: list[str] | None,
+        geometry_policy: str = "",
     ) -> PhotoOptimizeAsset:
         asset = self.get_asset(asset_id)
         if asset is None:
@@ -315,6 +315,8 @@ class PhotoOptimizeStore:
             config_snapshot=deepcopy(config_snapshot or {}),
             job_ids=list(job_ids or []),
             manifest_paths=copied_manifest_paths,
+            output_sha256={path: digest(path) for path in copied_output_paths},
+            geometry_policy=geometry_policy,
         )
         asset.history.append(entry)
         return self.save_asset(asset)

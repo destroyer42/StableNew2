@@ -84,7 +84,7 @@ def test_record_history_promote_and_revert_baseline(tmp_path: Path) -> None:
         effective_prompt="portrait, straighten teeth",
         effective_negative_prompt="blurry, extra teeth",
         stages=["img2img"],
-        config_snapshot={"img2img": {"denoising_strength": 0.33}},
+        config_snapshot={"model": "modelA", "vae": "", "img2img": {"denoising_strength": 0.33}},
         job_ids=["job_1"],
     )
 

@@ -2172,11 +2172,9 @@ class AppController:
 
         store = get_photo_optimize_store()
         processed_asset_ids: list[str] = []
-        for index, asset_info in enumerate(assets):
+        for index, asset_info in enumerate(assets[:len(output_paths)]):
             if not isinstance(asset_info, dict):
                 continue
-            if index >= len(output_paths):
-                break
             asset_id = str(asset_info.get("asset_id") or "")
             if not asset_id:
                 continue
@@ -2194,6 +2192,7 @@ class AppController:
                 stages=[str(item) for item in asset_info.get("stages") or photo_meta.get("stages") or []],
                 config_snapshot=asset_info.get("config_snapshot") or {},
                 job_ids=[job.job_id],
+                geometry_policy=str(asset_info.get("geometry_policy") or ""),
             )
             processed_asset_ids.append(asset_id)
 
