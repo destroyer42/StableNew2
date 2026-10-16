@@ -4,6 +4,14 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Crash-safe state writes (audit P0-5, local deterministic validation): the Learning experiment, Discovered-review,
+  feedback, run-metadata, UI-state, LoRA-manifest and preview/sidebar stores used `Path.write_text` (truncate then write),
+  so a hard reset mid-write left a zero-filled file (a real Learning `session.json` was found as 100,884 NUL bytes).
+  They now publish through `src/utils/atomic_io.py` (same-directory temp file, fsync, atomic replace with a bounded retry
+  for transient Windows sharing denials); a failure keeps the previous file and removes the temp file. A learning record
+  that cannot be appended is now logged as a warning and `append_record` returns `False`; `record_rating` raises so the
+  Review panel shows "Error saving rating" instead of caching a rating that was never stored. `ConfigManager` JSON writes
+  and the other lower-value writers are unchanged (follow-up). No new persistence authority or format change.
 - CI census gate (PR-DEVEX-CI-160, local deterministic validation and required gate green): the sharded full census
   (`full-suite`, three file-level shards) is now a blocking check for every executable change, alongside `required`;
   nothing in the workflow uses `continue-on-error`. The affected-lane job and its per-lane routing are removed:

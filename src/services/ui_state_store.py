@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from src.state.workspace_paths import workspace_paths
+from src.utils.atomic_io import atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class UIStateStore:
             # Ensure schema version is set
             state["schema_version"] = SCHEMA_VERSION
 
-            self._path.write_text(json.dumps(state, indent=2))
+            atomic_write_text(self._path, json.dumps(state, indent=2))
             logger.debug(f"Saved UI state to {self._path}")
             return True
         except Exception as e:

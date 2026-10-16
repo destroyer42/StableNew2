@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_text
+
 
 def _utc_iso() -> str:
     return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -62,6 +64,6 @@ def write_run_metadata(
         worker.enqueue(task, critical=True)
     else:
         # Synchronous write (tests, critical paths)
-        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_text(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
     return path

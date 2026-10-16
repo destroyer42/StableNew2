@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_text
+
 _MANIFEST_SCHEMA = "stablenew.lora-manifest.v2.6"
 
 
@@ -140,11 +142,7 @@ class LoRAManager:
         }
 
     def _write_manifest(self, manifest: dict[str, Any]) -> None:
-        self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        self.manifest_path.write_text(
-            json.dumps(manifest, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        atomic_write_text(self.manifest_path, json.dumps(manifest, indent=2, sort_keys=True))
 
     @staticmethod
     def _entry_key(character_name: str) -> str:

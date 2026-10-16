@@ -173,8 +173,12 @@ class LearningRecordWriter:
             path_obj.parent.mkdir(parents=True, exist_ok=True)
         self.records_path = path_obj
 
-    def append_record(self, record: LearningRecord) -> None:
-        """Append a record as a single JSON line with fsync for durability."""
+    def append_record(self, record: LearningRecord) -> bool:
+        """Append a record as a single JSON line with fsync for durability.
+
+        Returns ``False`` (after logging a warning with the traceback) when the record could not be written, so a caller
+        that reports a user-visible save can tell the difference instead of claiming a rating that was never stored.
+        """
         try:
             line = record.to_json() + "\n"
             temp_path = self.records_path.with_suffix(self.records_path.suffix + ".tmp")
@@ -192,8 +196,10 @@ class LearningRecordWriter:
                 temp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
             except Exception:
                 pass
+            return True
         except Exception:
-            logger.debug("Failed to write learning record", exc_info=True)
+            logger.warning("Failed to write learning record to %s", self.records_path, exc_info=True)
+            return False
 
     def write(self, record: LearningRecord) -> None:
         """Backward compatible alias for append_record."""
