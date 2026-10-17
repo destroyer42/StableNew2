@@ -16,7 +16,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Running a job | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
 | PromptPacks | `src/pipeline/prompt_pack_parser.py` -> `src/pipeline/prompt_pack_job_builder.py`; `src/promptpacks/`; `docs/Subsystems/PromptPacks/` |
 | Matrix and randomization | `src/pipeline/config_variant_plan_v2.py` -> `src/randomizer/` |
-| Image backends and model profiles | `src/image_backends/image_backend_registry.py`, `src/image_backends/model_policy.py`; `docs/Subsystems/Image/` |
+| Image backends and model profiles | `docs/Subsystems/Image/IMAGE_PIPELINE.md` first, then `src/image_backends/image_backend_registry.py`, `src/image_backends/model_policy.py` |
 | Prompt compatibility and adaptation | `src/prompting/`; `docs/Subsystems/Prompting/` |
 | Assets (models, LoRAs, embeddings) | `src/assets/registry.py`; `docs/Subsystems/Image/PR-ASSET-110_Local_Asset_Registry.md` |
 | WebUI process, outage and startup hold | `src/api/webui_process_manager.py`, `src/controller/webui_outage_coordinator.py`, `src/controller/job_service_outage.py`; `docs/Subsystems/Runtime/` |
