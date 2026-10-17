@@ -104,6 +104,7 @@ of the roadmap; where they conflict with this file, this file and the repository
   2026-09-07, the latest 2026-10-17 with the OS still running; Windows logs a Kernel-PnP event 1000 for this GPU at each; no root cause accepted; records `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
   `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md`). No physical
   generation, qualification or runtime restart without explicit owner authorization.
+- Character Training is on HOLD pending a real trainer decision (no trainer is bundled; cancellation reaches only the immediate process; weight discovery can fall back to an older file). LoRA consumption is independent and stays supported: `docs/Subsystems/Training/Character_Embedding_Workflow_v2.6.md` section 0.1.
 - Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs resource and
   fault clearance first (`docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md`).
 - Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized.
