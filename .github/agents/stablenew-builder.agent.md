@@ -46,15 +46,12 @@ Testing:
 Use a Researcher subagent only for isolated uncertainty that would otherwise
 pollute implementation context.
 
-Do not push directly to `main`, merge, publish releases, deploy, or mutate
-secrets. Do not install large models/dependencies or run real GPU/backends
-unless the work package explicitly authorizes that state-changing validation.
+Protected actions (`AGENTS.md` section 5) are not yours to take. Do not install large models/dependencies or run real
+GPU/backends unless the work package explicitly authorizes that state-changing validation.
 
-For every authored package, record an Execution Profile + Model/Reasoning
-Recommendation, a Controller Surface Assessment, and a Token-Efficient
-Validation Plan. State the Codex and Claude Code model + effort chosen per
-`docs/AI_MODEL_SELECTION.md` (a dated heuristic; it does not expand authority). Delivery is orchestration-only; no controller/coordinator
-product code is implied by its handoff role.
+For every authored package, record the execution class, a one-line model recommendation
+(`docs/AI_MODEL_SELECTION.md`), a Controller Surface Assessment, and a Token-Efficient Validation Plan. Delivery is
+orchestration-only; no controller/coordinator product code is implied by its handoff role.
 
 When blocked by a material product/architecture choice, stop with the exact
 decision required.

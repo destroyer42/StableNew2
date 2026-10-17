@@ -103,14 +103,8 @@ Do not delegate, create, or spawn Release. Do not switch workspaces or
 branches, mutate Git, or claim native handoff support. A top-level Release
 session is an explicit operator transition, not a Delivery child.
 
-Never authorize direct push to `main`, PR merge, release publication,
-deployment, secret mutation, destructive data migration, or material
-architecture change without explicit owner approval.
-
-Model guidance: choose the Codex and Claude Code model + effort per
-`docs/AI_MODEL_SELECTION.md` (a dated heuristic that grants no authority). Global permissions remain conservative; Full Access or Auto Approve
-changes capability, not owner authorization. A nested Release is not a supported
-Git mutation path.
+Protected actions and the meaning of Full Access are defined in `AGENTS.md` section 5; Delivery authorizes none of them.
+A nested Release is not a supported Git mutation path. Choose model and effort per `docs/AI_MODEL_SELECTION.md`.
 
 Finish with a compact Release-ready capsule containing:
 - workspace path, if known;
@@ -120,9 +114,5 @@ Finish with a compact Release-ready capsule containing:
 - validation evidence;
 - authorized publication actions and prohibited actions.
 
-Explicitly direct the operator to start or select top-level StableNew Release
-in that verified workspace. Top-level Release independently validates this
-capsule before any mutation. Full Access is a session capability, not
-authorization; explicit owner approval remains required for main integration,
-merge, tag/release, deployment, destructive migration, secrets, force-push,
-and protected actions.
+Explicitly direct the operator to start or select top-level StableNew Release in that verified workspace; it validates the
+capsule independently before any mutation.

@@ -10,14 +10,13 @@ authorities and exact start state.
 - In scope:
 - Explicit exclusions:
 
-## Execution profile and model recommendation
+## Execution class and model recommendation
 
 - Execution class: Narrow / Standard / Architectural
 - Execution location: Local / Cloud
-- Codex model + effort (per `docs/AI_MODEL_SELECTION.md`):
-- Claude Code model + effort (per `docs/AI_MODEL_SELECTION.md`):
-- Preferred host (only if one materially fits better; otherwise stay in the current session):
-- Why this profile minimizes expected successful-work cost:
+- Model recommendation (one line each, per `docs/AI_MODEL_SELECTION.md`): Claude Code model + effort; Codex model + effort
+- Preferred host and why (only if one materially fits better; otherwise stay in the current session):
+- Separable hard part worth delegating to a stronger model (only if clearly separable):
 
 ## Exact start state and authorities
 
@@ -69,7 +68,7 @@ authorities and exact start state.
 - Architecture:
 - `CODEX_MAP.md`:
 - Coding/testing:
-- `AGENTS.md`:
+- `AGENTS.md` (the only place rules live):
 
 ## Completion report
 
@@ -79,6 +78,4 @@ authorities and exact start state.
 - Main unchanged:
 - Working tree clean:
 - Ready for next phase: Yes / No
-- Model / usage (host, actual model, effort, phases, host-reported token/cost/time
-  deltas, compactions, repair passes, result, efficiency observation; report
-  `unavailable in current host` rather than estimating):
+- Model / usage (host, actual model, effort, repair passes, result; tokens or cost only if a tool reported them):

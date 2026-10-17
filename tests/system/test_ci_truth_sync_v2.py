@@ -272,7 +272,16 @@ def test_the_cheap_docs_path_enforces_the_same_truth_without_the_application_env
 def test_a_docs_edit_that_violates_current_ci_truth_is_detected(tmp_path: Path) -> None:
     import shutil
 
-    for rel in ("docs/StableNew_Coding_and_Testing_v2.6.md", "AGENTS.md", "STATUS.md", "docs/CODEX_MAP.md"):
+    for rel in (
+        "docs/StableNew_Coding_and_Testing_v2.6.md",
+        "AGENTS.md",
+        "STATUS.md",
+        "docs/CODEX_MAP.md",
+        "CLAUDE.md",
+        ".github/copilot-instructions.md",
+        "docs/AGENT_OPERATING_MODEL.md",
+        "docs/AI_MODEL_SELECTION.md",
+    ):
         target = tmp_path / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / rel, target)

@@ -88,6 +88,51 @@ def task_map_problems(root: Path = ROOT) -> list[str]:
     return problems
 
 
+#: AGENTS.md is the only place operating rules live (audit P2-4). Everything else adds procedure or points to it.
+RULES = "AGENTS.md"
+RULE_CAPS = {
+    "CLAUDE.md": 40,
+    ".github/copilot-instructions.md": 12,
+    "docs/AGENT_OPERATING_MODEL.md": 160,
+    "docs/AI_MODEL_SELECTION.md": 90,
+}
+#: Bridges that must name AGENTS.md as the authority.
+RULE_BRIDGES = ("CLAUDE.md", ".github/copilot-instructions.md", "docs/AGENT_OPERATING_MODEL.md", "docs/AI_MODEL_SELECTION.md")
+#: Rule text that exists once, in AGENTS.md. Restating it elsewhere is how the copies drifted before.
+RESTATED_RULE_MARKERS = (
+    "immediately before an authorized",
+    "execution profile + model",
+    "cost/task",
+)
+RESTATEMENT_SCOPES = ("docs/AGENT_OPERATING_MODEL.md", "docs/AI_MODEL_SELECTION.md", "docs/CODEX_WORK_PACKAGE_TEMPLATE.md", "CLAUDE.md")
+
+
+def rules_problems(root: Path = ROOT) -> list[str]:
+    problems: list[str] = []
+    if _read(root, RULES) is None:
+        return [f"{RULES} is missing"]
+    for rel, cap in RULE_CAPS.items():
+        text = _read(root, rel)
+        if text is None:
+            problems.append(f"{rel} is missing")
+            continue
+        if len(text.splitlines()) > cap:
+            problems.append(f"{rel} has {len(text.splitlines())} lines; the cap is {cap} (rules live in {RULES}; link instead of copying)")
+        if rel in RULE_BRIDGES and "AGENTS.md" not in text:
+            problems.append(f"{rel} must name {RULES} as the authority")
+    scoped = list(RESTATEMENT_SCOPES)
+    for directory, pattern in ((".github/agents", "*.md"), (".claude/skills", "*/SKILL.md")):
+        base = root / directory
+        if base.is_dir():
+            scoped.extend(path.relative_to(root).as_posix() for path in sorted(base.glob(pattern)))
+    for rel in scoped:
+        lowered = (_read(root, rel) or "").lower()
+        for marker in RESTATED_RULE_MARKERS:
+            if marker in lowered:
+                problems.append(f"{rel} restates a rule that belongs only in {RULES}: {marker!r}")
+    return problems
+
+
 def _read(root: Path, rel: str) -> str | None:
     path = root / rel
     return path.read_text(encoding="utf-8") if path.is_file() else None
@@ -120,6 +165,7 @@ def docs_truth_problems(root: Path = ROOT) -> list[str]:
         problems.append("AGENTS.md must point to `python tools/ci/run_pr_gate.py`")
     problems.extend(status_problems(root))
     problems.extend(task_map_problems(root))
+    problems.extend(rules_problems(root))
     for rel, phrases in STALE_PHRASES.items():
         text = _read(root, rel)
         if text is None:

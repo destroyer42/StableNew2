@@ -21,13 +21,8 @@ searches, single-file edits, or tightly sequential work.
 Use the repository skills when their narrow workflow matches the task. Reuse
 already-green exact-SHA evidence while relevant source is unchanged.
 
-Never push directly to `main`, merge a pull request, publish a release, deploy
-externally, mutate secrets, or make a material architecture decision without
-explicit owner approval. Ordinary scoped implementation, tests, refactors
-needed for correctness, feature-branch commits, and PR preparation do not
-require repeated approval when already authorized by the user's end state.
+Protected actions (push to `main`, merge, publish, deploy, secrets, material architecture decisions) need explicit owner
+approval as defined in `AGENTS.md` section 5; ordinary scoped implementation, tests, refactors needed for correctness,
+feature-branch commits and PR preparation do not need repeated approval when the user's end state already authorizes them.
 
-Keep completion reports concise: outcome, branch/SHA, evidence, architecture
-effect, unresolved risk, and next decision if one remains, plus the `Model / usage`
-section from `docs/AI_MODEL_SELECTION.md` (report unavailable metrics as
-unavailable; never estimate them).
+Completion reports follow `AGENTS.md` section 8.
