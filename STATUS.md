@@ -36,6 +36,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 
 **Image generation**
 
+- Start with the living documents (one per subsystem, edited in place; see `docs/Subsystems/README.md`): `docs/Subsystems/Image/IMAGE_PIPELINE.md`
+  and `docs/Subsystems/Image/MODEL_PROFILES.md`. The per-PR records linked below are historical evidence and lose to the code and the living docs.
 - Forge is the default backend; A1111 is the rollback/compatibility backend (`docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`).
   Backend-neutral execution: `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`.
 - Exact model profiles: FLUX.2 Klein 4B FP8 (`docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`) and
@@ -72,8 +74,8 @@ Active: the improvement roadmap in `docs/audits/2026-10-16_repo_audit_and_roadma
 the independent critique adjustments in the PR history before reordering it). Phases 0 and 1 are merged (protection and gates,
 process isolation, startup wiring, crash-safe writes, pinned dev environment, Windows lane, ratchets). Phase 2 (docs and
 process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
-`docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done; next are living subsystem docs
-(P2-2). Phases 3 to 5 are a candidate list; each package needs a contract check and an owner decision first.
+`docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done, and the eight living subsystem docs (P2-2) are written;
+remaining in Phase 2 is the per-harness archive (P2-6, owner decision 2). Phases 3 to 5 are a candidate list; each package needs a contract check and an owner decision first.
 
 Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
 of the roadmap; where they conflict with this file, this file and the repository are current.
@@ -90,6 +92,8 @@ of the roadmap; where they conflict with this file, this file and the repository
 6. Retire AnimateDiff, disabled LTX specs, story-plan/continuity, `src/ai`, `src/cluster`, Character Training?
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: history browser, Learning payoff, inpainting/ControlNet, LoRA browser.
+9. Movie Clips assembly runs outside `JobService` (no NJR, queue or history record): make CPU-only assembly a queued
+   workload, or explicitly exempt bounded media utilities? See `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.
 
 ## Holds and safety constraints
 
