@@ -19,7 +19,8 @@ def test_ci_workflow_uses_named_required_smoke_script() -> None:
     assert "python tools/ci/run_collection_gate.py" in workflow
     assert "python tools/ci/run_required_smoke.py" in workflow
     assert "python tools/ci/run_mypy_smoke.py" in workflow
-    assert "ruff==0.14.9" in workflow
+    assert "pip install -r requirements-dev.txt" in workflow  # the pinned tools (ruff, mypy, pytest plugins) live there
+    assert "ruff==0.14.9" in _read("requirements-dev.txt")
     assert "ruff check src" not in workflow
     assert "git diff --exit-code" in workflow
 
@@ -97,7 +98,8 @@ def test_full_suite_lane_is_the_blocking_merge_gate_and_not_fail_fast() -> None:
 
     assert "continue-on-error" not in workflow  # PR-DEVEX-CI-160: the census blocks; no job masks its failure
     assert "--maxfail" not in full_suite and "--maxfail" not in " ".join(shards.PYTEST_ARGS)
-    assert "pytest-timeout" in full_suite
+    assert "pip install -r requirements-dev.txt" in full_suite
+    assert "pytest-timeout==" in _read("requirements-dev.txt")
     assert "--timeout=300" in shards.PYTEST_ARGS
 
 
