@@ -211,6 +211,9 @@ class GpuSurvivorTelemetry:
             return {
                 "schema": SCHEMA,
                 "kind": kind,
+                # "job" while a pipeline job runs, "session" for the app-lifetime recorder. A session sample says the
+                # app was open and the GPU was observed; only job-scoped records can show generation was active.
+                "scope": self._lifecycle,
                 "timestamp_utc": datetime.now(UTC).isoformat(timespec="milliseconds"),
                 "monotonic_ns": time.monotonic_ns(),
                 "job_id": self._job_id,

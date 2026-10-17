@@ -182,3 +182,26 @@ def test_session_telemetry_start_failure_is_contained(tmp_path) -> None:
         )
     finally:
         module.stop_gpu_session_telemetry("test_cleanup")
+
+
+def test_records_carry_their_scope_so_session_samples_are_not_mistaken_for_job_work(
+    tmp_path,
+) -> None:
+    def _make(lifecycle: str, job_id: str) -> GpuSurvivorTelemetry:
+        return GpuSurvivorTelemetry(
+            job_id=job_id,
+            run_id="run",
+            workflow=[],
+            backend_id=None,
+            output_dir=tmp_path / lifecycle,
+            interval_s=60,
+            snapshot_provider=_snapshot,
+            presence_provider=lambda: None,
+            lifecycle=lifecycle,
+        )
+
+    for lifecycle, job_id in (("job", "job-1"), ("session", "session-1")):
+        recorder = _make(lifecycle, job_id)
+        recorder.start()
+        recorder.close(outcome="done")
+        assert {record["scope"] for record in _read_records(recorder.path)} == {lifecycle}

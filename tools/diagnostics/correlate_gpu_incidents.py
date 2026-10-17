@@ -198,6 +198,19 @@ def _nearby_jobs(
     return selected
 
 
+def _telemetry_scope(record: Mapping[str, Any]) -> str:
+    """Return ``session`` for app-lifetime observations and ``job`` for records of a pipeline job.
+
+    Newer records carry an explicit ``scope``. Older ones do not, so a ``session-`` job id also marks a session
+    record; anything else is job telemetry (the only kind that existed before the session recorder).
+    """
+
+    scope = record.get("scope")
+    if scope is not None:
+        return "session" if str(scope) == "session" else "job"
+    return "session" if str(record.get("job_id") or "").startswith("session-") else "job"
+
+
 def _telemetry_near(
     incident: datetime,
     records: Iterable[Mapping[str, Any]],
@@ -213,6 +226,7 @@ def _telemetry_near(
             {
                 "timestamp_utc": record.get("timestamp_utc"),
                 "kind": record.get("kind"),
+                "scope": _telemetry_scope(record),
                 "event": record.get("event"),
                 "job_id": record.get("job_id"),
                 "run_id": record.get("run_id"),
@@ -259,11 +273,15 @@ def correlate(
             for path in webui_files
             if abs(datetime.fromtimestamp(path.stat().st_mtime, UTC) - timestamp) <= window
         ]
-        if active_jobs or nearby_telemetry:
+        # Only job-scoped telemetry can show generation was active. A session sample proves the app was open and the
+        # GPU observed, which is weaker, so it can never raise the classification to proven active work.
+        nearby_job_telemetry = [item for item in nearby_telemetry if item["scope"] != "session"]
+        nearby_session_telemetry = [item for item in nearby_telemetry if item["scope"] == "session"]
+        if active_jobs or nearby_job_telemetry:
             classification = "proven_active_stablenew_gpu_work"
         elif nearby_jobs:
             classification = "nearby_stablenew_lifecycle_no_proven_active_generation"
-        elif nearby_webui:
+        elif nearby_webui or nearby_session_telemetry:
             classification = "stablenew_open_no_proven_active_generation"
         elif sqlite_available and telemetry_covers_incident and webui_available:
             classification = "no_stablenew_evidence"
@@ -303,7 +321,7 @@ def main() -> int:
     args = _parse_args()
     jobs = read_sqlite_jobs(args.sqlite) if args.sqlite and args.sqlite.exists() else None
     telemetry_paths = (
-        sorted(args.telemetry_dir.glob("*.jsonl*"))
+        sorted(args.telemetry_dir.rglob("*.jsonl*"))
         if args.telemetry_dir and args.telemetry_dir.exists()
         else None
     )
