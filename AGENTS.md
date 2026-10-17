@@ -66,7 +66,8 @@ understood architecture, and validates together.
 
 ## 4. Ownership, determinism, and runtime safety
 
-Use `docs/CODEX_MAP.md` to locate the relevant task surface, then inspect only
+Use `docs/CODEX_MAP.md` to locate the relevant task surface (and the generated
+`docs/CODE_MAP.md` to find any module), then inspect only
 the implementation required for the approved outcome. `src/gui/` owns Tk
 presentation, `src/gui_v2/` toolkit-neutral adapters/view models,
 `src/controller/` coordination/lifecycle adapters, `src/pipeline/` compiler,

@@ -40,6 +40,22 @@ STATUS_BANNED_MARKERS = (
 REPO_PATH_PREFIXES = ("docs/", "src/", "tools/", "tests/", "scripts/", "config/", "constraints/")
 _BACKTICKED = re.compile(r"`([^`\s]+)`")
 
+#: The task map is hand-written navigation; the exhaustive module index is generated into docs/CODE_MAP.md.
+TASK_MAP = "docs/CODEX_MAP.md"
+TASK_MAP_MAX_LINES = 60
+
+
+def _dead_references(root: Path, rel: str, text: str) -> list[str]:
+    problems: list[str] = []
+    for reference in sorted(set(_BACKTICKED.findall(text))):
+        candidate = reference.rstrip(".,;:)")
+        if not candidate.startswith(REPO_PATH_PREFIXES):
+            continue
+        exists = any(root.glob(candidate)) if "*" in candidate else (root / candidate).exists()
+        if not exists:
+            problems.append(f"{rel} references a path that does not exist: {candidate}")
+    return problems
+
 
 def status_problems(root: Path = ROOT) -> list[str]:
     text = _read(root, STATUS)
@@ -53,13 +69,22 @@ def status_problems(root: Path = ROOT) -> list[str]:
     for marker in STATUS_BANNED_MARKERS:
         if marker in lowered:
             problems.append(f"{STATUS} contains the stale/narrative marker {marker!r}")
-    for reference in sorted(set(_BACKTICKED.findall(text))):
-        candidate = reference.rstrip(".,;:)")
-        if not candidate.startswith(REPO_PATH_PREFIXES):
-            continue
-        exists = any(root.glob(candidate)) if "*" in candidate else (root / candidate).exists()
-        if not exists:
-            problems.append(f"{STATUS} references a path that does not exist: {candidate}")
+    problems.extend(_dead_references(root, STATUS, text))
+    return problems
+
+
+def task_map_problems(root: Path = ROOT) -> list[str]:
+    """The task map stays a short hand-written table whose every path exists (the full module index is generated)."""
+    text = _read(root, TASK_MAP)
+    if text is None:
+        return [f"{TASK_MAP} is missing"]
+    problems: list[str] = []
+    line_count = len(text.splitlines())
+    if line_count > TASK_MAP_MAX_LINES:
+        problems.append(
+            f"{TASK_MAP} has {line_count} lines; the cap is {TASK_MAP_MAX_LINES} (link to docs/CODE_MAP.md instead of listing modules)"
+        )
+    problems.extend(_dead_references(root, TASK_MAP, text))
     return problems
 
 
@@ -94,6 +119,7 @@ def docs_truth_problems(root: Path = ROOT) -> list[str]:
     elif "python tools/ci/run_pr_gate.py" not in agents:
         problems.append("AGENTS.md must point to `python tools/ci/run_pr_gate.py`")
     problems.extend(status_problems(root))
+    problems.extend(task_map_problems(root))
     for rel, phrases in STALE_PHRASES.items():
         text = _read(root, rel)
         if text is None:
