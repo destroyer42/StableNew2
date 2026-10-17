@@ -12,3 +12,16 @@ and `tests/gui_v2/test_queue_panel_remove_updates_gui.py`.
 
 Add a file here only with a recorded reason and a removal condition. A file with
 no behavioral protection should be deleted, not quarantined.
+
+## Flake policy
+
+The census is a blocking gate, so a test that fails and later passes without a code change is repaired, not retried.
+If it cannot be fixed in the same PR, move it here with a first-line header and open the repair:
+
+```
+# quarantined: YYYY-MM-DD; owner: <name>; expires: YYYY-MM-DD; reason: <why>
+```
+
+A quarantine lasts at most 30 days. `tests/system/test_quarantine_policy.py` fails once a quarantine expires, which
+forces the decision: fix it, extend it deliberately, or delete it.
+

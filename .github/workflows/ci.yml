@@ -131,6 +131,11 @@ jobs:
       run: |
         python tools/ci/run_ruff_ratchets.py
 
+    - name: Run the architecture-rule ratchets (threads, layering)
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/run_architecture_ratchets.py
+
     - name: Collect the active test surface in isolation
       if: steps.plan.outputs.cheap_path != 'true'
       run: |

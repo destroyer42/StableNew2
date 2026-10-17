@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "totals": {
+    "daemon_threads": 18,
+    "raw_threads": 12,
+    "utils_upward_imports": 19,
+    "controller_gui_imports": 18
+  },
+  "counts": {
+    "src/api/webui_process_manager.py": {
+      "daemon_threads": 2
+    },
+    "src/controller/app_controller.py": {
+      "daemon_threads": 3,
+      "controller_gui_imports": 13
+    },
+    "src/controller/app_controller_services/gui_config_service.py": {
+      "controller_gui_imports": 1
+    },
+    "src/controller/content_visibility_resolver.py": {
+      "controller_gui_imports": 1
+    },
+    "src/controller/core_pipeline_controller.py": {
+      "controller_gui_imports": 1
+    },
+    "src/controller/process_auto_scanner_service.py": {
+      "raw_threads": 1
+    },
+    "src/controller/prompt_pack_preflight.py": {
+      "controller_gui_imports": 1
+    },
+    "src/controller/review_batch_service.py": {
+      "controller_gui_imports": 1
+    },
+    "src/gui/model_comparison_readiness.py": {
+      "daemon_threads": 1,
+      "raw_threads": 1
+    },
+    "src/gui/widgets/openpose_picker_panel.py": {
+      "daemon_threads": 2,
+      "raw_threads": 1
+    },
+    "src/main.py": {
+      "daemon_threads": 3
+    },
+    "src/queue/single_node_runner.py": {
+      "raw_threads": 1
+    },
+    "src/services/persistence_worker.py": {
+      "daemon_threads": 1,
+      "raw_threads": 1
+    },
+    "src/services/watchdog_system_v2.py": {
+      "raw_threads": 1
+    },
+    "src/training/character_embedder.py": {
+      "daemon_threads": 1,
+      "raw_threads": 1
+    },
+    "src/utils/config.py": {
+      "utils_upward_imports": 2
+    },
+    "src/utils/diagnostics_bundle_v2.py": {
+      "raw_threads": 1,
+      "utils_upward_imports": 2
+    },
+    "src/utils/file_io.py": {
+      "utils_upward_imports": 2
+    },
+    "src/utils/gpu_device_health.py": {
+      "daemon_threads": 1,
+      "raw_threads": 1
+    },
+    "src/utils/graceful_exit.py": {
+      "utils_upward_imports": 1
+    },
+    "src/utils/image_metadata.py": {
+      "utils_upward_imports": 1
+    },
+    "src/utils/prompt_pack_utils.py": {
+      "utils_upward_imports": 1
+    },
+    "src/utils/prompt_packs.py": {
+      "utils_upward_imports": 2
+    },
+    "src/utils/randomizer.py": {
+      "utils_upward_imports": 2
+    },
+    "src/utils/single_instance.py": {
+      "daemon_threads": 1
+    },
+    "src/utils/snapshot_builder_v2.py": {
+      "utils_upward_imports": 4
+    },
+    "src/utils/watchdog_v2.py": {
+      "utils_upward_imports": 1
+    },
+    "src/utils/webui_discovery.py": {
+      "utils_upward_imports": 1
+    },
+    "src/video/comfy_process_manager.py": {
+      "daemon_threads": 1,
+      "raw_threads": 1
+    },
+    "src/video/driving_video_inspection.py": {
+      "daemon_threads": 2,
+      "raw_threads": 2
+    }
+  }
+}

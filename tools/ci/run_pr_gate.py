@@ -16,6 +16,7 @@ GATE_STEPS = (
     ("mypy smoke", (sys.executable, str(ROOT / "tools/ci/run_mypy_smoke.py"))),
     ("mypy ratchet", (sys.executable, str(ROOT / "tools/ci/run_mypy_ratchet.py"))),
     ("ruff ratchets", (sys.executable, str(ROOT / "tools/ci/run_ruff_ratchets.py"))),
+    ("architecture ratchets", (sys.executable, str(ROOT / "tools/ci/run_architecture_ratchets.py"))),
     ("isolated collection", (sys.executable, str(ROOT / "tools/ci/run_collection_gate.py"))),
     ("required smoke", (sys.executable, str(ROOT / "tools/ci/run_required_smoke.py"))),
 )
