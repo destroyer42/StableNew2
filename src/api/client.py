@@ -88,6 +88,10 @@ DEFAULT_READ_TIMEOUT = 60.0
 OPTIONS_POST_MIN_INTERVAL = 6.0
 UPSCALE_SINGLE_IMAGE_TIMEOUT = 300.0
 RESOURCE_ENDPOINT_RETRY_COOLDOWN_SEC = 15.0
+#: After a read-only request is refused (nothing is listening), further GETs fail at once for this long. A refused
+#: loopback connection costs ~2 s per attempt on Windows, and the GUI makes many resource GETs while the managed
+#: WebUI is still starting. Cleared on any success and when the backend is proven ready.
+CONNECTION_REFUSED_CIRCUIT_SEC = 15.0
 RESOURCE_STARTUP_GRACE_SEC = 30.0
 DEFAULT_SCHEDULERS: tuple[str, ...] = (
     "Normal",
@@ -252,6 +256,29 @@ def _is_generation_post(*, method: str, endpoint: str) -> bool:
     return method.upper() == "POST" and endpoint.rstrip("/") in _GENERATION_POST_ENDPOINTS
 
 
+def _is_connection_refused(exc: BaseException) -> bool:
+    """True when ``exc`` (or anything it wraps) is a refused connection: no process is listening on the port."""
+
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ConnectionRefusedError):
+            return True
+        if isinstance(current, OSError) and (
+            getattr(current, "winerror", None) == 10061 or current.errno in (10061, 111, 61)
+        ):
+            return True
+        following = current.__cause__ or current.__context__ or getattr(current, "reason", None)
+        if not isinstance(following, BaseException):
+            following = next(
+                (arg for arg in getattr(current, "args", ()) if isinstance(arg, BaseException)),
+                None,
+            )
+        current = following
+    return False
+
+
 def _is_ambiguous_generation_transport_failure(
     *, method: str, endpoint: str, exc: Exception
 ) -> bool:
@@ -340,6 +367,7 @@ class SDWebUIClient:
         self._session_id = id(self._session)
         self._last_http_500_summary: dict[str, Any] | None = None
         self._resource_endpoint_cooldowns: dict[str, float] = {}
+        self._connection_refused_until = 0.0
         self._startup_probe_grace_until = 0.0
         self._startup_probe_grace_logged: set[str] = set()
 
@@ -410,6 +438,7 @@ class SDWebUIClient:
         """Clear cached readiness and resource-endpoint failure state."""
 
         self._resource_endpoint_cooldowns.clear()
+        self._connection_refused_until = 0.0
         clear_readiness_failure_state(self.base_url)
 
     def set_startup_probe_grace(self, duration_s: float = RESOURCE_STARTUP_GRACE_SEC) -> None:
@@ -607,6 +636,18 @@ class SDWebUIClient:
         url = f"{self.base_url}{endpoint}"
         last_exception: Exception | None = None
         attempts_made = 0
+        is_get = method.upper() == "GET"
+        if is_get:
+            circuit_remaining = self._connection_refused_until - time.monotonic()
+            if circuit_remaining > 0:
+                logger.debug(
+                    "GET %s skipped: connection refused moments ago (%.1fs left)",
+                    url,
+                    circuit_remaining,
+                )
+                raise requests.ConnectionError(
+                    f"{url}: connection was refused moments ago; not retrying for {circuit_remaining:.1f}s"
+                )
 
         context = ctx or LogContext(subsystem="api")
         if stage_key and not context.stage:
@@ -663,6 +704,7 @@ class SDWebUIClient:
                     timeout=timeout_value,
                     **kwargs,
                 )
+                self._connection_refused_until = 0.0
                 try:
                     response.raise_for_status()
                 except requests.HTTPError as http_exc:
@@ -761,6 +803,12 @@ class SDWebUIClient:
                     self._last_http_500_summary = None
                 attempt_index = attempt + 1
                 will_retry = attempt < retries - 1
+                refused = is_get and _is_connection_refused(exc)
+                if refused:  # nothing is listening: retrying a read-only GET only burns time
+                    self._connection_refused_until = (
+                        time.monotonic() + CONNECTION_REFUSED_CIRCUIT_SEC
+                    )
+                    will_retry = False
                 if _is_ambiguous_generation_transport_failure(
                     method=method,
                     endpoint=endpoint,
@@ -839,6 +887,8 @@ class SDWebUIClient:
                             "session_id": failed_session_id,
                         },
                     )
+                    break
+                if refused:
                     break
                 if self._retry_callback:
                     try:

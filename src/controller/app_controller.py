@@ -581,11 +581,9 @@ class AppController:
         # PR-PIPE-002: Initialize duration stats service for queue ETA
         history_store = getattr(self.job_service, "history_store", None) if self.job_service else None
         self._duration_stats_service = DurationStatsService(history_store=history_store)
-        if self._duration_stats_service:
-            try:
-                self._duration_stats_service.refresh()
-            except Exception as exc:
-                self._append_log(f"[duration_stats] Initial refresh failed: {exc}")
+        self._runtime_projection_coordinator.publish_duration_stats_refresh(  # off the UI thread: reads job history
+            self._duration_stats_service, on_error=lambda exc: self._append_log(f"[duration_stats] {exc}")
+        )
 
         # PR-LEARN-012: Initialize LearningExecutionController (NEW implementation)
         from src.gui.learning_state import LearningState
@@ -3048,13 +3046,10 @@ class AppController:
         if not self.app_state or not self.job_service:
             return
         self._runtime_projection_coordinator.publish_history_refresh(limit=limit)
-
-        # PR-PIPE-002: Refresh duration stats when history updates
-        if hasattr(self, "_duration_stats_service") and self._duration_stats_service:
-            try:
-                self._duration_stats_service.refresh()
-            except Exception as exc:
-                self._append_log(f"[duration_stats] Refresh failed: {exc}")
+        self._runtime_projection_coordinator.publish_duration_stats_refresh(  # PR-PIPE-002: stats follow history
+            getattr(self, "_duration_stats_service", None),
+            on_error=lambda exc: self._append_log(f"[duration_stats] Refresh failed: {exc}"),
+        )
 
     def on_open_settings(self) -> None:
         self._append_log("[controller] Opening settings dialog.")

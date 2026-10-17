@@ -90,6 +90,20 @@ class RuntimeProjectionCoordinator:
         )
         return revision
 
+    def publish_duration_stats_refresh(
+        self, service: Any, *, on_error: Callable[[Exception], None] | None = None
+    ) -> None:
+        """Recompute queue ETA statistics off the UI thread; a newer request supersedes a pending one."""
+        if service is None:
+            return
+        self._background_tasks.submit(
+            "duration_stats:refresh",
+            service.refresh,
+            on_error=on_error,
+            name="DurationStatsRefresh",
+            purpose="Recompute queue ETA statistics off the UI thread",
+        )
+
     def publish_preview_refresh(
         self,
         request: PreviewRequest,

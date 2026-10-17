@@ -195,6 +195,8 @@ A Learning change should cover persistence/resume, stage capability validation, 
 - Banner label stacking "Workflow: Workflow: ..." (audit G8) [A], not re-checked.
 - Spec drift [V]: see section 11.
 
+- Snapshot size [V]: a Model Comparison job's NJR embeds the whole frozen experiment (`frozen_experiment.snapshot`, all arms, about 0.7 MB for a 48-arm study) under **both** `normalized_job.workload.metadata` and `normalized_job.provenance.metadata`, and every variant job of the experiment repeats it. In the owner's repository 10 experiments x about 49 jobs account for about 713 MB of 753 MB of those snapshots (about 7 MB if each experiment snapshot were stored once; `snapshot_sha256` identifies it). It is a design choice (a self-contained, replayable NJR), not corruption. Externalizing it by hash changes the NJR contract and needs an owner decision (`STATUS.md`).
+
 ## 10. Changing or extending Learning today
 
 - New tested variable: add a `VariableMetadata` entry in `src/learning/variable_metadata.py` (config path, type, resource key), list it in the stage in `src/learning/stage_capabilities.py`, make `ModelPolicy` classify it as configurable (`src/learning/model_capabilities.py` projects it; do not add model names), and cover value generation (`LearningController._generate_variant_values`), `_apply_variant_override_with_metadata`, the `compile_variant` proof and a recommendation parameter map (`src/gui_v2/recommendation_targets.py`, `staged_recommendations._PARAMETER_KEYS`) if it should be recommendable.

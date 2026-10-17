@@ -154,6 +154,14 @@ A transient, in-memory coordination service (`src/controller/webui_outage_coordi
 - **Reading it:** every record carries `scope` (`job` or `session`). Point `tools/diagnostics/correlate_gpu_incidents.py --telemetry-dir` at the directory (it reads subdirectories, so `session/` is included); only job-scoped records or an active SQLite job classify an incident as proven active GPU work, while a session sample alone yields `stablenew_open_no_proven_active_generation`. Add `--windows-pnp` (or `--pnp-events-xml <exported events>`) to read Kernel-PnP / Device Management event 1000 ("could not be query removed ... vetoed") for the GPU's device instance, read-only. Each incident then carries a `windows_pnp` section with the signed `delta_seconds` (event minus incident; negative is before), the veto type number and label, and the vetoing component. It is a timing marker only: it never changes `classification` and does not establish hardware failure, that the device disappeared, or the responsible component. A missing, inaccessible or non-Windows event log is reported as `unavailable_*`, never as "no marker".
 - **Thread rule:** the loop is a non-daemon `ThreadRegistry` thread and exits when the registry requests shutdown, so `shutdown_all` never waits on it.
 
+### 9.2 Resuming after a device loss, and what the queue shows meanwhile
+
+The quarantine is durable (`repository_metadata.gpu_dispatch_quarantine`) and survives a reboot: a rebooted, healthy GPU does **not** release it. While it is set the worker claims nothing, so pausing/unpausing, toggling auto-run and Send Job have no visible effect and the queue count does not move. Resume only through the GUI: header **Readiness** button -> the `gpu_device` row -> **Confirm GPU recovered...**. That runs `AppController.confirm_gpu_recovery` -> `GpuLossCoordinator.release(operator_confirmed=True)`, which re-checks the GPU read-only and then releases held jobs in order. The Readiness window also opens by itself at startup while a quarantine is active. [V] The queue controls give no message of their own while quarantined (known debt).
+
+### 9.3 Startup cost of the job history
+
+`JobRepository.list_jobs` / `list_recent_jobs` choose the newest ids first (`idx_jobs_created_at`, created idempotently by `_ensure_created_at_index`; `DROP INDEX idx_jobs_created_at` undoes it) and fetch full rows only for those. The history panel and the duration-stats (queue ETA) refresh both run off the UI thread (`RuntimeProjectionCoordinator.publish_duration_stats_refresh`). Before this, two `SELECT * ... ORDER BY created_at` passes sorted the whole multi-gigabyte table on the UI thread at every launch (about 14 s warm on a 2.1 GB repository). Resource GETs to the WebUI also share a short "connection refused" circuit in `SDWebUIClient` (`CONNECTION_REFUSED_CIRCUIT_SEC`, GET only, cleared on success and by `clear_runtime_failure_state` when the backend is proven READY), because a refused loopback connection costs about 2 s per attempt on Windows and the GUI makes many such calls while the managed WebUI is still starting.
+
 ## 10. Runtime transition policy and managed Comfy
 
 **Transition** (`RuntimeTransitionCoordinator.prepare_for`, `src/services/runtime_transition_service.py`) runs once, synchronously, inside a single admitted job's backend `execute()` (image: `WebUIFamilyImageBackend`; also the SVD and Comfy backends). It releases StableNew-owned conflicting residency through each runtime's own owner, never touches the queue or SQLite, and never restarts anything. [V]
@@ -233,6 +241,8 @@ A new refusal or hold test should assert both the outcome and that no claim, dis
 - Empty `except`/listener swallowing is widespread (ratcheted in `tools/ci`); when debugging a missing event, check the swallow sites listed in section 11 first.
 - The orphan monitor and `SingleInstanceLock.is_gui_running` gate WebUI launches: a headless tool or test that builds a real manager will be refused, by design.
 - `ComfyProcessManager.__init__` registers itself globally even if it never launches; the transition coordinator and outage coordinator read that global.
+
+- Repository size [V]: every job row carries its full NJR snapshot (average about 51 KB, Learning model-comparison jobs about 1.2-1.5 MB, see `docs/Subsystems/Learning/LEARNING.md`) and its `result_json`; nothing prunes rows whose images and manifests were deleted. A list query that selects every column over the whole table is therefore slow; always select ids first.
 
 ## 16. How to change or extend today
 
