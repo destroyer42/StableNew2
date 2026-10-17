@@ -4,6 +4,15 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Whole-application mypy ratchet (audit P1-4, local deterministic validation; hosted determinism check pending): strict
+  mypy now runs over all of `src` in the local gate and the required CI job as a per-file ratchet
+  (`tools/ci/run_mypy_ratchet.py`, baseline `tools/ci/mypy_baseline.json`: 1,691 errors in 196 files). A file may not exceed
+  its baseline, a clean file stays clean, and an improvement must be locked in with `--update`. The run uses
+  `--no-site-packages --platform linux --python-version 3.14` and ignores unresolved-import errors so counts are identical on
+  every machine (third-party values are `Any`). The ten-file smoke gate is unchanged. This gates the 396 already-clean files
+  and stops the attr-defined/call-arg class that broad `except` blocks used to hide from growing; reducing the existing debt
+  is separate work.
+
 - Windows platform-contract lane (audit P1-3, local deterministic validation; hosted run pending): CI gains a `windows`
   job on `windows-latest` that runs `tools/ci/run_windows_lane.py`, an explicit positive list of the OS-dependent tests
   (anonymous job objects and process ownership, atomic replacement and sharing violations, Windows paths and JSON-escaped

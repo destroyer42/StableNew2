@@ -121,6 +121,11 @@ jobs:
       run: |
         python tools/ci/run_mypy_smoke.py
 
+    - name: Run the whole-application mypy ratchet (no file may exceed its baseline)
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/run_mypy_ratchet.py --report "$RUNNER_TEMP/mypy-counts.json"
+
     - name: Collect the active test surface in isolation
       if: steps.plan.outputs.cheap_path != 'true'
       run: |

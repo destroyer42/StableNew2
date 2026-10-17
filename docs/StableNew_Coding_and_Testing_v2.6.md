@@ -220,9 +220,15 @@ lint authority in both the local PR gate and required CI; the former
 non-increasing baseline was retired by PR-MVP-090. Every touched source file
 must remain raw-Ruff clean.
 
-`tools/ci/run_mypy_smoke.py` checks the typed architecture seams. A broad mypy
-run is useful diagnostic evidence but is not yet a repository-wide green gate.
-New typed seams should not add to that debt.
+`tools/ci/run_mypy_smoke.py` checks the typed architecture seams.
+`tools/ci/run_mypy_ratchet.py` (audit P1-4) runs the project's strict mypy over all of
+`src` as a per-file ratchet against `tools/ci/mypy_baseline.json`: no file may have more
+errors than its baseline, a file with none stays clean, and an improvement must be locked
+in with `python tools/ci/run_mypy_ratchet.py --update`. The existing debt is therefore
+tolerated and cannot grow; reduce it by fixing errors, never by raising the baseline.
+To keep counts identical on every machine the run uses `--no-site-packages`,
+`--platform linux` and `--python-version 3.14`, and ignores unresolved-import errors, so
+third-party values are `Any` and the ratchet measures StableNew's own typing.
 
 ## Controller-surface ratchet
 
