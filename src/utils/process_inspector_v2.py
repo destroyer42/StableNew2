@@ -245,70 +245,115 @@ def collect_gpu_snapshot() -> dict[str, object] | None:
     return {"provider": "nvidia-smi", "devices": devices}
 
 
-def collect_gpu_survivor_snapshot(*, timeout_s: float = 1.0) -> dict[str, object] | None:
-    """Return compact best-effort metrics for durable GPU incident telemetry.
+# (nvidia-smi query field, record key) pairs. The first block is the original contract; the second block is
+# additive evidence for narrowing unexplained device loss (throttle reasons, link ceiling, memory-controller load).
+_SURVIVOR_BASE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("index", "index"),
+    ("name", "name"),
+    ("utilization.gpu", "utilization_gpu_pct"),
+    ("memory.total", "memory_total_mb"),
+    ("memory.used", "memory_used_mb"),
+    ("temperature.gpu", "temperature_c"),
+    ("power.draw", "power_draw_w"),
+    ("power.limit", "power_limit_w"),
+    ("clocks.gr", "graphics_clock_mhz"),
+    ("clocks.mem", "memory_clock_mhz"),
+    ("pstate", "pstate"),
+    ("pcie.link.gen.current", "pcie_link_generation"),
+    ("pcie.link.width.current", "pcie_link_width"),
+)
+_SURVIVOR_EXTRA_FIELDS: tuple[tuple[str, str], ...] = (
+    ("utilization.memory", "utilization_memory_pct"),
+    ("pcie.link.gen.max", "pcie_link_generation_max"),
+    ("pcie.link.width.max", "pcie_link_width_max"),
+    ("clocks_throttle_reasons.active", "throttle_reasons_active"),
+    ("fan.speed", "fan_speed_pct"),
+)
+_SURVIVOR_TEXT_KEYS = frozenset({"name", "pstate", "throttle_reasons_active"})
+_SURVIVOR_INT_KEYS = frozenset(
+    {"index", "pcie_link_generation", "pcie_link_width", "pcie_link_generation_max", "pcie_link_width_max"}
+)
 
-    This is deliberately observational: it only invokes ``nvidia-smi`` and
-    reads host available memory.  Callers must treat missing values as unknown,
-    never as evidence that a GPU or process was absent.
+
+@dataclass(frozen=True)
+class GpuQueryResult:
+    """One ``nvidia-smi`` observation: the snapshot, or why there is none.
+
+    ``status`` is ``ok``, ``gpu_lost`` (the driver reports the device is gone), ``no_devices``, ``timeout``,
+    ``no_nvidia_smi``, ``nonzero_exit`` or ``error``. An absent snapshot is an observation about the query, not
+    proof about the GPU unless the status says ``gpu_lost``.
+    """
+
+    snapshot: dict[str, object] | None
+    status: str
+    detail: str = ""
+
+
+def _classify_nvidia_smi_failure(text: str, returncode: int | None) -> str:
+    lowered = text.lower()
+    if "gpu is lost" in lowered or "unable to determine the device handle" in lowered:
+        return "gpu_lost"
+    if "no devices were found" in lowered:
+        return "no_devices"
+    return "nonzero_exit" if returncode else "no_devices"
+
+
+def _run_survivor_query(
+    nvidia_smi: str, fields: tuple[tuple[str, str], ...], timeout_s: float
+) -> subprocess.CompletedProcess[str]:
+    query = ",".join(name for name, _key in fields)
+    return subprocess.run(
+        [nvidia_smi, f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+        capture_output=True,
+        text=True,
+        timeout=max(0.1, float(timeout_s)),
+        check=False,
+    )
+
+
+def query_gpu_survivor_snapshot(*, timeout_s: float = 1.0) -> GpuQueryResult:
+    """Observe the GPU through ``nvidia-smi`` and say why when nothing is returned.
+
+    Observational only: it invokes ``nvidia-smi`` and reads host available memory. Falls back to the original field
+    set if a driver rejects an additive field, so extra evidence can never remove the base evidence.
     """
 
     nvidia_smi = shutil.which("nvidia-smi")
     if not nvidia_smi:
-        return None
-    fields = (
-        "index,name,utilization.gpu,memory.total,memory.used,temperature.gpu,"
-        "power.draw,power.limit,clocks.gr,clocks.mem,pstate,"
-        "pcie.link.gen.current,pcie.link.width.current"
-    )
+        return GpuQueryResult(None, "no_nvidia_smi")
+    fields = _SURVIVOR_BASE_FIELDS + _SURVIVOR_EXTRA_FIELDS
     try:
-        result = subprocess.run(
-            [nvidia_smi, f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
-            capture_output=True,
-            text=True,
-            timeout=max(0.1, float(timeout_s)),
-            check=False,
-        )
-    except Exception:
-        return None
-    if result.returncode != 0 or not result.stdout.strip():
-        return None
+        result = _run_survivor_query(nvidia_smi, fields, timeout_s)
+        if result.returncode != 0 and "not a valid field" in f"{result.stdout}{result.stderr}".lower():
+            fields = _SURVIVOR_BASE_FIELDS
+            result = _run_survivor_query(nvidia_smi, fields, timeout_s)
+    except subprocess.TimeoutExpired:
+        return GpuQueryResult(None, "timeout")
+    except Exception as exc:
+        return GpuQueryResult(None, "error", type(exc).__name__)
 
-    keys = (
-        "index",
-        "name",
-        "utilization_gpu_pct",
-        "memory_total_mb",
-        "memory_used_mb",
-        "temperature_c",
-        "power_draw_w",
-        "power_limit_w",
-        "graphics_clock_mhz",
-        "memory_clock_mhz",
-        "pstate",
-        "pcie_link_generation",
-        "pcie_link_width",
-    )
-    numeric_keys = set(keys) - {"name", "pstate"}
+    combined = " ".join(f"{result.stdout} {result.stderr}".split())
+    keys = tuple(key for _name, key in fields)
     devices: list[dict[str, object]] = []
-    for line in result.stdout.splitlines():
-        values = [value.strip() for value in line.split(",")]
-        if len(values) != len(keys):
-            continue
-        device: dict[str, object] = {}
-        for key, value in zip(keys, values, strict=True):
-            if value.upper() in {"N/A", "[N/A]", ""}:
-                device[key] = None
-            elif key in numeric_keys:
-                try:
-                    device[key] = int(float(value)) if key in {"index", "pcie_link_generation", "pcie_link_width"} else float(value)
-                except ValueError:
+    if result.returncode == 0:
+        for line in result.stdout.splitlines():
+            values = [value.strip() for value in line.split(",")]
+            if len(values) != len(keys):
+                continue
+            device: dict[str, object] = {}
+            for key, value in zip(keys, values, strict=True):
+                if value.upper() in {"N/A", "[N/A]", ""}:
                     device[key] = None
-            else:
-                device[key] = value
-        devices.append(device)
+                elif key in _SURVIVOR_TEXT_KEYS:
+                    device[key] = value
+                else:
+                    try:
+                        device[key] = int(float(value)) if key in _SURVIVOR_INT_KEYS else float(value)
+                    except ValueError:
+                        device[key] = None
+            devices.append(device)
     if not devices:
-        return None
+        return GpuQueryResult(None, _classify_nvidia_smi_failure(combined, result.returncode), combined[:200])
 
     host_available_memory_mb: float | None = None
     if psutil is not None:
@@ -316,11 +361,24 @@ def collect_gpu_survivor_snapshot(*, timeout_s: float = 1.0) -> dict[str, object
             host_available_memory_mb = round(psutil.virtual_memory().available / (1024 * 1024), 1)
         except Exception:
             pass
-    return {
+    snapshot: dict[str, object] = {
         "provider": "nvidia-smi",
         "devices": devices,
         "host_available_memory_mb": host_available_memory_mb,
     }
+    return GpuQueryResult(snapshot, "ok", "" if fields is not _SURVIVOR_BASE_FIELDS else "base_fields_only")
+
+
+def collect_gpu_survivor_snapshot(*, timeout_s: float = 1.0) -> dict[str, object] | None:
+    """Return compact best-effort metrics for durable GPU incident telemetry.
+
+    This is deliberately observational: it only invokes ``nvidia-smi`` and
+    reads host available memory.  Callers must treat missing values as unknown,
+    never as evidence that a GPU or process was absent. Use ``query_gpu_survivor_snapshot`` when the reason for a
+    missing snapshot matters.
+    """
+
+    return query_gpu_survivor_snapshot(timeout_s=timeout_s).snapshot
 
 
 def _independent_process_tree_roots(
