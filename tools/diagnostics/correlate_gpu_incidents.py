@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sqlite3
-from collections.abc import Iterable, Mapping
+import subprocess
+import sys
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
+from xml.etree import ElementTree
 
 
 def _parse_timestamp(value: str) -> datetime:
@@ -237,6 +241,257 @@ def _telemetry_near(
     return selected
 
 
+# --- Windows Kernel-PnP "query remove vetoed" marker (read-only) -------------------------------------------------
+
+PNP_PROVIDER = "Microsoft-Windows-Kernel-PnP"
+PNP_CHANNEL = "Microsoft-Windows-Kernel-PnP/Device Management"
+PNP_QUERY_REMOVE_VETOED_EVENT_ID = 1000
+DEFAULT_PNP_WINDOW = timedelta(seconds=120)
+DEFAULT_GPU_VENDOR_ID = "VEN_10DE"
+_EVENT_NS = "{http://schemas.microsoft.com/win/2004/08/events/event}"
+# PNP_VETO_TYPE from the Windows SDK (cfgmgr32.h). The number is always reported; the label is a reading aid.
+PNP_VETO_TYPE_LABELS = {
+    0: "Unknown",
+    1: "LegacyDevice",
+    2: "PendingClose",
+    3: "WindowsApp",
+    4: "WindowsService",
+    5: "OutstandingOpen",
+    6: "Device",
+    7: "Driver",
+    8: "IllegalDeviceRequest",
+    9: "InsufficientPower",
+    10: "NonDisableable",
+    11: "LegacyDriver",
+    12: "InsufficientRights",
+}
+PNP_INTERPRETATION = (
+    "Kernel-PnP event 1000 is a timing marker only: Windows asked to remove the device and the request was vetoed. "
+    "It does not establish hardware failure, that the GPU disappeared, or which component is responsible."
+)
+_POWERSHELL_TIMEOUT_S = 30.0
+
+
+class PnpRead(NamedTuple):
+    """Parsed Kernel-PnP events, or why none could be read. ``events`` is None when the source was unavailable."""
+
+    events: list[dict[str, Any]] | None
+    status: str
+    detail: str = ""
+
+
+def parse_pnp_events_xml(xml_documents: Iterable[str]) -> list[dict[str, Any]]:
+    """Parse exported event XML, keeping only Kernel-PnP / Device Management event 1000.
+
+    Provider, channel and event id must all match exactly; anything else, and anything malformed, is dropped.
+    """
+
+    events: list[dict[str, Any]] = []
+    for document in xml_documents:
+        try:
+            root = ElementTree.fromstring(document)
+        except ElementTree.ParseError:
+            continue
+        system = root.find(f"{_EVENT_NS}System")
+        if system is None:
+            continue
+        provider = system.find(f"{_EVENT_NS}Provider")
+        channel = system.findtext(f"{_EVENT_NS}Channel")
+        event_id = system.findtext(f"{_EVENT_NS}EventID")
+        created = system.find(f"{_EVENT_NS}TimeCreated")
+        if (
+            provider is None
+            or provider.get("Name") != PNP_PROVIDER
+            or channel != PNP_CHANNEL
+            or str(event_id).strip() != str(PNP_QUERY_REMOVE_VETOED_EVENT_ID)
+            or created is None
+        ):
+            continue
+        timestamp = _safe_time(created.get("SystemTime"))
+        if timestamp is None:
+            continue
+        data = {
+            item.get("Name"): (item.text or "")
+            for item in root.findall(f"{_EVENT_NS}EventData/{_EVENT_NS}Data")
+            if item.get("Name")
+        }
+        device_id = data.get("DeviceInstanceId", "").strip()
+        if not device_id:
+            continue
+        try:
+            veto_type: int | None = int(data.get("VetoType", "").strip())
+        except ValueError:
+            veto_type = None
+        record_id = system.findtext(f"{_EVENT_NS}EventRecordID")
+        events.append(
+            {
+                "timestamp_utc": timestamp.isoformat(),
+                "event_record_id": int(record_id) if record_id and record_id.isdigit() else None,
+                "provider": PNP_PROVIDER,
+                "channel": PNP_CHANNEL,
+                "event_id": PNP_QUERY_REMOVE_VETOED_EVENT_ID,
+                "device_instance_id": device_id,
+                "veto_type": veto_type,
+                "veto_type_label": PNP_VETO_TYPE_LABELS.get(veto_type) if veto_type is not None else None,
+                "vetoed_by": data.get("VetoName", "").strip() or None,
+            }
+        )
+    return events
+
+
+def _powershell_utc_to_local(expression: str) -> str:
+    return f"[DateTimeOffset]::Parse('{expression}').LocalDateTime"
+
+
+def _pnp_event_script(since: datetime, until: datetime) -> str:
+    """Read-only PowerShell: list Kernel-PnP event 1000 as XML, one document per line."""
+
+    return (
+        "$ErrorActionPreference = 'Stop'\n"
+        "try {\n"
+        f"  $s = {_powershell_utc_to_local(since.astimezone(UTC).isoformat())}\n"
+        f"  $e = {_powershell_utc_to_local(until.astimezone(UTC).isoformat())}\n"
+        f"  Get-WinEvent -FilterHashtable @{{LogName='{PNP_CHANNEL}';Id={PNP_QUERY_REMOVE_VETOED_EVENT_ID};"
+        "StartTime=$s;EndTime=$e} | ForEach-Object { $_.ToXml() -replace \"[\\r\\n]+\", ' ' }\n"
+        "} catch {\n"
+        "  if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') { exit 0 }\n"
+        "  [Console]::Error.WriteLine($_.Exception.Message); exit 3\n"
+        "}\n"
+    )
+
+
+def _gpu_device_script() -> str:
+    return (
+        "$ErrorActionPreference = 'Stop'\n"
+        "try { Get-PnpDevice -Class Display | ForEach-Object { $_.InstanceId } }\n"
+        "catch { [Console]::Error.WriteLine($_.Exception.Message); exit 3 }\n"
+    )
+
+
+def _run_powershell(script: str) -> tuple[int, str, str]:
+    executable = shutil.which("powershell.exe") or shutil.which("powershell") or shutil.which("pwsh")
+    if executable is None:
+        raise FileNotFoundError("PowerShell is not available")
+    completed = subprocess.run(
+        [executable, "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True,
+        text=True,
+        timeout=_POWERSHELL_TIMEOUT_S,
+        check=False,
+    )
+    return completed.returncode, completed.stdout, completed.stderr
+
+
+PowerShellRunner = Callable[[str], tuple[int, str, str]]
+
+
+def _run_read_only(script: str, runner: PowerShellRunner) -> tuple[str, str, str]:
+    """Return ``(status, stdout, detail)``; ``status`` is ``ok`` or an unavailability reason."""
+
+    try:
+        returncode, stdout, stderr = runner(script)
+    except FileNotFoundError:
+        return "powershell_unavailable", "", "PowerShell was not found"
+    except subprocess.TimeoutExpired:
+        return "timeout", "", f"PowerShell exceeded {_POWERSHELL_TIMEOUT_S:.0f}s"
+    except OSError as exc:
+        return "error", "", type(exc).__name__
+    if returncode != 0:
+        return "log_inaccessible", "", " ".join(stderr.split())[:200]
+    return "ok", stdout, ""
+
+
+def read_windows_pnp_events(
+    *,
+    since: datetime,
+    until: datetime,
+    runner: PowerShellRunner = _run_powershell,
+    platform: str = sys.platform,
+) -> PnpRead:
+    """Read Kernel-PnP event 1000 between two instants without modifying the event log."""
+
+    if not platform.startswith("win"):
+        return PnpRead(None, "unavailable_not_windows")
+    status, stdout, detail = _run_read_only(_pnp_event_script(since, until), runner)
+    if status != "ok":
+        return PnpRead(None, status, detail)
+    documents = [line for line in stdout.splitlines() if line.lstrip().startswith("<Event")]
+    return PnpRead(parse_pnp_events_xml(documents), "ok")
+
+
+def read_gpu_device_ids(
+    *,
+    vendor_id: str = DEFAULT_GPU_VENDOR_ID,
+    runner: PowerShellRunner = _run_powershell,
+    platform: str = sys.platform,
+) -> tuple[list[str] | None, str]:
+    """List display-class device instance ids from this vendor; ``None`` when they cannot be read."""
+
+    if not platform.startswith("win"):
+        return None, "unavailable_not_windows"
+    status, stdout, _detail = _run_read_only(_gpu_device_script(), runner)
+    if status != "ok":
+        return None, status
+    wanted = vendor_id.upper()
+    return [line.strip() for line in stdout.splitlines() if wanted in line.upper()], "ok"
+
+
+def match_pnp_markers(
+    incident: datetime,
+    events: Iterable[Mapping[str, Any]],
+    *,
+    device_ids: Iterable[str],
+    window: timedelta = DEFAULT_PNP_WINDOW,
+) -> list[dict[str, Any]]:
+    """Return events for the given device instances within ``window`` of ``incident``, nearest first.
+
+    ``delta_seconds`` is signed: event time minus incident time, so a negative value happened before the incident.
+    """
+
+    wanted = {device_id.strip().casefold() for device_id in device_ids if device_id.strip()}
+    markers: list[dict[str, Any]] = []
+    for event in events:
+        device_id = str(event.get("device_instance_id") or "")
+        timestamp = _safe_time(event.get("timestamp_utc"))
+        if timestamp is None or device_id.casefold() not in wanted:
+            continue
+        delta = (timestamp - incident).total_seconds()
+        if abs(delta) > window.total_seconds():
+            continue
+        relation = "before_incident" if delta < 0 else "after_incident" if delta > 0 else "at_incident"
+        markers.append({**event, "delta_seconds": round(delta, 3), "relation": relation})
+    markers.sort(key=lambda item: abs(item["delta_seconds"]))
+    return markers
+
+
+def _windows_pnp_section(
+    incident: datetime,
+    *,
+    pnp: PnpRead | None,
+    gpu_device_ids: Iterable[str] | None,
+    window: timedelta,
+) -> dict[str, Any]:
+    """Describe the PnP marker without feeding it into the StableNew-activity classification."""
+
+    if pnp is None:
+        return {"status": "not_requested", "markers": []}
+    if pnp.events is None:
+        return {"status": f"unavailable_{pnp.status}", "detail": pnp.detail, "markers": []}
+    ids = [device_id for device_id in (gpu_device_ids or []) if device_id.strip()]
+    if not ids:
+        return {"status": "gpu_device_unknown", "markers": []}
+    markers = match_pnp_markers(incident, pnp.events, device_ids=ids, window=window)
+    section: dict[str, Any] = {
+        "status": "marker_near_incident" if markers else "no_marker_near_incident",
+        "window_seconds": window.total_seconds(),
+        "gpu_device_ids": ids,
+        "markers": markers,
+    }
+    if markers:
+        section["interpretation"] = PNP_INTERPRETATION
+    return section
+
+
 def correlate(
     incidents: Iterable[Mapping[str, Any]],
     *,
@@ -244,6 +499,9 @@ def correlate(
     telemetry: Iterable[Mapping[str, Any]] | None,
     webui_log_files: Iterable[Path] | None,
     window: timedelta = timedelta(minutes=10),
+    pnp: PnpRead | None = None,
+    gpu_device_ids: Iterable[str] | None = None,
+    pnp_window: timedelta = DEFAULT_PNP_WINDOW,
 ) -> list[dict[str, Any]]:
     """Classify only what supplied evidence proves; unavailable remains unknown."""
 
@@ -296,6 +554,9 @@ def correlate(
                 "nearby_sqlite_jobs": nearby_jobs,
                 "nearby_survivor_telemetry": nearby_telemetry,
                 "nearby_webui_log_files": nearby_webui,
+                "windows_pnp": _windows_pnp_section(
+                    timestamp, pnp=pnp, gpu_device_ids=gpu_device_ids, window=pnp_window
+                ),
                 "source_availability": {
                     "sqlite": sqlite_available,
                     "survivor_telemetry": telemetry_available,
@@ -313,6 +574,24 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--sqlite", type=Path)
     parser.add_argument("--telemetry-dir", type=Path)
     parser.add_argument("--webui-log-dir", type=Path)
+    parser.add_argument(
+        "--windows-pnp",
+        action="store_true",
+        help="read Kernel-PnP event 1000 (query-remove vetoed) from the Windows event log, read-only",
+    )
+    parser.add_argument(
+        "--pnp-events-xml",
+        type=Path,
+        help="offline alternative to --windows-pnp: a file of exported event XML, one event per line",
+    )
+    parser.add_argument(
+        "--gpu-instance-id",
+        action="append",
+        default=[],
+        help="GPU device instance id to match (repeatable); default: display devices with the vendor id",
+    )
+    parser.add_argument("--gpu-vendor-id", default=DEFAULT_GPU_VENDOR_ID)
+    parser.add_argument("--pnp-window-seconds", type=float, default=DEFAULT_PNP_WINDOW.total_seconds())
     parser.add_argument("--out", type=Path, required=True)
     return parser.parse_args()
 
@@ -332,6 +611,21 @@ def main() -> int:
         else None
     )
     incidents = [{"timestamp_utc": timestamp, "source": "operator_supplied"} for timestamp in args.incident]
+    pnp_window = timedelta(seconds=max(0.0, args.pnp_window_seconds))
+    pnp: PnpRead | None = None
+    gpu_device_ids: list[str] = list(args.gpu_instance_id)
+    if args.pnp_events_xml is not None:
+        if args.pnp_events_xml.exists():
+            lines = args.pnp_events_xml.read_text(encoding="utf-8", errors="replace").splitlines()
+            pnp = PnpRead(parse_pnp_events_xml(line for line in lines if line.lstrip().startswith("<Event")), "ok")
+        else:
+            pnp = PnpRead(None, "events_file_missing", str(args.pnp_events_xml))
+    elif args.windows_pnp:
+        instants = [_parse_timestamp(str(item["timestamp_utc"])) for item in incidents]
+        pnp = read_windows_pnp_events(since=min(instants) - pnp_window, until=max(instants) + pnp_window)
+    if pnp is not None and not gpu_device_ids:
+        detected, _status = read_gpu_device_ids(vendor_id=args.gpu_vendor_id)
+        gpu_device_ids = detected or []
     output = {
         "schema": "stablenew.gpu-incident-timeline.v1",
         "generated_at_utc": datetime.now(UTC).isoformat(),
@@ -340,6 +634,9 @@ def main() -> int:
             jobs=jobs,
             telemetry=telemetry,
             webui_log_files=webui_files,
+            pnp=pnp,
+            gpu_device_ids=gpu_device_ids,
+            pnp_window=pnp_window,
         ),
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
