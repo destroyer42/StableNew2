@@ -16,6 +16,8 @@ class QueueProjection:
     revision: int
     queue_items: tuple[str, ...] = ()
     queue_jobs: tuple[UnifiedJobSummary, ...] = ()
+    #: Why queued work is not dispatching (GPU quarantine / WebUI outage), or "" when nothing is held.
+    dispatch_hold: str = ""
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-416 of 593 modules have a docstring.
+417 of 594 modules have a docstring.
 
 ## src/
 
@@ -126,6 +126,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `application_runtime_coordinator.py`: (no docstring)
 - `background_task_coordinator.py`: (no docstring)
 - `diagnostics_coordinator.py`: (no docstring)
+- `dispatch_hold_status.py`: Operator-facing reason a non-empty queue is not dispatching
 - `gui_config_service.py`: (no docstring)
 - `learning_completion_router.py`: learning_completion_router — routes job-completion events to the learning controller without hard-wiring AppC…
 - `run_submission_service.py`: (no docstring)
