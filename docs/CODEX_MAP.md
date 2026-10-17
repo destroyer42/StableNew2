@@ -1,383 +1,52 @@
-# StableNew Codex map
+# StableNew task map
 
-This is a task-oriented navigation map, not an architecture authority. Start
-from the task row, and do not expand into adjacent subsystems without
-evidence. Read `STATUS.md`, this map, and only the relevant section of
-`docs/ARCHITECTURE_v2.6.md` before exploring implementation.
-
-Product/value/priority assessment: [assessment entry point](assessments/README.md)
--> [v1.2 playbook](assessments/ASSESSMENT_PLAYBOOK.md) ->
-[template](assessments/ASSESSMENT_TEMPLATE.md). Select Lightweight, Focused, or
-Comprehensive; dated reports are evidence, not current priority authority.
-
-## Canonical runtime
-
-- Forge/Comfy still-image qualification (offline, no runtime driver):
-  `docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md` ->
-  `tools/qualification/img_backend_qual_100/` (frozen comparison, cited capability ledger, pure Comfy graphs,
-  read-only model inventory, proposed protocol and stdout-only packet CLI) -> `tests/tools/test_img_backend_qual_100.py`.
+Where to start for a task. This is navigation, not architecture authority, and it is hand-written and short on purpose
+(capped at 60 lines by `tools/ci/ci_truth.py`, every path checked). Find any other module in the generated
+[`docs/CODE_MAP.md`](CODE_MAP.md); read the matching feature record under `docs/Subsystems/` (one folder per area) before changing a feature.
+The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX_MAP.md`).
 
 `Intent -> Compiler -> NJR -> JobService -> Queue/Repository -> PipelineRunner.run_njr -> Handler -> Artifacts/History`
 
-- GUI intent and application wiring: `src/controller/app_controller.py`,
-  `src/gui/app_state_v2.py`, and `src/gui/views/`.
-- Photo Optimize settings, geometry, batching and workspace (PR-IMG-PHOTO-220):
-  Historical result promotion (PR-IMG-PHOTO-223): `src/photo_optimize/results.py` projects exact
-  original/working/history-output candidates and validates contained images, available integrity
-  evidence and reviewed promotion plans. `store.py` saves snapshot + baseline together through its
-  existing atomic sidecar path. `photo_optimize_results.py` owns the browser, read-only preview
-  worker and confirmed intent; existing completion passes frozen geometry policy into history.
-  See `docs/Subsystems/Image/PR-IMG-PHOTO-223_Historical_Result_Promotion.md` and
-  `tests/{photo_optimize/test_historical_results_223,gui_v2/test_photo_results_223}.py`.
-  Scope-aware editing (PR-IMG-PHOTO-222): `photo_optimize_layout.py` builds the Single Photo /
-  Batch Edit workspaces; `photo_optimize_editors.py` provides masks and complete review dialogs;
-  `photo_optimize_scope.py` captures UI intent and coordinates the existing worker.
-  `src/photo_optimize/editing.py` preflights masked draft diffs and reports per-asset write outcomes
-  through the existing store. `src/controller/photo_optimize_submission.py` extracts preparation /
-  admission delegates; confirmed plans use the same compiler and one admission without recompilation.
-  See `docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md` and
-  `tests/{photo_optimize/test_scope_editing_222,gui_v2/test_photo_scope_222}.py`.
-  `src/gui/views/photo_optimize_tab_frame_v2.py` -> `src/photo_optimize/settings.py`
-  (explicit settings/alias precedence and Auto/Custom geometry) / `submission.py`
-  (per-photo stage partitions; existing `ReprocessJobBuilder`, frozen-plan summary) ->
-  `AppController.on_optimize_photo_assets` -> `reprocess_admission.submit_reprocess_njrs`
-  (one whole-request preflight/admission). `models.py` / `store.py` own photo draft/archive
-  sidecars and copied artifact associations; `migration.py` / `paths.py` verify nondestructive
-  Windows-safe legacy copies. `WorkspacePaths.photo_optimize_root` places the managed workspace
-  below the configured routed output root; `output_routing.py` / `OutputScanner` exclude it.
-  Windows migration recovery (PR-IMG-PHOTO-221): `migration.py` reports per-asset failures and
-  bounds rename retries; `paths.py` publishes without replacement; `store.py` probes workspace
-  writability and retries through the same store. The existing GUI worker projects migration
-  status/details and retry. See `docs/Subsystems/Image/PR-IMG-PHOTO-221_Windows_Migration_Recovery.md`
-  and `tests/photo_optimize/test_migration_recovery_221.py`.
-  Focused regressions: `tests/photo_optimize/`, `tests/controller/test_app_controller_photo_optimize.py`.
-- Forge supported-option defaults (PR-IMG-FORGE-230):
-  `docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md` ->
-  `src/api/client.py` (`apply_upscale_performance_defaults` filters to advertised options and returns
-  `WebUIDefaultsOutcome`; `_ensure_option_keys` does not cache a failed listing) <-
-  `src/pipeline/executor.py` (`_apply_webui_defaults_once`, unchanged). Regressions:
-  `tests/test_api_client.py`, `tests/pipeline/test_forge_supported_option_defaults_230.py`.
-- PromptPack draft and submission coordination:
-  `src/controller/pipeline_controller.py`,
-  `src/controller/app_controller_services/run_submission_service.py`, and
-  `src/controller/pipeline_controller_services/`.
-- SDXL PromptPack OpenPose ControlNet (PR-IMG-CNET-210):
-  Follow-up output integrity/conditioning diagnostics: `docs/Subsystems/Image/PR-IMG-CNET-211_OpenPose_Output_Integrity_and_Reliability.md` ->
-  `src/image_backends/openpose_output.py` (response classification before save) / `src/conditioning/openpose_diagnostics.py`
-  (model-name hints, input/geometry facts) -> existing Forge admission, executor and GUI view; no new authority.
-  `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md` ->
-  `src/conditioning/openpose.py` (versioned slot declaration, identity rules) ->
-  `src/promptpacks/storage.py::prompt_pack_rows` / `src/gui/models/prompt_pack_model.py` (per-slot persistence, row conditioning) ->
-  `src/pipeline/openpose_compile.py` (target gate + verify + freeze, called by `prompt_pack_job_builder.py::_freeze_conditioning`) ->
-  `src/conditioning/openpose_library.py` / `openpose_snapshot.py` (bounded read, content-addressed job-owned snapshot, frozen record) ->
-  `src/assets/registry.py` (`AssetKind.OPENPOSE_IMAGE`) / `src/conditioning/openpose_catalog.py` (editor listing) ->
-  `src/image_backends/openpose_capability.py` (target eligibility over `ModelPolicy`) ->
-  `src/image_backends/forge_controlnet.py` + `forge_webui_backend.py` (read-only admission, one wire unit) /
-  `src/api/forge_client.py::get_controlnet_catalog` -> `src/pipeline/executor.py::run_txt2img_stage` (final re-verification) ->
-  `src/gui/widgets/openpose_picker_panel.py` / `src/gui_v2/openpose_conditioning_view.py` (editor) ->
-  `tests/*/test_*_210.py` (+ `tests/integration/test_pr_img_cnet_210_canonical_path.py`).
-- Preview draft recovery (PR-GUI-112):
-  `docs/Subsystems/GUI/PR-GUI-112_Preview_Draft_Recovery.md` ->
-  `src/gui/preview_panel_v2.py` (independent Clear/queue eligibility and errors) ->
-  `src/gui/app_state_v2.py` (transient preview generation) ->
-  `src/controller/app_controller_services/runtime_projection_coordinator.py` /
-  `src/gui/app_state_projection_sink.py` (versioned async publication) ->
-  `tests/gui_v2/test_preview_draft_recovery_112.py`.
-- Persistent checkpoint evidence and Model Comparison compatibility (PR-LEARN-COMPARE-145):
-  `docs/Subsystems/Learning/PR-LEARN-COMPARE-145_Checkpoint_Evidence_and_Comparison_Compatibility.md` ->
-  `src/assets/registry.py` (`checkpoint_status`, `describe_cache`, `RefreshResult.counters`; sole hash/cache authority) /
-  `src/assets/cache_diagnostics.py` (path-free miss reasons and counters) ->
-  `src/learning/model_evidence_readiness.py` (exact-profile identity authority via `ModelPolicy.exact_identity_authority`) ->
-  `src/learning/model_comparison.py::candidate_ineligibility` (one policy-derived eligibility rule;
-  `ModelPolicy.explicit_capabilities`) -> `tools/diagnose_asset_registry_cache.py` (read-only owner diagnosis) ->
-  `tests/assets/test_checkpoint_evidence_persistence_145.py` / `tests/learning_v2/test_model_comparison_evidence_145.py`.
-- Unified batch operations and outcome triage (PR-BATCH-OPS-201):
-  `docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md` ->
-  `src/queue/batch_membership.py` (pure composite `(kind, batch_id)` identity; `replay_origin`; `selected_retry` descriptor) ->
-  `src/queue/batch_projection.py` / `failure_triage.py` (derived counts, aggregate state, typed-evidence triage) ->
-  `src/queue/job_repository.py` (`list_batch_candidate_rows`, `list_replay_child_rows`, `transition_job(expected_status=)`) /
-  `src/queue/job_queue.py` (`cancel_if_queued`, `cancel_queued_jobs`) ->
-  `src/pipeline/replay_njr_compiler.py` (no inherited membership) / `replay_input_verification.py` ->
-  `src/controller/batch_operations_service.py` (refresh, Cancel Remaining, selected retry, output resolution) ->
-  `src/gui/view_contracts/batch_operations_contract.py` (toolkit-neutral session) ->
-  `src/gui/batch_operations_panel_v2.py` / `batch_retry_dialog.py` (Tk, mounted by `pipeline_tab_frame_v2.py`) ->
-  `src/gui/controllers/video_workspace_handoff.py::route_images_to_review` ->
-  `tests/queue/test_batch_*_201.py`, `tests/controller/test_batch_operations_service_201.py`, `tests/gui_v2/test_batch_operations_*_201.py`.
-- GPU device-loss dispatch containment (PR-QUEUE-GPU-180):
-  `docs/Subsystems/Runtime/PR-QUEUE-GPU-180_GPU_Loss_Dispatch_Containment.md` ->
-  `src/utils/gpu_device_health.py` (hard-bounded, single-flight read-only `nvidia-smi` enumeration, fault vocabulary) ->
-  `src/api/webui_failure_evidence.py` (`accelerator_fault` code) -> `src/queue/gpu_loss_assessment.py` (pure decision
-  table; host is queried only for a device fault or typed outage suspicion) -> `src/queue/backend_dependency.py`
-  (`held_by_gpu_loss`) / `src/queue/job_queue.py` (persisted `gpu_dispatch_quarantine` inside the atomic claim
-  predicate; `is_job_held_by_gpu_loss` / `is_job_held_by_webui`) -> `src/queue/single_node_runner.py`
-  (`_observe_gpu_loss`, ahead of the WebUI assessment) -> `src/controller/gpu_loss_coordinator.py` (apply,
-  operator-gated release, incident listener, projection; bound in `job_service_outage.py`) ->
-  `src/controller/webui_outage_coordinator.py` (no owned restart under quarantine) ->
-  `src/controller/app_controller.py` (`confirm_gpu_recovery`, `add_gpu_quarantine_listener`: the only GUI seam) ->
-  `src/services/operator_readiness_service.py` / `src/gui/panels_v2/operator_readiness_panel_v2.py` /
-  `src/gui/main_window_v2.py` (readiness record, confirm action, off-Tk release) and
-  `src/queue/batch_projection.py` / `src/gui/view_contracts/batch_operations_contract.py` (hold-source labels) ->
-  `tests/queue/test_gpu_loss_containment_180.py`, `test_gpu_quarantine_queue_180.py`, `test_gpu_loss_assessment_180.py`.
-- Dead Forge endpoint cascade repair (PR-QUEUE-WEBUI-172):
-  `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-172_Dead_Forge_Endpoint_Cascade_Repair.md` ->
-  `src/pipeline/executor.py` / `src/api/client.py` (typed stage/extra-single-image errors, no ambiguous replay) ->
-  `src/api/webui_failure_evidence.py` (identity gap, dispatch certainty, completed work) ->
-  `src/pipeline/pipeline_runner.py` / `src/queue/single_node_runner.py` (normalized proof, phase/event checkpoints) ->
-  `src/controller/webui_outage_coordinator.py` (owned recovery, one incident budget) ->
-  `src/controller/webui_connection_controller.py` / `src/main.py` (fresh off-Tk health, outage projection) ->
-  `tests/queue/test_dead_forge_cascade_172.py` (offline canonical path and temporary SQLite cascade).
-- WebUI outage containment (PR-QUEUE-WEBUI-171):
-  `docs/Subsystems/Runtime/PR-QUEUE-WEBUI-171_Backend_Scoped_Outage_Containment.md` ->
-  `src/queue/backend_dependency.py` (pure classifier) -> `src/queue/job_queue.py` (atomic eligibility-aware
-  claim, in-memory WebUI hold, `return_undispatched_to_queue`) -> `src/queue/single_node_runner.py` (no replay,
-  outage observer, held idle wait) -> `src/api/webui_failure_evidence.py` + `src/pipeline/pipeline_runner.py`
-  (typed evidence) -> `src/controller/webui_outage_coordinator.py` / `job_service_outage.py` (assessment,
-  one owned recovery cycle, proof-gated release, projection) -> `src/api/webui_process_manager.py::restart_webui`
-  (launch-lock serialized) -> `src/services/operator_readiness_service.py` ->
-  `tests/queue/test_webui_outage_containment_171.py`.
-- Managed WebUI endpoint/lifecycle consistency (PR-RUNTIME-WEBUI-170):
-  `docs/Subsystems/Runtime/PR-RUNTIME-WEBUI-170_Managed_WebUI_Endpoint_and_Lifecycle_Consistency.md` ->
-  `src/controller/webui_connection_controller.py` (single-flight, epoch-guarded, no alternate ports) ->
-  `src/api/webui_process_manager.py` (`_start_lock`, startup window, `check_health` refusal) /
-  `src/api/healthcheck.py` -> `src/gui/status_bar_v2.py` (READY controls) ->
-  `tests/controller/test_webui_endpoint_lifecycle_170.py`.
-- Model Comparison global-positive parity (PR-IMG-MODELS-160):
-  `docs/Subsystems/Image/PR-IMG-MODELS-160_Model_Comparison_Global_Positive_Parity.md` ->
-  `src/learning/model_comparison.py::global_positive_ownership` (ownership read from the arm's compiled policy) /
-  `_verify_global_positive` (frozen-arm contract, legacy discriminator) ->
-  `src/pipeline/global_prompt_policy.py::frozen_global_positive_policy` ->
-  `src/pipeline/resolution_layer.py::adapt_pack_intent` / `compose_global_positive` (unchanged) ->
-  `tests/learning_v2/test_model_comparison_global_positive_160.py`.
-- Z-Image effective configuration adaptation (PR-IMG-MODELS-159):
-  `docs/Subsystems/Image/PR-IMG-MODELS-159_ZImage_Effective_Configuration_Adaptation.md` ->
-  `src/pipeline/prompt_pack_job_builder.py::_prepare_entry`/`_build_jobs_for_entry` (normalize executable
-  config, compose global positive) -> `src/image_backends/model_policy.py::normalize_profile_owned_values` /
-  `forge_zimage_profile.project_shared_baseline` -> `src/prompting/prompt_adaptation.py` (ops, ruleset
-  `159.1`) / `src/pipeline/resolution_layer.py::compose_global_positive` ->
-  `src/pipeline/exact_profile_effective_config.py` + `job_builder_v2.py` (generic path) ->
-  `src/gui_v2/adaptation_notice.py` + `src/gui/preview_panel_v2.py` (notice) +
-  `src/gui/zimage_optional_control_projection.py` -> `tests/*/test_*159*.py`.
-- Cross-workflow exact-profile compatibility and preflight (PR-IMG-MODELS-158):
-  `docs/Subsystems/Image/PR-IMG-MODELS-158_Cross_Workflow_Model_Compatibility.md` ->
-  `src/image_backends/operation_compatibility.py` (pure read-only assessment over `ModelPolicy`) ->
-  `src/controller/reprocess_admission.py` (whole-batch preflight before the one
-  `JobService.submit_njrs`; Review/Reprocess/mask-edit/photo-optimize/curation) ->
-  `src/gui/controllers/review_workflow_adapter.py::assess_readiness` (Review `Readiness:` line) ->
-  `src/learning/model_comparison.py` (`prepare_candidate_baseline`, `verify_arms_admissible`) ->
-  `src/prompting/pack_target_readiness.py` + `PromptWorkspaceState.pack_for_validation`
-  (editor Validate: structure vs target, in-memory) ->
-  `tests/*/test_*_158.py`.
-- Z-Image PromptPack adaptation (PR-IMG-MODELS-157):
-  `docs/Subsystems/Image/PR-IMG-MODELS-157_ZImage_PromptPack_Adaptation.md` ->
-  `src/pipeline/prompt_pack_job_builder.py::_prepare_entry` -> existing
-  `adapt_pack_intent`/render and immutable adaptation provenance; model-facing
-  guidance remains in `src/image_backends/model_policy.py`.
-- PromptPack native storage, discovery, interchange, and migration:
-  `src/promptpacks/paths.py` resolves the per-user authority and
-  `src/promptpacks/storage.py` owns the versioned JSON format; typed GUI editing remains in
-  `src/gui/models/prompt_pack_model.py`.
-- WebUI-family managed lifecycle (one active manager; startup, readiness epochs, owned restart, early-exit diagnostics):
-  `src/api/webui_process_manager.py` (`WebUIProcessManager`, `wait_for_managed_startup`, `WebUIReadyEvent`), observed by
-  `src/controller/webui_connection_controller.py` (`attach_process_manager`, `ready_epoch`) and wired in `src/main.py`;
-  readiness fans out to `AppController.on_webui_ready` (the one resource-refresh seam). The application-level runtime
-  selector lives in `src/gui/engine_settings_dialog.py` over `src/api/webui_runtime_identity.py`.
-- Global Positive/Negative prompt text (per-user state): `src/prompting/global_prompt_paths.py` resolves the
-  directory (`%LOCALAPPDATA%\StableNew\GlobalPrompts`, `STABLENEW_GLOBAL_PROMPT_DIR` override) and
-  `src/utils/config.py::ConfigManager` is the persistence API; enabled flags stay in settings. Journeys isolate it
-  through `tools/operator_journey/workspace.py`.
-- PromptPack expansion/compilation: `src/pipeline/prompt_pack_job_builder.py`,
-  `src/pipeline/prompt_pack_parser.py`, and `src/pipeline/resolution_layer.py`.
-- Matrix/randomization: `src/pipeline/config_variant_plan_v2.py`,
-  `src/pipeline/randomizer_v2.py`, and `src/randomizer/`.
-- NJR contract and serialization: `src/pipeline/njr_core_v26.py` and
-  `src/pipeline/config_contract_v26.py`.
-- Other typed compilers: `src/pipeline/replay_njr_compiler.py`,
-  `src/pipeline/training_njr_compiler.py`, `src/pipeline/cli_njr_builder.py`,
-  and `src/video/workflow_compiler.py`.
-- Submission and queue policy: `src/controller/job_service.py`,
-  `src/controller/submission_policy_v26.py`, and `src/queue/job_queue.py`.
-- SQLite jobs/history: `src/queue/job_repository.py`,
-  `src/queue/job_history_store.py`, and `src/history/`.
-- Execution: `src/queue/single_node_runner.py`,
-  `src/pipeline/pipeline_runner.py`, and `src/pipeline/executor.py`.
-- Shutdown admission fence and repository quiescence (`PR-RUNTIME-SHUTDOWN-140`,
-  `docs/Subsystems/Runtime/PR-RUNTIME-SHUTDOWN-140_Shutdown_Admission_and_Repository_Quiescence.md`):
-  `src/queue/job_queue.py` (`fence_dispatch`, the atomic claim boundary) ->
-  `src/queue/single_node_runner.py` (`begin_shutdown`, `is_quiescent`, `stop() -> bool`) ->
-  `src/controller/job_service_shutdown.py` -> `src/controller/app_controller_services/shutdown_coordinator.py`
-  (sequencing; the repository closes only when quiescent) -> `tests/queue/test_shutdown_admission_fence_140.py`,
-  `tests/controller/test_shutdown_quiescence_140.py`.
-- Managed Forge identity attestation (`PR-RUNTIME-FORGE-IDENTITY-150`,
-  `docs/Subsystems/Runtime/PR-RUNTIME-FORGE-IDENTITY-150_Managed_Forge_Identity_Attestation.md`):
-  `src/api/webui_runtime_identity.py` (endpoint classification + evidence) ->
-  `src/api/webui_identity_attestation.py` (owned-session attestation, `identity_gap`, decision source) ->
-  `src/image_backends/webui_family_backend.py` (the pre-dispatch guard) -> `tests/api/test_managed_forge_identity_attestation.py`.
-  `WebUIProcessManager` stays the only lifecycle/ownership authority and only exposes session facts.
-- GPU hard-crash evidence (observation only):
-  `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`
-  -> `src/utils/gpu_survivor_telemetry.py` ->
-  `src/utils/process_inspector_v2.py::collect_gpu_survivor_snapshot` ->
-  `src/pipeline/pipeline_runner.py`; offline correlation is
-  `tools/diagnostics/correlate_gpu_incidents.py`. These surfaces do not own
-  queue state, runtime lifecycle, GPU settings, or execution control.
-- Current A1111 image implementation boundary: `src/api/`,
-  `src/pipeline/payload_builder.py`, and the typed image handlers in
-  `src/pipeline/executor.py`.
-- Implemented post-v2.6 backend-neutral image boundary (`PR-IMG-100`):
-  `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`,
-  `src/image_backends/image_backend_types.py`,
-  `src/image_backends/image_backend_registry.py`,
-  `src/image_backends/a1111_webui_backend.py`,
-  `src/pipeline/njr_core_v26.py`, `src/pipeline/config_contract_v26.py`,
-  image NJR compilers/builders, `src/pipeline/pipeline_runner.py`, controller
-  runtime ports, and the A1111 executor/client boundary.
-- Completed `PR-IMG-110` target-hardware qualification (generic Diffusers
-  substrate viable; its Ideogram 4 no-go is superseded by `PR-IMG-110R`, Ideogram 4
-  NF4 PASS — CONSTRAINED):
-  `docs/Subsystems/Image/PR-IMG-110_Diffusers_Ideogram4_Qualification.md`,
-  `docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md`, and
-  qualification-only evidence tooling in `tools/qualification/img110/` and
-  `tools/qualification/img110r/`.
-- Native SVD/video: `src/video/svd_service.py`, `src/video/svd_runner.py`,
-  `src/video/svd_native_backend.py`, and `src/video/workflow_contracts.py`.
-- SVD folder-batch submission: `docs/Subsystems/Video/PR-SVD-100_Folder_Batch_Submission.md`
-  -> `src/video/svd_preprocess.py` -> `src/controller/svd_controller.py` ->
-  `src/controller/svd_submission_service.py` -> `src/controller/app_controller.py`
-  -> `src/gui/views/svd_tab_frame_v2.py` -> `JobService.submit_njrs`.
-- Portable SVD provenance: `src/video/svd_portable_provenance.py` ->
-  `src/video/container_metadata.py` -> `src/video/svd_runner.py` ->
-  `src/video/svd_registry.py`.
-- Learning experiments: `src/learning/experiment_execution.py` ->
-  `src/learning/execution_controller.py` -> `JobService.submit_njrs`; durable
-  evidence/recommendations live in `learning_record.py` and
-  `recommendation_engine.py`; draft/library classification, sample-derived
-  conclusions, deterministic source freeze, and isolated derived-job suggestion
-  patches live in `experiment_lifecycle.py`, `experiment_conclusion.py`,
-  `experiment_freeze.py`, and `staged_recommendations.py`, with GUI coordination in
-  `src/gui/controllers/learning_controller.py`.
-- Explicit Model Comparison: `src/learning/model_comparison.py` owns bounded
-  candidate/envelope gates, structured-source preview freeze and frozen-arm NJR
-  materialization (including the PR-160 per-arm global-positive ownership and frozen
-  representation); `experiment_freeze.py` delegates source construction to
-  `resolution_layer.py`. Controlled-variable policy compatibility is unchanged.
-- Artifacts and replay: `src/pipeline/artifact_contract.py`,
-  `src/pipeline/result_contract_v26.py`, and `src/pipeline/replay_engine.py`.
-- Adaptive Refinement CPU face observations: `src/refinement/detectors/opencv_face_detector.py`
-  (YuNet on pinned core OpenCV; verified offline asset in `src/refinement/assets/`)
-  -> `subject_scale_policy_service.py` -> `quality_metrics.py` -> Learning context.
-  See `docs/Subsystems/Image/PR-REFINE-150_YuNet_Face_Detection.md`; detector errors
-  are unknown observations, distinct from successful no-face results.
-
 ## Start here by task
 
-| Task | Start here |
+| Task | Start here, in order |
 |---|---|
-| Z-Image canonical acceptance preparation (PR-IMG-MODELS-156) | `docs/Subsystems/Image/PR-IMG-MODELS-156_ZImage_Canonical_Production_Acceptance.md` -> `tools/acceptance/img_156_zimage_acceptance.py` (one frozen NJR, separate owner permission, existing canonical stack, managed adapter, observed actual POST/artifacts and independent outcome dimensions) -> `tests/tools/test_img_156_zimage_acceptance.py`; physical attempt separately authorized |
-| Z-Image-Turbo exact-bundle Forge execution (PR-IMG-MODELS-155) | `docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md` -> `src/image_backends/forge_zimage_profile.py` (immutable v1, pure intent/wire checks) + `exact_model_profile.py` (bounded Klein/Z-Image resolver) -> existing `model_policy.py`, compiler/NJR normalization, `forge_webui_backend.py`, served-path hash cache and `managed_forge_runtime.verify_pinned_launch` -> `executor.run_txt2img_stage` (profile-specific actual POST/readback) -> normal artifacts/history; GUI `model_policy_panel_projection.py`, `zimage_optional_control_projection.py`; no physical qualification authority or experimental ledger in production |
-| PromptPack OpenPose ControlNet conditioning (PR-IMG-CNET-210) | `docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md` -> `src/conditioning/` (declaration, library, snapshot) -> `src/pipeline/openpose_compile.py` (compile-time gate/freeze) -> `src/image_backends/forge_controlnet.py` / `forge_webui_backend.py` (admission + wire unit) -> `executor.run_txt2img_stage`; editor in `src/gui/widgets/openpose_picker_panel.py`; Forge-only, SDXL-only, base txt2img only; physical verification separately authorized |
-| PromptPack behavior | `paths.py` -> `storage.py` -> `prompt_pack_model.py` -> `prompt_pack_job_builder.py` |
-| Matrix/randomization | `config_variant_plan_v2.py` -> `src/randomizer/` |
-| GUI submission | `app_controller.py` -> `run_submission_service.py` -> `job_service.py` |
-| Queue/history | `job_service.py` -> `job_queue.py` -> `job_repository.py` |
-| Current image execution | `pipeline_runner.py` -> `executor.py` -> `src/api/` |
-| `PR-ASSET-DISCOVERY-100` local A1111 asset census | `docs/Subsystems/Image/PR-ASSET-DISCOVERY-100_Local_A1111_Asset_Census.md` -> `tools/asset_census.py` (offline/operator-only; explicit roots, streamed SHA-256 cache, safetensors-header-only metadata, optional LoRA cache evidence; not a production scanner or registry) -> `tests/tools/test_asset_census.py`; live A1111 projection remains `src/api/webui_resources.py` / `src/api/webui_resource_service.py` |
-| `PR-ASSET-110` local Asset Registry | `docs/Subsystems/Image/PR-ASSET-110_Local_Asset_Registry.md` -> `src/assets/registry.py` (offline SHA-256 identity/cache) -> legacy `src/utils/lora_scanner.py` / `embedding_scanner.py` projections; `src/api/webui_resource_service.py` remains the independent live-A1111 projection |
-| `PR-ASSET-120` provenance-rich asset metadata and compatibility profiles | `docs/Subsystems/Image/PR-ASSET-120_Provenance_Rich_Asset_Metadata_and_Compatibility_Profiles.md` -> `src/assets/registry.py` (v2 cache; per-location `.civitai.info` sidecar evidence, independent sidecar/model freshness) + `src/assets/compatibility.py` (conservative `ModelFamily`/`CompatibilityProfile` evidence, no recommendation) -> `tests/assets/test_asset_compatibility_profiles.py`; offline/observational only, consumed later by `WP-PACK-AUDIT-100` |
-| `WP-PACK-AUDIT-100` PromptPack & saved-settings quality census | `docs/Subsystems/PromptPacks/WP-PACK-AUDIT-100_PromptPack_Saved_Settings_Quality_Census.md` -> `tools/promptpack_quality_census.py` (offline/read-only; raw-JSON structural census before typed normalization, confirmed alias/stage contradictions from `src/pipeline/config_normalizer.py`, asset-reference resolution + Asset-120 family-compatibility consumption; never mutates a PromptPack/preset/asset) -> `tests/tools/test_promptpack_quality_census.py`; consumes `src/assets/registry.py` + `src/assets/compatibility.py` read-only via an audit-owned cache |
-| `PR-PACK-110` ADetailer stage-enablement persistence repair | `docs/Subsystems/PromptPacks/PR-PACK-110_ADetailer_Stage_Enablement_Persistence_Repair.md` -> `src/utils/config.py` (`synchronize_adetailer_enablement()`; wired into `_merge_config_with_defaults()` and `save_pack_config()`) -> `tests/unit/test_config_presets_v2.py` + `tests/utils/test_pack_config_flags.py`; `pipeline.adetailer_enabled` is the persisted stage-membership authority, `adetailer.enabled`/`adetailer.adetailer_enabled` are synchronized mirrors; stage-sequencer OR-based admission semantics unchanged |
-| `PR-PACK-120` missing asset reference triage | `docs/Subsystems/PromptPacks/PR-PACK-120_Missing_Asset_Reference_Triage.md` -> `tools/missing_asset_reference_triage.py` (offline, read-only, no source-write pathway: `scan` re-opens raw sources to map WP-PACK-AUDIT-100's aggregated `missing_file_backed_asset` findings to exact JSON occurrences + same-kind `AssetRegistry` candidate evidence + Asset-120 family context, and emits a `decisions.template.json`; `validate_decision`/`validate_batch` sanity-check a draft decisions file read-only; reconciliation execution is deferred to a later, separately authorized package) -> `tests/tools/test_missing_asset_reference_triage.py` |
-| `PR-PACK-130` approved missing-reference reconciliation | `docs/Subsystems/PromptPacks/PR-PACK-130_Approved_Missing_Reference_Reconciliation.md` -- durable record of a one-time, owner-authorized real-data reconciliation (executed and verified locally, then the temporary mutation utility used to run it was deliberately not retained in the repository); no PR-PACK-130 code path remains that can write a PromptPack/preset source; current missing-reference state (9 `DreamyStyle_xl` items, 63 occurrences, intentionally unresolved) is tracked by `PR-PACK-120`'s read-only `tools/missing_asset_reference_triage.py` |
-| `PR-IMG-100` backend-neutral image execution | `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md` -> `src/image_backends/image_backend_types.py` / `src/image_backends/image_backend_registry.py` / `src/image_backends/a1111_webui_backend.py` -> `njr_core_v26.py` / `config_contract_v26.py` -> image compilers -> `pipeline_runner.py` -> runtime ports -> A1111 executor/client boundary |
-| `PR-IMG-130B` model-aware Prompt compatibility UX | `docs/Subsystems/Image/PR-IMG-130B_Model_Aware_Prompt_Compatibility_UX.md` -> `src/prompting/prompt_compatibility.py` (pure `project_prompt_target`: policy + Prompt state snapshot -> target label, guidance and coded findings; never rewrites a prompt) -> `src/image_backends/model_policy_lora.py` (`assess_lora_selection`, the one dispatch to the existing PR-IMG-117 admission, shared with the Base Generation projection) -> `src/gui/prompt_target_presenter.py` (Tk application) -> `src/gui/views/prompt_tab_frame_v2.py` (`on_model_projection`) / `src/gui/widgets/embedding_picker_panel.py` (`set_additions_allowed`) <- `ModelPolicyPanelProjection.add_listener` + `main_window_v2._wire_prompt_model_target` -> `tests/image_backends/test_prompt_compatibility_130b.py`, `tests/gui_v2/test_prompt_target_130b.py` |
-| `PR-IMG-130C` explicit model-aware Prompt adaptation | `docs/Subsystems/Image/PR-IMG-130C_Explicit_Model_Aware_Prompt_Adaptation.md` -> `src/prompting/prompt_adaptation.py` (pure `adapt_prompt_for_target`: `ModelPolicy` + structured `PromptAdaptationInput` -> versioned `PromptAdaptationPlan` with ordered, content-free operation codes; reuses the 130B syntax patterns, `target_is_unverified` and `assess_lora_selection`; no family/filename conditional) -> `src/gui_v2/prompt_adaptation_preview.py` (toolkit-neutral preview model, hidden-content suppression) -> `src/gui/prompt_adaptation_dialog.py` (read-only dialog) -> `PromptTabFrame._open_adaptation_preview` (thin orchestration; the button's availability is `PromptTargetProjection.adaptation_available` via `PromptTargetPresenter`); compile-time adaptation of fresh PromptPack work is `PR-PROMPT-140` (next row); contracts: `tests/image_backends/test_prompt_adaptation_130c.py`, `tests/gui_v2/test_prompt_adaptation_130c.py` |
-| `PR-PROMPT-140` model-adaptive PromptPack compilation | `docs/Subsystems/PromptPacks/PR-PROMPT-140_Model_Adaptive_PromptPack_Compilation.md` -> `src/pipeline/prompt_pack_job_builder.py` (`_build_jobs_for_entry`: source config vs effective config, one `CompileEvidence` per `build_jobs`; frozen `provenance.metadata['prompt_adaptation']`) -> `src/pipeline/compile_evidence.py` (persisted-snapshot-only generic evidence; explicit fresh selection preparation is PR-PROMPT-143) -> `src/pipeline/resolution_layer.py` (`resolve_pack_intent` -> `adapt_pack_intent` -> `render_pack_intent`; `resolve_from_pack` stays the compatibility wrapper) -> `src/prompting/prompt_adaptation.py::adapt_structured_prompt` (the one compile-safe rule implementation; definitive facts delete, uncertain evidence preserves) -> `src/image_backends/model_policy_lora.py` (`LoraAssessment.statuses`, `LoraEvidenceContext`); replay never re-adapts; contracts: `tests/pipeline/test_pack_prompt_intent_140.py`, `tests/pipeline/test_prompt_pack_adaptation_140.py`, `tests/image_backends/test_prompt_adaptation_140.py` |
-| `PR-PROMPT-143` Klein-compatible PromptPack LoRA selection | `docs/Subsystems/PromptPacks/PR-PROMPT-143_Klein_Compatible_LoRA_Selection.md` -> `src/controller/prompt_pack_preflight.py` (explicit production builder policy, bounded background evidence/current-source guard and Tk batch review) -> `prompt_pack_job_builder.py` (prepare all structured rows/Matrix before NJRs) -> `src/prompting/pack_lora_evidence.py` (existing AssetRegistry LoRA refresh once) / `pack_lora_selection.py` (pure choices and versioned source/selection contract) -> canonical `adapt_pack_intent` / `adapt_structured_prompt` / render -> immutable selection/adaptation provenance -> existing atomic JobService admission; `src/gui/klein_lora_selection_dialog.py` and `src/gui_v2/pack_lora_selection_projection.py` (hidden-safe review/details); existing Forge qualifier checks manifest consistency and refreshed frozen adapter identity; tests: `test_klein_pack_selection_143.py`, `test_pack_selection_preflight_143.py`, `test_pack_lora_dialog_143.py` |
-| `PR-IMG-130A` model-family capability registry and dynamic image UX | `docs/Subsystems/Image/PR-IMG-130A_Model_Family_Capability_Registry.md` -> `src/image_backends/model_policy.py` (pure `ModelPolicy`: exact qualified profile first, then `AssetRegistry` family evidence from the persisted snapshot; `apply_model_compile_policy` is the one compile entry, delegating to the immutable profile) -> `src/gui_v2/model_policy_projection.py` (pure control projection) -> `src/gui/model_policy_panel_projection.py` (Tk glue, per-family draft values) -> `base_generation_panel_v2.py` -> `tests/image_backends/test_model_policy_130a.py`, `tests/gui_v2/test_model_policy_panel_130a.py`; `src/learning/model_profiles.py` is a different (learning-prior) concept |
-| `PR-IMG-117` FLUX.2 Klein 4B LoRA (profile v2) | `docs/Subsystems/Image/PR-IMG-117_FLUX2_Klein_LoRA_Qualification_and_Profile_v2.md` -> `src/image_backends/forge_klein_profile.py` (v2 = v1 + `max_loras=1`, `_LATEST_PROFILE`; v1 immutable) / `forge_klein_lora.py` (exact Klein-4B evidence over the `AssetRegistry` record, admission, Forge consumption observation; hashes/scans nothing) / `forge_webui_backend.py` (v2 admission, served-file binding, LoRA evidence) -> `src/api/forge_client.py` (`get_loras`) / `src/assets/registry.py` (`cached_snapshot`) -> `src/gui_v2/model_policy_projection.py` + `src/gui/model_policy_panel_projection.py` + `src/gui/widgets/lora_picker_panel.py` + `main_window_v2._wire_klein_lora_projection` (annotations, no removal) -> `tools/acceptance/img_117_klein_lora_acceptance.py` -> `tests/image_backends/test_forge_klein_lora.py`, `tests/integration/test_pr_img_117_klein_lora_canonical_path.py` |
-| `PR-IMG-FORGE-100` explicit Forge compatibility and qualification | `docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md` / `config/forge_qualification_runtime.json` -> `src/api/forge_client.py` / `webui_runtime_identity.py` -> `src/image_backends/forge_webui_backend.py` / `webui_family_backend.py` (shared canonical seed translation) -> `src/pipeline/executor.py` (ADetailer outer img2img seed; duplicate runtime admission refuses automatic recovery) / `src/utils/process_inspector_v2.py` (raw PID diagnostics plus independent WebUI/significant-main tree risk) -> `tools/acceptance/img_forge_100_acceptance.py` (thin canonical-path physical acceptance driver: production `build_cli_njr` + global-prompt helper -> JobService/SQLite -> `run_njr`; runtime only via `WebUIProcessManager`, observed never gated; run from the checkout, `--reports-dir` anywhere; tests `tests/tools/test_img_forge_100_acceptance_driver.py`) / `tools/qualification/img_forge_100/` (matrix validation/preview and provenance helpers; its `execute_matrix` physical path is superseded; no second production authority). PR-IMG-FORGE-D110: `forge_webui_backend.py::_normalize_module_baseline` (ordinary Forge stages verify/replace persisted `forge_additional_modules` before any model load; Klein/A1111 untouched; `tests/integration/test_pr_img_forge_d110_module_state.py`). A1111 stays default. |
-| `PR-IMG-116` FLUX.2 Klein 4B FP8 production slice | `docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md` -> `src/image_backends/forge_klein_profile.py` (immutable profile v1, compile policy, validator) / `forge_klein_readiness.py` / `forge_webui_backend.py` (projection, pre-dispatch validation, evidence) -> `src/api/forge_client.py` (`set_additional_modules`) -> `src/pipeline/executor.py` (`additional_modules`) / `klein_edit_reprocess.py` (Review edit) / `job_builder_v2.py`, `prompt_pack_job_builder.py`, `cli_njr_builder.py` (compile policy) -> `src/gui_v2/model_policy_projection.py` + `src/gui/model_policy_panel_projection.py` (Pipeline controls), Review checkbox -> `scripts/install_forge_klein_assets.ps1` + `config/forge_klein_assets.json` -> `tools/acceptance/img_116_klein_acceptance.py` |
-| `PR-IMG-110` / `PR-IMG-110R` qualification evidence | `docs/Subsystems/Image/PR-IMG-110_Diffusers_Ideogram4_Qualification.md` -> `tools/qualification/img110/`; `docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md` -> `tools/qualification/img110r/` (qualification-only; no production backend) |
-| `PR-VID-130` Wan2.2 experimental workflow | `docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md` -> `src/video/workflow_catalog.py` (spec) / `src/video/workflow_registry.py` (experimental gate) / `src/video/video_workflow_intent.py` (capability-driven producer intent) / `src/video/workflow_readiness.py` (observe-only guard) / `src/video/comfy_workflow_backend.py` / `src/controller/video_workflow_controller.py` -> `tools/acceptance/vid130_wan_acceptance.py` |
-| `PR-VID-140` Wan2.2 operator readiness | `docs/Subsystems/Video/PR-VID-140_Wan22_Operator_Readiness.md` -> `src/video/workflow_catalog.py` (LTX governance and Wan projection) / `src/video/workflow_source_preparation.py` (catalog-declared deterministic source preparation) / `src/controller/video_workflow_controller.py` (admission-frozen seed and prepared-source NJR) -> `src/video/comfy_process_manager.py` (owned configured readiness) -> `tools/acceptance/vid130_wan_acceptance.py` (bounded real acceptance evidence) |
-| `PR-RUNTIME-110` Comfy video runner liveness / watchdog correctness | `docs/Subsystems/Runtime/PR-RUNTIME-110_Comfy_Video_Runner_Liveness.md` -> `src/video/comfy_workflow_backend.py` (`_wait_for_history_entry` uses the workflow-declared bounded history timeout, confirms queue membership or explicit nonterminal history before `_liveness_reporter`, and fails promptly on terminal failed history; emits through the existing `Pipeline._emit_status_update`) -> `src/controller/app_controller.py` runtime-status merge -> `src/services/watchdog_system_v2.py` (unchanged) -> `tests/video/test_pr_runtime_110_comfy_liveness.py` |
-| `PR-RUNTIME-100` owned GPU transition policy | `docs/Subsystems/Runtime/PR-RUNTIME-100_Owned_Runtime_Transition_Policy.md` -> `src/services/runtime_transition_service.py` -> read-only configured endpoint probes (`src/api/healthcheck.py::probe_webui_endpoint`, `src/video/comfy_healthcheck.py::probe_comfy_endpoint`) -> `src/image_backends/a1111_webui_backend.py` / `src/video/comfy_workflow_backend.py` / `src/video/svd_native_backend.py` -> existing `WebUIProcessManager` / `ComfyProcessManager` / `SVDService` release boundaries |
-| `PR-VID-120` neutral video execution contract | `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md` -> `src/video/video_backend_types.py` / `src/video/video_execution_resolver.py` / `src/video/video_backend_registry.py` / `src/video/workflow_contracts.py` -> `pipeline_runner.py::_execute_video_stage` (resolver call only) |
-| `PR-VID-110` directed-motion qualification evidence | `docs/Subsystems/Video/PR-VID-110_Directed_Motion_Qualification.md` -> `tools/qualification/vid110/` (qualification-only; Wan2.2 CONDITIONAL, VACE-1.3B NO-GO; no production backend) |
-| `PR-VID-150` Wan2.2 motion characterization | `docs/Subsystems/Video/PR-VID-150_Wan22_Motion_Characterization.md` -> `tools/qualification/vid150/run.py` (qualification-only, reuses `tools/acceptance/vid130_wan_acceptance.py` stack + `tools/qualification/vid110/` metrics/monitor; `local_motion_viable_locomotion_weak`; no production backend) |
-| `PR-VID-160B` Wan2.2-Animate resource-feasibility evidence | `docs/Subsystems/Video/PR-VID-160B_Wan22_Animate_Target_Hardware_Feasibility.md` -> `tools/qualification/vid160b/` (qualification-only; direct manager-owned-Comfy dispatch; Animate is not a registered StableNew workflow; `ANIMATE_BACKBONE_RESOURCE_FLOOR_PASS`, but `pose_video` was not exercised, so Move-mode resource gate remains open; no production backend) |
-| `PR-VID-160C` Wan2.2-Animate Move-mode resource closure | `docs/Subsystems/Video/PR-VID-160C_Wan22_Animate_Move_Mode_Resource_Closure.md` -> `tools/qualification/vid160c/` (qualification-only; reuses `tools/qualification/vid160b/` telemetry/ownership/graph constants + `tools/qualification/vid110/comfy_client.py`; adds a real `pose_video` and Windows commit-aware telemetry (`win_memory.py`); adjudicated `MOVE_MODE_RESOURCE_PASS_32GB` (supersedes an interim physical-RAM-only guard trigger); no production backend) |
-| `PR-VID-170` Wan2.2-Animate motion-transfer characterization | `docs/Subsystems/Video/PR-VID-170_Wan22_Animate_Motion_Transfer_Characterization.md` -> `tools/qualification/vid170/` (qualification-only; reuses `tools/qualification/vid160b/`+`vid160c/` telemetry/ownership/graph constants + `tools/qualification/vid110/comfy_client.py`+metrics; adds official Wan2.2-Animate sampling settings and deterministic/synthetic pose-case tooling (`synthetic_pose.py`); `ANIMATE_QUALITY_INSUFFICIENT_AT_SMALL_ENVELOPE`; no production backend) |
-| `PR-VID-175` Wan2.2-Animate 480x832 interpretability gate | `docs/Subsystems/Video/PR-VID-175_Wan22_Animate_480x832_Interpretability.md` -> `tools/qualification/vid175/` (qualification-only; thin extension reusing `tools/qualification/vid170/graph.py` unchanged plus `vid160b/`+`vid160c/` ownership/telemetry; `ANIMATE_480x832_INTERPRETABLE_PASS`; no production backend) |
-| `PR-VID-180` Wan2.2-Animate 480x832 motion-transfer characterization | `docs/Subsystems/Video/PR-VID-180_Wan22_Animate_480x832_Motion_Transfer_Characterization.md` -> `tools/qualification/vid180/` (qualification-only; `run.py` extends `tools/qualification/vid170/run.py` restricted to runnable Case A/B only (no Case C submission path); adds `native_pose.py`, a native-480x832 reimplementation of `vid170/synthetic_pose.py`'s motion semantics (resolution-independent angle/phase/translation-fraction formulas, proven frame-by-frame equal), reusable for future native-envelope synthetic pose-control work; `ANIMATE_CHARACTERIZATION_INCONCLUSIVE` (procedural-synthetic-vs-detector-derived pose-conditioning confound, not a capability verdict; secondary finding `BACKGROUND_INSTABILITY_CROSS_CASE`); no production backend) |
-| `PR-VID-181` Wan2.2-Animate real-driving pose adjudication | `docs/Subsystems/Video/PR-VID-181_Wan22_Animate_Real_Driving_Pose_Adjudication.md` -> `tools/qualification/vid181/` (qualification-only; `preprocess_launcher.py` runs ONLY in a disposable CPU-only env outside StableNew/Comfy/A1111 over the pinned upstream Wan2.2 animation pose path (`provenance.py` pins SHA/checkpoints and rejects production env prefixes); `driving_prep.py` fixed 29:52 crop, `finalize.py` freezes 480x832/13f/8fps controls; reusable for any future upstream-compatible pose control; `run.py` runs the two frozen controls through the accepted 480x832 Animate graph with control-hash enforcement (A/B only); `ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY` + `BACKGROUND_INSTABILITY_CROSS_CASE`; no production backend) |
-| `PR-VID-183` Wan2.2-Animate controlled basic-retarget A/B | `docs/Subsystems/Video/PR-VID-183_Wan22_Animate_Basic_Retargeting_Controlled_AB.md` -> `tools/qualification/vid183/` (qualification-only; thin reuse of VID-181's CPU-isolated detector/finalizer and manager-owned runner; frozen natural source and reference feed A/B, while B calls pinned upstream `get_retarget_pose` with `use_flux=False`; exact control hashes plus a non-no-op/temporal-motion pair gate are required before either of the two allowed submissions; `BASIC_RETARGET_APPLIES; REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED`; no production backend) |
-| `PR-VID-184` Wan-Animate-2 reference/target-hardware/integration feasibility | `docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md` -> `tools/qualification/vid184/` (qualification-only, closed: scoring contract/tracker/blind-seal/legal-length tooling, `run_manifest.json`, `local_attempt_evidence.json`; model capability UNKNOWN, remote gate `REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION`, local RTX 4070 Ti attempt `WAN_ANIMATE_2_LOCAL_TARGET_HARDWARE_NO_GO_AT_FROZEN_ENVELOPE — GPU_DEVICE_LOSS_DURING_SAMPLING`; no output produced; no production backend) |
-| `PR-VID-184R` Wan-Animate-2 pinned-memory re-adjudication | `docs/Subsystems/Video/PR-VID-184R_Wan_Animate_2_Pinned_Memory_Readjudication.md` -> `tools/qualification/vid184r/` (qualification-only: `arm_manifest.py` Arm-A/B one-variable diff, `run_arm_b.py` harness with gates/owned-process teardown/incremental telemetry, `arm_b_evidence.json`; reuses `tools/qualification/vid184/` and `vid160c/` telemetry; `--disable-pinned-memory` run completed: `WAN_ANIMATE_2_LOCAL_EXECUTION_PASS_WITH_PINNED_MEMORY_DISABLED`, `PINNED_MEMORY_PATH_MATERIALLY_IMPLICATED`, motion PARTIAL; no production backend) |
-| `PR-VID-184S` Wan-Animate-2 matched-state B1/A/B2 reproducibility | `docs/Subsystems/Video/PR-VID-184S_Wan_Animate_2_Matched_State_Reproducibility.md` -> `tools/qualification/vid184s/` (qualification-only: `arms.py` B1/A/B2 manifests + frozen matched-state bands + pre-registered classifier, `run_arm.py` extends `vid184r/run_arm_b.py` with sequencing/matched-state gate/fresh-boot check, `output_scoring.py` CPU-venv re-scoring/cross-output comparison; owner `WAN_ANIMATE_2_OWNER_MOTION_VALUE_PASS` recorded separately from the FAIL/PARTIAL `motion_curve_correlation`; three ordered submissions all completed: `WAN_ANIMATE_2_LOCAL_EXECUTION_REPRODUCIBLE_WITH_PINNED_MEMORY_DISABLED`, `ORIGINAL_PINNED_MEMORY_FAILURE_NOT_REPRODUCED_UNDER_MATCHED_STATE`, `PINNED_MEMORY_RESOURCE_PRESSURE_EFFECT_REPRODUCED`; no production backend) |
-| `PR-VID-185` Wan-Animate-2 promotion/readiness adjudication | `docs/Subsystems/Video/PR-VID-185_Wan_Animate_2_Promotion_Readiness_Adjudication.md` (documentation-only adjudication: owner product-value PASS preserved; frozen `motion_curve_correlation` FAIL preserved as a useful non-blocking guardrail; pinned-OFF preferred; representative-state resource/usability evidence remains required; no production integration) |
-| `PR-VID-190` owned-Comfy recycling + selectable frame count (Wan2.2 TI2V-5B) | `docs/Subsystems/Video/PR-VID-190_Comfy_Runtime_Recycling_and_Frame_Count.md` -> `src/video/workflow_catalog.py` (`wan22_ti2v_5b_i2v_v1@1.1.0`: `frame_count_policy` + `runtime_policy.release_owned_runtime_after_job`; `@1.0.0` byte-identical for replay) / `src/video/workflow_frame_count.py` (neutral `4n+1` length contract) / `src/video/comfy_workflow_backend.py` (per-job release of the StableNew-owned Comfy via `ComfyProcessManager.stop()` on every exit path; external/unowned never stopped) / `src/video/comfy_process_manager.py` (`start()` re-registers the global owner) / `src/controller/video_workflow_controller.py` (freeze frame count at admission; newest version per workflow) / `src/gui/views/video_workflow_tab_frame_v2.py` (Frames selector) -> `tests/video/test_pr_vid_190_comfy_lifecycle_frame_count.py` -> `tools/acceptance/vid190_queue_recycling_acceptance.py` |
-| `PR-VID-191` managed ComfyUI v0.37.0 runtime + experimental Wan-Animate-2 | `docs/Subsystems/Video/PR-VID-191_Comfy_v037_Runtime_and_Wan_Animate_2.md` -> machine-local, uncommitted managed-Comfy configuration for the qualified v0.37.0 install (tracked `presets/settings.json` unchanged; `--disable-pinned-memory` required) / `src/video/workflow_catalog_wan_animate2.py` (`wan_animate2_prompt_i2v_v1`, `wan_animate2_drive_i2v_v1`; qualified-graph settings, `required_launch_flags`, `history_timeout_seconds`) / `src/video/comfy_workflow_backend.py` (launch-flag verification, `LoadVideo` staging as a copy, only `type: output` descriptors are artifacts, declared generation wait) / `src/controller/video_workflow_controller.py` (driving-video path+sha256 frozen at admission; rechecked before upload) / `src/gui/views/video_workflow_tab_frame_v2.py` (Driving Video field) -> `tests/video/test_pr_vid_190_wan_animate2.py` -> `tools/acceptance/vid190_queue_recycling_acceptance.py --suite animate2` |
-| `PR-VID-192` Animate-2 control truth + motion experimentability | `docs/Subsystems/Video/PR-VID-192_Animate2_Control_Truth.md` -> `src/video/workflow_controls.py` (spec-declared operator controls: validate + freeze) / `src/video/workflow_catalog_wan_animate2.py` (`@1.1.0` specs: Motion Prompt -> `positive_pose`, pose strength/window, reference strength; `@1.0.0` unchanged) / `src/controller/video_workflow_controller.py` (freezes `operator_controls`; builds no payload) / `src/video/comfy_workflow_backend.py` (`control_record` provenance) / `src/gui/views/video_workflow_controls_panel_v2.py` + `video_workflow_tab_frame_v2.py` (declared controls; inert Motion selector hidden) / `tools/qualification/vid192/` (motion-source corpus tooling, annotations, inventory) / `tools/acceptance/vid190_queue_recycling_acceptance.py --suite animate2_controls` (A0-A3 one-variable arms) -> `tests/video/test_pr_vid_192_animate2_controls.py`, `tests/tools/test_vid192_qualification.py` |
-| `PR-VID-194` one-variable operator experiments | `docs/Subsystems/Video/PR-VID-194_Animate2_One_Variable_Operator_Experiments.md` -> `src/video/video_workflow_njr_builder.py` (the single Video Workflow NJR construction path: `freeze_inputs` + `build_job`; shared by normal submit and experiments) / `src/video/video_workflow_experiment.py` (baseline/candidate resolution through `workflow_controls`, controlled-diff gate, one-call admission via `src/learning/experiment_execution.py`; `LearningJobContext` provenance through `ReprocessJobBuilder(learning_context=)`) / `src/controller/video_workflow_controller.py` (`preview_experiment`/`submit_experiment`; reached via `AppController.get_video_workflow_controller()`) / `src/gui/view_contracts/video_experiment_contract.py` + `src/gui/views/video_workflow_experiment_panel_v2.py` (transient session + Tk rendering of the declared controls) -> `tests/video/test_pr_vid_194_one_variable_experiments.py`, `tests/gui_v2/test_video_workflow_experiment_ui.py` |
-| `PR-VID-BATCH-200` multi-source Video Workflow batch | `docs/Subsystems/Video/PR-VID-BATCH-200_MultiSource_Workflow_Batch.md` -> `src/video/video_workflow_batch.py` (`VideoWorkflowBatchService`: read-only `assess`, prepare+freeze `preview` through `VideoWorkflowNjrBuilder`, single-use all-or-none `admit` via one `submit_njrs`; `stablenew.batch.v1` provenance; source selection/folder scan) / `src/video/video_workflow_njr_builder.py` (`freeze_shared_inputs`, `SharedFrozenInputs`, `verify_shared_unchanged`, additive `batch`/`lineage` on `build_job`) / `src/video/workflow_source_preparation.py` (pure `resolve_declared_target`, `prepared_source_destination`) / `src/controller/video_workflow_controller.py` (`select_batch_sources`, `scan_batch_folder`, `preview_batch`, `submit_batch`) / `src/gui/view_contracts/video_batch_contract.py` + `src/gui/views/video_workflow_batch_panel_v2.py` (transient session + header panel) / `src/gui/controllers/video_workspace_handoff.py::route_images_to_video_workflow` + Review tab `Send Selected to Video Workflow` -> `tests/video/test_pr_vid_batch_200_multisource.py`, `tests/gui_v2/test_video_workflow_batch_ui.py` |
-| `PR-VID-196` motion source readiness + workflow-aware guidance | `docs/Subsystems/Video/PR-VID-196_Motion_Source_Readiness.md` -> `src/video/workflow_source_preparation.py` (`transform_declared_workflow_source`: the one in-memory EXIF/RGB/LANCZOS-cover/centred-crop transform shared by `prepare_declared_workflow_source` and the write-free `preview_declared_workflow_source`; `cover_crop_box` is the reported crop) / `src/video/driving_video_inspection.py` (bounded read-only FFprobe/FFmpeg: timeouts, byte caps, <=3 frames <=160 px, cancel; reported facts vs measured frames) / `src/video/motion_source_readiness.py` (pure advisory geometry/timing, named thresholds, `driving_frame_consumption` verified-runtime registry) / `src/video/workflow_motion_guidance.py` (pure display-only `spec -> guidance`, not a catalog field) / `src/controller/video_workflow_controller.py` (`motion_readiness` projection key + `preview_motion_source`/`inspect_driving_video` delegates) / `src/gui/view_contracts/video_motion_readiness_contract.py` + `src/gui/views/video_workflow_motion_readiness_panel_v2.py` (selection-generation tokens, bounded workers, Tk rendering) -> `tests/video/test_pr_vid_196_*.py`, `tests/gui_v2/test_video_workflow_motion_readiness_ui.py` |
-| Video/SVD | `workflow_compiler.py` -> `svd_service.py` -> `svd_native_backend.py` |
-| Portable SVD provenance | `src/video/svd_portable_provenance.py` -> `src/video/container_metadata.py` -> `src/video/svd_runner.py` -> `src/video/svd_registry.py` |
-| Windows runtime/bootstrap | `scripts/bootstrap_windows.ps1` (`-SkipSvdReadiness` = core application environment without the native-SVD capability checks) -> `docs/runbooks/windows_runtime_bootstrap.md`; canonical launcher `scripts/launch_stablenew.bat` -> `scripts/launch_stablenew.ps1` (venv python only; pre-launch check `tools/runtime/check_launch_environment.py`; `launch_stablenew_advanced.bat` forwards) -> `tests/system/test_launch_stablenew_180.py`; exact runtime pins `constraints/windows-py314-cu130.txt`; drift check `tools/runtime/verify_runtime_pins.py`; optional restoration profile `requirements-postprocess.txt` and adapters `src/video/restoration/` (`docs/Subsystems/Video/PR-POSTPROC-100_Restoration_Isolation.md`) |
-| `PR-COMFY-RUNTIME-100` managed ComfyUI runtime | `docs/Subsystems/Video/PR-COMFY-RUNTIME-100_Managed_Comfy_Runtime.md` + `docs/runbooks/managed_comfy_runtime.md` -> `config/managed_comfy_runtime.json` (installation identity + launch policy only) / `constraints/comfy-windows-py313-cu130-v0.38.0.txt` (exact pins; separate from the application constraints) / `scripts/bootstrap_managed_comfy_windows.ps1` (separate bootstrap; exact tag + commit verified, no model/custom-node/other-runtime action) / `tools/runtime/verify_managed_comfy.py` (read-only drift check, prints the launch command) / `src/video/comfy_process_manager.py` (unchanged; the only lifecycle authority) / `src/video/workflow_catalog.py` + `workflow_catalog_wan_animate2.py` (`@1.2.0` = the `@1.1.0` graph requalified; older versions byte-identical) / `src/video/comfy_workflow_backend.py` (`actual_runtime` observed from `/system_stats`) / `tools/acceptance/vid190_queue_recycling_acceptance.py --only/--workflow-version` -> `tests/system/test_managed_comfy_runtime.py`, `tests/video/test_pr_comfy_runtime_100_workflow_versions.py` |
-| `PR-IMG-FORGE-RUNTIME-100` reproducible managed Forge Neo runtime | `docs/runbooks/managed_forge_runtime.md` + `docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md` (section 23) -> `config/managed_forge_runtime.json` (installation identity, exact Forge + ADetailer-Neo commits, Python/Torch contract, the one declared gradio/pillow conflict, launch policy, detector + model-reference hashes; starts nothing, no generation settings) / `constraints/forge-windows-py313-cu130-neo-d70373eb.txt` (the complete accepted 147-distribution set; separate from the application and Comfy constraints; installed with `--no-deps`) / `scripts/bootstrap_managed_forge_windows.ps1` (marker-first, exact-commit, never launches Forge, no model/detector download; `-CheckOnly` read-only, `-Recreate` only for a marked install) / `tools/runtime/verify_managed_forge.py` (read-only drift check; accepts only the declared pip-check line; `--print-profile` prints the `WebUIProcessManager` launch profile without starting) / `src/api/webui_process_manager.py` (unchanged; sole lifecycle authority for `a1111_webui`/`forge_webui`) / `tools/acceptance/img_forge_100_acceptance.py` (unchanged; the qualification driver). -> `tests/system/test_managed_forge_runtime.py` |
-| `PR-IMG-FORGE-120` Forge default production promotion | `docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md` -> `src/image_backends/image_backend_types.py` (`NEW_IMAGE_BACKEND_DEFAULT_ID` = `forge_webui` for new work; `LEGACY_MISSING_IMAGE_BACKEND_ID` = `a1111_webui` for persisted records; `configured_image_backend_id` fails closed) / `src/api/webui_runtime_identity.py` (unset identity -> Forge, explicit A1111 = rollback, invalid -> `WebUIRuntimeConfigurationError`; `load_backend_settings`; identity-aware `resolve_effective_webui_base_url`) / `src/utils/managed_forge_runtime.py` (the ONE managed-Forge launch-profile authority, shared by `tools/runtime/verify_managed_forge.py` and `src/api/webui_process_manager.py::build_default_webui_process_config`; `ManagedForgeUnavailable` setup guidance, never an install) / `src/utils/config.py` (`settings_load_error`, effective endpoint in `load_settings`) / `src/controller/ports/default_runtime_ports.py` (configured client; `DefaultImageRuntimePorts.base_url()`) / `tools/acceptance/img_forge_120_default_acceptance.py` (injects no backend selection) / `src/image_backends/backend_capabilities.py` + `ImageBackendCapabilities.supports_hypernetworks` + `ForgeWebUIImageBackend.validate_njr_intent` (Hypernetwork refusal before dispatch) + `ForgeWebUIClient._get_default_adetailer_models` / ADetailer stage card (accepted detector set, never the generic list) -> `tests/api/test_forge_production_selection.py`, `tests/gui_v2/test_forge_capability_projection_v2.py`, `tests/controller/test_default_runtime_ports_forge.py`, `tests/image_backends/test_image_backend_contract.py` |
-| Replay/learning | `replay_engine.py`, `src/learning/`, `job_history_store.py` |
-| `PR-LEARN-142` Model Comparison evidence readiness | `docs/Subsystems/Learning/PR-LEARN-142_Model_Comparison_Evidence_Readiness.md` -> `src/learning/model_evidence_readiness.py` (selected served-path binding, header preflight, one pinned CompileEvidence) -> `src/assets/registry.py` (targeted checkpoint refresh/fingerprints, header-only cache enrichment) / `checkpoint_structure.py` (bounded safetensors signatures) / `compatibility.py` (metadata/structural conflicts) / `cache_lock.py` (serialized cache transactions) -> exact-bound `RegistryFamilyLookup`; `src/gui/model_comparison_readiness.py` (worker mailbox) -> ExperimentDesignPanel (Tk polling/cancellation/selection check, visible names/provenance) -> LearningController (thin evidence forwarding) -> unchanged arm freeze/Run/admission; `tests/assets/test_checkpoint_readiness_142.py`, `test_checkpoint_structure_142.py`, `tests/gui_v2/test_model_comparison_readiness_142.py`, `test_installed_sdxl_evidence_142.py` |
-| `PR-LEARN-300` experiment workflow | `experiment_execution.py` / `experiment_lifecycle.py` / `experiment_conclusion.py` / `experiment_freeze.py` -> `execution_controller.py` -> `learning_controller.py` -> `resource_access.py` / `experiment_naming.py` / `review_workspace.py` / `discovered_review_store.py` / `staged_recommendations.py` -> `learning_record.py` / `recommendation_engine.py` |
-| `PR-LEARN-141` ordinary Global Prompt correctness | `docs/Subsystems/Learning/PR-LEARN-141_Ordinary_Global_Prompt_Correctness.md` -> `src/learning/ordinary_prompt_freeze.py` (executor-base source/global freeze, canonical row-negative ownership, saved-preview refusal, config consistency and rating readback) -> `experiment_freeze.py` (optional selected-negative contribution; ordinary UI projection excluded) -> ordinary `learning_controller.py` Preview/compile/rating seams -> unchanged atomic admission/executor/replay; `tests/learning_v2/test_ordinary_global_prompts_141.py` |
-| `PR-LEARN-130D` model-scoped Learning | `docs/Subsystems/Learning/PR-LEARN-130D_Model_Scoped_Learning_Capability_Correctness.md` -> canonical `src/image_backends/model_policy.py` (stage-local facts) -> `src/learning/model_capabilities.py` (pure intersection and immutable context) / `model_policy_service.py` (preview/frozen validation, compile delegation, recommendation preflight) -> `src/gui/views/experiment_design_panel.py` (`on_model_projection`) <- `main_window_v2._wire_learning_model_target` / `ModelPolicyPanelProjection.add_listener`; `learning_controller.py` freezes context before normal batch admission; `recommendation_engine.py` scopes exact evidence and image parameters; `src/gui_v2/recommendation_targets.py` resolves stage-aware operator controls and the complete patch before mutation -> `tests/learning_v2/test_model_capabilities_130d.py`, `tests/gui_v2/test_learning_model_policy_130d.py`, `tests/gui_v2/test_recommendation_targets_130d.py` |
-| `PR-LEARN-140` explicit Model Comparison Study | `docs/Subsystems/Learning/PR-LEARN-140_Model_Comparison_Study.md` -> `src/learning/model_comparison.py` (one evidence context; candidate/backend/geometry gates; Build Preview arm freeze; consistency-checked frozen Learning NJRs) -> `experiment_freeze.py` / `src/pipeline/resolution_layer.py` (canonical structured intent and pure serialization) -> existing `experiment_execution.py` / `execution_controller.py` / `JobService.submit_njrs`; `src/gui/views/experiment_design_panel.py` (explicit Study Type, model checklist, PromptPack/txt2img constraints) / `learning_controller.py` (thin delegation); `recommendation_engine.py` excludes noncausal comparison ratings; PR-IMG-MODELS-160 adds global-positive parity (`docs/Subsystems/Image/PR-IMG-MODELS-160_Model_Comparison_Global_Positive_Parity.md`) -> `tests/learning_v2/test_model_comparison_140.py`, `test_model_comparison_global_positive_160.py`, `tests/gui_v2/test_model_comparison_design_140.py` |
-| Operator-journey harness | `python -m tools.operator_journey` -> `tools/operator_journey/cli.py` -> `journeys/learning_lora_strength.py` / `journeys/discovered_outputs_review.py` (+ `fixtures.py`, `dialogs.py`) -> `tk_driver.py` (semantic Tk) / `workspace.py` (isolation) / `observe.py` / `capture.py` / `evidence.py` / `fake_a1111.py`; tests in `tests/tools/test_operator_journey_*.py` |
-| Tests/CI | `pyproject.toml`, `tools/ci/`, `.github/workflows/ci.yml` (required gate + affected-lane / full-census jobs routed by `tools/ci/validation_plan.py`; `tools/ci/previous_evidence.py` and `tools/ci/ci_truth.py` support evidence reuse and the docs-only cheap path), `.github/workflows/shutdown_leak_manual.yml` (manual self-hosted), `tests/helpers/njr_queue_harness.py` (canonical-path harness) |
-| `PR-DEVEX-CENSUS-140` parallel/sharded full census | `docs/Subsystems/Testing/PR-DEVEX-CENSUS-140_Parallel_Sharded_Full_Census.md` -> `tools/ci/census_shards.py` (active-file surface from `run_collection_gate.DEFAULT_COLLECTION_EXCLUDES` + `pyproject.toml`, SHA-256 path partition, shard runner, fail-closed aggregate verifier) / `tools/ci/run_sharded_census.py` (local isolated-worker census) / `.github/workflows/ci.yml` (`full-suite-shard` x3 + aggregate `full-suite`) -> `tests/tools/test_ci_census_shards.py`, `tests/system/test_ci_truth_sync_v2.py` |
-| `PR-DEVEX-CI-110` risk-proportionate CI, contract gate and test census | `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md` -> `tools/ci/validation_plan.py` (lane policy, escalation, evidence reuse) / `.github/workflows/ci.yml` (consumes the plan) / `tools/ci/run_required_smoke.py` (`CONTRACT_GATE_TARGETS`) / `tests/system/test_construction_identity_contract.py` / `tools/ci/census_summary.py` -> `tests/tools/test_ci_validation_plan.py`, `tests/tools/test_ci_census_summary.py`, `tests/system/test_ci_truth_sync_v2.py` |
-| `PR-TEST-TRUTH-120` deterministic test truth | `docs/Subsystems/Testing/PR-TEST-TRUTH-120_Deterministic_Test_Truth.md` -> `tests/api/test_webui_process_manager.py` / `tests/pipeline/test_pipeline_runner_njr_diagnostics.py`; removes unreferenced timing probes and isolates fake diagnostics from configured-endpoint observation, with no production runtime change |
-| `PR-TEST-TRUTH-210` pre-Forge execution & test truth | `docs/Subsystems/Testing/PR-TEST-TRUTH-210_Pre_Forge_Execution_and_Test_Truth.md` -> `src/pipeline/run_plan.py` (fail-closed RunPlan: explicit enabled stages only) / `src/pipeline/pipeline_runner.py::run_njr` (plan validated before runtime side effects) -> `tests/pipeline/test_stage_chain_fix.py`, `tests/pipeline/test_replay_run_plan_v2.py`, `tests/pipeline/test_pipeline_runner.py`, `tests/integration/test_golden_path_suite_v2_6.py` (active Golden Path); skip policy in `docs/StableNew_Coding_and_Testing_v2.6.md` |
-| A1111 generation / transport | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
-| A1111 process ownership / lifecycle | `src/api/webui_process_manager.py` (launch-profile resolution is manager-scoped: `WebUIProcessConfig.launch_profile_commands` declares the profiles a manager supports; an undeclared profile never changes its command/working directory/identity; only the StableNew-managed A1111 configuration declares the canonical `app_config` profiles, never Forge or a qualification runtime) -> `src/controller/webui_connection_controller.py`; executor launch policy and sampling/extension progress semantics: `src/pipeline/executor.py` (`_maybe_apply_workload_launch_policy` is capability-aware; `_poll_progress_loop`: ADetailer nominal completion enters extension-active state under the client transport bound; a new generation marker restores sampling liveness) -> `tests/api/test_webui_launch_profile_ownership.py`, `tests/pipeline/test_launch_profile_capability_policy.py`, `tests/pipeline/test_adetailer_progress_semantics.py` |
-| WebUI generation-request retry semantics (PR-HTTP-100) | `src/api/client.py::_perform_request` (the single retry authority; stage policies in `src/utils/retry_policy_v2.py`): a definite HTTP error response to a generation POST (`/sdapi/v1/txt2img`, `/img2img` incl. ADetailer, `/extra-single-image` upscale) is posted once and never replayed (`fail_fast_reason` `definite_http_response`, or the narrower `cuda_oom`); a ReadTimeout/ConnectionError after dispatch on any generation POST (`/txt2img`, `/img2img` incl. ADetailer, `/extra-single-image` upscale) is `WebUIGenerationOutcomeUnknownError` and is never replayed, while `ConnectTimeout` stays retry-safe because connection establishment did not complete; resource/readiness GETs, options writes and interrogate keep their policy retries -> `tests/api/test_http_100_definite_http_fail_fast.py`, `tests/api/test_webui_retry_policy_v2.py` |
-| Generation progress / stall diagnostics | `src/pipeline/executor.py` -> `src/controller/core_pipeline_controller.py` -> `src/controller/app_controller.py` runtime projection -> `src/services/watchdog_system_v2.py` |
-| Operator readiness | `src/services/operator_readiness_service.py` (recovery count uses `src/queue/job_repository.py::count_jobs_with_last_control_action`, reading only execution metadata without job/NJR hydration) -> `src/gui/panels_v2/operator_readiness_panel_v2.py` -> `src/gui/main_window_v2.py`; contracts: `tests/queue/test_job_repository_sqlite.py`, `tests/services/test_operator_readiness_service.py`, `tests/gui_v2/test_operator_readiness_panel_v2.py` |
-| Main-window geometry / scrollable workspaces (PR-GUI-100) | `docs/Subsystems/GUI/PR-GUI-100_Responsive_Workspace_and_Reachable_Controls.md` -> `src/gui/view_contracts/window_layout_contract.py` (pure screen-aware default/min size + saved-geometry normalization) -> `src/gui/main_window_v2.py` (`_ensure_window_geometry`) / `src/gui/widgets/scrollable_frame_v2.py` (`_WheelRouter`, the one wheel dispatcher) -> `review_tab_frame_v2.py`, `svd_tab_frame_v2.py`, `video_workflow_tab_frame_v2.py` (scrollable bodies) / `pipeline_layout_contract.py` (pure fit/scale/hysteresis helpers) + `layout_v2.py` (`measure_horizontal_extent`, `apply_compact_column_minsizes`, `apply_compact_label_wraps`, `apply_compact_layout_hooks`) + `pipeline_tab_frame_v2.py::_apply_responsive_layout` (normal vs compact Pipeline presentation chosen by measured fit) |
-| ADetailer control truth / effectiveness evidence (PR-REFINE-160) | `docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md` -> `src/pipeline/adetailer_contract.py` (pinned ADetailer-Neo schema, fresh pass defaults, detector classification) + `src/pipeline/adetailer_effectiveness.py` (`stablenew.adetailer-effectiveness.v1`, written by `executor.run_adetailer` into the stage manifest) + `src/gui/stage_cards_v2/adetailer_stage_card_v2.py` (control truth) + `src/pipeline/pipeline_runner.py::_apply_adetailer_refinement_overrides` (adaptive precedence) + `src/review/adetailer_outcome.py` with `review_tab_frame_v2.py` (operator before/after judgment via the existing feedback `context`) -> tests `tests/pipeline/test_adetailer_truth_160.py`, `test_adetailer_canonical_160.py`, `tests/gui_v2/test_adetailer_card_truth_160.py`, `tests/review/test_adetailer_outcome_160.py`, `tests/gui_v2/test_review_adetailer_outcome_160.py` |
-| Exact-model feasibility for Z-Image-Turbo FP8-scaled (PR-IMG-MODELS-153) | `docs/Subsystems/Image/PR-IMG-MODELS-153_ZImage_Turbo_FP8_Feasibility.md` -> `tools/qualification/img153/feasibility.py` (read-only evaluator reusing PR-152 header evidence and PR-151 telemetry; never loads a model) -> `tests/tools/test_img153_feasibility.py` |
-| Z-Image-Turbo FP8-scaled safety preparation, preparation only (PR-IMG-MODELS-154A) | `docs/Subsystems/Image/PR-IMG-MODELS-154A_ZImage_Turbo_Safety_Preparation.md` -> `tools/qualification/img154/` (`manifest.py` frozen proposed manifest and exact/served proof; `isolation.py`; `preflight.py` fail-closed evaluator; `monitor.py` injected-sample state machine that only requests an owner stop; `evidence.py` redaction/fsync JSONL/fault classification/no-replay ledger; `probes.py` opt-in read-only host facts reusing `tools/qualification/vid160c/win_memory.py`, `src/utils/process_inspector_v2.py` and the PR-151 read-only queries; `report.py` operator packet and three-subcommand CLI; no launch, model-selection, request or termination code, `WebUIProcessManager` not imported; this package stays execution-free, a few contracts were extended by PR-IMG-MODELS-154B) -> `tests/tools/test_img154_manifest_isolation.py`, `test_img154_preflight_monitor.py`, `test_img154_evidence_guard.py` |
-| Z-Image-Turbo FP8-scaled controlled physical-qualification harness, validated without a physical run (PR-IMG-MODELS-154B) | `docs/Subsystems/Image/PR-IMG-MODELS-154B_ZImage_Turbo_Controlled_Physical_Qualification.md` -> `tools/qualification/img154b/` (`request.py` pinned-Forge request semantics, anchors and the immutable payload; `fence.py` atomic no-retry dispatch fence over the 154A ledger; `runtime.py` isolated layout, served-file proof, launch profile and the manager-owned lifecycle adapter over PR-115 `OwnedForge`/`WebUIProcessManager`; `sampler.py` native Windows telemetry feeding the 154A `SafetyMonitor`; `collector.py` live-preflight assembly; `authorization.py`; `case.py` one-case coordinator against ports; `adjudication.py`; `bundle.py`; `cli.py` default non-live CLI; `physical.py` the single, disabled-by-default live module) plus small extensions in `tools/qualification/img154/` (`evidence.py` ordered stages and exclusive claim, `preflight.py` validated quiescent baselines) -> `tests/tools/test_img154b_*.py` |
-| Asset topology / model-bundle discovery (PR-IMG-MODELS-152) | `docs/Subsystems/Image/PR-IMG-MODELS-152_Asset_Topology_and_Bundle_Discovery.md` -> `src/assets/observation.py` (bounded header-only Tier-1 observation, shard packaging; no SHA) via `AssetRegistry.observe()` -> `src/assets/bundles.py` (pure advisory bundle/relationship evidence) -> `src/assets/inventory_report.py` + `tools/asset_topology_report.py` (opt-in redacted report) and `src/image_backends/model_inventory_reconcile.py` (explicit GET-only Forge state); classifiers `component_evidence.py` / `adapter_evidence.py` / `gguf.py` on `checkpoint_structure.read_tensor_table`; tests `tests/assets/test_asset_topology_152.py`, `tests/tools/test_asset_topology_report_152.py` |
-| Exact-model feasibility before any GPU qualification (PR-IMG-MODELS-151) | `docs/Subsystems/Image/PR-IMG-MODELS-151_Klein_Base_9B_Feasibility.md` -> `tools/qualification/img151/feasibility.py` (read-only evaluator: allow-listed queries only, never loads a model) -> `tests/tools/test_img151_feasibility.py` |
-| Installed model readiness / Forge dependency preflight (PR-IMG-MODELS-150) | `docs/Subsystems/Image/PR-IMG-MODELS-150_Installed_Model_Readiness.md` -> `src/assets/component_evidence.py` (header-only role/architecture evidence on `checkpoint_structure.read_tensor_table`) -> `src/image_backends/model_readiness.py` (pure projection) + `model_readiness_probe.py` (read-only GETs + one bounded header) -> `forge_webui_backend.py::_dependency_gate` (refuses before module write / generation POST) and `src/gui/model_readiness_presenter.py` (explicit read-only Base Generation line) |
-| Focused operator workspace: compact Operator Log, one-row guidance, responsive Review preview, SVD/Video primary actions, collapsible sections (PR-GUI-110) | `docs/Subsystems/GUI/PR-GUI-110_Focused_Operator_Workspace.md` -> `src/gui/view_contracts/workspace_density_contract.py` (pure sizing/disclosure rules) -> `src/gui/log_trace_panel_v2.py`, `src/gui/widgets/{tab_overview_panel,action_explainer_panel,thumbnail_widget,disclosure_section,responsive_wrap}_v2.py`, `src/gui/tooltip.py` (`install_full_value_tooltips`), `src/gui/preview_panel_v2.py` -> `review_tab_frame_v2.py`, `svd_tab_frame_v2.py`, `video_workflow_tab_frame_v2.py`; measure with `tools/qualification/gui110/measure_workspace.py` |
-| SVD geometry/presets | `src/gui/views/svd_tab_frame_v2.py` -> `src/video/svd_target.py` -> `src/video/svd_service.py` -> `src/video/svd_models.py` |
-| `PR-SVD-100` folder batch | `svd_preprocess.py` -> `svd_controller.py` -> `svd_submission_service.py` -> `app_controller.py` -> `svd_tab_frame_v2.py` -> `JobService.submit_njrs` |
-| `PR-BATCH-OPS-201` unified batch operations | `docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md` -> `src/queue/batch_membership.py` / `batch_projection.py` / `failure_triage.py` (pure, derived; nothing persisted) -> `JobRepository.list_batch_candidate_rows` + `JobQueue.cancel_queued_jobs` (guarded queued-only cancel) -> `compile_replay_intent` (archives membership as `replay_origin`; optional `selected_retry` batch) -> `BatchOperationsService` (one `JobService.submit_njrs` per retry) -> `BatchOperationsSession` / `BatchOperationsPanelV2` (off-Tk, collapsed under History) -> Review via `route_images_to_review` -> `tests/*/test_batch_*_201.py`, `tests/gui_v2/test_batch_operations_*_201.py` |
-| Queue/history recovery UX | `src/gui/panels_v2/queue_panel_v2.py` + `src/gui/job_history_panel_v2.py` -> `src/controller/job_history_service.py` / `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
-| Review whole-selection batch preflight (PR-REVIEW-BATCH-200) | `docs/Subsystems/GUI/PR-REVIEW-BATCH-200_Evidence_and_Preflight.md` -> `src/gui/views/review_tab_frame_v2.py` + `src/gui/review_batch_dialog.py` (explicit frozen-plan approval/exclusion) -> `src/controller/app_controller.py` + `review_batch_service.py` (background preflight/admission source-hash verification, stable optional model/profile order) -> existing `src/pipeline/reprocess_builder.py` + IMG-158 `operation_compatibility.assess_njr` -> `reprocess_admission.submit_reprocess_njrs` -> `JobService.submit_njrs` / SQLite; regressions `tests/gui_v2/test_review_batch_200.py` |
-| Queue Pause/Resume/Send Job control truth | `queue_panel_v2.py` buttons -> `AppController.on_pause_queue_v2` / `on_resume_queue_v2` / `on_queue_send_job_v2` (thin delegates; no direct `JobQueue` control) -> `PipelineController` -> `JobService.pause` / `resume` / `run_next_now` (`job_service_auto_run.retire_idle_runner_for_pause`: Pause never joins an active job) -> `JobQueue` (durable `queue_paused`, atomic claim refusal) -> `AppStateV2.is_queue_paused` / `auto_run_queue` -> `PipelineTabFrame` owns those subscriptions and marks the Queue surface dirty (`_on_queue_control_changed`); the managed `QueuePanelV2` does not subscribe itself; contracts: `tests/gui_v2/test_queue_pause_resume_journey_150.py`, `tests/controller/test_app_controller_queue_control_150.py`, `tests/controller/test_job_service_pause_active_job_150.py` |
+| GUI to queue submission | `src/controller/app_controller.py` -> `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
+| Job record (NJR) and compilers | `src/pipeline/njr_core_v26.py`, `src/pipeline/config_contract_v26.py`, `src/pipeline/job_builder_v2.py` |
+| Running a job | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
+| PromptPacks | `src/pipeline/prompt_pack_parser.py` -> `src/pipeline/prompt_pack_job_builder.py`; `src/promptpacks/`; `docs/Subsystems/PromptPacks/` |
+| Matrix and randomization | `src/pipeline/config_variant_plan_v2.py` -> `src/randomizer/` |
+| Image backends and model profiles | `src/image_backends/image_backend_registry.py`, `src/image_backends/model_policy.py`; `docs/Subsystems/Image/` |
+| Prompt compatibility and adaptation | `src/prompting/`; `docs/Subsystems/Prompting/` |
+| Assets (models, LoRAs, embeddings) | `src/assets/registry.py`; `docs/Subsystems/Image/PR-ASSET-110_Local_Asset_Registry.md` |
+| WebUI process, outage and startup hold | `src/api/webui_process_manager.py`, `src/controller/webui_outage_coordinator.py`, `src/controller/job_service_outage.py`; `docs/Subsystems/Runtime/` |
+| GPU device-loss containment | `src/controller/gpu_loss_coordinator.py`; `docs/Subsystems/Runtime/PR-QUEUE-GPU-180_GPU_Loss_Dispatch_Containment.md` |
+| Native SVD video | `src/video/svd_service.py` -> `src/video/svd_native_backend.py` -> `src/video/svd_runner.py` |
+| Comfy Video Workflow | `src/video/workflow_catalog.py` -> `src/video/video_workflow_njr_builder.py` -> `src/video/comfy_workflow_backend.py`; `docs/Subsystems/Video/` |
+| Artifacts, replay and history | `src/pipeline/artifact_contract.py`, `src/pipeline/result_contract_v26.py`, `src/pipeline/replay_engine.py`, `src/history/` |
+| Learning and experiments | `src/learning/`, `src/gui/controllers/learning_controller.py`; `docs/Subsystems/Learning/` |
+| Review, reprocess and batch operations | `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/queue/batch_projection.py`; `docs/Subsystems/GUI/` |
+| Photo Optimize | `src/photo_optimize/`, `src/controller/photo_optimize_submission.py` |
+| Adaptive refinement and ADetailer | `src/refinement/`, `src/pipeline/adetailer_contract.py` |
+| GUI views and state | `src/gui/views/`, `src/gui/app_state_v2.py`, `src/gui/main_window_v2.py` |
+| Crash-safe state files | `src/utils/atomic_io.py` (every persisted JSON/text store goes through it) |
+| Tests, CI and ratchets | `python tools/ci/run_pr_gate.py`, `.github/workflows/ci.yml`, `tools/ci/`, `docs/StableNew_Coding_and_Testing_v2.6.md` |
+| Offline qualification evidence | `tools/qualification/`, `tools/acceptance/` (operator-only; never part of the production path) |
 
 ## Controller decomposition
 
-Controllers coordinate; cohesive work belongs behind services/coordinators.
-Existing extraction homes are `src/controller/app_controller_services/` and
-`src/controller/pipeline_controller_services/`. Runtime ports live in
-`src/controller/ports/`. Before adding responsibility to a ratcheted controller,
-look for an existing service or create one with a single clear owner.
+Controllers coordinate; cohesive work belongs behind services. Extraction homes are
+`src/controller/app_controller_services/` and `src/controller/pipeline_controller_services/`; runtime ports live in
+`src/controller/ports/`. Before adding responsibility to a ratcheted controller, find an existing service or create one with a
+single clear owner (the controller-surface ratchet only allows line counts to shrink).
 
 ## Documentation authority
 
 1. `AGENTS.md`
 2. `STATUS.md`
-3. `docs/CODEX_MAP.md`
-4. Relevant section of `docs/ARCHITECTURE_v2.6.md`
-5. Relevant section of `docs/StableNew_Coding_and_Testing_v2.6.md`
-6. `docs/StableNew Roadmap v2.6.md` for sequencing
-7. Git history only when current evidence is insufficient or history is asked
+3. This map, then the relevant section of `docs/ARCHITECTURE_v2.6.md`
+4. The relevant section of `docs/StableNew_Coding_and_Testing_v2.6.md`
+5. `docs/StableNew Roadmap v2.6.md` for sequencing
+6. Git history only when current evidence is insufficient; `src/history/` is production code, not archive material.
 
-Git history and archive/recovery material are not searched unless a historical
-question requires them. Runtime history code under `src/history/` is current
-production code and is not archival material.
+Product, value and priority assessment: [assessment entry point](assessments/README.md).

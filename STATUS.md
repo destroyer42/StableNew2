@@ -71,8 +71,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 Active: the improvement roadmap in `docs/audits/2026-10-16_repo_audit_and_roadmap.md` (read its "Critical assessment" and
 the independent critique adjustments in the PR history before reordering it). Phases 0 and 1 are merged (protection and gates,
 process isolation, startup wiring, crash-safe writes, pinned dev environment, Windows lane, ratchets). Phase 2 (docs and
-process) is in progress: this file (P2-1) is done; next are living subsystem docs (P2-2), a generated code map (P2-3) and one
-source for the rules (P2-4). Phases 3 to 5 are a candidate list; each package needs a contract check and an owner decision first.
+process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
+`docs/CODEX_MAP.md` (P2-3) are done; next are living subsystem docs (P2-2) and one source for the rules (P2-4). Phases 3 to 5 are a candidate list; each package needs a contract check and an owner decision first.
 
 Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
 of the roadmap; where they conflict with this file, this file and the repository are current.
