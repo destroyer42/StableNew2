@@ -102,7 +102,7 @@ def test_docs_only_runs_no_python_environment_or_tests() -> None:
 
 
 def test_the_census_is_the_blocking_merge_gate_and_waits_for_the_required_gate() -> None:
-    full = WORKFLOW[WORKFLOW.index("  full-suite-shard:") :]  # the shard jobs plus the aggregate verdict
+    full = WORKFLOW[WORKFLOW.index("  full-suite-shard:") : WORKFLOW.index("\n  # Windows platform contract")]
     assert "continue-on-error" not in WORKFLOW  # nothing is informational any more
     assert "affected:" not in WORKFLOW
     assert full.count("needs: ") == 2 and full.count("needs.required.outputs.full_census == 'true'") == 2
@@ -110,7 +110,7 @@ def test_the_census_is_the_blocking_merge_gate_and_waits_for_the_required_gate()
 
 def test_every_job_has_a_timeout_so_a_hang_cannot_hold_a_runner_for_hours() -> None:
     jobs = WORKFLOW[WORKFLOW.index("\njobs:") :]
-    assert jobs.count("timeout-minutes:") == 3  # required, full-suite-shard, full-suite
+    assert jobs.count("timeout-minutes:") == 4  # required, full-suite-shard, full-suite, windows
 
 
 def test_third_party_actions_are_pinned_to_full_commit_shas() -> None:

@@ -146,7 +146,9 @@ def run_pytest_gate(pytest_args: Sequence[str]) -> int:
 
     before = snapshot_repository()
     started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="stablenew-pytest-") as temp_dir:
+    # The scratch directory is outside the repository. On Windows, tests that deliberately create long or locked paths
+    # (Photo Optimize migration recovery) can leave entries rmtree cannot remove; that must not fail an otherwise green gate.
+    with tempfile.TemporaryDirectory(prefix="stablenew-pytest-", ignore_cleanup_errors=True) as temp_dir:
         temp_root = Path(temp_dir)
         environment = os.environ.copy()
         environment.update(
