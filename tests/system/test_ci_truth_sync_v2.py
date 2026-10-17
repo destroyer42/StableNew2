@@ -276,6 +276,17 @@ def test_a_docs_edit_that_violates_current_ci_truth_is_detected(tmp_path: Path) 
         target = tmp_path / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / rel, target)
+    # STATUS.md must reference only paths that exist; give the isolated tree empty stand-ins for them.
+    import re
+
+    for reference in re.findall(r"`([^`\s]+)`", (tmp_path / "STATUS.md").read_text(encoding="utf-8")):
+        if reference.startswith(("docs/", "src/", "tools/", "tests/", "scripts/", "config/", "constraints/")) and "*" not in reference:
+            stand_in = tmp_path / reference.rstrip(".,;:)")
+            if reference.endswith("/"):
+                stand_in.mkdir(parents=True, exist_ok=True)
+            elif not stand_in.exists():
+                stand_in.parent.mkdir(parents=True, exist_ok=True)
+                stand_in.write_text("", encoding="utf-8")
     truth = _truth_module()
     assert truth.docs_truth_problems(tmp_path) == []
     coding = tmp_path / "docs/StableNew_Coding_and_Testing_v2.6.md"
