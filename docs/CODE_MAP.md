@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-416 of 593 modules have a docstring.
+416 of 589 modules have a docstring.
 
 ## src/
 
@@ -685,7 +685,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `comfy_workflow_backend.py`: (no docstring)
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: (no docstring)
-- `continuity_store.py`: (no docstring)
 - `depth_map_resolver.py`: (no docstring)
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
@@ -695,9 +694,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `sequence_manifest.py`: Sequence manifest builder and writer for multi-segment video
 - `sequence_models.py`: Sequence and segment planning models for long-form video generation
 - `sequence_planner.py`: Sequence planner for multi-segment long-form video
-- `story_plan_compiler.py`: (no docstring)
-- `story_plan_models.py`: (no docstring)
-- `story_plan_store.py`: (no docstring)
 - `svd_capabilities.py`: Capability discovery for native SVD postprocess helpers
 - `svd_config.py`: Typed configuration models for native SVD image-to-video
 - `svd_errors.py`: Typed error surface for native SVD runtime

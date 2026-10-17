@@ -409,9 +409,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1412,
+      "BLE001": 1408,
       "S110": 565,
-      "S112": 45
+      "S112": 43
     },
     "counts": {
       "src/ai/settings_generator_adapter.py": {
@@ -1112,10 +1112,6 @@
       "src/video/container_metadata.py": {
         "BLE001": 4
       },
-      "src/video/continuity_store.py": {
-        "BLE001": 2,
-        "S112": 1
-      },
       "src/video/driving_video_inspection.py": {
         "BLE001": 1
       },
@@ -1127,10 +1123,6 @@
       },
       "src/video/restoration/codeformer.py": {
         "BLE001": 1
-      },
-      "src/video/story_plan_store.py": {
-        "BLE001": 2,
-        "S112": 1
       },
       "src/video/svd_capabilities.py": {
         "BLE001": 4
