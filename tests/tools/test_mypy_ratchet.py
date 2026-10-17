@@ -21,19 +21,30 @@ src/pipeline/c.py:7: error: Incompatible types in assignment  [assignment]
 """
 
 
-def test_parse_counts_counts_only_src_errors_and_ignores_environment_dependent_import_errors() -> None:
-    assert ratchet.parse_counts(SAMPLE) == {"src/pipeline/c.py": 1, "src/utils/a.py": 2}  # backslashes normalized
+def test_parse_counts_counts_only_src_errors_and_ignores_environment_dependent_import_errors() -> (
+    None
+):
+    assert ratchet.parse_counts(SAMPLE) == {
+        "src/pipeline/c.py": 1,
+        "src/utils/a.py": 2,
+    }  # backslashes normalized
 
 
 def test_a_new_error_in_a_clean_file_is_a_regression() -> None:
     problems = ratchet.compare({"src/new.py": 1}, {})
-    assert len(problems) == 1 and problems[0].startswith("REGRESSION: src/new.py") and "no mypy errors" in problems[0]
+    assert (
+        len(problems) == 1
+        and problems[0].startswith("REGRESSION: src/new.py")
+        and "no mypy errors" in problems[0]
+    )
 
 
 def test_more_errors_than_the_baseline_is_a_regression_even_when_other_files_improved() -> None:
     problems = ratchet.compare({"src/a.py": 3, "src/b.py": 0}, {"src/a.py": 2, "src/b.py": 5})
     assert any(p.startswith("REGRESSION: src/a.py") for p in problems)
-    assert any(p.startswith("IMPROVED: src/b.py") for p in problems)  # an improvement is never offset against a regression
+    assert any(
+        p.startswith("IMPROVED: src/b.py") for p in problems
+    )  # an improvement is never offset against a regression
 
 
 def test_an_improvement_must_be_locked_in_by_lowering_the_baseline() -> None:
@@ -48,7 +59,9 @@ def test_equal_counts_pass() -> None:
 
 def test_the_checked_in_baseline_is_well_formed_and_refers_to_real_files() -> None:
     baseline = ratchet.load_baseline()
-    assert baseline and all(path.startswith("src/") and (ROOT / path).is_file() for path in baseline)
+    assert baseline and all(
+        path.startswith("src/") and (ROOT / path).is_file() for path in baseline
+    )
     assert all(count > 0 for count in baseline.values())  # a clean file must not be listed
     import json
 

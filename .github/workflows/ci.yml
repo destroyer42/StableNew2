@@ -126,6 +126,11 @@ jobs:
       run: |
         python tools/ci/run_mypy_ratchet.py --report "$RUNNER_TEMP/mypy-counts.json"
 
+    - name: Run the formatting and blind/silent-exception ratchets
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/run_ruff_ratchets.py
+
     - name: Run the architecture-rule ratchets (threads, layering)
       if: steps.plan.outputs.cheap_path != 'true'
       run: |

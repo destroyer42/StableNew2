@@ -20,7 +20,11 @@ def _windows_job() -> str:
 
 
 def test_every_lane_target_still_exists() -> None:
-    missing = [target for target in lane.WINDOWS_LANE_TARGETS if not (ROOT / target.partition("::")[0]).exists()]
+    missing = [
+        target
+        for target in lane.WINDOWS_LANE_TARGETS
+        if not (ROOT / target.partition("::")[0]).exists()
+    ]
     assert missing == []
 
 
@@ -42,7 +46,9 @@ def test_the_lane_uses_the_isolated_pollution_detecting_runner_with_a_per_test_t
     source = (ROOT / "tools" / "ci" / "run_windows_lane.py").read_text(encoding="utf-8")
     assert "run_pytest_gate" in source and "subprocess" not in source  # no second pytest runner
     runner = (ROOT / "tools" / "ci" / "run_collection_gate.py").read_text(encoding="utf-8")
-    assert "ignore_cleanup_errors=True" in runner  # Windows long/locked test paths must not fail a green gate on cleanup
+    assert (
+        "ignore_cleanup_errors=True" in runner
+    )  # Windows long/locked test paths must not fail a green gate on cleanup
     command = lane.build_command()
     assert "--timeout=300" in command and "-x" not in command  # runs to completion, like the census
 
@@ -62,7 +68,16 @@ def test_on_windows_the_lane_targets_are_collectable() -> None:
     import subprocess
 
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", *lane.WINDOWS_LANE_TARGETS],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            *lane.WINDOWS_LANE_TARGETS,
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,

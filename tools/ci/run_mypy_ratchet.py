@@ -45,7 +45,9 @@ MYPY_ARGS = (
     "--no-pretty",
 )
 
-_ERROR_LINE = re.compile(r"^(?P<path>[^:\n]+\.pyi?):\d+(?::\d+)?: error: .*\[(?P<code>[\w-]+)\]\s*$")
+_ERROR_LINE = re.compile(
+    r"^(?P<path>[^:\n]+\.pyi?):\d+(?::\d+)?: error: .*\[(?P<code>[\w-]+)\]\s*$"
+)
 
 
 def parse_counts(output: str) -> dict[str, int]:
@@ -70,7 +72,9 @@ def compare(current: dict[str, int], baseline: dict[str, int]) -> list[str]:
         have, allowed = current.get(path, 0), baseline.get(path, 0)
         if have > allowed:
             where = "a file with no mypy errors" if allowed == 0 else f"baseline {allowed}"
-            problems.append(f"REGRESSION: {path}: {have} mypy error(s) ({where}); fix them, do not raise the baseline")
+            problems.append(
+                f"REGRESSION: {path}: {have} mypy error(s) ({where}); fix them, do not raise the baseline"
+            )
         elif have < allowed:
             problems.append(
                 f"IMPROVED: {path}: {have} mypy error(s), baseline {allowed}; run "
@@ -93,7 +97,9 @@ def write_baseline(counts: dict[str, int], path: Path = BASELINE_PATH) -> None:
         "total": sum(counts.values()),
         "counts": counts,
     }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def run_mypy() -> str:
@@ -105,25 +111,41 @@ def run_mypy() -> str:
         check=False,
     )
     if "error:" not in result.stdout and result.returncode not in (0, 1):
-        raise RuntimeError(f"mypy failed to run (exit {result.returncode}):\n{result.stdout}\n{result.stderr}")
+        raise RuntimeError(
+            f"mypy failed to run (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+        )
     return result.stdout
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--update", action="store_true", help="rewrite the baseline from the current counts")
-    parser.add_argument("--report", default="", help="also write the current counts to this JSON file")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--update", action="store_true", help="rewrite the baseline from the current counts"
+    )
+    parser.add_argument(
+        "--report", default="", help="also write the current counts to this JSON file"
+    )
     args = parser.parse_args(argv)
 
     counts = parse_counts(run_mypy())
     if args.report:
-        Path(args.report).write_text(json.dumps({"total": sum(counts.values()), "counts": counts}, indent=2), encoding="utf-8")
+        Path(args.report).write_text(
+            json.dumps({"total": sum(counts.values()), "counts": counts}, indent=2),
+            encoding="utf-8",
+        )
     if args.update:
         write_baseline(counts)
-        print(f"mypy ratchet baseline written: {sum(counts.values())} error(s) in {len(counts)} file(s)")
+        print(
+            f"mypy ratchet baseline written: {sum(counts.values())} error(s) in {len(counts)} file(s)"
+        )
         return 0
     if not BASELINE_PATH.is_file():
-        print(f"mypy ratchet FAILED: {BASELINE_PATH.name} is missing; create it with --update", file=sys.stderr)
+        print(
+            f"mypy ratchet FAILED: {BASELINE_PATH.name} is missing; create it with --update",
+            file=sys.stderr,
+        )
         return 1
     problems = compare(counts, load_baseline())
     if problems:
@@ -131,7 +153,9 @@ def main(argv: list[str] | None = None) -> int:
         for problem in problems:
             print(problem, file=sys.stderr)
         return 1
-    print(f"mypy ratchet OK: {sum(counts.values())} error(s) in {len(counts)} file(s), none beyond the baseline")
+    print(
+        f"mypy ratchet OK: {sum(counts.values())} error(s) in {len(counts)} file(s), none beyond the baseline"
+    )
     return 0
 
 

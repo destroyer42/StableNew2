@@ -46,16 +46,24 @@ def test_a_crash_before_the_replace_keeps_the_previous_file_and_leaves_no_temp_f
     assert _leftovers(tmp_path) == []
 
 
-def test_content_is_flushed_to_disk_before_the_replace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_content_is_flushed_to_disk_before_the_replace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     order: list[str] = []
     real_fsync, real_replace = os.fsync, os.replace
-    monkeypatch.setattr(atomic_io.os, "fsync", lambda fd: (order.append("fsync"), real_fsync(fd))[1])
-    monkeypatch.setattr(atomic_io.os, "replace", lambda a, b: (order.append("replace"), real_replace(a, b))[1])
+    monkeypatch.setattr(
+        atomic_io.os, "fsync", lambda fd: (order.append("fsync"), real_fsync(fd))[1]
+    )
+    monkeypatch.setattr(
+        atomic_io.os, "replace", lambda a, b: (order.append("replace"), real_replace(a, b))[1]
+    )
     atomic_write_text(tmp_path / "x.json", "{}")
     assert order == ["fsync", "replace"]
 
 
-def test_a_transient_windows_sharing_denial_is_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_transient_windows_sharing_denial_is_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     real_replace = os.replace
     attempts = {"n": 0}
 
@@ -71,15 +79,21 @@ def test_a_transient_windows_sharing_denial_is_retried(tmp_path: Path, monkeypat
     assert attempts["n"] == 3 and (tmp_path / "x.json").read_text(encoding="utf-8") == "ok"
 
 
-def test_a_persistent_denial_is_raised_not_swallowed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(atomic_io.os, "replace", lambda *_: (_ for _ in ()).throw(PermissionError(13, "locked")))
+def test_a_persistent_denial_is_raised_not_swallowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        atomic_io.os, "replace", lambda *_: (_ for _ in ()).throw(PermissionError(13, "locked"))
+    )
     monkeypatch.setattr(atomic_io.time, "sleep", lambda _s: None)
     with pytest.raises(PermissionError):
         atomic_write_text(tmp_path / "x.json", "ok")
     assert _leftovers(tmp_path) == []
 
 
-def test_a_payload_that_cannot_be_serialized_never_touches_the_existing_file(tmp_path: Path) -> None:
+def test_a_payload_that_cannot_be_serialized_never_touches_the_existing_file(
+    tmp_path: Path,
+) -> None:
     target = tmp_path / "x.json"
     target.write_text('{"keep": true}', encoding="utf-8")
     with pytest.raises(TypeError):
@@ -99,22 +113,30 @@ def test_the_learning_experiment_store_keeps_the_last_good_session_when_a_write_
 
     monkeypatch.setattr(atomic_io.os, "replace", boom)
     with pytest.raises(OSError):
-        store.save_session(display_name="exp", payload={"revision": 2}, experiment_id=handle.experiment_id)
+        store.save_session(
+            display_name="exp", payload={"revision": 2}, experiment_id=handle.experiment_id
+        )
     monkeypatch.undo()
     assert store.load_session(handle.experiment_id) == {"revision": 1}
     assert session.read_bytes() != b"\x00" * session.stat().st_size  # never a zero-filled file
 
 
-def test_the_record_writer_reports_failure_instead_of_silently_dropping_a_record(tmp_path: Path) -> None:
+def test_the_record_writer_reports_failure_instead_of_silently_dropping_a_record(
+    tmp_path: Path,
+) -> None:
     writer = LearningRecordWriter(tmp_path / "records.jsonl")
-    record = LearningRecord.from_json(json.dumps({"run_id": "r1", "timestamp": "2026-10-16T00:00:00Z"}))
+    record = LearningRecord.from_json(
+        json.dumps({"run_id": "r1", "timestamp": "2026-10-16T00:00:00Z"})
+    )
     assert writer.append_record(record) is True
 
     writer.records_path = tmp_path / "missing_dir" / "records.jsonl"  # unwritable destination
     assert writer.append_record(record) is False
 
 
-def test_a_rating_that_cannot_be_stored_is_raised_to_the_ui_and_never_cached_as_saved(tmp_path: Path) -> None:
+def test_a_rating_that_cannot_be_stored_is_raised_to_the_ui_and_never_cached_as_saved(
+    tmp_path: Path,
+) -> None:
     """The review panel catches the exception and shows 'Error saving rating'; the cache must not claim a save."""
 
     from tests.learning_v2.test_ordinary_global_prompts_141 import ordinary_plan

@@ -41,7 +41,13 @@ WINDOWS_LANE_TARGETS = (
 
 
 def build_command() -> list[str]:
-    return ["-q", "-rfE", "--tb=short", "--timeout=300", *(repository_test_target(t) for t in WINDOWS_LANE_TARGETS)]
+    return [
+        "-q",
+        "-rfE",
+        "--tb=short",
+        "--timeout=300",
+        *(repository_test_target(t) for t in WINDOWS_LANE_TARGETS),
+    ]
 
 
 def main() -> int:

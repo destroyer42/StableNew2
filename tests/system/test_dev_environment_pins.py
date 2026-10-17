@@ -35,25 +35,36 @@ def test_every_dev_tool_is_pinned_exactly_once() -> None:
     assert len(names) == len(set(names))
     for requirement in requirements:
         specifiers = list(requirement.specifier)
-        assert len(specifiers) == 1 and specifiers[0].operator == "==", f"{requirement.name} must be pinned with =="
+        assert len(specifiers) == 1 and specifiers[0].operator == "==", (
+            f"{requirement.name} must be pinned with =="
+        )
     for tool in ("pytest", "pytest-timeout", "ruff", "mypy", "types-requests"):
         assert tool in names, f"{tool} is missing from requirements-dev.txt"
 
 
 def test_the_ruff_pin_is_identical_in_every_place_it_is_declared() -> None:
-    dev_pin = next(r for r in _requirements("requirements-dev.txt") if canonicalize_name(r.name) == "ruff")
+    dev_pin = next(
+        r for r in _requirements("requirements-dev.txt") if canonicalize_name(r.name) == "ruff"
+    )
     version = next(iter(dev_pin.specifier)).version
 
     pyproject = tomllib.loads(_read("pyproject.toml"))
     assert f"ruff=={version}" in pyproject["project"]["optional-dependencies"]["dev"]
-    assert f"rev: v{version}" in _read(".pre-commit-config.yaml").split("astral-sh/ruff-pre-commit")[1][:80]
+    assert (
+        f"rev: v{version}"
+        in _read(".pre-commit-config.yaml").split("astral-sh/ruff-pre-commit")[1][:80]
+    )
 
 
 def test_the_pytest_pin_does_not_contradict_the_runtime_constraints() -> None:
-    dev = next(r for r in _requirements("requirements-dev.txt") if canonicalize_name(r.name) == "pytest")
+    dev = next(
+        r for r in _requirements("requirements-dev.txt") if canonicalize_name(r.name) == "pytest"
+    )
     pinned = next(iter(dev.specifier)).version
     constraint_lines = _read("constraints/windows-py314-cu130.txt").splitlines()
-    assert f"pytest=={pinned}" in constraint_lines, "dev pytest and the Windows runtime pin must agree"
+    assert f"pytest=={pinned}" in constraint_lines, (
+        "dev pytest and the Windows runtime pin must agree"
+    )
 
 
 def test_workflows_install_the_dev_lock_instead_of_unpinned_tools() -> None:
@@ -62,9 +73,13 @@ def test_workflows_install_the_dev_lock_instead_of_unpinned_tools() -> None:
         for line in text.splitlines():
             stripped = line.strip()
             if stripped.startswith("pip install") and "-r " not in stripped:
-                raise AssertionError(f"{workflow.name}: unpinned `{stripped}`; use requirements-dev.txt")
+                raise AssertionError(
+                    f"{workflow.name}: unpinned `{stripped}`; use requirements-dev.txt"
+                )
     ci = _read(".github/workflows/ci.yml")
-    assert ci.count("pip install -r requirements-dev.txt") >= 2  # the required job and the census shards
+    assert (
+        ci.count("pip install -r requirements-dev.txt") >= 2
+    )  # the required job and the census shards
 
 
 def test_the_tooling_blocker_message_names_the_install_command() -> None:
@@ -109,7 +124,9 @@ def _imported_roots(directory: str) -> dict[str, str]:
     for path in sorted((ROOT / directory).rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
-        siblings = {p.stem for p in path.parent.glob("*.py")}  # tools/ci modules import each other by bare name
+        siblings = {
+            p.stem for p in path.parent.glob("*.py")
+        }  # tools/ci modules import each other by bare name
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except (SyntaxError, UnicodeDecodeError):
@@ -153,6 +170,8 @@ def test_the_import_guard_detects_an_undeclared_module(tmp_path: Path, monkeypat
     probe = ROOT / "src" / "_p1_2_probe_undeclared_module.py"
     probe.write_text("import definitely_not_a_real_distribution\n", encoding="utf-8")
     try:
-        assert any(item.startswith("definitely_not_a_real_distribution") for item in _undeclared("src"))
+        assert any(
+            item.startswith("definitely_not_a_real_distribution") for item in _undeclared("src")
+        )
     finally:
         probe.unlink()

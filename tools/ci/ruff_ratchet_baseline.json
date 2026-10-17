@@ -1,0 +1,1176 @@
+{
+  "schema_version": 1,
+  "format": {
+    "metric": "files `ruff format --check` would reformat",
+    "total": 407,
+    "files": [
+      "src/api/forge_client.py",
+      "src/api/webui_failure_evidence.py",
+      "src/api/webui_identity_attestation.py",
+      "src/api/webui_process_manager.py",
+      "src/api/webui_runtime_identity.py",
+      "src/assets/cache_diagnostics.py",
+      "src/assets/checkpoint_structure.py",
+      "src/assets/compatibility.py",
+      "src/assets/component_evidence.py",
+      "src/assets/controlnet_structure.py",
+      "src/assets/registry.py",
+      "src/conditioning/openpose.py",
+      "src/conditioning/openpose_library.py",
+      "src/conditioning/openpose_snapshot.py",
+      "src/controller/app_controller.py",
+      "src/controller/app_controller_services/runtime_projection_coordinator.py",
+      "src/controller/app_controller_services/shutdown_coordinator.py",
+      "src/controller/batch_operations_service.py",
+      "src/controller/batch_output_resolution.py",
+      "src/controller/gpu_loss_coordinator.py",
+      "src/controller/job_history_service.py",
+      "src/controller/job_service.py",
+      "src/controller/job_service_dispatch.py",
+      "src/controller/job_service_shutdown.py",
+      "src/controller/pipeline_controller.py",
+      "src/controller/review_batch_service.py",
+      "src/controller/webui_connection_controller.py",
+      "src/controller/webui_outage_coordinator.py",
+      "src/gui/app_state_projection_sink.py",
+      "src/gui/app_state_v2.py",
+      "src/gui/base_generation_panel_v2.py",
+      "src/gui/batch_operations_panel_v2.py",
+      "src/gui/batch_retry_dialog.py",
+      "src/gui/controllers/learning_controller.py",
+      "src/gui/engine_settings_dialog.py",
+      "src/gui/layout_v2.py",
+      "src/gui/main_window_v2.py",
+      "src/gui/model_policy_panel_projection.py",
+      "src/gui/model_readiness_presenter.py",
+      "src/gui/preview_panel_v2.py",
+      "src/gui/prompt_adaptation_dialog.py",
+      "src/gui/prompt_target_presenter.py",
+      "src/gui/review_batch_dialog.py",
+      "src/gui/status_bar_v2.py",
+      "src/gui/theme_v2.py",
+      "src/gui/view_contracts/batch_operations_contract.py",
+      "src/gui/view_contracts/window_layout_contract.py",
+      "src/gui/view_contracts/workspace_density_contract.py",
+      "src/gui/views/discovered_review_inbox_panel.py",
+      "src/gui/views/discovered_review_table.py",
+      "src/gui/views/experiment_design_panel.py",
+      "src/gui/views/learning_review_panel.py",
+      "src/gui/views/learning_tab_frame_v2.py",
+      "src/gui/views/photo_optimize_layout.py",
+      "src/gui/views/photo_optimize_tab_frame_v2.py",
+      "src/gui/views/pipeline_tab_frame_v2.py",
+      "src/gui/views/prompt_tab_frame_v2.py",
+      "src/gui/views/review_tab_frame_v2.py",
+      "src/gui/views/svd_tab_frame_v2.py",
+      "src/gui/views/video_workflow_motion_readiness_panel_v2.py",
+      "src/gui/views/video_workflow_tab_frame_v2.py",
+      "src/gui/widgets/embedding_picker_panel.py",
+      "src/gui/widgets/lora_picker_panel.py",
+      "src/gui/widgets/openpose_picker_panel.py",
+      "src/gui/zimage_optional_control_projection.py",
+      "src/gui_v2/adaptation_notice.py",
+      "src/gui_v2/model_policy_projection.py",
+      "src/gui_v2/openpose_conditioning_view.py",
+      "src/gui_v2/prompt_adaptation_preview.py",
+      "src/image_backends/backend_capabilities.py",
+      "src/image_backends/exact_model_profile.py",
+      "src/image_backends/forge_controlnet.py",
+      "src/image_backends/forge_klein_assets.py",
+      "src/image_backends/forge_klein_lora.py",
+      "src/image_backends/forge_klein_profile.py",
+      "src/image_backends/forge_webui_backend.py",
+      "src/image_backends/forge_zimage_profile.py",
+      "src/image_backends/image_backend_types.py",
+      "src/image_backends/model_policy.py",
+      "src/image_backends/model_policy_lora.py",
+      "src/image_backends/model_readiness.py",
+      "src/image_backends/model_readiness_probe.py",
+      "src/image_backends/openpose_capability.py",
+      "src/image_backends/operation_compatibility.py",
+      "src/learning/discovered_review_store.py",
+      "src/learning/execution_controller.py",
+      "src/learning/experiment_conclusion.py",
+      "src/learning/experiment_freeze.py",
+      "src/learning/experiment_naming.py",
+      "src/learning/learning_record.py",
+      "src/learning/lora_variant.py",
+      "src/learning/model_comparison.py",
+      "src/learning/model_evidence_readiness.py",
+      "src/learning/output_scanner.py",
+      "src/learning/recommendation_engine.py",
+      "src/learning/review_workspace.py",
+      "src/learning/staged_recommendations.py",
+      "src/main.py",
+      "src/photo_optimize/models.py",
+      "src/photo_optimize/paths.py",
+      "src/photo_optimize/settings.py",
+      "src/photo_optimize/store.py",
+      "src/photo_optimize/submission.py",
+      "src/pipeline/compile_evidence.py",
+      "src/pipeline/exact_profile_effective_config.py",
+      "src/pipeline/executor.py",
+      "src/pipeline/global_prompt_policy.py",
+      "src/pipeline/openpose_compile.py",
+      "src/pipeline/pipeline_runner.py",
+      "src/pipeline/prompt_pack_job_builder.py",
+      "src/pipeline/replay_input_verification.py",
+      "src/pipeline/resolution_layer.py",
+      "src/prompting/pack_target_readiness.py",
+      "src/prompting/prompt_adaptation.py",
+      "src/prompting/prompt_compatibility.py",
+      "src/promptpacks/storage.py",
+      "src/queue/backend_dependency.py",
+      "src/queue/batch_membership.py",
+      "src/queue/batch_projection.py",
+      "src/queue/failure_triage.py",
+      "src/queue/gpu_loss_assessment.py",
+      "src/queue/job_queue.py",
+      "src/queue/job_repository.py",
+      "src/queue/single_node_runner.py",
+      "src/refinement/quality_metrics.py",
+      "src/services/operator_readiness_service.py",
+      "src/services/runtime_transition_service.py",
+      "src/state/output_routing.py",
+      "src/state/workspace_paths.py",
+      "src/utils/api_failure_store_v2.py",
+      "src/utils/gpu_survivor_telemetry.py",
+      "src/utils/managed_forge_runtime.py",
+      "src/utils/process_inspector_v2.py",
+      "src/video/comfy_workflow_backend.py",
+      "src/video/restoration/upscaler.py",
+      "src/video/svd_preprocess.py",
+      "src/video/video_workflow_njr_builder.py",
+      "src/video/workflow_catalog.py",
+      "src/video/workflow_catalog_wan_animate2.py",
+      "src/video/workflow_controls.py",
+      "src/video/workflow_source_preparation.py",
+      "tests/api/test_forge_client.py",
+      "tests/api/test_forge_production_selection.py",
+      "tests/api/test_healthcheck_v2.py",
+      "tests/api/test_http_100_definite_http_fail_fast.py",
+      "tests/api/test_managed_forge_identity_attestation.py",
+      "tests/api/test_managed_forge_initial_identity_settle.py",
+      "tests/api/test_webui_launch_profile_ownership.py",
+      "tests/api/test_webui_process_cleanup.py",
+      "tests/api/test_webui_process_manager_identity.py",
+      "tests/api/test_webui_process_manager_lifecycle_130.py",
+      "tests/api/test_webui_resources_adetailer_v2.py",
+      "tests/api/test_webui_runtime_identity.py",
+      "tests/api/test_webui_true_readiness.py",
+      "tests/app/test_bootstrap_comfy_autostart.py",
+      "tests/assets/test_asset_compatibility_profiles.py",
+      "tests/assets/test_asset_registry.py",
+      "tests/assets/test_checkpoint_evidence_persistence_145.py",
+      "tests/assets/test_controlnet_structure_210.py",
+      "tests/assets/test_openpose_image_kind_210.py",
+      "tests/conditioning/openpose_fixtures_210.py",
+      "tests/conditioning/test_openpose_catalog_210.py",
+      "tests/conditioning/test_openpose_contract_210.py",
+      "tests/conditioning/test_openpose_library_210.py",
+      "tests/conditioning/test_openpose_snapshot_210.py",
+      "tests/conftest.py",
+      "tests/controller/conftest.py",
+      "tests/controller/test_app_controller_queue_control_150.py",
+      "tests/controller/test_app_controller_ui_debounce.py",
+      "tests/controller/test_batch_operations_service_201.py",
+      "tests/controller/test_default_runtime_ports_forge.py",
+      "tests/controller/test_job_service_pause_active_job_150.py",
+      "tests/controller/test_learning_controller_review_feedback.py",
+      "tests/controller/test_review_exact_profile_preflight_158.py",
+      "tests/controller/test_runtime_backend_port_wiring.py",
+      "tests/controller/test_shutdown_coordinator_140.py",
+      "tests/controller/test_shutdown_quiescence_140.py",
+      "tests/controller/test_svd_controller.py",
+      "tests/controller/test_video_workflow_controller.py",
+      "tests/controller/test_webui_endpoint_lifecycle_170.py",
+      "tests/controller/test_webui_lifecycle_convergence_130.py",
+      "tests/gui_v2/test_batch_gpu_hold_labels_180.py",
+      "tests/gui_v2/test_batch_operations_review_handoff_201.py",
+      "tests/gui_v2/test_batch_operations_session_201.py",
+      "tests/gui_v2/test_batch_operations_view_201.py",
+      "tests/gui_v2/test_batch_operations_visibility_201.py",
+      "tests/gui_v2/test_curation_exact_profile_preflight_158.py",
+      "tests/gui_v2/test_engine_settings_runtime_selector_130.py",
+      "tests/gui_v2/test_focused_operator_workspace_110.py",
+      "tests/gui_v2/test_forge_capability_projection_v2.py",
+      "tests/gui_v2/test_gpu_quarantine_readiness_180.py",
+      "tests/gui_v2/test_klein_lora_gui_117.py",
+      "tests/gui_v2/test_klein_profile_gui.py",
+      "tests/gui_v2/test_learning_tab_state_persistence.py",
+      "tests/gui_v2/test_main_window_persistence_regressions.py",
+      "tests/gui_v2/test_model_policy_panel_130a.py",
+      "tests/gui_v2/test_model_readiness_presenter_150.py",
+      "tests/gui_v2/test_openpose_conditioning_view_210.py",
+      "tests/gui_v2/test_openpose_picker_panel_210.py",
+      "tests/gui_v2/test_pack_editor_readiness_158.py",
+      "tests/gui_v2/test_pack_lora_dialog_143.py",
+      "tests/gui_v2/test_photo_optimize_tab_v2.py",
+      "tests/gui_v2/test_pipeline_layout_scroll_v2.py",
+      "tests/gui_v2/test_pipeline_view_contracts.py",
+      "tests/gui_v2/test_pr_mvp_060_phase3a_r1_queue.py",
+      "tests/gui_v2/test_preview_draft_recovery_112.py",
+      "tests/gui_v2/test_prompt_adaptation_130c.py",
+      "tests/gui_v2/test_prompt_tab_openpose_210.py",
+      "tests/gui_v2/test_prompt_target_130b.py",
+      "tests/gui_v2/test_queue_pause_resume_journey_150.py",
+      "tests/gui_v2/test_review_batch_200.py",
+      "tests/gui_v2/test_thumbnail_tooltip_recovery_111.py",
+      "tests/gui_v2/test_video_workflow_motion_readiness_ui.py",
+      "tests/gui_v2/test_video_workflow_tab_frame_v2.py",
+      "tests/gui_v2/test_workspace_density_contract_110.py",
+      "tests/gui_v2/test_workspace_layout_resilience_v2.py",
+      "tests/gui_v2/test_zimage_effective_config_159_gui.py",
+      "tests/gui_v2/test_zimage_policy_projection.py",
+      "tests/helpers/batch_ops_201.py",
+      "tests/helpers/fake_webui_transport.py",
+      "tests/image_backends/test_forge_controlnet_210.py",
+      "tests/image_backends/test_forge_klein_assets.py",
+      "tests/image_backends/test_forge_klein_lora.py",
+      "tests/image_backends/test_forge_klein_profile.py",
+      "tests/image_backends/test_forge_webui_backend.py",
+      "tests/image_backends/test_forge_zimage_profile.py",
+      "tests/image_backends/test_image_backend_contract.py",
+      "tests/image_backends/test_model_policy_130a.py",
+      "tests/image_backends/test_openpose_capability_210.py",
+      "tests/image_backends/test_openpose_output_211.py",
+      "tests/image_backends/test_operation_compatibility_158.py",
+      "tests/image_backends/test_prompt_adaptation_130c.py",
+      "tests/image_backends/test_prompt_adaptation_140.py",
+      "tests/image_backends/test_prompt_compatibility_130b.py",
+      "tests/image_backends/test_webui_family_prompt_intent.py",
+      "tests/integration/test_clean_shutdown.py",
+      "tests/integration/test_global_prompt_integration.py",
+      "tests/integration/test_golden_path_suite_v2_6.py",
+      "tests/integration/test_learning_review_recommendation_e2e.py",
+      "tests/integration/test_pr_img_116_klein_canonical_path.py",
+      "tests/integration/test_pr_img_117_klein_lora_canonical_path.py",
+      "tests/integration/test_pr_img_155_zimage_canonical_path.py",
+      "tests/integration/test_pr_img_159_zimage_effective_config.py",
+      "tests/integration/test_pr_img_cnet_210_canonical_path.py",
+      "tests/integration/test_pr_img_cnet_211_canonical_path.py",
+      "tests/integration/test_pr_img_forge_100_canonical_path.py",
+      "tests/integration/test_pr_img_forge_d110_module_state.py",
+      "tests/integration/test_pr_img_models_150_readiness.py",
+      "tests/integration/test_pr_runtime_100_transition_queue.py",
+      "tests/integration/test_pr_vid_130_wan_experimental_queue.py",
+      "tests/integration/test_webui_lifecycle_non_webui_admission_130.py",
+      "tests/learning/test_learning_record_builder.py",
+      "tests/learning_v2/test_discovered_review_store.py",
+      "tests/learning_v2/test_experiment_freeze.py",
+      "tests/learning_v2/test_model_comparison_140.py",
+      "tests/learning_v2/test_model_comparison_compat_158.py",
+      "tests/learning_v2/test_model_comparison_evidence_145.py",
+      "tests/learning_v2/test_model_comparison_global_positive_160.py",
+      "tests/learning_v2/test_openpose_learning_refusal_210.py",
+      "tests/learning_v2/test_ordinary_global_prompts_141.py",
+      "tests/learning_v2/test_ordinary_learning_zimage_158.py",
+      "tests/learning_v2/test_pr_learn_300_experiment_coherence.py",
+      "tests/learning_v2/test_pr_learn_300_lora_strength.py",
+      "tests/learning_v2/test_pr_learn_300_seed_propagation.py",
+      "tests/learning_v2/test_pr_learn_300_workflow_continuation.py",
+      "tests/learning_v2/test_pr_learn_300_workspace_persistence.py",
+      "tests/learning_v2/test_recommendation_structured_values.py",
+      "tests/photo_optimize/test_photo_220.py",
+      "tests/photo_optimize/test_photo_220_form.py",
+      "tests/pipeline/test_adetailer_progress_semantics.py",
+      "tests/pipeline/test_config_sweeps_v2.py",
+      "tests/pipeline/test_exact_profile_effective_config_159.py",
+      "tests/pipeline/test_executor_adetailer.py",
+      "tests/pipeline/test_klein_compile_policy.py",
+      "tests/pipeline/test_launch_profile_capability_policy.py",
+      "tests/pipeline/test_openpose_compile_210.py",
+      "tests/pipeline/test_openpose_wire_hygiene_210.py",
+      "tests/pipeline/test_pack_prompt_intent_140.py",
+      "tests/pipeline/test_pipeline_runner.py",
+      "tests/pipeline/test_pipeline_runner_gpu_survivor_telemetry.py",
+      "tests/pipeline/test_pr_harden_009_r1a_txt2img_cancellation.py",
+      "tests/pipeline/test_prompt_pack_adaptation_140.py",
+      "tests/pipeline/test_stage_admission_control_v2.py",
+      "tests/pipeline/test_zimage_compile_policy.py",
+      "tests/pipeline/test_zimage_effective_config_159.py",
+      "tests/promptpacks/test_openpose_promptpack_210.py",
+      "tests/promptpacks/test_openpose_readiness_210.py",
+      "tests/queue/test_batch_admission_atomicity.py",
+      "tests/queue/test_batch_cancel_201.py",
+      "tests/queue/test_batch_catalog_201.py",
+      "tests/queue/test_batch_membership_201.py",
+      "tests/queue/test_dead_forge_cascade_172.py",
+      "tests/queue/test_dispatch_fence_unit_140.py",
+      "tests/queue/test_gpu_loss_assessment_180.py",
+      "tests/queue/test_gpu_loss_containment_180.py",
+      "tests/queue/test_gpu_quarantine_queue_180.py",
+      "tests/queue/test_job_repository_sqlite.py",
+      "tests/queue/test_jobrunner_integration.py",
+      "tests/queue/test_shutdown_admission_fence_140.py",
+      "tests/queue/test_webui_outage_containment_171.py",
+      "tests/refinement/test_subject_scale_policy_service.py",
+      "tests/services/test_operator_readiness_gpu_180.py",
+      "tests/services/test_operator_readiness_service.py",
+      "tests/services/test_runtime_transition_service.py",
+      "tests/services/test_watchdog_first_trigger_120.py",
+      "tests/state/test_prompt_metadata_parsing.py",
+      "tests/system/test_ci_truth_sync_v2.py",
+      "tests/system/test_construction_identity_contract.py",
+      "tests/system/test_forge_qualification_descriptor.py",
+      "tests/system/test_launch_stablenew_180.py",
+      "tests/system/test_managed_comfy_runtime.py",
+      "tests/system/test_managed_forge_runtime.py",
+      "tests/system/test_runtime_constraints.py",
+      "tests/system/test_zimage_forge_pin.py",
+      "tests/test_api_client.py",
+      "tests/test_global_prompt_integration.py",
+      "tests/test_pr_008.py",
+      "tests/tools/test_acceptance_intent_digest_145.py",
+      "tests/tools/test_ci_census_shards.py",
+      "tests/tools/test_ci_census_summary.py",
+      "tests/tools/test_ci_previous_evidence.py",
+      "tests/tools/test_ci_validation_plan.py",
+      "tests/tools/test_correlate_gpu_incidents.py",
+      "tests/tools/test_diagnose_asset_registry_cache_145.py",
+      "tests/tools/test_img115_harness.py",
+      "tests/tools/test_img151_feasibility.py",
+      "tests/tools/test_img_116_klein_acceptance_driver.py",
+      "tests/tools/test_img_117_klein_lora_acceptance_driver.py",
+      "tests/tools/test_img_156_zimage_acceptance.py",
+      "tests/tools/test_img_forge_100_acceptance_driver.py",
+      "tests/tools/test_img_forge_100_acceptance_driver_bcd.py",
+      "tests/tools/test_img_forge_100_prompt_intent.py",
+      "tests/tools/test_img_forge_100_qualification.py",
+      "tests/tools/test_install_forge_klein_assets.py",
+      "tests/tools/test_missing_asset_reference_triage.py",
+      "tests/tools/test_operator_journey_harness.py",
+      "tests/tools/test_promptpack_quality_census.py",
+      "tests/tools/test_vid130_acceptance_cleanup.py",
+      "tests/tools/test_vid150_qualification.py",
+      "tests/tools/test_vid160c_commit_adjudication.py",
+      "tests/tools/test_vid175_interpretability.py",
+      "tests/tools/test_vid181_runner.py",
+      "tests/tools/test_vid190_acceptance_harness_verdict.py",
+      "tests/tools/test_vid192_qualification.py",
+      "tests/utils/test_config_manager_global_prompts.py",
+      "tests/utils/test_global_prompt_paths.py",
+      "tests/utils/test_gpu_device_health_180.py",
+      "tests/utils/test_process_inspector_v2.py",
+      "tests/video/test_pr_comfy_runtime_100_workflow_versions.py",
+      "tests/video/test_pr_runtime_110_comfy_liveness.py",
+      "tests/video/test_pr_vid_190_comfy_lifecycle_frame_count.py",
+      "tests/video/test_pr_vid_190_wan_animate2.py",
+      "tests/video/test_pr_vid_192_animate2_controls.py",
+      "tests/video/test_pr_vid_196_driving_video_inspection.py",
+      "tests/video/test_pr_vid_196_readiness_and_guidance.py",
+      "tests/video/test_pr_vid_196_source_preview.py",
+      "tests/video/test_svd_postprocess.py",
+      "tests/video/test_svd_restoration_adapters.py",
+      "tests/video/test_svd_restoration_readiness.py",
+      "tests/video/test_wan22_experimental_workflow.py",
+      "tests/video/test_workflow_registry.py",
+      "tests/video/test_workflow_source_preparation.py",
+      "tools/acceptance/img_116_klein_acceptance.py",
+      "tools/acceptance/img_117_klein_lora_acceptance.py",
+      "tools/acceptance/img_156_zimage_acceptance.py",
+      "tools/acceptance/img_forge_100_acceptance.py",
+      "tools/acceptance/img_forge_120_default_acceptance.py",
+      "tools/acceptance/vid130_wan_acceptance.py",
+      "tools/acceptance/vid190_queue_recycling_acceptance.py",
+      "tools/ci/census_shards.py",
+      "tools/ci/census_summary.py",
+      "tools/ci/ci_truth.py",
+      "tools/ci/previous_evidence.py",
+      "tools/ci/run_collection_gate.py",
+      "tools/ci/run_pr_gate.py",
+      "tools/ci/run_required_smoke.py",
+      "tools/ci/run_sharded_census.py",
+      "tools/ci/validation_plan.py",
+      "tools/diagnose_asset_registry_cache.py",
+      "tools/diagnostics/correlate_gpu_incidents.py",
+      "tools/missing_asset_reference_triage.py",
+      "tools/promptpack_quality_census.py",
+      "tools/qualification/gui110/measure_workspace.py",
+      "tools/qualification/img110/run_ideogram.py",
+      "tools/qualification/img115/api.py",
+      "tools/qualification/img115/run.py",
+      "tools/qualification/img115/runtime.py",
+      "tools/qualification/img115/spec.py",
+      "tools/qualification/img151/feasibility.py",
+      "tools/qualification/img_forge_100/compare.py",
+      "tools/qualification/img_forge_100/contact_sheet.py",
+      "tools/qualification/img_forge_100/preflight.py",
+      "tools/qualification/img_forge_100/provenance.py",
+      "tools/qualification/img_forge_100/run.py",
+      "tools/qualification/img_forge_100/runtime_capture.py",
+      "tools/qualification/vid150/run.py",
+      "tools/qualification/vid160b/run.py",
+      "tools/qualification/vid160c/adjudicate.py",
+      "tools/qualification/vid160c/run.py",
+      "tools/qualification/vid175/pose_asset_480x832.py",
+      "tools/qualification/vid180/run.py",
+      "tools/qualification/vid181/driving_prep.py",
+      "tools/qualification/vid181/preprocess_launcher.py",
+      "tools/qualification/vid192/motion_corpus.py",
+      "tools/runtime/verify_managed_comfy.py",
+      "tools/runtime/verify_managed_forge.py",
+      "tools/runtime/verify_runtime_pins.py"
+    ]
+  },
+  "rules": {
+    "metric": "findings per src file",
+    "totals": {
+      "BLE001": 1414,
+      "S110": 565,
+      "S112": 45
+    },
+    "counts": {
+      "src/ai/settings_generator_adapter.py": {
+        "BLE001": 1,
+        "S112": 1
+      },
+      "src/api/client.py": {
+        "BLE001": 23,
+        "S110": 4
+      },
+      "src/api/healthcheck.py": {
+        "BLE001": 4
+      },
+      "src/api/webui_api.py": {
+        "BLE001": 6
+      },
+      "src/api/webui_process_manager.py": {
+        "BLE001": 37,
+        "S110": 9
+      },
+      "src/api/webui_resource_service.py": {
+        "BLE001": 4,
+        "S110": 2
+      },
+      "src/api/webui_resources.py": {
+        "BLE001": 5,
+        "S110": 4
+      },
+      "src/app/optional_dependency_probes.py": {
+        "BLE001": 1
+      },
+      "src/config/app_config.py": {
+        "BLE001": 18
+      },
+      "src/controller/app_controller.py": {
+        "BLE001": 151,
+        "S110": 53,
+        "S112": 4
+      },
+      "src/controller/app_controller_services/application_runtime_coordinator.py": {
+        "BLE001": 3,
+        "S110": 3
+      },
+      "src/controller/app_controller_services/diagnostics_coordinator.py": {
+        "BLE001": 4,
+        "S110": 4
+      },
+      "src/controller/app_controller_services/run_submission_service.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/controller/app_controller_services/shutdown_coordinator.py": {
+        "BLE001": 1
+      },
+      "src/controller/core_pipeline_controller.py": {
+        "BLE001": 13,
+        "S110": 7
+      },
+      "src/controller/global_prompt_policy_service.py": {
+        "BLE001": 1
+      },
+      "src/controller/job_execution_controller.py": {
+        "BLE001": 5,
+        "S110": 2
+      },
+      "src/controller/job_history_service.py": {
+        "BLE001": 6,
+        "S110": 1,
+        "S112": 1
+      },
+      "src/controller/job_lifecycle_logger.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/controller/job_service.py": {
+        "BLE001": 13,
+        "S110": 3,
+        "S112": 1
+      },
+      "src/controller/pipeline_controller.py": {
+        "BLE001": 42,
+        "S110": 21
+      },
+      "src/controller/pipeline_controller_services/history_handoff_service.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/controller/process_auto_scanner_service.py": {
+        "BLE001": 13,
+        "S110": 5,
+        "S112": 1
+      },
+      "src/controller/prompt_pack_preflight.py": {
+        "BLE001": 1
+      },
+      "src/controller/runtime_state.py": {
+        "BLE001": 2
+      },
+      "src/controller/svd_controller.py": {
+        "BLE001": 2
+      },
+      "src/controller/webui_connection_controller.py": {
+        "BLE001": 7
+      },
+      "src/controller/webui_outage_coordinator.py": {
+        "BLE001": 8
+      },
+      "src/gui/advanced_prompt_editor.py": {
+        "BLE001": 20,
+        "S110": 9,
+        "S112": 1
+      },
+      "src/gui/api_status_panel.py": {
+        "BLE001": 4
+      },
+      "src/gui/app_state_v2.py": {
+        "BLE001": 6,
+        "S112": 4
+      },
+      "src/gui/base_generation_panel_v2.py": {
+        "BLE001": 19,
+        "S110": 11
+      },
+      "src/gui/controllers/learning_controller.py": {
+        "BLE001": 35,
+        "S110": 8,
+        "S112": 5
+      },
+      "src/gui/controllers/video_workspace_handoff.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/dropdown_loader_v2.py": {
+        "BLE001": 9,
+        "S110": 7
+      },
+      "src/gui/engine_settings_dialog.py": {
+        "BLE001": 3,
+        "S110": 3
+      },
+      "src/gui/gui_invoker.py": {
+        "BLE001": 2,
+        "S112": 1
+      },
+      "src/gui/job_history_panel_v2.py": {
+        "BLE001": 14,
+        "S110": 11
+      },
+      "src/gui/learning_review_dialog_v2.py": {
+        "BLE001": 3,
+        "S110": 1,
+        "S112": 1
+      },
+      "src/gui/log_trace_panel_v2.py": {
+        "BLE001": 2
+      },
+      "src/gui/main_window.py": {
+        "BLE001": 5,
+        "S110": 2
+      },
+      "src/gui/main_window_v2.py": {
+        "BLE001": 106,
+        "S110": 73,
+        "S112": 1
+      },
+      "src/gui/model_comparison_readiness.py": {
+        "BLE001": 1
+      },
+      "src/gui/model_list_adapter_v2.py": {
+        "BLE001": 3
+      },
+      "src/gui/model_manager_panel_v2.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/gui/model_policy_panel_projection.py": {
+        "BLE001": 6
+      },
+      "src/gui/output_settings_panel_v2.py": {
+        "BLE001": 2,
+        "S110": 1
+      },
+      "src/gui/panels_v2/api_failure_visualizer_v2.py": {
+        "BLE001": 1
+      },
+      "src/gui/panels_v2/debug_hub_panel_v2.py": {
+        "BLE001": 11,
+        "S110": 8
+      },
+      "src/gui/panels_v2/history_panel_v2.py": {
+        "BLE001": 2,
+        "S110": 1
+      },
+      "src/gui/panels_v2/job_explanation_panel_v2.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/panels_v2/operator_readiness_panel_v2.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/gui/panels_v2/queue_panel_v2.py": {
+        "BLE001": 16,
+        "S110": 6
+      },
+      "src/gui/panels_v2/reprocess_panel_v2.py": {
+        "BLE001": 4,
+        "S110": 2,
+        "S112": 1
+      },
+      "src/gui/panels_v2/running_job_panel_v2.py": {
+        "BLE001": 5,
+        "S110": 2
+      },
+      "src/gui/pipeline_panel_v2.py": {
+        "BLE001": 6,
+        "S110": 6
+      },
+      "src/gui/preview_panel_v2.py": {
+        "BLE001": 11,
+        "S110": 3
+      },
+      "src/gui/prompt_pack_adapter_v2.py": {
+        "BLE001": 2
+      },
+      "src/gui/prompt_pack_panel_v2.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/gui/prompt_target_presenter.py": {
+        "BLE001": 4
+      },
+      "src/gui/randomizer_panel_v2.py": {
+        "BLE001": 6,
+        "S110": 6
+      },
+      "src/gui/recipe_summary_v2.py": {
+        "BLE001": 1
+      },
+      "src/gui/resolution_panel_v2.py": {
+        "BLE001": 2,
+        "S110": 1
+      },
+      "src/gui/review_batch_dialog.py": {
+        "BLE001": 1
+      },
+      "src/gui/scrolling.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/sidebar_panel_v2.py": {
+        "BLE001": 32,
+        "S110": 21
+      },
+      "src/gui/stage_cards_v2/adetailer_stage_card_v2.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/stage_cards_v2/advanced_img2img_stage_card_v2.py": {
+        "BLE001": 6,
+        "S110": 3
+      },
+      "src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py": {
+        "BLE001": 16,
+        "S110": 8,
+        "S112": 1
+      },
+      "src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py": {
+        "BLE001": 4
+      },
+      "src/gui/status_bar_v2.py": {
+        "BLE001": 7,
+        "S110": 5
+      },
+      "src/gui/theme_v2.py": {
+        "BLE001": 9,
+        "S110": 9
+      },
+      "src/gui/tooltip.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/gui/ui_dispatcher.py": {
+        "BLE001": 2,
+        "S110": 1
+      },
+      "src/gui/utils/display_helpers.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/view_contracts/video_batch_contract.py": {
+        "BLE001": 3
+      },
+      "src/gui/view_contracts/video_experiment_contract.py": {
+        "BLE001": 4,
+        "S110": 1
+      },
+      "src/gui/view_contracts/video_motion_readiness_contract.py": {
+        "BLE001": 2
+      },
+      "src/gui/views/character_training_frame.py": {
+        "BLE001": 2
+      },
+      "src/gui/views/diagnostics_dashboard_v2.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/gui/views/discovered_review_table.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/views/error_modal_v2.py": {
+        "BLE001": 1
+      },
+      "src/gui/views/experiment_design_panel.py": {
+        "BLE001": 8,
+        "S110": 3
+      },
+      "src/gui/views/experiment_design_panel_v2.py": {
+        "BLE001": 2
+      },
+      "src/gui/views/learning_analytics_panel.py": {
+        "BLE001": 2
+      },
+      "src/gui/views/learning_review_panel.py": {
+        "BLE001": 9,
+        "S110": 4,
+        "S112": 2
+      },
+      "src/gui/views/learning_review_panel_v2.py": {
+        "BLE001": 1
+      },
+      "src/gui/views/learning_tab_frame_v2.py": {
+        "BLE001": 21,
+        "S110": 16
+      },
+      "src/gui/views/movie_clips_tab_frame_v2.py": {
+        "BLE001": 8,
+        "S110": 6
+      },
+      "src/gui/views/photo_optimize_tab_frame_v2.py": {
+        "BLE001": 10,
+        "S110": 5
+      },
+      "src/gui/views/pipeline_tab_frame.py": {
+        "BLE001": 6,
+        "S110": 4
+      },
+      "src/gui/views/pipeline_tab_frame_v2.py": {
+        "BLE001": 29,
+        "S110": 21,
+        "S112": 1
+      },
+      "src/gui/views/prompt_tab_frame.py": {
+        "BLE001": 7,
+        "S110": 4
+      },
+      "src/gui/views/prompt_tab_frame_v2.py": {
+        "BLE001": 35,
+        "S110": 16
+      },
+      "src/gui/views/review_tab_frame_v2.py": {
+        "BLE001": 10,
+        "S110": 1
+      },
+      "src/gui/views/run_control_bar.py": {
+        "BLE001": 4,
+        "S110": 3
+      },
+      "src/gui/views/run_control_bar_v2.py": {
+        "BLE001": 4,
+        "S110": 3
+      },
+      "src/gui/views/stage_cards_panel_v2.py": {
+        "BLE001": 23,
+        "S110": 16
+      },
+      "src/gui/views/svd_tab_frame_v2.py": {
+        "BLE001": 15,
+        "S110": 4
+      },
+      "src/gui/views/video_workflow_batch_panel_v2.py": {
+        "BLE001": 2
+      },
+      "src/gui/views/video_workflow_experiment_panel_v2.py": {
+        "BLE001": 1
+      },
+      "src/gui/views/video_workflow_motion_readiness_panel_v2.py": {
+        "BLE001": 1
+      },
+      "src/gui/views/video_workflow_tab_frame_v2.py": {
+        "BLE001": 5,
+        "S110": 3
+      },
+      "src/gui/widgets/action_explainer_panel_v2.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/gui/widgets/config_sweep_widget_v2.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/widgets/embedding_picker_panel.py": {
+        "BLE001": 3,
+        "S110": 3
+      },
+      "src/gui/widgets/image_thumbnail.py": {
+        "BLE001": 4,
+        "S110": 3
+      },
+      "src/gui/widgets/lora_picker_panel.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/gui/widgets/matrix_helper_widget.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/widgets/matrix_tab_panel.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/widgets/multi_line_prompt_field.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/widgets/tab_overview_panel_v2.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/gui/widgets/thumbnail_widget_v2.py": {
+        "BLE001": 5,
+        "S110": 1
+      },
+      "src/gui/widgets/tooltip_widget.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui/zimage_optional_control_projection.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/gui_v2/adapters/learning_adapter_v2.py": {
+        "BLE001": 6,
+        "S112": 1
+      },
+      "src/image_backends/forge_klein_readiness.py": {
+        "BLE001": 1
+      },
+      "src/image_backends/forge_webui_backend.py": {
+        "BLE001": 2
+      },
+      "src/learning/dataset_builder.py": {
+        "BLE001": 2,
+        "S112": 2
+      },
+      "src/learning/discovered_review_store.py": {
+        "BLE001": 5
+      },
+      "src/learning/experiment_store.py": {
+        "BLE001": 1
+      },
+      "src/learning/feedback_manager.py": {
+        "BLE001": 1
+      },
+      "src/learning/learning_analytics.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/learning/learning_record.py": {
+        "BLE001": 5,
+        "S110": 3
+      },
+      "src/learning/learning_record_builder.py": {
+        "BLE001": 1
+      },
+      "src/learning/lora_variable_service.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/learning/model_profiles.py": {
+        "BLE001": 2
+      },
+      "src/learning/output_scanner.py": {
+        "BLE001": 6
+      },
+      "src/learning/recommendation_engine.py": {
+        "BLE001": 2
+      },
+      "src/main.py": {
+        "BLE001": 23,
+        "S110": 10
+      },
+      "src/migrations/sqlite_job_importer.py": {
+        "BLE001": 1
+      },
+      "src/photo_optimize/store.py": {
+        "BLE001": 1
+      },
+      "src/pipeline/executor.py": {
+        "BLE001": 67,
+        "S110": 17
+      },
+      "src/pipeline/job_models_v2.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/pipeline/last_run_store_v2_5.py": {
+        "BLE001": 2
+      },
+      "src/pipeline/model_synchronizer.py": {
+        "BLE001": 2
+      },
+      "src/pipeline/payload_builder.py": {
+        "BLE001": 2
+      },
+      "src/pipeline/pipeline_runner.py": {
+        "BLE001": 25,
+        "S110": 11
+      },
+      "src/pipeline/prompt_pack_job_builder.py": {
+        "BLE001": 8
+      },
+      "src/pipeline/replay_engine.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/pipeline/video.py": {
+        "BLE001": 5
+      },
+      "src/prompting/prompt_optimizer_service.py": {
+        "BLE001": 2
+      },
+      "src/queue/job_queue.py": {
+        "BLE001": 3,
+        "S112": 3
+      },
+      "src/queue/job_repository.py": {
+        "BLE001": 1,
+        "S112": 1
+      },
+      "src/queue/single_node_runner.py": {
+        "BLE001": 1,
+        "S110": 1
+      },
+      "src/refinement/detectors/opencv_face_detector.py": {
+        "BLE001": 1
+      },
+      "src/refinement/quality_metrics.py": {
+        "BLE001": 2
+      },
+      "src/refinement/subject_scale_policy_service.py": {
+        "BLE001": 1
+      },
+      "src/services/diagnostics_service_v2.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/services/duration_stats_service.py": {
+        "BLE001": 1
+      },
+      "src/services/operator_readiness_service.py": {
+        "BLE001": 4
+      },
+      "src/services/ui_state_store.py": {
+        "BLE001": 3
+      },
+      "src/services/watchdog_system_v2.py": {
+        "BLE001": 5,
+        "S110": 2
+      },
+      "src/state/output_routing.py": {
+        "BLE001": 4,
+        "S110": 1,
+        "S112": 1
+      },
+      "src/training/character_embedder.py": {
+        "BLE001": 3,
+        "S110": 1
+      },
+      "src/training/lora_manager.py": {
+        "BLE001": 1
+      },
+      "src/training/style_lora_manager.py": {
+        "BLE001": 2
+      },
+      "src/utils/api_failure_store_v2.py": {
+        "BLE001": 2,
+        "S112": 1
+      },
+      "src/utils/cgroup_v2.py": {
+        "BLE001": 7,
+        "S110": 1,
+        "S112": 1
+      },
+      "src/utils/config.py": {
+        "BLE001": 14,
+        "S110": 1
+      },
+      "src/utils/config_helpers.py": {
+        "BLE001": 1,
+        "S112": 1
+      },
+      "src/utils/debug_shutdown_inspector.py": {
+        "BLE001": 1
+      },
+      "src/utils/diagnostics_bundle_v2.py": {
+        "BLE001": 14,
+        "S110": 2
+      },
+      "src/utils/file_access_log_v2_5_2025_11_26.py": {
+        "BLE001": 1
+      },
+      "src/utils/file_io.py": {
+        "BLE001": 9
+      },
+      "src/utils/gpu_survivor_telemetry.py": {
+        "BLE001": 7,
+        "S110": 2
+      },
+      "src/utils/graceful_exit.py": {
+        "BLE001": 2,
+        "S110": 1
+      },
+      "src/utils/image_metadata.py": {
+        "BLE001": 11
+      },
+      "src/utils/image_utils.py": {
+        "BLE001": 1
+      },
+      "src/utils/logger.py": {
+        "BLE001": 11,
+        "S110": 3
+      },
+      "src/utils/logging_helpers_v2.py": {
+        "BLE001": 1
+      },
+      "src/utils/lora_keyword_detector.py": {
+        "BLE001": 4,
+        "S110": 4
+      },
+      "src/utils/memory_utils.py": {
+        "BLE001": 1
+      },
+      "src/utils/preferences.py": {
+        "BLE001": 3
+      },
+      "src/utils/process_container_v2.py": {
+        "BLE001": 2
+      },
+      "src/utils/process_inspector_v2.py": {
+        "BLE001": 10,
+        "S110": 1,
+        "S112": 4
+      },
+      "src/utils/prompt_pack_utils.py": {
+        "BLE001": 1
+      },
+      "src/utils/single_instance.py": {
+        "BLE001": 4,
+        "S110": 3
+      },
+      "src/utils/snapshot_builder_v2.py": {
+        "BLE001": 3,
+        "S110": 2
+      },
+      "src/utils/system_info_v2.py": {
+        "BLE001": 3
+      },
+      "src/utils/watchdog_v2.py": {
+        "BLE001": 4
+      },
+      "src/utils/webui_discovery.py": {
+        "BLE001": 4,
+        "S112": 1
+      },
+      "src/utils/webui_resource_names.py": {
+        "BLE001": 1
+      },
+      "src/video/assembly_service.py": {
+        "BLE001": 1
+      },
+      "src/video/comfy_api_client.py": {
+        "BLE001": 3,
+        "S110": 1
+      },
+      "src/video/comfy_healthcheck.py": {
+        "BLE001": 4
+      },
+      "src/video/comfy_process_manager.py": {
+        "BLE001": 5,
+        "S110": 2
+      },
+      "src/video/comfy_workflow_backend.py": {
+        "BLE001": 2,
+        "S110": 1
+      },
+      "src/video/container_metadata.py": {
+        "BLE001": 4
+      },
+      "src/video/continuity_store.py": {
+        "BLE001": 2,
+        "S112": 1
+      },
+      "src/video/driving_video_inspection.py": {
+        "BLE001": 1
+      },
+      "src/video/motion/secondary_motion_video_reencode.py": {
+        "BLE001": 3
+      },
+      "src/video/movie_clip_service.py": {
+        "BLE001": 3
+      },
+      "src/video/restoration/codeformer.py": {
+        "BLE001": 1
+      },
+      "src/video/story_plan_store.py": {
+        "BLE001": 2,
+        "S112": 1
+      },
+      "src/video/svd_capabilities.py": {
+        "BLE001": 4
+      },
+      "src/video/svd_portable_provenance.py": {
+        "BLE001": 2
+      },
+      "src/video/svd_postprocess.py": {
+        "BLE001": 3,
+        "S110": 2
+      },
+      "src/video/svd_postprocess_worker.py": {
+        "BLE001": 2,
+        "S110": 2
+      },
+      "src/video/svd_preprocess.py": {
+        "BLE001": 1
+      },
+      "src/video/svd_runner.py": {
+        "BLE001": 3,
+        "S110": 1
+      },
+      "src/video/svd_service.py": {
+        "BLE001": 12,
+        "S110": 8
+      },
+      "src/video/video_workflow_batch.py": {
+        "BLE001": 4,
+        "S112": 1
+      },
+      "src/video/video_workflow_njr_builder.py": {
+        "BLE001": 1
+      }
+    }
+  }
+}
