@@ -72,7 +72,8 @@ Active: the improvement roadmap in `docs/audits/2026-10-16_repo_audit_and_roadma
 the independent critique adjustments in the PR history before reordering it). Phases 0 and 1 are merged (protection and gates,
 process isolation, startup wiring, crash-safe writes, pinned dev environment, Windows lane, ratchets). Phase 2 (docs and
 process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
-`docs/CODEX_MAP.md` (P2-3) are done; next are living subsystem docs (P2-2) and one source for the rules (P2-4). Phases 3 to 5 are a candidate list; each package needs a contract check and an owner decision first.
+`docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done; next are living subsystem docs
+(P2-2). Phases 3 to 5 are a candidate list; each package needs a contract check and an owner decision first.
 
 Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
 of the roadmap; where they conflict with this file, this file and the repository are current.
@@ -81,7 +82,8 @@ of the roadmap; where they conflict with this file, this file and the repository
 
 1. LICENSE file (copyright holder) and the single canonical version number (`pyproject.toml` 1.0.0, `.stableNew_version.txt`
    1.0.4, README v2.6).
-2. Keep or drop the per-PR Execution Profile / Model-usage ceremony; per-harness archive of finished qualification tools.
+2. Per-harness archive of finished qualification tools (the per-PR model ceremony is decided: a one-line recommendation and a
+   one-line usage record, see `docs/AI_MODEL_SELECTION.md`).
 3. Is `DIAG-GPU-130` open or closed? Records conflict; treat as open (see Holds).
 4. Should the GUI "batch runs" control apply on the state-fallback job-building path? It has never applied there.
 5. A physical restart check that queued WebUI jobs are held then released against a running Forge.

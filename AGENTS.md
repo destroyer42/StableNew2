@@ -56,13 +56,21 @@ shared external state.
 
 Classify work as Narrow, Standard, or Architectural. If discovery proves a
 higher class, stop and recommend escalation instead of silently broadening
-scope. Every authored PR or bounded work package records an
-**Execution Profile + Model/Reasoning Recommendation** (Codex and Claude Code
-model + effort per `docs/AI_MODEL_SELECTION.md`, and a preferred host only when
-one materially fits better), a Controller Surface Assessment when
-controller/coordinator code may be touched, and a Token-Efficient Validation
-Plan. Prefer the largest coherent package that shares one outcome, stays in
-understood architecture, and validates together.
+scope. Every authored PR or bounded work package records its execution class, a
+one-line **Model recommendation** (Claude Code and Codex model + effort per
+`docs/AI_MODEL_SELECTION.md`, and a preferred host only when one materially fits
+better), a Controller Surface Assessment when controller/coordinator code may be
+touched, and a Token-Efficient Validation Plan. Prefer the largest coherent
+package that shares one outcome, stays in understood architecture, and validates
+together.
+
+Stop for an owner decision when evidence reveals a choice that materially
+changes product-visible behavior not resolved by the request, canonical runtime
+ownership or an architecture invariant, user-data migration or deletion
+semantics, compatibility policy, a security boundary, supported hardware or
+platform scope, or irreversible shared state. Do not stop for file selection,
+refactoring needed for correctness, test selection, implementation detail, or
+repair of failures caused by the authorized change.
 
 ## 4. Ownership, determinism, and runtime safety
 
@@ -93,6 +101,21 @@ Do not push, merge, rewrite history, delete remote state, publish, deploy, or
 mutate secrets without explicit owner authorization (feature-branch publication
 may be authorized in the initial package authorization). Auto Approve / Full
 Access changes capability, not the scope of authorization.
+
+**Protected actions** are integration or merge to `main` or another long-lived
+target, force-push or history rewrite, tag/release, deployment, destructive
+migration, secrets or credentials, and any other irreversible or shared action.
+Each needs current explicit owner authorization naming the action and its
+target; a repository policy may prescribe procedure or automation but cannot
+authorize the action. Immediately before an authorized one, fail closed: the
+authorization and target are unambiguous; local and remote refs, ancestry,
+worktree and aggregate diff still match the accepted outcome and its
+exclusions; required CI and verifier/security findings are still valid; unrelated
+user work is preserved. On drift, missing evidence or ambiguity, stop and report.
+Never force-push, choose an alternate ref, bypass CI, widen scope, or infer
+authority. Feature-branch publication rechecks the exact HEAD and aggregate diff
+the same way; an approved outcome authorizes its normal implementation file scope
+without an owner file list, and unexpected changes stop publication.
 
 StableNew may control lifecycle only for a process its appropriate process
 manager launched and owns. An external A1111/Comfy process may use supported
@@ -131,12 +154,19 @@ Lightweight, Focused, or Comprehensive, with v1.2 critical-control and
 method-diverse challenge requirements. Dated reports support decisions; they
 do not supersede `STATUS.md` or authorize implementation or publication.
 
-`docs/AGENT_OPERATING_MODEL.md` defines the single-lane default workflow
-(one primary Claude Code or Codex session; specialists optional), local
-feature-branch lifecycle, worktree ownership, checkpoint/stop discipline,
-evidence reuse, security/release triggers, and PR-ready criteria.
-`docs/AI_MODEL_SELECTION.md` owns current model/effort selection, the periodic
-review, and the `Model / usage` completion-report section. Provider bridges such as `CLAUDE.md` and
-`.github/copilot-instructions.md` may point to this root contract; they do not
+`docs/AGENT_OPERATING_MODEL.md` defines how work is done: the single-lane default
+workflow (one primary Claude Code or Codex session; specialists optional),
+worktree ownership, context and session policy, the review and repair protocol,
+security triggers and PR-ready criteria. It adds procedure and never restates the
+rules above. `docs/AI_MODEL_SELECTION.md` owns model/effort selection and the
+calibration rule. Provider bridges such as `CLAUDE.md` and
+`.github/copilot-instructions.md` point to this root contract; they do not
 replace it. Provider-specific orchestration is an implementation detail, not a
 repository authority.
+
+## 8. Completion report
+
+Keep it concise: outcome, branch/SHA, evidence, architecture effect, unresolved
+risk, and the next decision if one remains, plus one `Model / usage` line (host,
+actual model, effort, repair passes, result, and the tokens measured by
+`tools/usage_report.py`). Never estimate a missing value or convert tokens to a price.

@@ -11,19 +11,10 @@ local feature branch: a primary Claude Code or Codex session may create/switch t
 the authorized short-lived feature branch, edit, validate, and commit locally
 (`docs/AGENT_OPERATING_MODEL.md`). The rules below apply when this agent is used.
 
-Release means "prepare and shepherd the reviewed feature branch" unless the
-owner explicitly authorizes a specific integration, production, or release
-action. No agent may integrate or push a long-lived target without that
-explicit owner authorization.
-
-Git/publication operations that mutate `.git` are supported only from a
-top-level StableNew Release session running with Full Access. A nested Release
-session is not the supported Git mutation path. Full Access is session-specific
-to top-level Release Git lifecycle operations: narrowly authorized
-feature-branch bootstrap and authorized publication/closeout. It changes
-capability, not owner authorization. Global permissions remain conservative.
-Do not add a custom Git authority/tool or infer permission to merge/main,
-release, deploy, mutate secrets, or perform a destructive action.
+Release means "prepare and shepherd the reviewed feature branch" unless the owner explicitly authorizes a specific integration,
+production or release action (`AGENTS.md` section 5). Git operations that mutate `.git` are supported only from a top-level
+StableNew Release session; a nested Release is not a supported Git mutation path. Full Access changes capability, not
+authorization.
 
 Bootstrap and publication/closeout are two distinct, mutually exclusive Git
 lifecycle modes. Bootstrap authority is never publication authority, and
@@ -93,35 +84,11 @@ may:
 - report required CI;
 - address CI/review failures that remain within the accepted task scope.
 
-An agent may integrate or push a long-lived target, merge a PR, release/tag,
-deploy, mutate secrets/credentials, perform a destructive migration, or take an
-irreversible/shared external action only when the current task has explicit
-owner authorization naming the action and target/scope. A repository policy may
-prescribe procedure, preconditions, or automation; it cannot authorize an
-action without that current explicit owner authorization.
+Protected actions, and the fail-closed check required immediately before one, are defined once in `AGENTS.md` section 5.
+This agent takes none of them without current explicit owner authorization naming the action and target.
 
-Immediately before an authorized long-lived integration or equivalent external
-action, fail closed: verify the authorization and intended action/target are
-present and unambiguous; local and remote refs, ancestry/fast-forward state,
-worktree, aggregate diff against the accepted task/outcome, explicit exclusions,
-any owner-supplied file constraints, unrelated-user-work preservation, required
-CI/checks, and verifier/security findings all remain valid. On any drift,
-missing evidence, or
-ambiguity, stop and report. Do not force-push, rewrite history, choose an
-alternate ref, bypass CI, widen scope, or infer authority.
-
-Never:
-- take any listed external action without current explicit owner authorization
-  naming action and target/scope;
-- force-push, rewrite history, choose an alternate ref, use non-fast-forward
-  integration, bypass CI, widen scope, or infer authority;
-- proceed after drift, missing evidence, ambiguity, or unresolved
-  verifier/security findings;
-- treat bootstrap authority as publication authority, or edit repository
-  files, stage, commit, push, or open a PR under bootstrap authority alone.
-
-Use the lowest effective model/effort for the work, per
-`docs/AI_MODEL_SELECTION.md` (a dated heuristic; guidance, not authorization).
+Never treat bootstrap authority as publication authority, or edit repository files, stage, commit, push or open a PR under
+bootstrap authority alone. Proceed no further after drift, missing evidence, ambiguity or unresolved verifier/security findings.
 
 Completion report:
 - Git lifecycle mode exercised (bootstrap or publication/closeout);
