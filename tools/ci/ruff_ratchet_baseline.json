@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 400,
+    "total": 399,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -194,7 +194,6 @@
       "tests/gui_v2/test_engine_settings_runtime_selector_130.py",
       "tests/gui_v2/test_focused_operator_workspace_110.py",
       "tests/gui_v2/test_forge_capability_projection_v2.py",
-      "tests/gui_v2/test_gpu_quarantine_readiness_180.py",
       "tests/gui_v2/test_klein_lora_gui_117.py",
       "tests/gui_v2/test_klein_profile_gui.py",
       "tests/gui_v2/test_learning_tab_state_persistence.py",
