@@ -34,20 +34,28 @@ def production_controller(tmp_path):
         close_all_structured_loggers()
 
 
-def test_the_production_path_builds_exactly_one_job_service(production_controller: AppController) -> None:
+def test_the_production_path_builds_exactly_one_job_service(
+    production_controller: AppController,
+) -> None:
     service = production_controller.job_service
     assert service is not None
-    assert production_controller.pipeline_controller.get_job_service() is service  # no second queue/repository authority
+    assert (
+        production_controller.pipeline_controller.get_job_service() is service
+    )  # no second queue/repository authority
 
 
-def test_the_production_path_holds_webui_claims_until_a_readiness_proof(production_controller: AppController) -> None:
+def test_the_production_path_holds_webui_claims_until_a_readiness_proof(
+    production_controller: AppController,
+) -> None:
     queue = production_controller.job_service.job_queue
     assert queue.is_webui_held()
     info = queue.webui_hold_info()
     assert info is not None and info.get("reason") == "startup_unverified"
 
 
-def test_the_production_path_refuses_jobs_without_a_normalized_record(production_controller: AppController) -> None:
+def test_the_production_path_refuses_jobs_without_a_normalized_record(
+    production_controller: AppController,
+) -> None:
     from src.queue.job_model import Job
 
     service = production_controller.job_service
@@ -71,30 +79,42 @@ def _controller_with_probe(monkeypatch: pytest.MonkeyPatch, tmp_path, probe) -> 
     )
 
 
-def test_a_fresh_ready_proof_releases_the_startup_hold_on_the_production_service(monkeypatch, tmp_path) -> None:
+def test_a_fresh_ready_proof_releases_the_startup_hold_on_the_production_service(
+    monkeypatch, tmp_path
+) -> None:
     """The negative case of the gate: holding is only safe if the real release path works on the same service."""
 
     from src.controller.webui_outage_coordinator import ProbeResult
 
-    controller = _controller_with_probe(monkeypatch, tmp_path, lambda: ProbeResult(True, "ready", "http://127.0.0.1:7860"))
+    controller = _controller_with_probe(
+        monkeypatch, tmp_path, lambda: ProbeResult(True, "ready", "http://127.0.0.1:7860")
+    )
     try:
         service = controller.job_service
         assert service.job_queue.is_webui_held()
         service.webui_outage.maybe_release(force=True)
-        assert not service.job_queue.is_webui_held()  # the observable guarantee; the return value is not the contract
+        assert (
+            not service.job_queue.is_webui_held()
+        )  # the observable guarantee; the return value is not the contract
     finally:
         close_all_structured_loggers()
 
 
-@pytest.mark.parametrize("reason", ["endpoint_unreachable", "identity_mismatch", "options_unreadable"])
-def test_a_failed_proof_keeps_webui_jobs_held_and_never_discards_them(monkeypatch, tmp_path, reason: str) -> None:
+@pytest.mark.parametrize(
+    "reason", ["endpoint_unreachable", "identity_mismatch", "options_unreadable"]
+)
+def test_a_failed_proof_keeps_webui_jobs_held_and_never_discards_them(
+    monkeypatch, tmp_path, reason: str
+) -> None:
     from src.controller.webui_outage_coordinator import ProbeResult
 
     controller = _controller_with_probe(monkeypatch, tmp_path, lambda: ProbeResult(False, reason))
     try:
         service = controller.job_service
         service.webui_outage.maybe_release(force=True)
-        assert service.job_queue.is_webui_held()  # still held; queued work is neither failed nor dropped
+        assert (
+            service.job_queue.is_webui_held()
+        )  # still held; queued work is neither failed nor dropped
         info = service.job_queue.webui_hold_info()
         assert info is not None and info.get("reason") == "startup_unverified"
     finally:

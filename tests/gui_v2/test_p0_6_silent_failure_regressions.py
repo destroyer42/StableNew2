@@ -29,7 +29,9 @@ def _label_texts(widget) -> list[str]:
     return texts
 
 
-def test_a_tab_that_fails_to_build_is_logged_and_shows_its_error(tk_root, caplog: pytest.LogCaptureFixture) -> None:
+def test_a_tab_that_fails_to_build_is_logged_and_shows_its_error(
+    tk_root, caplog: pytest.LogCaptureFixture
+) -> None:
     window = _bare_window(tk_root)
 
     def broken(_parent):
@@ -38,8 +40,12 @@ def test_a_tab_that_fails_to_build_is_logged_and_shows_its_error(tk_root, caplog
     with caplog.at_level(logging.ERROR, logger="src.gui.main_window_v2"):
         frame = window.add_tab("broken", "Broken Tab", broken)
 
-    assert window.get_tab("broken") is frame  # the tab still exists so the notebook layout is unchanged
-    assert any("failed to build" in record.getMessage() and record.exc_info for record in caplog.records)
+    assert (
+        window.get_tab("broken") is frame
+    )  # the tab still exists so the notebook layout is unchanged
+    assert any(
+        "failed to build" in record.getMessage() and record.exc_info for record in caplog.records
+    )
     texts = " ".join(_label_texts(frame))
     assert "Broken Tab" in texts and "RuntimeError" in texts and "constructor exploded" in texts
 
@@ -71,10 +77,16 @@ def test_the_scan_completion_callback_runs_through_the_gui_thread_dispatcher(tmp
         seen.append(result)
         done.set()
 
-    controller.trigger_background_scan(output_root=str(tmp_path / "no_such_dir"), on_complete=on_complete)
+    controller.trigger_background_scan(
+        output_root=str(tmp_path / "no_such_dir"), on_complete=on_complete
+    )
     assert done.wait(timeout=5.0)
-    assert dispatched == [1] and len(seen) == 1  # delivered via the dispatcher, never called bare from the worker
-    assert worker_thread_id[0] != threading.get_ident()  # the scan itself ran off the calling thread
+    assert (
+        dispatched == [1] and len(seen) == 1
+    )  # delivered via the dispatcher, never called bare from the worker
+    assert (
+        worker_thread_id[0] != threading.get_ident()
+    )  # the scan itself ran off the calling thread
 
 
 def test_the_scan_worker_is_a_tracked_non_daemon_thread(tmp_path) -> None:

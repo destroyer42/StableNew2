@@ -4,6 +4,14 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Formatting and swallowed-failure ratchets (audit P1-5a, local deterministic validation; hosted run pending):
+  `tools/ci/run_ruff_ratchets.py` runs in the local gate and the required CI job against `tools/ci/ruff_ratchet_baseline.json`.
+  Formatting is a ratchet, not a big-bang reformat (407 currently-unformatted files are recorded; none can be added, and a file
+  formatted later must leave the list), which avoids conflicting with in-flight branches. Per-file counts of blind
+  `except Exception` (BLE001: 1,414), `except: pass` (S110: 565) and `except: continue` (S112: 45) in `src` may not grow, so
+  new code cannot add a silently swallowed failure. The Python files added during this audit were formatted rather than
+  baselined.
+
 - Whole-application mypy ratchet (audit P1-4, local deterministic validation; hosted determinism check pending): strict
   mypy now runs over all of `src` in the local gate and the required CI job as a per-file ratchet
   (`tools/ci/run_mypy_ratchet.py`, baseline `tools/ci/mypy_baseline.json`: 1,691 errors in 196 files). A file may not exceed

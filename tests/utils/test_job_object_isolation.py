@@ -71,7 +71,9 @@ def test_the_job_object_is_anonymous() -> None:
         second.close()
 
 
-def test_each_webui_process_manager_gets_a_unique_container_label(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_each_webui_process_manager_gets_a_unique_container_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import src.api.webui_process_manager as wpm
 
     labels: list[str] = []
