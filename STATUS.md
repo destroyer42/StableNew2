@@ -74,6 +74,9 @@ process isolation, startup wiring, crash-safe writes, pinned dev environment, Wi
 process) is in progress: this file (P2-1) is done; next are living subsystem docs (P2-2), a generated code map (P2-3) and one
 source for the rules (P2-4). Phases 3 to 5 are a candidate list; each package needs a contract check and an owner decision first.
 
+Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
+of the roadmap; where they conflict with this file, this file and the repository are current.
+
 ## Open owner decisions
 
 1. LICENSE file (copyright holder) and the single canonical version number (`pyproject.toml` 1.0.0, `.stableNew_version.txt`
