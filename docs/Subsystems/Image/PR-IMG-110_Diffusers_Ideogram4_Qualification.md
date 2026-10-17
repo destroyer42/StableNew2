@@ -1,5 +1,7 @@
 # PR-IMG-110 — Diffusers / Ideogram 4 Qualification
 
+> Harness retired (audit P2-6): `tools/qualification/img110` is no longer in the tree. Its source is in Git history at `bfdeb493` (`git show bfdeb493:<path>`). This record is the preserved verdict and evidence.
+
 Status: **COMPLETE — DIFFUSERS SUBSTRATE VIABLE.** The Ideogram 4 verdict below is
 **SUPERSEDED** by `PR-IMG-110R_Ideogram4_Requalification.md`: Ideogram 4 NF4 is
 **PASS — CONSTRAINED** on the RTX 4070 Ti 12GB with an explicit residency policy. The

@@ -1,5 +1,7 @@
 # PR-IMG-117 - FLUX.2 Klein 4B LoRA qualification and profile v2
 
+> Harness retired (audit P2-6): `tools/acceptance/img_117_klein_lora_acceptance.py` is no longer in the tree. Its source is in Git history at `bfdeb493` (`git show bfdeb493:<path>`). This record is the preserved verdict and evidence.
+
 Result class: **QUALIFIED, PRODUCTION SLICE** (`flux2_klein_4b_fp8` profile **v2**: exactly one explicitly Klein-4B-compatible
 LoRA on text-to-image work). Klein remains a model profile on the existing `forge_webui` backend; there is no new backend,
 queue, runner, compiler, LoRA scanner or runtime authority. Execution Profile: Standard (Claude Code: Sonnet 5.5 High).

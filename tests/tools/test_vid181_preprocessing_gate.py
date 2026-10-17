@@ -14,7 +14,6 @@ import pytest
 from tests.helpers.optional_deps import requires_cv2, requires_numpy
 from tools.qualification.vid160c.pose_asset import sample_indices
 from tools.qualification.vid170.graph import CharacterizationSpec, build_characterization_graph
-from tools.qualification.vid180 import run as vid180_run
 from tools.qualification.vid181 import provenance as prov
 
 # --- pinned upstream identity / frozen model names ----------------------------------------------
@@ -219,7 +218,7 @@ def test_adaptation_rejects_undecodable_source(tmp_path: Path) -> None:
 
 
 def test_frozen_geometry_matches_the_accepted_animate_envelope() -> None:
-    assert (prov.WIDTH, prov.HEIGHT) == (vid180_run.WIDTH, vid180_run.HEIGHT) == (480, 832)
+    assert (prov.WIDTH, prov.HEIGHT) == (480, 832)
     assert (prov.FRAMES, prov.FPS) == (13, 8.0)
 
 

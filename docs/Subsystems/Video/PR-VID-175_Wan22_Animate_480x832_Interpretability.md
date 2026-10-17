@@ -1,5 +1,7 @@
 # PR-VID-175 — Wan2.2-Animate 480×832 Interpretability Gate
 
+> Harness retired (audit P2-6): `tools/qualification/vid175` is no longer in the tree. Its source is in Git history at `bfdeb493` (`git show bfdeb493:<path>`). This record is the preserved verdict and evidence.
+
 Status: **COMPLETE / ACCEPTED / INTEGRATED — `ANIMATE_480x832_INTERPRETABLE_PASS`**.
 Qualification/characterization only. No production `src/` change, no backend, no queue/history
 authority, no GUI/controller/resolver change, no Wan production graph/settings change, no workflow

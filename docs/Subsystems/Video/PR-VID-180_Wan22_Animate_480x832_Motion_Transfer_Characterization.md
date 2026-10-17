@@ -1,5 +1,7 @@
 # PR-VID-180 — Wan2.2-Animate 480×832 Motion-Transfer Characterization
 
+> Harness retired (audit P2-6): `tools/qualification/vid180 (and vid175)` is no longer in the tree. Its source is in Git history at `bfdeb493` (`git show bfdeb493:<path>`). This record is the preserved verdict and evidence.
+
 Status: **COMPLETE / ACCEPTED / INTEGRATED — `ANIMATE_CHARACTERIZATION_INCONCLUSIVE`**. Secondary
 finding: **`BACKGROUND_INSTABILITY_CROSS_CASE`**. Qualification/characterization only. No production
 `src/` change, no backend, no queue/history authority, no GUI/controller/resolver change, no Wan
