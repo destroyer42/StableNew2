@@ -6,7 +6,7 @@ Narrow / Standard / Architectural
 
 ## Model recommendation
 
-Claude Code model + effort; Codex model + effort; a few words on why this is the lowest tier likely to finish the package.
+Claude Code model + effort; Codex model + effort; why this is the lowest tier likely to finish the package; expected usage (order of magnitude).
 
 ## Architecture and invariants affected
 
@@ -24,4 +24,4 @@ Claude Code model + effort; Codex model + effort; a few words on why this is the
 
 ## Model / usage
 
-Host, actual model, effort, repair passes, result (tokens or cost only if a tool reported them).
+Host, actual model, effort, repair passes, result, and `python tools/usage_report.py --since-commit <first commit> --line`.

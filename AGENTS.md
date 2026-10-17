@@ -168,5 +168,5 @@ repository authority.
 
 Keep it concise: outcome, branch/SHA, evidence, architecture effect, unresolved
 risk, and the next decision if one remains, plus one `Model / usage` line (host,
-actual model, effort, repair passes, result). Report host-reported tokens or cost
-only when a tool supplies them, and never estimate a missing value.
+actual model, effort, repair passes, result, and the tokens measured by
+`tools/usage_report.py`). Never estimate a missing value or convert tokens to a price.

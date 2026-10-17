@@ -16,6 +16,7 @@ authorities and exact start state.
 - Execution location: Local / Cloud
 - Model recommendation (one line each, per `docs/AI_MODEL_SELECTION.md`): Claude Code model + effort; Codex model + effort
 - Preferred host and why (only if one materially fits better; otherwise stay in the current session):
+- Expected usage (order of magnitude, for example "about 10M cache-read, 60k output"):
 - Separable hard part worth delegating to a stronger model (only if clearly separable):
 
 ## Exact start state and authorities
@@ -78,4 +79,4 @@ authorities and exact start state.
 - Main unchanged:
 - Working tree clean:
 - Ready for next phase: Yes / No
-- Model / usage (host, actual model, effort, repair passes, result; tokens or cost only if a tool reported them):
+- Model / usage (host, actual model, effort, repair passes, result, and the line from `tools/usage_report.py --since-commit <first commit> --line`):

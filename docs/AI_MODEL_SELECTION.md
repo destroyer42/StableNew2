@@ -9,11 +9,14 @@ files point here instead of copying it. This is a starting heuristic, not a rout
 ## What every package records
 
 - **Before:** one line in the PR body or work package, `Model recommendation`: the Claude Code model + effort and the Codex
-  model + effort, with a few words on why that is the lowest tier likely to finish the whole package. Add a preferred host only
-  when one materially fits better; otherwise stay in the current session and keep its context.
+  model + effort, with a few words on why that is the lowest tier likely to finish the whole package, and an **expected usage**
+  as an order of magnitude (for example "about 10M cache-read, 60k output"). Add a preferred host only when one materially fits
+  better; otherwise stay in the current session and keep its context.
 - **After:** one line in the completion report, `Model / usage`: host, actual model, effort, repair passes, result
-  (PASS / FAIL / BLOCKED). Add host-reported tokens or cost only when a tool supplies them; never estimate or fill with guesses.
-  Do not commit just to persist this line; the PR body is the record.
+  (PASS / FAIL / BLOCKED), and the measured tokens from `python tools/usage_report.py --since-commit <first commit of the
+  package> --line` (it sums the usage both hosts already log locally; run it from the same machine). The script reports tokens
+  only. Never estimate a missing value or convert tokens to a price. Do not commit just to persist this line; the PR body is the
+  record.
 
 ## Selection matrix (starting heuristic)
 
@@ -61,6 +64,10 @@ a pattern, never on a single outlier, and move one step at a time:
 - A "repair pass" is a commit pushed to the PR after its first full CI run or review, made to fix a defect in that PR (not a scope
   change or a rebase).
 - With fewer than 5 PRs in a class, do not change the row.
+
+Compare each PR's expected usage with the measured line. Investigate any PR whose measured output or cache-read tokens are more
+than 3 times the expectation (or less than a third of it): the cause is usually a mis-sized package, repeated discovery,
+or a session that carried too much context, and it points to a fix in the recommendation, the package size, or the session policy.
 
 Questions for the review: did a model cause repair passes that a higher tier would have avoided; did a cheaper model cost more
 overall through rediscovery; was the cost mostly reasoning or re-reading repository context.

@@ -85,6 +85,7 @@ not the documentation read at the start.
 - Routine startup must not inspect `~/.codex/memories`, provider memory, historical chats or archived plans; use them only for an
   explicitly historical question or one identified missing fact.
 - Use deterministic scripts for Git state, lint, type, test and diff checks, and do not rerun green expensive evidence.
+- Measure instead of guessing: `tools/usage_report.py` sums the tokens both hosts already log locally for a time window.
 
 ## Worktree policy
 
