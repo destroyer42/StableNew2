@@ -23,10 +23,10 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - `main` is protected: a PR is required, force pushes and deletion are blocked, the owner may bypass. Required checks:
   `required`, `full-suite` (the sharded census) and `windows`. Docs-only changes take a cheap path.
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below),
-  isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` after
+  isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
 - Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,691 errors in 196
-  files), unformatted files (400), blind/silent excepts in `src` (BLE001 1,412, S110 565, S112 45), thread and layering
+  files), unformatted files (399), blind/silent excepts in `src` (BLE001 1,412, S110 565, S112 45), thread and layering
   rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 18), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.

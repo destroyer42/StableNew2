@@ -130,7 +130,7 @@ Trap: the dead-reference scan treats every whitespace-free backticked token with
 | Docs-only checks | `git diff --check`, `python tools/ci/check_repository_completeness.py`, `python tools/ci/check_controller_surface.py`, `python tools/ci/ci_truth.py` |
 | Hosted verdict (Level 3) | the PR's `required`, `full-suite`, `windows` checks; the gate script is not a substitute for the census |
 
-`run_pr_gate.py` does not run the census, the Windows lane or `ci_truth.py` directly; the last runs only through its pytest tests in the required smoke. A green local gate therefore does not predict a green `full-suite`.
+`run_pr_gate.py` on its own does not run the census, the Windows lane or `ci_truth.py` directly; the last runs only through its pytest tests in the required smoke. A green default local gate therefore does not predict a green `full-suite`. `python tools/ci/run_pr_gate.py --full [--workers N]` appends `tools/ci/run_sharded_census.py` (default 2 workers): the same path-hash shard partition and completeness verdict as the hosted `full-suite`, one isolated checkout per worker. It is deliberately not pytest-xdist: this Windows/Tk suite shares ports, files and process-global state, so workers must not share a tree. Use it before a PR that changes executable code; hosted CI stays the authority, and the Windows lane is still hosted-only.
 
 ## 11. Test layout (`tests/`)
 
