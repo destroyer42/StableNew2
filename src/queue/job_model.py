@@ -1,7 +1,7 @@
 # Subsystem: Queue
 # Role: Defines the Job domain model, statuses, and priorities.
 
-"""Job model for single-node and future cluster execution."""
+"""Job model for single-node execution."""
 
 from __future__ import annotations
 
@@ -12,12 +12,15 @@ from datetime import datetime
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Any
 
-from src.cluster.worker_model import WorkerId
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, serialize_envelope
 
 if TYPE_CHECKING:
     from src.controller.runtime_state import CancelToken
     from src.pipeline.job_models_v2 import NormalizedJobRecord
+
+# Opaque identifier of the worker that ran a job. Execution is single-node, so
+# this is an informational string persisted in the ``jobs.worker_id`` column.
+WorkerId = str
 
 
 class JobPriority(IntEnum):

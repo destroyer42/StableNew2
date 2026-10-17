@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-416 of 593 modules have a docstring.
+412 of 589 modules have a docstring.
 
 ## src/
 
@@ -58,12 +58,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `observation.py`: Tier-1 observational inventory (PR-IMG-MODELS-152): bounded, cancellable, header-only, no hashing
 - `registry.py`: Offline local-file identity registry; never contacts A1111 or a network
 
-## src/cluster/
-
-- `__init__.py`: Cluster primitives (worker descriptors, registry)
-- `worker_model.py`: Worker descriptor models for cluster-aware execution
-- `worker_registry.py`: In-memory worker registry for cluster V2 foundation
-
 ## src/conditioning/
 
 - `__init__.py`: Structural-conditioning inputs for image generation (PR-IMG-CNET-210)
@@ -91,7 +85,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `app_controller.py`: StableNew - App Controller (Skeleton + CancelToken + Worker Thread Stub)
 - `batch_operations_service.py`: Unified Review / Video Workflow batch operations (PR-BATCH-OPS-201)
 - `batch_output_resolution.py`: Resolve a batch's recorded outputs against the file system (PR-BATCH-OPS-201)
-- `cluster_controller.py`: Cluster controller responsible for worker registry initialization
 - `content_visibility_resolver.py`: (no docstring)
 - `core_pipeline_controller.py`: Controller-owned base pipeline controller
 - `global_prompt_policy_service.py`: Controller-side projection of current global prompt intent
@@ -561,7 +554,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `failure_triage.py`: Classify a FAILED job from the typed evidence that was persisted with it
 - `gpu_loss_assessment.py`: Classify one failed job against host GPU evidence
 - `job_history_store.py`: History projection contracts implemented by the SQLite job repository
-- `job_model.py`: Job model for single-node and future cluster execution
+- `job_model.py`: Job model for single-node execution
 - `job_queue.py`: Thread-safe runnable projection with priority + FIFO behavior
 - `job_repository.py`: Transactional SQLite authority for StableNew job lifecycle state
 - `single_node_runner.py`: Single-node job runner that executes jobs from an in-memory queue

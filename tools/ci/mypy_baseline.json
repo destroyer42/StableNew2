@@ -13,7 +13,6 @@
     "src/config/app_config.py": 1,
     "src/controller/app_controller.py": 117,
     "src/controller/app_controller_services/runtime_projection_coordinator.py": 2,
-    "src/controller/cluster_controller.py": 1,
     "src/controller/core_pipeline_controller.py": 7,
     "src/controller/job_execution_controller.py": 5,
     "src/controller/job_history_service.py": 13,
@@ -199,5 +198,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1691
+  "total": 1690
 }
