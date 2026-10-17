@@ -29,7 +29,7 @@ import pytest
 
 from src.api.client import SDWebUIClient
 from src.gui.models.prompt_pack_model import PromptPackModel
-from src.pipeline.animatediff_models import AnimateDiffCapability
+from src.pipeline.animatediff_retirement import AnimateDiffRetiredError
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import BatchSettings, StageConfig
 from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
@@ -513,8 +513,8 @@ class TestGP6MultiStagePipeline:
             assert config.get("enable_hr") is True
             assert config.get("adetailer_enabled") is True
 
-    def test_gp6_animatediff_stage_creates_mp4_clip(self, tmp_path: Path):
-        """GP6.3: AnimateDiff stage writes an MP4 clip artifact through the runner path."""
+    def test_gp6_enabled_animatediff_stage_is_refused_before_any_request(self, tmp_path: Path):
+        """GP6.3: AnimateDiff execution is retired; an enabled stage is refused at submission, nothing is sent."""
         seed_path = tmp_path / "seed.png"
         seed_path.write_bytes(base64.b64decode(_TINY_PNG_BASE64))
 
@@ -523,108 +523,30 @@ class TestGP6MultiStagePipeline:
             positive_prompt="portrait photo of a woman subtly turning her head, cinematic lighting",
             negative_prompt="blurry, distorted, bad anatomy",
             base_model="realismFromHadesXL_2ndAnniversary",
-            config={
-                "model": "realismFromHadesXL_2ndAnniversary",
-                "sampler": "Euler a",
-                "scheduler": "Automatic",
-                "steps": 6,
-                "cfg_scale": 5.5,
-                "width": 512,
-                "height": 768,
-            },
+            config={"model": "realismFromHadesXL_2ndAnniversary", "steps": 6},
             stage_chain=(
                 StageConfig(
                     stage_type="animatediff",
                     enabled=True,
-                    steps=6,
-                    cfg_scale=5.5,
-                    sampler_name="Euler a",
-                    scheduler="Automatic",
-                    model="realismFromHadesXL_2ndAnniversary",
-                    extra={
-                        "enabled": True,
-                        "motion_module": "mm_sdxl_hs.safetensors",
-                        "fps": 8,
-                        "video_length": 4,
-                        "batch_size": 4,
-                        "format": ["PNG", "Frame"],
-                    },
+                    extra={"enabled": True, "motion_module": "mm_sdxl_hs.safetensors"},
                 ),
             ),
             path_output_dir=str(tmp_path / "output"),
             input_image_paths=(str(seed_path),),
             start_stage="animatediff",
         )
+        transport_log: list[tuple[str, str]] = []
 
-        api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-
-        mock_http_response = {
-            "images": [_TINY_PNG_BASE64, _TINY_PNG_BASE64, _TINY_PNG_BASE64, _TINY_PNG_BASE64],
-            "info": json.dumps(
-                {
-                    "seed": 1234,
-                    "subseed": 5678,
-                    "extra_generation_params": {
-                        "AnimateDiff": "model: mm_sdxl_hs.safetensors, video_length: 4, fps: 8"
-                    },
-                }
-            ),
-        }
-
-        def _write_fake_video(
-            self, image_paths, output_path, fps=24, codec="libx264", quality="medium"
-        ):
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(b"fake-mp4")
-            return True
-
-        with (
-            patch.object(
-                api_client,
-                "get_animatediff_capability",
-                return_value=AnimateDiffCapability(
-                    available=True,
-                    script_name="AnimateDiff",
-                    motion_modules=["mm_sdxl_hs.safetensors"],
-                ),
-            ),
-            patch.object(
-                api_client, "get_current_model", return_value="realismFromHadesXL_2ndAnniversary"
-            ),
-            patch.object(api_client._session, "request") as mock_request,
-            patch("src.api.webui_api.WebUIAPI.wait_until_true_ready", return_value=True),
-            patch("src.api.client.wait_for_webui_ready", return_value=True),
-            patch("src.api.client.validate_webui_health", return_value=True),
-            patch(
-                "src.pipeline.executor.VideoCreator.create_video_from_images", new=_write_fake_video
-            ),
-        ):
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = mock_http_response
-            mock_response.content = b"{}"
-            mock_response.text = "{}"
-            mock_response.headers = {}
-            mock_response.raise_for_status = Mock()
-            mock_request.return_value = mock_response
-
-            entry = run_njr_via_queue(
+        with pytest.raises(AnimateDiffRetiredError, match="AnimateDiff execution is retired"):
+            run_njr_via_queue(
                 njr,
-                api_client,
+                SDWebUIClient(base_url="http://127.0.0.1:7860"),
                 timeout_seconds=10.0,
-                mock_http_response=mock_http_response,
                 artifact_root=tmp_path / "journey-workspace",
+                transport_log=transport_log,
             )
 
-        assert entry.status is JobStatus.COMPLETED
-        result = entry.result or {}
-        artifact = (result.get("metadata") or {}).get("animatediff_artifact")
-        assert artifact is not None
-        assert artifact["count"] == 1
-        clip_path = Path(artifact["video_paths"][0])
-        assert clip_path.exists()
-        assert clip_path.suffix == ".mp4"
-        assert len(list(clip_path.parent.glob(f"{clip_path.stem}_frames/*.png"))) == 4
+        assert transport_log == []
 
 
 # ============================================================================

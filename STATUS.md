@@ -25,8 +25,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below),
   isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` after
   `pip install -r requirements.txt -r requirements-dev.txt`.
-- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,691 errors in 196
-  files), unformatted files (400), blind/silent excepts in `src` (BLE001 1,412, S110 565, S112 45), thread and layering
+- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,687 errors in 196
+  files), unformatted files (400), blind/silent excepts in `src` (BLE001 1,410, S110 565, S112 45), thread and layering
   rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 18), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
@@ -89,7 +89,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 3. Is `DIAG-GPU-130` open or closed? Records conflict; treat as open (see Holds).
 4. Should the GUI "batch runs" control apply on the state-fallback job-building path? It has never applied there.
 5. A physical restart check that queued WebUI jobs are held then released against a running Forge.
-6. Retire AnimateDiff, disabled LTX specs, story-plan/continuity, `src/ai`, `src/cluster`, Character Training?
+6. Retire disabled LTX specs, story-plan/continuity, `src/ai`, `src/cluster`, Character Training? (AnimateDiff execution is retired: only an enabled stage is refused; disabled placeholders and history stay readable.)
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: history browser, Learning payoff, inpainting/ControlNet, LoRA browser.
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments).

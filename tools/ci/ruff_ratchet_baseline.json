@@ -409,7 +409,7 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1412,
+      "BLE001": 1410,
       "S110": 565,
       "S112": 45
     },
@@ -912,7 +912,7 @@
         "BLE001": 1
       },
       "src/pipeline/executor.py": {
-        "BLE001": 67,
+        "BLE001": 65,
         "S110": 17
       },
       "src/pipeline/job_models_v2.py": {

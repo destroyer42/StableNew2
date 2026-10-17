@@ -27,6 +27,7 @@ from src.image_backends.model_policy import (
     normalize_profile_owned_values,
 )
 from src.pipeline import config_contract_v26
+from src.pipeline.animatediff_retirement import refuse_enabled_animatediff
 from src.pipeline.compile_evidence import CompileEvidence
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
@@ -1128,6 +1129,7 @@ class PromptPackNormalizedJobBuilder:
                     }
                 )
             if stage == "animatediff":
+                # Inert placeholder settings only: they keep the persisted stage entry byte-compatible.
                 extra.update(
                     {
                         "motion_module": data.get("motion_module"),
@@ -1177,6 +1179,9 @@ class PromptPackNormalizedJobBuilder:
                 extra={k: v for k, v in extra.items() if v not in (None, "", [])},
             )
             chain.append(stage_cfg)
+        # Retired AnimateDiff execution: refuse an enabled stage before any NJR exists. The disabled placeholder
+        # every pack carries stays in the chain unchanged.
+        refuse_enabled_animatediff(chain)
         return chain
 
     def _build_batch_settings(self, merged_config: dict[str, Any]) -> BatchSettings:

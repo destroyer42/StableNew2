@@ -96,11 +96,7 @@ def test_capabilities_fold_legacy_flags_into_one_source_of_truth() -> None:
 
 def test_default_backends_declare_semantic_tasks_and_controls_not_stage_names() -> None:
     registry = build_default_video_backend_registry()
-    assert registry.list_backend_ids_for_task(VIDEO_TASK_IMAGE_TO_VIDEO) == [
-        "animatediff",
-        "comfy",
-        "svd_native",
-    ]
+    assert registry.list_backend_ids_for_task(VIDEO_TASK_IMAGE_TO_VIDEO) == ["comfy", "svd_native"]
     svd = registry.get("svd_native").capabilities
     assert svd.controls == (CONTROL_SOURCE_IMAGE,) and svd.required_controls == (
         CONTROL_SOURCE_IMAGE,
@@ -203,8 +199,9 @@ def test_no_fallback_between_backends() -> None:
     assert good.calls == narrow.calls == 0
 
 
-def test_legacy_bridge_maps_only_the_three_accepted_stage_types() -> None:
-    assert set(LEGACY_STAGE_BINDINGS) == {"svd_native", "animatediff", "video_workflow"}
+def test_legacy_bridge_maps_only_the_accepted_stage_types() -> None:
+    # AnimateDiff execution is retired: its stage type has no legacy binding.
+    assert set(LEGACY_STAGE_BINDINGS) == {"svd_native", "video_workflow"}
     resolver = VideoExecutionResolver(build_default_video_backend_registry())
     svd = resolver.build_intent("svd_native", {}, has_source_image=True)
     assert svd.legacy and svd.controls == (CONTROL_SOURCE_IMAGE,)  # prompt stays context-only

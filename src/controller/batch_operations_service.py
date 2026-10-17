@@ -30,6 +30,7 @@ from src.image_backends.operation_compatibility import (
     OperationNotSupportedError,
     require_njr_operation,
 )
+from src.pipeline.animatediff_retirement import AnimateDiffRetiredError
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.replay_input_verification import frozen_input_checks, verify_inputs
 from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
@@ -379,7 +380,10 @@ class BatchOperationsService:
         """Would today's policy admit this replay, and are its frozen inputs still intact?"""
 
         problems = [issue.describe() for issue in verify_inputs(frozen_input_checks(record))]
-        replay = compile_replay_intent(ReplayIntent(record))
+        try:
+            replay = compile_replay_intent(ReplayIntent(record))
+        except AnimateDiffRetiredError as exc:
+            return [*problems, str(exc)]
         validator = getattr(self._job_service, "_validate_normalized_record", None)
         if callable(validator):
             ok, details = validator(replay)

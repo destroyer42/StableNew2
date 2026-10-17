@@ -7,7 +7,7 @@ This module provides the canonical StageSequencer class for building
 stage execution plans. All pipeline runs should go through StageSequencer.build_plan().
 
 The canonical stage ordering is:
-    txt2img -> img2img -> adetailer -> upscale -> animatediff -> video_workflow
+    txt2img -> img2img -> adetailer -> upscale -> video_workflow
 
 The preferred still-image flow is:
     txt2img -> optional img2img -> optional adetailer -> optional final upscale
@@ -22,6 +22,7 @@ import logging
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from src.pipeline.animatediff_retirement import AnimateDiffRetiredError
 from src.pipeline.config_contract_v26 import (
     extract_execution_config,
     validate_train_lora_execution_config,
@@ -262,19 +263,8 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
         order += 1
 
     if animatediff_enabled:
-        if not any(_is_image_producing_stage(stage) for stage in stages):
-            raise InvalidStagePlanError("AnimateDiff requires a preceding image-producing stage.")
-        payload = _stage_payload(config, "animatediff")
-        metadata = _build_stage_metadata(config, payload, stage="animatediff")
-        stage = StageExecution(
-            stage_type="animatediff",
-            config=StageConfig(enabled=animatediff_enabled, payload=payload, metadata=metadata),
-            order_index=order,
-            requires_input_image=True,
-            produces_output_image=False,
-        )
-        stages.append(stage)
-        order += 1
+        # AnimateDiff execution is retired: refused at compile time, never planned, dropped or substituted.
+        raise AnimateDiffRetiredError()
 
     if video_workflow_enabled:
         if not any(_is_image_producing_stage(stage) for stage in stages):
@@ -313,26 +303,17 @@ def _is_image_producing_stage(stage: StageExecution) -> bool:
 
 
 def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]:
-    """Ensure post stages are ordered canonically, with AnimateDiff last."""
+    """Ensure post stages are ordered canonically, with the video workflow last."""
 
     adetailers = [stage for stage in stages if stage.stage_type == "adetailer"]
-    animatediffs = [stage for stage in stages if stage.stage_type == "animatediff"]
     video_workflows = [stage for stage in stages if stage.stage_type == "video_workflow"]
 
-    if len(animatediffs) > 1:
-        raise InvalidStagePlanError("Multiple AnimateDiff stages are not supported.")
     if len(video_workflows) > 1:
         raise InvalidStagePlanError("Multiple video workflow stages are not supported.")
-    if animatediffs and video_workflows:
-        raise InvalidStagePlanError("Only one terminal video stage may be enabled at a time.")
     if adetailers and not any(
         _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "adetailer"
     ):
         raise InvalidStagePlanError("ADetailer stage requires a preceding generation stage.")
-    if animatediffs and not any(
-        _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "animatediff"
-    ):
-        raise InvalidStagePlanError("AnimateDiff stage requires a preceding image-producing stage.")
     if video_workflows and not any(
         _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "video_workflow"
     ):

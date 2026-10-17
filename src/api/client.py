@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -35,9 +35,6 @@ from src.utils.retry_policy_v2 import (
 )
 
 logger = get_logger(__name__)
-
-if TYPE_CHECKING:
-    from src.pipeline.animatediff_models import AnimateDiffCapability
 
 
 @dataclass
@@ -2092,22 +2089,6 @@ class SDWebUIClient:
             return data
         logger.warning("Unexpected scripts payload type: %s", type(data).__name__)
         return {}
-
-    def get_animatediff_capability(self) -> AnimateDiffCapability:
-        """Detect AnimateDiff support from the WebUI scripts contract."""
-
-        from src.pipeline.animatediff_models import (
-            AnimateDiffCapability,
-            parse_animatediff_capability,
-        )
-
-        scripts_payload = self.get_scripts()
-        if not scripts_payload:
-            return AnimateDiffCapability(
-                available=False,
-                reason="Could not retrieve WebUI scripts catalog",
-            )
-        return parse_animatediff_capability(scripts_payload)
 
     def get_adetailer_models(self) -> list[str]:
         """
