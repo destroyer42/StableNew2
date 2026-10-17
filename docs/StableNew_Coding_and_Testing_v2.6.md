@@ -326,8 +326,9 @@ models or alter user data.
 
 ## Current evidence
 
-Current exact collection and smoke counts are taken from the latest required CI
-recorded in `STATUS.md` or the applicable acceptance report. The full census is a
+Current exact collection and smoke counts are taken from the latest required CI run or
+the applicable acceptance report (`STATUS.md` records the enforced gates and baselines,
+not per-run counts). The full census is a
 blocking merge gate (PR-DEVEX-CI-160); a red census on main is repaired before further
 feature work. Update the recorded evidence only after comparable required CI or a
 documented acceptance run.

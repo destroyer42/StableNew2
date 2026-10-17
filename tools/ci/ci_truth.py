@@ -8,6 +8,7 @@ pytest truth tests (``tests/system/test_ci_truth_sync_v2.py``) call the same fun
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -19,6 +20,47 @@ STALE_PHRASES = {
     "STATUS.md": ("one required gate, one informational full-suite job",),
     "docs/CODEX_MAP.md": ("(required gate + informational full-suite)",),
 }
+
+
+#: STATUS.md is current state only (audit P2-1). Its size, stale-marker and dead-reference rules are enforced here.
+STATUS = "STATUS.md"
+STATUS_MAX_LINES = 150
+#: Phrases that mean a per-PR narrative or an out-of-date lifecycle label crept back in (matched case-insensitively).
+STATUS_BANNED_MARKERS = (
+    "not merged",
+    "local implementation",
+    "locally validated",
+    "local deterministic validation",
+    "awaiting integration",
+    "draft pr",
+    "python 3.11",
+    "python 3.12",
+    "3.11/3.12",
+)
+REPO_PATH_PREFIXES = ("docs/", "src/", "tools/", "tests/", "scripts/", "config/", "constraints/")
+_BACKTICKED = re.compile(r"`([^`\s]+)`")
+
+
+def status_problems(root: Path = ROOT) -> list[str]:
+    text = _read(root, STATUS)
+    if text is None:
+        return [f"{STATUS} is missing"]
+    problems: list[str] = []
+    lines = text.splitlines()
+    if len(lines) > STATUS_MAX_LINES:
+        problems.append(f"{STATUS} has {len(lines)} lines; the cap is {STATUS_MAX_LINES} (current state only, no PR narrative)")
+    lowered = text.lower()
+    for marker in STATUS_BANNED_MARKERS:
+        if marker in lowered:
+            problems.append(f"{STATUS} contains the stale/narrative marker {marker!r}")
+    for reference in sorted(set(_BACKTICKED.findall(text))):
+        candidate = reference.rstrip(".,;:)")
+        if not candidate.startswith(REPO_PATH_PREFIXES):
+            continue
+        exists = any(root.glob(candidate)) if "*" in candidate else (root / candidate).exists()
+        if not exists:
+            problems.append(f"{STATUS} references a path that does not exist: {candidate}")
+    return problems
 
 
 def _read(root: Path, rel: str) -> str | None:
@@ -51,6 +93,7 @@ def docs_truth_problems(root: Path = ROOT) -> list[str]:
         problems.append("AGENTS.md is missing")
     elif "python tools/ci/run_pr_gate.py" not in agents:
         problems.append("AGENTS.md must point to `python tools/ci/run_pr_gate.py`")
+    problems.extend(status_problems(root))
     for rel, phrases in STALE_PHRASES.items():
         text = _read(root, rel)
         if text is None:
