@@ -123,6 +123,7 @@ class AppStateProjectionSink:
             return
         app_state.set_queue_items(list(projection.queue_items))
         app_state.set_queue_jobs(list(projection.queue_jobs))
+        app_state.set_queue_dispatch_hold(projection.dispatch_hold)
 
     def _apply_history(self, projection: HistoryProjection) -> None:
         app_state = self._app_state

@@ -81,6 +81,7 @@ class QueuePanelV2(ttk.Frame):
         self._manage_app_state_subscriptions = bool(manage_app_state_subscriptions)
         self._jobs: list[UnifiedJobSummary] = []
         self._is_queue_paused = False
+        self._dispatch_hold = ""
         self._auto_run_enabled = bool(getattr(app_state, "auto_run_queue", True))
         self._running_job_id: str | None = None  # PR-GUI-F2: Track running job for highlighting
         self._summaries: list[UnifiedJobSummary] = []
@@ -313,6 +314,7 @@ class QueuePanelV2(ttk.Frame):
                 pass
             try:
                 self.app_state.subscribe("queue_jobs", self._on_queue_jobs_changed)
+                self.app_state.subscribe("queue_dispatch_hold", self._on_dispatch_hold_changed)
             except Exception:
                 pass
             try:
@@ -965,6 +967,7 @@ class QueuePanelV2(ttk.Frame):
         auto_run = getattr(app_state, "auto_run_queue", False)
         self._auto_run_enabled = auto_run
         self.auto_run_var.set(auto_run)
+        self._dispatch_hold = str(getattr(app_state, "queue_dispatch_hold", "") or "")
 
         running_job = getattr(app_state, "running_job", None)
         queue_count = len(self._jobs)
@@ -1071,7 +1074,10 @@ class QueuePanelV2(ttk.Frame):
             self._emit_status_message("Queued job could not be sent", level="warning")
             return
         if started is False:
-            self._emit_status_message("Queued job was not sent", level="warning")
+            # A hold is the usual reason nothing was sent; name it instead of a bare refusal.
+            self._emit_status_message(
+                self._dispatch_hold or "Queued job was not sent", level="warning"
+            )
 
     def _update_queue_status_display(
         self, is_paused: bool, running_job: Any | None, queue_count: int
@@ -1081,6 +1087,7 @@ class QueuePanelV2(ttk.Frame):
             is_paused=bool(is_paused),
             has_running_job=running_job is not None,
             queue_count=int(queue_count or 0),
+            dispatch_hold=self._dispatch_hold,
         )
         self.queue_status_label.configure(
             text=state.text,
@@ -1104,6 +1111,7 @@ class QueuePanelV2(ttk.Frame):
         severity_to_color = {
             "running": TOKENS.colors.status_warning,
             "paused": TOKENS.colors.status_error,
+            "held": TOKENS.colors.status_warning,
             "pending": TOKENS.colors.text_primary,
             "idle": TOKENS.colors.text_primary,
         }
@@ -1221,6 +1229,15 @@ class QueuePanelV2(ttk.Frame):
                 if self._running_job_id == job_id:
                     self._running_job_id = None
                 self._refresh_display()
+
+    def _on_dispatch_hold_changed(self) -> None:
+        """A GPU quarantine / WebUI hold appeared or cleared: say why nothing starts (or stop saying it)."""
+        if self.app_state is None:
+            return
+        self._dispatch_hold = str(getattr(self.app_state, "queue_dispatch_hold", "") or "")
+        self._update_queue_status_display(
+            self._is_queue_paused, getattr(self.app_state, "running_job", None), len(self._jobs)
+        )
 
     def _on_queue_jobs_changed(self) -> None:
         """Handle queue_jobs changes from app_state (PR-CORE-D)."""

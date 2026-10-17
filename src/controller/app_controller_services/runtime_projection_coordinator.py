@@ -34,6 +34,7 @@ class RuntimeProjectionCoordinator:
         build_queue_projection: Callable[[], tuple[list[str], list[UnifiedJobSummary]]],
         load_history_entries: Callable[[int | None], list[JobHistoryEntry]],
         summarize_running_job: Callable[[Any], UnifiedJobSummary | None],
+        describe_dispatch_hold: Callable[[], str] | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._sink = sink
@@ -41,6 +42,7 @@ class RuntimeProjectionCoordinator:
         self._build_queue_projection = build_queue_projection
         self._load_history_entries = load_history_entries
         self._summarize_running_job = summarize_running_job
+        self._describe_dispatch_hold = describe_dispatch_hold
         self._logger = logger or logging.getLogger(__name__)
         self._lock = threading.RLock()
         self._revisions: dict[str, int] = {}
@@ -56,12 +58,13 @@ class RuntimeProjectionCoordinator:
         revision = self._next_revision("queue")
         self._background_tasks.submit(
             "projection:queue",
-            self._build_queue_projection,
+            self._build_queue_with_hold,
             on_result=lambda result, revision=revision: self._sink.apply_queue_projection(
                 QueueProjection(
                     revision=revision,
                     queue_items=tuple(result[0]),
                     queue_jobs=tuple(result[1]),
+                    dispatch_hold=result[2],
                 )
             ),
             on_error=lambda exc: self._logger.error(
@@ -72,6 +75,11 @@ class RuntimeProjectionCoordinator:
             purpose="Refresh queue projections off the UI thread",
         )
         return revision
+
+    def _build_queue_with_hold(self) -> tuple[list[str], list[UnifiedJobSummary], str]:
+        queue_items, queue_jobs = self._build_queue_projection()
+        hold = self._describe_dispatch_hold() if self._describe_dispatch_hold is not None else ""
+        return queue_items, queue_jobs, hold
 
     def publish_history_refresh(self, *, limit: int | None = None) -> int:
         revision = self._next_revision("history")
