@@ -7,12 +7,8 @@ This directory no longer contains importable Python modules.
 **Date:** 2025
 **Reason:** Enforcement of NJR-only execution path (v2.6 architecture)
 
-The old reference-only GUI module was relocated by `PR-ARCH-243` to:
-
-- `tools.archive_reference.gui.pipeline_config_panel_v2`
-
-It remains available only for explicit archival/reference use outside runtime
-package paths.
+The old reference-only GUI module was relocated by `PR-ARCH-243` to `tools/archive_reference/gui/` and later retired
+(audit P2-6). It is available only from Git history (`bfdeb493`), not in the tree.
 
 **Architecture Change:**
 GUI V2 no longer assembles `PipelineConfig` objects. Instead:

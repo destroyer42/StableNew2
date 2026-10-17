@@ -1,5 +1,7 @@
 # PR-VID-183 - Wan2.2-Animate Basic-Retargeting Controlled A/B
 
+> Harness retired (audit P2-6): `tools/qualification/vid183` is no longer in the tree. Its source is in Git history at `bfdeb493` (`git show bfdeb493:<path>`). This record is the preserved verdict and evidence.
+
 Status: **`PR-VID-183 — COMPLETE / ACCEPTED / INTEGRATED — BASIC_RETARGET_APPLIES; REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED`**.
 
 This qualification-only package tested the upstream basic-retarget applicability gate that PR-VID-182 could not exercise. It adds no production backend, controller, resolver, graph, or workflow registration. The result is evidence for product-owner adjudication, not an Animate capability pass or a DIAG-GPU stability pass.
