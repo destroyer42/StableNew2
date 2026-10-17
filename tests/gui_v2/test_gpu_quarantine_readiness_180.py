@@ -1,4 +1,5 @@
 """PR-QUEUE-GPU-180: the Tk Operator Readiness action for a GPU device-loss quarantine (offline, semantic)."""
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -28,7 +29,13 @@ class _Service:
         self.collects += 1
         records = [
             OperatorReadinessRecord(
-                "webui", "A1111 / WebUI", OperatorReadinessState.READY, "WebUI is ready.", (), (), "test"
+                "webui",
+                "A1111 / WebUI",
+                OperatorReadinessState.READY,
+                "WebUI is ready.",
+                (),
+                (),
+                "test",
             )
         ]
         if self.quarantined:
@@ -48,11 +55,15 @@ class _Service:
 
 
 @pytest.mark.gui
-def test_confirm_action_is_explicit_off_tk_and_reports_the_outcome(tk_root: tk.Tk, tmp_path: Path, monkeypatch):
+def test_confirm_action_is_explicit_off_tk_and_reports_the_outcome(
+    tk_root: tk.Tk, tmp_path: Path, monkeypatch
+):
     service = _Service()
     started: list = []
 
-    def start(done) -> None:  # the application starts the release off the Tk thread and calls back on it
+    def start(
+        done,
+    ) -> None:  # the application starts the release off the Tk thread and calls back on it
         started.append(done)
 
     panel = OperatorReadinessPanelV2(
@@ -67,11 +78,16 @@ def test_confirm_action_is_explicit_off_tk_and_reports_the_outcome(tk_root: tk.T
     assert "confirm_gpu_recovery" not in panel.record_widgets["webui"]
 
     # Declining the confirmation dialog does nothing at all.
-    monkeypatch.setattr("src.gui.panels_v2.operator_readiness_panel_v2.messagebox.askokcancel", lambda *a, **k: False)
+    monkeypatch.setattr(
+        "src.gui.panels_v2.operator_readiness_panel_v2.messagebox.askokcancel",
+        lambda *a, **k: False,
+    )
     button.invoke()
     assert started == []
 
-    monkeypatch.setattr("src.gui.panels_v2.operator_readiness_panel_v2.messagebox.askokcancel", lambda *a, **k: True)
+    monkeypatch.setattr(
+        "src.gui.panels_v2.operator_readiness_panel_v2.messagebox.askokcancel", lambda *a, **k: True
+    )
     button.invoke()
     assert len(started) == 1  # exactly one release request per confirmation
 
@@ -85,7 +101,9 @@ def test_confirm_action_is_explicit_off_tk_and_reports_the_outcome(tk_root: tk.T
 
 
 @pytest.mark.gui
-def test_without_the_application_callback_there_is_no_release_control(tk_root: tk.Tk, tmp_path: Path):
+def test_without_the_application_callback_there_is_no_release_control(
+    tk_root: tk.Tk, tmp_path: Path
+):
     panel = OperatorReadinessPanelV2(
         tk_root, service=_Service(), ui_state_store=UIStateStore(tmp_path / "ui.json")
     )
@@ -114,7 +132,9 @@ def test_main_window_release_goes_through_the_application_controller(monkeypatch
 
 def test_main_window_release_failure_is_reported_not_raised(monkeypatch):
     window = MainWindowV2.__new__(MainWindowV2)
-    window.app_controller = SimpleNamespace(confirm_gpu_recovery=Mock(side_effect=RuntimeError("boom")))
+    window.app_controller = SimpleNamespace(
+        confirm_gpu_recovery=Mock(side_effect=RuntimeError("boom"))
+    )
     delivered: list = []
     window.run_in_main_thread = lambda fn: fn()
 
@@ -144,7 +164,9 @@ def test_main_window_surfaces_a_quarantine_through_the_application_controller():
     opened: list = []
     window.run_in_main_thread = lambda fn: opened.append(fn)
     window._watch_gpu_quarantine()
-    assert len(registered) == 1 and registered[0][1] is True  # a restored incident is announced at startup
+    assert (
+        len(registered) == 1 and registered[0][1] is True
+    )  # a restored incident is announced at startup
     assert opened == []
     registered[0][0]({"status": "quarantined", "incident_id": "gpu-1"})
     assert opened == [window.open_operator_readiness]
@@ -164,12 +186,20 @@ def test_main_window_surfaces_a_quarantine_through_the_application_controller():
 def test_application_controller_delegates_to_the_coordinator_only():
     from src.controller.app_controller import AppController
 
-    outcome = SimpleNamespace(to_dict=lambda: {"released": False, "reason": "no_positive_recovery_evidence"})
+    outcome = SimpleNamespace(
+        to_dict=lambda: {"released": False, "reason": "no_positive_recovery_evidence"}
+    )
     coordinator = SimpleNamespace(release=Mock(return_value=outcome), add_incident_listener=Mock())
     controller = AppController.__new__(AppController)
     controller.job_service = SimpleNamespace(gpu_loss=coordinator)
-    assert controller.confirm_gpu_recovery() == {"released": False, "reason": "no_positive_recovery_evidence"}
+    projections = SimpleNamespace(publish_queue_refresh=Mock())
+    controller._runtime_projection_coordinator = projections
+    assert controller.confirm_gpu_recovery() == {
+        "released": False,
+        "reason": "no_positive_recovery_evidence",
+    }
     coordinator.release.assert_called_once_with(operator_confirmed=True)
+    projections.publish_queue_refresh.assert_called_once_with()  # the queue's hold message must be recomputed
 
     def listener(_snapshot):
         return None

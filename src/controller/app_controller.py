@@ -72,6 +72,7 @@ from src.controller.app_controller_services.background_task_coordinator import (
 from src.controller.app_controller_services.diagnostics_coordinator import (
     DiagnosticsCoordinator,
 )
+from src.controller.app_controller_services.dispatch_hold_status import describe_dispatch_hold
 from src.controller.app_controller_services.gui_config_service import GuiConfigService
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
@@ -457,6 +458,7 @@ class AppController:
             build_queue_projection=self._build_queue_projection,
             load_history_entries=self._load_history_entries,
             summarize_running_job=self._build_running_job_summary,
+            describe_dispatch_hold=lambda: describe_dispatch_hold(getattr(self.job_service, "job_queue", None)),
             logger=logger,
         )
         self._diagnostics_coordinator = DiagnosticsCoordinator()
@@ -3032,7 +3034,9 @@ class AppController:
 
     def confirm_gpu_recovery(self) -> dict[str, Any]:
         """Operator-confirmed GPU quarantine release (PR-QUEUE-GPU-180; blocking: call off the Tk thread)."""
-        return self.job_service.gpu_loss.release(operator_confirmed=True).to_dict()
+        outcome = self.job_service.gpu_loss.release(operator_confirmed=True).to_dict()
+        self._runtime_projection_coordinator.publish_queue_refresh()  # the hold message must clear on release
+        return outcome
 
     def add_gpu_quarantine_listener(self, listener: Any, *, replay_active: bool = False) -> None:
         """Be called (on the queue's thread) with a snapshot when a GPU device-loss quarantine is applied."""
@@ -7296,12 +7300,3 @@ class AppController:
             "postprocess_output_width": output_width,
             "postprocess_output_height": output_height,
         }
-
-
-# Convenience entrypoint for testing the skeleton standalone
-if __name__ == "__main__":
-    from src.gui.main_window_v2 import StableNewApp
-
-    app = StableNewApp()
-    controller = AppController(app.main_window, threaded=True)
-    app.mainloop()
