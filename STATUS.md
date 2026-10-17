@@ -4,6 +4,15 @@ Updated: 2026-10-16
 
 ## Repository
 
+- Architecture-rule ratchets and flake policy (audit P1-5b, local deterministic validation; hosted run pending):
+  `tools/ci/run_architecture_ratchets.py` (pure `ast`, instant, in the local gate and the required CI job) ratchets
+  `daemon=True` threads (18), raw `threading.Thread` outside the ThreadRegistry (12), `src/utils` importing a higher layer (19)
+  and `src/controller` importing `src.gui` (18) against `tools/ci/architecture_baseline.json`; nothing can be added and an
+  improvement must be locked in. It replaces `scripts/check_daemon_threads.py` and `scripts/check_thread_registry_usage.py`
+  (the first already failed on `main`, the second crashed under cp1252), whose pre-commit hooks are removed together with the
+  `black` hook that conflicted with `ruff format`. The flake policy is executable: a quarantined test needs an owner,
+  reason and expiry (at most 30 days) in a first-line header, and `tests/system/test_quarantine_policy.py` fails once it expires.
+
 - Whole-application mypy ratchet (audit P1-4, local deterministic validation; hosted determinism check pending): strict
   mypy now runs over all of `src` in the local gate and the required CI job as a per-file ratchet
   (`tools/ci/run_mypy_ratchet.py`, baseline `tools/ci/mypy_baseline.json`: 1,691 errors in 196 files). A file may not exceed

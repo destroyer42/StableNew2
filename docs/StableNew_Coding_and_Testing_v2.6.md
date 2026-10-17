@@ -170,7 +170,8 @@ every executable change, the `full-suite` census verdict. Both are blocking chec
 masks its failure. The census runs each shard once to completion (no `--maxfail`) with
 `pytest-timeout` and a quiet summary (`-q -rfE --tb=short`). A failure is a signal to fix the
 test or the code, never to re-run until green: a flaky test is repaired or quarantined with
-an owner and an expiry, not ignored. Tests must isolate host
+an owner and an expiry (`tests/quarantine/README.md`; `tests/system/test_quarantine_policy.py` enforces
+the deadline), not ignored. Tests must isolate host
 state: PromptPacks via `STABLENEW_PROMPTPACK_DIR`/injected `packs_dir`, runtime transitions via
 fake owner managers, and never read or write the owner's real data.
 
