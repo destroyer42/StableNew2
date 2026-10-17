@@ -26,7 +26,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` after
   `pip install -r requirements.txt -r requirements-dev.txt`.
 - Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,691 errors in 196
-  files), unformatted files (400), blind/silent excepts in `src` (BLE001 1,414, S110 565, S112 45), thread and layering
+  files), unformatted files (400), blind/silent excepts in `src` (BLE001 1,412, S110 565, S112 45), thread and layering
   rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 18), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
@@ -92,7 +92,10 @@ of the roadmap; where they conflict with this file, this file and the repository
 6. Retire AnimateDiff, disabled LTX specs, story-plan/continuity, `src/ai`, `src/cluster`, Character Training?
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: history browser, Learning payoff, inpainting/ControlNet, LoRA browser.
-9. Movie Clips assembly runs outside `JobService` (no NJR, queue or history record): make CPU-only assembly a queued
+9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments).
+   Store it once per experiment by hash (an NJR contract change), and/or add a dry-run tool that prunes snapshots and results of
+   jobs whose images and manifests were deleted? See `docs/Subsystems/Learning/LEARNING.md` section 9.
+10. Movie Clips assembly runs outside `JobService` (no NJR, queue or history record): make CPU-only assembly a queued
    workload, or explicitly exempt bounded media utilities? See `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.
 
 ## Holds and safety constraints
@@ -108,7 +111,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 
 ## Known debt
 
-- The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 7,312 lines and the executor,
+- The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 7,307 lines and the executor,
   NJR construction at several sites, model-family branches in generic code, untyped stage configuration).
 - 64 modules unreachable from any entry point (~8.7k lines) await a verified deletion pass; the retained qualification harnesses
   (inventory in `tools/qualification/README.md`) remain the bulk of `tools/`.

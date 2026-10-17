@@ -409,7 +409,7 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1414,
+      "BLE001": 1412,
       "S110": 565,
       "S112": 45
     },
@@ -447,7 +447,7 @@
         "BLE001": 18
       },
       "src/controller/app_controller.py": {
-        "BLE001": 151,
+        "BLE001": 149,
         "S110": 53,
         "S112": 4
       },

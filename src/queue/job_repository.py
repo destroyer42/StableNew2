@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 import threading
+import time
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -35,6 +37,11 @@ from src.utils.error_envelope_v2 import (
     deserialize_envelope,
     serialize_envelope,
 )
+
+logger = logging.getLogger(__name__)
+
+#: Index that lets history/recent-job lists read the newest rows without scanning and sorting the whole table.
+CREATED_AT_INDEX = "idx_jobs_created_at"
 
 REPOSITORY_SCHEMA_VERSION = 1
 # Every batch identity (Review, versioned descriptor, top-level) is stored under a JSON key of this name.
@@ -325,6 +332,27 @@ class JobRepository(JobHistoryStore):
                 raise JobRepositoryError(
                     f"Unsupported job repository schema: {version['value'] if version else 'missing'}"
                 )
+            self._ensure_created_at_index(connection)
+
+    @staticmethod
+    def _ensure_created_at_index(connection: sqlite3.Connection) -> None:
+        """Create ``idx_jobs_created_at`` once.
+
+        Additive and idempotent: it changes no rows and no schema version, and ``DROP INDEX idx_jobs_created_at``
+        undoes it. Without it every ``ORDER BY created_at DESC`` list reads and sorts the whole table, which on a
+        multi-gigabyte repository cost seconds per call at startup. The first open of an existing repository pays
+        for one table pass, so say so in the log.
+        """
+
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?", (CREATED_AT_INDEX,)
+        ).fetchone()
+        if exists is not None:
+            return
+        started = time.perf_counter()
+        logger.info("Building %s (one-time; speeds up history and startup)", CREATED_AT_INDEX)
+        connection.execute(f"CREATE INDEX IF NOT EXISTS {CREATED_AT_INDEX} ON jobs(created_at DESC)")
+        logger.info("Built %s in %.1fs", CREATED_AT_INDEX, time.perf_counter() - started)
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -684,12 +712,15 @@ class JobRepository(JobHistoryStore):
         self, status: JobStatus | None = None, limit: int = 50, offset: int = 0
     ) -> list[JobHistoryEntry]:
         parameters: list[Any] = []
-        sql = "SELECT * FROM jobs"
+        # Choose the newest ids first and fetch full rows only for those. ``SELECT * ... ORDER BY`` would carry every
+        # row's large ``njr_snapshot`` through the sort of the whole table.
+        newest = "SELECT job_id FROM jobs"
         if status is not None:
-            sql += " WHERE status = ?"
+            newest += " WHERE status = ?"
             parameters.append(status.value)
-        sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        newest += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
         parameters.extend([max(0, int(limit)), max(0, int(offset))])
+        sql = f"SELECT * FROM jobs WHERE job_id IN ({newest}) ORDER BY created_at DESC"
         with self._lock:
             rows = self._connection.execute(sql, tuple(parameters)).fetchall()
         return [self._row_to_history(row) for row in rows]
@@ -699,12 +730,13 @@ class JobRepository(JobHistoryStore):
     ) -> list[JobHistoryEntry]:
         wanted = tuple(status.value for status in statuses or ())
         parameters: list[Any] = []
-        sql = "SELECT * FROM jobs"
+        newest = "SELECT job_id FROM jobs"
         if wanted:
-            sql += f" WHERE status IN ({','.join('?' for _ in wanted)})"
+            newest += f" WHERE status IN ({','.join('?' for _ in wanted)})"
             parameters.extend(wanted)
-        sql += " ORDER BY created_at DESC LIMIT ?"
+        newest += " ORDER BY created_at DESC LIMIT ?"
         parameters.append(max(0, int(limit)))
+        sql = f"SELECT * FROM jobs WHERE job_id IN ({newest}) ORDER BY created_at DESC"
         with self._lock:
             rows = self._connection.execute(sql, tuple(parameters)).fetchall()
         return [self._row_to_history(row) for row in rows]

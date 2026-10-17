@@ -211,7 +211,7 @@ Other traps found while reading:
 - Persistence is not on `src/utils/atomic_io.py` [V]: `PhotoOptimizeStore.save_asset` writes a temp file and `Path.replace` without fsync or the Windows retry; `write_review_sidecar` uses plain `write_text`. The audit (B4) lists the photo store as already safe [A]; that is only partly true. `PhotoOptimizeStore._read_asset` returns `None` on any exception, so a corrupt sidecar silently disappears from the list.
 - `write_png_metadata` / `write_jpg_metadata` swallow every exception and return `False`; `write_portable_review_metadata` then falls back to the sidecar file. Both are best-effort.
 - `decode_payload` gunzips without a size bound (audit B11 [A]); Review opens arbitrary user files with it.
-- `AppController` (ceiling 7,312 lines, `tools/ci/controller_surface_baseline.json`) still hosts the Review/reprocess/image-edit/Photo entry points and `_extract_reprocess_baseline_from_image`; do not grow it. New logic goes into the service modules above.
+- `AppController` (ceiling 7,307 lines, `tools/ci/controller_surface_baseline.json`) still hosts the Review/reprocess/image-edit/Photo entry points and `_extract_reprocess_baseline_from_image`; do not grow it. New logic goes into the service modules above.
 - Audit C2 [A]: `NormalizedJobRecord(` construction sites differ in policy; reprocess is one of them (section 2.3). A change to compile policy must be checked here too.
 
 ## 9. How to test

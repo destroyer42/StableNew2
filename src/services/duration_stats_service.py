@@ -88,8 +88,9 @@ class DurationStatsService:
             if chain:
                 chain_durations[chain].append(duration_ms)
 
-        # Compute stats for each chain
-        self._stats_cache.clear()
+        # Compute stats for each chain into a fresh dict and swap it in whole: refresh may run on a background
+        # thread while the queue panel reads the cache, so readers must never see a cleared or half-filled one.
+        new_cache: dict[tuple[str, ...], StageChainStats] = {}
         now = datetime.utcnow()
 
         for chain, durations in chain_durations.items():
@@ -99,7 +100,7 @@ class DurationStatsService:
             if len(recent) < self._min_samples:
                 continue
 
-            self._stats_cache[chain] = StageChainStats(
+            new_cache[chain] = StageChainStats(
                 stage_chain=chain,
                 sample_count=len(recent),
                 mean_duration_ms=statistics.mean(recent),
@@ -110,6 +111,7 @@ class DurationStatsService:
                 last_updated=now,
             )
 
+        self._stats_cache = new_cache
         self._last_refresh = now
 
     def _extract_stage_chain(self, entry: JobHistoryEntry) -> tuple[str, ...] | None:
