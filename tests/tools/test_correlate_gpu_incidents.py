@@ -134,3 +134,134 @@ def test_correlation_normalizes_naive_local_and_aware_timestamps() -> None:
     )
     assert result[0]["active_sqlite_jobs"][0]["job_id"] == "active-aware"
     assert result[0]["nearby_sqlite_jobs"][0]["relation"] == "active_at_incident"
+
+
+# --- app-session telemetry is observation of the app, not proof of generation ----------------------
+
+_INCIDENT = "2026-10-17T16:49:25Z"
+
+
+def _session_sample(**overrides):
+    record = {
+        "timestamp_utc": "2026-10-17T16:49:20+00:00",
+        "kind": "sample",
+        "scope": "session",
+        "job_id": "session-4242",
+        "run_id": "session-20261017T160000Z",
+        "backend_id": None,
+        "stage": None,
+    }
+    record.update(overrides)
+    return record
+
+
+def test_idle_session_sample_without_a_job_is_not_proof_of_active_generation() -> None:
+    tool = _load_tool()
+
+    result = tool.correlate(
+        [{"timestamp_utc": _INCIDENT}],
+        jobs=[],
+        telemetry=[_session_sample()],
+        webui_log_files=[],
+    )
+
+    assert result[0]["classification"] == "stablenew_open_no_proven_active_generation"
+    assert result[0]["active_sqlite_jobs"] == []
+    assert [item["scope"] for item in result[0]["nearby_survivor_telemetry"]] == ["session"]
+    assert result[0]["source_availability"]["survivor_telemetry_covers_incident"] is True
+
+
+def test_session_marker_is_recognized_from_the_job_id_when_a_record_has_no_scope() -> None:
+    tool = _load_tool()
+    record = _session_sample()
+    del record["scope"]
+
+    result = tool.correlate([{"timestamp_utc": _INCIDENT}], jobs=[], telemetry=[record], webui_log_files=[])
+
+    assert result[0]["classification"] == "stablenew_open_no_proven_active_generation"
+    assert result[0]["nearby_survivor_telemetry"][0]["scope"] == "session"
+
+
+def test_job_scoped_telemetry_still_proves_active_work_beside_session_samples() -> None:
+    tool = _load_tool()
+    job_record = {
+        "timestamp_utc": "2026-10-17T16:49:20+00:00",
+        "kind": "sample",
+        "scope": "job",
+        "job_id": "81f4fdc58e1c43f199e42d30b3183e84",
+        "stage": "txt2img",
+    }
+
+    result = tool.correlate(
+        [{"timestamp_utc": _INCIDENT}],
+        jobs=[],
+        telemetry=[_session_sample(), job_record],
+        webui_log_files=[],
+    )
+
+    assert result[0]["classification"] == "proven_active_stablenew_gpu_work"
+    assert sorted(item["scope"] for item in result[0]["nearby_survivor_telemetry"]) == ["job", "session"]
+
+
+def test_records_from_before_the_scope_field_are_job_telemetry() -> None:
+    tool = _load_tool()
+    legacy = {
+        "timestamp_utc": "2026-10-17T16:49:20+00:00",
+        "kind": "sample",
+        "job_id": "81f4fdc58e1c43f199e42d30b3183e84",
+        "stage": "txt2img",
+    }
+
+    result = tool.correlate([{"timestamp_utc": _INCIDENT}], jobs=[], telemetry=[legacy], webui_log_files=[])
+
+    assert result[0]["classification"] == "proven_active_stablenew_gpu_work"
+    assert result[0]["nearby_survivor_telemetry"][0]["scope"] == "job"
+
+
+def test_an_active_sqlite_job_still_proves_active_work_beside_a_session_sample() -> None:
+    tool = _load_tool()
+    running = {
+        "job_id": "job-running",
+        "status": "running",
+        "started_at": "2026-10-17T16:49:00Z",
+        "completed_at": None,
+        "updated_at": "2026-10-17T16:49:00Z",
+        "source": "queue",
+    }
+
+    result = tool.correlate(
+        [{"timestamp_utc": _INCIDENT}], jobs=[running], telemetry=[_session_sample()], webui_log_files=[]
+    )
+
+    assert result[0]["classification"] == "proven_active_stablenew_gpu_work"
+
+
+def test_command_line_reads_session_telemetry_from_a_subdirectory(tmp_path, monkeypatch) -> None:
+    import sys
+
+    tool = _load_tool()
+    telemetry_dir = tmp_path / "gpu_survivor"
+    (telemetry_dir / "session").mkdir(parents=True)
+    (telemetry_dir / "session" / "survivor.jsonl").write_text(
+        json.dumps(_session_sample()) + "\n", encoding="utf-8"
+    )
+    out = tmp_path / "timeline.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "correlate_gpu_incidents.py",
+            "--incident",
+            _INCIDENT,
+            "--telemetry-dir",
+            str(telemetry_dir),
+            "--out",
+            str(out),
+        ],
+    )
+
+    assert tool.main() == 0
+
+    timeline = json.loads(out.read_text(encoding="utf-8"))["timeline"]
+    assert timeline[0]["classification"] == "stablenew_open_no_proven_active_generation"
+    assert timeline[0]["nearby_survivor_telemetry"][0]["scope"] == "session"

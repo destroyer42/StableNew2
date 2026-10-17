@@ -25,6 +25,7 @@ except Exception:  # pragma: no cover - Tk not ready
 
 
 from src.gui import main_window
+from src.utils.gpu_survivor_telemetry import start_gpu_session_telemetry, stop_gpu_session_telemetry
 from src.utils.graceful_exit import graceful_exit
 from src.utils.single_instance import SingleInstanceLock
 
@@ -808,6 +809,10 @@ def main() -> None:
     root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
     root.after(700, lambda: _async_bootstrap_comfy(root, app_state, window))
 
+    # Observation-only GPU state record for the whole app session (see gpu_survivor_telemetry); stopped by
+    # graceful_exit or the finally block below.
+    start_gpu_session_telemetry()
+
     try:
         root.mainloop()
     except BaseException as exc:
@@ -817,6 +822,7 @@ def main() -> None:
             app_controller, root, single_instance_lock, logger, window=window, reason="fatal-error"
         )
     finally:
+        stop_gpu_session_telemetry("mainloop_exit")
         if single_instance_lock.is_acquired():
             single_instance_lock.release()
 

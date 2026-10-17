@@ -97,8 +97,8 @@ of the roadmap; where they conflict with this file, this file and the repository
 
 ## Holds and safety constraints
 
-- Physical GPU qualification is on HOLD after the 2026-10-12 RTX 4070 Ti device-loss incident (15 hard resets since
-  2026-09-07; no root cause accepted; records `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
+- Physical GPU qualification is on HOLD after the 2026-10-12 RTX 4070 Ti device-loss incident (16 device-loss events since
+  2026-09-07, the latest 2026-10-17 with the OS still running; Windows logs a Kernel-PnP event 1000 for this GPU at each; no root cause accepted; records `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
   `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md`). No physical
   generation, qualification or runtime restart without explicit owner authorization.
 - Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs resource and

@@ -144,6 +144,16 @@ A transient, in-memory coordination service (`src/controller/webui_outage_coordi
 - Release (`GpuLossCoordinator.release`) requires explicit operator confirmation AND fresh positive host evidence, and a matching incident id; refusal codes are stable strings (`operator_confirmation_required`, `no_positive_recovery_evidence`, `incident_mismatch`, `release_not_durable`). The durable record is cleared first, then memory. It never restarts a runtime, resets a driver, reboots, kills a process or issues a generation probe.
 - Surfaces: `OperatorReadinessService` lists the `gpu_device` record first while quarantined; the WebUI outage message changes wording when GPU jobs are held.
 
+### 9.1 Survivor telemetry (observation only)
+
+`src/utils/gpu_survivor_telemetry.py` (`GpuSurvivorTelemetry`) leaves a flushed, fsynced record of GPU state because a device loss can end the process before any normal diagnostic runs. It has no queue, repository, process-lifecycle or execution authority; every failure is swallowed.
+
+- **Per job:** `PipelineRunner._start_gpu_survivor_telemetry` starts a recorder for every GPU-capable job (`JOB_SAMPLE_INTERVAL_S` = 0.5 s) under `<cwd>/reports/diagnostics/gpu_survivor/survivor.jsonl`, with `job_started`, `stage_started`, `generation_dispatched` and `job_finished` events.
+- **Per app session:** `main()` calls `start_gpu_session_telemetry()` just before the Tk loop and `stop_gpu_session_telemetry()` in its `finally` (and `graceful_exit` calls it first, because that path ends in `os._exit`). It samples every 5 s into `gpu_survivor/session/` (4 MB x 7 files), so a loss during startup, model load or idle still has a lead-up. `STABLENEW_GPU_SESSION_TELEMETRY=0` turns it off; the autouse test fixture sets that.
+- **What a sample holds:** `nvidia-smi` utilization, memory, temperature, power, clocks, pstate, PCIe link now and max, throttle-reason bitmask, fan speed (`query_gpu_survivor_snapshot` in `src/utils/process_inspector_v2.py`; an unsupported additive field falls back to the base set). When the query returns nothing the record keeps `gpu: null` and adds `gpu_query` with a `status` (`gpu_lost`, `timeout`, `no_nvidia_smi`, `no_devices`, `nonzero_exit`, `error`) and the driver text.
+- **Reading it:** every record carries `scope` (`job` or `session`). Point `tools/diagnostics/correlate_gpu_incidents.py --telemetry-dir` at the directory (it reads subdirectories, so `session/` is included); only job-scoped records or an active SQLite job classify an incident as proven active GPU work, while a session sample alone yields `stablenew_open_no_proven_active_generation`. Windows marks each incident for this GPU with Kernel-PnP/Device Management event 1000 ("could not be query removed ... vetoed"), seconds after the last good sample.
+- **Thread rule:** the loop is a non-daemon `ThreadRegistry` thread and exits when the registry requests shutdown, so `shutdown_all` never waits on it.
+
 ## 10. Runtime transition policy and managed Comfy
 
 **Transition** (`RuntimeTransitionCoordinator.prepare_for`, `src/services/runtime_transition_service.py`) runs once, synchronously, inside a single admitted job's backend `execute()` (image: `WebUIFamilyImageBackend`; also the SVD and Comfy backends). It releases StableNew-owned conflicting residency through each runtime's own owner, never touches the queue or SQLite, and never restarts anything. [V]
@@ -189,7 +199,7 @@ Related [A]: B9 (silent provenance and swallowed listener errors) is partly visi
 `STATUS.md` Holds: physical GPU qualification is on HOLD after the 2026-10-12 device-loss incident. For this subsystem that means:
 
 - No real generation, qualification, WebUI/Forge/Comfy start, restart or stop of a real runtime, and no outage-recovery exercise without explicit owner authorization. Note that production `WebUIOutageCoordinator.recover` performs a real owned restart on a confirmed outage, and `RuntimeTransitionCoordinator` stops real owned runtimes; never trigger either against a live manager outside an authorized session.
-- Tests must be hermetic: no WebUI, model, GPU, `nvidia-smi` or display. The autouse fixtures pin `STABLENEW_GPU_HOST_PROBE=0`, `STABLENEW_WEBUI_AUTOSTART=0`, `STABLENEW_COMFY_AUTOSTART=0`, `STABLENEW_NO_WEBUI=1`, and replace the WebUI container with a no-op. Inject probes, manager getters, clocks and runners instead of touching the real ones.
+- Tests must be hermetic: no WebUI, model, GPU, `nvidia-smi` or display. The autouse fixtures pin `STABLENEW_GPU_HOST_PROBE=0`, `STABLENEW_GPU_SESSION_TELEMETRY=0`, `STABLENEW_WEBUI_AUTOSTART=0`, `STABLENEW_COMFY_AUTOSTART=0`, `STABLENEW_NO_WEBUI=1`, and replace the WebUI container with a no-op. Inject probes, manager getters, clocks and runners instead of touching the real ones.
 - Do not weaken containment to "make progress": no auto-release of the quarantine, no hold release without proof, no recovery while quarantined, no replay of failed work.
 - Restart-while-queued physical verification (held then released against a running Forge) is an open owner decision, not something to run opportunistically.
 

@@ -10,6 +10,7 @@ complete.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
@@ -19,13 +20,24 @@ from pathlib import Path
 from typing import Any
 
 from src.utils.process_inspector_v2 import (
-    collect_gpu_survivor_snapshot,
     collect_process_risk_snapshot,
+    query_gpu_survivor_snapshot,
 )
 from src.utils.thread_registry import get_thread_registry
 
+logger = logging.getLogger(__name__)
+
 SCHEMA = "stablenew.gpu-survivor.v1"
 DEFAULT_OUTPUT_DIR = Path("reports") / "diagnostics" / "gpu_survivor"
+# Job recorders sample fast enough to bracket a device loss that takes well under a second to show.
+JOB_SAMPLE_INTERVAL_S = 0.5
+# The app-session recorder keeps the lead-up to a loss that happens outside any job (startup, model load, idle).
+SESSION_OUTPUT_SUBDIR = "session"
+SESSION_SAMPLE_INTERVAL_S = 5.0
+SESSION_MAX_BYTES = 4_000_000
+SESSION_BACKUP_COUNT = 6
+SESSION_ENV_FLAG = "STABLENEW_GPU_SESSION_TELEMETRY"
+_SESSION_DISABLED_VALUES = frozenset({"0", "false", "off", "no", "disabled"})
 
 SnapshotProvider = Callable[[], Mapping[str, Any] | None]
 PresenceProvider = Callable[[], Mapping[str, Any] | None]
@@ -44,11 +56,12 @@ class GpuSurvivorTelemetry:
         workflow_id: str | None = None,
         workflow_version: str | None = None,
         output_dir: Path | str = DEFAULT_OUTPUT_DIR,
-        interval_s: float = 1.0,
+        interval_s: float = JOB_SAMPLE_INTERVAL_S,
         max_bytes: int = 2_000_000,
         backup_count: int = 3,
         snapshot_provider: SnapshotProvider | None = None,
         presence_provider: PresenceProvider | None = None,
+        lifecycle: str = "job",
     ) -> None:
         self._job_id = str(job_id)
         self._run_id = str(run_id)
@@ -62,8 +75,11 @@ class GpuSurvivorTelemetry:
         self._interval_s = max(0.2, float(interval_s))
         self._max_bytes = max(1024, int(max_bytes))
         self._backup_count = max(1, int(backup_count))
-        self._snapshot_provider = snapshot_provider or collect_gpu_survivor_snapshot
+        # The default path keeps the reason a query returned nothing (gpu_lost, timeout, ...); an injected provider
+        # only returns a snapshot, so no query status is recorded for it.
+        self._snapshot_provider = snapshot_provider
         self._presence_provider = presence_provider or collect_process_risk_snapshot
+        self._lifecycle = str(lifecycle or "job")
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -78,13 +94,13 @@ class GpuSurvivorTelemetry:
         with self._lock:
             if self._thread is not None:
                 return
-            self._record_event("job_started", include_presence=True)
+            self._record_event(f"{self._lifecycle}_started", include_presence=True)
             try:
                 self._thread = get_thread_registry().spawn(
                     target=self._sample_loop,
                     name=f"GpuSurvivorTelemetry-{self._job_id[:8]}",
                     daemon=False,
-                    purpose="Durable observation of an active GPU pipeline job",
+                    purpose="Durable observation of GPU state for an active job or app session",
                 )
             except Exception:
                 self._thread = None
@@ -151,16 +167,28 @@ class GpuSurvivorTelemetry:
                 except Exception:
                     pass
         with self._lock:
-            self._record_event("job_finished", outcome=str(outcome))
+            self._record_event(f"{self._lifecycle}_finished", outcome=str(outcome))
 
     def _sample_loop(self) -> None:
+        registry = get_thread_registry()
         while not self._stop.wait(self._interval_s):
+            # ThreadRegistry.shutdown_all joins non-daemon threads one by one; leave promptly when it asks.
+            if registry.is_shutdown_requested():
+                break
             self._record_sample()
 
     def _record_sample(self) -> None:
         payload = self._base_record(kind="sample")
-        payload["gpu"] = self._safe_snapshot()
+        self._attach_gpu(payload)
         self._append(payload)
+
+    def _attach_gpu(self, payload: dict[str, Any]) -> None:
+        """Add the GPU observation, and why it is missing when the default query returned nothing."""
+
+        snapshot, query = self._observe_gpu()
+        payload["gpu"] = snapshot
+        if query is not None:
+            payload["gpu_query"] = query
 
     def _record_event(
         self,
@@ -173,7 +201,7 @@ class GpuSurvivorTelemetry:
         payload["event"] = event
         if outcome:
             payload["outcome"] = outcome
-        payload["gpu"] = self._safe_snapshot()
+        self._attach_gpu(payload)
         if include_presence:
             payload["process_presence"] = self._safe_presence()
         self._append(payload)
@@ -183,6 +211,9 @@ class GpuSurvivorTelemetry:
             return {
                 "schema": SCHEMA,
                 "kind": kind,
+                # "job" while a pipeline job runs, "session" for the app-lifetime recorder. A session sample says the
+                # app was open and the GPU was observed; only job-scoped records can show generation was active.
+                "scope": self._lifecycle,
                 "timestamp_utc": datetime.now(UTC).isoformat(timespec="milliseconds"),
                 "monotonic_ns": time.monotonic_ns(),
                 "job_id": self._job_id,
@@ -194,12 +225,20 @@ class GpuSurvivorTelemetry:
                 "workflow_version": self._workflow_version,
             }
 
-    def _safe_snapshot(self) -> Mapping[str, Any] | None:
+    def _observe_gpu(self) -> tuple[Mapping[str, Any] | None, dict[str, str] | None]:
+        """Return ``(snapshot, query_status)``; the status is None for an injected provider."""
+
         try:
-            snapshot = self._snapshot_provider()
-            return dict(snapshot) if snapshot is not None else None
+            if self._snapshot_provider is not None:
+                snapshot = self._snapshot_provider()
+                return (dict(snapshot) if snapshot is not None else None), None
+            result = query_gpu_survivor_snapshot()
+            query = {"status": result.status}
+            if result.detail:
+                query["detail"] = result.detail
+            return (dict(result.snapshot) if result.snapshot is not None else None), query
         except Exception:
-            return None
+            return None, None
 
     def _safe_presence(self) -> Mapping[str, Any] | None:
         try:
@@ -241,3 +280,63 @@ class GpuSurvivorTelemetry:
                     os.replace(source, target)
         except Exception:
             return
+
+
+_session_lock = threading.Lock()
+_session: GpuSurvivorTelemetry | None = None
+
+
+def start_gpu_session_telemetry(
+    *,
+    base_dir: Path | str = DEFAULT_OUTPUT_DIR,
+    environ: Mapping[str, str] | None = None,
+    factory: Callable[..., GpuSurvivorTelemetry] = GpuSurvivorTelemetry,
+) -> GpuSurvivorTelemetry | None:
+    """Start the app-session recorder once; it samples GPU state for as long as the app runs.
+
+    Per-job recorders only cover a running job. A device loss during startup, model load or idle leaves no job
+    record, so this keeps a slower, separately rotated record under ``<base_dir>/session``. It is observation
+    only (no queue, repository, process-lifecycle or execution authority) and any failure returns ``None``.
+    Set ``STABLENEW_GPU_SESSION_TELEMETRY=0`` to turn it off.
+    """
+
+    global _session
+    env = os.environ if environ is None else environ
+    if str(env.get(SESSION_ENV_FLAG, "1")).strip().lower() in _SESSION_DISABLED_VALUES:
+        return None
+    with _session_lock:
+        if _session is not None:
+            return _session
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        try:
+            recorder = factory(
+                job_id=f"session-{os.getpid()}",
+                run_id=f"session-{stamp}",
+                workflow=[],
+                backend_id=None,
+                output_dir=Path(base_dir) / SESSION_OUTPUT_SUBDIR,
+                interval_s=SESSION_SAMPLE_INTERVAL_S,
+                max_bytes=SESSION_MAX_BYTES,
+                backup_count=SESSION_BACKUP_COUNT,
+                lifecycle="session",
+            )
+            recorder.start()
+        except Exception:
+            logger.exception("GPU session telemetry could not start")
+            return None
+        _session = recorder
+        return recorder
+
+
+def stop_gpu_session_telemetry(outcome: str = "app_exit") -> None:
+    """Stop the app-session recorder if one is running. Idempotent and never raises."""
+
+    global _session
+    with _session_lock:
+        recorder, _session = _session, None
+    if recorder is None:
+        return
+    try:
+        recorder.close(outcome=str(outcome))
+    except Exception:
+        logger.exception("GPU session telemetry could not close cleanly")

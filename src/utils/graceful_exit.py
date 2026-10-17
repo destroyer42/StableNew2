@@ -11,6 +11,7 @@ from typing import Any, NoReturn
 from src.config.app_config import is_debug_shutdown_inspector_enabled
 from src.controller.app_controller import AppController
 from src.utils.debug_shutdown_inspector import log_shutdown_state
+from src.utils.gpu_survivor_telemetry import stop_gpu_session_telemetry
 from src.utils.single_instance import SingleInstanceLock
 
 _shutdown_lock = threading.Lock()
@@ -42,6 +43,10 @@ def graceful_exit(
     label = reason or "graceful-exit"
     shutdown_timeout = float(os.environ.get("STABLENEW_SHUTDOWN_TIMEOUT", "2.0"))
     logger.info("[graceful_exit] Initiating (%s)", label)
+
+    # Close the GPU session record first: its thread is joined by the registry shutdown below, and this path ends
+    # in os._exit, so nothing later would write the final record.
+    stop_gpu_session_telemetry(label)
 
     # CRITICAL: Shutdown controller BEFORE destroying Tk root
     # If root is destroyed first, process exits before cleanup completes
