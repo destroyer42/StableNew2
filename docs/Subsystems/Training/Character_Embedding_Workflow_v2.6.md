@@ -25,6 +25,36 @@ The current implementation uses the explicit `TrainingIntent`/
 through `JobService.submit_njrs`. It does not require or fabricate PromptPack
 identity. Training productization is not an MVP release gate.
 
+## 0.1 Status: on hold pending a trainer decision
+
+Character Training is **on hold**. Nothing here is removed or changed. It is held for productization: no new training
+features, no promotion out of the advanced/unverified tabs, and no retirement, until there is a concrete training
+requirement and a chosen trainer contract (owner decision).
+
+What stays supported and independent of training [V]: **LoRA consumption**. `LoRAManager`, its manifests and
+`StyleLoRAManager` are used by PromptPack actor resolution and the Prompt tab whether or not any LoRA was trained in
+StableNew. If training is ever retired, retire submission and execution separately from these consumption paths and keep
+historical training records readable.
+
+Why it is held (read from `src/training/character_embedder.py`, not run) [V]:
+
+- **No trainer contract.** The wrapper appends StableNew-specific flags (`--character_name`, `--image_dir`,
+  `--output_dir`, `--epochs`, `--learning_rate`, then optional `--base_model`, `--trigger_phrase`, `--rank`,
+  `--network_alpha`) to an arbitrary configured command and does no trainer-specific translation. A compatible custom
+  wrapper could implement that contract; an arbitrary trainer executable cannot be presumed compatible, and no accepted
+  training recipe ships.
+- **Cancellation reaches only the immediate process.** `cancel()` calls `terminate()` then `kill()` on the process it
+  started. Descendant trainer processes may survive. This is a static inference, not a reproduced incident.
+- **Weight discovery can pick the wrong file.** `_resolve_weight_path` takes weights written since the session started,
+  but falls back to any pre-existing weight file in the output directory when none is recent
+  (`recent_candidates or candidates`), so a successful process exit could register an older artifact.
+- **Tests are mock-level.** They cover mocked subprocess success and a missing command, compiler identity, GUI
+  submission, runner artifact registration and mixed-stage rejection. They do not establish real trainer compatibility,
+  descendant cleanup or training quality.
+
+Do not extend this surface before those are addressed by a decision, and do not read the tab's presence as a supported
+training capability.
+
 ## 1. Prerequisites
 
 StableNew does not ship a trainer backend. A training job requires one of the
