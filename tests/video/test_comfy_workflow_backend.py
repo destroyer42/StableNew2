@@ -14,15 +14,15 @@ from src.video import (
     VideoExecutionRequest,
 )
 from src.video.workflow_registry import WorkflowRegistry
-from tests.helpers.video_contract_registry import build_ltx_contract_registry
+from tests.helpers.video_contract_registry import build_synthetic_contract_registry
 
 
 def _backend_contract_registry() -> WorkflowRegistry:
-    return build_ltx_contract_registry()
+    return build_synthetic_contract_registry()
 
 
 @pytest.fixture(autouse=True)
-def _use_test_only_ltx_contract_registry(monkeypatch) -> None:
+def _use_test_only_synthetic_contract_registry(monkeypatch) -> None:
     monkeypatch.setattr(
         "src.video.comfy_workflow_backend.build_default_workflow_registry",
         _backend_contract_registry,
@@ -64,7 +64,7 @@ class _DepthResolverStub:
         )
 
 
-def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
+def test_comfy_workflow_backend_executes_synthetic_workflow_and_writes_manifest(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -84,7 +84,7 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXAnchorBridge": {
+        "SyntheticAnchorBridge": {
             "input": {
                 "required": {
                     "start_anchor": ["IMAGE"],
@@ -118,7 +118,7 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
                 }
             }
         },
-        "models": {"checkpoints": ["ltx_video.safetensors"]},
+        "models": {"checkpoints": ["synthetic_video.safetensors"]},
     }
     client.upload_image.side_effect = [
         {"name": "uploaded_start.png", "subfolder": "", "type": "input"},
@@ -164,7 +164,7 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
             stage_name="video_workflow",
             stage_config={
                 "enabled": True,
-                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_id": "synthetic_anchor_video_v1",
                 "workflow_version": "1.0.0",
             },
             output_dir=tmp_path,
@@ -183,10 +183,10 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
     assert result.primary_path == str(output_video)
     assert result.manifest_path is not None
     assert Path(result.manifest_path).exists()
-    assert result.backend_metadata["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert result.backend_metadata["workflow_id"] == "synthetic_anchor_video_v1"
     assert result.backend_metadata["prompt_id"] == "prompt-123"
     queue_payload = client.queue_prompt.call_args.args[0]
-    assert queue_payload["extra_data"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert queue_payload["extra_data"]["workflow_id"] == "synthetic_anchor_video_v1"
     assert queue_payload["prompt"]["1"]["inputs"]["image"] == "uploaded_start.png"
     assert queue_payload["prompt"]["2"]["inputs"]["image"] == "uploaded_end.png"
     assert queue_payload["prompt"]["3"]["inputs"]["mid_anchors"] == json.dumps([str(mid_anchor)])
@@ -235,7 +235,7 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
             request=VideoExecutionRequest(
                 backend_id="comfy",
                 stage_name="video_workflow",
-                stage_config={"enabled": True, "workflow_id": "ltx_multiframe_anchor_v1"},
+                stage_config={"enabled": True, "workflow_id": "synthetic_anchor_video_v1"},
                 output_dir=tmp_path,
                 input_image_path=start_anchor,
                 end_anchor_path=end_anchor,
@@ -243,7 +243,7 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
         )
     except RuntimeError as exc:
         assert "missing required Comfy dependencies" in str(exc)
-        assert "ltx_model" in str(exc)
+        assert "synthetic_model" in str(exc)
         assert "restart ComfyUI" in str(exc)
     else:
         raise AssertionError("Expected missing workflow dependencies to fail execution")
@@ -270,7 +270,7 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXAnchorBridge": {
+        "SyntheticAnchorBridge": {
             "input": {
                 "required": {
                     "start_anchor": ["IMAGE"],
@@ -304,7 +304,7 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
                 }
             }
         },
-        "models": {"checkpoints": ["ltx_video.safetensors"]},
+        "models": {"checkpoints": ["synthetic_video.safetensors"]},
     }
     client.upload_image.side_effect = [
         {"name": "uploaded_start.png", "subfolder": "", "type": "input"},
@@ -349,7 +349,7 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
             stage_name="video_workflow",
             stage_config={
                 "enabled": True,
-                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_id": "synthetic_anchor_video_v1",
                 "workflow_version": "1.0.0",
             },
             output_dir=tmp_path,
@@ -377,7 +377,7 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
     assert result.backend_metadata["carry_forward_policy"] == "last_frame"
     # Core execute fields still present.
     assert result.primary_path == str(output_video)
-    assert result.backend_metadata["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert result.backend_metadata["workflow_id"] == "synthetic_anchor_video_v1"
 
 
 def test_comfy_workflow_backend_reports_missing_managed_runtime_configuration(
@@ -413,7 +413,7 @@ def test_comfy_workflow_backend_reports_missing_managed_runtime_configuration(
         raise AssertionError("Expected missing ComfyUI runtime configuration to fail")
 
 
-def test_comfy_workflow_backend_executes_conditioned_ltx_workflow_with_resolved_depth(
+def test_comfy_workflow_backend_executes_conditioned_synthetic_workflow_with_resolved_depth(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -433,7 +433,7 @@ def test_comfy_workflow_backend_executes_conditioned_ltx_workflow_with_resolved_
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXDepthControlBridge": {
+        "SyntheticConditionedBridge": {
             "input": {
                 "required": {
                     "start_anchor": ["IMAGE"],
@@ -470,7 +470,7 @@ def test_comfy_workflow_backend_executes_conditioned_ltx_workflow_with_resolved_
                 }
             }
         },
-        "models": {"checkpoints": ["ltx_video.safetensors", "depth_control_v1.safetensors"]},
+        "models": {"checkpoints": ["synthetic_video.safetensors", "depth_control_v1.safetensors"]},
     }
     client.upload_image.side_effect = [
         {"name": "uploaded_start.png", "subfolder": "", "type": "input"},
@@ -517,7 +517,7 @@ def test_comfy_workflow_backend_executes_conditioned_ltx_workflow_with_resolved_
             stage_name="video_workflow",
             stage_config={
                 "enabled": True,
-                "workflow_id": "ltx_multiframe_anchor_v1_conditioned",
+                "workflow_id": "synthetic_anchor_video_v1_conditioned",
                 "workflow_version": "1.0.0",
                 "camera_intent": {"preset": "dolly_in", "strength": 0.4},
                 "controlnet": {
@@ -536,7 +536,7 @@ def test_comfy_workflow_backend_executes_conditioned_ltx_workflow_with_resolved_
             negative_prompt="blurry",
             motion_profile="balanced",
             job_id="job-conditioned-001",
-            workflow_id="ltx_multiframe_anchor_v1_conditioned",
+            workflow_id="synthetic_anchor_video_v1_conditioned",
             workflow_version="1.0.0",
         ),
     )
@@ -577,8 +577,8 @@ def test_comfy_workflow_backend_promotes_reencoded_secondary_motion_video(
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXAnchorBridge": {"input": {}},
-        "models": {"checkpoints": ["ltx_video.safetensors"]},
+        "SyntheticAnchorBridge": {"input": {}},
+        "models": {"checkpoints": ["synthetic_video.safetensors"]},
     }
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.side_effect = [
@@ -639,7 +639,7 @@ def test_comfy_workflow_backend_promotes_reencoded_secondary_motion_video(
             stage_name="video_workflow",
             stage_config={
                 "enabled": True,
-                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_id": "synthetic_anchor_video_v1",
                 "workflow_version": "1.0.0",
                 "secondary_motion": {
                     "enabled": True,
@@ -688,8 +688,8 @@ def test_comfy_workflow_backend_preserves_original_video_when_secondary_motion_u
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXAnchorBridge": {"input": {}},
-        "models": {"checkpoints": ["ltx_video.safetensors"]},
+        "SyntheticAnchorBridge": {"input": {}},
+        "models": {"checkpoints": ["synthetic_video.safetensors"]},
     }
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.side_effect = [
@@ -757,7 +757,7 @@ def test_comfy_workflow_backend_preserves_original_video_when_secondary_motion_u
             stage_name="video_workflow",
             stage_config={
                 "enabled": True,
-                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_id": "synthetic_anchor_video_v1",
                 "workflow_version": "1.0.0",
                 "secondary_motion": {
                     "enabled": True,

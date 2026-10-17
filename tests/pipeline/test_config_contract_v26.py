@@ -53,7 +53,7 @@ def test_build_config_layers_derives_video_backend_options_from_execution_config
 def test_build_config_layers_derives_video_workflow_backend_options_from_execution_config() -> None:
     execution_config = {
         "video_workflow": {
-            "workflow_id": "ltx_multiframe_anchor_v1",
+            "workflow_id": "synthetic_anchor_video_v1",
             "workflow_version": "1.0.0",
             "backend_id": "comfy",
         }
@@ -64,7 +64,7 @@ def test_build_config_layers_derives_video_workflow_backend_options_from_executi
         execution_config=execution_config,
     )
 
-    assert layers.backend_options["video"]["workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert layers.backend_options["video"]["workflow"]["workflow_id"] == "synthetic_anchor_video_v1"
     assert layers.backend_options["video"]["workflow"]["backend_id"] == "comfy"
 
 

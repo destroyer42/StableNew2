@@ -979,7 +979,7 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
         )
 
         def execute(self, pipeline, request):
-            assert request.workflow_id == "ltx_multiframe_anchor_v1"
+            assert request.workflow_id == "synthetic_anchor_video_v1"
             assert request.end_anchor_path == end_path
             return VideoExecutionResult.from_stage_result(
                 backend_id="comfy",
@@ -1026,7 +1026,7 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "workflow_version": "1.0.0",
                     "end_anchor_path": str(end_path),
                 },
@@ -1064,7 +1064,7 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
     assert result.metadata["replay_descriptor"]["backends"][0]["backend_id"] == "comfy"
     assert (
         result.metadata["replay_descriptor"]["backends"][0]["workflow_id"]
-        == "ltx_multiframe_anchor_v1"
+        == "synthetic_anchor_video_v1"
     )
     assert result.metadata["diagnostics_descriptor"]["primary_stage"] == "video_workflow"
     # PR-VIDEO-215: stage-specific key for video_workflow must be stamped
@@ -1143,7 +1143,7 @@ def test_run_njr_emits_secondary_motion_policy_for_video_stage(tmp_path: Path) -
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "workflow_version": "1.0.0",
                     "motion_profile": "cinematic",
                 },
@@ -1252,7 +1252,7 @@ def test_run_njr_injects_apply_mode_secondary_motion_and_collects_summary(tmp_pa
             StageConfig(
                 stage_type="video_workflow",
                 enabled=True,
-                extra={"workflow_id": "ltx_multiframe_anchor_v1", "workflow_version": "1.0.0"},
+                extra={"workflow_id": "synthetic_anchor_video_v1", "workflow_version": "1.0.0"},
             )
         ],
         input_image_paths=[str(input_path)],
@@ -1586,7 +1586,7 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
                     "video_path": str(out),
                     "output_paths": [str(out)],
                     "manifest_path": None,
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "artifact": {
                         "schema": "stablenew.artifact.v2.6",
                         "stage": "video_workflow",
@@ -1597,8 +1597,8 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
                         "input_image_path": str(input_path),
                     },
                 },
-                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
-                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+                backend_metadata={"workflow_id": "synthetic_anchor_video_v1"},
+                replay_manifest_fragment={"workflow_id": "synthetic_anchor_video_v1"},
             )
 
     registry = VideoBackendRegistry()
@@ -1621,7 +1621,7 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "sequence_metadata": {
                         "sequence_id": "seq-test-216",
                         "total_segments": 2,
@@ -1712,7 +1712,7 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
                     "video_path": str(out),
                     "output_paths": [str(out)],
                     "manifest_path": None,
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "artifact": {
                         "schema": "stablenew.artifact.v2.6",
                         "stage": "video_workflow",
@@ -1723,8 +1723,8 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
                         "input_image_path": str(input_path),
                     },
                 },
-                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
-                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+                backend_metadata={"workflow_id": "synthetic_anchor_video_v1"},
+                replay_manifest_fragment={"workflow_id": "synthetic_anchor_video_v1"},
             )
 
     def _fake_assemble(self, request):
@@ -1772,7 +1772,7 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "sequence_metadata": {
                         "sequence_id": "seq-test-217",
                         "total_segments": 2,
@@ -1836,7 +1836,7 @@ def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> No
                     "video_path": str(output_video),
                     "output_paths": [str(output_video)],
                     "manifest_path": None,
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "artifact": {
                         "schema": "stablenew.artifact.v2.6",
                         "stage": "video_workflow",
@@ -1847,8 +1847,8 @@ def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> No
                         "input_image_path": str(input_path),
                     },
                 },
-                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
-                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+                backend_metadata={"workflow_id": "synthetic_anchor_video_v1"},
+                replay_manifest_fragment={"workflow_id": "synthetic_anchor_video_v1"},
             )
 
     registry = VideoBackendRegistry()
@@ -1871,7 +1871,7 @@ def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> No
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "sequence_metadata": {
                         "sequence_id": "seq-plan-219",
                         "total_segments": 2,

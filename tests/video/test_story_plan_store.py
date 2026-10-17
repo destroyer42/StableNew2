@@ -37,7 +37,7 @@ def _make_plan(plan_id: str, display_name: str) -> StoryPlan:
                                 lora_name="bran",
                             )
                         ],
-                        workflow_id="ltx_multiframe_anchor_v1",
+                        workflow_id="synthetic_anchor_video_v1",
                     )
                 ],
             )

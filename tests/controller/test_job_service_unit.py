@@ -255,7 +255,7 @@ def test_get_diagnostics_snapshot_includes_queue_and_checkpoint_state(service: J
                 "path": "output/test.mp4",
                 "video_backend_id": "comfy",
                 "video_replay_manifest": {
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "workflow_version": "1.0.0",
                 },
                 "artifact": {
@@ -292,5 +292,5 @@ def test_get_diagnostics_snapshot_includes_queue_and_checkpoint_state(service: J
     assert job_entry["result_summary"]["backends"][0]["backend_id"] == "comfy"
     assert (
         job_entry["result_summary"]["replay_descriptor"]["backends"][0]["workflow_id"]
-        == "ltx_multiframe_anchor_v1"
+        == "synthetic_anchor_video_v1"
     )

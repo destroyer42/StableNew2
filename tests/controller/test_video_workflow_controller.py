@@ -5,7 +5,12 @@ from types import SimpleNamespace
 
 from PIL import Image
 
+from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.controller.video_workflow_controller import VideoWorkflowController
+from tests.helpers.video_contract_registry import (
+    SYNTHETIC_DISABLED_ID,
+    build_synthetic_disabled_registry,
+)
 
 WAN_ID = "wan22_ti2v_5b_i2v_v1"
 
@@ -65,15 +70,36 @@ def test_list_workflow_specs_offers_only_the_qualified_experimental_wan_workflow
     assert spec["frame_count"]["fps"] == 24
 
 
-def test_disabled_ltx_catalog_entries_are_rejected_before_admission(tmp_path: Path) -> None:
-    controller, _ = _controller(tmp_path)
+def test_disabled_workflow_is_rejected_before_admission_and_not_offered(tmp_path: Path) -> None:
+    job_service = _JobServiceStub()
+    controller = VideoWorkflowController(
+        app_controller=SimpleNamespace(job_service=job_service, output_dir=str(tmp_path / "output")),
+        workflow_registry=DefaultWorkflowRegistryPort(build_synthetic_disabled_registry()),
+    )
+
+    valid, reason = controller.validate_form_data(
+        {"workflow_id": SYNTHETIC_DISABLED_ID, "workflow_version": "1.0.0"}
+    )
+
+    assert valid is False
+    assert "not approved for execution" in str(reason)
+    assert SYNTHETIC_DISABLED_ID not in [spec["workflow_id"] for spec in controller.list_workflow_specs()]
+    assert job_service.calls == []
+
+
+def test_retired_ltx_workflow_id_is_rejected_before_admission_with_a_clear_reason(
+    tmp_path: Path,
+) -> None:
+    controller, job_service = _controller(tmp_path)
 
     valid, reason = controller.validate_form_data(
         {"workflow_id": "ltx_multiframe_anchor_v1", "workflow_version": "1.0.0"}
     )
 
     assert valid is False
-    assert "not approved for execution" in str(reason)
+    assert "ltx_multiframe_anchor_v1" in str(reason)
+    assert "not registered" in str(reason) and "removed" in str(reason)
+    assert job_service.calls == []
 
 
 def test_submit_wan_freezes_explicit_seed_and_prepares_landscape_source(tmp_path: Path) -> None:

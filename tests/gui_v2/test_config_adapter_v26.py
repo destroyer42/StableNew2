@@ -30,7 +30,7 @@ def test_config_adapter_derives_backend_options_from_projection_when_layers_empt
     app_state = AppStateV2()
     app_state.run_config = {
         "video_workflow": {
-            "workflow_id": "ltx_multiframe_anchor_v1",
+            "workflow_id": "synthetic_anchor_video_v1",
             "workflow_version": "1.0.0",
             "backend_id": "comfy",
         }
@@ -38,7 +38,7 @@ def test_config_adapter_derives_backend_options_from_projection_when_layers_empt
 
     backend_options = app_state.config_adapter.get_backend_options()
 
-    assert backend_options["video"]["workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert backend_options["video"]["workflow"]["workflow_id"] == "synthetic_anchor_video_v1"
     assert backend_options["video"]["workflow"]["backend_id"] == "comfy"
 
 

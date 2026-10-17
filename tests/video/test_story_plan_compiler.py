@@ -47,7 +47,7 @@ def _make_plan() -> StoryPlan:
                                 lora_name="bran",
                             ),
                         ],
-                        workflow_id="ltx_multiframe_anchor_v1",
+                        workflow_id="synthetic_anchor_video_v1",
                         total_segments=2,
                         segment_length_frames=24,
                         overlap_frames=2,
@@ -78,7 +78,7 @@ def test_compile_story_plan_returns_sequence_jobs() -> None:
     assert len(compiled) == 1
     sequence_job = compiled[0]
     assert sequence_job.sequence_id == "story_story-001__scene_scene-001__shot_shot-001"
-    assert sequence_job.workflow_id == "ltx_multiframe_anchor_v1"
+    assert sequence_job.workflow_id == "synthetic_anchor_video_v1"
     assert sequence_job.total_segments == 2
     assert sequence_job.base_source_image_path == "C:/anchors/hero_start.png"
     assert sequence_job.plan_origin is not None

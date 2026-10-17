@@ -50,7 +50,7 @@ def _make_plan() -> StoryPlan:
                                 lora_name="bran",
                             ),
                         ],
-                        workflow_id="ltx_multiframe_anchor_v1",
+                        workflow_id="synthetic_anchor_video_v1",
                         total_segments=2,
                         segment_length_frames=24,
                         overlap_frames=2,

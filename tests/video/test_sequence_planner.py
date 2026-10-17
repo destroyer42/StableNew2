@@ -44,7 +44,7 @@ def _make_job(**kwargs) -> VideoSequenceJob:
     defaults = {
         "sequence_id": "seq-001",
         "job_id": "job-abc",
-        "workflow_id": "ltx_multiframe_anchor_v1",
+        "workflow_id": "synthetic_anchor_video_v1",
         "total_segments": 3,
         "segment_length_frames": 25,
         "overlap_frames": 2,
@@ -149,7 +149,7 @@ class TestVideoSequencePlannerPlan:
         )
         plans = self.planner.plan(job)
         assert plans[0].workflow_id == "alt_workflow"
-        assert plans[1].workflow_id == "ltx_multiframe_anchor_v1"
+        assert plans[1].workflow_id == "synthetic_anchor_video_v1"
 
     def test_extra_fields_passed_through(self):
         job = _make_job(

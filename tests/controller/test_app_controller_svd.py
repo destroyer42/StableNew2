@@ -301,7 +301,7 @@ def test_submit_video_workflow_job_syncs_queue_state_after_direct_enqueue() -> N
 
     job_id = controller.submit_video_workflow_job(
         source_image_path="C:/tmp/source.png",
-        form_data={"workflow_id": "ltx_multiframe_anchor_v1"},
+        form_data={"workflow_id": "synthetic_anchor_video_v1"},
     )
 
     assert job_id == "job-video-123"

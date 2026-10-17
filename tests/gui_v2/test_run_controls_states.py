@@ -89,7 +89,7 @@ class TestAppStateV2RunStateFields:
                 "source": "run",
                 "prompt_source": "pack",
                 "video_workflow": {
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "backend_id": "comfy",
                 },
             }
@@ -97,7 +97,9 @@ class TestAppStateV2RunStateFields:
 
         assert state.intent_config["run_mode"] == "queue"
         assert state.intent_config["source"] == "run"
-        assert state.execution_config["video_workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+        assert (
+            state.execution_config["video_workflow"]["workflow_id"] == "synthetic_anchor_video_v1"
+        )
         assert state.backend_options["video"]["workflow"]["backend_id"] == "comfy"
 
     def test_no_notify_if_same_value(self) -> None:
