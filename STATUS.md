@@ -27,7 +27,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   `pip install -r requirements.txt -r requirements-dev.txt`.
 - Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,690 errors in 196
   files), unformatted files (400), blind/silent excepts in `src` (BLE001 1,412, S110 565, S112 45), thread and layering
-  rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 18), and the four
+  rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 17), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
   Flaky tests are repaired or quarantined with an owner and expiry (`tests/quarantine/README.md`).
