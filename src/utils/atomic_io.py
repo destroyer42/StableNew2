@@ -35,7 +35,9 @@ def atomic_write_text(path: str | os.PathLike[str], text: str, *, encoding: str 
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temp_name = tempfile.mkstemp(prefix=f"{target.name}.", suffix=".tmp", dir=target.parent)
+    descriptor, temp_name = tempfile.mkstemp(
+        prefix=f"{target.name}.", suffix=".tmp", dir=target.parent
+    )
     try:
         with os.fdopen(descriptor, "w", encoding=encoding) as handle:
             handle.write(text)

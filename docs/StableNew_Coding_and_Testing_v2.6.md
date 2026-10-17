@@ -226,6 +226,12 @@ must remain raw-Ruff clean.
 errors than its baseline, a file with none stays clean, and an improvement must be locked
 in with `python tools/ci/run_mypy_ratchet.py --update`. The existing debt is therefore
 tolerated and cannot grow; reduce it by fixing errors, never by raising the baseline.
+`tools/ci/run_ruff_ratchets.py` (audit P1-5) applies the same ratchet idea to formatting and
+swallowed failures, using the pinned ruff and `tools/ci/ruff_ratchet_baseline.json`: a file that
+`ruff format` would change cannot be added to the unformatted set (new and touched-then-formatted
+files stay formatted; format a file with `ruff format <file>` and run `--update` to drop it), and
+per-file counts of `BLE001` (blind `except Exception`), `S110` (`except: pass`) and `S112`
+(`except: continue`) in `src` may not exceed the baseline. New code cannot add a swallowed failure.
 To keep counts identical on every machine the run uses `--no-site-packages`,
 `--platform linux` and `--python-version 3.14`, and ignores unresolved-import errors, so
 third-party values are `Any` and the ratchet measures StableNew's own typing.
