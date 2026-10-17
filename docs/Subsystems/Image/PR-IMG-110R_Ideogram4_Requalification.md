@@ -1,5 +1,7 @@
 # PR-IMG-110R — Ideogram 4 Definitive Target-Hardware Requalification
 
+> Harness retired (audit P2-6): `tools/qualification/img110 (img110r is retained)` is no longer in the tree. Its source is in Git history at `bfdeb493` (`git show bfdeb493:<path>`). This record is the preserved verdict and evidence.
+
 Status: **COMPLETE — IDEOGRAM 4 NF4: PASS — CONSTRAINED on RTX 4070 Ti 12GB** (explicit
 residency policy required; the earlier "hardware no-go" is retracted).
 Qualification only. No production Diffusers/Ideogram backend, compiler/NJR/queue/runner/

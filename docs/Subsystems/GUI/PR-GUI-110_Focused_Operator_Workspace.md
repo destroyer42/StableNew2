@@ -1,5 +1,7 @@
 # PR-GUI-110 — Focused Operator Workspace
 
+> Harness retired (audit P2-6): `tools/qualification/gui110` is no longer in the tree. Its source is in Git history at `bfdeb493` (`git show bfdeb493:<path>`). This record is the preserved verdict and evidence.
+
 Status: COMPLETE / ACCEPTED / INTEGRATED (PR #75; hosted `required` and GUI `affected` lanes passed; independent review found no
 blocking finding). Follow-up corrections: `PR-GUI-111_Thumbnail_Recovery_and_Tooltip_Correctness.md`.
 
