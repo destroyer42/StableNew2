@@ -92,6 +92,8 @@ of the roadmap; where they conflict with this file, this file and the repository
 6. Retire AnimateDiff, disabled LTX specs, story-plan/continuity, `src/ai`, `src/cluster`, Character Training?
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: history browser, Learning payoff, inpainting/ControlNet, LoRA browser.
+9. Movie Clips assembly runs outside `JobService` (no NJR, queue or history record): make CPU-only assembly a queued
+   workload, or explicitly exempt bounded media utilities? See `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.
 
 ## Holds and safety constraints
 

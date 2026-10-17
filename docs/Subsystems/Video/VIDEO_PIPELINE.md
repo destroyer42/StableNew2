@@ -23,7 +23,7 @@ This document covers image-to-video: the native Stable Video Diffusion XT path a
 | Wan-Animate-2, prompt mode and driving-video mode (`wan_animate2_prompt_i2v_v1`, `wan_animate2_drive_i2v_v1`) | **Experimental.** Promotion readiness is not met (owner decision pending). | Per-job opt-in, managed Comfy launched with `--disable-pinned-memory`. |
 | LTX multi-frame anchor (two specs) | **Disabled.** Contract metadata only; the bridge nodes do not exist. Not offerable, not runnable. | Section 4.2. |
 | AnimateDiff (`animatediff`) | Registered backend with no GUI control; needs the WebUI executor. Retirement is an open owner decision. | Section 9. |
-| Movie Clips (FFmpeg assembly of existing outputs) | Retained feature, not a generation path and not queued. | Section 7. |
+| Movie Clips (FFmpeg assembly of existing outputs) | Retained feature, not a generation path; runs outside the queue as a known, undecided exception. | Section 7. |
 
 No Comfy workflow is `approved`. Promoting one is an owner decision (audit G7, roadmap P5-7) and starts with a catalog governance change plus the audit's P3-3 and P3-4 fixes (managed process containment, Comfy cancellation) [A].
 
@@ -150,7 +150,7 @@ Experimental status is a statement about evidence, not a toggle. Wan2.2 TI2V-5B 
 
 `MovieClipService` (`src/video/movie_clip_service.py`) validates a `ClipRequest`, orders sources by filename and routes through `AssemblyService` (`src/video/assembly_service.py`: `AssemblyRequest`, image-sequence export, `stitch_video_segments`, a pluggable `InterpolationProvider` with `NoOpInterpolationProvider`), writing a manifest with schema `stablenew_assembly_manifest_v1`. FFmpeg is resolved by `resolve_ffmpeg_executable` (`src/pipeline/video.py`).
 
-Exception to the canonical path [V]: `AppController.on_build_movie_clip` runs the service on a tracked daemon worker thread, writes to the `movie_clips` output route, and never calls `JobService`. It is CPU-only assembly of existing outputs, creates no NJR and no queue/history record, and has no cancellation. Keep it that way (no GPU, no model, no backend call); anything that generates frames must use the queue. `send_history_job_to_movie_clips` and `video_workspace_handoff.py` only route an existing output into the tab.
+Exception to the canonical path [V]: `AppController.on_build_movie_clip` runs the service on a tracked daemon worker thread, writes to the `movie_clips` output route, and never calls `JobService`. It is CPU-only assembly of existing outputs, creates no NJR and no queue/history record, and has no cancellation. This is an unresolved architectural exception, not settled policy: `AGENTS.md` requires artifact-producing work to go through the canonical path, and whether CPU-only assembly should become a queued workload or be explicitly exempted is an open owner decision (`STATUS.md`). Until it is decided, do not extend this path (no GPU, no model, no backend call); anything that generates frames must use the queue. `send_history_job_to_movie_clips` and `video_workspace_handoff.py` only route an existing output into the tab.
 
 ## 8. Provenance, artifacts and replay lineage
 
