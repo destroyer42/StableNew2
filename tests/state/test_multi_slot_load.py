@@ -1,13 +1,17 @@
 """Test multi-slot TXT loading functionality."""
 
+from pathlib import Path
+
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.utils.prompt_txt_parser import parse_multi_slot_txt
+
+ROOT = Path(__file__).resolve().parents[2]  # anchor to the repository, not the working directory
 
 
 def test_load_multi_slot_txt():
     """Test loading a multi-slot TXT file."""
     # Read TXT file
-    with open("packs/SDXL_female_fantasy_heroes_Fantasy.txt", encoding="utf-8") as f:
+    with open(ROOT / "packs/SDXL_female_fantasy_heroes_Fantasy.txt", encoding="utf-8") as f:
         content = f.read()
 
     # Parse slots

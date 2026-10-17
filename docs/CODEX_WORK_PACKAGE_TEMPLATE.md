@@ -64,7 +64,7 @@ authorities and exact start state.
 
 ## Documentation impact
 
-- `STATUS.md`:
+- `STATUS.md` (current state only: change a line when a baseline, hold, decision or direction changed; never add a PR bullet):
 - Roadmap:
 - Architecture:
 - `CODEX_MAP.md`:

@@ -65,13 +65,11 @@ safetensors==0.8.0
 setuptools==78.1.0
 shellingham==1.5.4
 sympy==1.14.0
-tkinterdnd2==0.6.3
 tokenizers==0.23.2
 torch==2.14.0+cu130
 torchvision==0.29.0+cu130
 tqdm==4.70.1
 transformers==5.17.0
-ttkbootstrap==2.2.3
 typer==0.27.2
 typing-extensions==4.16.0
 urllib3==2.7.0

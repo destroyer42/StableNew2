@@ -52,10 +52,15 @@ def test_reports_reuse_and_each_kind_of_miss_without_modifying_anything(installe
 
 def test_default_output_hides_paths_and_names(installed) -> None:
     tmp_path, model, cache = installed
+    # json.dumps escapes backslashes, so a Windows path must be compared in its JSON-escaped form (comparing the raw
+    # path made the hidden-path check vacuous and the shown-path check impossible on Windows).
+    def escaped(path: Path) -> str:
+        return json.dumps(str(path))[1:-1]
+
     text = json.dumps(diagnose(cache=cache, webui_root=None, checkpoints=[model]))
-    assert str(tmp_path) not in text and "m.safetensors" not in text
+    assert escaped(tmp_path) not in text and "m.safetensors" not in text
     shown = json.dumps(diagnose(cache=cache, webui_root=None, checkpoints=[model], show_paths=True))
-    assert str(model) in shown
+    assert escaped(model) in shown
 
 
 def test_an_unreadable_cache_is_reported_not_repaired(tmp_path: Path) -> None:

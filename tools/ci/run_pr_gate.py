@@ -14,6 +14,9 @@ GATE_STEPS = (
     ("controller surface ratchet", (sys.executable, str(ROOT / "tools/ci/check_controller_surface.py"))),
     ("Ruff", ("ruff", "check", ".")),
     ("mypy smoke", (sys.executable, str(ROOT / "tools/ci/run_mypy_smoke.py"))),
+    ("mypy ratchet", (sys.executable, str(ROOT / "tools/ci/run_mypy_ratchet.py"))),
+    ("ruff ratchets", (sys.executable, str(ROOT / "tools/ci/run_ruff_ratchets.py"))),
+    ("architecture ratchets", (sys.executable, str(ROOT / "tools/ci/run_architecture_ratchets.py"))),
     ("isolated collection", (sys.executable, str(ROOT / "tools/ci/run_collection_gate.py"))),
     ("required smoke", (sys.executable, str(ROOT / "tools/ci/run_required_smoke.py"))),
 )
@@ -42,8 +45,8 @@ def preflight_tools() -> bool:
         file=sys.stderr,
     )
     print(
-        "Install the pinned tools or use the supported CI environment before "
-        "running the full PR gate.",
+        "Install the pinned tools with `pip install -r requirements-dev.txt` (or use the supported CI "
+        "environment) before running the full PR gate.",
         file=sys.stderr,
     )
     return False

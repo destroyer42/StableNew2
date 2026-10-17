@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_text
+
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -153,5 +155,4 @@ class LearningExperimentStore:
 
     @staticmethod
     def _write_json(path: Path, payload: dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True))

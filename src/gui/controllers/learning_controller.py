@@ -2266,8 +2266,9 @@ class LearningController:
             },
         )
 
-        # Write the record
-        self._learning_record_writer.append_record(record)
+        # Write the record; a rating that was not stored must never be reported (or cached) as saved.
+        if self._learning_record_writer.append_record(record) is False:
+            raise OSError("The rating could not be written to the learning records file; see the log for details.")
 
         # Update rating cache
         self._rating_cache[image_ref] = rating
@@ -3962,16 +3963,17 @@ class LearningController:
         output_root:
             Root directory to scan for image artifacts.
         on_complete:
-            Optional callback(OutputScanResult) invoked on the main thread when
-            the scan completes.  Uses ``after(0, ...)`` via the stored after_fn
-            if available, otherwise calls directly.
+            Optional callback(OutputScanResult) invoked on the Tk thread (through the
+            application controller's GUI-thread dispatcher) when the scan completes;
+            called directly when no dispatcher exists (headless).
         """
-        import threading
+        import logging
         from pathlib import Path
 
         from src.learning.discovered_scan_service import apply_scan
         from src.learning.output_scan_models import OutputScanResult
         from src.learning.output_scanner import OutputScanner
+        from src.utils.thread_registry import get_thread_registry
 
         def _run() -> None:
             root = Path(output_root)
@@ -4009,14 +4011,17 @@ class LearningController:
                 )
 
             if callable(on_complete):
-                after_fn = getattr(self, "_after_fn", None)
-                if callable(after_fn):
-                    after_fn(0, lambda: on_complete(result))
-                else:
-                    try:
+                # The callbacks update Tk variables and widgets, so they must run on the Tk thread. The application
+                # controller's dispatcher is the single thread-safe path; without one (headless tests) call directly.
+                dispatch = getattr(self.app_controller, "_run_in_gui_thread", None)
+                try:
+                    if callable(dispatch):
+                        dispatch(lambda: on_complete(result))
+                    else:
                         on_complete(result)
-                    except Exception:
-                        pass
+                except Exception:
+                    logging.getLogger(__name__).warning(
+                        "Discovered-output scan completion callback failed", exc_info=True
+                    )
 
-        thread = threading.Thread(target=_run, daemon=True, name="discovered-scan")
-        thread.start()
+        get_thread_registry().spawn(target=_run, name="discovered-scan", purpose="discovered output scan")
