@@ -14,6 +14,7 @@ GATE_STEPS = (
     ("controller surface ratchet", (sys.executable, str(ROOT / "tools/ci/check_controller_surface.py"))),
     ("Ruff", ("ruff", "check", ".")),
     ("mypy smoke", (sys.executable, str(ROOT / "tools/ci/run_mypy_smoke.py"))),
+    ("mypy ratchet", (sys.executable, str(ROOT / "tools/ci/run_mypy_ratchet.py"))),
     ("isolated collection", (sys.executable, str(ROOT / "tools/ci/run_collection_gate.py"))),
     ("required smoke", (sys.executable, str(ROOT / "tools/ci/run_required_smoke.py"))),
 )
