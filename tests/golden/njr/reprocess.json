@@ -1,0 +1,127 @@
+{
+ "job_id": "<job_id>",
+ "output_plan": {
+  "base_output_dir": "<tmp>/output",
+  "filename_template": "{seed}",
+  "route": null
+ },
+ "provenance": {
+  "aesthetic_embedding": null,
+  "aesthetic_enabled": false,
+  "aesthetic_text": null,
+  "aesthetic_weight": null,
+  "batch_index": 0,
+  "batch_total": 1,
+  "config_variant_index": 0,
+  "config_variant_label": "base",
+  "config_variant_overrides": {},
+  "img2img_prompt_info": null,
+  "learning_context": null,
+  "lora_tags": [],
+  "matrix_mode": null,
+  "matrix_name": null,
+  "matrix_prompt_mode": null,
+  "matrix_slot_values": {},
+  "metadata": {
+   "original_image_count": 1,
+   "reprocess": {
+    "input_count": 1,
+    "input_image_paths": [
+     "<tmp>/source.png"
+    ],
+    "requested_stages": [
+     "upscale"
+    ],
+    "schema": "stablenew.reprocess.v2.6",
+    "source": "reprocess"
+   },
+   "reprocess_mode": true,
+   "reprocess_stages": [
+    "upscale"
+   ],
+   "submission_source": "reprocess"
+  },
+  "negative_embeddings": [],
+  "pack_usage": [],
+  "positive_embeddings": [],
+  "randomizer_summary": {},
+  "seed": null,
+  "txt2img_prompt_info": null,
+  "variant_index": 0,
+  "variant_total": 1
+ },
+ "schema_version": "2.6",
+ "source": {
+  "display_name": "Reprocess Golden",
+  "id": null,
+  "kind": "reprocess",
+  "metadata": {},
+  "parent_artifact_id": null,
+  "parent_job_id": null,
+  "revision": null,
+  "row_index": null
+ },
+ "stages": [
+  {
+   "cfg_scale": 7.0,
+   "denoising_strength": 0.35,
+   "enabled": true,
+   "extra": {
+    "enabled": true,
+    "scale": 2.0,
+    "upscaler": "R-ESRGAN 4x+"
+   },
+   "model": null,
+   "sampler_name": "Euler a",
+   "scheduler": null,
+   "stage_type": "upscale",
+   "steps": 20,
+   "vae": null
+  }
+ ],
+ "workload": {
+  "backend_options": {
+   "image": {
+    "backend_id": "forge_webui"
+   }
+  },
+  "config": {
+   "upscale": {
+    "enabled": true,
+    "scale": 2.0,
+    "upscaler": "R-ESRGAN 4x+"
+   }
+  },
+  "images_per_prompt": 1,
+  "input_image_paths": [
+   "<tmp>/source.png"
+  ],
+  "intent_config": {},
+  "loop_count": 1,
+  "loop_type": "pipeline",
+  "metadata": {
+   "original_image_count": 1,
+   "reprocess": {
+    "input_count": 1,
+    "input_image_paths": [
+     "<tmp>/source.png"
+    ],
+    "requested_stages": [
+     "upscale"
+    ],
+    "schema": "stablenew.reprocess.v2.6",
+    "source": "reprocess"
+   },
+   "reprocess_mode": true,
+   "reprocess_stages": [
+    "upscale"
+   ],
+   "submission_source": "reprocess"
+  },
+  "negative_prompt": "n",
+  "positive_prompt": "p",
+  "start_stage": "upscale",
+  "variant_mode": "standard"
+ },
+ "workload_kind": "image"
+}

@@ -1,0 +1,120 @@
+{
+ "job_id": "train-1",
+ "output_plan": {
+  "base_output_dir": "weights",
+  "filename_template": "{seed}",
+  "route": null
+ },
+ "provenance": {
+  "aesthetic_embedding": null,
+  "aesthetic_enabled": false,
+  "aesthetic_text": null,
+  "aesthetic_weight": null,
+  "batch_index": 0,
+  "batch_total": 1,
+  "config_variant_index": 0,
+  "config_variant_label": "base",
+  "config_variant_overrides": {},
+  "img2img_prompt_info": null,
+  "learning_context": null,
+  "lora_tags": [],
+  "matrix_mode": null,
+  "matrix_name": null,
+  "matrix_prompt_mode": null,
+  "matrix_slot_values": {},
+  "metadata": {
+   "character_key": "ada",
+   "character_name": "Ada",
+   "job_type": "train_lora",
+   "requested_job_label": "Character Training",
+   "submission_source": "character_training"
+  },
+  "negative_embeddings": [],
+  "pack_usage": [],
+  "positive_embeddings": [],
+  "randomizer_summary": {},
+  "seed": null,
+  "txt2img_prompt_info": null,
+  "variant_index": 0,
+  "variant_total": 1
+ },
+ "schema_version": "2.6",
+ "source": {
+  "display_name": "Character Training",
+  "id": "ada",
+  "kind": "training",
+  "metadata": {
+   "character_key": "ada",
+   "character_name": "Ada",
+   "job_type": "train_lora",
+   "requested_job_label": "Character Training",
+   "submission_source": "character_training"
+  },
+  "parent_artifact_id": null,
+  "parent_job_id": null,
+  "revision": null,
+  "row_index": null
+ },
+ "stages": [
+  {
+   "cfg_scale": null,
+   "denoising_strength": null,
+   "enabled": true,
+   "extra": {
+    "base_model": "sdxl",
+    "character_name": "Ada",
+    "enabled": true,
+    "epochs": 2,
+    "image_dir": "images/ada",
+    "learning_rate": 0.0001,
+    "lr": 0.0001,
+    "output_dir": "weights"
+   },
+   "model": "sdxl",
+   "sampler_name": null,
+   "scheduler": null,
+   "stage_type": "train_lora",
+   "steps": null,
+   "vae": null
+  }
+ ],
+ "workload": {
+  "backend_options": {},
+  "config": {
+   "pipeline": {
+    "train_lora_enabled": true
+   },
+   "train_lora": {
+    "base_model": "sdxl",
+    "character_name": "Ada",
+    "enabled": true,
+    "epochs": 2,
+    "image_dir": "images/ada",
+    "learning_rate": 0.0001,
+    "lr": 0.0001,
+    "output_dir": "weights"
+   }
+  },
+  "images_per_prompt": 1,
+  "input_image_paths": [],
+  "intent_config": {
+   "prompt_source": "training",
+   "requested_job_label": "Character Training",
+   "source": "character_training"
+  },
+  "loop_count": 1,
+  "loop_type": "pipeline",
+  "metadata": {
+   "character_key": "ada",
+   "character_name": "Ada",
+   "job_type": "train_lora",
+   "requested_job_label": "Character Training",
+   "submission_source": "character_training"
+  },
+  "negative_prompt": "",
+  "positive_prompt": "Train LoRA for Ada",
+  "start_stage": null,
+  "variant_mode": "standard"
+ },
+ "workload_kind": "training"
+}
