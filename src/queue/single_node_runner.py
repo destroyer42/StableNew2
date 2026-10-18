@@ -115,7 +115,7 @@ class _WakingEvent(threading.Event):
         try:
             self._on_set()
         except Exception:  # noqa: BLE001 - waking is best-effort; the flag is already set
-            pass
+            logger.debug("Could not wake the idle queue wait", exc_info=True)
 
 
 class SingleNodeJobRunner:
