@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-404 of 561 modules have a docstring.
+405 of 562 modules have a docstring.
 
 ## src/
 
@@ -483,6 +483,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `result_contract_v26.py`: (no docstring)
 - `run_config.py`: Run configuration model with prompt source tracking
 - `run_plan.py`: (no docstring)
+- `run_stage_handlers.py`: Per-stage execution handlers for ``PipelineRunner.run_njr`` (roadmap P4-1)
 - `stage_models.py`: Stage models for the StableNew pipeline execution system
 - `stage_sequencer.py`: Stage sequencer for v2 pipeline
 - `training_njr_compiler.py`: Pure compiler for the supported train-LoRA NJR workload

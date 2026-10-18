@@ -404,8 +404,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1356,
-      "S110": 541,
+      "BLE001": 1353,
+      "S110": 538,
       "S112": 38
     },
     "counts": {
@@ -876,8 +876,8 @@
         "BLE001": 2
       },
       "src/pipeline/pipeline_runner.py": {
-        "BLE001": 23,
-        "S110": 10
+        "BLE001": 20,
+        "S110": 7
       },
       "src/pipeline/prompt_pack_job_builder.py": {
         "BLE001": 8
