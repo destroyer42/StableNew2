@@ -164,6 +164,7 @@ class SVDRunner:
             try:
                 frames, postprocess_metadata = SVDPostprocessRunner(
                     status_callback=self._map_postprocess_status,
+                    cancel_token=cancel_token,
                 ).process_frames(
                     frames=frames,
                     config=config,

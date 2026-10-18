@@ -8,6 +8,8 @@ from unittest.mock import Mock
 import pytest
 from PIL import Image
 
+from src.controller.runtime_state import CancellationError, CancelToken
+from src.utils.managed_process import ProcessOutcome
 from src.video.restoration.runtime import GFPGAN_UNSUPPORTED_ISSUE, WORKER_WARNING_PREFIX
 from src.video.svd_config import SVDConfig
 from src.video.svd_errors import SVDPostprocessError
@@ -19,6 +21,20 @@ from src.video.svd_postprocess import (
     resolve_rife_executable,
     validate_svd_postprocess_config,
 )
+
+
+def _as_bounded(fake):
+    """Adapt a ``subprocess.run``-style fake to the ``run_bounded`` seam the runner now uses."""
+
+    def _run_bounded(command, *, cwd=None, **_kwargs):
+        done = fake(list(command), None if cwd is None else str(cwd), True, True, False)
+        return ProcessOutcome(
+            returncode=done.returncode,
+            stdout=str(done.stdout).encode("utf-8"),
+            stderr=str(done.stderr).encode("utf-8"),
+        )
+
+    return _run_bounded
 
 
 @pytest.fixture(autouse=True)
@@ -252,7 +268,7 @@ def test_postprocess_runner_runs_secondary_motion_before_other_stages(
             return completed
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr("src.video.svd_postprocess.subprocess.run", _fake_run)
+    monkeypatch.setattr("src.video.svd_postprocess.run_bounded", _as_bounded(_fake_run))
 
     processed, metadata = SVDPostprocessRunner().process_frames(
         frames=frames,
@@ -319,7 +335,7 @@ def test_postprocess_runner_records_unavailable_secondary_motion_and_continues(
         Image.new("RGB", (32, 32), "blue").save(output_dir / "frame_000001.png")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr("src.video.svd_postprocess.subprocess.run", _fake_run)
+    monkeypatch.setattr("src.video.svd_postprocess.run_bounded", _as_bounded(_fake_run))
 
     processed, metadata = SVDPostprocessRunner().process_frames(
         frames=frames,
@@ -373,7 +389,7 @@ def test_postprocess_runner_face_restore_stage_returns_worker_outputs(
             [Image.new("RGB", (32, 32), "red"), Image.new("RGB", (32, 32), "blue")],
         ]
     )
-    monkeypatch.setattr("src.video.svd_postprocess.subprocess.run", _fake_run)
+    monkeypatch.setattr("src.video.svd_postprocess.run_bounded", _as_bounded(_fake_run))
     monkeypatch.setattr(SVDPostprocessRunner, "_load_frame_sequence", staticmethod(load_mock))
 
     processed, metadata = SVDPostprocessRunner().process_frames(
@@ -395,15 +411,12 @@ def test_postprocess_runner_rejects_gfpgan_without_starting_a_worker(
         {"postprocess": {"face_restore": {"enabled": True, "method": "GFPGAN"}}}
     )
     started: list[object] = []
-    monkeypatch.setattr(
-        "src.video.svd_postprocess.subprocess.run", lambda *a, **k: started.append(a)
-    )
+    monkeypatch.setattr("src.video.svd_postprocess.run_bounded", lambda *a, **k: started.append(a))
 
     with pytest.raises(SVDPostprocessError, match="GFPGAN"):
         SVDPostprocessRunner().process_frames(frames=frames, config=config, work_dir=tmp_path)
 
     assert started == []
-
 
 
 def test_run_worker_stage_releases_input_frames_before_loading_output(
@@ -424,8 +437,8 @@ def test_run_worker_stage_releases_input_frames_before_loading_output(
 
     monkeypatch.setattr("src.video.svd_postprocess.save_video_frames", _fake_save_video_frames)
     monkeypatch.setattr(
-        "src.video.svd_postprocess.subprocess.run",
-        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+        "src.video.svd_postprocess.run_bounded",
+        lambda *args, **kwargs: ProcessOutcome(returncode=0),
     )
     runner = SVDPostprocessRunner(repo_root=tmp_path)
     monkeypatch.setattr(
@@ -480,8 +493,8 @@ def test_run_rife_stage_releases_input_frames_before_loading_output(
 
     monkeypatch.setattr("src.video.svd_postprocess.save_video_frames", _fake_save_video_frames)
     monkeypatch.setattr(
-        "src.video.svd_postprocess.subprocess.run",
-        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+        "src.video.svd_postprocess.run_bounded",
+        lambda *args, **kwargs: ProcessOutcome(returncode=0),
     )
     runner = SVDPostprocessRunner(repo_root=tmp_path)
     monkeypatch.setattr(
@@ -783,7 +796,7 @@ def _run_face_restore_with_worker_stderr(tmp_path: Path, monkeypatch, stderr: st
         Image.new("RGB", (32, 32), "red").save(output_dir / "frame_001.png")
         return SimpleNamespace(returncode=0, stdout="", stderr=stderr)
 
-    monkeypatch.setattr("src.video.svd_postprocess.subprocess.run", _fake_run)
+    monkeypatch.setattr("src.video.svd_postprocess.run_bounded", _as_bounded(_fake_run))
     monkeypatch.setattr(
         SVDPostprocessRunner,
         "_load_frame_sequence",
@@ -824,3 +837,78 @@ def test_clean_worker_run_adds_no_warnings_key(tmp_path: Path, monkeypatch) -> N
     )
 
     assert metadata is not None and "warnings" not in metadata
+
+
+def test_worker_stage_timeout_surfaces_as_a_postprocess_error(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "src.video.svd_postprocess.run_bounded",
+        lambda *a, **k: ProcessOutcome(returncode=None, timed_out=True),
+    )
+    runner = SVDPostprocessRunner(repo_root=tmp_path)
+    with pytest.raises(SVDPostprocessError, match="timed out"):
+        runner._run_child(["x"], cwd=tmp_path, timeout_seconds=5, what="face_restore worker")
+
+
+def test_worker_stage_cancellation_raises_cancellation_error(tmp_path: Path, monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def _fake(command, **kwargs):
+        seen.update(kwargs)
+        return ProcessOutcome(returncode=None, cancelled=True)
+
+    monkeypatch.setattr("src.video.svd_postprocess.run_bounded", _fake)
+    token = CancelToken()
+    runner = SVDPostprocessRunner(repo_root=tmp_path, cancel_token=token)
+    with pytest.raises(CancellationError):
+        runner._run_child(["x"], cwd=tmp_path, timeout_seconds=5, what="upscale worker")
+    assert seen["cancel"] == token.is_cancelled
+
+
+def test_worker_stage_reports_unlaunchable_and_oversized_children(
+    tmp_path: Path, monkeypatch
+) -> None:
+    runner = SVDPostprocessRunner(repo_root=tmp_path)
+    monkeypatch.setattr(
+        "src.video.svd_postprocess.run_bounded",
+        lambda *a, **k: ProcessOutcome(returncode=None, launch_error="no such file"),
+    )
+    with pytest.raises(SVDPostprocessError, match="could not start"):
+        runner._run_child(["x"], cwd=tmp_path, timeout_seconds=5, what="RIFE interpolation")
+    monkeypatch.setattr(
+        "src.video.svd_postprocess.run_bounded",
+        lambda *a, **k: ProcessOutcome(returncode=0, output_truncated=True),
+    )
+    with pytest.raises(SVDPostprocessError, match="stdout"):
+        runner._run_child(["x"], cwd=tmp_path, timeout_seconds=5, what="RIFE interpolation")
+
+
+def test_a_hung_worker_is_stopped_by_the_real_bounded_runner(tmp_path: Path) -> None:
+    import sys
+
+    runner = SVDPostprocessRunner(repo_root=tmp_path)
+    with pytest.raises(SVDPostprocessError, match="timed out"):
+        runner._run_child(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            cwd=tmp_path,
+            timeout_seconds=0.5,
+            what="face_restore worker",
+        )
+
+
+def test_rife_command_runs_under_the_rife_timeout(tmp_path: Path, monkeypatch) -> None:
+    from src.video import svd_postprocess
+
+    seen: dict[str, object] = {}
+
+    def _fake(command, **kwargs):
+        seen.update(kwargs)
+        return ProcessOutcome(returncode=0, stdout=b"ok")
+
+    monkeypatch.setattr("src.video.svd_postprocess.run_bounded", _fake)
+    exe = tmp_path / "rife.exe"
+    done = SVDPostprocessRunner(repo_root=tmp_path)._run_rife_command(
+        cmd=[str(exe)], executable=exe
+    )
+    assert done.returncode == 0 and done.stdout == "ok"
+    assert seen["timeout_seconds"] == svd_postprocess.RIFE_TIMEOUT_SECONDS
+    assert seen["cwd"] == tmp_path

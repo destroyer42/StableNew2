@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import io
+import sys
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -17,88 +18,120 @@ from src.video.comfy_process_manager import (
 
 
 class _DummyProcess:
-    def __init__(self, pid: int = 54321, stdout_text: str = "", stderr_text: str = "") -> None:
+    def __init__(self, pid: int = 54321) -> None:
         self.pid = pid
         self._returncode = None
-        self.stdout = io.StringIO(stdout_text)
-        self.stderr = io.StringIO(stderr_text)
 
     def poll(self):
         return self._returncode
 
-    def terminate(self):
-        self._returncode = 0
 
-    def wait(self, timeout=None):
-        return self._returncode
+class _FakeManaged:
+    """Stands in for ManagedProcess so lifecycle logic is tested without spawning anything."""
 
-    def kill(self):
-        self._returncode = -9
+    instances: list[_FakeManaged] = []
+
+    def __init__(self, command, **kwargs) -> None:
+        self.command = list(command)
+        self.kwargs = kwargs
+        self.process = None
+        self.stopped = False
+        self.contained = True
+        self._stdout: list[str] = []
+        self._stderr: list[str] = []
+        _FakeManaged.instances.append(self)
+
+    @property
+    def pid(self):
+        return None if self.process is None else self.process.pid
+
+    def start(self):
+        self.process = _DummyProcess()
+        return self.process
+
+    def stop(self, *, grace_seconds: float = 5.0) -> None:
+        self.stopped = True
+
+    def is_running(self) -> bool:
+        return self.process is not None and self.process.poll() is None
+
+    def stdout_tail(self):
+        return list(self._stdout)
+
+    def stderr_tail(self):
+        return list(self._stderr)
 
 
-def test_comfy_process_manager_start_invokes_subprocess_with_config(monkeypatch) -> None:
-    dummy = _DummyProcess()
-    popen_mock = mock.Mock(return_value=dummy)
-    monkeypatch.setattr("subprocess.Popen", popen_mock)
+@pytest.fixture(autouse=True)
+def _reset_fake_managed():
+    _FakeManaged.instances.clear()
+    yield
+    _FakeManaged.instances.clear()
 
+
+def _manager(config: ComfyProcessConfig) -> ComfyProcessManager:
+    return ComfyProcessManager(config, process_factory=_FakeManaged)
+
+
+def test_comfy_process_manager_start_invokes_the_managed_process_with_config() -> None:
     cfg = ComfyProcessConfig(
         command=["python", "main.py"],
         working_dir="C:/ComfyUI",
         env_overrides={"A": "1"},
     )
-    manager = ComfyProcessManager(cfg)
+    manager = _manager(cfg)
 
     process = manager.start()
 
-    assert process is dummy
+    (managed,) = _FakeManaged.instances
+    assert process is managed.process
     assert manager.owns_process is True
-    kwargs = popen_mock.call_args.kwargs
-    assert kwargs["cwd"] == "C:/ComfyUI"
-    assert kwargs["env"]["A"] == "1"
+    assert managed.command == ["python", "main.py"]
+    assert managed.kwargs["cwd"] == "C:/ComfyUI"
+    assert managed.kwargs["env"]["A"] == "1"
+    assert managed.kwargs["label"] == "comfy"
+    assert manager.contained is True
 
 
 @pytest.mark.parametrize("endpoint_state", ["healthy", "occupied"])
 def test_comfy_start_refuses_any_occupied_configured_endpoint(monkeypatch, endpoint_state) -> None:
-    popen_mock = mock.Mock()
-    monkeypatch.setattr("subprocess.Popen", popen_mock)
     monkeypatch.setattr(
         "src.video.comfy_process_manager.probe_comfy_endpoint",
         lambda *_args, **_kwargs: endpoint_state,
     )
-    manager = ComfyProcessManager(
+    manager = _manager(
         ComfyProcessConfig(command=["python", "main.py"], base_url="http://127.0.0.1:8188")
     )
 
     with pytest.raises(ComfyStartupError):
         manager.start()
 
-    popen_mock.assert_not_called()
+    assert _FakeManaged.instances == []
     assert manager.owns_process is False
 
 
 def test_comfy_start_free_endpoint_launches_once_and_owned_stop_works(monkeypatch) -> None:
-    dummy = _DummyProcess()
-    popen_mock = mock.Mock(return_value=dummy)
-    monkeypatch.setattr("subprocess.Popen", popen_mock)
     monkeypatch.setattr(
         "src.video.comfy_process_manager.probe_comfy_endpoint",
         lambda *_args, **_kwargs: "free",
     )
-    manager = ComfyProcessManager(
+    manager = _manager(
         ComfyProcessConfig(command=["python", "main.py"], base_url="http://127.0.0.1:8188")
     )
 
     manager.start()
     assert manager.owns_process is True
     assert manager.restart(wait_ready=False) is True
-    assert popen_mock.call_count == 2
+    assert len(_FakeManaged.instances) == 2
+    assert _FakeManaged.instances[0].stopped is True
     manager.stop()
+    assert _FakeManaged.instances[1].stopped is True
     assert manager.owns_process is False
 
 
 def test_comfy_process_manager_ensure_running_uses_healthcheck(monkeypatch) -> None:
-    manager = ComfyProcessManager(ComfyProcessConfig(command=["python", "main.py"]))
-    manager._process = _DummyProcess()
+    manager = _manager(ComfyProcessConfig(command=["python", "main.py"]))
+    manager.start()
     start_mock = mock.Mock()
     manager.start = start_mock
     manager.check_health = mock.Mock(return_value=True)
@@ -139,19 +172,19 @@ def test_comfy_process_manager_healthcheck_uses_configured_timeout_and_poll(monk
 def test_owned_comfy_startup_failure_reports_bounded_process_diagnostics(
     monkeypatch, return_code, expected_process_state
 ) -> None:
-    dummy = _DummyProcess(pid=24680)
-    dummy._returncode = return_code
-    manager = ComfyProcessManager(
+    manager = _manager(
         ComfyProcessConfig(
             command=["python", "main.py"],
             base_url="http://127.0.0.1:9000",
             startup_timeout_seconds=30.0,
         )
     )
-    manager._process = dummy
-    manager._owns_process = True
-    manager._stdout_tail.extend(["starting"] + ["x" * 300])
-    manager._stderr_tail.append("launcher warning")
+    manager.start()
+    managed = _FakeManaged.instances[0]
+    managed.process = _DummyProcess(pid=24680)
+    managed.process._returncode = return_code
+    managed._stdout.extend(["starting"] + ["x" * 300])
+    managed._stderr.append("launcher warning")
 
     def timeout(*_args, **_kwargs) -> bool:
         raise ComfyHealthCheckTimeout("not ready")
@@ -171,16 +204,32 @@ def test_owned_comfy_startup_failure_reports_bounded_process_diagnostics(
     assert "x" * 241 not in message
 
 
-def test_comfy_process_manager_captures_output_tails(monkeypatch) -> None:
-    dummy = _DummyProcess(stdout_text="ready\nserving\n", stderr_text="warn\n")
-    monkeypatch.setattr("subprocess.Popen", mock.Mock(return_value=dummy))
-
-    manager = ComfyProcessManager(ComfyProcessConfig(command=["python", "main.py"]))
-    manager.start()
-    manager._join_output_threads()
-
+def test_comfy_process_manager_captures_output_tails_from_a_real_child() -> None:
+    code = "import sys; print('ready'); print('serving'); print('warn', file=sys.stderr)"
+    manager = ComfyProcessManager(ComfyProcessConfig(command=[sys.executable, "-c", code]))
+    try:
+        manager.start()
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not (
+            manager.get_stdout_tail() == ["ready", "serving"]
+            and manager.get_stderr_tail() == ["warn"]
+        ):
+            time.sleep(0.05)
+        assert manager.get_stdout_tail() == ["ready", "serving"]
+        assert manager.get_stderr_tail() == ["warn"]
+    finally:
+        manager.stop()
+    # The tails survive stop() for post-mortem diagnostics.
     assert manager.get_stdout_tail() == ["ready", "serving"]
-    assert manager.get_stderr_tail() == ["warn"]
+
+
+def test_a_failed_launch_is_reported_as_a_startup_error_and_leaves_no_owner() -> None:
+    manager = ComfyProcessManager(
+        ComfyProcessConfig(command=[str(Path("definitely") / "missing" / "comfy.exe")])
+    )
+    with pytest.raises(ComfyStartupError):
+        manager.start()
+    assert manager.owns_process is False
 
 
 def test_build_default_comfy_process_config_reads_settings(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-417 of 589 modules have a docstring.
+418 of 590 modules have a docstring.
 
 ## src/
 
@@ -644,6 +644,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_keyword_detector.py`: LoRA keyword detection from metadata files
 - `lora_scanner.py`: Compatibility projection from AssetRegistry; it owns no scan or cache
 - `managed_forge_runtime.py`: The single StableNew-owned authority for the managed Forge Neo launch profile (PR-IMG-FORGE-RUNTIME-100 / -12…
+- `managed_process.py`: Contained, bounded child processes (audit P3-3, findings B7/B8/E6)
 - `memory_utils.py`: Memory management utilities for Windows
 - `negative_helpers_v2.py`: Helper utilities for global prompt merging
 - `preferences.py`: Persistence helpers for GUI preferences and last-used settings

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 398,
+    "total": 395,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -339,7 +339,6 @@
       "tests/tools/test_missing_asset_reference_triage.py",
       "tests/tools/test_operator_journey_harness.py",
       "tests/tools/test_promptpack_quality_census.py",
-      "tests/tools/test_vid130_acceptance_cleanup.py",
       "tests/tools/test_vid150_qualification.py",
       "tests/tools/test_vid160c_commit_adjudication.py",
       "tests/tools/test_vid181_runner.py",
@@ -351,13 +350,11 @@
       "tests/utils/test_process_inspector_v2.py",
       "tests/video/test_pr_comfy_runtime_100_workflow_versions.py",
       "tests/video/test_pr_runtime_110_comfy_liveness.py",
-      "tests/video/test_pr_vid_190_comfy_lifecycle_frame_count.py",
       "tests/video/test_pr_vid_190_wan_animate2.py",
       "tests/video/test_pr_vid_192_animate2_controls.py",
       "tests/video/test_pr_vid_196_driving_video_inspection.py",
       "tests/video/test_pr_vid_196_readiness_and_guidance.py",
       "tests/video/test_pr_vid_196_source_preview.py",
-      "tests/video/test_svd_postprocess.py",
       "tests/video/test_svd_restoration_adapters.py",
       "tests/video/test_svd_restoration_readiness.py",
       "tests/video/test_wan22_experimental_workflow.py",
@@ -407,8 +404,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1405,
-      "S110": 565,
+      "BLE001": 1402,
+      "S110": 564,
       "S112": 42
     },
     "counts": {
@@ -1096,8 +1093,8 @@
         "BLE001": 4
       },
       "src/video/comfy_process_manager.py": {
-        "BLE001": 5,
-        "S110": 2
+        "BLE001": 2,
+        "S110": 1
       },
       "src/video/comfy_workflow_backend.py": {
         "BLE001": 2,

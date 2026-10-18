@@ -32,7 +32,8 @@ class ProcessContainer(ABC):
         self.config = config
 
     @abstractmethod
-    def add_pid(self, pid: int) -> None:
+    def add_pid(self, pid: int) -> bool:
+        """Place ``pid`` in the container.  Returns ``True`` only if the OS accepted it."""
         raise NotImplementedError
 
     def kill_all(self) -> None:
@@ -53,8 +54,8 @@ class ProcessContainer(ABC):
 
 
 class NullProcessContainer(ProcessContainer):
-    def add_pid(self, pid: int) -> None:
-        pass
+    def add_pid(self, pid: int) -> bool:
+        return False
 
     def kill_all(self) -> None:
         pass
@@ -118,8 +119,8 @@ class WindowsContainerAdapter(ProcessContainer):
         super().__init__(job_id, config)
         self._inner = inner
 
-    def add_pid(self, pid: int) -> None:
-        self._inner.assign(pid)
+    def add_pid(self, pid: int) -> bool:
+        return bool(self._inner.assign(pid))
 
     def kill_all(self) -> None:
         self._inner.kill_all()
@@ -143,8 +144,8 @@ class LinuxContainerAdapter(ProcessContainer):
         super().__init__(job_id, config)
         self._inner = inner
 
-    def add_pid(self, pid: int) -> None:
-        self._inner.add_pid(pid)
+    def add_pid(self, pid: int) -> bool:
+        return bool(self._inner.add_pid(pid))
 
     def kill_all(self) -> None:
         self._inner.kill_all()

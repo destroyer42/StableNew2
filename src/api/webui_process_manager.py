@@ -23,6 +23,7 @@ from src.api.webui_runtime_identity import (
 )
 from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
+from src.utils.managed_process import RotatingTextLog, prune_logs
 from src.utils.process_container_v2 import (
     ProcessContainer,
     ProcessContainerConfig,
@@ -107,6 +108,12 @@ class WebUIReadyEvent:
     endpoint: str
 
 
+# Per-launch output logs live under the repository (not the working directory), are size-rotated while a launch
+# runs, and only the newest few launches are kept (audit E6: one unbounded file per launch, written relative to cwd).
+_WEBUI_LOG_DIR = Path(__file__).resolve().parents[2] / "logs" / "webui"
+WEBUI_LOG_MAX_BYTES = 20 * 1024 * 1024
+WEBUI_LOG_BACKUPS = 1
+WEBUI_LOG_LAUNCHES_KEPT = 8
 #: Bounds for the diagnostics reported when the process exits before it becomes ready.
 STARTUP_DIAGNOSTIC_TAIL_LINES = 40
 STARTUP_DIAGNOSTIC_TAIL_CHARS = 4000
@@ -646,12 +653,22 @@ class WebUIProcessManager:
             logger.warning("WebUI stdout/stderr capture unavailable (no pipes attached)")
             return
 
-        log_dir = Path("logs") / "webui"
+        log_dir = _WEBUI_LOG_DIR
         log_dir.mkdir(parents=True, exist_ok=True)
+        # Leave room for the launch about to start; rotated siblings (".log.1") are pruned on their own pattern.
+        for pattern in ("webui_stdout_*.log", "webui_stderr_*.log"):
+            prune_logs(log_dir, pattern, keep=WEBUI_LOG_LAUNCHES_KEPT - 1)
+            prune_logs(
+                log_dir, pattern + ".*", keep=(WEBUI_LOG_LAUNCHES_KEPT - 1) * WEBUI_LOG_BACKUPS
+            )
         self._stdout_log_path = log_dir / f"webui_stdout_{run_session_id}.log"
         self._stderr_log_path = log_dir / f"webui_stderr_{run_session_id}.log"
-        self._stdout_log_file = self._stdout_log_path.open("a", encoding="utf-8", errors="replace")
-        self._stderr_log_file = self._stderr_log_path.open("a", encoding="utf-8", errors="replace")
+        self._stdout_log_file = RotatingTextLog(
+            self._stdout_log_path, max_bytes=WEBUI_LOG_MAX_BYTES, backups=WEBUI_LOG_BACKUPS
+        )
+        self._stderr_log_file = RotatingTextLog(
+            self._stderr_log_path, max_bytes=WEBUI_LOG_MAX_BYTES, backups=WEBUI_LOG_BACKUPS
+        )
 
         def _read_stream(stream, sink, tail, label: str) -> None:
             try:

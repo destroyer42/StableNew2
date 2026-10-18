@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "totals": {
-    "daemon_threads": 18,
-    "raw_threads": 12,
+    "daemon_threads": 16,
+    "raw_threads": 9,
     "utils_upward_imports": 19,
     "controller_gui_imports": 17
   },
@@ -77,6 +77,9 @@
     "src/utils/image_metadata.py": {
       "utils_upward_imports": 1
     },
+    "src/utils/managed_process.py": {
+      "daemon_threads": 1
+    },
     "src/utils/prompt_pack_utils.py": {
       "utils_upward_imports": 1
     },
@@ -97,14 +100,6 @@
     },
     "src/utils/webui_discovery.py": {
       "utils_upward_imports": 1
-    },
-    "src/video/comfy_process_manager.py": {
-      "daemon_threads": 1,
-      "raw_threads": 1
-    },
-    "src/video/driving_video_inspection.py": {
-      "daemon_threads": 2,
-      "raw_threads": 2
     }
   }
 }

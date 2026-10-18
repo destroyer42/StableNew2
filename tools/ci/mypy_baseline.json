@@ -184,7 +184,7 @@
     "src/utils/webui_launcher.py": 1,
     "src/utils/win_jobobject.py": 5,
     "src/video/assembly_service.py": 1,
-    "src/video/comfy_process_manager.py": 3,
+    "src/video/comfy_process_manager.py": 2,
     "src/video/continuity_models.py": 1,
     "src/video/depth_map_resolver.py": 1,
     "src/video/movie_clip_service.py": 2,
@@ -197,5 +197,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1667
+  "total": 1666
 }

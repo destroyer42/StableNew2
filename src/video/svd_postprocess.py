@@ -16,6 +16,8 @@ from typing import Any, cast
 
 from PIL import Image
 
+from src.controller.runtime_state import CancellationError, CancelToken
+from src.utils.managed_process import run_bounded
 from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
 from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
 from src.video.restoration.runtime import (
@@ -36,6 +38,11 @@ _REQUIRED_FACELIB_FILES = (
 )
 _RIFE_CUSTOM_FRAMECOUNT_UNSUPPORTED = "only rife-v4 model support custom numframe and timestep"
 _SUPPORTED_RIFE_MULTIPLIERS = frozenset((2, 4))
+# A hung worker would otherwise block the single queue runner forever and keep holding VRAM (audit B8).
+WORKER_STAGE_TIMEOUT_SECONDS = 1800.0
+RIFE_TIMEOUT_SECONDS = 1800.0
+_CHILD_MAX_STDOUT_BYTES = 4 * 1024 * 1024
+_CHILD_MAX_STDERR_BYTES = 256 * 1024
 _RIFE_DURATION_PRESERVING_SEMANTICS = "duration_preserving_temporal_smoothing"
 
 
@@ -196,9 +203,11 @@ class SVDPostprocessRunner:
         *,
         repo_root: str | Path | None = None,
         status_callback: Callable[[dict[str, Any]], None] | None = None,
+        cancel_token: CancelToken | None = None,
     ) -> None:
         self._repo_root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[2]
         self._status_callback = status_callback
+        self._cancel_token = cancel_token
         self._stage_warnings: list[str] = []
 
     def _record_stage_warnings(self, metadata: dict[str, Any], stage_name: str) -> None:
@@ -496,12 +505,11 @@ class SVDPostprocessRunner:
                 "--config-json",
                 json.dumps(config_payload),
             ]
-            completed = subprocess.run(
+            completed = self._run_child(
                 cmd,
-                cwd=str(self._repo_root),
-                capture_output=True,
-                text=True,
-                check=False,
+                cwd=self._repo_root,
+                timeout_seconds=WORKER_STAGE_TIMEOUT_SECONDS,
+                what=f"{stage_name} worker",
             )
             if completed.returncode != 0:
                 message = (
@@ -701,14 +709,52 @@ class SVDPostprocessRunner:
             cmd.extend(["-m", str(model_dir)])
         return cmd
 
-    @staticmethod
-    def _run_rife_command(*, cmd: list[str], executable: Path) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
+    def _run_rife_command(
+        self, *, cmd: list[str], executable: Path
+    ) -> subprocess.CompletedProcess[str]:
+        return self._run_child(
             cmd,
-            cwd=str(executable.parent),
-            capture_output=True,
-            text=True,
-            check=False,
+            cwd=executable.parent,
+            timeout_seconds=RIFE_TIMEOUT_SECONDS,
+            what="RIFE interpolation",
+        )
+
+    def _run_child(
+        self,
+        cmd: list[str],
+        *,
+        cwd: Path,
+        timeout_seconds: float,
+        what: str,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run one contained child under a wall-clock bound; cancel and timeout kill its whole tree."""
+
+        token = self._cancel_token
+        outcome = run_bounded(
+            cmd,
+            timeout_seconds=timeout_seconds,
+            max_stdout_bytes=_CHILD_MAX_STDOUT_BYTES,
+            max_stderr_bytes=_CHILD_MAX_STDERR_BYTES,
+            cancel=None if token is None else token.is_cancelled,
+            cwd=cwd,
+        )
+        if outcome.launch_error:
+            raise SVDPostprocessError(f"{what} could not start: {outcome.launch_error}")
+        if outcome.cancelled:
+            raise CancellationError(f"{what} cancelled")
+        if outcome.timed_out:
+            raise SVDPostprocessError(
+                f"{what} timed out after {timeout_seconds:.0f}s and was stopped"
+            )
+        if outcome.output_truncated:
+            raise SVDPostprocessError(
+                f"{what} wrote more than {_CHILD_MAX_STDOUT_BYTES} bytes to stdout and was stopped"
+            )
+        return subprocess.CompletedProcess(
+            cmd,
+            outcome.returncode if outcome.returncode is not None else -1,
+            outcome.stdout.decode("utf-8", errors="replace"),
+            outcome.stderr.decode("utf-8", errors="replace"),
         )
 
     @staticmethod

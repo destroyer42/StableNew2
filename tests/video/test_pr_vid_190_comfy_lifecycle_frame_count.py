@@ -126,9 +126,7 @@ def _backend(client, manager, *, readiness=None) -> ComfyWorkflowVideoBackend:
         client=client,
         process_manager=manager,
         readiness=readiness
-        or WorkflowResourceReadiness(
-            ram_probe=lambda: 24.0, gpu_probe=_driver_probe(client.stats)
-        ),
+        or WorkflowResourceReadiness(ram_probe=lambda: 24.0, gpu_probe=_driver_probe(client.stats)),
         transition=_no_transition(),
         history_timeout=5.0,
         history_poll_interval=0.1,
@@ -175,7 +173,9 @@ def test_variable_length_revision_keeps_the_qualified_graph_files_and_readiness(
     old, new = _spec(V1), _spec(V11)
     assert new.is_experimental and new.backend_id == "comfy"
     assert new.pinned_revision == "catalog:wan22_ti2v_5b_i2v_v1@1.1.0"
-    assert [d.to_dict() for d in new.dependency_specs] == [d.to_dict() for d in old.dependency_specs]
+    assert [d.to_dict() for d in new.dependency_specs] == [
+        d.to_dict() for d in old.dependency_specs
+    ]
     old_graph = json.loads(json.dumps(old.backend_defaults["prompt_template"]))
     new_graph = json.loads(json.dumps(new.backend_defaults["prompt_template"]))
     assert new_graph["8"]["inputs"].pop("length") == "{{input.frame_count}}"
@@ -453,23 +453,36 @@ def test_relaunch_after_stop_reregisters_the_global_owner(monkeypatch) -> None:
     class _Proc:
         pid = 55
 
-        def __init__(self, *_a, **_k) -> None:
-            self.stdout = self.stderr = None
-            self.alive = True
-
         def poll(self):
-            return None if self.alive else 0
+            return None
 
-        def terminate(self) -> None:
-            self.alive = False
+    class _Managed:
+        def __init__(self, *_a, **_k) -> None:
+            self.process = None
 
-        def wait(self, timeout=None) -> int:
-            return 0
+        pid = 55
+        contained = True
 
-    monkeypatch.setattr(cpm.subprocess, "Popen", _Proc)
+        def start(self):
+            self.process = _Proc()
+            return self.process
+
+        def stop(self, *, grace_seconds: float = 5.0) -> None:
+            self.process = None
+
+        def is_running(self) -> bool:
+            return self.process is not None
+
+        def stdout_tail(self):
+            return []
+
+        def stderr_tail(self):
+            return []
+
     monkeypatch.setattr(cpm, "probe_comfy_endpoint", lambda *_a, **_k: "free")
     manager = cpm.ComfyProcessManager(
-        cpm.ComfyProcessConfig(command=["comfy"], base_url="http://127.0.0.1:1")
+        cpm.ComfyProcessConfig(command=["comfy"], base_url="http://127.0.0.1:1"),
+        process_factory=_Managed,
     )
     try:
         manager.start()

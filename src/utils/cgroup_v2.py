@@ -48,12 +48,14 @@ class LinuxCGroupV2:
         except Exception as exc:
             logger.debug("Failed to write to %s: %s", filename, exc)
 
-    def add_pid(self, pid: int) -> None:
+    def add_pid(self, pid: int) -> bool:
         try:
             with (self._path / "cgroup.procs").open("a") as handle:
                 handle.write(f"{pid}\n")
         except Exception as exc:
             logger.debug("Failed to join pid %s to cgroup: %s", pid, exc)
+            return False
+        return True
 
     def kill_all(self) -> None:
         kill_path = self._path / "cgroup.kill"

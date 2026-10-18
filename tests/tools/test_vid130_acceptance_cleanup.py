@@ -138,29 +138,25 @@ def test_an_external_or_unowned_comfy_is_never_stopped(monkeypatch, isolated) ->
 
 
 def test_the_real_manager_never_terminates_a_process_it_does_not_own() -> None:
-    """Belt and braces: even if ``stop`` were called, a non-owning manager leaves the process alone."""
+    """A manager that launched nothing owns nothing: an external Comfy is invisible to it and is left alone."""
 
-    process = Mock()
-    process.poll.return_value = None  # a live external Comfy
     manager = ComfyProcessManager(ComfyProcessConfig(command=["comfy"], base_url="http://x"))
-    manager._process = process
-    manager._owns_process = False  # adopted/external: never launched by this manager
     assert manager.owns_process is False
     assert harness._stop_owned_comfy(_registry(manager)) is False
-    manager.stop()
-    process.terminate.assert_not_called()
-    process.kill.assert_not_called()
+    manager.stop()  # must be a harmless no-op
 
 
 def test_the_real_manager_terminates_only_the_process_it_launched() -> None:
-    process = Mock()
-    process.poll.return_value = None
-    process.wait.return_value = 0
+    managed = Mock()
+    managed.process = Mock()
+    managed.process.poll.return_value = None
+    managed.stdout_tail.return_value = []
+    managed.stderr_tail.return_value = []
     manager = ComfyProcessManager(ComfyProcessConfig(command=["comfy"], base_url="http://x"))
-    manager._process = process
-    manager._owns_process = True  # launched by this manager's own start()
+    manager._managed = managed  # launched by this manager's own start()
+    assert manager.owns_process is True
     assert harness._stop_owned_comfy(_registry(manager)) is True
-    process.terminate.assert_called_once()
+    managed.stop.assert_called_once()
     assert manager.owns_process is False
 
 
@@ -206,7 +202,9 @@ def test_completed_evidence_selects_the_replay_for_the_completed_job() -> None:
         return SimpleNamespace(
             _normalized_record=SimpleNamespace(
                 source=SimpleNamespace(parent_job_id=parent_job_id),
-                stage_chain=[SimpleNamespace(to_dict=lambda: {"extra": {"video_execution": video_execution}})],
+                stage_chain=[
+                    SimpleNamespace(to_dict=lambda: {"extra": {"video_execution": video_execution}})
+                ],
             )
         )
 
