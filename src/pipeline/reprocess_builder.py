@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from src.image_backends.image_backend_types import normalize_image_backend_options
+from src.pipeline.animatediff_retirement import ANIMATEDIFF_STAGE, AnimateDiffRetiredError
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.job_models_v2 import (
     CURRENT_NJR_SCHEMA_VERSION,
@@ -132,7 +133,6 @@ class ReprocessJobBuilder:
         "img2img",
         "adetailer",
         "upscale",
-        "animatediff",
         "svd_native",
         "video_workflow",
     }
@@ -153,12 +153,6 @@ class ReprocessJobBuilder:
             "steps": 20,
             "cfg_scale": 7.0,
             "denoising_strength": 0.35,
-            "sampler_name": "Euler a",
-        },
-        "animatediff": {
-            "steps": 16,
-            "cfg_scale": 7.0,
-            "denoising_strength": 0.3,
             "sampler_name": "Euler a",
         },
         "svd_native": {
@@ -192,11 +186,7 @@ class ReprocessJobBuilder:
     def build_reprocess_job(
         self,
         input_image_paths: list[str | Path],
-        stages: list[
-            Literal[
-                "img2img", "adetailer", "upscale", "animatediff", "svd_native", "video_workflow"
-            ]
-        ],
+        stages: list[Literal["img2img", "adetailer", "upscale", "svd_native", "video_workflow"]],
         config: dict[str, Any] | None = None,
         output_dir: str = "output",
         prompt: str = "",
@@ -238,6 +228,11 @@ class ReprocessJobBuilder:
             if not path.exists():
                 raise ValueError(f"Input image not found: {p}")
             path_strs.append(str(path))
+
+        # Retired AnimateDiff execution is refused with its own clear error, not as an "invalid stage".
+        # Every requested reprocess stage is enabled, so requesting it is requesting execution.
+        if ANIMATEDIFF_STAGE in stages:
+            raise AnimateDiffRetiredError()
 
         # Validate stages
         invalid_stages = set(stages) - self.VALID_REPROCESS_STAGES
@@ -290,7 +285,7 @@ class ReprocessJobBuilder:
         }
 
         metadata = self._merge_nested_dicts(base_metadata, extra_metadata or {})
-        video_stage_names = {"animatediff", "svd_native", "video_workflow"}
+        video_stage_names = {"svd_native", "video_workflow"}
         is_video = bool(set(stages) & video_stage_names)
         source_aliases = {
             "image_edit": SourceKind.IMAGE_EDIT,
@@ -955,11 +950,7 @@ class ReprocessJobBuilder:
     def build_reprocess_jobs_batched(
         self,
         input_image_paths: list[str | Path],
-        stages: list[
-            Literal[
-                "img2img", "adetailer", "upscale", "animatediff", "svd_native", "video_workflow"
-            ]
-        ],
+        stages: list[Literal["img2img", "adetailer", "upscale", "svd_native", "video_workflow"]],
         batch_size: int = 10,
         **kwargs,
     ) -> list[NormalizedJobRecord]:
@@ -991,11 +982,7 @@ class ReprocessJobBuilder:
         self,
         *,
         items: list[ReprocessSourceItem],
-        stages: list[
-            Literal[
-                "img2img", "adetailer", "upscale", "animatediff", "svd_native", "video_workflow"
-            ]
-        ],
+        stages: list[Literal["img2img", "adetailer", "upscale", "svd_native", "video_workflow"]],
         fallback_config: dict[str, Any] | None = None,
         batch_size: int = 1,
         pack_name: str = "Reprocess",

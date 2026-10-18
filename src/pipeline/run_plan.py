@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from src.pipeline.animatediff_retirement import require_animatediff_not_enabled
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 
 _CANONICAL_STAGE_ORDER = {
@@ -55,7 +56,11 @@ def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
     missing/blank stage identity or an empty/all-disabled chain raises ``ValueError``;
     this module never synthesizes a stage. Historical input must be hydrated into a
     valid NJR before it reaches this function.
+
+    An enabled AnimateDiff stage is refused here (``AnimateDiffRetiredError``) before any plan exists; a disabled
+    placeholder stage is simply not planned.
     """
+    require_animatediff_not_enabled(njr)
     stage_chain: list[StageConfig] = list(getattr(njr, "stage_chain", []) or [])
     enabled_chain = [
         (idx, stage, _explicit_stage_name(stage))

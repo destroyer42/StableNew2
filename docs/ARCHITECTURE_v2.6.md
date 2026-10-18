@@ -380,7 +380,7 @@ The model is not bundled. Setup must provide:
 - memory-conscious defaults, offload, and chunking appropriate for a 12 GB GPU;
 - a deterministic smoke workflow and actionable failure messages.
 
-ComfyUI, LTX, AnimateDiff, multi-shot sequencing, stitching, and secondary-motion
+ComfyUI, LTX, multi-shot sequencing, stitching, and secondary-motion
 systems are post-MVP. Existing code for them may remain quarantined during
 recovery but must not be on the MVP execution path or presented as MVP-ready.
 

@@ -1,6 +1,5 @@
 """Video utilities package for StableNew v2.6."""
 
-from src.video.animatediff_backend import AnimateDiffVideoBackend
 from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe, DependencyProbeResult
 from src.video.comfy_healthcheck import (
@@ -55,7 +54,6 @@ from src.video.workflow_contracts import (
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 __all__ = [
-    "AnimateDiffVideoBackend",
     "ComfyApiClient",
     "ComfyDependencyProbe",
     "ComfyHealthCheckTimeout",

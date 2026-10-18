@@ -37,12 +37,6 @@ from src.conditioning.openpose import ConditioningError
 from src.config import app_config
 from src.pipeline.adetailer_contract import schema_issues
 from src.pipeline.adetailer_effectiveness import build_effectiveness, response_infotexts
-from src.pipeline.animatediff_models import (
-    AnimateDiffConfig,
-    attach_animatediff_to_payload,
-    normalize_animatediff_response,
-    resolve_animatediff_motion_module,
-)
 from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.pipeline.global_prompt_policy import (
     FROZEN_POLICY_SOURCE,
@@ -50,7 +44,6 @@ from src.pipeline.global_prompt_policy import (
     has_frozen_global_prompt_policy,
 )
 from src.pipeline.model_synchronizer import A1111ModelSynchronizer, normalize_model_name
-from src.pipeline.video import VideoCreator, write_video_frames
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
@@ -70,13 +63,7 @@ from src.refinement.prompt_patcher import apply_prompt_patch
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 from src.utils.process_inspector_v2 import collect_gpu_snapshot, collect_process_risk_snapshot
 from src.utils.webui_resource_names import canonicalize_vae_lookup_key, normalize_vae_config_value
-from src.video.container_metadata import write_video_container_metadata
-from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
-from src.video.motion.secondary_motion_provenance import (
-    build_secondary_motion_manifest_block,
-    extract_secondary_motion_summary,
-)
-from src.video.motion.secondary_motion_worker import run_secondary_motion_worker
+from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 
 from ..api import SDWebUIClient
 from ..controller.runtime_state import CancellationError, CancelToken
@@ -99,30 +86,6 @@ if TYPE_CHECKING:
 def _cached_image_base64(path_str: str) -> str | None:
     """LRU cache for recently loaded images to cut down disk reads."""
     return load_image_to_base64(Path(path_str))
-
-
-def _apply_secondary_motion_frame_directory(
-    *,
-    runtime_block: Mapping[str, Any] | None,
-    input_dir: Path,
-    output_dir: Path,
-) -> dict[str, Any] | None:
-    payload = dict(runtime_block or {}) if isinstance(runtime_block, Mapping) else {}
-    if not payload or not bool(payload.get("enabled")):
-        return None
-    intent = dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
-    policy = dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
-    if not intent or not policy:
-        return None
-    return run_secondary_motion_worker(
-        {
-            "input_dir": str(input_dir),
-            "output_dir": str(output_dir),
-            "intent": intent,
-            "policy": policy,
-            "seed": payload.get("seed"),
-        }
-    )
 
 
 logger = logging.getLogger(__name__)
@@ -5765,275 +5728,6 @@ class Pipeline:
             raise
         except Exception as e:
             logger.error(f"img2img stage failed: {e}")
-            return None
-
-    def run_animatediff_stage(
-        self,
-        input_image_path: Path | None,
-        prompt: str,
-        negative_prompt: str,
-        config: dict[str, Any],
-        output_dir: Path,
-        image_name: str,
-        cancel_token=None,
-    ) -> dict[str, Any] | None:
-        """Run AnimateDiff through the standard WebUI txt2img/img2img endpoints."""
-
-        self._record_stage_event("animatediff", "enter", 1, 1, False)
-        try:
-            self._ensure_not_cancelled(cancel_token, "animatediff stage start")
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            capability = self.client.get_animatediff_capability()
-            if not capability.available:
-                raise RuntimeError(
-                    capability.reason or "AnimateDiff is not available from the WebUI scripts API"
-                )
-
-            animatediff_cfg = AnimateDiffConfig.from_dict(config)
-            if not animatediff_cfg.enabled:
-                raise RuntimeError("AnimateDiff stage is disabled in the runtime config")
-
-            current_model = self.client.get_current_model()
-            if not isinstance(current_model, str) or not current_model.strip():
-                current_model = None
-            requested_model = (
-                config.get("model") or config.get("sd_model_checkpoint") or current_model
-            )
-            requested_vae = config.get("vae")
-            if requested_model or requested_vae:
-                self._ensure_model_and_vae(requested_model, requested_vae)
-
-            self._ensure_hypernetwork(
-                config.get("hypernetwork"),
-                config.get("hypernetwork_strength"),
-            )
-
-            sampler_config = self._parse_sampler_config(config)
-            self._ensure_webui_true_ready()
-            self._check_webui_health_before_stage("animatediff")
-
-            run_mode = "img2img" if input_image_path is not None else "txt2img"
-            payload: dict[str, Any] = {
-                "prompt": prompt,
-                "negative_prompt": negative_prompt,
-                "steps": config.get("steps", 16),
-                "cfg_scale": config.get("cfg_scale", 7.0),
-                "width": config.get("width", 512),
-                "height": config.get("height", 512),
-                "seed": config.get("seed", -1),
-                "clip_skip": config.get("clip_skip", 2),
-                "batch_size": 1,
-                "n_iter": 1,
-            }
-            payload.update(sampler_config)
-            if input_image_path is not None:
-                input_image_b64 = self._load_image_base64(input_image_path)
-                if not input_image_b64:
-                    raise RuntimeError(
-                        f"Failed to load AnimateDiff input image: {input_image_path}"
-                    )
-                payload["init_images"] = [input_image_b64]
-                denoising_strength = config.get("denoising_strength")
-                if denoising_strength in (None, ""):
-                    denoising_strength = 0.3
-                payload["denoising_strength"] = denoising_strength
-
-            resolved_motion_module = resolve_animatediff_motion_module(
-                animatediff_cfg,
-                capability,
-                requested_model,
-            )
-            if resolved_motion_module and resolved_motion_module != animatediff_cfg.motion_module:
-                animatediff_cfg = AnimateDiffConfig(
-                    enabled=animatediff_cfg.enabled,
-                    motion_module=resolved_motion_module,
-                    fps=animatediff_cfg.fps,
-                    video_length=animatediff_cfg.video_length,
-                    loop_number=animatediff_cfg.loop_number,
-                    closed_loop=animatediff_cfg.closed_loop,
-                    batch_size=animatediff_cfg.batch_size,
-                    stride=animatediff_cfg.stride,
-                    overlap=animatediff_cfg.overlap,
-                    format=list(animatediff_cfg.format),
-                )
-                logger.info(
-                    "animatediff stage auto-selected motion module %s for model %s",
-                    resolved_motion_module,
-                    requested_model or "<unknown>",
-                )
-
-            payload = attach_animatediff_to_payload(payload, animatediff_cfg, capability)
-            response = (
-                self.client.img2img(payload)
-                if run_mode == "img2img"
-                else self.client.txt2img(payload)
-            )
-            normalized = normalize_animatediff_response(response)
-            frame_images = normalized["frame_images"]
-            expected_frame_count = max(2, animatediff_cfg.video_length)
-            if not frame_images:
-                raise RuntimeError("AnimateDiff returned no frame images")
-            if not normalized.get("animate_detected") and len(frame_images) < expected_frame_count:
-                raise RuntimeError(
-                    "AnimateDiff payload was accepted by WebUI but did not produce an AnimateDiff response"
-                )
-
-            from src.utils.file_io import get_unique_output_path
-
-            video_path = get_unique_output_path(output_dir / f"{image_name}.mp4")
-            frames_dir = output_dir / f"{video_path.stem}_frames"
-            frame_paths = write_video_frames(frame_images, frames_dir, frame_prefix="frame")
-            if not frame_paths:
-                raise RuntimeError("AnimateDiff frames could not be written to disk")
-
-            secondary_motion_block = (
-                config.get("secondary_motion")
-                if isinstance(config.get("secondary_motion"), dict)
-                else None
-            )
-            secondary_motion_manifest = None
-            secondary_motion_summary = None
-            if isinstance(secondary_motion_block, dict) and secondary_motion_block.get("enabled"):
-                motion_frames_dir = output_dir / f"{video_path.stem}_secondary_motion_frames"
-                try:
-                    apply_result = _apply_secondary_motion_frame_directory(
-                        runtime_block=secondary_motion_block,
-                        input_dir=frames_dir,
-                        output_dir=motion_frames_dir,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "AnimateDiff secondary motion unavailable; continuing with original frames: %s",
-                        exc,
-                    )
-                    apply_result = {
-                        "schema": SECONDARY_MOTION_APPLY_SCHEMA_V1,
-                        "status": "unavailable",
-                        "policy_id": str(secondary_motion_block.get("policy_id") or ""),
-                        "application_path": "frame_directory_worker",
-                        "backend_mode": str(secondary_motion_block.get("backend_mode") or ""),
-                        "frames_in": len(frame_paths),
-                        "frames_out": len(frame_paths),
-                        "seed": secondary_motion_block.get("seed"),
-                        "regions_applied": list(secondary_motion_block.get("regions") or []),
-                        "skip_reason": "worker_failed",
-                        "metrics": {"applied_frame_count": 0},
-                        "error": str(exc),
-                    }
-                if isinstance(apply_result, dict):
-                    motion_output_paths = [
-                        Path(path) for path in apply_result.get("output_paths") or []
-                    ]
-                    if motion_output_paths:
-                        frame_paths = motion_output_paths
-                    secondary_motion_manifest = build_secondary_motion_manifest_block(
-                        intent=secondary_motion_block.get("intent"),
-                        policy=secondary_motion_block.get("policy"),
-                        apply_result=apply_result,
-                    )
-                    secondary_motion_summary = dict(secondary_motion_manifest.get("summary") or {})
-
-            video_creator = VideoCreator()
-            if not video_creator.create_video_from_images(
-                frame_paths,
-                video_path,
-                fps=animatediff_cfg.fps,
-            ):
-                raise RuntimeError("AnimateDiff video assembly failed")
-
-            gen_info = self._extract_generation_info(response or {})
-            metadata = {
-                "name": image_name,
-                "stage": "animatediff",
-                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
-                "prompt": prompt,
-                "negative_prompt": negative_prompt,
-                "input_image": str(input_image_path) if input_image_path else None,
-                "source_image_path": str(input_image_path) if input_image_path else None,
-                "config": self._clean_metadata_payload(payload),
-                "path": str(video_path),
-                "output_path": str(video_path),
-                "video_path": str(video_path),
-                "output_paths": [str(video_path)],
-                "frame_paths": [str(path) for path in frame_paths],
-                "frame_path_count": len(frame_paths),
-                "frame_count": len(frame_paths),
-                "fps": animatediff_cfg.fps,
-                "motion_module": animatediff_cfg.motion_module,
-                "extension_contract": normalized["extension_contract"],
-                "requested_seed": payload.get("seed", -1),
-                "actual_seed": gen_info.get("seed"),
-                "actual_subseed": gen_info.get("subseed"),
-            }
-            if secondary_motion_manifest is not None:
-                metadata["secondary_motion"] = secondary_motion_manifest
-                metadata["secondary_motion_summary"] = (
-                    secondary_motion_summary
-                    or extract_secondary_motion_summary(
-                        {"secondary_motion": secondary_motion_manifest}
-                    )
-                )
-
-            manifest_dir = output_dir / "manifests"
-            manifest_dir.mkdir(exist_ok=True, parents=True)
-            manifest_path = manifest_dir / f"{video_path.stem}.json"
-            metadata["manifest_path"] = str(manifest_path)
-            metadata["manifest_paths"] = [str(manifest_path)]
-            metadata["count"] = 1
-            metadata["artifact"] = artifact_manifest_payload(
-                stage="animatediff",
-                image_or_output_path=video_path,
-                manifest_path=manifest_path,
-                output_paths=[str(video_path)],
-                input_image_path=input_image_path,
-                artifact_type="video",
-            )
-            self._write_manifest_file(
-                manifest_path=manifest_path,
-                metadata=metadata,
-            )
-            write_video_container_metadata(
-                video_path,
-                {
-                    "stage": "animatediff",
-                    "backend_id": "animatediff",
-                    "job_id": getattr(self, "_current_job_id", None),
-                    "run_id": output_dir.name,
-                    "title": image_name,
-                    "prompt": prompt,
-                    "negative_prompt": negative_prompt,
-                    "source_image_path": str(input_image_path) if input_image_path else None,
-                    "manifest_path": str(manifest_path),
-                    "video_path": str(video_path),
-                    "video_paths": [str(video_path)],
-                    "frame_path_count": len(frame_paths),
-                    "fps": animatediff_cfg.fps,
-                    "seed": gen_info.get("seed"),
-                    "thumbnail_path": str(frame_paths[0]) if frame_paths else None,
-                    "config": self._clean_metadata_payload(payload),
-                    "artifact": metadata["artifact"],
-                    "secondary_motion": secondary_motion_manifest,
-                    "secondary_motion_summary": metadata.get("secondary_motion_summary"),
-                },
-            )
-
-            self._record_stage_event(
-                "animatediff",
-                "exit",
-                len(frame_paths),
-                len(frame_paths),
-                False,
-                extra={"video_path": str(video_path)},
-            )
-            return metadata
-        except CancellationError:
-            self._record_stage_event("animatediff", "cancelled", 1, 1, True)
-            raise
-        except (PipelineStageError, WebUIRuntimeIdentityMismatch):
-            raise
-        except Exception as exc:
-            logger.error("animatediff stage failed: %s", exc)
             return None
 
     def run_svd_native_stage(

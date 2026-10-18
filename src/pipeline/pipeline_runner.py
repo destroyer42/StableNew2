@@ -440,10 +440,6 @@ class PipelineRunner:
                 workflow_id=video_intent.workflow_id,
                 workflow_version=video_intent.workflow_version,
             )
-        if stage_name == "animatediff":
-            config_dict["enabled"] = True
-            if njr.scheduler:
-                config_dict["scheduler"] = njr.scheduler
         secondary_motion_intent = extract_secondary_motion_intent(
             getattr(njr, "intent_config", None) or {}
         )
@@ -464,22 +460,9 @@ class PipelineRunner:
         manifest_paths: list[str] = []
         artifact_records: list[dict[str, Any]] = []
         backend_results: list[VideoExecutionResult] = []
-        prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
         continuity_link = self._resolve_continuity_link(njr, metadata=metadata)
         if continuity_link:
             metadata["continuity"] = dict(continuity_link)
-
-        from pathlib import Path as PathLib
-
-        from src.utils.file_io import build_safe_image_name
-
-        base_prefix = f"{stage_name}_p{prompt_row + 1:02d}_v{njr.variant_index + 1:02d}"
-        matrix_values = (
-            getattr(njr, "matrix_slot_values", None) if hasattr(njr, "matrix_slot_values") else None
-        )
-        pack_name = getattr(njr, "prompt_pack_name", None) or getattr(njr, "pack_name", None)
-        original_inputs = getattr(njr, "input_image_paths", None)
-        use_original_name = original_inputs and getattr(njr, "start_stage", None)
 
         video_paths: list[str] = []
         gif_paths: list[str] = []
@@ -489,21 +472,6 @@ class PipelineRunner:
         source_image_path: str | None = None
 
         for img_idx, input_path in enumerate(current_stage_paths):
-            image_name = None
-            if stage_name == "animatediff":
-                if use_original_name and img_idx < len(original_inputs):
-                    input_stem = PathLib(original_inputs[img_idx]).stem[:30]
-                    unique_prefix = f"{base_prefix}_{input_stem}"
-                else:
-                    unique_prefix = base_prefix
-                image_name = build_safe_image_name(
-                    base_prefix=unique_prefix,
-                    matrix_values=matrix_values,
-                    seed=None,
-                    batch_index=img_idx,
-                    pack_name=pack_name,
-                    max_length=100,
-                )
             raw_mid_anchor_paths = config_dict.get("mid_anchor_paths") or []
             if isinstance(raw_mid_anchor_paths, (str, Path)):
                 normalized_mid_anchor_paths = [Path(raw_mid_anchor_paths)]
@@ -553,7 +521,7 @@ class PipelineRunner:
                     request_postprocess = dict(request_stage_config.get("postprocess") or {})
                     request_postprocess["secondary_motion"] = motion_runtime_block
                     request_stage_config["postprocess"] = request_postprocess
-                elif stage_name in {"animatediff", "video_workflow"}:
+                elif stage_name == "video_workflow":
                     request_stage_config["secondary_motion"] = motion_runtime_block
 
             request = VideoExecutionRequest(
@@ -566,7 +534,6 @@ class PipelineRunner:
                 if config_dict.get("end_anchor_path")
                 else None,
                 mid_anchor_paths=normalized_mid_anchor_paths,
-                image_name=image_name,
                 prompt=prompt,
                 negative_prompt=negative_prompt,
                 motion_profile=str(config_dict.get("motion_profile") or ""),
@@ -693,9 +660,7 @@ class PipelineRunner:
             metadata["video_primary_backend_id"] = backend.backend_id
             metadata["video_primary_stage"] = stage_name
 
-            if stage_name == "animatediff":
-                metadata["animatediff_artifact"] = dict(aggregate)
-            elif stage_name == "svd_native":
+            if stage_name == "svd_native":
                 metadata["svd_native_artifact"] = dict(aggregate)
             elif stage_name == "video_workflow":
                 metadata["video_workflow_artifact"] = dict(aggregate)
@@ -1115,8 +1080,11 @@ class PipelineRunner:
         """
         # Pure RunPlan construction/validation precedes any runtime/API side effect so a
         # malformed plan fails closed before metrics, cleanup, or backend calls.
+        from src.pipeline.animatediff_retirement import require_animatediff_not_enabled
         from src.pipeline.run_plan import build_run_plan_from_njr
 
+        # Retired AnimateDiff execution is refused first, before metrics, cleanup or any client call.
+        require_animatediff_not_enabled(njr)
         plan = build_run_plan_from_njr(njr)
         if hasattr(self._pipeline, "_begin_run_metrics"):
             self._pipeline._begin_run_metrics()
@@ -2450,9 +2418,6 @@ class PipelineRunner:
         adetailers = [
             stage for stage in stages if stage.stage_type == StageTypeEnum.ADETAILER.value
         ]
-        animatediffs = [
-            stage for stage in stages if stage.stage_type == StageTypeEnum.ANIMATEDIFF.value
-        ]
         svd_native = [
             stage for stage in stages if stage.stage_type == StageTypeEnum.SVD_NATIVE.value
         ]
@@ -2461,8 +2426,6 @@ class PipelineRunner:
         ]
         if len(adetailers) > 1:
             raise ValueError("Multiple ADetailer stages are not supported.")
-        if len(animatediffs) > 1:
-            raise ValueError("Multiple AnimateDiff stages are not supported.")
         if len(svd_native) > 1:
             raise ValueError("Multiple SVD Native stages are not supported.")
         if len(video_workflows) > 1:
@@ -2473,10 +2436,8 @@ class PipelineRunner:
             raise ValueError("train_lora must be the only enabled stage.")
         if train_lora:
             return
-        if sum(bool(group) for group in (animatediffs, svd_native, video_workflows)) > 1:
+        if sum(bool(group) for group in (svd_native, video_workflows)) > 1:
             raise ValueError("Only one terminal video stage may be enabled at a time.")
-        if animatediffs and stages[-1].stage_type != StageTypeEnum.ANIMATEDIFF.value:
-            raise ValueError("AnimateDiff stage must be the final stage.")
         if svd_native and stages[-1].stage_type != StageTypeEnum.SVD_NATIVE.value:
             raise ValueError("SVD Native stage must be the final stage.")
         if video_workflows and stages[-1].stage_type != StageTypeEnum.VIDEO_WORKFLOW.value:
@@ -2504,7 +2465,6 @@ class PipelineRunner:
                 for stage in stages[first_adetailer_index + 1 :]
                 if stage.stage_type
                 not in {
-                    StageTypeEnum.ANIMATEDIFF.value,
                     StageTypeEnum.SVD_NATIVE.value,
                     StageTypeEnum.VIDEO_WORKFLOW.value,
                 }
@@ -2514,12 +2474,6 @@ class PipelineRunner:
                 for stage_type in trailing_non_terminal_video
             ):
                 raise ValueError("Only upscale and terminal video stages may follow ADetailer.")
-        if animatediffs and not any(
-            self._is_image_producing_stage_type(stage.stage_type)
-            for stage in stages
-            if stage.stage_type != StageTypeEnum.ANIMATEDIFF.value
-        ):
-            raise ValueError("AnimateDiff stage requires a preceding image-producing stage.")
         if svd_native and not any(
             self._is_image_producing_stage_type(stage.stage_type)
             for stage in stages

@@ -4,6 +4,7 @@ import logging
 
 import pytest
 
+from src.pipeline.animatediff_retirement import AnimateDiffRetiredError
 from src.pipeline.stage_sequencer import build_stage_execution_plan
 
 
@@ -214,13 +215,24 @@ def test_plan_builder_carries_hires_metadata():
     assert metadata.hires_denoise == 0.4
 
 
-def test_plan_builder_txt2img_and_animatediff():
-    cfg = _base_config()
-    cfg["animatediff"]["enabled"] = True
-    cfg["pipeline"]["animatediff_enabled"] = True
-    plan = build_stage_execution_plan(cfg)
-    assert [s.stage_type for s in plan.stages] == ["txt2img", "animatediff"]
-    assert plan.stages[-1].requires_input_image is True
+def test_plan_builder_refuses_enabled_animatediff_and_keeps_disabled_placeholder_inert():
+    """AnimateDiff execution is retired: only the disabled -> enabled flip is refused."""
+
+    placeholder = (
+        _base_config()
+    )  # animatediff settings present, enabled False (every PromptPack carries this)
+    plan = build_stage_execution_plan(placeholder)
+    assert [s.stage_type for s in plan.stages] == ["txt2img"]
+
+    flagged = _base_config()
+    flagged["pipeline"]["animatediff_enabled"] = True
+    with pytest.raises(AnimateDiffRetiredError, match="AnimateDiff execution is retired"):
+        build_stage_execution_plan(flagged)
+
+    sectioned = _base_config()
+    sectioned["animatediff"]["enabled"] = True
+    with pytest.raises(AnimateDiffRetiredError):
+        build_stage_execution_plan(sectioned)
 
 
 def test_plan_builder_video_workflow_with_sequence_metadata():
@@ -269,13 +281,13 @@ def test_plan_builder_video_workflow_sequence_metadata_workflow_id_fallback():
     assert vw_stage.config.payload.get("workflow_id") == "synthetic_anchor_video_v1"
 
 
-def test_plan_builder_animatediff_without_prior_stage_raises():
+def test_plan_builder_animatediff_without_prior_stage_is_still_refused_as_retired():
     cfg = _base_config()
     cfg["txt2img"]["enabled"] = False
     cfg["pipeline"]["txt2img_enabled"] = False
     cfg["animatediff"]["enabled"] = True
     cfg["pipeline"]["animatediff_enabled"] = True
-    with pytest.raises(ValueError):
+    with pytest.raises(AnimateDiffRetiredError):
         build_stage_execution_plan(cfg)
 
 

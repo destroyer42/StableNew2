@@ -22,7 +22,7 @@ This document covers image-to-video: the native Stable Video Diffusion XT path a
 | Wan2.2 TI2V-5B prompt-directed I2V (`wan22_ti2v_5b_i2v_v1`) | **Experimental**, the only conditionally qualified directed-motion candidate. Never approved, never default. | Per-job opt-in. |
 | Wan-Animate-2, prompt mode and driving-video mode (`wan_animate2_prompt_i2v_v1`, `wan_animate2_drive_i2v_v1`) | **Experimental.** Promotion readiness is not met (owner decision pending). | Per-job opt-in, managed Comfy launched with `--disable-pinned-memory`. |
 | LTX multi-frame anchor (two former catalog specs) | **Retired.** The disabled contract-only specs were removed; their ids are refused with a readable message. Future LTX support is not ruled out; it needs bridge implementations plus accepted runtime evidence. | Section 4.2. |
-| AnimateDiff (`animatediff`) | Registered backend with no GUI control; needs the WebUI executor. Retirement is an open owner decision. | Section 9. |
+| AnimateDiff (`animatediff`) | **Execution retired.** An enabled stage is refused before any dispatch (`AnimateDiffRetiredError`); the disabled placeholder stage, the `animatediff` config key and historical records stay readable. | Section 9. |
 | Movie Clips (FFmpeg assembly of existing outputs) | Retained feature, not a generation path; runs outside the queue as a known, undecided exception. | Section 7. |
 
 No Comfy workflow is `approved`. Promoting one is an owner decision (audit G7, roadmap P5-7) and starts with a catalog governance change plus the audit's P3-3 and P3-4 fixes (managed process containment, Comfy cancellation) [A].
@@ -37,7 +37,7 @@ The repository-wide path applies (authority: `AGENTS.md`, `docs/ARCHITECTURE_v2.
 | Compiler | SVD: `SVDController._build_svd_njr`. Workflow: `VideoWorkflowNjrBuilder` (`freeze_inputs` then `build_job`). Both end in `ReprocessJobBuilder.build_reprocess_job` | `src/video/video_workflow_njr_builder.py`, `src/pipeline/reprocess_builder.py` |
 | NJR | Immutable record with a `VideoWorkloadSpec` and one stage (`svd_native` or `video_workflow`). `SourceKind.VIDEO_WORKFLOW` is stamped for every video stage, including SVD [V] | `src/pipeline/njr_core_v26.py` |
 | JobService | `JobService.submit_njrs` is the only fresh-submission boundary; batches and experiments cross it exactly once | `src/controller/job_service.py` |
-| Queue/Repository | SQLite `JobRepository`. `classify_record` marks `svd_native` and `video_workflow`/`comfy` jobs `INDEPENDENT_VIDEO` (no WebUI needed); `animatediff` is `REQUIRES_WEBUI` | `src/queue/backend_dependency.py` |
+| Queue/Repository | SQLite `JobRepository`. `classify_record` marks `svd_native` and `video_workflow`/`comfy` jobs `INDEPENDENT_VIDEO` (no WebUI needed); an enabled historical `animatediff` stage is still classified `REQUIRES_WEBUI` (held like other WebUI work until it is refused) | `src/queue/backend_dependency.py` |
 | Runner | `PipelineRunner.run_njr` -> `_video_resolver.is_video_stage` -> `_execute_video_stage` | `src/pipeline/pipeline_runner.py` |
 | Handler | `VideoExecutionResolver` -> `VideoBackendRegistry` -> backend `execute` | `src/video/` |
 | Artifacts/History | MP4/GIF/frames, per-run manifest JSON, container metadata, `PipelineRunResult` metadata (`video_artifacts`, `video_primary_artifact`, `video_backend_results`) | Section 8 |
@@ -52,7 +52,7 @@ Types are in `src/video/video_backend_types.py`:
 - `VideoExecutionRequest` (neutral request, carries `task`, `requested_controls`, `workflow_id/version`, `experimental_opt_in`, `cancel_token`) and `VideoExecutionResult` (canonicalized through `src/pipeline/artifact_contract.py`; `to_variant_payload` feeds the runner).
 - `VideoBackendInterface`: `backend_id`, `capabilities`, `execute(pipeline, request)`.
 
-`VideoBackendRegistry` (`build_default_video_backend_registry`) registers three backends: `animatediff` (`AnimateDiffVideoBackend`), `svd_native` (`SVDNativeVideoBackend`) and `comfy` (`ComfyWorkflowVideoBackend`).
+`VideoBackendRegistry` (`build_default_video_backend_registry`) registers two backends: `svd_native` (`SVDNativeVideoBackend`) and `comfy` (`ComfyWorkflowVideoBackend`). No backend claims the `animatediff` stage type (retired, section 9).
 
 `VideoExecutionResolver` (`src/video/video_execution_resolver.py`) is the only place a stage becomes a validated (backend, task, controls) triple. Validation runs before any backend is called and raises `VideoContractError` with a code (`unknown_backend`, `unsupported_task`, `unsupported_control`, `missing_control`, `backend_required`, `invalid_workflow`). There is no fallback and no silent dropping of a control. Two intent sources:
 
@@ -173,13 +173,13 @@ Provenance can be lost on the image side (audit B9) and `gzip.decompress` of emb
 | Item | State |
 |---|---|
 | Depth and camera conditioning | No catalog workflow declares `depth_map`, `camera_preset` or `controlnet_model`, so `src/video/depth_map_resolver.py`, `_resolve_conditioning_inputs`, `_normalize_camera_intent` and the matching Video Workflow tab fields are reachable only through a spec that declares them, today the synthetic test fixture [V]. They are kept deliberately as generic infrastructure (the retired LTX specs were their only catalog users). |
-| `animatediff` | `AnimateDiffVideoBackend` and `Pipeline.run_animatediff_stage` are registered and executable for a persisted `animatediff` stage, but no GUI or controller builds such a job [V: no producer in `src/gui`/`src/controller`]; it needs the A1111 extension [A]. |
+| `animatediff` | **Execution retired** (owner decision; the backend adapter, `Pipeline.run_animatediff_stage`, the extension capability probe and payload construction are gone). Compatibility policy, from `src/pipeline/animatediff_retirement.py`: every PromptPack job carries a *disabled* `animatediff` placeholder stage plus an `animatediff` settings dict, and both stay valid, loadable and inert; only an **enabled** stage is refused, with `AnimateDiffRetiredError` ("AnimateDiff execution is retired ... Disable the AnimateDiff stage ... or use native SVD or the Comfy Video Workflow"), before any WebUI request or probe. Refusal points: fresh PromptPack and generic compilation (`animatediff_enabled`), `JobService.submit_njrs`, replay (`compile_replay_intent`), reprocess requests, and `build_run_plan_from_njr` / `PipelineRunner.run_njr` for jobs queued earlier (they fail through the normal failure path, classified as an invalid configuration, never retried). The stage is never dropped or replaced by SVD or Wan. Old NJRs, the `animatediff` config key and `animatediff_artifact` history results still deserialize and render. |
 | Multi-segment sequences | `PipelineRunner._execute_sequence` runs when a `video_workflow` stage config has `sequence_metadata.total_segments > 1`, but nothing in `src` writes `sequence_metadata` [V]. `src/video/sequence_planner.py`, `sequence_models.py`, `sequence_manifest.py` and `ComfyWorkflowVideoBackend.execute_segment` (no callers) are reachable only through that path or tests. |
 | Story plan and continuity authoring | Retired: `StoryPlanCompiler`, the story-plan models and store, and `ContinuityStore` had no production caller and were removed. Live and kept: `continuity_models` (`normalize_continuity_link` and the pack/link/summary models), the NJR `continuity_link` field and its runner propagation, and PromptPack `story_plan`/`plan_origin` actor metadata. Existing files under `data/story_plans` and `data/continuity` are user data, are never read, migrated or deleted by the app, and nothing writes them any more. |
 | GFPGAN option | Offered, always refused (3.2). |
 | Startup dependency probe | `build_optional_dependency_snapshot` (`src/app/optional_dependency_probes.py`) iterates `registry.list_specs_for_backend("comfy")`, which returns only approved specs, so it reports no workflow while none is approved [V]. |
 
-Audit E3 counted 3 video backends and 11 workflow specs with none approved; the two disabled LTX specs are now retired (9 specs remain), while AnimateDiff and story-plan retirement stays an owner decision (`STATUS.md` open decision 6): do not delete those on your own.
+Audit E3 counted 3 video backends and 11 workflow specs with none approved. The two disabled LTX specs (9 specs remain), AnimateDiff execution and the dormant story-plan authoring code are now retired; only Character Training remains an open question in `STATUS.md` (it is on hold, not retired).
 
 ## 10. Invariants that must not be broken
 
@@ -220,7 +220,7 @@ For a new refusal, assert both the error and that no `queue_prompt` call was rec
 - No cancellation for Comfy waits or SVD post-process subprocesses; no timeouts on the latter (3.2, 4.5). Cancel only takes effect between SVD phases and denoising steps.
 - `SVDRunner.run` returns a successful result even when optional post-process warnings were recorded; check `postprocess["warnings"]` (CodeFormer pastes an unrestored face back and only warns).
 - The executor swallows non-SVD exceptions in `run_svd_native_stage` and returns `None`, which the runner reports as no output. `SVDError` subclasses propagate; raise refusals as those (`src/video/svd_errors.py`).
-- `PipelineRunner._execute_video_stage` still names `animatediff` and `svd_native` in places (filenames, postprocess merge, legacy metadata keys). It is part of the executor-sized `run_njr` debt (roadmap P4-1) [A].
+- `PipelineRunner._execute_video_stage` still names `svd_native` in places (filenames, postprocess merge, legacy metadata keys). It is part of the executor-sized `run_njr` debt (roadmap P4-1) [A].
 - Disk space is not checked before SVD frame dumps or Comfy downloads (audit E6) [A]. A user-set `comfy_command` is not checked for `--listen 0.0.0.0` (audit E5) [A].
 - `cv2` is used by restoration/refinement code but declared only in the SVD/postprocess extra [A].
 

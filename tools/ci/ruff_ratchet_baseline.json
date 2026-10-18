@@ -407,9 +407,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1411,
+      "BLE001": 1405,
       "S110": 565,
-      "S112": 44
+      "S112": 42
     },
     "counts": {
       "src/api/client.py": {
@@ -906,7 +906,7 @@
         "BLE001": 1
       },
       "src/pipeline/executor.py": {
-        "BLE001": 67,
+        "BLE001": 65,
         "S110": 17
       },
       "src/pipeline/job_models_v2.py": {
@@ -1106,10 +1106,6 @@
       "src/video/container_metadata.py": {
         "BLE001": 4
       },
-      "src/video/continuity_store.py": {
-        "BLE001": 2,
-        "S112": 1
-      },
       "src/video/driving_video_inspection.py": {
         "BLE001": 1
       },
@@ -1121,10 +1117,6 @@
       },
       "src/video/restoration/codeformer.py": {
         "BLE001": 1
-      },
-      "src/video/story_plan_store.py": {
-        "BLE001": 2,
-        "S112": 1
       },
       "src/video/svd_capabilities.py": {
         "BLE001": 4

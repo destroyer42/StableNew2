@@ -40,7 +40,7 @@ Nothing in these surfaces may build a backend payload, call a runner, or add a q
 | `apply_model_vae_to_config`, `apply_prompt_overrides`, `apply_image_edit_overrides`, `_merge_nested_dicts` | Static helpers also used by Photo Optimize and by GUI adapters |
 | `extract_reprocess_output_paths` | Maps a finished job to its output files (used by the Photo Optimize completion handler) |
 
-`VALID_REPROCESS_STAGES` also lists `animatediff`, `svd_native` and `video_workflow`: this builder is shared with the video paths (`src/controller/svd_controller.py`, `src/video/video_workflow_njr_builder.py`, `src/curation/curation_workflow_builder.py`). The Review path restricts stages to `adetailer`, `upscale`, `img2img` before calling it.
+`VALID_REPROCESS_STAGES` also lists `svd_native` and `video_workflow` (a request for `animatediff` is refused with `AnimateDiffRetiredError`; its execution is retired): this builder is shared with the video paths (`src/controller/svd_controller.py`, `src/video/video_workflow_njr_builder.py`, `src/curation/curation_workflow_builder.py`). The Review path restricts stages to `adetailer`, `upscale`, `img2img` before calling it.
 
 Klein single-reference edit is an explicit request, never inferred: `ReviewWorkflowAdapter.with_klein_edit_request` marks sources with `KLEIN_EDIT_METADATA_KEY`; `is_klein_edit_item` / `prepare_klein_edit_item` in `src/pipeline/klein_edit_reprocess.py` freeze the item to `latest_klein_profile()` (exactly one image, img2img only, empty config and negative prompt, source SHA-256 recorded) and force group size 1.
 

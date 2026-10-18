@@ -25,8 +25,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below),
   isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
-- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,685 errors in
-  194 files), unformatted files (398), blind/silent excepts in `src` (BLE001 1,411, S110 565, S112 44), thread and layering
+- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,681 errors in
+  194 files), unformatted files (398), blind/silent excepts in `src` (BLE001 1,405, S110 565, S112 42), thread and layering
   rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 17), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
@@ -89,7 +89,10 @@ of the roadmap; where they conflict with this file, this file and the repository
 3. Is `DIAG-GPU-130` open or closed? Records conflict; treat as open (see Holds).
 4. Should the GUI "batch runs" control apply on the state-fallback job-building path? It has never applied there.
 5. A physical restart check that queued WebUI jobs are held then released against a running Forge.
-6. Retire AnimateDiff, Character Training? (The AI settings-suggestion stub package was retired with its controller and tests, and the cluster scaffolding was retired too; external scripts importing `src.ai` would break, unverified. The disabled LTX specs are retired; future LTX support is not ruled out and needs bridge implementations plus accepted runtime evidence.)
+6. Decided: Character Training stays on hold pending a real trainer decision (see Holds). Retired: AnimateDiff execution (only an
+   enabled stage is refused; disabled placeholders and history stay readable), the disabled LTX specs (future LTX support is not ruled
+   out and needs bridge implementations plus accepted runtime evidence), the dormant story-plan/continuity authoring code, the AI
+   settings-suggestion stub (external scripts importing `src.ai` would break, unverified) and the cluster scaffolding.
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: history browser, Learning payoff, inpainting/ControlNet, LoRA browser.
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments).

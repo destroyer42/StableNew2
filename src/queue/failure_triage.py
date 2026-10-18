@@ -53,7 +53,13 @@ CATEGORY_LABELS: dict[TriageCategory, str] = {
 # Exact exception *types* recorded by the error envelope (never message text).
 _RESOURCE_TYPES = frozenset({"SVDOutOfMemoryError", "ResourceLimitError"})
 _CONFIGURATION_TYPES = frozenset(
-    {"SVDConfigError", "SVDInputError", "ConfigError", "OperationNotSupportedError"}
+    {
+        "SVDConfigError",
+        "SVDInputError",
+        "ConfigError",
+        "OperationNotSupportedError",
+        "AnimateDiffRetiredError",
+    }
 )
 _IDENTITY_TYPES = frozenset({"WebUIRuntimeIdentityMismatch"})
 _CONFIGURATION_CODES = frozenset(
