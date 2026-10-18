@@ -6,9 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]  # anchor to the repository, not the 
 
 ADAPTER_FILES = [
     ROOT / "src/gui_v2/adapters/__init__.py",
-    ROOT / "src/gui_v2/adapters/pipeline_adapter_v2.py",
     ROOT / "src/gui_v2/adapters/randomizer_adapter_v2.py",
-    ROOT / "src/gui_v2/adapters/status_adapter_v2.py",
     ROOT / "src/gui_v2/adapters/learning_adapter_v2.py",
 ]
 

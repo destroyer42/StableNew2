@@ -404,8 +404,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1391,
-      "S110": 563,
+      "BLE001": 1356,
+      "S110": 541,
       "S112": 38
     },
     "counts": {
@@ -576,10 +576,6 @@
       "src/gui/model_list_adapter_v2.py": {
         "BLE001": 3
       },
-      "src/gui/model_manager_panel_v2.py": {
-        "BLE001": 2,
-        "S110": 2
-      },
       "src/gui/model_policy_panel_projection.py": {
         "BLE001": 6
       },
@@ -593,10 +589,6 @@
       "src/gui/panels_v2/debug_hub_panel_v2.py": {
         "BLE001": 11,
         "S110": 8
-      },
-      "src/gui/panels_v2/history_panel_v2.py": {
-        "BLE001": 2,
-        "S110": 1
       },
       "src/gui/panels_v2/job_explanation_panel_v2.py": {
         "BLE001": 1,
@@ -630,10 +622,6 @@
       "src/gui/prompt_pack_adapter_v2.py": {
         "BLE001": 2
       },
-      "src/gui/prompt_pack_panel_v2.py": {
-        "BLE001": 2,
-        "S110": 2
-      },
       "src/gui/prompt_target_presenter.py": {
         "BLE001": 4
       },
@@ -643,10 +631,6 @@
       },
       "src/gui/recipe_summary_v2.py": {
         "BLE001": 1
-      },
-      "src/gui/resolution_panel_v2.py": {
-        "BLE001": 2,
-        "S110": 1
       },
       "src/gui/review_batch_dialog.py": {
         "BLE001": 1
@@ -723,9 +707,6 @@
         "BLE001": 8,
         "S110": 3
       },
-      "src/gui/views/experiment_design_panel_v2.py": {
-        "BLE001": 2
-      },
       "src/gui/views/learning_analytics_panel.py": {
         "BLE001": 2
       },
@@ -733,9 +714,6 @@
         "BLE001": 9,
         "S110": 4,
         "S112": 2
-      },
-      "src/gui/views/learning_review_panel_v2.py": {
-        "BLE001": 1
       },
       "src/gui/views/learning_tab_frame_v2.py": {
         "BLE001": 21,
@@ -749,18 +727,10 @@
         "BLE001": 10,
         "S110": 5
       },
-      "src/gui/views/pipeline_tab_frame.py": {
-        "BLE001": 6,
-        "S110": 4
-      },
       "src/gui/views/pipeline_tab_frame_v2.py": {
         "BLE001": 29,
         "S110": 21,
         "S112": 1
-      },
-      "src/gui/views/prompt_tab_frame.py": {
-        "BLE001": 7,
-        "S110": 4
       },
       "src/gui/views/prompt_tab_frame_v2.py": {
         "BLE001": 35,
@@ -769,14 +739,6 @@
       "src/gui/views/review_tab_frame_v2.py": {
         "BLE001": 10,
         "S110": 1
-      },
-      "src/gui/views/run_control_bar.py": {
-        "BLE001": 4,
-        "S110": 3
-      },
-      "src/gui/views/run_control_bar_v2.py": {
-        "BLE001": 4,
-        "S110": 3
       },
       "src/gui/views/stage_cards_panel_v2.py": {
         "BLE001": 23,
@@ -827,20 +789,12 @@
         "BLE001": 1,
         "S110": 1
       },
-      "src/gui/widgets/multi_line_prompt_field.py": {
-        "BLE001": 1,
-        "S110": 1
-      },
       "src/gui/widgets/tab_overview_panel_v2.py": {
         "BLE001": 2,
         "S110": 2
       },
       "src/gui/widgets/thumbnail_widget_v2.py": {
         "BLE001": 5,
-        "S110": 1
-      },
-      "src/gui/widgets/tooltip_widget.py": {
-        "BLE001": 1,
         "S110": 1
       },
       "src/gui/zimage_optional_control_projection.py": {
@@ -1041,9 +995,6 @@
       "src/utils/lora_keyword_detector.py": {
         "BLE001": 4,
         "S110": 4
-      },
-      "src/utils/memory_utils.py": {
-        "BLE001": 1
       },
       "src/utils/preferences.py": {
         "BLE001": 3
