@@ -404,3 +404,43 @@ def test_the_command_line_accepts_the_result_json_flag(
     )
 
     assert json.loads(capsys.readouterr().out)["result_json"]["rows"] == 1
+
+
+def test_result_json_sizes_nested_keys_and_separates_within_row_from_cross_row_repeats(
+    repo: JobRepository, tmp_path: Path
+) -> None:
+    replay = {"primary": ["r" * 3000]}
+    cross = {"graph": ["g" * 3000]}
+    for job_id in ("a", "b"):
+        _add(repo, job_id)
+        _set_result(
+            repo,
+            job_id,
+            {
+                "metadata": {
+                    "id": job_id,  # keeps each row's metadata block distinct from the other row's
+                    "replay_descriptor": replay,
+                    "diagnostics_descriptor": {"replay_descriptor": replay},
+                },
+                "variants": [{"metadata": {"big": f"{job_id}" * 3000}, "cross": cross}],
+            },
+        )
+
+    section = _result_report(repo, tmp_path)["result_json"]
+
+    paths = {item["path"]: item["bytes"] for item in section["by_key"]}
+    assert paths["variants[].metadata.big"] > 6000  # two rows, three KB each
+    assert "metadata.diagnostics_descriptor.replay_descriptor" in paths
+    repeated = section["repeated_blocks"]
+    by_path = {item["path"]: item for item in repeated["largest"]}
+    replay_group = by_path["metadata.replay_descriptor"]
+    # Row a holds it twice (top level and inside diagnostics); row b's top-level copy repeats it across rows.
+    assert replay_group["copies"] == 3
+    assert replay_group["within_row_copies"] == 1
+    assert replay_group["cross_row_copies"] == 1
+    assert repeated["within_row_extra_bytes"] > 0
+    assert repeated["cross_row_extra_bytes"] > 0
+    assert (
+        repeated["extra_bytes"]
+        == repeated["within_row_extra_bytes"] + repeated["cross_row_extra_bytes"]
+    )
