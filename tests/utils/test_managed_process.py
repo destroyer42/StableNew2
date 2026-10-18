@@ -261,7 +261,7 @@ def test_managed_process_without_a_container_still_runs(monkeypatch: pytest.Monk
         "build_process_container",
         lambda job_id, config: NullProcessContainer(job_id, config),
     )
-    proc = ManagedProcess([_PY, "-c", "print('hi')"], label="test")
+    proc = ManagedProcess([_PY, "-c", "print('hi')"], label="test", require_containment=False)
     proc.start()
     assert proc.contained is False
     assert _wait_until(lambda: "hi" in proc.stdout_tail())

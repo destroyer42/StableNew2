@@ -616,7 +616,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_keyword_detector.py`: LoRA keyword detection from metadata files
 - `lora_scanner.py`: Compatibility projection from AssetRegistry; it owns no scan or cache
 - `managed_forge_runtime.py`: The single StableNew-owned authority for the managed Forge Neo launch profile (PR-IMG-FORGE-RUNTIME-100 / -12…
-- `managed_process.py`: Contained, bounded child processes (audit P3-3, findings B7/B8/E6)
+- `managed_process.py`: Contained, bounded child processes (audit P3-3, findings B7/B8/E6; fail-closed containment)
 - `negative_helpers_v2.py`: Helper utilities for global prompt merging
 - `njr_identity.py`: The one identity of a stored NJR snapshot
 - `preferences.py`: Persistence helpers for GUI preferences and last-used settings

@@ -27,6 +27,10 @@ class ProcessContainerConfig:
 
 
 class ProcessContainer(ABC):
+    #: A container that can adopt a child created suspended (``CREATE_SUSPENDED``), so the child provably runs no
+    #: instruction, and spawns no descendant, before it is inside the container.
+    supports_suspended_start: bool = False
+
     def __init__(self, job_id: str, config: ProcessContainerConfig) -> None:
         self.job_id = job_id
         self.config = config
@@ -54,6 +58,15 @@ class ProcessContainer(ABC):
 
 
 class NullProcessContainer(ProcessContainer):
+    """No containment.  ``reason`` says why (``disabled``, ``unsupported_platform: ...``, ``construction_failed: ...``)
+    so a caller that requires containment can refuse instead of silently running uncontained."""
+
+    def __init__(
+        self, job_id: str, config: ProcessContainerConfig, reason: str = "disabled"
+    ) -> None:
+        super().__init__(job_id, config)
+        self.reason = reason
+
     def add_pid(self, pid: int) -> bool:
         return False
 
@@ -66,7 +79,7 @@ class NullProcessContainer(ProcessContainer):
 
 def build_process_container(job_id: str, config: ProcessContainerConfig) -> ProcessContainer:
     if not config.enabled:
-        return NullProcessContainer(job_id, config)
+        return NullProcessContainer(job_id, config, "disabled")
     system = platform.system().lower()
     if system.startswith("windows"):
         try:
@@ -80,12 +93,14 @@ def build_process_container(job_id: str, config: ProcessContainerConfig) -> Proc
         except Exception as exc:
             log_with_ctx(
                 logger,
-                logging.DEBUG,
+                logging.WARNING,
                 "Failed to build Windows job object container",
                 ctx=LogContext(job_id=job_id, subsystem="process_container"),
                 extra_fields={"error": str(exc)},
             )
-            return NullProcessContainer(job_id, config)
+            return NullProcessContainer(
+                job_id, config, f"construction_failed: windows job object: {exc}"
+            )
     if system.startswith("linux"):
         try:
             from .cgroup_v2 import LinuxCGroupV2
@@ -100,16 +115,20 @@ def build_process_container(job_id: str, config: ProcessContainerConfig) -> Proc
         except Exception as exc:
             log_with_ctx(
                 logger,
-                logging.DEBUG,
+                logging.WARNING,
                 "Failed to build Linux cgroup container",
                 ctx=LogContext(job_id=job_id, subsystem="process_container"),
                 extra_fields={"error": str(exc)},
             )
-            return NullProcessContainer(job_id, config)
-    return NullProcessContainer(job_id, config)
+            return NullProcessContainer(
+                job_id, config, f"construction_failed: linux cgroup v2: {exc}"
+            )
+    return NullProcessContainer(job_id, config, f"unsupported_platform: {system or 'unknown'}")
 
 
 class WindowsContainerAdapter(ProcessContainer):
+    supports_suspended_start = True
+
     def __init__(
         self,
         job_id: str,

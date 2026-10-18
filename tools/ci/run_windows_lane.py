@@ -20,6 +20,9 @@ WINDOWS_LANE_TARGETS = (
     # process ownership and containment (anonymous job objects; stopping one manager never reaches another's processes)
     "tests/utils/test_job_object_isolation.py",
     "tests/utils/test_process_container_v2.py",
+    # fail-closed child containment: suspended start, job-object attach, tree kill, owner death (needs a real job object)
+    "tests/utils/test_process_containment_failsafe.py",
+    "tests/utils/test_managed_process.py",
     "tests/api",
     "tests/safety",
     "tests/services/test_runtime_transition_service.py",

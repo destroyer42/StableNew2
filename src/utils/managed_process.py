@@ -1,8 +1,7 @@
-"""Contained, bounded child processes (audit P3-3, findings B7/B8/E6).
+"""Contained, bounded child processes (audit P3-3, findings B7/B8/E6; fail-closed containment).
 
-Two primitives share one containment rule: a child is assigned to its own anonymous OS container (a Windows job
-object with kill-on-close, a Linux cgroup) as soon as it is spawned, so it cannot outlive its owner and one kill reaches
-its whole process tree.
+Two primitives share one containment rule: a child is placed in its own anonymous OS container (a Windows job object with
+kill-on-close, a Linux cgroup), so it cannot outlive its owner and one kill reaches its whole process tree.
 
 * ``run_bounded`` runs a short-lived child to completion with a wall-clock timeout, a stdout byte cap, a bounded stderr
   prefix and cooperative cancellation.  Output is returned as bytes; nothing is decoded here.
@@ -10,10 +9,16 @@ its whole process tree.
   with ``errors="replace"`` (a bad byte can never kill the reader and block the child on a full pipe), keep only a bounded
   tail of bounded lines, and optionally mirror to a size-rotated log file.
 
-A container is a safety net, not an authority: if none can be built (non-Windows/Linux host, restricted token) the child
-still runs, ``contained`` is ``False`` and the caller decides whether that matters.  The child is assigned right after
-``Popen`` returns, not before its first instruction, so a grandchild forked in that window would escape; the supported
-runtimes do not fork before they finish importing.
+Containment policy.  Where the platform is a supported runtime platform (Windows: ``containment_required()``), a child is
+**never run uncontained**: if the container cannot be built, or the child cannot be placed in it, the child is killed and
+``ContainmentError`` is raised (``run_bounded`` reports it as ``launch_error``).  On Windows the child is created
+suspended, placed in the job object and only then resumed, so it and its descendants provably start inside the job.  On
+other platforms, or when a caller passes ``require_containment=False``, the child runs uncontained with a WARNING and
+``contained`` is ``False``; its descendants are then not tracked and a kill reaches only the direct child.
+
+A guarantee about *time* never depends on containment: even if a descendant escaped and still holds the child's pipes,
+``run_bounded`` and ``ManagedProcess.stop`` return promptly (reader threads are abandoned, never closed under, so a close
+cannot block on a pipe an escaped descendant keeps open).
 
 This module imports nothing above ``src.utils``.
 """
@@ -48,7 +53,10 @@ TAIL_LINE_LIMIT = 200
 TAIL_LINE_CHARS = 2000
 _CANCEL_POLL_SECONDS = 0.05
 _KILL_WAIT_SECONDS = 5.0
+#: Total time to let the pipe readers drain after a kill; an escaped descendant can hold a pipe open indefinitely.
+_DRAIN_SECONDS = 2.0
 _READ_CHUNK = 8192
+_CREATE_SUSPENDED = 0x00000004
 
 CancelSignal = threading.Event | Callable[[], bool]
 
@@ -64,6 +72,18 @@ class ProcessOutcome:
     output_truncated: bool = False
     cancelled: bool = False
     launch_error: str = ""
+    #: Whether the child ran inside an OS container (so a kill reached its whole tree).
+    contained: bool = False
+
+
+class ContainmentError(RuntimeError):
+    """A child could not be placed in the OS container this platform requires, so it was not (or no longer) run."""
+
+
+def containment_required() -> bool:
+    """Windows is the supported runtime platform: a child there is never run without its job object."""
+
+    return os.name == "nt"
 
 
 def _spawn_reader(
@@ -97,14 +117,109 @@ def _is_cancelled(signal: CancelSignal | None) -> bool:
         return False
 
 
-def _contain(process: subprocess.Popen[Any], label: str) -> ProcessContainer:
-    container = build_process_container(label, ProcessContainerConfig(enabled=True))
+@dataclass
+class _Spawned:
+    process: subprocess.Popen[bytes]
+    container: ProcessContainer
+    contained: bool
+
+
+def _terminate_uncontained(process: subprocess.Popen[Any], container: ProcessContainer) -> None:
+    """Kill a child that was just spawned and could not be contained, and release everything it was given."""
+
     try:
-        if not container.add_pid(process.pid):
-            logger.debug("[managed_process] %s runs without an OS container", label)
-    except Exception as exc:  # noqa: BLE001 - containment is best-effort, never a reason to fail the run
-        logger.debug("[managed_process] containing %s failed: %s", label, exc)
-    return container
+        container.kill_all()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[managed_process] container kill failed: %s", exc)
+    try:
+        process.kill()
+    except OSError:
+        pass
+    try:
+        process.wait(timeout=_KILL_WAIT_SECONDS)
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    for stream in (process.stdin, process.stdout, process.stderr):
+        try:
+            if stream is not None:
+                stream.close()  # no reader exists yet, so this cannot block
+        except OSError:
+            pass
+    _release(container)
+
+
+def _spawn_contained(
+    command: Sequence[str],
+    *,
+    label: str,
+    require_containment: bool | None,
+    cwd: str | None,
+    env: Mapping[str, str] | None,
+) -> _Spawned:
+    """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
+
+    Raises ``ContainmentError`` (with the child already killed) when containment is required and could not be
+    established, and ``OSError`` when the child cannot launch at all."""
+
+    required = containment_required() if require_containment is None else require_containment
+    container = build_process_container(label, ProcessContainerConfig(enabled=True))
+    if isinstance(container, NullProcessContainer):
+        reason = getattr(container, "reason", "") or "no container available"
+        if required:
+            raise ContainmentError(
+                f"{label}: an OS process container is required on this platform but none is available "
+                f"({reason}); the child was not started"
+            )
+        logger.warning(
+            "[managed_process] %s starts without an OS container (%s); its descendants are not tracked",
+            label,
+            reason,
+        )
+    suspended = os.name == "nt" and bool(getattr(container, "supports_suspended_start", False))
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    if suspended:
+        creationflags |= _CREATE_SUSPENDED
+    try:
+        process = subprocess.Popen(  # noqa: S603 - argv list, no shell
+            list(command),
+            cwd=cwd,
+            env=None if env is None else dict(env),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=creationflags,
+        )
+    except BaseException:
+        _release(container)
+        raise
+    if isinstance(container, NullProcessContainer):
+        return _Spawned(process, container, False)
+
+    attached = False
+    try:
+        failure = ""
+        try:
+            attached = bool(container.add_pid(process.pid))
+            if not attached:
+                failure = "the OS refused to place the child in its container"
+        except Exception as exc:  # noqa: BLE001 - reported below as a containment failure
+            failure = f"placing the child in its container failed: {exc}"
+        if not attached and required:
+            raise ContainmentError(f"{label}: {failure}; the child was stopped")
+        if not attached:
+            logger.warning("[managed_process] %s: %s; running it uncontained", label, failure)
+        if suspended:
+            from src.utils.win_jobobject import resume_suspended_process
+
+            if not resume_suspended_process(process.pid):
+                raise ContainmentError(
+                    f"{label}: the suspended child could not be resumed; it was stopped"
+                )
+    except BaseException:
+        # Whatever went wrong (including an interrupt), a child that may be suspended or uncontained is never left behind.
+        _terminate_uncontained(process, container)
+        raise
+    return _Spawned(process, container, attached)
 
 
 def _kill_tree(process: subprocess.Popen[Any], container: ProcessContainer | None) -> None:
@@ -132,30 +247,42 @@ def _release(container: ProcessContainer | None) -> None:
         logger.debug("[managed_process] container teardown failed: %s", exc)
 
 
-def _read_capped(stream: Any, limit: int, sink: dict[str, Any], *, stop_on_overflow: bool) -> None:
-    """Read ``stream`` to EOF keeping at most ``limit`` bytes.
+class _CappedBuffer:
+    """What a capped reader has read so far.  Updated in place so a reader that never finishes (an escaped
+    descendant keeps the pipe open) still yields everything read before the deadline."""
 
-    With ``stop_on_overflow`` the read stops as soon as more than ``limit`` bytes arrived (the caller then kills the
-    process); otherwise the excess is drained and discarded so the child can never block on a full pipe."""
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.data = bytearray()
+        self.overflow = False
 
-    kept = bytearray()
-    overflow = False
+    def snapshot(self) -> bytes:
+        return bytes(self.data)
+
+
+def _read_capped(stream: Any, buffer: _CappedBuffer, *, stop_on_overflow: bool) -> None:
+    """Read ``stream`` to EOF keeping at most ``buffer.limit`` bytes.
+
+    With ``stop_on_overflow`` the read stops as soon as more than the limit arrived (the caller then kills the process);
+    otherwise the excess is drained and discarded so the child can never block on a full pipe."""
+
+    # read1 returns what is available (``read(n)`` would wait for n bytes or EOF), so output is captured as it
+    # arrives and survives a pipe that never reaches EOF.
+    read = getattr(stream, "read1", stream.read)
     try:
         while True:
-            chunk = stream.read(_READ_CHUNK)
+            chunk = read(_READ_CHUNK)
             if not chunk:
                 break
-            room = limit - len(kept)
+            room = buffer.limit - len(buffer.data)
             if room > 0:
-                kept.extend(chunk[:room])
+                buffer.data.extend(chunk[:room])
             if len(chunk) > max(room, 0):
-                overflow = True
+                buffer.overflow = True
                 if stop_on_overflow:
                     break
     except (OSError, ValueError):
         pass  # the pipe closed under us (process killed); what was read is what we have
-    sink["data"] = bytes(kept)
-    sink["overflow"] = overflow
 
 
 def run_bounded(
@@ -167,53 +294,57 @@ def run_bounded(
     cancel: CancelSignal | None = None,
     cwd: str | os.PathLike[str] | None = None,
     env: Mapping[str, str] | None = None,
+    require_containment: bool | None = None,
 ) -> ProcessOutcome:
     """Run one child with a wall-clock timeout, output caps and cooperative cancellation.
 
-    The child is contained, so a timeout or cancellation kills its whole tree.  ``stdin`` is closed.  A launch failure
-    is reported in ``launch_error``; it never raises."""
+    Where containment is required (``containment_required()``) the child runs inside its own container, so a timeout or
+    cancellation kills its whole tree; if that cannot be arranged the child is not run and the reason is reported in
+    ``launch_error``.  ``stdin`` is closed.  A launch failure never raises.  The call returns within the timeout plus a
+    short drain even if a descendant that escaped containment still holds the child's pipes."""
 
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
-        process = subprocess.Popen(  # noqa: S603 - argv list, no shell
-            list(command),
+        spawned = _spawn_contained(
+            command,
+            label=f"bounded-{uuid.uuid4().hex[:12]}",
+            require_containment=require_containment,
             cwd=None if cwd is None else str(cwd),
-            env=None if env is None else dict(env),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            creationflags=creationflags,
+            env=env,
         )
+    except ContainmentError as exc:
+        return ProcessOutcome(returncode=None, launch_error=f"containment unavailable: {exc}")
     except OSError as exc:
         return ProcessOutcome(returncode=None, launch_error=str(exc) or type(exc).__name__)
 
-    container = _contain(process, f"bounded-{uuid.uuid4().hex[:12]}")
-    out_sink: dict[str, Any] = {}
-    err_sink: dict[str, Any] = {}
-    readers = [
-        _spawn_reader(
-            _read_capped,
-            process.stdout,
-            max_stdout_bytes,
-            out_sink,
-            name="bounded-process-stdout",
-            stop_on_overflow=True,
-        ),
-        _spawn_reader(
-            _read_capped,
-            process.stderr,
-            max_stderr_bytes,
-            err_sink,
-            name="bounded-process-stderr",
-            stop_on_overflow=False,
-        ),
-    ]
+    process, container = spawned.process, spawned.container
+    out_buf = _CappedBuffer(max_stdout_bytes)
+    err_buf = _CappedBuffer(max_stderr_bytes)
+    readers: list[threading.Thread] = []
 
     deadline = time.monotonic() + max(0.0, timeout_seconds)
     timed_out = False
     cancelled = False
-    stdout_reader = readers[0]
     try:
+        # Inside the try: if a reader cannot start, the (already running) child is still killed and released below.
+        readers.append(
+            _spawn_reader(
+                _read_capped,
+                process.stdout,
+                out_buf,
+                name="bounded-process-stdout",
+                stop_on_overflow=True,
+            )
+        )
+        readers.append(
+            _spawn_reader(
+                _read_capped,
+                process.stderr,
+                err_buf,
+                name="bounded-process-stderr",
+                stop_on_overflow=False,
+            )
+        )
+        stdout_reader = readers[0]
         while stdout_reader.is_alive():
             if _is_cancelled(cancel):
                 cancelled = True
@@ -224,8 +355,7 @@ def run_bounded(
                 break
             stdout_reader.join(min(_CANCEL_POLL_SECONDS, remaining))
 
-        truncated = bool(out_sink.get("overflow"))
-        if timed_out or cancelled or truncated:
+        if timed_out or cancelled or out_buf.overflow:
             _kill_tree(process, container)
         else:
             # stdout is at EOF; the child is exiting (or holds stdout open only through a grandchild).
@@ -240,26 +370,30 @@ def run_bounded(
                 time.sleep(min(_CANCEL_POLL_SECONDS, remaining))
             if timed_out or cancelled:
                 _kill_tree(process, container)
+        drain_deadline = time.monotonic() + _DRAIN_SECONDS
         for reader in readers:
-            reader.join(_KILL_WAIT_SECONDS)
+            reader.join(max(0.0, drain_deadline - time.monotonic()))
     finally:
         # Leave nothing behind on any path, including an exception in this thread.
         if process.poll() is None:
             _kill_tree(process, container)
-        for stream in (process.stdout, process.stderr):
+        # Never close a stream a reader is still blocked on: that close waits for the pipe's EOF, which an escaped
+        # descendant can withhold indefinitely.  The (daemon) reader ends by itself when the pipe finally closes.
+        for reader, stream in zip(readers, (process.stdout, process.stderr), strict=False):
             try:
-                if stream is not None:
+                if stream is not None and not reader.is_alive():
                     stream.close()
             except OSError:
                 pass
         _release(container)
     return ProcessOutcome(
         returncode=process.returncode,
-        stdout=out_sink.get("data", b""),
-        stderr=err_sink.get("data", b""),
+        stdout=out_buf.snapshot(),
+        stderr=err_buf.snapshot(),
         timed_out=timed_out,
-        output_truncated=bool(out_sink.get("overflow")),
+        output_truncated=out_buf.overflow,
         cancelled=cancelled,
+        contained=spawned.contained,
     )
 
 
@@ -273,9 +407,12 @@ class RotatingTextLog:
         self._lock = threading.Lock()
         self._handle: IO[str] | None = None
         self._size = 0
+        self._closed = False
 
     def write_line(self, line: str) -> None:
         with self._lock:
+            if self._closed:
+                return  # a pump that outlived its process must not reopen a closed log
             try:
                 if self._handle is None:
                     self._open()
@@ -305,7 +442,14 @@ class RotatingTextLog:
 
     def close(self) -> None:
         with self._lock:
+            self._closed = True
             self._close_handle()
+
+    def reopen(self) -> None:
+        """Allow writes again after ``close`` (a restarted process appends to the same log)."""
+
+        with self._lock:
+            self._closed = False
 
     def _open(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -357,8 +501,10 @@ def prune_logs(directory: Path, pattern: str, *, keep: int) -> list[Path]:
 class ManagedProcess:
     """One long-lived, contained child with bounded, decode-safe output capture.
 
-    ``start`` raises ``OSError`` (from ``Popen``) if the child cannot launch.  ``stop`` is idempotent and always leaves the
-    container released.  The owner token is exported to the child as ``OWNER_TOKEN_ENV`` so a process listing can tell a
+    ``start`` raises ``OSError`` (from ``Popen``) if the child cannot launch and ``ContainmentError`` if containment is
+    required (``containment_required()``, or ``require_containment=True``) and could not be established; in both cases no
+    child is left running.  ``stop`` is idempotent, never blocks on a pipe an escaped descendant holds, and always leaves
+    the container released.  The owner token is exported to the child as ``OWNER_TOKEN_ENV`` so a process listing can tell a
     child this application launched from an unrelated one; it grants no authority by itself.
     """
 
@@ -373,8 +519,10 @@ class ManagedProcess:
         log_path: Path | None = None,
         log_max_bytes: int = 5 * 1024 * 1024,
         log_backups: int = 2,
+        require_containment: bool | None = None,
     ) -> None:
         self._command = list(command)
+        self._require_containment = require_containment
         self._cwd = None if cwd is None else str(cwd)
         self._env = dict(env) if env is not None else dict(os.environ)
         self._label = label
@@ -388,6 +536,8 @@ class ManagedProcess:
         )
         self._process: subprocess.Popen[bytes] | None = None
         self._container: ProcessContainer | None = None
+        self._contained = False
+        self._generation = 0
         self._threads: list[threading.Thread] = []
 
     @property
@@ -400,7 +550,9 @@ class ManagedProcess:
 
     @property
     def contained(self) -> bool:
-        return self._container is not None and not isinstance(self._container, NullProcessContainer)
+        """True only if the OS accepted the child into its container (so a kill reaches its whole tree)."""
+
+        return self._contained and self._process is not None
 
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
@@ -417,28 +569,39 @@ class ManagedProcess:
             return self._process
         env = dict(self._env)
         env[OWNER_TOKEN_ENV] = self.owner_token
-        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-        process = subprocess.Popen(  # noqa: S603 - argv list, no shell
+        spawned = _spawn_contained(
             self._command,
+            label=f"{self._label}-{uuid.uuid4().hex[:12]}",
+            require_containment=self._require_containment,
             cwd=self._cwd,
             env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            creationflags=creationflags,
         )
+        process = spawned.process
+        if self._container is not None:
+            _release(
+                self._container
+            )  # a previous process exited without stop(): do not leak its job handle
         self._process = process
-        self._container = _contain(process, f"{self._label}-{uuid.uuid4().hex[:12]}")
-        self._threads = [
-            self._start_pump(process.stdout, self._stdout_tail, "stdout"),
-            self._start_pump(process.stderr, self._stderr_tail, "stderr"),
-        ]
+        self._container = spawned.container
+        self._contained = spawned.contained
+        self._generation += 1
+        if self._log is not None:
+            self._log.reopen()
+        try:
+            self._threads = [
+                self._start_pump(process.stdout, self._stdout_tail, "stdout"),
+                self._start_pump(process.stderr, self._stderr_tail, "stderr"),
+            ]
+        except BaseException:
+            self.stop(grace_seconds=0.0)  # never leave a running child nobody reads
+            raise
         return process
 
     def stop(self, *, grace_seconds: float = 5.0) -> None:
         process, container = self._process, self._container
         self._process = None
         self._container = None
+        self._contained = False
         if process is not None:
             if process.poll() is None:
                 try:
@@ -453,16 +616,18 @@ class ManagedProcess:
         for thread in self._threads:
             if thread.is_alive():
                 thread.join(timeout=1.0)
+        # A pump still blocked on its pipe means a descendant that escaped containment holds it open.  Closing the stream
+        # would wait for that descendant to exit, so it is left to the (daemon) pump, which ends at the pipe's EOF.
+        if process is not None:
+            for thread, stream in zip(
+                self._threads, (process.stdout, process.stderr), strict=False
+            ):
+                try:
+                    if stream is not None and not thread.is_alive():
+                        stream.close()
+                except OSError:
+                    pass
         self._threads = []
-        for stream in (
-            None if process is None else process.stdout,
-            None if process is None else process.stderr,
-        ):
-            try:
-                if stream is not None:
-                    stream.close()
-            except OSError:
-                pass
         if self._log is not None:
             self._log.close()
 
@@ -470,16 +635,26 @@ class ManagedProcess:
         self, stream: IO[bytes] | None, sink: deque[str], name: str
     ) -> threading.Thread:
         return _spawn_reader(
-            self._pump, stream, sink, name, name=f"managed-process-{self._label}-{name}"
+            self._pump,
+            stream,
+            sink,
+            name,
+            self._generation,
+            name=f"managed-process-{self._label}-{name}",
         )
 
-    def _pump(self, stream: IO[bytes] | None, sink: deque[str], name: str) -> None:
-        """Drain ``stream`` forever: every byte is consumed, so the child can never block on a full pipe."""
+    def _pump(self, stream: IO[bytes] | None, sink: deque[str], name: str, generation: int) -> None:
+        """Drain ``stream`` forever: every byte is consumed, so the child can never block on a full pipe.
+
+        A pump abandoned by ``stop`` (an escaped descendant still holds its pipe) keeps draining but, once the process
+        has been restarted, no longer records anything: its output is not the new process's."""
 
         if stream is None:
             return
         try:
             for raw in iter(lambda: stream.readline(_READ_CHUNK), b""):
+                if generation != self._generation:
+                    continue
                 line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                 if len(line) > TAIL_LINE_CHARS:
                     line = line[:TAIL_LINE_CHARS] + "..."
@@ -493,10 +668,12 @@ class ManagedProcess:
 __all__ = [
     "DEFAULT_MAX_STDERR_BYTES",
     "OWNER_TOKEN_ENV",
+    "ContainmentError",
     "CancelSignal",
     "ManagedProcess",
     "ProcessOutcome",
     "RotatingTextLog",
     "prune_logs",
+    "containment_required",
     "run_bounded",
 ]
