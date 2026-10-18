@@ -41,6 +41,6 @@
     "warn_on_large_chunk_count": true,
     "opt_out_pipeline_names": []
   },
-  "global_positive_enabled": false,
-  "global_negative_enabled": false
+  "global_positive_enabled": true,
+  "global_negative_enabled": true
 }
