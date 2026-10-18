@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-405 of 562 modules have a docstring.
+406 of 563 modules have a docstring.
 
 ## src/
 
@@ -527,6 +527,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `backend_dependency.py`: Classify a queued job's runtime dependency from its frozen executable identity
 - `batch_membership.py`: Resolve which logical batch, if any, a persisted job belongs to
 - `batch_projection.py`: Derive display-level batch state from canonical persisted job rows
+- `dispatch_evidence.py`: Dispatch evidence for returning a RUNNING job to the queue (PR-RUNTIME-QUEUE-TRANSITION-ATOMICITY)
 - `failure_triage.py`: Classify a FAILED job from the typed evidence that was persisted with it
 - `gpu_loss_assessment.py`: Classify one failed job against host GPU evidence
 - `history_query.py`: Read-only, paged and filtered history queries over the ``jobs`` table

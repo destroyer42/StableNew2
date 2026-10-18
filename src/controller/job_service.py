@@ -673,24 +673,21 @@ class JobService:
         self._set_queue_status("running")
 
     def cancel_current(self, *, return_to_queue: bool = False) -> Job | None:
-        """Cancel the currently running job and return it if one was active."""
+        """Cancel the currently running job and return it if one was active.
+
+        This only signals. The live job is never edited ahead of a commit: a plain cancel is the queue's guarded
+        durable CANCELLED, and "return to queue" is decided and committed later by the worker, which returns the
+        job only on positive evidence that nothing was dispatched (otherwise it is cancelled and flagged).
+        """
         running = self._find_running_job()
         if running is None and getattr(self.runner, "current_job", None) is not None:
             running = self.runner.current_job
         if running and not return_to_queue:
             self.cancel_job(running.job_id, reason="cancel_requested")
-        if running and return_to_queue:
-            running.execution_metadata.last_control_action = "return_to_queue_requested"
-        elif running:
-            running.execution_metadata.last_control_action = "cancel_requested"
         try:
             self.runner.cancel_current(return_to_queue=return_to_queue)
         except TypeError:
-            self.runner.cancel_current()
-            if running and return_to_queue:
-                cancel_running = getattr(self.job_queue, "cancel_running_job", None)
-                if callable(cancel_running):
-                    cancel_running(return_to_queue=True)
+            self.runner.cancel_current()  # a runner that cannot carry the return request only cancels
         # Don't force queue to "idle" - let runner continue processing if auto-run enabled
         # The runner will naturally pick up the next job or go idle when queue is empty
         return running

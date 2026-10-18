@@ -945,7 +945,9 @@ def test_an_undispatched_job_is_requeued_at_most_a_bounded_number_of_times(make_
         stack.queue.claim_next_job()
         decision = stack.coordinator.assess(job, result=failed(**CONNECTION))
         if decision.requeue:
-            stack.queue.return_undispatched_to_queue("img-1", reason="webui_outage")
+            stack.queue.return_undispatched_to_queue(
+                "img-1", reason="webui_outage", assessment=decision.assessment
+            )
             stack.queue.release_webui_dispatch()
     assert job.execution_metadata.return_to_queue_count == 2  # then the real failure is published
 

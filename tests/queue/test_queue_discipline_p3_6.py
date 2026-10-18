@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from src.pipeline.cli_njr_builder import build_cli_njr
+from src.queue.dispatch_evidence import NEVER_INVOKED
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository, JobStatusChanged
@@ -146,7 +147,7 @@ def test_returning_a_job_that_already_finished_is_a_noop_not_an_overwrite(stack)
     repository.transition_job(
         running, JobStatus.COMPLETED
     )  # it finished before the return was applied
-    assert queue.cancel_running_job(return_to_queue=True) is None
+    assert queue.cancel_running_job(return_to_queue=True, assessment=NEVER_INVOKED) is None
     assert repository.get_job("finished-first").status is JobStatus.COMPLETED
 
 
@@ -156,7 +157,10 @@ def test_an_undispatched_return_of_a_job_that_moved_on_is_skipped(stack) -> None
     running = queue.claim_next_job()
     assert running is not None
     repository.transition_job(running, JobStatus.FAILED)
-    assert queue.return_undispatched_to_queue("moved-on", reason="test") is None
+    assert (
+        queue.return_undispatched_to_queue("moved-on", reason="test", assessment=NEVER_INVOKED)
+        is None
+    )
     assert repository.get_job("moved-on").status is JobStatus.FAILED
 
 
@@ -164,7 +168,7 @@ def test_the_ordinary_return_to_queue_still_works(stack) -> None:
     repository, queue = stack
     queue.submit(_job("back-to-queue"))
     queue.claim_next_job()
-    assert queue.cancel_running_job(return_to_queue=True) is not None
+    assert queue.cancel_running_job(return_to_queue=True, assessment=NEVER_INVOKED) is not None
     assert repository.get_job("back-to-queue").status is JobStatus.QUEUED
     assert queue.claim_next_job().job_id == "back-to-queue"
 

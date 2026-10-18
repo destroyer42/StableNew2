@@ -83,11 +83,20 @@ def test_runner_does_not_dequeue_while_queue_paused() -> None:
     assert executed == ["paused-job"]
 
 
-def test_run_once_cancel_return_to_queue_requeues_job() -> None:
+def test_run_once_cancel_and_return_does_not_requeue_work_that_already_ran() -> None:
+    """The callable finished a stage and produced output before the stop request was honoured.
+
+    Cancel and Return used to put that job back in the queue (discarding the output and generating it again). A job
+    whose dispatch is not provably absent is cancelled instead, never requeued (accepted policy,
+    PR-RUNTIME-QUEUE-TRANSITION-ATOMICITY; the full matrix is in ``test_cancel_return_dispatch_certainty.py``).
+    """
+
     queue = JobQueue()
     runner: SingleNodeJobRunner
+    calls: list[str] = []
 
     def _execute(job: Job):
+        calls.append(job.job_id)
         runner.cancel_current(return_to_queue=True)
         return {
             "success": True,
@@ -102,9 +111,11 @@ def test_run_once_cancel_return_to_queue_requeues_job() -> None:
     result = runner.run_once(job)
 
     assert result is not None
-    assert job.status == JobStatus.QUEUED
-    assert job.execution_metadata.return_to_queue_count == 1
-    assert job.execution_metadata.stage_checkpoints == []
+    assert calls == ["return-job"]  # generated once, never submitted again
+    assert job.status == JobStatus.CANCELLED
+    assert job.execution_metadata.return_to_queue_count == 0
+    assert job.error_envelope is not None and job.error_envelope.context["action_required"] is True
+    assert queue.claim_next_job() is None
 
 
 def test_cancelled_job_does_not_publish_late_success(tmp_path: Path) -> None:

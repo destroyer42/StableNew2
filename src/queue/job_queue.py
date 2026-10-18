@@ -14,13 +14,21 @@ import heapq
 import logging
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from threading import Event, Lock
 from typing import Any
 
+from src.api.webui_failure_evidence import FailureAssessment
 from src.queue.backend_dependency import DependencyAssessment, classify_job
+from src.queue.dispatch_evidence import (
+    NO_EVIDENCE,
+    REFUSAL_MESSAGE,
+    refusal_envelope,
+    withhold_requeue_after_progress,
+)
+from src.queue.job_history_store import RETURN_REFUSED_CONTROL_ACTION
 from src.queue.job_model import Job, JobStatus, StageCheckpoint
-from src.queue.job_repository import JobRepository, JobStatusChanged
+from src.queue.job_repository import InvalidLifecycleTransition, JobRepository, JobStatusChanged
 
 logger = logging.getLogger(__name__)
 
@@ -372,71 +380,59 @@ class JobQueue:
                 (job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None
             )
 
-    def cancel_running_job(self, *, return_to_queue: bool = False) -> Job | None:
-        with self._lock:
-            running = next(
-                (job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None
-            )
-            if running is None:
-                return None
-        if return_to_queue:
-            running.execution_metadata.last_control_action = "return_to_queue"
-            running.execution_metadata.return_to_queue_count += 1
-            running.progress = 0.0
-            running.eta_seconds = None
-            running.error_message = None
-            running.result = None
-            try:
-                persisted = self._repository.transition_job(
-                    running, JobStatus.QUEUED, expected_status=JobStatus.RUNNING
-                )
-            except JobStatusChanged:
-                return None  # it finished or was cancelled first: nothing to return
-            with self._lock:
-                self._copy_persisted_state(running, persisted)
-                self._counter += 1
-                self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != running.job_id]
-                heapq.heappush(self._queue, (-int(running.priority), self._counter, running.job_id))
-                heapq.heapify(self._queue)
-            self._notify_status(running, JobStatus.QUEUED)
-            self._notify_state_listeners()
-        else:
-            running.execution_metadata.last_control_action = "cancelled"
-            self._update_status(running.job_id, JobStatus.CANCELLED, "cancelled")
-        return running
+    def cancel_running_job(
+        self,
+        *,
+        return_to_queue: bool = False,
+        job_id: str | None = None,
+        assessment: FailureAssessment | None = None,
+    ) -> Job | None:
+        """Stop the RUNNING job (``job_id``, or the one running job) for the operator.
 
-    def return_undispatched_to_queue(self, job_id: str, *, reason: str) -> Job | None:
-        """Restore a RUNNING job to QUEUED with its original identity and position.
-
-        Only the outage coordinator calls this, and only on positive evidence that no part of the job was dispatched.
-        Durable queue order is untouched by the transition, and the in-memory heap entry keeps its original counter.
+        With ``return_to_queue`` the job goes back to QUEUED (at the back) only when ``assessment`` is positive
+        evidence that no part of it was dispatched (``FailureAssessment.safe_to_requeue``) *and* it recorded no
+        progress. Otherwise the request is refused: the job is CANCELLED, never requeued, and carries the
+        operator-action-required envelope of ``dispatch_evidence.refusal_envelope``. Returns the settled job, or
+        ``None`` when nothing was RUNNING or the job moved on first (nothing is changed then).
         """
 
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if job is None or job.status != JobStatus.RUNNING:
+        with self._repository.defer_emissions(), self._lock:
+            job = self._running_locked(job_id)
+            if job is None:
                 return None
-            counter = self._claimed_counters.get(job_id)
-        job.execution_metadata.last_control_action = "outage_requeue_undispatched"
-        job.execution_metadata.return_to_queue_count += 1
-        job.progress = 0.0
-        job.eta_seconds = None
-        job.error_message = None
-        job.error_envelope = None
-        job.result = None
-        try:
-            persisted = self._repository.transition_job(
-                job, JobStatus.QUEUED, expected_status=JobStatus.RUNNING
-            )
-        except JobStatusChanged:
-            return None  # the job moved on while the outage coordinator decided
-        with self._lock:
-            self._copy_persisted_state(job, persisted)
-            if counter is None:
-                self._counter += 1
-                counter = self._counter
-            self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != job_id]
-            heapq.heappush(self._queue, (-int(job.priority), counter, job_id))
+            try:
+                verdict = withhold_requeue_after_progress(assessment or NO_EVIDENCE, job)
+                if return_to_queue and verdict.safe_to_requeue:
+                    self._commit_return_locked(job, "return_to_queue", counter=None)
+                else:
+                    self._commit_cancel_locked(job, refused=verdict if return_to_queue else None)
+            except JobStatusChanged:
+                return None  # it finished or was cancelled first: nothing to return
+        self._notify_status(job, job.status)
+        self._notify_state_listeners()
+        return job
+
+    def return_undispatched_to_queue(
+        self, job_id: str, *, reason: str, assessment: FailureAssessment
+    ) -> Job | None:
+        """Restore a RUNNING job to QUEUED with its original identity and position.
+
+        Only the outage coordinator's decision reaches this, and the queue re-checks it under its own lock against the
+        live job: ``assessment`` must be positive evidence that no part of the job was dispatched, and a job that has
+        since recorded a stage checkpoint or output is never returned. Durable queue order is untouched by the
+        transition, and the heap entry keeps its original counter. ``None`` means nothing was changed.
+        """
+
+        with self._repository.defer_emissions(), self._lock:
+            job = self._running_locked(job_id)
+            if job is None or not withhold_requeue_after_progress(assessment, job).safe_to_requeue:
+                return None
+            try:
+                self._commit_return_locked(
+                    job, "outage_requeue_undispatched", counter=self._claimed_counters.get(job_id)
+                )
+            except JobStatusChanged:
+                return None  # the job moved on while the outage coordinator decided
         self._notify_status(job, JobStatus.QUEUED)
         self._notify_state_listeners()
         return job
@@ -449,9 +445,7 @@ class JobQueue:
         self._update_status(job_id, JobStatus.COMPLETED, result=result)
 
     def mark_failed(self, job_id: str, error_message: str, result: dict | None = None) -> None:
-        job = self._update_status(job_id, JobStatus.FAILED, error_message, result=result)
-        if job:
-            job.error_message = error_message
+        self._update_status(job_id, JobStatus.FAILED, error_message, result=result)
 
     def mark_cancelled(self, job_id: str, reason: str | None = None) -> Job | None:
         return self._update_status(job_id, JobStatus.CANCELLED, reason or "cancelled")
@@ -505,6 +499,141 @@ class JobQueue:
             finalized = self._finalized_jobs.get(job_id)
         return finalized or self._repository.get_job_model(job_id)
 
+    # -- the transition protocol ---------------------------------------------------------------------------------
+    # Every lifecycle change follows one protocol, under ``_lock`` (always entered inside ``defer_emissions`` so the
+    # repository's observers run only after the lock is released):
+    #   1. prepare a *candidate*: a private copy of the live job that carries the intended change. Nothing live,
+    #      nothing in the heap and nothing the repository holds is touched while preparing it.
+    #   2. commit the candidate with the repository's guarded transition. That UPDATE is the durable linearization
+    #      point: if it raises, nothing was written and nothing live was edited.
+    #   3. project the committed row onto the live job and the runnable heap.
+    # A failure in step 3 does not undo step 2. The live job and the heap are re-derived from the committed row
+    # (``_reconcile_locked``), never "rolled back".
+
+    @staticmethod
+    def _candidate(job: Job, **changes: Any) -> Job:
+        """A private copy of ``job`` (its execution metadata copied, not shared) carrying ``changes``."""
+
+        candidate = copy.copy(job)
+        candidate.execution_metadata = copy.deepcopy(job.execution_metadata)
+        for name, value in changes.items():
+            setattr(candidate, name, value)
+        return candidate
+
+    def _running_locked(self, job_id: str | None) -> Job | None:
+        if job_id is not None:
+            job = self._jobs.get(job_id)
+            return job if job is not None and job.status == JobStatus.RUNNING else None
+        return next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
+
+    def _commit_locked(
+        self,
+        job: Job,
+        candidate: Job,
+        status: JobStatus,
+        *,
+        counter: int | None = None,
+        adopt_checkpoints: bool = False,
+        **fields: Any,
+    ) -> None:
+        """Commit ``candidate`` and project the committed row onto ``job``. The caller holds ``_lock``."""
+
+        try:
+            persisted = self._repository.transition_job(candidate, status, **fields)
+        except (JobStatusChanged, InvalidLifecycleTransition):
+            raise  # the guard refused it: nothing was committed and nothing live was touched
+        except Exception:
+            # Anything else may have happened after COMMIT. Only the durable row can say.
+            recovered = self._committed_row(job, status)
+            if recovered is None:
+                raise
+            logger.exception(
+                "%s: %s was committed although the repository reported a failure", job.job_id, status.value
+            )
+            persisted = recovered
+        try:
+            self._project_locked(job, persisted, counter=counter, adopt_checkpoints=adopt_checkpoints)
+        except Exception:
+            logger.exception(
+                "Projecting the committed %s of %s failed; reconciling from the row", status.value, job.job_id
+            )
+            self._reconcile_locked(job)
+
+    def _committed_row(self, job: Job, status: JobStatus) -> Job | None:
+        """The durable row, but only when it shows that the transition to ``status`` did commit."""
+
+        try:
+            row = self._repository.get_job_model(job.job_id)
+        except Exception:  # noqa: BLE001 - nothing can be established; the caller re-raises the original failure
+            logger.exception("Cannot read %s to learn whether its transition committed", job.job_id)
+            return None
+        return row if row is not None and row.status is status and job.status is not status else None
+
+    def _project_locked(
+        self, job: Job, persisted: Job, *, counter: int | None = None, adopt_checkpoints: bool = False
+    ) -> None:
+        """Make the live job and the heap show the committed row (``persisted``). The caller holds ``_lock``."""
+
+        self._copy_persisted_state(job, persisted, adopt_checkpoints=adopt_checkpoints)
+        if persisted.status in self._FINAL_STATUSES:
+            # PR-MEMORY-001: bounded finalized jobs; the terminal job leaves the runnable projection.
+            self._add_finalized_job(job.job_id, job)
+            self._prune_job(job.job_id)
+            return
+        self._jobs[job.job_id] = job
+        if persisted.status == JobStatus.QUEUED:
+            if counter is None:
+                self._counter += 1
+                counter = self._counter
+            self._discard_entries_locked(job.job_id)
+            heapq.heappush(self._queue, (-int(job.priority), counter, job.job_id))
+        elif counter is not None:
+            self._claimed_counters[job.job_id] = counter  # a claim: its entry was already popped
+        else:
+            self._discard_entries_locked(job.job_id)
+
+    def _reconcile_locked(self, job: Job) -> None:
+        """Re-derive the live job and the heap from the committed row after a projection failure."""
+
+        try:
+            row = self._repository.get_job_model(job.job_id)
+            if row is not None:
+                self._discard_entries_locked(job.job_id)  # a QUEUED row re-enters the heap below
+                self._project_locked(
+                    job, row, counter=self._claimed_counters.get(job.job_id), adopt_checkpoints=True
+                )
+        except Exception:  # noqa: BLE001 - the row is authoritative; restart recovery re-derives everything
+            logger.exception("Reconciling %s from its committed row failed", job.job_id)
+
+    def _discard_entries_locked(self, job_id: str) -> None:
+        kept = [item for item in self._queue if item[2] != job_id]
+        if len(kept) != len(self._queue):
+            heapq.heapify(kept)
+            self._queue = kept
+
+    def _commit_return_locked(self, job: Job, action: str, *, counter: int | None) -> None:
+        candidate = self._candidate(
+            job, progress=0.0, eta_seconds=None, error_message=None, error_envelope=None, result=None
+        )
+        candidate.execution_metadata.last_control_action = action
+        candidate.execution_metadata.return_to_queue_count += 1
+        self._commit_locked(
+            job, candidate, JobStatus.QUEUED, expected_status=JobStatus.RUNNING, counter=counter
+        )
+
+    def _commit_cancel_locked(self, job: Job, *, refused: FailureAssessment | None) -> None:
+        candidate = self._candidate(job)
+        if refused is None:
+            candidate.execution_metadata.last_control_action = "cancelled"
+            message = "cancelled"
+        else:
+            candidate.execution_metadata.last_control_action = RETURN_REFUSED_CONTROL_ACTION
+            candidate.error_envelope = refusal_envelope(job.job_id, refused)
+            message = REFUSAL_MESSAGE
+        self._commit_locked(
+            job, candidate, JobStatus.CANCELLED, error_message=message, expected_status=JobStatus.RUNNING
+        )
+
     def _update_status(
         self,
         job_id: str,
@@ -524,16 +653,14 @@ class JobQueue:
             if status is JobStatus.RUNNING and job.status is JobStatus.QUEUED:
                 if self._dispatch_fenced or self._is_held_locked(job):
                     return None
-            transition_job = job
+            candidate = self._candidate(job)
             if stage_checkpoints is not None:
-                execution_metadata = replace(
-                    job.execution_metadata,
-                    stage_checkpoints=list(stage_checkpoints),
-                )
-                transition_job = replace(job, execution_metadata=execution_metadata)
-            persisted = self._repository.transition_job(
-                transition_job,
+                candidate.execution_metadata.stage_checkpoints = list(stage_checkpoints)
+            self._commit_locked(
+                job,
+                candidate,
                 status,
+                adopt_checkpoints=stage_checkpoints is not None,
                 error_message=error_message,
                 result=result,
                 expected_status=(
@@ -544,12 +671,6 @@ class JobQueue:
                     else None
                 ),
             )
-            self._copy_persisted_state(job, persisted)
-            should_prune = status in self._FINAL_STATUSES
-            if should_prune:
-                # PR-MEMORY-001: Add to bounded finalized jobs collection
-                self._add_finalized_job(job_id, job)
-                self._prune_job(job_id)
         self._notify_status(job, status)
         self._notify_state_listeners()
         return job
@@ -609,18 +730,22 @@ class JobQueue:
             if found is not None:
                 queue_item, job, skipped = found
                 try:
-                    persisted = self._repository.transition_job(
-                        job, JobStatus.RUNNING, expected_status=JobStatus.QUEUED
+                    self._commit_locked(
+                        job,
+                        self._candidate(job),
+                        JobStatus.RUNNING,
+                        expected_status=JobStatus.QUEUED,
+                        counter=queue_item[1],
                     )
                 except Exception:
-                    heapq.heappush(self._queue, queue_item)
+                    # Put the popped entries back, but only for a job that is still a QUEUED projection.
+                    if self._jobs.get(job.job_id) is job and job.status == JobStatus.QUEUED:
+                        heapq.heappush(self._queue, queue_item)
                     for held in skipped:
                         heapq.heappush(self._queue, held)
                     raise
                 for held in skipped:
                     heapq.heappush(self._queue, held)
-                self._copy_persisted_state(job, persisted)
-                self._claimed_counters[job.job_id] = queue_item[1]
                 claimed = job
         if claimed is not None:
             self._notify_status(claimed, JobStatus.RUNNING)
@@ -648,7 +773,14 @@ class JobQueue:
         self._finalized_jobs[job_id] = job
 
     @staticmethod
-    def _copy_persisted_state(target: Job, source: Job) -> None:
+    def _copy_persisted_state(target: Job, source: Job, *, adopt_checkpoints: bool = False) -> None:
+        """Copy the committed lifecycle columns onto the live job.
+
+        Execution metadata is merged in place, never replaced: a transition owns the control action, the return
+        count and (when it published them) the stage checkpoints, while external pids and retry attempts belong to
+        concurrent writers and must not be overwritten by an older snapshot.
+        """
+
         for name in (
             "status",
             "updated_at",
@@ -657,16 +789,42 @@ class JobQueue:
             "progress",
             "eta_seconds",
             "worker_id",
-            "execution_metadata",
             "error_message",
             "error_envelope",
             "result",
         ):
             setattr(target, name, getattr(source, name))
+        live, committed = target.execution_metadata, source.execution_metadata
+        live.last_control_action = committed.last_control_action
+        live.return_to_queue_count = committed.return_to_queue_count
+        if adopt_checkpoints:
+            live.stage_checkpoints = list(committed.stage_checkpoints)
 
     def persist_runtime_state(self, job: Job) -> None:
-        """Durably checkpoint mutable execution metadata for an active job."""
-        self._repository.persist_runtime_state(job)
+        """Durably checkpoint mutable execution metadata for an active job.
+
+        Serialized with every transition by the queue lock: a writer that edited the live metadata in place is either
+        ahead of a transition's candidate or persists after the transition's projection, never in between.
+        """
+        with self._lock:
+            self._repository.persist_runtime_state(job)
+
+    def record_progress(self, job_id: str, progress: float, eta_seconds: float | None) -> Job | None:
+        """Record a RUNNING job's progress (the high-water mark is kept) and ETA; ``None`` once it is not RUNNING.
+
+        Serialized with every transition by the queue lock, and the SQL update is itself guarded on RUNNING, so a
+        report that arrives after the job moved on cannot write onto its new state.
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status != JobStatus.RUNNING:
+                return None
+            reported = max(job.progress, float(progress))
+            eta = float(eta_seconds) if eta_seconds is not None else None
+            if not self._repository.update_progress(job_id, reported, eta):
+                return None
+            job.progress, job.eta_seconds = reported, eta
+            return job
 
     def register_status_callback(self, callback: Callable[[Job, JobStatus], None]) -> None:
         """Allow observers to react to job status changes."""
