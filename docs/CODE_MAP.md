@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-412 of 589 modules have a docstring.
+409 of 586 modules have a docstring.
 
 ## src/
 
@@ -14,12 +14,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `app_factory.py`: (no docstring)
 - `cli.py`: Command-line interface for StableNew
 - `main.py`: (no docstring)
-
-## src/ai/
-
-- `settings_generator_adapter.py`: Adapters from learning data to AI settings generator requests
-- `settings_generator_contract.py`: Contracts for AI-driven settings suggestions (stubbed, versioned)
-- `settings_generator_driver.py`: Stubbed AI settings generator driver
 
 ## src/api/
 
@@ -105,7 +99,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `reprocess_admission.py`: Reprocess admission preflight (PR-IMG-MODELS-158): refuse an exact profile's unsupported operation before que…
 - `review_batch_service.py`: Transient Review compilation/preflight; JobService remains the admission authority
 - `runtime_state.py`: Controller-owned runtime state primitives
-- `settings_suggestion_controller.py`: Controller wrapper for AI settings suggestions
 - `submission_policy_v26.py`: Typed policy for submitting an already compiled NJR to the queue
 - `svd_controller.py`: Controller surface for native SVD selected-image jobs
 - `svd_submission_service.py`: Thin form-data bridge for SVD submissions owned by AppController
@@ -119,6 +112,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `application_runtime_coordinator.py`: (no docstring)
 - `background_task_coordinator.py`: (no docstring)
 - `diagnostics_coordinator.py`: (no docstring)
+- `dispatch_hold_status.py`: Operator-facing reason a non-empty queue is not dispatching
 - `gui_config_service.py`: (no docstring)
 - `learning_completion_router.py`: learning_completion_router — routes job-completion events to the learning controller without hard-wiring AppC…
 - `run_submission_service.py`: (no docstring)

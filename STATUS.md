@@ -23,11 +23,11 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - `main` is protected: a PR is required, force pushes and deletion are blocked, the owner may bypass. Required checks:
   `required`, `full-suite` (the sharded census) and `windows`. Docs-only changes take a cheap path.
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below),
-  isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` after
+  isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
-- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,690 errors in 195
-  files), unformatted files (400), blind/silent excepts in `src` (BLE001 1,412, S110 565, S112 45), thread and layering
-  rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 18), and the four
+- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,685 errors in
+  194 files), unformatted files (398), blind/silent excepts in `src` (BLE001 1,411, S110 565, S112 44), thread and layering
+  rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 17), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
   Flaky tests are repaired or quarantined with an owner and expiry (`tests/quarantine/README.md`).
@@ -89,7 +89,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 3. Is `DIAG-GPU-130` open or closed? Records conflict; treat as open (see Holds).
 4. Should the GUI "batch runs" control apply on the state-fallback job-building path? It has never applied there.
 5. A physical restart check that queued WebUI jobs are held then released against a running Forge.
-6. Retire AnimateDiff, disabled LTX specs, story-plan/continuity, `src/ai`, Character Training? (The cluster scaffolding is already retired.)
+6. Retire AnimateDiff, disabled LTX specs, story-plan/continuity, Character Training? (The AI settings-suggestion stub package was retired with its controller and tests, and the cluster scaffolding was retired too; external scripts importing `src.ai` would break, unverified.)
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: history browser, Learning payoff, inpainting/ControlNet, LoRA browser.
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments).
@@ -104,6 +104,7 @@ of the roadmap; where they conflict with this file, this file and the repository
   2026-09-07, the latest 2026-10-17 with the OS still running; Windows logs a Kernel-PnP event 1000 for this GPU at each; no root cause accepted; records `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
   `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md`). No physical
   generation, qualification or runtime restart without explicit owner authorization.
+- Character Training is on HOLD pending a real trainer decision (no trainer is bundled; cancellation reaches only the immediate process; weight discovery can fall back to an older file). LoRA consumption is independent and stays supported: `docs/Subsystems/Training/Character_Embedding_Workflow_v2.6.md` section 0.1.
 - Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs resource and
   fault clearance first (`docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md`).
 - Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized.

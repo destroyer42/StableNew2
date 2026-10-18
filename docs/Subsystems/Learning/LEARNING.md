@@ -42,7 +42,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | Discovered outputs | `output_scanner.py` (`OutputScanner.scan_incremental`), `output_scan_models.py`, `discovered_scan_service.py` (`apply_scan`), `discovered_grouping.py` (`GroupingEngine`), `discovered_review_models.py` |
 | Review and analytics | `review_workspace.py` (`build_review_projection`), `experiment_conclusion.py`, `learning_analytics.py` (`LearningAnalytics`, JSON/CSV export), `experiment_naming.py` |
 | Legacy plan runner | `learning_plan.py` (`LearningPlan`, `LearningMode`), `learning_runner.py` (`LearningRunner`, a stub that fabricates pending artifacts), `learning_execution.py` (`LearningExecutionRunner`), `learning_adapter.py`, `learning_contract.py` (placeholder optimizer presets). Not the experiment path; see section 9 |
-| Other | `run_metadata.py` (`write_run_metadata`, called by the runner), `feedback_manager.py` and `learning_feedback.py` (no callers in `src`), `dataset_builder.py` (feeds `src/ai/settings_generator_adapter.py`) |
+| Other | `run_metadata.py` (`write_run_metadata`, called by the runner), `feedback_manager.py` and `learning_feedback.py` (no callers in `src`), `dataset_builder.py` (`build_learning_dataset`; its former `src/ai` consumer was retired) |
 
 ### 2.2 GUI and controller layers
 

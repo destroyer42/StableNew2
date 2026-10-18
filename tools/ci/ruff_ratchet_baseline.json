@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 400,
+    "total": 398,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -194,7 +194,6 @@
       "tests/gui_v2/test_engine_settings_runtime_selector_130.py",
       "tests/gui_v2/test_focused_operator_workspace_110.py",
       "tests/gui_v2/test_forge_capability_projection_v2.py",
-      "tests/gui_v2/test_gpu_quarantine_readiness_180.py",
       "tests/gui_v2/test_klein_lora_gui_117.py",
       "tests/gui_v2/test_klein_profile_gui.py",
       "tests/gui_v2/test_learning_tab_state_persistence.py",
@@ -375,7 +374,6 @@
       "tools/ci/ci_truth.py",
       "tools/ci/previous_evidence.py",
       "tools/ci/run_collection_gate.py",
-      "tools/ci/run_pr_gate.py",
       "tools/ci/run_required_smoke.py",
       "tools/ci/run_sharded_census.py",
       "tools/ci/validation_plan.py",
@@ -409,15 +407,11 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1412,
+      "BLE001": 1411,
       "S110": 565,
-      "S112": 45
+      "S112": 44
     },
     "counts": {
-      "src/ai/settings_generator_adapter.py": {
-        "BLE001": 1,
-        "S112": 1
-      },
       "src/api/client.py": {
         "BLE001": 23,
         "S110": 4

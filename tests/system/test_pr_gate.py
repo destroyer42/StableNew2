@@ -64,6 +64,70 @@ def test_pr_gate_labels_gate_failure_as_source_or_test_failure(monkeypatch, caps
     assert "SOURCE/TEST FAILURE" in capsys.readouterr().err
 
 
+# --- --full: the hosted full-suite census, run locally -------------------------------------------------------
+
+
+def _record_runs(monkeypatch, *, fail_on: str | None = None, code: int = 5):
+    observed: list[tuple[str, ...]] = []
+
+    def fake_run(command, **_kwargs):
+        observed.append(tuple(command))
+        name = _command_name(tuple(command))
+        return SimpleNamespace(returncode=code if name == fail_on else 0)
+
+    monkeypatch.setattr(run_pr_gate.subprocess, "run", fake_run)
+    monkeypatch.setattr(run_pr_gate, "missing_required_tools", lambda: [])
+    return observed
+
+
+def test_default_run_does_not_start_the_census(monkeypatch) -> None:
+    observed = _record_runs(monkeypatch)
+
+    assert run_pr_gate.main([]) == 0
+    assert all("run_sharded_census.py" not in " ".join(command) for command in observed)
+
+
+def test_full_runs_the_required_gate_then_the_sharded_census(monkeypatch, capsys) -> None:
+    observed = _record_runs(monkeypatch)
+
+    assert run_pr_gate.main(["--full"]) == 0
+
+    names = [_command_name(command) for command in observed]
+    assert names[:-1] == [_command_name(command) for _, command in run_pr_gate.GATE_STEPS]
+    assert names[-1] == "run_sharded_census.py"
+    assert observed[-1][-2:] == ("--workers", str(run_pr_gate.DEFAULT_CENSUS_WORKERS))
+    assert "including the full census" in capsys.readouterr().out
+
+
+def test_full_passes_the_requested_worker_count_through(monkeypatch) -> None:
+    observed = _record_runs(monkeypatch)
+
+    assert run_pr_gate.main(["--full", "--workers", "3"]) == 0
+    assert observed[-1][-2:] == ("--workers", "3")
+
+
+def test_a_failing_census_returns_its_exit_code_and_is_labelled(monkeypatch, capsys) -> None:
+    _record_runs(monkeypatch, fail_on="run_sharded_census.py", code=1)
+
+    assert run_pr_gate.main(["--full"]) == 1
+    assert "SOURCE/TEST FAILURE at " + run_pr_gate.FULL_CENSUS_LABEL in capsys.readouterr().err
+
+
+def test_a_failing_required_gate_never_reaches_the_census(monkeypatch) -> None:
+    observed = _record_runs(monkeypatch, fail_on="check_controller_surface.py", code=7)
+
+    assert run_pr_gate.main(["--full"]) == 7
+    assert all("run_sharded_census.py" not in " ".join(command) for command in observed)
+
+
+def test_workers_requires_full_and_must_be_positive(capsys) -> None:
+    with pytest.raises(SystemExit):
+        run_pr_gate.main(["--workers", "2"])
+    with pytest.raises(SystemExit):
+        run_pr_gate.main(["--full", "--workers", "0"])
+    assert "--workers" in capsys.readouterr().err
+
+
 # --- Shared pytest-gate output contract: quiet on success, diagnostic on failure -------------
 
 

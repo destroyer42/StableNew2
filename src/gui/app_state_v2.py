@@ -40,6 +40,7 @@ class AppStateV2:
             "queue_status",
             "queue_items",
             "queue_jobs",
+            "queue_dispatch_hold",
             "history_items",
             "preview_jobs",
             "operator_log",
@@ -78,6 +79,7 @@ class AppStateV2:
     resources: dict[str, list[Any]] = field(default_factory=build_empty_resource_map)
     queue_items: list[str] = field(default_factory=list)
     queue_jobs: list[UnifiedJobSummary] = field(default_factory=list)
+    queue_dispatch_hold: str = ""
     running_job: UnifiedJobSummary | None = None
     runtime_status: RuntimeJobStatus | None = None  # Dynamic execution state for running job
     queue_status: str = "idle"
@@ -458,6 +460,13 @@ class AppStateV2:
             self._notify("queue_jobs")
         else:
             logger.debug(f"set_queue_jobs: No change detected, {len(jobs)} jobs")
+
+    def set_queue_dispatch_hold(self, message: str | None) -> None:
+        """Record why queued work is not dispatching ("" when nothing is held); notifies only on change."""
+        text = str(message or "")
+        if text != self.queue_dispatch_hold:
+            self.queue_dispatch_hold = text
+            self._notify("queue_dispatch_hold")
 
     def set_running_job(self, job: UnifiedJobSummary | None) -> None:
         if self.running_job != job:
