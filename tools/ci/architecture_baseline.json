@@ -3,7 +3,7 @@
   "totals": {
     "daemon_threads": 16,
     "raw_threads": 9,
-    "utils_upward_imports": 19,
+    "utils_upward_imports": 18,
     "controller_gui_imports": 17
   },
   "counts": {
@@ -96,9 +96,6 @@
       "utils_upward_imports": 4
     },
     "src/utils/watchdog_v2.py": {
-      "utils_upward_imports": 1
-    },
-    "src/utils/webui_discovery.py": {
       "utils_upward_imports": 1
     }
   }

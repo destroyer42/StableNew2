@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 import uuid
 from collections.abc import Callable, Mapping
@@ -9,6 +10,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from src.controller.runtime_state import CancellationError
 from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.services.runtime_transition_service import (
     RUNTIME_COMFY,
@@ -47,6 +49,8 @@ from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
+
+logger = logging.getLogger(__name__)
 
 
 def _release_owned_runtime_after_job(spec: Any) -> bool:
@@ -247,6 +251,18 @@ def _has_model_inventory(payload: Any) -> bool:
 _LIVENESS_REPORT_INTERVAL_S = 5.0
 
 
+def _queue_membership(queue: Any, prompt_id: str) -> str | None:
+    """``"running"`` / ``"pending"`` when Comfy's ``/queue`` payload lists the prompt, else ``None``."""
+
+    if not isinstance(queue, Mapping):
+        return None
+    for key, state in (("queue_running", "running"), ("queue_pending", "pending")):
+        for item in queue.get(key) or ():
+            if isinstance(item, (list, tuple)) and len(item) > 1 and str(item[1]) == prompt_id:
+                return state
+    return None
+
+
 def _prompt_is_live(client: Any, prompt_id: str) -> bool:
     """True only when the Comfy server itself still lists the prompt as running or pending.
 
@@ -258,13 +274,20 @@ def _prompt_is_live(client: Any, prompt_id: str) -> bool:
         queue = client.get_queue()
     except Exception:
         return False
-    if not isinstance(queue, Mapping):
+    return _queue_membership(queue, prompt_id) is not None
+
+
+def _is_cancelled(cancel_token: Any) -> bool:
+    checker = getattr(cancel_token, "is_cancelled", None)
+    try:
+        return bool(checker()) if callable(checker) else False
+    except Exception:  # noqa: BLE001 - a broken token must not abort a healthy generation
         return False
-    for key in ("queue_running", "queue_pending"):
-        for item in queue.get(key) or ():
-            if isinstance(item, (list, tuple)) and len(item) > 1 and str(item[1]) == prompt_id:
-                return True
-    return False
+
+
+def _raise_if_cancelled(cancel_token: Any, where: str) -> None:
+    if _is_cancelled(cancel_token):
+        raise CancellationError(f"Comfy workflow cancelled {where}")
 
 
 def _history_entry_from_payload(
@@ -491,6 +514,9 @@ class ComfyWorkflowVideoBackend:
             client=client,
             object_info=object_info,
         )
+        # A job cancelled while it was still preparing must not dispatch anything.
+        _raise_if_cancelled(request.cancel_token, "before the workflow was queued")
+        # Not retried: a DispatchOutcomeUnknown here means Comfy may already be running this prompt.
         queue_response = client.queue_prompt(queue_payload)
         prompt_id = str(queue_response.get("prompt_id") or "").strip()
         if not prompt_id:
@@ -501,6 +527,7 @@ class ComfyWorkflowVideoBackend:
             prompt_id=prompt_id,
             report_liveness=self._liveness_reporter(pipeline, request),
             timeout=self._history_timeout_for(spec),
+            cancel_token=request.cancel_token,
         )
         if str(spec.backend_defaults.get("output_transport") or "") == "comfy_view":
             history_entry = self._localize_comfy_outputs(
@@ -1151,12 +1178,16 @@ class ComfyWorkflowVideoBackend:
         prompt_id: str,
         report_liveness: Callable[[float], None] | None = None,
         timeout: float | None = None,
+        cancel_token: Any = None,
     ) -> dict[str, Any]:
         started = time.time()
         deadline = started + (timeout if timeout is not None else self._history_timeout)
         last_report: float | None = None
         last_payload: dict[str, Any] | None = None
         while time.time() < deadline:
+            if _is_cancelled(cancel_token):
+                self._cancel_prompt(client, prompt_id)
+                raise CancellationError(f"Comfy workflow cancelled (prompt_id '{prompt_id}')")
             payload = client.get_history(prompt_id)
             last_payload = dict(payload or {})
             entry = _history_entry_from_payload(last_payload, prompt_id)
@@ -1179,6 +1210,22 @@ class ComfyWorkflowVideoBackend:
         raise TimeoutError(
             f"Timed out waiting for Comfy workflow history for prompt_id '{prompt_id}'"
         )
+
+    @staticmethod
+    def _cancel_prompt(client: Any, prompt_id: str) -> None:
+        """Best-effort, bounded stop of the one prompt this job queued; never raises.
+
+        A running prompt is interrupted by id (so another client's prompt is never the target); a prompt still waiting
+        in Comfy's queue is removed from it.  Anything else (finished, unknown) needs no action."""
+
+        try:
+            state = _queue_membership(client.get_queue(), prompt_id)
+            if state == "running":
+                client.interrupt(prompt_id)
+            elif state == "pending":
+                client.delete_from_queue([prompt_id])
+        except Exception as exc:  # noqa: BLE001 - cancellation must proceed even if Comfy is unreachable
+            logger.warning("Could not ask Comfy to stop prompt %s: %s", prompt_id, exc)
 
     @staticmethod
     def _localize_comfy_outputs(

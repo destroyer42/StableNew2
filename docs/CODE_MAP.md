@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-418 of 590 modules have a docstring.
+420 of 590 modules have a docstring.
 
 ## src/
 
@@ -21,6 +21,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `client.py`: API client for Stable Diffusion WebUI
 - `forge_client.py`: Forge WebUI transport adapter (PR-IMG-FORGE-100)
 - `healthcheck.py`: (no docstring)
+- `http_transport.py`: A small typed HTTP transport (audit E1, P3-4)
 - `types.py`: API result and error types for StableNew V2
 - `webui_api.py`: WebUI API helpers with throttled options plumbing
 - `webui_failure_evidence.py`: Bounded, content-free classification of WebUI execution failures (PR-QUEUE-WEBUI-171)
@@ -663,8 +664,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `system_info_v2.py`: (no docstring)
 - `thread_registry.py`: Thread Registry for Centralized Thread Lifecycle Management
 - `watchdog_v2.py`: (no docstring)
-- `webui_discovery.py`: (no docstring)
-- `webui_launcher.py`: (no docstring)
+- `webui_discovery.py`: One-shot WebUI API health summary used by ``SDWebUIClient.check_api_ready``
 - `webui_resource_names.py`: (no docstring)
 - `win_jobobject.py`: (no docstring)
 

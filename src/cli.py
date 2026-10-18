@@ -4,11 +4,11 @@ import argparse
 import logging
 from pathlib import Path
 
-from .api.webui_runtime_identity import A1111_DEFAULT_BASE_URL, resolve_effective_webui_base_url
+from .api.webui_runtime_identity import resolve_effective_webui_base_url
 from .app.bootstrap import build_cli_kernel
 from .pipeline import VideoCreator
 from .pipeline.cli_njr_builder import build_cli_njr
-from .utils import ConfigManager, StructuredLogger, find_webui_api_port, setup_logging
+from .utils import ConfigManager, StructuredLogger, setup_logging
 
 
 def _collect_video_source_paths(result_variants: list[dict[str, object]]) -> list[Path]:
@@ -118,17 +118,8 @@ def main():
     api_url = args.api_url or resolve_effective_webui_base_url(config_manager.load_settings())
     config["api"]["base_url"] = api_url
 
-    # Initialize API client with port discovery
-    logger.info("Connecting to SD WebUI API...")
-
-    # Try to find the actual API port if using default
-    if api_url == A1111_DEFAULT_BASE_URL:  # port discovery is only for the default A1111 endpoint
-        discovered_url = find_webui_api_port()
-        if discovered_url:
-            logger.info(f"Found WebUI API at {discovered_url}")
-            api_url = discovered_url
-        else:
-            logger.info(f"Using configured URL: {api_url}")
+    # The configured endpoint is the only endpoint: alternate ports are never probed.
+    logger.info("Connecting to SD WebUI API at %s...", api_url)
 
     kernel = build_cli_kernel(
         api_url=api_url,
@@ -141,7 +132,7 @@ def main():
     logger.info("Checking API readiness...")
     if not client.check_api_ready():
         logger.error("SD WebUI API is not ready. Exiting.")
-        logger.info("Common ports to check: 7860, 7861, 7862, 7863, 7864")
+        logger.info("Check that the WebUI is running at %s (or pass --api-url)", api_url)
         return 1
 
     runner = kernel.pipeline_runner

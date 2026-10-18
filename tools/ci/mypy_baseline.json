@@ -1,6 +1,6 @@
 {
   "counts": {
-    "src/api/client.py": 34,
+    "src/api/client.py": 33,
     "src/api/forge_client.py": 2,
     "src/api/healthcheck.py": 1,
     "src/api/webui_failure_evidence.py": 7,
@@ -180,8 +180,7 @@
     "src/utils/system_info_v2.py": 2,
     "src/utils/thread_registry.py": 1,
     "src/utils/watchdog_v2.py": 5,
-    "src/utils/webui_discovery.py": 9,
-    "src/utils/webui_launcher.py": 1,
+    "src/utils/webui_discovery.py": 6,
     "src/utils/win_jobobject.py": 5,
     "src/video/assembly_service.py": 1,
     "src/video/comfy_process_manager.py": 2,
@@ -197,5 +196,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1666
+  "total": 1661
 }

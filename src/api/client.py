@@ -2462,12 +2462,6 @@ def validate_webui_health(*args, **kwargs):
     return _wd.validate_webui_health(*args, **kwargs)
 
 
-def find_webui_api_port(*args, **kwargs):
-    from src.utils import webui_discovery as _wd
-
-    return _wd.find_webui_api_port(*args, **kwargs)
-
-
 # ---------------------------------------------------------------------------
 # Backwards-compatibility alias for older tests/imports
 # ---------------------------------------------------------------------------

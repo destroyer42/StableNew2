@@ -229,20 +229,6 @@ def _mock_webui_discovery(monkeypatch, tmp_path: Path):
         pass
 
     try:
-        import src.utils.webui_discovery as wd  # type: ignore
-    except Exception:
-        return
-
-    def fake_find_port(*_args, **_kwargs):
-        return None
-
-    def fake_launch_safely(*_args, **_kwargs):
-        return None
-
-    monkeypatch.setattr(wd, "find_webui_api_port", fake_find_port, raising=False)
-    monkeypatch.setattr(wd, "launch_webui_safely", fake_launch_safely, raising=False)
-
-    try:
         import src.api.client as api_client  # type: ignore
 
         current_test = os.environ.get("PYTEST_CURRENT_TEST", "")

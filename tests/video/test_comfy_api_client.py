@@ -11,7 +11,7 @@ def test_comfy_api_client_reads_system_stats() -> None:
     session = mock.Mock()
     response = mock.Mock()
     response.json.return_value = {"devices": []}
-    response.raise_for_status.return_value = None
+    response.status_code = 200
     session.get.return_value = response
 
     client = ComfyApiClient(base_url="http://127.0.0.1:8188", session=session)
@@ -24,7 +24,7 @@ def test_comfy_api_client_queue_prompt_posts_payload() -> None:
     session = mock.Mock()
     response = mock.Mock()
     response.json.return_value = {"prompt_id": "abc123"}
-    response.raise_for_status.return_value = None
+    response.status_code = 200
     session.post.return_value = response
 
     client = ComfyApiClient(base_url="http://127.0.0.1:8188", session=session)
@@ -39,7 +39,7 @@ def test_comfy_api_client_rejects_non_dict_json() -> None:
     session = mock.Mock()
     response = mock.Mock()
     response.json.return_value = []
-    response.raise_for_status.return_value = None
+    response.status_code = 200
     session.get.return_value = response
 
     client = ComfyApiClient(session=session)
@@ -52,7 +52,7 @@ def test_comfy_api_client_reads_prompt_history() -> None:
     session = mock.Mock()
     response = mock.Mock()
     response.json.return_value = {"prompt-123": {"outputs": {}}}
-    response.raise_for_status.return_value = None
+    response.status_code = 200
     session.get.return_value = response
 
     client = ComfyApiClient(base_url="http://127.0.0.1:8188", session=session)
