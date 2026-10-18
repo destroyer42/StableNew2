@@ -17,6 +17,7 @@ JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
 JOB_OBJECT_LIMIT_JOB_MEMORY = 0x00000200
 JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 PROCESS_ALL_ACCESS = 0x1F0FFF
+PROCESS_SUSPEND_RESUME = 0x0800
 
 
 class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
@@ -64,6 +65,9 @@ kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
 kernel32.TerminateJobObject.restype = wintypes.BOOL
 kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
 kernel32.CloseHandle.restype = wintypes.BOOL
+ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined]  # Windows-only module
+ntdll.NtResumeProcess.restype = ctypes.c_long
+ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
 kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 kernel32.SetInformationJobObject.restype = wintypes.BOOL
 kernel32.SetInformationJobObject.argtypes = [
@@ -72,6 +76,27 @@ kernel32.SetInformationJobObject.argtypes = [
     wintypes.LPVOID,
     wintypes.DWORD,
 ]
+
+
+def resume_suspended_process(pid: int) -> bool:
+    """Resume a process that was created with ``CREATE_SUSPENDED`` and has not run yet.
+
+    Resumes through ``NtResumeProcess`` (the call ``psutil.Process.resume`` makes), which decrements the suspend count
+    of the process's threads; for a fresh ``CREATE_SUSPENDED`` process that is its one initial thread.  ``True`` only if
+    Windows accepted the request; the caller must not assume the child runs otherwise."""
+
+    handle = kernel32.OpenProcess(PROCESS_SUSPEND_RESUME, False, pid)
+    if not handle:
+        logger.warning("Could not open pid %s to resume it", pid)
+        return False
+    try:
+        status = ntdll.NtResumeProcess(handle)
+    finally:
+        kernel32.CloseHandle(handle)
+    if status < 0:  # NTSTATUS: negative is failure, 0 and positive statuses are success
+        logger.warning("NtResumeProcess failed for pid %s: status %#x", pid, status & 0xFFFFFFFF)
+        return False
+    return True
 
 
 class WindowsJobObject:
@@ -98,14 +123,28 @@ class WindowsJobObject:
         if self._memory_limit_mb:
             info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_JOB_MEMORY
             info.JobMemoryLimit = int(self._memory_limit_mb * 1024 * 1024)
-        success = kernel32.SetInformationJobObject(
-            self._handle,
-            JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
-            ctypes.byref(info),
-            ctypes.sizeof(info),
+        if self._set_limits(info):
+            return
+        if self._memory_limit_mb:
+            # The memory cap is optional; kill-on-close is what makes the job a safety net.
+            logger.warning("Job memory limit was refused; retrying with kill-on-close only")
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            info.JobMemoryLimit = 0
+            if self._set_limits(info):
+                self._memory_limit_mb = None
+                return
+        self.close()
+        raise OSError(f"SetInformationJobObject(kill-on-close) failed: {ctypes.get_last_error()}")
+
+    def _set_limits(self, info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION) -> bool:
+        return bool(
+            kernel32.SetInformationJobObject(
+                self._handle,
+                JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                ctypes.byref(info),
+                ctypes.sizeof(info),
+            )
         )
-        if not success:
-            logger.debug("SetInformationJobObject failed: %s", ctypes.get_last_error())
 
     def assign(self, pid: int) -> bool:
         """Assign ``pid`` to this job; ``True`` only if Windows accepted it."""
