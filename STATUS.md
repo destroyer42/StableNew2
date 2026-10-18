@@ -89,7 +89,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 3. Is `DIAG-GPU-130` open or closed? Records conflict; treat as open (see Holds).
 4. Should the GUI "batch runs" control apply on the state-fallback job-building path? It has never applied there.
 5. A physical restart check that queued WebUI jobs are held then released against a running Forge.
-6. Retire AnimateDiff, disabled LTX specs, story-plan/continuity, Character Training? (The AI settings-suggestion stub package was retired with its controller and tests, and the cluster scaffolding was retired too; external scripts importing `src.ai` would break, unverified.)
+6. Retire AnimateDiff, disabled LTX specs, Character Training? (The AI settings-suggestion stub package was retired with its controller and tests, and the cluster scaffolding was retired too; external scripts importing `src.ai` would break, unverified.)
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: history browser, Learning payoff, inpainting/ControlNet, LoRA browser.
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments).
