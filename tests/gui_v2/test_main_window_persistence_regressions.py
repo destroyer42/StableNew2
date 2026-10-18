@@ -237,7 +237,7 @@ def test_save_ui_state_persists_video_workflow_selection(tmp_path: Path) -> None
     window.learning_tab = _StubLearningTab({})
     window.video_workflow_tab = _StubVideoWorkflowTab(
         {
-            "workflow_id": "ltx_multiframe_anchor_v1",
+            "workflow_id": "synthetic_anchor_video_v1",
             "source_image_path": "C:/tmp/source.png",
             "end_anchor_path": "C:/tmp/end.png",
         }
@@ -251,7 +251,7 @@ def test_save_ui_state_persists_video_workflow_selection(tmp_path: Path) -> None
 
     saved = store.load_state()
     assert saved is not None
-    assert saved["video_workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert saved["video_workflow"]["workflow_id"] == "synthetic_anchor_video_v1"
 
 
 def test_save_ui_state_persists_content_visibility_mode(tmp_path: Path) -> None:

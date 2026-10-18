@@ -13,7 +13,7 @@ class _ControllerStub:
 
     def build_video_workflow_defaults(self) -> dict[str, object]:
         return {
-            "workflow_id": "ltx_multiframe_anchor_v1",
+            "workflow_id": "synthetic_anchor_video_v1",
             "motion_profile": "gentle",
             "camera_intent": {"preset": "none", "strength": 0.35},
             "controlnet": {
@@ -29,16 +29,16 @@ class _ControllerStub:
     def get_video_workflow_specs(self) -> list[dict[str, object]]:
         return [
             {
-                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_id": "synthetic_anchor_video_v1",
                 "workflow_version": "1.0.0",
                 "backend_id": "comfy",
-                "display_name": "LTX Multi-Frame Anchor v1",
+                "display_name": "Synthetic Anchor Video v1",
             },
             {
-                "workflow_id": "ltx_multiframe_anchor_v1_conditioned",
+                "workflow_id": "synthetic_anchor_video_v1_conditioned",
                 "workflow_version": "1.0.0",
                 "backend_id": "comfy",
-                "display_name": "LTX Multi-Frame Anchor v1 Conditioned",
+                "display_name": "Synthetic Conditioned Anchor Video v1",
             },
         ]
 
@@ -75,7 +75,7 @@ def test_video_workflow_tab_handoff_and_state_roundtrip(tk_root) -> None:
 
     state = tab.get_video_workflow_state()
 
-    assert state["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert state["workflow_id"] == "synthetic_anchor_video_v1"
     assert state["source_image_path"] == "C:/tmp/source.png"
     assert state["end_anchor_path"] == "C:/tmp/end.png"
     assert state["mid_anchor_paths"] == ["C:/tmp/mid1.png", "C:/tmp/mid2.png"]
@@ -89,7 +89,7 @@ def test_video_workflow_tab_handoff_and_state_roundtrip(tk_root) -> None:
 
     tab.restore_video_workflow_state(
         {
-            "workflow_id": "ltx_multiframe_anchor_v1_conditioned",
+            "workflow_id": "synthetic_anchor_video_v1_conditioned",
             "source_image_path": "C:/tmp/source-2.png",
             "end_anchor_path": "C:/tmp/end-2.png",
             "mid_anchor_paths": ["C:/tmp/mid-a.png"],
@@ -120,7 +120,7 @@ def test_video_workflow_tab_handoff_and_state_roundtrip(tk_root) -> None:
     assert restored["prompt"] == "new prompt"
     assert restored["negative_prompt"] == "new negative"
     assert "End anchor" in tab.source_summary_var.get()
-    assert "LTX Multi-Frame Anchor v1 Conditioned" in tab.workflow_detail_var.get()
+    assert "Synthetic Conditioned Anchor Video v1" in tab.workflow_detail_var.get()
     assert "Effective settings:" in tab.effective_settings_var.get()
     assert "motion=dynamic [selected here]" in tab.effective_settings_var.get()
     assert "depth=auto" in tab.effective_settings_var.get()
@@ -188,7 +188,7 @@ def test_video_workflow_tab_submit_serializes_conditioning_payload(tk_root, monk
     controller = _ControllerStub()
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=controller)
     tab.source_image_var.set("C:/tmp/source.png")
-    tab.workflow_var.set("ltx_multiframe_anchor_v1_conditioned")
+    tab.workflow_var.set("synthetic_anchor_video_v1_conditioned")
     tab.end_anchor_var.set("C:/tmp/end.png")
     tab.depth_mode_var.set("auto")
     tab.camera_preset_var.set("dolly_in")
@@ -206,7 +206,7 @@ def test_video_workflow_tab_submit_serializes_conditioning_payload(tk_root, monk
 
     assert controller.submissions
     _, form_data = controller.submissions[0]
-    assert form_data["workflow_id"] == "ltx_multiframe_anchor_v1_conditioned"
+    assert form_data["workflow_id"] == "synthetic_anchor_video_v1_conditioned"
     assert form_data["depth_input"]["mode"] == "auto"
     assert form_data["camera_intent"]["preset"] == "dolly_in"
     assert form_data["controlnet"]["guidance_end"] == "0.9"

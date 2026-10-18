@@ -14,7 +14,7 @@ from src.video import (
     build_default_video_backend_registry,
 )
 from src.video.workflow_registry import WorkflowRegistry
-from tests.helpers.video_contract_registry import build_ltx_contract_registry
+from tests.helpers.video_contract_registry import build_synthetic_contract_registry
 
 
 def _ready_transition() -> object:
@@ -31,7 +31,7 @@ def _ready_process_manager(base_url: str = "http://127.0.0.1:8188") -> object:
 
 
 def _backend_contract_registry() -> WorkflowRegistry:
-    return build_ltx_contract_registry()
+    return build_synthetic_contract_registry()
 
 
 def test_default_video_backend_registry_registers_builtin_backends() -> None:
@@ -193,8 +193,8 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXAnchorBridge": {"input": {}},
-        "models": {"checkpoints": ["ltx_video.safetensors"]},
+        "SyntheticAnchorBridge": {"input": {}},
+        "models": {"checkpoints": ["synthetic_video.safetensors"]},
     }
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.return_value = {
@@ -253,7 +253,7 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
             stage_name="video_workflow",
             stage_config={
                 "enabled": True,
-                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_id": "synthetic_anchor_video_v1",
                 "secondary_motion": {
                     "enabled": True,
                     "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},

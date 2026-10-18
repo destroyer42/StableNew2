@@ -4,6 +4,44 @@ from src.video.workflow_catalog import build_builtin_workflow_specs
 from src.video.workflow_contracts import WorkflowSpec
 
 
+class WorkflowLookupError(KeyError):
+    """A workflow lookup refused for governance or identity reasons.
+
+    It stays a ``KeyError`` for existing callers, but ``str()`` is the plain operator-readable
+    message (``KeyError`` would otherwise render its repr, quotes included).
+    """
+
+    def __str__(self) -> str:
+        return str(self.args[0]) if self.args else ""
+
+
+# Message-only record of catalog workflows that were removed.  It never resolves, aliases or
+# substitutes a workflow: a retained job or history snapshot that still names one of these ids
+# loads and displays as before, and an execution request for it fails with the reason below.
+# Remove an entry once no retained job or history snapshot can reference it.
+RETIRED_WORKFLOW_IDS: dict[str, str] = {
+    "ltx_multiframe_anchor_v1": (
+        "it was a disabled LTX contract example whose bridge nodes never existed and was removed"
+    ),
+    "ltx_multiframe_anchor_v1_conditioned": (
+        "it was a disabled LTX contract example whose bridge nodes never existed and was removed"
+    ),
+}
+
+
+def _not_registered_message(workflow_id: str, workflow_version: str | None = None) -> str:
+    target = f"Workflow '{workflow_id}'"
+    if workflow_version is not None:
+        target += f" version '{workflow_version}'"
+    reason = RETIRED_WORKFLOW_IDS.get(workflow_id)
+    if reason is not None:
+        return (
+            f"{target} is not registered: {reason}, so a job that names it cannot be run. "
+            "Choose a currently offered video workflow."
+        )
+    return f"{target} is not registered"
+
+
 class WorkflowRegistry:
     def __init__(self) -> None:
         self._specs: dict[tuple[str, str], WorkflowSpec] = {}
@@ -26,16 +64,16 @@ class WorkflowRegistry:
             # Experimental workflows run only with an explicit, per-job opt-in carried in the
             # immutable job intent; there is no process-global switch.
             if not allow_experimental:
-                raise KeyError(
+                raise WorkflowLookupError(
                     f"Workflow '{spec.workflow_id}' version '{spec.workflow_version}' is "
                     "experimental and requires an explicit experimental opt-in for this job"
                 )
         elif spec.governance_state != "approved":
-            raise KeyError(
+            raise WorkflowLookupError(
                 f"Workflow '{spec.workflow_id}' version '{spec.workflow_version}' is not approved for execution"
             )
         if not spec.pinned_revision:
-            raise KeyError(
+            raise WorkflowLookupError(
                 f"Workflow '{spec.workflow_id}' version '{spec.workflow_version}' is missing a pinned revision"
             )
         return spec
@@ -49,20 +87,20 @@ class WorkflowRegistry:
     ) -> WorkflowSpec:
         workflow_key = str(workflow_id or "").strip()
         if not workflow_key:
-            raise KeyError("Workflow lookup requires a non-empty workflow_id")
+            raise WorkflowLookupError("Workflow lookup requires a non-empty workflow_id")
         if workflow_version is not None:
             key = (workflow_key, str(workflow_version or "").strip())
             if key not in self._specs:
-                raise KeyError(
-                    f"Workflow '{workflow_key}' version '{workflow_version}' is not registered"
+                raise WorkflowLookupError(
+                    _not_registered_message(workflow_key, str(workflow_version))
                 )
             return self._require_runnable(self._specs[key], allow_experimental=allow_experimental)
 
         versions = self._versions_by_id.get(workflow_key) or []
         if not versions:
-            raise KeyError(f"Workflow '{workflow_key}' is not registered")
+            raise WorkflowLookupError(_not_registered_message(workflow_key))
         if len(versions) > 1:
-            raise KeyError(
+            raise WorkflowLookupError(
                 f"Workflow '{workflow_key}' has multiple versions registered; version is required"
             )
         return self._require_runnable(
@@ -112,4 +150,9 @@ def build_default_workflow_registry() -> WorkflowRegistry:
     return registry
 
 
-__all__ = ["WorkflowRegistry", "build_default_workflow_registry"]
+__all__ = [
+    "RETIRED_WORKFLOW_IDS",
+    "WorkflowLookupError",
+    "WorkflowRegistry",
+    "build_default_workflow_registry",
+]
