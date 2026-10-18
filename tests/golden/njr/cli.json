@@ -1,0 +1,139 @@
+{
+ "job_id": "golden",
+ "output_plan": {
+  "base_output_dir": "output",
+  "filename_template": "{seed}",
+  "route": null
+ },
+ "provenance": {
+  "aesthetic_embedding": null,
+  "aesthetic_enabled": false,
+  "aesthetic_text": null,
+  "aesthetic_weight": null,
+  "batch_index": 0,
+  "batch_total": 1,
+  "config_variant_index": 0,
+  "config_variant_label": "base",
+  "config_variant_overrides": {},
+  "img2img_prompt_info": null,
+  "learning_context": null,
+  "lora_tags": [],
+  "matrix_mode": null,
+  "matrix_name": null,
+  "matrix_prompt_mode": null,
+  "matrix_slot_values": {},
+  "metadata": {
+   "execution_source": "cli",
+   "run_name": "golden"
+  },
+  "negative_embeddings": [],
+  "pack_usage": [],
+  "positive_embeddings": [],
+  "randomizer_summary": {},
+  "seed": 7,
+  "txt2img_prompt_info": null,
+  "variant_index": 0,
+  "variant_total": 1
+ },
+ "schema_version": "2.6",
+ "source": {
+  "display_name": "golden",
+  "id": null,
+  "kind": "cli",
+  "metadata": {},
+  "parent_artifact_id": null,
+  "parent_job_id": null,
+  "revision": null,
+  "row_index": null
+ },
+ "stages": [
+  {
+   "cfg_scale": 5.0,
+   "denoising_strength": null,
+   "enabled": true,
+   "extra": {
+    "cfg_scale": 5.0,
+    "height": 64,
+    "model": "m.safetensors",
+    "seed": 7,
+    "steps": 4,
+    "width": 64
+   },
+   "model": "m.safetensors",
+   "sampler_name": null,
+   "scheduler": null,
+   "stage_type": "txt2img",
+   "steps": 4,
+   "vae": null
+  },
+  {
+   "cfg_scale": null,
+   "denoising_strength": 0.4,
+   "enabled": true,
+   "extra": {
+    "denoising_strength": 0.4,
+    "enabled": true
+   },
+   "model": null,
+   "sampler_name": null,
+   "scheduler": null,
+   "stage_type": "img2img",
+   "steps": null,
+   "vae": null
+  },
+  {
+   "cfg_scale": null,
+   "denoising_strength": null,
+   "enabled": true,
+   "extra": {
+    "enabled": true,
+    "scale": 2.0,
+    "upscaler": "Latent"
+   },
+   "model": null,
+   "sampler_name": null,
+   "scheduler": null,
+   "stage_type": "upscale",
+   "steps": null,
+   "vae": null
+  }
+ ],
+ "workload": {
+  "backend_options": {
+   "image": {
+    "backend_id": "forge_webui"
+   }
+  },
+  "config": {
+   "cfg_scale": 5.0,
+   "height": 64,
+   "model": "m.safetensors",
+   "pipeline": {
+    "img2img_enabled": true,
+    "upscale_enabled": true
+   },
+   "seed": 7,
+   "steps": 4,
+   "width": 64
+  },
+  "images_per_prompt": 1,
+  "input_image_paths": [],
+  "intent_config": {
+   "prompt_source": "cli",
+   "requested_job_label": "golden",
+   "run_mode": "queue",
+   "source": "cli"
+  },
+  "loop_count": 1,
+  "loop_type": "pipeline",
+  "metadata": {
+   "execution_source": "cli",
+   "run_name": "golden"
+  },
+  "negative_prompt": "",
+  "positive_prompt": "a cat",
+  "start_stage": null,
+  "variant_mode": "standard"
+ },
+ "workload_kind": "image"
+}

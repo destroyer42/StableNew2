@@ -1,0 +1,104 @@
+{
+ "job_id": "replay-1",
+ "output_plan": {
+  "base_output_dir": "output",
+  "filename_template": "{seed}",
+  "route": null
+ },
+ "provenance": {
+  "aesthetic_embedding": null,
+  "aesthetic_enabled": false,
+  "aesthetic_text": null,
+  "aesthetic_weight": null,
+  "batch_index": 0,
+  "batch_total": 1,
+  "config_variant_index": 0,
+  "config_variant_label": "base",
+  "config_variant_overrides": {},
+  "img2img_prompt_info": null,
+  "learning_context": null,
+  "lora_tags": [],
+  "matrix_mode": null,
+  "matrix_name": null,
+  "matrix_prompt_mode": null,
+  "matrix_slot_values": {},
+  "metadata": {
+   "execution_source": "cli",
+   "parent_job_id": "golden",
+   "replay": true,
+   "run_name": "golden"
+  },
+  "negative_embeddings": [],
+  "pack_usage": [],
+  "positive_embeddings": [],
+  "randomizer_summary": {},
+  "seed": 7,
+  "txt2img_prompt_info": null,
+  "variant_index": 0,
+  "variant_total": 1
+ },
+ "schema_version": "2.6",
+ "source": {
+  "display_name": "golden",
+  "id": null,
+  "kind": "history_replay",
+  "metadata": {
+   "original_source_kind": "cli"
+  },
+  "parent_artifact_id": null,
+  "parent_job_id": "golden",
+  "revision": null,
+  "row_index": null
+ },
+ "stages": [
+  {
+   "cfg_scale": 5.0,
+   "denoising_strength": null,
+   "enabled": true,
+   "extra": {
+    "cfg_scale": 5.0,
+    "model": "m.safetensors",
+    "seed": 7,
+    "steps": 4
+   },
+   "model": "m.safetensors",
+   "sampler_name": null,
+   "scheduler": null,
+   "stage_type": "txt2img",
+   "steps": 4,
+   "vae": null
+  }
+ ],
+ "workload": {
+  "backend_options": {
+   "image": {
+    "backend_id": "forge_webui"
+   }
+  },
+  "config": {
+   "cfg_scale": 5.0,
+   "model": "m.safetensors",
+   "seed": 7,
+   "steps": 4
+  },
+  "images_per_prompt": 1,
+  "input_image_paths": [],
+  "intent_config": {
+   "prompt_source": "cli",
+   "requested_job_label": "golden",
+   "run_mode": "queue",
+   "source": "cli"
+  },
+  "loop_count": 1,
+  "loop_type": "pipeline",
+  "metadata": {
+   "execution_source": "cli",
+   "run_name": "golden"
+  },
+  "negative_prompt": "",
+  "positive_prompt": "a cat",
+  "start_stage": null,
+  "variant_mode": "standard"
+ },
+ "workload_kind": "image"
+}

@@ -1,0 +1,208 @@
+[
+ {
+  "job_id": "job-1",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 2,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": null,
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {},
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 12345,
+   "txt2img_prompt_info": {
+    "final_negative_prompt": "",
+    "final_prompt": "test prompt",
+    "global_negative_applied": false,
+    "global_negative_terms": "",
+    "original_negative_prompt": "",
+    "original_prompt": "test prompt"
+   },
+   "variant_index": 0,
+   "variant_total": 1
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": null,
+   "id": null,
+   "kind": "cli",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "golden-model",
+    "sampler_name": "Euler",
+    "scheduler": null,
+    "stage_type": "txt2img",
+    "steps": 20,
+    "vae": null
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer_enabled": false,
+    "cfg_scale": 7.0,
+    "height": 512,
+    "hires_enabled": false,
+    "model": "golden-model",
+    "negative_prompt": "",
+    "prompt": "test prompt",
+    "refiner_enabled": false,
+    "sampler": "Euler",
+    "scheduler": "Normal",
+    "seed": 12345,
+    "stages": [
+     "txt2img"
+    ],
+    "steps": 20,
+    "width": 512
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {},
+   "negative_prompt": "",
+   "positive_prompt": "test prompt",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ {
+  "job_id": "job-2",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 1,
+   "batch_total": 2,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": null,
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {},
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 12345,
+   "txt2img_prompt_info": {
+    "final_negative_prompt": "",
+    "final_prompt": "test prompt",
+    "global_negative_applied": false,
+    "global_negative_terms": "",
+    "original_negative_prompt": "",
+    "original_prompt": "test prompt"
+   },
+   "variant_index": 0,
+   "variant_total": 1
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": null,
+   "id": null,
+   "kind": "cli",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "golden-model",
+    "sampler_name": "Euler",
+    "scheduler": null,
+    "stage_type": "txt2img",
+    "steps": 20,
+    "vae": null
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer_enabled": false,
+    "cfg_scale": 7.0,
+    "height": 512,
+    "hires_enabled": false,
+    "model": "golden-model",
+    "negative_prompt": "",
+    "prompt": "test prompt",
+    "refiner_enabled": false,
+    "sampler": "Euler",
+    "scheduler": "Normal",
+    "seed": 12345,
+    "stages": [
+     "txt2img"
+    ],
+    "steps": 20,
+    "width": 512
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {},
+   "negative_prompt": "",
+   "positive_prompt": "test prompt",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ }
+]
