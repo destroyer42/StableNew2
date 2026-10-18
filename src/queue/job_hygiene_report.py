@@ -4,9 +4,11 @@ It writes nothing and deletes nothing: the database is opened read-only and the 
 to put numbers in front of the owner before any decision to externalize snapshots, backfill, or prune.
 
 A job is a *prune candidate* only when every one of these holds: it is terminal (completed, failed or cancelled), it is
-older than the age threshold, it has recorded output paths and every one of them is confirmed missing, no other job
-was compiled from it (replay lineage), and no Learning file mentions its id. Queued and running jobs, jobs with no
-recorded outputs, unresolvable relative paths and paths that could not be checked are never candidates. Not checked:
+older than the age threshold, it has recorded generated images or videos and every one of them is confirmed missing,
+no other job was compiled from it (replay lineage), and no Learning file mentions its id. Only images and videos count
+as outputs; other recorded paths (a PromptPack, a manifest) are ignored, because the repository records every
+path-like value in a result and a moved pack must not make a job look prunable. Queued and running jobs, jobs with no
+recorded media, unresolvable relative paths and paths that could not be checked are never candidates. Not checked:
 staged-curation groups and run folders (a candidate list is a starting point for review, not a delete list).
 """
 
@@ -185,25 +187,69 @@ def _learning_job_ids(root: Path | None) -> set[str]:
     return ids
 
 
-def _resolve(reference: str, output_root: Path | None) -> Path | None:
+_MEDIA_SUFFIXES = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".bmp",
+        ".gif",
+        ".tif",
+        ".tiff",
+        ".mp4",
+        ".webm",
+        ".mov",
+        ".mkv",
+        ".avi",
+    }
+)
+
+
+def _media_references(references: list[str]) -> list[str]:
+    """Only generated images and videos count as outputs.
+
+    The repository records every path-like value in a result as an "artifact reference", which includes source files
+    such as a PromptPack. Treating those as outputs made jobs look prunable just because a pack had moved.
+    """
+
+    return [
+        reference for reference in references if Path(reference).suffix.lower() in _MEDIA_SUFFIXES
+    ]
+
+
+def _candidate_paths(reference: str, output_root: Path | None) -> list[Path]:
+    """Where a recorded path may live: as is if absolute, else under the output root or the folder above it.
+
+    Relative paths are often recorded from the workspace root (``output/Pipeline/...``), so joining them onto an
+    output root named ``output`` would double the folder; both readings are tried and one hit is enough.
+    """
+
     path = Path(reference)
     if path.is_absolute():
-        return path
-    return output_root / path if output_root is not None else None
+        return [path]
+    if output_root is None:
+        return []
+    candidates = [output_root / path, output_root.parent / path]
+    return list(dict.fromkeys(candidates))
 
 
 def _classify_paths(references: list[str], output_root: Path | None) -> str:
-    """``no_outputs``, ``unresolvable``, ``unchecked``, ``all_present``, ``partly_missing`` or ``all_missing``."""
+    """``no_outputs``, ``no_media_outputs``, ``unresolvable``, ``unchecked``, ``all_present``, ``partly_missing`` or
+    ``all_missing``, judged on generated images and videos only."""
 
     if not references:
         return "no_outputs"
+    media = _media_references(references)
+    if not media:
+        return "no_media_outputs"
     present = missing = 0
-    for reference in references:
-        path = _resolve(reference, output_root)
-        if path is None:
+    for reference in media:
+        candidates = _candidate_paths(reference, output_root)
+        if not candidates:
             return "unresolvable"
         try:
-            exists = path.exists()
+            exists = any(candidate.exists() for candidate in candidates)
         except (OSError, ValueError):
             return "unchecked"
         present += exists
@@ -261,15 +307,16 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
         sums["snapshot_bytes"] += snapshot_bytes
         sums["result_bytes"] += result_bytes
         if outcome in {"candidate", "protected_in_learning_files", "protected_has_replay_children"}:
+            media = _media_references(references)
             missing_dirs.update(
                 {
-                    str(resolved.parent)
-                    for reference in references
-                    if (resolved := _resolve(reference, options.output_root)) is not None
+                    str(places[0].parent)
+                    for reference in media
+                    if (places := _candidate_paths(reference, options.output_root))
                 }
             )
-            if outcome == "candidate" and len(samples) < 5 and references:
-                samples.append(references[0])
+            if outcome == "candidate" and len(samples) < 5 and media:
+                samples.append(media[0])
         if outcome == "candidate":
             candidate_ids.append(job_id)
             candidates.append(
@@ -316,8 +363,8 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
     }
 
 
-_MIN_DUPLICATE_BYTES = 8192
-_MAX_DEPTH = 3
+_MIN_BLOCK_BYTES = 2048
+_MAX_DEPTH = 5
 _PROGRESS_EVERY = 2000
 
 
@@ -329,49 +376,66 @@ def _percentile(ordered: list[int], fraction: float) -> int:
     return ordered[min(len(ordered) - 1, int(len(ordered) * fraction))] if ordered else 0
 
 
-def _walk_result(
-    value: Any,
-    path: str,
-    depth: int,
-    sizes: Counter[str],
-    appears: Counter[str],
-    seen: dict[str, list[Any]],
-    job_id: str,
-) -> None:
-    """Size every top-level key (and the sub-keys of large ones) and find repeated large blocks.
+class _ResultWalk:
+    """Accumulates key sizes and repeated blocks over every ``result_json`` row (one traversal per row)."""
 
-    A block already seen elsewhere is counted as a copy and not descended into, so a repeated parent and its repeated
-    children are never both counted: the figures are outermost-first and do not overlap.
-    """
+    def __init__(self) -> None:
+        self.sizes: Counter[str] = Counter()
+        self.appears: Counter[str] = Counter()
+        # digest -> [copies, block_bytes, path, first_job, within_row_copies, cross_row_copies, last_job]
+        self.seen: dict[str, list[Any]] = {}
 
-    if isinstance(value, dict):
-        children = [(f"{path}.{key}" if path else str(key), child) for key, child in value.items()]
-    elif isinstance(value, list):
-        children = [(f"{path}[]", child) for child in value]
-    else:
-        return
-    for child_path, child in children:
-        if not isinstance(child, (dict, list)):
-            if depth == 0:
-                size = len(_compact(child))
-                sizes[child_path] += size
-                appears[child_path] += 1
-            continue
-        text = _compact(child)
-        size = len(text)
-        if depth <= 1:
-            sizes[child_path] += size
-            appears[child_path] += 1
-        if size < _MIN_DUPLICATE_BYTES:
-            continue
-        digest = hashlib.sha1(text.encode("utf-8")).hexdigest()
-        known = seen.get(digest)
-        if known is not None:
-            known[0] += 1
-            continue
-        seen[digest] = [1, size, child_path, job_id]
-        if depth + 1 < _MAX_DEPTH:
-            _walk_result(child, child_path, depth + 1, sizes, appears, seen, job_id)
+    def walk(
+        self, value: Any, path: str, depth: int, job_id: str, *, count_repeats: bool = True
+    ) -> None:
+        """Size every top-level key and every block of 2 KB or more below it, and find repeated blocks.
+
+        A block already seen elsewhere is counted as a copy and its children are sized but not counted as repeats
+        again, so a repeated parent and its repeated children never both count: the repeat figures are
+        outermost-first and do not overlap.
+        """
+
+        if isinstance(value, dict):
+            children = [
+                (f"{path}.{key}" if path else str(key), child) for key, child in value.items()
+            ]
+        elif isinstance(value, list):
+            children = [(f"{path}[]", child) for child in value]
+        else:
+            return
+        for child_path, child in children:
+            if not isinstance(child, (dict, list)):
+                if depth == 0:
+                    self.sizes[child_path] += len(_compact(child))
+                    self.appears[child_path] += 1
+                elif isinstance(child, str) and len(child) >= _MIN_BLOCK_BYTES:
+                    # A large string (a blob, a long log) is sized like a block, but cannot repeat as one.
+                    self.sizes[child_path] += len(child) + 2
+                    self.appears[child_path] += 1
+                continue
+            text = _compact(child)
+            size = len(text)
+            if depth == 0 or size >= _MIN_BLOCK_BYTES:
+                self.sizes[child_path] += size
+                self.appears[child_path] += 1
+            if size < _MIN_BLOCK_BYTES:
+                continue
+            repeats_below = count_repeats
+            if count_repeats:
+                digest = hashlib.sha1(text.encode("utf-8")).hexdigest()
+                known = self.seen.get(digest)
+                if known is not None:
+                    known[0] += 1
+                    if job_id == known[6]:
+                        known[4] += 1
+                    else:
+                        known[5] += 1
+                        known[6] = job_id
+                    repeats_below = False
+                else:
+                    self.seen[digest] = [1, size, child_path, job_id, 0, 0, job_id]
+            if depth + 1 < _MAX_DEPTH:
+                self.walk(child, child_path, depth + 1, job_id, count_repeats=repeats_below)
 
 
 def _result_json_section(
@@ -394,9 +458,7 @@ def _result_json_section(
         )
     }
     total_rows = sum(item["rows"] for item in by_status.values())
-    sizes: Counter[str] = Counter()
-    appears: Counter[str] = Counter()
-    seen: dict[str, list[Any]] = {}
+    walker = _ResultWalk()
     row_sizes: list[int] = []
     largest: list[tuple[int, str, str, str]] = []
     frozen_blocks = unparsed = done = 0
@@ -418,13 +480,15 @@ def _result_json_section(
             continue
         if _FROZEN_MARKER in text:
             frozen_blocks += sum(1 for _ in _frozen_snapshots(parsed))
-        _walk_result(parsed, "", 0, sizes, appears, seen, str(row["job_id"]))
+        walker.walk(parsed, "", 0, str(row["job_id"]))
         done += 1
         if progress is not None and done % _PROGRESS_EVERY == 0:
             progress(f"result_json: {done:,} of {total_rows:,} rows")
     ordered = sorted(row_sizes)
-    repeated = {digest: group for digest, group in seen.items() if group[0] > 1}
+    repeated = {digest: group for digest, group in walker.seen.items() if group[0] > 1}
     extra_bytes = sum((group[0] - 1) * group[1] for group in repeated.values())
+    within_bytes = sum(group[4] * group[1] for group in repeated.values())
+    cross_bytes = sum(group[5] * group[1] for group in repeated.values())
     top_repeated = sorted(repeated.values(), key=lambda g: (g[0] - 1) * g[1], reverse=True)[:_TOP]
     return {
         "rows": total_rows,
@@ -440,21 +504,25 @@ def _result_json_section(
         "by_status": by_status,
         "by_source": by_source,
         "by_key": [
-            {"path": path, "bytes": size, "rows": appears[path]}
-            for path, size in sizes.most_common(2 * _TOP)
+            {"path": path, "bytes": size, "rows": walker.appears[path]}
+            for path, size in walker.sizes.most_common(4 * _TOP)
         ],
         "frozen_snapshot_blocks": frozen_blocks,
         "repeated_blocks": {
-            "min_block_bytes": _MIN_DUPLICATE_BYTES,
+            "min_block_bytes": _MIN_BLOCK_BYTES,
             "groups": len(repeated),
             "extra_copies": sum(group[0] - 1 for group in repeated.values()),
             "extra_bytes": extra_bytes,
+            "within_row_extra_bytes": within_bytes,
+            "cross_row_extra_bytes": cross_bytes,
             "largest": [
                 {
                     "path": group[2],
                     "copies": group[0],
                     "block_bytes": group[1],
                     "extra_bytes": (group[0] - 1) * group[1],
+                    "within_row_copies": group[4],
+                    "cross_row_copies": group[5],
                     "first_job_id": group[3],
                 }
                 for group in top_repeated
@@ -591,9 +659,12 @@ def _format_result_json(section: dict[str, Any]) -> list[str]:
         f"  Repeated blocks of {repeated['min_block_bytes']:,}+ bytes (outermost; no double counting): "
         f"{repeated['groups']:,} distinct, {repeated['extra_copies']:,} extra copies, "
         f"{_mb(repeated['extra_bytes'])} would be saved by storing each once",
+        f"    of which repeated inside the same row: {_mb(repeated['within_row_extra_bytes'])}; "
+        f"repeated across rows: {_mb(repeated['cross_row_extra_bytes'])}",
     ]
     lines.extend(
-        f"    {item['copies']:>6,} x {_mb(item['block_bytes']):>9}  {item['path']}  (first in {item['first_job_id']})"
+        f"    {item['copies']:>6,} x {_mb(item['block_bytes']):>9}  {item['path']}  "
+        f"(within-row {item['within_row_copies']:,}, cross-row {item['cross_row_copies']:,}; first in {item['first_job_id']})"
         for item in repeated["largest"]
     )
     lines.append("  Largest rows:")
