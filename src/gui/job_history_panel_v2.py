@@ -134,6 +134,9 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         self.explain_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.browse_btn = ttk.Button(action_bar, text="Browse All...", command=self._on_browse_all)
+        self.browse_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self._browser_window: tk.Toplevel | None = None
 
         # D-GUI-003: Enhanced columns with row/variant/batch info
         columns = (
@@ -407,6 +410,30 @@ class JobHistoryPanelV2(ttk.Frame):
             handler(self._selected_job_id)
         except Exception:
             pass
+
+    def _on_browse_all(self) -> None:
+        """Open (or raise) the searchable browser over the whole history in its own window."""
+
+        from src.gui.history_browser_panel_v2 import HistoryBrowserPanelV2, resolve_history_search
+
+        window = self._browser_window
+        if window is not None and window.winfo_exists():
+            window.lift()
+            return
+        search = resolve_history_search(self.controller)
+        if search is None:
+            self.empty_state_var.set("History search is unavailable: no job repository.")
+            return
+        window = tk.Toplevel(self)
+        window.title("Job History")
+        window.geometry("1100x520")
+        HistoryBrowserPanelV2(
+            window,
+            search=search,
+            controller=self.controller,
+            folder_opener=self._folder_opener,
+        ).pack(fill=tk.BOTH, expand=True)
+        self._browser_window = window
 
     def _on_explain_job(self) -> None:
         entry = self._selected_entry()
