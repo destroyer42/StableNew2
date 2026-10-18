@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-409 of 581 modules have a docstring.
+412 of 584 modules have a docstring.
 
 ## src/
 
@@ -159,6 +159,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `engine_settings_dialog.py`: Modern engine settings dialog for GUI V2
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
 - `gui_invoker.py`: (no docstring)
+- `history_browser_panel_v2.py`: Searchable, paged browser over the whole job history (every row, not only the newest few)
 - `job_history_panel_v2.py`: Compact job history renderer for the Pipeline tab
 - `klein_lora_selection_dialog.py`: One batch review of ordered verified candidates, on the Tk thread only
 - `layout_v2.py`: (no docstring)
@@ -344,6 +345,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
+- `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
 - `model_policy_projection.py`: Toolkit-neutral projection of a model policy onto the Base Generation controls (PR-IMG-130A)
 - `openpose_conditioning_view.py`: Toolkit-neutral presentation of a slot's OpenPose conditioning (PR-IMG-CNET-210)
 - `pack_lora_selection_projection.py`: Read-only, visibility-aware reporting of frozen explicit selection evidence
@@ -547,6 +549,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `batch_projection.py`: Derive display-level batch state from canonical persisted job rows
 - `failure_triage.py`: Classify a FAILED job from the typed evidence that was persisted with it
 - `gpu_loss_assessment.py`: Classify one failed job against host GPU evidence
+- `history_query.py`: Read-only, paged and filtered history queries over the ``jobs`` table
 - `job_history_store.py`: History projection contracts implemented by the SQLite job repository
 - `job_model.py`: Job model for single-node execution
 - `job_queue.py`: Thread-safe runnable projection with priority + FIFO behavior

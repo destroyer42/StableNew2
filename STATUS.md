@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-16
+Updated: 2026-10-18
 
 This file is **current state only**: baseline, supported capabilities, what is active and next, open owner
 decisions, holds and known debt. It is capped at 150 lines and checked by `tools/ci/ci_truth.py`. It does not narrate
@@ -49,6 +49,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   (`docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md`), cross-workflow model compatibility preflight.
 - Learning: designed experiments, ratings, Model Comparison, staged curation. The recommendation Apply path is not reachable
   from the UI yet (audit G2).
+- History browser: the Pipeline tab's Job History opens a searchable, paged view of every job (status, date, pack, prompt/model text;
+  no schema change). Text search covers only the first 64 prompt characters and the model; full-text search and "replay with changes" are not built.
 - Batch operations: whole-selection Review preflight, multi-source Video Workflow batch, unified batch triage and retry
   (`docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md`).
 

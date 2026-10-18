@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.queue.history_query import HistoryPage, HistoryQuery, run_history_query
 from src.queue.job_history_store import (
     INTERRUPTED_RESTART_ACTION_REQUIRED,
     BatchCandidatePage,
@@ -747,6 +748,11 @@ class JobRepository(JobHistoryStore):
                 "SELECT * FROM jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
         return self._row_to_history(row) if row is not None else None
+
+    def query_history(self, query: HistoryQuery) -> HistoryPage:
+        """Read-only paged search (see ``src.queue.history_query``); no schema, index or lifecycle effect."""
+
+        return run_history_query(self._connection, query, self._row_to_history, self._lock)
 
     def read_batch_candidate_page(
         self, *, before_cursor: int | None = None, window: int = 2000
