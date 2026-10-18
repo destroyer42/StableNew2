@@ -77,7 +77,7 @@ the independent critique adjustments in the PR history before reordering it). Ph
 process isolation, startup wiring, crash-safe writes, pinned dev environment, Windows lane, ratchets). Phase 2 (docs and
 process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
 `docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done, and the eight living subsystem docs (P2-2) are written;
-P2-6 wave 1 retired the leaf harnesses; the rest stay with named retirement conditions (`tools/qualification/README.md`). Phases 3 to 5 are a candidate list; each package needs a contract check and an owner decision first.
+P2-6 wave 1 retired the leaf harnesses; the rest stay with named retirement conditions (`tools/qualification/README.md`). Phase 3 has started: P3-3 (contained, bounded child processes, `src/utils/managed_process.py`) is merged; P3-4 (typed transport, Comfy cancellation) is next. Phases 4 and 5 are a candidate list; each package needs a contract check and an owner decision first.
 
 Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
 of the roadmap; where they conflict with this file, this file and the repository are current.
@@ -106,10 +106,11 @@ of the roadmap; where they conflict with this file, this file and the repository
 
 ## Holds and safety constraints
 
-- Physical GPU qualification is on HOLD after the 2026-10-12 RTX 4070 Ti device-loss incident (16 device-loss events since
-  2026-09-07, the latest 2026-10-17 with the OS still running; Windows logs a Kernel-PnP event 1000 for this GPU at each; no root cause accepted; records `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
-  `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md`). No physical
-  generation, qualification or runtime restart without explicit owner authorization.
+- The physical-GPU hold was lifted by the owner on 2026-10-18: the owner has been running jobs, and device loss looks
+  intermittent (a loss can come early in a run, or the GPU can be stressed for hours without one). Records:
+  `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
+  `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` (16 losses since 2026-09-07; no root cause accepted). The device-loss
+  quarantine stays the response to a loss. Tests, gates and CI still never touch a GPU or a real runtime; a package runs physical work only when its acceptance needs it.
 - Character Training is on HOLD pending a real trainer decision (no trainer is bundled; cancellation reaches only the immediate process; weight discovery can fall back to an older file). LoRA consumption is independent and stays supported: `docs/Subsystems/Training/Character_Embedding_Workflow_v2.6.md` section 0.1.
 - Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs resource and
   fault clearance first (`docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md`).

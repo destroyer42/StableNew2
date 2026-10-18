@@ -208,7 +208,7 @@ Environment-dependent patterns to avoid: assuming `%LOCALAPPDATA%`, a Tk geometr
 
 ## 15. Invariants
 
-1. Tests, gates and CI never start, adopt, restart or kill an external A1111/Forge/Comfy process or touch a GPU. Physical work needs explicit owner authorization (`STATUS.md` Holds).
+1. Tests, gates and CI never start, adopt, restart or kill an external A1111/Forge/Comfy process or touch a GPU. Physical work belongs to a package's own acceptance run, never to tests (`STATUS.md` Holds).
 2. Tests must not make the repository dirty; `git status` clean is checked in CI, and the pollution fingerprint covers ignored runtime paths in the pytest gates.
 3. One routing policy: `tools/ci/validation_plan.py`. Do not add path-based test selection to the workflow; the census runs everything.
 4. One pytest configuration authority: `pyproject.toml`.

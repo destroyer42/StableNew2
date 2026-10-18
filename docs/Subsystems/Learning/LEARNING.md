@@ -158,7 +158,7 @@ Because both layers stay in the compiler, the invariant "randomization never hap
 8. A rating shown as saved must be saved: do not ignore the `append_record` result.
 9. Persisted Learning state is written with `src/utils/atomic_io.py` (or the fsync append of the records file). UI-thread-only: Tk variables and widgets are touched on the Tk thread (`app_controller._run_in_gui_thread`); background work uses `get_thread_registry().spawn`.
 10. No image crops, detector frames or binary artifacts in records; adaptive-refinement context is stored only as compact scalar fields, mapped from the canonical `adaptive_refinement` carrier, and `face_detected` is nullable (a confirmed negative needs a successful zero-detection assessment).
-11. Physical GPU work is on HOLD (`STATUS.md` Holds). Learning tests must not contact a WebUI, model or GPU.
+11. Learning tests must not contact a WebUI, model or GPU.
 12. Protected actions need explicit owner approval (`AGENTS.md` section 5).
 
 ## 8. How to test

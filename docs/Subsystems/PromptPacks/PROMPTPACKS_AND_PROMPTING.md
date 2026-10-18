@@ -195,7 +195,7 @@ A fresh install has zero PromptPacks, because the resolver never reads the repos
 7. Frozen manifests are content-free: no prompt text, asset names or image bytes.
 8. The editor's view of a model is advisory; the compiler and the backend are final.
 9. Matrix and randomization happen at compile time only, never at run time.
-10. Physical GPU work is on HOLD (STATUS.md Holds). Tests must not contact a WebUI, model or GPU. Tools in `tools/` that touch real packs are read-only unless a separately authorized, backed-up operation says otherwise.
+10. Tests must not contact a WebUI, model or GPU. Tools in `tools/` that touch real packs are read-only unless a separately authorized, backed-up operation says otherwise.
 
 ## 12. How to test
 
