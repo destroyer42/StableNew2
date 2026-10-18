@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import os
 import subprocess
-import threading
-from collections import deque
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from src.utils.config import ConfigManager
+from src.utils.managed_process import ManagedProcess
 from src.video.comfy_healthcheck import probe_comfy_endpoint, wait_for_comfy_ready
+
+# Anchored to the repository, not the working directory, and size-rotated by ``ManagedProcess``.
+_MANAGED_COMFY_LOG_PATH = (
+    Path(__file__).resolve().parents[2] / "logs" / "comfy" / "managed_comfy.log"
+)
 
 
 @dataclass
@@ -23,6 +26,7 @@ class ComfyProcessConfig:
     auto_restart_on_crash: bool = False
     autostart_enabled: bool = False
     base_url: str | None = None
+    log_path: Path | None = None
 
     def build_env(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -38,50 +42,59 @@ _GLOBAL_COMFY_PROCESS_MANAGER: ComfyProcessManager | None = None
 
 
 class ComfyProcessManager:
-    """Owns the lifecycle of a managed local ComfyUI process."""
+    """Owns the lifecycle of a managed local ComfyUI process.
 
-    def __init__(self, config: ComfyProcessConfig) -> None:
+    The child runs inside a ``ManagedProcess``: it is placed in its own OS container at launch (so a hard crash of this
+    application cannot orphan it, and ``stop`` reaps its whole tree), its output is drained and decoded safely on
+    bounded readers, and its log rotates.  Nothing outside this launch session is ever adopted or stopped.
+    """
+
+    def __init__(
+        self,
+        config: ComfyProcessConfig,
+        *,
+        process_factory: Callable[..., ManagedProcess] = ManagedProcess,
+    ) -> None:
         global _GLOBAL_COMFY_PROCESS_MANAGER
         self._config = config
-        self._process: subprocess.Popen | None = None
-        self._owns_process = False
-        self._stdout_tail: deque[str] = deque(maxlen=200)
-        self._stderr_tail: deque[str] = deque(maxlen=200)
-        self._stdout_thread: threading.Thread | None = None
-        self._stderr_thread: threading.Thread | None = None
+        self._process_factory = process_factory
+        self._managed: ManagedProcess | None = None
+        self._last_tails: tuple[list[str], list[str]] = ([], [])
         self._stopped = False
         _GLOBAL_COMFY_PROCESS_MANAGER = self
 
     @property
     def process(self) -> subprocess.Popen | None:
-        return self._process
+        return None if self._managed is None else self._managed.process
 
     @property
     def owns_process(self) -> bool:
         """Whether this manager owns the process created by its current launch session."""
-        return bool(self._owns_process and self._process is not None)
+        return self.process is not None
 
     @property
     def pid(self) -> int | None:
-        return None if self._process is None else getattr(self._process, "pid", None)
+        return None if self._managed is None else self._managed.pid
+
+    @property
+    def contained(self) -> bool:
+        """Whether the OS accepted the child into its own container (kill-on-close)."""
+        return bool(self._managed is not None and self._managed.contained)
 
     def get_stdout_tail(self) -> list[str]:
-        return list(self._stdout_tail)
+        return self._last_tails[0] if self._managed is None else self._managed.stdout_tail()
 
     def get_stderr_tail(self) -> list[str]:
-        return list(self._stderr_tail)
+        return self._last_tails[1] if self._managed is None else self._managed.stderr_tail()
 
     def is_running(self) -> bool:
-        return self._process is not None and self._process.poll() is None
+        return self._managed is not None and self._managed.is_running()
 
     def start(self) -> subprocess.Popen:
-        if self._process and self.is_running():
-            if self.owns_process:
-                return self._process
-            raise ComfyStartupError(
-                "A running ComfyUI process is present without launch-session ownership; "
-                "refusing to adopt or replace it"
-            )
+        if self._managed is not None and self.is_running():
+            process = self._managed.process
+            if process is not None:
+                return process
         if self._config.base_url:
             endpoint_state = probe_comfy_endpoint(self._config.base_url, timeout=0.5)
             if endpoint_state != "free":
@@ -93,31 +106,26 @@ class ComfyProcessManager:
                 raise ComfyStartupError(
                     f"Cannot launch managed ComfyUI: {detail}; refusing to adopt, stop, or replace it"
                 )
+        managed = self._process_factory(
+            self._config.command,
+            cwd=self._config.working_dir,
+            env=self._config.build_env(),
+            label="comfy",
+            log_path=self._config.log_path,
+        )
         try:
-            process = subprocess.Popen(
-                self._config.command,
-                cwd=self._config.working_dir,
-                env=self._config.build_env(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                bufsize=1,
-                shell=False,
-            )
+            process = managed.start()
         except Exception as exc:  # noqa: BLE001
+            managed.stop(grace_seconds=0.0)
             raise ComfyStartupError(str(exc)) from exc
 
-        self._process = process
-        self._owns_process = True
+        self._managed = managed
         self._stopped = False
         # stop() unregisters this manager; a relaunch must re-register it, or the owned process
         # it just started would be invisible to runtime transitions (PR-RUNTIME-100) that look
         # the Comfy owner up through get_global_comfy_process_manager().
         global _GLOBAL_COMFY_PROCESS_MANAGER
         _GLOBAL_COMFY_PROCESS_MANAGER = self
-        self._stdout_thread = self._start_output_thread(process.stdout, self._stdout_tail)
-        self._stderr_thread = self._start_output_thread(process.stderr, self._stderr_tail)
         return process
 
     def stop(self, *, grace_seconds: float = 5.0) -> None:
@@ -125,19 +133,10 @@ class ComfyProcessManager:
         if self._stopped:
             return
         self._stopped = True
-        process = self._process
-        if self.owns_process and process is not None and process.poll() is None:
-            try:
-                process.terminate()
-                process.wait(timeout=grace_seconds)
-            except Exception:
-                try:
-                    process.kill()
-                except Exception:
-                    pass
-        self._process = None
-        self._owns_process = False
-        self._join_output_threads()
+        managed, self._managed = self._managed, None
+        if managed is not None:
+            managed.stop(grace_seconds=grace_seconds)
+            self._last_tails = (managed.stdout_tail(), managed.stderr_tail())
         if _GLOBAL_COMFY_PROCESS_MANAGER is self:
             _GLOBAL_COMFY_PROCESS_MANAGER = None
 
@@ -195,7 +194,7 @@ class ComfyProcessManager:
         runtime.
         """
 
-        process = self._process
+        process = self.process
         pid = getattr(process, "pid", None)
         return_code = process.poll() if process is not None else None
         process_state = "alive" if return_code is None else f"exited (return code {return_code})"
@@ -203,42 +202,13 @@ class ComfyProcessManager:
             "Managed ComfyUI did not become ready "
             f"(pid={pid}, process={process_state}, endpoint={base_url}, "
             f"timeout_seconds={self._config.startup_timeout_seconds}): {error}; "
-            f"stdout_tail={self._bounded_output_tail(self._stdout_tail)!r}; "
-            f"stderr_tail={self._bounded_output_tail(self._stderr_tail)!r}"
+            f"stdout_tail={self._bounded_output_tail(self.get_stdout_tail())!r}; "
+            f"stderr_tail={self._bounded_output_tail(self.get_stderr_tail())!r}"
         )
 
     @staticmethod
-    def _bounded_output_tail(lines: deque[str]) -> list[str]:
-        return [line[:240] for line in list(lines)[-10:]]
-
-    def _start_output_thread(
-        self,
-        stream: Any,
-        sink: deque[str],
-    ) -> threading.Thread | None:
-        if stream is None:
-            return None
-
-        def _reader() -> None:
-            try:
-                while True:
-                    line = stream.readline()
-                    if not line:
-                        break
-                    sink.append(str(line).rstrip())
-            except Exception:
-                return
-
-        thread = threading.Thread(target=_reader, daemon=True)
-        thread.start()
-        return thread
-
-    def _join_output_threads(self) -> None:
-        for thread in (self._stdout_thread, self._stderr_thread):
-            if thread is not None and thread.is_alive():
-                thread.join(timeout=1.0)
-        self._stdout_thread = None
-        self._stderr_thread = None
+    def _bounded_output_tail(lines: list[str]) -> list[str]:
+        return [line[:240] for line in lines[-10:]]
 
 
 def get_global_comfy_process_manager() -> ComfyProcessManager | None:
@@ -274,6 +244,7 @@ def build_default_comfy_process_config(
         autostart_enabled=bool(autostart_enabled),
         base_url=str(settings.get("comfy_base_url") or "http://127.0.0.1:8188"),
         startup_timeout_seconds=float(settings.get("comfy_health_total_timeout_seconds") or 30.0),
+        log_path=_MANAGED_COMFY_LOG_PATH,
     )
 
 

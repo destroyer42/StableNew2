@@ -173,6 +173,29 @@ def _never_create_real_process_containers_for_webui_managers(monkeypatch: pytest
 
 
 @pytest.fixture(autouse=True)
+def _managed_runtime_logs_never_touch_the_operators_log_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Managed-runtime output logs (and their retention pruning) go to a per-test directory under pytest.
+
+    ``WebUIProcessManager`` prunes old per-launch logs and ``build_default_comfy_process_config`` points at a rotating
+    Comfy log; both live under the repository's ``logs/`` in production. A test must never rotate or delete the
+    operator's real logs.
+    """
+
+    try:
+        import src.api.webui_process_manager as webui_process_manager
+        import src.video.comfy_process_manager as comfy_process_manager
+
+        monkeypatch.setattr(webui_process_manager, "_WEBUI_LOG_DIR", tmp_path / "webui_logs")
+        monkeypatch.setattr(
+            comfy_process_manager, "_MANAGED_COMFY_LOG_PATH", tmp_path / "comfy_logs" / "comfy.log"
+        )
+    except Exception:  # pragma: no cover - isolation must never break collection
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _isolate_global_prompt_user_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Pytest never reads or writes the operator's per-user Global Prompt store.
 

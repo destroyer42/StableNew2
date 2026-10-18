@@ -28,9 +28,7 @@ from __future__ import annotations
 import io
 import json
 import math
-import os
 import re
-import subprocess
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -42,6 +40,7 @@ from typing import Any, Protocol
 from PIL import Image
 
 from src.pipeline.video import resolve_ffmpeg_executable
+from src.utils.managed_process import ProcessOutcome, run_bounded
 from src.video.container_metadata import resolve_ffprobe_executable
 
 # --- bounds -------------------------------------------------------------------------------------
@@ -58,8 +57,6 @@ MAX_REASONABLE_DIMENSION = 65535
 # 8K DCI) no preview is decoded, so a crafted header cannot ask a child process for gigabytes.
 MAX_PREVIEW_DECODE_PIXELS = 40_000_000
 MAX_REASONABLE_FPS = 1000.0
-_CANCEL_POLL_SECONDS = 0.05
-_KILL_WAIT_SECONDS = 5.0
 _REPORTED_TEXT_LIMIT = 40
 _STDERR_REASON_LIMIT = 80
 
@@ -91,19 +88,6 @@ ISSUE_CANCELLED = "cancelled"
 class InspectionIssue:
     code: str
     message: str
-
-
-@dataclass(frozen=True, slots=True)
-class ProcessOutcome:
-    """What one bounded child process did.  ``stdout`` never exceeds the requested cap."""
-
-    returncode: int | None
-    stdout: bytes = b""
-    stderr: bytes = b""
-    timed_out: bool = False
-    output_truncated: bool = False
-    cancelled: bool = False
-    launch_error: str = ""
 
 
 class ProcessRunner(Protocol):
@@ -184,44 +168,6 @@ class DrivingVideoInspection:
 # --- bounded process execution ------------------------------------------------------------------
 
 
-def _read_capped(stream: Any, limit: int, sink: dict[str, Any], *, stop_on_overflow: bool) -> None:
-    """Read ``stream`` to EOF keeping at most ``limit`` bytes.
-
-    With ``stop_on_overflow`` the read stops as soon as more than ``limit`` bytes arrived (the
-    caller then kills the process); otherwise the excess is drained and discarded so the child can
-    never block on a full pipe."""
-
-    kept = bytearray()
-    overflow = False
-    try:
-        while True:
-            chunk = stream.read(8192)
-            if not chunk:
-                break
-            room = limit - len(kept)
-            if room > 0:
-                kept.extend(chunk[:room])
-            if len(chunk) > max(room, 0):
-                overflow = True
-                if stop_on_overflow:
-                    break
-    except (OSError, ValueError):
-        pass  # the pipe closed under us (process killed); what was read is what we have
-    sink["data"] = bytes(kept)
-    sink["overflow"] = overflow
-
-
-def _terminate(process: subprocess.Popen[bytes]) -> None:
-    try:
-        process.kill()
-    except OSError:
-        pass
-    try:
-        process.wait(timeout=_KILL_WAIT_SECONDS)
-    except (subprocess.TimeoutExpired, OSError):
-        pass
-
-
 def run_bounded_process(
     command: Sequence[str],
     *,
@@ -231,77 +177,12 @@ def run_bounded_process(
 ) -> ProcessOutcome:
     """Run one child with a wall-clock timeout, a stdout byte cap and cooperative cancellation."""
 
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-    try:
-        process = subprocess.Popen(  # noqa: S603 - argv list, no shell, resolved executables
-            list(command),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            creationflags=creationflags,
-        )
-    except OSError as exc:
-        return ProcessOutcome(returncode=None, launch_error=str(exc) or type(exc).__name__)
-
-    out_sink: dict[str, Any] = {}
-    err_sink: dict[str, Any] = {}
-    readers = [
-        threading.Thread(
-            target=_read_capped,
-            args=(process.stdout, max_stdout_bytes, out_sink),
-            kwargs={"stop_on_overflow": True},
-            name="driving-video-stdout",
-            daemon=True,
-        ),
-        threading.Thread(
-            target=_read_capped,
-            args=(process.stderr, MAX_STDERR_BYTES, err_sink),
-            kwargs={"stop_on_overflow": False},
-            name="driving-video-stderr",
-            daemon=True,
-        ),
-    ]
-    for reader in readers:
-        reader.start()
-
-    deadline = time.monotonic() + max(0.0, timeout_seconds)
-    timed_out = False
-    cancelled = False
-    stdout_reader = readers[0]
-    while stdout_reader.is_alive():
-        if cancel is not None and cancel.is_set():
-            cancelled = True
-            break
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            timed_out = True
-            break
-        stdout_reader.join(min(_CANCEL_POLL_SECONDS, remaining))
-
-    truncated = bool(out_sink.get("overflow"))
-    if timed_out or cancelled or truncated:
-        _terminate(process)
-    else:
-        try:
-            process.wait(timeout=max(0.1, deadline - time.monotonic()))
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _terminate(process)
-    for reader in readers:
-        reader.join(_KILL_WAIT_SECONDS)
-    for stream in (process.stdout, process.stderr):
-        try:
-            if stream is not None:
-                stream.close()
-        except OSError:
-            pass
-    return ProcessOutcome(
-        returncode=process.returncode,
-        stdout=out_sink.get("data", b""),
-        stderr=err_sink.get("data", b""),
-        timed_out=timed_out,
-        output_truncated=truncated,
-        cancelled=cancelled,
+    return run_bounded(
+        command,
+        timeout_seconds=timeout_seconds,
+        max_stdout_bytes=max_stdout_bytes,
+        max_stderr_bytes=MAX_STDERR_BYTES,
+        cancel=cancel,
     )
 
 

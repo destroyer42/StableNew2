@@ -107,16 +107,19 @@ class WindowsJobObject:
         if not success:
             logger.debug("SetInformationJobObject failed: %s", ctypes.get_last_error())
 
-    def assign(self, pid: int) -> None:
+    def assign(self, pid: int) -> bool:
+        """Assign ``pid`` to this job; ``True`` only if Windows accepted it."""
         proc_handle = kernel32.OpenProcess(PROCESS_ALL_ACCESS, False, pid)
         if not proc_handle:
             logger.debug("OpenProcess failed for pid %s: %s", pid, ctypes.get_last_error())
-            return
+            return False
         try:
             if not kernel32.AssignProcessToJobObject(self._handle, proc_handle):
                 logger.debug(
                     "AssignProcessToJobObject failed for pid %s: %s", pid, ctypes.get_last_error()
                 )
+                return False
+            return True
         finally:
             kernel32.CloseHandle(proc_handle)
 
