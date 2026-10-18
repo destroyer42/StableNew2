@@ -238,3 +238,39 @@ def test_the_command_line_prints_json_and_writes_the_candidate_list(
     assert json.loads(capsys.readouterr().out)["prune"]["candidates"]["jobs"] == 1
     assert csv_path.read_text(encoding="utf-8").split() == ["job_id", "gone"]
     assert main(["--database", str(tmp_path / "missing.sqlite3")]) == 2
+
+
+def test_a_missing_learning_folder_is_called_out(repo: JobRepository, tmp_path: Path) -> None:
+    _add(repo, "gone", refs=[str(tmp_path / "gone.png")])
+
+    report = _report(repo, tmp_path)  # tmp_path / "learning" does not exist
+
+    assert report["prune"]["criteria"]["learning_root_found"] is False
+    assert "Learning folder not found" in format_report(report)
+
+
+def test_the_command_line_runs_without_importing_the_application(
+    repo: JobRepository, tmp_path: Path
+) -> None:
+    """A machine without the project's dependencies (no ``requests``) must still be able to run the report."""
+
+    import subprocess
+    import sys
+
+    _add(repo, "gone", refs=[str(tmp_path / "gone.png")])
+    tool = Path(__file__).resolve().parents[2] / "tools" / "job_repository_report.py"
+    code = (
+        "import runpy, sys\n"
+        f"ns = runpy.run_path({str(tool)!r}, run_name='report_tool')\n"
+        f"rc = ns['main'](['--database', {str(repo.path)!r}, '--learning-root', {str(tmp_path / 'learning')!r}])\n"
+        "assert not any(name == 'src' or name.startswith('src.') for name in sys.modules), 'imported the application'\n"
+        "assert 'requests' not in sys.modules\n"
+        "raise SystemExit(rc)\n"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=120
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Job repository hygiene report" in result.stdout

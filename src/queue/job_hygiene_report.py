@@ -249,6 +249,7 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
             "output_root": str(options.output_root) if options.output_root else None,
             "learning_root": str(options.learning_root) if options.learning_root else None,
             "relative_paths_resolvable": options.output_root is not None,
+            "learning_root_found": bool(options.learning_root and options.learning_root.is_dir()),
         },
         "terminal_jobs_older_than_cutoff": considered,
         "classes": {
@@ -319,6 +320,11 @@ def format_report(report: dict[str, Any]) -> str:
     if not criteria["relative_paths_resolvable"]:
         lines.append(
             "  (no --output-root given: jobs with relative output paths are 'unresolvable' and never candidates)"
+        )
+    if not criteria["learning_root_found"]:
+        lines.append(
+            f"  WARNING: Learning folder not found ({criteria['learning_root']}): jobs it mentions are NOT protected; "
+            "pass --learning-root"
         )
     for name, info in prune["classes"].items():
         lines.append(f"  {name:<32} {info['jobs']:>8,} jobs  {_mb(info['bytes']):>12}")
