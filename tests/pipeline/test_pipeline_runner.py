@@ -1760,3 +1760,70 @@ def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> No
     assert result.success is True
     assert result.metadata["plan_origin"]["plan_id"] == "story-001"
     assert result.metadata["sequence_artifact"]["plan_origin"]["shot_id"] == "shot-001"
+
+
+def _runner_with_fake_pipeline() -> tuple[PipelineRunner, Mock]:
+    runner = PipelineRunner(Mock(), Mock())
+    pipeline = Mock()
+    pipeline.client = Mock()
+    pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
+    runner._pipeline = pipeline
+    return runner, pipeline
+
+
+def test_run_njr_stamps_the_repository_fingerprint_as_the_njr_identity() -> None:
+    from src.utils.njr_identity import snapshot_envelope, snapshot_fingerprint
+
+    runner, pipeline = _runner_with_fake_pipeline()
+    record = _minimal_normalized_record()
+    seen: list[object] = []
+
+    def _stage(*_args, **_kwargs):
+        seen.append(pipeline._current_njr_sha256)  # the identity the executor stamps into artifacts
+        return {"path": "output.png"}
+
+    pipeline.run_txt2img_stage.side_effect = _stage
+    runner.run_njr(record, cancel_token=None)
+    assert seen == [
+        snapshot_fingerprint(snapshot_envelope(record.job_id, record.to_queue_snapshot()))
+    ]
+
+
+def test_run_njr_reports_images_saved_without_provenance_in_the_result_metadata() -> None:
+    runner, pipeline = _runner_with_fake_pipeline()
+
+    def _stage(*_args, **_kwargs):
+        pipeline._provenance_incomplete.append(
+            {"stage": "txt2img", "image": "output.png", "reason": "metadata_build_failed"}
+        )
+        return {"path": "output.png"}
+
+    pipeline.run_txt2img_stage.side_effect = _stage
+    result = runner.run_njr(_minimal_normalized_record(), cancel_token=None)
+    assert result.success is True
+    assert result.metadata["provenance_incomplete"] == [
+        {"stage": "txt2img", "image": "output.png", "reason": "metadata_build_failed"}
+    ]
+
+
+def test_run_njr_has_no_provenance_incomplete_key_when_nothing_was_lost() -> None:
+    runner, _pipeline = _runner_with_fake_pipeline()
+    result = runner.run_njr(_minimal_normalized_record(), cancel_token=None)
+    assert "provenance_incomplete" not in result.metadata
+
+
+def test_a_failing_run_metadata_write_is_logged_and_does_not_fail_the_job(
+    monkeypatch, caplog
+) -> None:
+    import logging
+
+    def _boom(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("src.pipeline.pipeline_runner.write_run_metadata", _boom)
+    runner, _pipeline = _runner_with_fake_pipeline()
+    with caplog.at_level(logging.WARNING):
+        result = runner.run_njr(_minimal_normalized_record(), cancel_token=None)
+    assert result.success is True
+    assert "Run metadata could not be written" in caplog.text
+    assert "disk full" in caplog.text

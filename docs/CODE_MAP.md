@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-420 of 590 modules have a docstring.
+421 of 591 modules have a docstring.
 
 ## src/
 
@@ -648,6 +648,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `managed_process.py`: Contained, bounded child processes (audit P3-3, findings B7/B8/E6)
 - `memory_utils.py`: Memory management utilities for Windows
 - `negative_helpers_v2.py`: Helper utilities for global prompt merging
+- `njr_identity.py`: The one identity of a stored NJR snapshot
 - `preferences.py`: Persistence helpers for GUI preferences and last-used settings
 - `process_container_v2.py`: OS-level process container helpers (job objects / cgroup v2) for StableNew
 - `process_inspector_v2.py`: Utilities for inspecting and describing Python processes

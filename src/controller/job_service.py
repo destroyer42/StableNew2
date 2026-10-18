@@ -1108,9 +1108,8 @@ class JobService:
                         callback(*args)
                 else:
                     callback(*args)
-            except Exception:
-                # Preserve existing behavior: swallow listener exceptions
-                continue
+            except Exception:  # noqa: BLE001 - isolate a bad listener
+                logger.warning("Listener %r raised for %s", callback, event, exc_info=True)
 
     def _notify_completion(self, job: Job, result: Any) -> None:
         """Notify all registered completion handlers of job completion.
