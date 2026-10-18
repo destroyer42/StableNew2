@@ -97,9 +97,10 @@ of the roadmap; where they conflict with this file, this file and the repository
    settings-suggestion stub (external scripts importing `src.ai` would break, unverified) and the cluster scaffolding.
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
 8. Product order after the safety work: inpainting/ControlNet, LoRA browser (the history browser and Learning payoff are in; "replay with changes" is not).
-9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments).
-   Store it once per experiment by hash (an NJR contract change), and/or add a dry-run tool that prunes snapshots and results of
-   jobs whose images and manifests were deleted? See `docs/Subsystems/Learning/LEARNING.md` section 9.
+9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments). Decided: store it
+   once per experiment by hash, forward-only (an NJR contract change, its own PR). Open: backfilling existing rows, and whether to prune jobs
+   whose images and manifests were deleted (archive then delete, or delete), both only after the owner reads the output of
+   `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
 10. Movie Clips assembly runs outside `JobService` (no NJR, queue or history record): make CPU-only assembly a queued
    workload, or explicitly exempt bounded media utilities? See `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.
 

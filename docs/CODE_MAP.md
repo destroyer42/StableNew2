@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-416 of 588 modules have a docstring.
+417 of 589 modules have a docstring.
 
 ## src/
 
@@ -555,6 +555,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `gpu_loss_assessment.py`: Classify one failed job against host GPU evidence
 - `history_query.py`: Read-only, paged and filtered history queries over the ``jobs`` table
 - `job_history_store.py`: History projection contracts implemented by the SQLite job repository
+- `job_hygiene_report.py`: Read-only hygiene report for the job repository: where the space is and what a prune could remove
 - `job_model.py`: Job model for single-node execution
 - `job_queue.py`: Thread-safe runnable projection with priority + FIFO behavior
 - `job_repository.py`: Transactional SQLite authority for StableNew job lifecycle state
