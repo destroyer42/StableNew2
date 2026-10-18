@@ -15,7 +15,7 @@ import logging
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
-from threading import Lock
+from threading import Event, Lock
 from typing import Any
 
 from src.queue.backend_dependency import DependencyAssessment, classify_job
@@ -62,6 +62,8 @@ class JobQueue:
         self._jobs: dict[str, Job] = {}
         self._counter = 0
         self._lock = Lock()
+        # Set whenever queue state changes (see ``_notify_state_listeners``); the runner idles on it instead of polling.
+        self._wake = Event()
         # Serializes durable queue-order writers (admission and complete reorders) with the
         # projection step that follows them.  Lock order: _admission_lock, then _lock.
         self._admission_lock = Lock()
@@ -384,7 +386,12 @@ class JobQueue:
             running.eta_seconds = None
             running.error_message = None
             running.result = None
-            persisted = self._repository.transition_job(running, JobStatus.QUEUED)
+            try:
+                persisted = self._repository.transition_job(
+                    running, JobStatus.QUEUED, expected_status=JobStatus.RUNNING
+                )
+            except JobStatusChanged:
+                return None  # it finished or was cancelled first: nothing to return
             with self._lock:
                 self._copy_persisted_state(running, persisted)
                 self._counter += 1
@@ -417,7 +424,12 @@ class JobQueue:
         job.error_message = None
         job.error_envelope = None
         job.result = None
-        persisted = self._repository.transition_job(job, JobStatus.QUEUED)
+        try:
+            persisted = self._repository.transition_job(
+                job, JobStatus.QUEUED, expected_status=JobStatus.RUNNING
+            )
+        except JobStatusChanged:
+            return None  # the job moved on while the outage coordinator decided
         with self._lock:
             self._copy_persisted_state(job, persisted)
             if counter is None:
@@ -503,7 +515,7 @@ class JobQueue:
         require_running: bool = False,
         require_queued: bool = False,
     ) -> Job | None:
-        with self._lock:
+        with self._repository.defer_emissions(), self._lock:
             job = self._jobs.get(job_id)
             if job is None or (require_running and job.status != JobStatus.RUNNING):
                 return None
@@ -524,7 +536,13 @@ class JobQueue:
                 status,
                 error_message=error_message,
                 result=result,
-                expected_status=JobStatus.QUEUED if require_queued else None,
+                expected_status=(
+                    JobStatus.QUEUED
+                    if require_queued
+                    else JobStatus.RUNNING
+                    if require_running
+                    else None
+                ),
             )
             self._copy_persisted_state(job, persisted)
             should_prune = status in self._FINAL_STATUSES
@@ -584,14 +602,16 @@ class JobQueue:
     def claim_next_job(self) -> Job | None:
         """Atomically claim the next runnable job for the single-node worker."""
         claimed: Job | None = None
-        with self._lock:
+        with self._repository.defer_emissions(), self._lock:
             if self._paused or self._dispatch_fenced:
                 return None
             found = self._pop_next_eligible_locked()
             if found is not None:
                 queue_item, job, skipped = found
                 try:
-                    persisted = self._repository.transition_job(job, JobStatus.RUNNING)
+                    persisted = self._repository.transition_job(
+                        job, JobStatus.RUNNING, expected_status=JobStatus.QUEUED
+                    )
                 except Exception:
                     heapq.heappush(self._queue, queue_item)
                     for held in skipped:
@@ -933,8 +953,22 @@ class JobQueue:
     def coalesce_state_notifications(self) -> _QueueStateNotificationBatch:
         return _QueueStateNotificationBatch(self)
 
+    def wake_worker(self) -> None:
+        """Wake an idle runner (state changed, or the runner must re-check its stop condition)."""
+
+        self._wake.set()
+
+    def clear_wake(self) -> None:
+        self._wake.clear()
+
+    def wait_for_change(self, timeout: float) -> bool:
+        """Block until queue state changes or ``timeout`` elapses.  Returns whether it was woken."""
+
+        return self._wake.wait(max(0.0, timeout))
+
     def _notify_state_listeners(self) -> None:
         """Notify listeners that the queue state has changed."""
+        self._wake.set()
         with self._lock:
             if self._state_notifications_suppressed > 0:
                 self._state_notifications_pending = True

@@ -99,6 +99,25 @@ def _merge_stage_checkpoints(
     return merged
 
 
+#: Longest an idle worker waits before re-checking on its own (queue changes wake it immediately).
+IDLE_HEARTBEAT_SECONDS = 1.0
+
+
+class _WakingEvent(threading.Event):
+    """A stop flag whose ``set`` also wakes the (event-driven) idle wait, so a stop never waits out the heartbeat."""
+
+    def __init__(self, on_set: Callable[[], None]) -> None:
+        super().__init__()
+        self._on_set = on_set
+
+    def set(self) -> None:
+        super().set()
+        try:
+            self._on_set()
+        except Exception:  # noqa: BLE001 - waking is best-effort; the flag is already set
+            pass
+
+
 class SingleNodeJobRunner:
     """Background worker that executes jobs from a JobQueue."""
 
@@ -118,7 +137,7 @@ class SingleNodeJobRunner:
         self.job_queue = job_queue
         self.run_callable = run_callable
         self.poll_interval = poll_interval
-        self._stop_event = threading.Event()
+        self._stop_event = _WakingEvent(self._wake_queue)
         self._worker: threading.Thread | None = None
         # Every worker thread this runner has launched and not yet seen exit. ``_worker`` is only the latest;
         # a worker that decided to retire can still be unwinding when its replacement starts, and the repository
@@ -231,8 +250,19 @@ class SingleNodeJobRunner:
             held_only = False
         if held_only:
             self._stop_event.wait(self._held_poll_interval)
+            return
+        wait_for_change = getattr(self.job_queue, "wait_for_change", None)
+        if callable(wait_for_change):
+            # Event-driven: the queue wakes us when work is admitted or state changes; the heartbeat only covers
+            # conditions that change without a queue event.  A stop request wakes the queue (see ``_wake_queue``).
+            wait_for_change(IDLE_HEARTBEAT_SECONDS)
         else:
             time.sleep(self.poll_interval)
+
+    def _wake_queue(self) -> None:
+        wake = getattr(self.job_queue, "wake_worker", None)
+        if callable(wake):
+            wake()
 
     def set_activity_callback(self, callback) -> None:
         """Bind the existing runner activity signal to an external observer."""
@@ -374,7 +404,7 @@ class SingleNodeJobRunner:
         while not self._stop_event.is_set():
             # Check if queue is paused before dequeuing
             if self._is_paused and self._is_paused():
-                time.sleep(self.poll_interval)
+                self._stop_event.wait(self.poll_interval)
                 continue
             with self._lifecycle_lock:
                 if self._shutting_down or not self._can_continue_dispatching():
@@ -384,6 +414,10 @@ class SingleNodeJobRunner:
             self._cancel_current.clear()
             self._cancel_return_to_queue = False
             self._maybe_release_hold()
+            # Clear before claiming: a change that lands between the claim and the wait leaves the event set.
+            clear_wake = getattr(self.job_queue, "clear_wake", None)
+            if callable(clear_wake):
+                clear_wake()
             job = self.job_queue.claim_next_job()
             if job is None:
                 self._idle_wait()
