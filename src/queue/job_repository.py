@@ -268,6 +268,7 @@ class JobRepository(JobHistoryStore):
             self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._callbacks: list[Any] = []
+        self._deferral = threading.local()
         self._connection = sqlite3.connect(
             str(self.path) if self.path is not None else ":memory:",
             timeout=10.0,
@@ -1123,9 +1124,36 @@ class JobRepository(JobHistoryStore):
             error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None, column="error_envelope", row=row)),
         )
 
+    @contextmanager
+    def defer_emissions(self) -> Iterator[None]:
+        """Hold observer notifications made on this thread until the outermost ``with`` exits.
+
+        ``JobQueue`` runs durable transitions under its own non-reentrant lock; an observer that read the queue
+        while that lock was held would deadlock.  The queue wraps the locked section in this context so the
+        observers run only after the lock is released.  Re-entrant: only the outermost exit flushes, in order, and
+        a transition that committed before an exception is still announced."""
+
+        outermost = getattr(self._deferral, "pending", None) is None
+        if outermost:
+            self._deferral.pending = []
+        try:
+            yield
+        finally:
+            if outermost:
+                pending, self._deferral.pending = self._deferral.pending, None
+                for entry in pending:
+                    self._notify_callbacks(entry)
+
     def _emit(self, entry: JobHistoryEntry | None) -> None:
         if entry is None:
             return
+        pending = getattr(self._deferral, "pending", None)
+        if pending is not None:
+            pending.append(entry)
+            return
+        self._notify_callbacks(entry)
+
+    def _notify_callbacks(self, entry: JobHistoryEntry) -> None:
         for callback in list(self._callbacks):
             try:
                 callback(entry)
