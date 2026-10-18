@@ -110,13 +110,15 @@ def classify_request_exception(
     )
 
 
+# urllib3 is requests' own dependency (not declared separately), so its exceptions are recognised by class name.
+_CONNECT_PHASE_ERRORS = frozenset(
+    {"NewConnectionError", "ConnectTimeoutError", "NameResolutionError"}
+)
+
+
 def _never_connected(exc: BaseException) -> bool:
     """True when the failure happened while *establishing* the connection (nothing was sent)."""
 
-    try:
-        from urllib3.exceptions import ConnectTimeoutError, NameResolutionError, NewConnectionError
-    except ImportError:  # pragma: no cover - urllib3 always ships with requests
-        return False
     pending: list[Any] = [exc]
     seen: set[int] = set()
     while pending:
@@ -124,7 +126,7 @@ def _never_connected(exc: BaseException) -> bool:
         if id(item) in seen:
             continue
         seen.add(id(item))
-        if isinstance(item, (NewConnectionError, ConnectTimeoutError, NameResolutionError)):
+        if type(item).__name__ in _CONNECT_PHASE_ERRORS:
             return True
         pending.extend(getattr(item, "args", ()))
         reason = getattr(item, "reason", None)
