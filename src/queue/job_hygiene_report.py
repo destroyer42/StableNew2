@@ -4,9 +4,11 @@ It writes nothing and deletes nothing: the database is opened read-only and the 
 to put numbers in front of the owner before any decision to externalize snapshots, backfill, or prune.
 
 A job is a *prune candidate* only when every one of these holds: it is terminal (completed, failed or cancelled), it is
-older than the age threshold, it has recorded output paths and every one of them is confirmed missing, no other job
-was compiled from it (replay lineage), and no Learning file mentions its id. Queued and running jobs, jobs with no
-recorded outputs, unresolvable relative paths and paths that could not be checked are never candidates. Not checked:
+older than the age threshold, it has recorded generated images or videos and every one of them is confirmed missing,
+no other job was compiled from it (replay lineage), and no Learning file mentions its id. Only images and videos count
+as outputs; other recorded paths (a PromptPack, a manifest) are ignored, because the repository records every
+path-like value in a result and a moved pack must not make a job look prunable. Queued and running jobs, jobs with no
+recorded media, unresolvable relative paths and paths that could not be checked are never candidates. Not checked:
 staged-curation groups and run folders (a candidate list is a starting point for review, not a delete list).
 """
 
@@ -185,25 +187,69 @@ def _learning_job_ids(root: Path | None) -> set[str]:
     return ids
 
 
-def _resolve(reference: str, output_root: Path | None) -> Path | None:
+_MEDIA_SUFFIXES = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".bmp",
+        ".gif",
+        ".tif",
+        ".tiff",
+        ".mp4",
+        ".webm",
+        ".mov",
+        ".mkv",
+        ".avi",
+    }
+)
+
+
+def _media_references(references: list[str]) -> list[str]:
+    """Only generated images and videos count as outputs.
+
+    The repository records every path-like value in a result as an "artifact reference", which includes source files
+    such as a PromptPack. Treating those as outputs made jobs look prunable just because a pack had moved.
+    """
+
+    return [
+        reference for reference in references if Path(reference).suffix.lower() in _MEDIA_SUFFIXES
+    ]
+
+
+def _candidate_paths(reference: str, output_root: Path | None) -> list[Path]:
+    """Where a recorded path may live: as is if absolute, else under the output root or the folder above it.
+
+    Relative paths are often recorded from the workspace root (``output/Pipeline/...``), so joining them onto an
+    output root named ``output`` would double the folder; both readings are tried and one hit is enough.
+    """
+
     path = Path(reference)
     if path.is_absolute():
-        return path
-    return output_root / path if output_root is not None else None
+        return [path]
+    if output_root is None:
+        return []
+    candidates = [output_root / path, output_root.parent / path]
+    return list(dict.fromkeys(candidates))
 
 
 def _classify_paths(references: list[str], output_root: Path | None) -> str:
-    """``no_outputs``, ``unresolvable``, ``unchecked``, ``all_present``, ``partly_missing`` or ``all_missing``."""
+    """``no_outputs``, ``no_media_outputs``, ``unresolvable``, ``unchecked``, ``all_present``, ``partly_missing`` or
+    ``all_missing``, judged on generated images and videos only."""
 
     if not references:
         return "no_outputs"
+    media = _media_references(references)
+    if not media:
+        return "no_media_outputs"
     present = missing = 0
-    for reference in references:
-        path = _resolve(reference, output_root)
-        if path is None:
+    for reference in media:
+        candidates = _candidate_paths(reference, output_root)
+        if not candidates:
             return "unresolvable"
         try:
-            exists = path.exists()
+            exists = any(candidate.exists() for candidate in candidates)
         except (OSError, ValueError):
             return "unchecked"
         present += exists
@@ -261,15 +307,16 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
         sums["snapshot_bytes"] += snapshot_bytes
         sums["result_bytes"] += result_bytes
         if outcome in {"candidate", "protected_in_learning_files", "protected_has_replay_children"}:
+            media = _media_references(references)
             missing_dirs.update(
                 {
-                    str(resolved.parent)
-                    for reference in references
-                    if (resolved := _resolve(reference, options.output_root)) is not None
+                    str(places[0].parent)
+                    for reference in media
+                    if (places := _candidate_paths(reference, options.output_root))
                 }
             )
-            if outcome == "candidate" and len(samples) < 5 and references:
-                samples.append(references[0])
+            if outcome == "candidate" and len(samples) < 5 and media:
+                samples.append(media[0])
         if outcome == "candidate":
             candidate_ids.append(job_id)
             candidates.append(

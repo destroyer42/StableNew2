@@ -444,3 +444,42 @@ def test_result_json_sizes_nested_keys_and_separates_within_row_from_cross_row_r
         repeated["extra_bytes"]
         == repeated["within_row_extra_bytes"] + repeated["cross_row_extra_bytes"]
     )
+
+
+def test_a_missing_pack_file_is_not_a_missing_output(repo: JobRepository, tmp_path: Path) -> None:
+    """Regression: 17,552 real jobs looked prunable because their only recorded path was a moved PromptPack."""
+
+    pack = tmp_path / "PromptPacks" / "portraits.json"
+    _add(repo, "pack-only", refs=[str(pack)])
+    _add(repo, "pack-and-image-present", refs=[str(pack), str(tmp_path / "out" / "x.png")])
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "x.png").write_bytes(b"x")
+    _add(repo, "pack-and-image-gone", refs=[str(pack), str(tmp_path / "out" / "y.png")])
+
+    report = _report(repo, tmp_path)
+
+    classes = _classes(report)
+    assert classes["no_media_outputs"] == 1
+    assert classes["all_present"] == 1
+    assert classes["candidate"] == 1
+    assert report["prune"]["candidate_job_ids"] == ["pack-and-image-gone"]
+    folders = {item["folder"] for item in report["prune"]["missing_output_folders"]}
+    assert str(pack.parent) not in folders
+
+
+def test_relative_paths_recorded_from_the_workspace_root_are_found(
+    repo: JobRepository, tmp_path: Path
+) -> None:
+    """``--output-root output`` plus a recorded ``output/Pipeline/x.png`` must not look under ``output/output``."""
+
+    image = tmp_path / "out" / "Pipeline" / "run" / "x.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"x")
+    _add(repo, "recorded-from-workspace-root", refs=["out/Pipeline/run/x.png"])
+    _add(repo, "recorded-from-output-root", refs=["Pipeline/run/x.png"])
+    _add(repo, "really-gone", refs=["out/Pipeline/run/gone.png"])
+
+    report = _report(repo, tmp_path)
+
+    assert _classes(report) == {"all_present": 2, "candidate": 1}
+    assert report["prune"]["candidate_job_ids"] == ["really-gone"]
