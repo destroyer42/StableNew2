@@ -47,8 +47,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   truth (`docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md`); supported-option upscale defaults (`docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md`).
 - PromptPacks (versioned JSON), Review and reprocess, Photo Optimize with scope-aware editing and historical baselines
   (`docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md`), cross-workflow model compatibility preflight.
-- Learning: designed experiments, ratings, Model Comparison, staged curation. The recommendation Apply path is not reachable
-  from the UI yet (audit G2).
+- Learning: designed experiments, ratings, Model Comparison, staged curation. Recommendations are applied from the Learning tab's
+  Recommendations selector (default Apply with confirm); rated review drafts are saved on navigation or with Save All Drafts.
 - History browser: the Pipeline tab's Job History opens a searchable, paged view of every job (status, date, pack, prompt/model text;
   no schema change). Text search covers only the first 64 prompt characters and the model; full-text search and "replay with changes" are not built.
 - Batch operations: whole-selection Review preflight, multi-source Video Workflow batch, unified batch triage and retry
@@ -96,7 +96,7 @@ of the roadmap; where they conflict with this file, this file and the repository
    out and needs bridge implementations plus accepted runtime evidence), the dormant story-plan/continuity authoring code, the AI
    settings-suggestion stub (external scripts importing `src.ai` would break, unverified) and the cluster scaffolding.
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
-8. Product order after the safety work: history browser, Learning payoff, inpainting/ControlNet, LoRA browser.
+8. Product order after the safety work: inpainting/ControlNet, LoRA browser (the history browser and Learning payoff are in; "replay with changes" is not).
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments).
    Store it once per experiment by hash (an NJR contract change), and/or add a dry-run tool that prunes snapshots and results of
    jobs whose images and manifests were deleted? See `docs/Subsystems/Learning/LEARNING.md` section 9.
