@@ -149,7 +149,6 @@ def test_cli_main_uses_pipeline_runner(monkeypatch, tmp_path: Path) -> None:
         ),
     )
     monkeypatch.setattr(cli, "setup_logging", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(cli, "find_webui_api_port", lambda: None)
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -215,7 +214,6 @@ def test_cli_main_create_video_prefers_final_stage_artifacts(monkeypatch, tmp_pa
     )
     monkeypatch.setattr(cli, "VideoCreator", _FakeVideoCreator)
     monkeypatch.setattr(cli, "setup_logging", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(cli, "find_webui_api_port", lambda: None)
     monkeypatch.setattr(
         "sys.argv",
         [

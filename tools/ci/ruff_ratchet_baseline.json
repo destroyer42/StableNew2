@@ -404,9 +404,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1402,
+      "BLE001": 1397,
       "S110": 564,
-      "S112": 42
+      "S112": 41
     },
     "counts": {
       "src/api/client.py": {
@@ -415,6 +415,9 @@
       },
       "src/api/healthcheck.py": {
         "BLE001": 4
+      },
+      "src/api/http_transport.py": {
+        "S110": 1
       },
       "src/api/webui_api.py": {
         "BLE001": 6
@@ -1076,18 +1079,13 @@
         "BLE001": 4
       },
       "src/utils/webui_discovery.py": {
-        "BLE001": 4,
-        "S112": 1
+        "BLE001": 2
       },
       "src/utils/webui_resource_names.py": {
         "BLE001": 1
       },
       "src/video/assembly_service.py": {
         "BLE001": 1
-      },
-      "src/video/comfy_api_client.py": {
-        "BLE001": 3,
-        "S110": 1
       },
       "src/video/comfy_healthcheck.py": {
         "BLE001": 4

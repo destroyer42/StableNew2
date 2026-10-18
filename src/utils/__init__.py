@@ -32,7 +32,6 @@ __all__ = [
     "get_safe_filename",
     "build_safe_image_stem",
     "merge_global_negative",
-    "find_webui_api_port",
     "wait_for_webui_ready",
 ]
 
@@ -51,7 +50,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "get_safe_filename": ("src.utils.file_io", "get_safe_filename"),
     "build_safe_image_stem": ("src.utils.file_io", "build_safe_image_stem"),
     "merge_global_negative": ("src.utils.negative_helpers_v2", "merge_global_negative"),
-    "find_webui_api_port": ("src.utils.webui_discovery", "find_webui_api_port"),
     # 🔴 OLD (remove this)
     # "wait_for_webui_ready": ("src.utils.webui_discovery", "wait_for_webui_ready"),
     # 🟢 NEW – route all utils.wait_for_webui_ready calls to the V2.5 healthcheck

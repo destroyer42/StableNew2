@@ -77,7 +77,7 @@ the independent critique adjustments in the PR history before reordering it). Ph
 process isolation, startup wiring, crash-safe writes, pinned dev environment, Windows lane, ratchets). Phase 2 (docs and
 process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
 `docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done, and the eight living subsystem docs (P2-2) are written;
-P2-6 wave 1 retired the leaf harnesses; the rest stay with named retirement conditions (`tools/qualification/README.md`). Phase 3 has started: P3-3 (contained, bounded child processes, `src/utils/managed_process.py`) is merged; P3-4 (typed transport, Comfy cancellation) is next. Phases 4 and 5 are a candidate list; each package needs a contract check and an owner decision first.
+P2-6 wave 1 retired the leaf harnesses; the rest stay with named retirement conditions (`tools/qualification/README.md`). Phase 3 has started: P3-3 (contained, bounded child processes, `src/utils/managed_process.py`) and P3-4 (typed Comfy transport and cancellation, `src/api/http_transport.py`; the port scan and dead launcher are gone) are merged; P3-5 (provenance) and P3-6 (queue discipline) are next. Phases 4 and 5 are a candidate list; each package needs a contract check and an owner decision first.
 
 Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
 of the roadmap; where they conflict with this file, this file and the repository are current.

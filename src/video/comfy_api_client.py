@@ -5,26 +5,35 @@ from typing import Any
 
 import requests
 
+from src.api.http_transport import (
+    HttpTransport,
+    HttpTransportError,
+    RequestPolicy,
+)
+
 
 class ComfyApiClient:
+    """Typed client for a local ComfyUI.
+
+    Every failure is an ``HttpTransportError`` subclass (``src.api.http_transport``).  In particular ``queue_prompt`` is
+    never retried and raises ``DispatchOutcomeUnknown`` when the server may already have accepted the prompt: callers must
+    treat that as "possibly running", not as "not started"."""
+
     def __init__(
         self,
         *,
         base_url: str = "http://127.0.0.1:8188",
         session: requests.Session | None = None,
     ) -> None:
-        self.base_url = str(base_url or "").rstrip("/")
-        self._session = session or requests.Session()
+        self._transport = HttpTransport(base_url, session)
+        self.base_url = self._transport.base_url
 
     @property
     def session(self) -> requests.Session:
-        return self._session
+        return self._transport.session
 
     def close(self) -> None:
-        try:
-            self._session.close()
-        except Exception:
-            pass
+        self._transport.close()
 
     def get_system_stats(self, *, timeout: float = 5.0) -> dict[str, Any]:
         return self._get_json("/system_stats", timeout=timeout)
@@ -46,28 +55,38 @@ class ComfyApiClient:
         return self._get_json(path, timeout=timeout)
 
     def queue_prompt(self, payload: dict[str, Any], *, timeout: float = 30.0) -> dict[str, Any]:
-        response = self._session.post(
-            f"{self.base_url}/prompt",
+        """Start a generation.  Not idempotent: never retried (see the class docstring)."""
+
+        return self._transport.request_json(
+            "POST",
+            "/prompt",
+            policy=RequestPolicy(timeout=timeout, idempotent=False),
             json=dict(payload or {}),
-            timeout=timeout,
         )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            body = ""
-            try:
-                body = response.text.strip()
-            except Exception:
-                body = ""
-            if body:
-                raise requests.HTTPError(
-                    f"{exc} | response_body={body[:2000]}", response=response
-                ) from exc
-            raise
-        data = response.json()
-        if not isinstance(data, dict):
-            raise RuntimeError("Comfy /prompt returned a non-dict payload")
-        return data
+
+    def interrupt(self, prompt_id: str | None = None, *, timeout: float = 5.0) -> None:
+        """Ask Comfy to stop the prompt it is executing.
+
+        With ``prompt_id`` the request names the prompt (current Comfy interrupts only that prompt if it is the one
+        running).  Idempotent: stopping twice is the same as once."""
+
+        body = {"prompt_id": str(prompt_id)} if prompt_id else {}
+        self._transport.send(
+            "POST",
+            "/interrupt",
+            policy=RequestPolicy(timeout=timeout, idempotent=True),
+            json=body,
+        )
+
+    def delete_from_queue(self, prompt_ids: list[str], *, timeout: float = 5.0) -> None:
+        """Remove still-pending prompts from Comfy's queue (a running prompt is not affected)."""
+
+        self._transport.send(
+            "POST",
+            "/queue",
+            policy=RequestPolicy(timeout=timeout, idempotent=True),
+            json={"delete": [str(item) for item in prompt_ids]},
+        )
 
     def upload_image(
         self,
@@ -79,32 +98,16 @@ class ComfyApiClient:
     ) -> dict[str, Any]:
         path = Path(image_path).expanduser()
         with path.open("rb") as handle:
-            response = self._session.post(
-                f"{self.base_url}/upload/image",
+            return self._transport.request_json(
+                "POST",
+                "/upload/image",
+                policy=RequestPolicy(timeout=timeout, idempotent=True),
                 files={"image": (path.name, handle, "application/octet-stream")},
                 data={
                     "type": str(image_type or "input"),
                     "overwrite": "true" if overwrite else "false",
                 },
-                timeout=timeout,
             )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            body = ""
-            try:
-                body = response.text.strip()
-            except Exception:
-                body = ""
-            if body:
-                raise requests.HTTPError(
-                    f"{exc} | response_body={body[:2000]}", response=response
-                ) from exc
-            raise
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise RuntimeError("Comfy /upload/image returned a non-dict payload")
-        return payload
 
     def download_view(
         self,
@@ -119,26 +122,32 @@ class ComfyApiClient:
 
         target = Path(destination)
         target.parent.mkdir(parents=True, exist_ok=True)
-        response = self._session.get(
-            f"{self.base_url}/view",
+        response = self._transport.send(
+            "GET",
+            "/view",
+            policy=RequestPolicy(timeout=timeout, idempotent=True),
             params={"filename": filename, "subfolder": subfolder, "type": file_type},
             stream=True,
-            timeout=timeout,
         )
-        response.raise_for_status()
-        with target.open("wb") as handle:
-            for chunk in response.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    handle.write(chunk)
+        try:
+            with target.open("wb") as handle:
+                for chunk in response.iter_content(chunk_size=1 << 20):
+                    if chunk:
+                        handle.write(chunk)
+        except requests.exceptions.RequestException as exc:
+            raise HttpTransportError(
+                f"GET /view: the download of {filename!r} was interrupted ({exc})",
+                method="GET",
+                path="/view",
+            ) from exc
+        finally:
+            response.close()
         return target
 
     def _get_json(self, path: str, *, timeout: float) -> dict[str, Any]:
-        response = self._session.get(f"{self.base_url}{path}", timeout=timeout)
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise RuntimeError(f"Comfy {path} returned a non-dict payload")
-        return payload
+        return self._transport.request_json(
+            "GET", path, policy=RequestPolicy(timeout=timeout, idempotent=True)
+        )
 
 
 __all__ = ["ComfyApiClient"]
