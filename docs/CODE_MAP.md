@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-412 of 584 modules have a docstring.
+416 of 588 modules have a docstring.
 
 ## src/
 
@@ -202,6 +202,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui/controllers/
 
 - `learning_controller.py`: (no docstring)
+- `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
 - `review_workflow_adapter.py`: Non-render review workflow logic for Review tab
 - `video_workspace_handoff.py`: (no docstring)
 
@@ -399,11 +400,14 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/learning/
 
+- `automation_modes.py`: Learning automation modes: names, labels, the default, and how a persisted choice is read back
 - `dataset_builder.py`: Dataset aggregation utilities for learning groundwork
 - `discovered_grouping.py`: Grouping engine for discovered-review candidate selection
 - `discovered_review_models.py`: Discovered-review group and item models
 - `discovered_review_store.py`: DiscoveredReviewStore — persists groups, items, and the scan index
 - `discovered_scan_service.py`: Scan -> group -> persist orchestration with truthful scan-index dispositions
+- `draft_commit.py`: Turn rated review drafts into saved ratings, without ever overriding a rating that is already saved
+- `evidence_progress.py`: How far an experiment is from the evidence a recommendation needs, in the engine's own thresholds
 - `execution_controller.py`: Learning job execution controller
 - `experiment_conclusion.py`: Derived, read-only conclusion projection for one designed experiment
 - `experiment_execution.py`: Frozen experiment preview and one-boundary queue admission helpers

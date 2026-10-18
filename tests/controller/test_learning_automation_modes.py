@@ -71,3 +71,13 @@ def test_auto_micro_experiment_respects_queue_cap() -> None:
     assert applied is False
     assert stage_cards.txt2img_card.cfg_var.get() == 7.0
     assert pipeline_controller.submit_preview_jobs_to_queue.call_count == 0
+
+
+def test_a_new_controller_defaults_to_apply_with_confirm() -> None:
+    controller, _ = _build_controller()
+
+    assert controller.get_automation_mode() == "apply_with_confirm"
+    assert (
+        controller.apply_recommendations_to_pipeline([{"parameter": "cfg_scale", "value": 8.0}])
+        is True
+    )

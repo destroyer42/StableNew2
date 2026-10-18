@@ -40,10 +40,13 @@ from src.gui_v2.adapters.learning_adapter_v2 import (
     update_record_feedback,
 )
 from src.image_backends.image_backend_types import normalize_image_backend_options
+from src.learning.automation_modes import DEFAULT_AUTOMATION_MODE
 from src.learning.discovered_review_models import (
     DiscoveredReviewExperiment,
     DiscoveredReviewItem,
 )
+from src.learning.draft_commit import DraftCommitSummary, commit_drafts
+from src.learning.evidence_progress import EvidenceProgress, evidence_progress
 from src.learning.experiment_conclusion import build_experiment_conclusion
 from src.learning.experiment_execution import (
     ExperimentAdmissionService,
@@ -155,7 +158,7 @@ class LearningController:
         self._review_panel = review_panel
         self._learning_record_writer = learning_record_writer
         self._learning_enabled = False
-        self._automation_mode = "suggest_only"
+        self._automation_mode = DEFAULT_AUTOMATION_MODE
         self._automation_snapshot: dict[tuple[str, str], Any] = {}
         self._workflow_state = "idle"
         self._workflow_state_listeners: list[Any] = []
@@ -773,6 +776,55 @@ class LearningController:
         self.learning_state.review_drafts.pop(self._draft_key(image_path), None)
         self._notify_resume_state_changed()
 
+    def commit_review_drafts(self, image_refs: list[str] | None = None) -> DraftCommitSummary:
+        """Save the rated drafts of the open experiment as ratings (all of them, or only ``image_refs``).
+
+        An image that already has a saved rating keeps its draft: replacing a saved rating stays an explicit,
+        confirmed Save Rating. Whatever is not saved stays a draft.
+        """
+        experiment = self.learning_state.current_experiment
+        if experiment is None or not self._learning_record_writer:
+            return DraftCommitSummary()
+        drafts = dict(self.learning_state.review_drafts or {})
+        if image_refs is not None:
+            wanted = {self._draft_key(ref) for ref in image_refs}
+            drafts = {key: value for key, value in drafts.items() if key in wanted}
+
+        def find_variant(ref: str) -> LearningVariant | None:
+            return next((v for v in self.learning_state.plan if ref in v.image_refs), None)
+
+        def commit(ref: str, _variant: LearningVariant, rating: Any) -> None:
+            self.record_rating(ref, rating.rating, rating.notes, rating.details)
+
+        _remaining, summary = commit_drafts(
+            drafts,
+            experiment_id=str(experiment.experiment_id),
+            find_variant=find_variant,
+            is_rated=self.is_image_rated,
+            commit=commit,
+        )
+        return summary
+
+    def commit_review_draft(self, image_ref: str) -> bool:
+        """Save one image's rated draft as a rating; ``False`` when it was kept as a draft."""
+        return self.commit_review_drafts([image_ref]).committed == 1
+
+    def commit_stored_review_drafts(self, store: Any, *, apply: bool) -> Any:
+        """Dry-run or commit the rated drafts in every saved experiment session except the open one."""
+        from src.gui.controllers.learning_stored_drafts import commit_stored_drafts
+
+        if not self._learning_record_writer:
+            raise RuntimeError("LearningRecordWriter not configured")
+        experiment = self.learning_state.current_experiment
+        open_ids = {str(experiment.experiment_id)} if experiment is not None else set()
+        return commit_stored_drafts(
+            store=store,
+            writer=self._learning_record_writer,
+            build_record=self.build_rating_record,
+            open_experiment_ids=open_ids,
+            apply=apply,
+        )
+
     def get_review_counts(self) -> dict[str, int]:
         """Return persisted-rating, draft, and unresolved counts for the current plan."""
         refs = [
@@ -784,6 +836,18 @@ class LearningController:
         saved = sum(self.is_image_rated(ref) for ref in refs)
         drafts = sum(not self.is_image_rated(ref) and self.get_review_draft(ref) is not None for ref in refs)
         return {"saved": saved, "draft": drafts, "unrated": max(0, len(refs) - saved - drafts), "total": len(refs)}
+
+    def get_evidence_progress(self) -> EvidenceProgress:
+        """Saved controlled ratings of the current experiment against what a recommendation needs."""
+        per_value: list[int] = []
+        for variant in self.learning_state.plan:
+            metadata = dict(getattr(variant, "execution_metadata", {}) or {})
+            if metadata.get("controlled_evidence_valid", True) is not True:
+                continue
+            per_value.append(
+                sum(self.is_image_rated(str(ref)) for ref in list(getattr(variant, "image_refs", []) or []))
+            )
+        return evidence_progress(per_value)
 
     def new_experiment_draft(self) -> None:
         """Clear only the editable controlled-experiment workspace for a new identity."""
@@ -2040,6 +2104,8 @@ class LearningController:
         self.learning_state.plan = list(restored.plan or [])
         self.learning_state.selected_variant = restored.selected_variant
         self.learning_state.selected_image_index = int(restored.selected_image_index or 0)
+        # Drafts are part of the saved session; dropping them here lost them at the next save.
+        self.learning_state.review_drafts = dict(restored.review_drafts or {})
         self.load_existing_ratings()
         self._update_plan_table()
 
@@ -2155,33 +2221,20 @@ class LearningController:
         # The specific variant handling is done in _on_variant_job_completed
         pass
 
-    def record_rating(
+    def build_rating_record(
         self,
+        experiment: Any,
+        target_variant: Any,
         image_ref: str,
         rating: int,
-        notes: str = "",
-        details: dict[str, Any] | None = None,
-    ) -> None:
-        """Record a rating for a learning image."""
-        if not self._learning_record_writer:
-            raise RuntimeError("LearningRecordWriter not configured")
+        notes: str,
+        details: dict[str, Any] | None,
+    ) -> tuple[LearningRecord, dict[str, Any], dict[str, Any]]:
+        """The evidence record for one controlled rating, plus its context flags and subscores.
 
-        if not self.learning_state.current_experiment:
-            raise RuntimeError("No current experiment")
-
-        # Find the variant that contains this image
-        target_variant = None
-        for variant in self.learning_state.plan:
-            if image_ref in variant.image_refs:
-                target_variant = variant
-                break
-
-        if not target_variant:
-            raise ValueError(f"Image {image_ref} not found in any variant")
-
-        # Create a learning record for this rating
-        experiment = self.learning_state.current_experiment
-
+        Pure with respect to controller state, so a rating committed from a stored session builds the same record
+        as one saved live.
+        """
         # Ratings are evidence about an execution, not about the current GUI.
         # Retain the exact frozen/effective configuration carried by the NJR.
         executed_config = dict(target_variant.executed_config or {})
@@ -2264,6 +2317,36 @@ class LearningController:
                     ),
                 },
             },
+        )
+        return record, context_flags, subscores
+
+    def record_rating(
+        self,
+        image_ref: str,
+        rating: int,
+        notes: str = "",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Record a rating for a learning image."""
+        if not self._learning_record_writer:
+            raise RuntimeError("LearningRecordWriter not configured")
+
+        if not self.learning_state.current_experiment:
+            raise RuntimeError("No current experiment")
+
+        # Find the variant that contains this image
+        target_variant = None
+        for variant in self.learning_state.plan:
+            if image_ref in variant.image_refs:
+                target_variant = variant
+                break
+
+        if not target_variant:
+            raise ValueError(f"Image {image_ref} not found in any variant")
+
+        experiment = self.learning_state.current_experiment
+        record, context_flags, subscores = self.build_rating_record(
+            experiment, target_variant, image_ref, rating, notes, details
         )
 
         # Write the record; a rating that was not stored must never be reported (or cached) as saved.

@@ -266,6 +266,10 @@ class LearningReviewPanel(ttk.Frame):
             self.rating_action_strip, text="Discard Draft", command=self._discard_draft
         )
         self.discard_draft_button.pack(side="left", padx=(4, 0))
+        self.save_all_drafts_button = ttk.Button(
+            self.rating_action_strip, text="Save All Drafts", command=self._save_all_drafts
+        )
+        self.save_all_drafts_button.pack(side="left", padx=(4, 0))
         self.send_to_curation_button = ttk.Button(
             self.rating_action_strip,
             text="Send Selected to Curation",
@@ -376,10 +380,12 @@ class LearningReviewPanel(ttk.Frame):
             else ("ready to review" if projection.execution_complete else "in progress")
         )
         name = str(getattr(experiment, "name", "experiment") or "experiment")
+        progress_getter = getattr(controller, "get_evidence_progress", None)
+        progress_text = f" | {progress_getter().message()}" if callable(progress_getter) else ""
         self.workspace_status_var.set(
             f"{name} | {getattr(experiment, 'variable_under_test', 'value')} | "
             f"{counts['saved']} saved / {counts['draft']} draft / {counts['unrated']} unrated | "
-            f"Experiment {state_label}"
+            f"Experiment {state_label}{progress_text}"
         )
         selected = getattr(state, "selected_variant", None) if state is not None else None
         if selected in variants:
@@ -703,7 +709,12 @@ class LearningReviewPanel(ttk.Frame):
         rating = int(self.rating_var.get() or 0)
         notes = self.notes_text.get("1.0", tk.END).strip()
         details = self._build_rating_details(rating)
-        if rating or notes or details["subscores"] or any(details["context_flags"].values()):
+        if self._matches_saved_rating(controller, image_ref, rating, notes, details):
+            return
+        # Untouched controls (the default context flags only) are not a draft: merely viewing an image must not
+        # leave one behind.
+        touched = details["context_flags"] != {key: key == "people" for key in details["context_flags"]}
+        if rating or notes or details["subscores"] or touched:
             controller.save_review_draft(
                 image_ref,
                 {
@@ -714,6 +725,36 @@ class LearningReviewPanel(ttk.Frame):
                     "dirty": True,
                 },
             )
+            self._commit_draft_on_navigation(controller, image_ref)
+
+    @staticmethod
+    def _matches_saved_rating(
+        controller: Any, image_ref: str, rating: int, notes: str, details: dict[str, Any]
+    ) -> bool:
+        """True when the controls still show exactly the saved rating, so there is nothing to draft."""
+        getter = getattr(controller, "get_rating_details_for_image", None)
+        saved = getter(image_ref) if callable(getter) else None
+        if not saved:
+            return False
+        return (
+            int(saved.get("overall_rating") or 0) == rating
+            and str(saved.get("notes") or "") == notes
+            and dict(saved.get("subscores") or {}) == details["subscores"]
+            and dict(saved.get("context_flags") or {}) == details["context_flags"]
+        )
+
+    def _commit_draft_on_navigation(self, controller: Any, image_ref: str) -> None:
+        """Leaving an image saves its rated draft; one that cannot be saved stays a draft."""
+        committer = getattr(controller, "commit_review_draft", None)
+        if not callable(committer):
+            return
+        try:
+            saved = committer(image_ref)
+        except (OSError, RuntimeError, ValueError):
+            return  # not storable now; it stays a draft and Save All Drafts reports it
+        if saved:
+            self.feedback_label.config(text="Draft saved as a rating", foreground="green")
+            self._refresh_experiment_workspace(self.current_experiment)
 
     def _load_review_state(self, image_ref: str) -> None:
         controller = self._get_learning_controller()
@@ -807,6 +848,38 @@ class LearningReviewPanel(ttk.Frame):
     def _save_and_next(self) -> None:
         if self._submit_rating():
             self._on_next_unrated()
+
+    def _save_all_drafts(self) -> None:
+        """Save every rated draft of this experiment as a rating (images already rated are left alone)."""
+        controller = self._get_learning_controller()
+        committer = getattr(controller, "commit_review_drafts", None)
+        if not callable(committer):
+            self.feedback_label.config(text="Rating system not available", foreground="red")
+            return
+        self._capture_current_draft()
+        counts_getter = getattr(controller, "get_review_counts", None)
+        drafts = int(counts_getter().get("draft", 0)) if callable(counts_getter) else 0
+        if drafts:
+            from tkinter import messagebox
+
+            if not messagebox.askyesno(
+                "Save All Drafts",
+                f"Save {drafts} draft(s) as ratings?\n\nDrafts without an overall rating, and images that "
+                "already have a saved rating, are left as drafts.",
+            ):
+                return
+        try:
+            summary = committer()
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.feedback_label.config(text=f"Error saving drafts: {exc}", foreground="red")
+            return
+        self._active_image_ref = None
+        if self.current_variant and self.current_experiment:
+            self.display_variant_results(self.current_variant, self.current_experiment)
+        # After the redisplay, which resets the label.
+        self.feedback_label.config(
+            text=summary.describe(), foreground="green" if summary.committed and not summary.failed else "orange"
+        )
 
     def _discard_draft(self) -> None:
         image_ref = self._selected_image_ref()
@@ -1035,7 +1108,7 @@ class LearningReviewPanel(ttk.Frame):
             return recommendations
         return []
 
-    def _get_learning_controller(self):
+    def _get_learning_controller(self) -> Any:
         """Get the learning controller from parent chain."""
         try:
             controller = getattr(self, "learning_controller", None)

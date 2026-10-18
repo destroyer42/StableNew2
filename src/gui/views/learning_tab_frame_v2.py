@@ -40,6 +40,15 @@ from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.image_thumbnail import ImageThumbnail
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
+from src.learning.automation_modes import (
+    AUTOMATION_MODE_LABELS,
+    AUTOMATION_MODES,
+    DEFAULT_AUTOMATION_MODE,
+    USER_SET_KEY,
+    mode_for_label,
+    normalize_automation_mode,
+    resolve_persisted_mode,
+)
 from src.learning.experiment_store import LearningExperimentStore
 from src.learning.learning_paths import get_learning_experiments_root, get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
@@ -148,7 +157,11 @@ class LearningTabFrame(ttk.Frame):
         self._learning_enabled_var = tk.BooleanVar(
             value=self.app_state.learning_enabled if self.app_state else False
         )
-        self._automation_mode_var = tk.StringVar(value="suggest_only")
+        self._automation_mode_var = tk.StringVar(value=DEFAULT_AUTOMATION_MODE)
+        self._automation_mode_label_var = tk.StringVar(
+            value=AUTOMATION_MODE_LABELS[DEFAULT_AUTOMATION_MODE]
+        )
+        self._automation_mode_user_set = False
         learning_toggle = ttk.Checkbutton(
             self.header_frame,
             text="Learning mode",
@@ -179,6 +192,33 @@ class LearningTabFrame(ttk.Frame):
             text="Experiment Library",
             command=self._on_open_experiment_library,
         ).grid(row=0, column=7, sticky="e", padx=(4, 0))
+        ttk.Label(self.header_frame, text="Recommendations:", style=BODY_LABEL_STYLE).grid(
+            row=1, column=5, sticky="e", pady=(6, 0)
+        )
+        self.automation_mode_box = ttk.Combobox(
+            self.header_frame,
+            textvariable=self._automation_mode_label_var,
+            values=[AUTOMATION_MODE_LABELS[mode] for mode in AUTOMATION_MODES],
+            state="readonly",
+            width=48,
+        )
+        self.automation_mode_box.grid(row=1, column=6, columnspan=2, sticky="e", padx=(4, 0), pady=(6, 0))
+        self.automation_mode_box.bind("<<ComboboxSelected>>", self._on_automation_mode_selected)
+        self.stored_drafts_button = ttk.Button(
+            self.header_frame,
+            text="Save Stored Drafts...",
+            command=self._on_commit_stored_drafts,
+        )
+        self.stored_drafts_button.grid(row=2, column=6, columnspan=2, sticky="e", padx=(4, 0), pady=(2, 0))
+        attach_tooltip(
+            self.stored_drafts_button,
+            "Save the rated drafts left in other saved experiments as ratings. Shows what it will do first.",
+        )
+        attach_tooltip(
+            self.automation_mode_box,
+            "What Apply may do with Learning recommendations. Apply with confirm asks before changing "
+            "Pipeline settings; Suggest only never applies; Auto micro-experiment also queues one preview job.",
+        )
         attach_tooltip(learning_toggle, "Enable learning mode to collect ratings and feedback.")
         attach_tooltip(header_label, "Learning mode: review runs, enable adaptive loops.")
         self._workflow_state_var = tk.StringVar(value="Workflow: idle")
@@ -734,14 +774,58 @@ class LearningTabFrame(ttk.Frame):
                 pass
         self._persist_learning_session_state()
 
+    def _on_commit_stored_drafts(self) -> None:
+        """Save rated drafts stored in other experiments' sessions, after showing exactly what will be saved."""
+        controller = self.learning_controller
+        try:
+            preview = controller.commit_stored_review_drafts(self.experiment_store, apply=False)
+        except (OSError, RuntimeError, ValueError) as exc:
+            messagebox.showerror("Learning", f"Could not scan the saved experiments: {exc}")
+            return
+        if not preview.summary.committed:
+            messagebox.showinfo("Save Stored Drafts", preview.describe())
+            return
+        if not messagebox.askyesno(
+            "Save Stored Drafts",
+            f"{preview.describe()}\n\nSave them as ratings now? This appends to the learning records and "
+            "cannot be undone.",
+        ):
+            return
+        try:
+            done = controller.commit_stored_review_drafts(self.experiment_store, apply=True)
+        except (OSError, RuntimeError, ValueError) as exc:
+            messagebox.showerror("Save Stored Drafts", f"Saving stopped: {exc}")
+            return
+        refresh = getattr(controller, "refresh_recommendations", None)
+        if callable(refresh):
+            refresh()
+        messagebox.showinfo("Save Stored Drafts", done.describe())
+
+    def _on_automation_mode_selected(self, _event: Any = None) -> None:
+        """The operator chose a mode: remember it as a choice, not as the default."""
+        self._automation_mode_var.set(mode_for_label(self._automation_mode_label_var.get()))
+        self._automation_mode_user_set = True
+        self._on_automation_mode_changed()
+
+    def _set_automation_mode(self, mode: str, *, user_set: bool) -> None:
+        mode = normalize_automation_mode(mode)
+        self._automation_mode_var.set(mode)
+        self._automation_mode_user_set = bool(user_set)
+        self._on_automation_mode_changed()
+
     def _on_automation_mode_changed(self) -> None:
-        mode = str(self._automation_mode_var.get() or "suggest_only")
+        mode = normalize_automation_mode(self._automation_mode_var.get())
+        self._automation_mode_label_var.set(AUTOMATION_MODE_LABELS[mode])
         setter = getattr(self.learning_controller, "set_automation_mode", None)
         if callable(setter):
             try:
                 setter(mode)
             except Exception:
                 pass
+        # The review panel enables Apply from the mode, so show the new state now.
+        refresh = getattr(self.learning_controller, "refresh_recommendations", None)
+        if callable(refresh):
+            refresh()
         self._persist_learning_session_state()
 
     def _on_workflow_state_changed(self, state: str) -> None:
@@ -795,14 +879,16 @@ class LearningTabFrame(ttk.Frame):
         payload = self.learning_controller.learning_state.to_dict()
         payload["workflow_state"] = str(self._workflow_state_var.get() or "")
         payload["learning_enabled"] = bool(self._learning_enabled_var.get())
-        payload["automation_mode"] = str(self._automation_mode_var.get() or "suggest_only")
+        payload["automation_mode"] = normalize_automation_mode(self._automation_mode_var.get())
+        payload[USER_SET_KEY] = bool(self._automation_mode_user_set)
         return payload
 
     def get_learning_session_state(self) -> dict[str, Any] | None:
         """Return learning tab session payload for app-level persistence."""
         return {
             "enabled": bool(self._learning_enabled_var.get()),
-            "automation_mode": "suggest_only",
+            "automation_mode": normalize_automation_mode(self._automation_mode_var.get()),
+            USER_SET_KEY: bool(self._automation_mode_user_set),
             "last_experiment_id": self._active_experiment_id,
             "session": self._build_store_payload(),
         }
@@ -850,8 +936,8 @@ class LearningTabFrame(ttk.Frame):
         except Exception:
             pass
         try:
-            self._automation_mode_var.set("suggest_only")
-            self._on_automation_mode_changed()
+            mode, user_set = resolve_persisted_mode(payload)
+            self._set_automation_mode(mode, user_set=user_set)
         except Exception:
             pass
         restored = bool(self.learning_controller.restore_resume_state(payload))
@@ -1039,9 +1125,8 @@ class LearningTabFrame(ttk.Frame):
             enabled = bool(payload.get("enabled", True))
             self._learning_enabled_var.set(enabled)
             self._on_learning_toggle()
-            mode = str(payload.get("automation_mode", "suggest_only") or "suggest_only")
-            self._automation_mode_var.set(mode)
-            self._on_automation_mode_changed()
+            mode, user_set = resolve_persisted_mode(payload)
+            self._set_automation_mode(mode, user_set=user_set)
         except Exception:
             pass
         return False
