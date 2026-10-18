@@ -133,7 +133,7 @@ Apply to Pipeline is reachable through the Recommendations selector (section 3.6
 
 Resume after restart [V by reading, not run]: `export_resume_state` / `restore_resume_state` restore plan, statuses and ratings, but `LearningExecutionController._job_to_variant` is in memory only and nothing reconciles variants marked `queued` with the repository after a restart, so a job that completes after a restart does not update its variant. Completed work is still discoverable through the Discovered Outputs scan (controlled artifacts are skipped there, so reopen the experiment instead).
 
-Dead view code [V: no importer in `src` or `tests`]: `src/gui/views/learning_tab_frame.py`, `src/gui/views/learning_plan_table_v2.py`, `src/gui/views/learning_review_panel_v2.py`. The live pair is `learning_plan_table.py` and `learning_review_panel.py` despite their names.
+The unsuffixed-or-`_v2` duplicates `learning_tab_frame.py`, `learning_plan_table_v2.py` and `learning_review_panel_v2.py` were deleted (P3-1); the live files are `learning_tab_frame_v2.py`, `learning_plan_table.py` and `learning_review_panel.py`, despite their names.
 
 ## 6. Randomizer relation
 

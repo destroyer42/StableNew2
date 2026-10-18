@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-421 of 591 modules have a docstring.
+404 of 561 modules have a docstring.
 
 ## src/
 
@@ -143,7 +143,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui/
 
 - `__init__.py`: GUI module
-- `adetailer_config_panel.py`: ADetailer configuration panel for face and detail enhancement
 - `advanced_prompt_editor.py`: Advanced Prompt Pack Editor with validation, embedding/LoRA discovery, and smart features
 - `api_status_panel.py`: APIStatusPanel - UI component for displaying API connection status
 - `app_state_projection_sink.py`: (no docstring)
@@ -171,26 +170,21 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `main_window_v2.py`: (no docstring)
 - `model_comparison_readiness.py`: Single-flight worker mailbox; all Tk calls remain in the polling owner
 - `model_list_adapter_v2.py`: Thin adapter to fetch available models/VAEs for GUI V2 without GUI/toolkit deps
-- `model_manager_panel_v2.py`: Model and VAE selector panel for GUI V2
 - `model_policy_panel_projection.py`: Tk glue that shows the selected model's policy on the Base Generation panel (PR-IMG-130A; generalizes PR-IMG-…
 - `model_readiness_presenter.py`: Read-only model readiness line for the Base Generation panel (PR-IMG-MODELS-150)
-- `negative_prompt_panel_v2.py`: Negative prompt editor for GUI V2
 - `output_settings_panel_v2.py`: Output settings panel for GUI V2
 - `pipeline_panel_v2.py`: Pipeline panel composed of modular stage cards and prompt pack summary
 - `preview_panel_v2.py`: Preview panel for GUI v2 (PR-CORE1-A3: NJR-only display)
 - `prompt_adaptation_dialog.py`: Read-only Tk dialog for the explicit "Adapt for Target" preview (PR-IMG-130C)
 - `prompt_pack_adapter_v2.py`: Thin adapter that exposes prompt pack summaries for GUI V2 widgets
 - `prompt_pack_list_manager.py`: Manages loading, saving, and editing custom prompt pack lists
-- `prompt_pack_panel_v2.py`: Prompt pack browser for GUI V2
 - `prompt_target_presenter.py`: Tk application of a ``PromptTargetProjection`` to the Prompt tab (PR-IMG-130B)
 - `prompt_workspace_state.py`: (no docstring)
 - `randomizer_panel_v2.py`: Randomizer panel for GUI v2 - Full plan builder UI
 - `recipe_summary_v2.py`: (no docstring)
-- `resolution_panel_v2.py`: Advanced resolution controls for GUI V2
 - `review_batch_dialog.py`: Transient whole-selection review; confirmation admits the exact prepared NJRs
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
 - `sidebar_panel_v2.py`: (no docstring)
-- `state.py`: GUI compatibility import surface for controller-owned runtime state
 - `status_bar_v2.py`: Status bar scaffold for GUI v2
 - `theme.py`: Legacy theming shim
 - `theme_v2.py`: StableNew V2 theme definitions and helpers
@@ -231,12 +225,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `api_failure_visualizer_v2.py`: API Failure Visualizer for the Debug Hub
 - `debug_hub_panel_v2.py`: Unified Debug Hub panel for StableNew V2
 - `debug_log_panel_v2.py`: Simple debug log console for job lifecycle events
-- `history_panel_v2.py`: V2 History Panel (PR-CORE1-A3: NJR-only display)
 - `job_explanation_panel_v2.py`: Job Explanation panel for the Debug Hub
 - `layout_manager_v2.py`: Optional layout manager to compose V2 panels
 - `operator_readiness_panel_v2.py`: Compact operator readiness and first-run guidance surface
 - `pipeline_panel_v2.py`: Re-export of PipelinePanelV2 for modular layout use
-- `pipeline_run_controls_v2.py`: Mini panel for pipeline queue/run controls in the V2 layout
 - `preview_panel_v2.py`: Re-export of PreviewPanelV2 for modular layout use
 - `queue_panel_v2.py`: V2 Queue Panel (PR-CORE1-A3: NJR-only display)
 - `randomizer_panel_v2.py`: Re-export of RandomizerPanelV2 for modular layout use
@@ -293,13 +285,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `discovered_review_table.py`: DiscoveredReviewTable — shows all items in a discovered group for comparison
 - `error_modal_v2.py`: Modal that presents structured error envelopes to the user
 - `experiment_design_panel.py`: (no docstring)
-- `experiment_design_panel_v2.py`: (no docstring)
 - `learning_analytics_panel.py`: Analytics display panel for learning system
 - `learning_plan_table.py`: (no docstring)
-- `learning_plan_table_v2.py`: (no docstring)
 - `learning_review_panel.py`: (no docstring)
-- `learning_review_panel_v2.py`: (no docstring)
-- `learning_tab_frame.py`: (no docstring)
 - `learning_tab_frame_v2.py`: (no docstring)
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
 - `photo_optimize_editors.py`: Scoped Photo Optimize editing and review widgets; no store writes or queue authority
@@ -307,13 +295,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `photo_optimize_results.py`: Result browser and read-only thumbnail worker; the existing store owns promotion/revert
 - `photo_optimize_scope.py`: Photo editing/review orchestration in the existing view and worker seams
 - `photo_optimize_tab_frame_v2.py`: (no docstring)
-- `pipeline_tab_frame.py`: (no docstring)
 - `pipeline_tab_frame_v2.py`: (no docstring)
-- `prompt_tab_frame.py`: (no docstring)
 - `prompt_tab_frame_v2.py`: Prompt Tab Frame v2.6 - Main prompt editing interface with matrix integration
 - `review_tab_frame_v2.py`: (no docstring)
-- `run_control_bar.py`: (no docstring)
-- `run_control_bar_v2.py`: (no docstring)
 - `stage_cards_panel.py`: (no docstring)
 - `stage_cards_panel_v2.py`: (no docstring)
 - `svd_tab_frame_v2.py`: (no docstring)
@@ -336,13 +320,11 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `matrix_helper_widget.py`: (no docstring)
 - `matrix_slot_picker.py`: MatrixSlotPickerDialog - Modal dialog for selecting matrix slot to insert
 - `matrix_tab_panel.py`: MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab
-- `multi_line_prompt_field.py`: Multi-line prompt field widget with scrollbar and StringVar sync (PR-GUI-LAYOUT-002)
 - `openpose_picker_panel.py`: PromptPack OpenPose reference picker (PR-IMG-CNET-210)
 - `responsive_wrap_v2.py`: Width-following label wrapping for responsive workspaces (PR-GUI-110)
 - `scrollable_frame_v2.py`: (no docstring)
 - `tab_overview_panel_v2.py`: (no docstring)
 - `thumbnail_widget_v2.py`: Thumbnail display widget for GUI V2
-- `tooltip_widget.py`: Tooltip widget for displaying help text on hover
 
 ## src/gui_v2/
 
@@ -358,15 +340,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Namespace for Tk-free GUI v2 adapters
 - `learning_adapter_v2.py`: Tk-free helpers for GUI v2 learning hooks
-- `pipeline_adapter_v2.py`: Tk-free helpers for extracting GUI overrides for the controller/assembler
-- `randomizer_adapter.py`: Compatibility shim that re-exports the v2 randomizer adapter
 - `randomizer_adapter_v2.py`: Tk-free randomizer adapter for GUI v2
-- `status_adapter_v2.py`: Tk-free adapter that maps controller callbacks to StatusBarV2 calls
-
-## src/gui_v2/validation/
-
-- `__init__.py`: (no docstring)
-- `pipeline_txt2img_validator.py`: Pure validator for txt2img pipeline config fields
 
 ## src/history/
 
@@ -618,13 +592,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/utils/
 
 - `__init__.py`: Utilities module with lazy exports to avoid heavy imports at package load
-- `_extract_name_prefix.py`: (no docstring)
-- `aesthetic.py`: Helpers for locating the Aesthetic Gradient extension
-- `aesthetic_detection.py`: (no docstring)
 - `api_failure_store_v2.py`: Central store for recent API failure records
 - `atomic_io.py`: Crash-safe small-file writes (temp file in the same directory, fsync, atomic replace)
 - `cgroup_v2.py`: (no docstring)
-- `clear_standby_memory.py`: Utility to clear Windows standby memory - fixes 'ghost memory' issue
 - `config.py`: Configuration management utilities
 - `config_helpers.py`: Helpers for logging when default configuration values are used
 - `debug_shutdown_inspector.py`: Utilities for logging detailed shutdown state diagnostics
@@ -646,13 +616,11 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_scanner.py`: Compatibility projection from AssetRegistry; it owns no scan or cache
 - `managed_forge_runtime.py`: The single StableNew-owned authority for the managed Forge Neo launch profile (PR-IMG-FORGE-RUNTIME-100 / -12…
 - `managed_process.py`: Contained, bounded child processes (audit P3-3, findings B7/B8/E6)
-- `memory_utils.py`: Memory management utilities for Windows
 - `negative_helpers_v2.py`: Helper utilities for global prompt merging
 - `njr_identity.py`: The one identity of a stored NJR snapshot
 - `preferences.py`: Persistence helpers for GUI preferences and last-used settings
 - `process_container_v2.py`: OS-level process container helpers (job objects / cgroup v2) for StableNew
 - `process_inspector_v2.py`: Utilities for inspecting and describing Python processes
-- `prompt_pack.py`: (no docstring)
 - `prompt_pack_utils.py`: Utilities for reading metadata from native JSON PromptPacks
 - `prompt_packs.py`: Prompt pack discovery and descriptors for Architecture_v2
 - `prompt_templates.py`: (no docstring)
@@ -661,7 +629,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `retry_policy_v2.py`: Retry policy definitions for StableNew WebUI interactions
 - `single_instance.py`: Simple localhost socket lock to enforce single StableNew V2 instance
 - `snapshot_builder_v2.py`: Snapshot helpers for Phase 9: Job Snapshotting + Deterministic Replay
-- `state.py`: (no docstring)
 - `system_info_v2.py`: (no docstring)
 - `thread_registry.py`: Thread Registry for Centralized Thread Lifecycle Management
 - `watchdog_v2.py`: (no docstring)
