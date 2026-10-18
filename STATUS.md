@@ -68,7 +68,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   GPU device-loss dispatch quarantine (`docs/Subsystems/Runtime/PR-QUEUE-GPU-180_GPU_Loss_Dispatch_Containment.md`), shutdown
   admission fence, managed-Forge identity attestation, anonymous per-owner job objects, crash-safe state writes.
 - External A1111/Comfy processes are never adopted, restarted or killed; ambiguous dispatched generation POSTs are never
-  replayed.
+  replayed. Cancel and Return requeues a job only on positive dispatch evidence; otherwise it is cancelled and flagged
+  action-required (`docs/Subsystems/Runtime/QUEUE_AND_RUNTIME.md`).
 
 ## Active and next
 

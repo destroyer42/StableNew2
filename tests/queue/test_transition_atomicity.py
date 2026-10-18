@@ -306,6 +306,66 @@ def test_metadata_written_during_a_transition_survives_the_projection(stack, wri
     assert_three_way_agreement(stack.repository, stack.queue, JOB)
 
 
+def test_a_progress_write_in_flight_is_not_overtaken_by_a_return(stack):
+    """The queue lock (not only the SQL guard) keeps a progress write and a return from interleaving: the write is
+    paused after its SQL update and before it assigns the live job; the return must wait for it."""
+
+    live = _claimed(stack)
+    gate = Gate()
+    stack.repository.after_progress = lambda _job_id, _applied: gate.pause()
+    reporting = Worker(lambda: stack.queue.record_progress(JOB, 0.6, 9.0), stack.lock)
+    gate.wait_arrived()
+    stack.repository.after_progress = None
+    returning = Worker(lambda: _return(stack.queue, "outage"), stack.lock)
+    returning.settled()  # parked behind the progress write
+    gate.release()
+    reporting.join()
+    returning.join()
+
+    assert reporting.error is None and returning.error is None and returning.result is live
+    assert (live.status, live.progress, live.eta_seconds) == (JobStatus.QUEUED, 0.0, None)
+    assert_three_way_agreement(stack.repository, stack.queue, JOB)
+
+
+def test_a_persist_between_commit_and_projection_cannot_write_stale_progress(stack):
+    """``persist_runtime_state`` writes the live job's progress. Fired between a terminal commit and its projection it
+    would write the old 0.4 onto the cancelled row; under the queue lock it runs after the projection (0.0)."""
+
+    live = _claimed(stack)
+    live.progress, live.eta_seconds = 0.4, 7.0
+    gate = Gate()
+    stack.repository.after_commit = once(
+        lambda _job, status: status is JobStatus.CANCELLED, lambda *_: gate.pause()
+    )
+    cancelling = Worker(lambda: stack.queue.mark_cancelled(JOB, "operator"), stack.lock)
+    gate.wait_arrived()
+    persisting = Worker(lambda: stack.queue.persist_runtime_state(live), stack.lock)
+    persisting.settled()
+    gate.release()
+    cancelling.join()
+    persisting.join()
+
+    assert cancelling.error is None and persisting.error is None
+    assert (live.progress, live.eta_seconds) == (0.0, None)
+    assert_three_way_agreement(stack.repository, stack.queue, JOB)
+
+
+def test_published_checkpoints_reach_the_live_job_and_the_row(stack):
+    live = _claimed(stack)
+    checkpoint = StageCheckpoint(stage_name="txt2img", completed_at=1.0, output_paths=["out/a.png"])
+
+    stack.queue.publish_result(
+        JOB, status=JobStatus.COMPLETED, result={"success": True}, stage_checkpoints=[checkpoint]
+    )
+
+    assert [c.stage_name for c in live.execution_metadata.stage_checkpoints] == ["txt2img"]
+    assert [
+        c.stage_name
+        for c in stack.repository.get_job_model(JOB).execution_metadata.stage_checkpoints
+    ] == ["txt2img"]
+    assert_three_way_agreement(stack.repository, stack.queue, JOB)
+
+
 # --- failures after the commit point -----------------------------------------------------------------------------------
 
 

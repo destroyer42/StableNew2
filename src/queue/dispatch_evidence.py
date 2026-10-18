@@ -43,9 +43,10 @@ NEVER_INVOKED = FailureAssessment(
 NO_EVIDENCE = FailureAssessment(FailureCategory.NOT_WEBUI, DispatchCertainty.UNKNOWN)
 
 REFUSAL_MESSAGE = (
-    "Cancel and Return was not applied: this job had already started generation, so it may have produced output "
-    "or still be running on the backend. It was cancelled instead of being returned to the queue. Inspect the "
-    "outputs and backend state, then use Replay Job only if you intentionally want a new run."
+    "Cancel and Return was not applied: it could not be shown that this job never started generation, so it "
+    "may have produced output or still be running on the backend. It was cancelled instead of being returned "
+    "to the queue. Inspect the outputs and backend state, then use Replay Job only if you intentionally want "
+    "a new run."
 )
 REFUSAL_REMEDIATION = (
     "Inspect available artifacts and backend state, then use Replay Job only if you intentionally want a new "

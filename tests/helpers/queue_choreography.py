@@ -131,6 +131,7 @@ class GatedRepository(JobRepository):
         super().__init__(path)
         self.before_commit: Callable[[Job, JobStatus], None] | None = None
         self.after_commit: Callable[[Job, JobStatus], None] | None = None
+        self.after_progress: Callable[[str, bool], None] | None = None
 
     def transition_job(self, job: Job, status: JobStatus, **kwargs: Any) -> Job:
         if self.before_commit is not None:
@@ -139,6 +140,12 @@ class GatedRepository(JobRepository):
         if self.after_commit is not None:
             self.after_commit(job, status)
         return persisted
+
+    def update_progress(self, job_id: str, progress: float, eta_seconds: float | None) -> bool:
+        applied = super().update_progress(job_id, progress, eta_seconds)
+        if self.after_progress is not None:
+            self.after_progress(job_id, applied)
+        return applied
 
 
 def once(predicate: Callable[[Job, JobStatus], bool], action: Callable[[Job, JobStatus], None]):

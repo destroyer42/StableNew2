@@ -216,6 +216,55 @@ def test_a_failure_before_the_commit_changes_nothing_live(stack):
     assert_three_way_agreement(stack.repository, stack.queue, JOB)
 
 
+def test_a_failed_claim_projection_keeps_the_claims_place_for_a_later_return(stack, monkeypatch):
+    for name in ("a", "b", "c"):
+        stack.queue.submit(make_queue_job(name))
+    original = stack.queue._project_locked  # noqa: SLF001
+    calls: list[str] = []
+
+    def _flaky(job: Job, persisted: Job, **kwargs: Any) -> None:
+        calls.append(job.job_id)
+        if len(calls) == 1:
+            raise MemoryError("projection failed after COMMIT")
+        original(job, persisted, **kwargs)
+
+    monkeypatch.setattr(stack.queue, "_project_locked", _flaky)
+    claimed = stack.queue.claim_next_job()
+    assert claimed is not None and claimed.job_id == "a"
+
+    stack.queue.return_undispatched_to_queue("a", reason="t", assessment=NEVER_INVOKED)
+
+    assert [job.job_id for job in stack.queue.list_active_jobs_ordered()] == [
+        "a",
+        "b",
+        "c",
+    ]  # original place
+    assert_three_way_agreement(stack.repository, stack.queue, "a")
+
+
+def test_a_reconcile_never_overwrites_checkpoints_the_transition_did_not_publish(
+    stack, monkeypatch
+):
+    live = _claimed(stack)
+    fresh = [StageCheckpoint(stage_name="txt2img", output_paths=["out/new.png"])]
+    original = stack.queue._project_locked  # noqa: SLF001
+    state = {"calls": 0}
+
+    def _flaky(job: Job, persisted: Job, **kwargs: Any) -> None:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            live.execution_metadata.stage_checkpoints = (
+                fresh  # a writer got in before the (failed) projection
+            )
+            raise MemoryError("projection failed after COMMIT")
+        original(job, persisted, **kwargs)
+
+    monkeypatch.setattr(stack.queue, "_project_locked", _flaky)
+    stack.queue.mark_cancelled(JOB, "operator")
+
+    assert live.execution_metadata.stage_checkpoints == fresh
+
+
 # --- re-entrancy on the refusal path -----------------------------------------------------------------------------------
 
 

@@ -557,7 +557,7 @@ class JobQueue:
             logger.exception(
                 "Projecting the committed %s of %s failed; reconciling from the row", status.value, job.job_id
             )
-            self._reconcile_locked(job)
+            self._reconcile_locked(job, counter=counter, adopt_checkpoints=adopt_checkpoints)
 
     def _committed_row(self, job: Job, status: JobStatus) -> Job | None:
         """The durable row, but only when it shows that the transition to ``status`` did commit."""
@@ -592,16 +592,23 @@ class JobQueue:
         else:
             self._discard_entries_locked(job.job_id)
 
-    def _reconcile_locked(self, job: Job) -> None:
-        """Re-derive the live job and the heap from the committed row after a projection failure."""
+    def _reconcile_locked(
+        self, job: Job, *, counter: int | None = None, adopt_checkpoints: bool = False
+    ) -> None:
+        """Re-derive the live job and the heap from the committed row after a projection failure.
+
+        ``counter`` and ``adopt_checkpoints`` are what the failed projection would have applied: a claim keeps
+        its heap counter, and the checkpoints of the live job are replaced only by a transition that published
+        them (a concurrent writer's not-yet-persisted checkpoint list is never overwritten by an older row).
+        """
 
         try:
             row = self._repository.get_job_model(job.job_id)
             if row is not None:
                 self._discard_entries_locked(job.job_id)  # a QUEUED row re-enters the heap below
-                self._project_locked(
-                    job, row, counter=self._claimed_counters.get(job.job_id), adopt_checkpoints=True
-                )
+                if counter is None:
+                    counter = self._claimed_counters.get(job.job_id)
+                self._project_locked(job, row, counter=counter, adopt_checkpoints=adopt_checkpoints)
         except Exception:  # noqa: BLE001 - the row is authoritative; restart recovery re-derives everything
             logger.exception("Reconciling %s from its committed row failed", job.job_id)
 
