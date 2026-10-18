@@ -290,6 +290,8 @@ class Pipeline:
         # PR-PIPE-001: Track current job ID for manifest linkage
         self._current_job_id: str | None = None
         self._current_njr_sha256: str | None = None
+        # Images/records written without full provenance during the current run (audit B9); reset per run.
+        self._provenance_incomplete: list[dict[str, Any]] = []
         # Stage tracking for runtime status
         self._current_stage_chain: list[str] = []
         self._current_stage_index: int = 0
@@ -752,7 +754,22 @@ class Pipeline:
                     created_utc=created_utc,
                     njr_sha256=self._current_njr_sha256,
                 )
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - the image is still saved, but never silently without provenance
+                logger.warning(
+                    "Image provenance could not be built for %s (stage=%s); saving without it: %s",
+                    image_path.name,
+                    stage,
+                    exc,
+                    exc_info=True,
+                )
+                self._provenance_incomplete.append(
+                    {
+                        "stage": stage,
+                        "image": image_path.name,
+                        "reason": "metadata_build_failed",
+                        "error": f"{type(exc).__name__}: {exc}"[:300],
+                    }
+                )
                 return None
 
         return _builder

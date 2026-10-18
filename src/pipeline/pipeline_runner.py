@@ -1187,13 +1187,20 @@ class PipelineRunner:
 
         # PR-PIPE-001: Set current job ID on executor for manifest tracking
         self._pipeline._current_job_id = njr.job_id
+        self._pipeline._provenance_incomplete = []
         try:
-            from src.utils.image_metadata import canonical_json_bytes, sha256_hex
+            from src.utils.njr_identity import snapshot_envelope, snapshot_fingerprint
 
-            snapshot = njr.to_queue_snapshot()
-            self._pipeline._current_njr_sha256 = sha256_hex(canonical_json_bytes(snapshot))
-        except Exception:
+            # The same identity the repository stores as jobs.njr_fingerprint, so embedded provenance matches its row.
+            self._pipeline._current_njr_sha256 = snapshot_fingerprint(
+                snapshot_envelope(njr.job_id, njr.to_queue_snapshot())
+            )
+        except Exception as exc:  # noqa: BLE001 - recorded below, never silent
+            logger.warning("NJR identity could not be computed for %s: %s", njr.job_id, exc, exc_info=True)
             self._pipeline._current_njr_sha256 = None
+            self._pipeline._provenance_incomplete.append(
+                {"reason": "njr_sha256_unavailable", "error": f"{type(exc).__name__}: {exc}"[:300]}
+            )
 
         # Initialize stage tracking for runtime status
         stage_chain = [stage.stage_name for stage in plan.jobs]
@@ -2026,6 +2033,9 @@ class PipelineRunner:
             metadata["efficiency_metrics"] = efficiency_metrics
 
         variants = canonicalize_variant_entries(variants)
+        incomplete = list(getattr(self._pipeline, "_provenance_incomplete", None) or [])
+        if incomplete:
+            metadata["provenance_incomplete"] = incomplete
 
         result = PipelineRunResult(
             run_id=run_id,
@@ -2107,8 +2117,10 @@ class PipelineRunner:
                 stage_outputs=stage_outputs,
                 base_dir=route_root,
             )
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - the run result is already final; report, do not fail the job
+            logger.warning(
+                "Run metadata could not be written for %s: %s", run_id, exc, exc_info=True
+            )
         self._last_run_result = result
         return result
 

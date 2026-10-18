@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import sqlite3
 import threading
 import time
+from collections import deque
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -37,6 +37,11 @@ from src.utils.error_envelope_v2 import (
     UnifiedErrorEnvelope,
     deserialize_envelope,
     serialize_envelope,
+)
+from src.utils.njr_identity import (
+    fingerprint_of_serialized,
+    snapshot_envelope,
+    snapshot_json,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,12 +97,40 @@ def _json_dumps(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
-def _json_loads(value: str | None, default: Any) -> Any:
+_INTEGRITY_ERRORS: deque[dict[str, str]] = deque(maxlen=200)
+_INTEGRITY_LOCK = threading.Lock()
+
+
+def recent_integrity_errors() -> list[dict[str, str]]:
+    """Stored columns that could not be parsed since this process started (bounded; newest last)."""
+
+    with _INTEGRITY_LOCK:
+        return [dict(item) for item in _INTEGRITY_ERRORS]
+
+
+def _json_loads(value: str | None, default: Any, *, column: str = "", row: Any = None) -> Any:
+    """Parse a stored JSON column.
+
+    An empty column is the default.  A column that is present but unparseable is *corrupt*: the default is still
+    returned so one bad row cannot take the whole history down, but the corruption is logged and recorded
+    (``recent_integrity_errors``) instead of passing as an empty value."""
+
     if not value:
         return default
     try:
         return json.loads(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as exc:
+        job_id = ""
+        try:
+            if row is not None and "job_id" in row.keys():
+                job_id = str(row["job_id"])
+        except Exception:  # noqa: BLE001 - diagnostics must not raise
+            job_id = ""
+        logger.error(
+            "Stored JSON is corrupt (job_id=%s column=%s): %s; using the default", job_id, column, exc
+        )
+        with _INTEGRITY_LOCK:
+            _INTEGRITY_ERRORS.append({"job_id": job_id, "column": column, "error": str(exc)[:200]})
         return default
 
 
@@ -130,11 +163,7 @@ def _canonical_snapshot(job: Job) -> tuple[dict[str, Any], NormalizedJobRecord]:
         raise ValueError("Job identity does not match its immutable NJR snapshot")
     # Store the NJR in the established snapshot envelope so replay can use the
     # same strict reader after a process restart. Runtime state lives in columns.
-    canonical = {
-        "schema_version": "2.6",
-        "job_id": job.job_id,
-        "normalized_job": serialized_record,
-    }
+    canonical = snapshot_envelope(job.job_id, serialized_record)
     return canonical, record
 
 
@@ -405,12 +434,12 @@ class JobRepository(JobHistoryStore):
         """Canonical snapshot, fingerprint and lineage for one job (no database access)."""
 
         snapshot, record = _canonical_snapshot(job)
-        serialized_snapshot = _json_dumps(snapshot)
+        serialized_snapshot = snapshot_json(snapshot)
         parent_job_id, parent_artifact_id = _lineage(snapshot)
         return _PreparedSubmission(
             job=job,
             serialized_snapshot=serialized_snapshot,
-            fingerprint=hashlib.sha256(serialized_snapshot.encode("utf-8")).hexdigest(),
+            fingerprint=fingerprint_of_serialized(serialized_snapshot),
             parent_job_id=parent_job_id,
             parent_artifact_id=parent_artifact_id,
             payload_summary=f"{record.positive_prompt[:64]} | {record.base_model}",
@@ -628,9 +657,9 @@ class JobRepository(JobHistoryStore):
             ).fetchall()
             now = datetime.utcnow().isoformat()
             for row in rows:
-                metadata = _execution_metadata_from_dict(_json_loads(row["execution_metadata"], {}))
+                metadata = _execution_metadata_from_dict(_json_loads(row["execution_metadata"], {}, column="execution_metadata", row=row))
                 metadata.last_control_action = "restart_interrupted_action_required"
-                prior_envelope = deserialize_envelope(_json_loads(row["error_envelope"], None))
+                prior_envelope = deserialize_envelope(_json_loads(row["error_envelope"], None, column="error_envelope", row=row))
                 message = (
                     "StableNew exited while this job was running. Its generation outcome may "
                     "be ambiguous, so it was not automatically replayed. Inspect available "
@@ -800,7 +829,7 @@ class JobRepository(JobHistoryStore):
                     tuple(chunk),
                 ).fetchall()
             for row in rows:
-                snapshot = _json_loads(row["njr_snapshot"], {})
+                snapshot = _json_loads(row["njr_snapshot"], {}, column="njr_snapshot", row=row)
                 normalized = snapshot.get("normalized_job") if isinstance(snapshot, dict) else None
                 source = normalized.get("source") if isinstance(normalized, dict) else None
                 if not isinstance(source, dict) or source.get("kind") != "history_replay":
@@ -826,12 +855,12 @@ class JobRepository(JobHistoryStore):
             started_at=_parse_datetime(row["started_at"]),
             completed_at=_parse_datetime(row["completed_at"]),
             error_message=row["error_message"],
-            error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None)),
-            result=_json_loads(row["result_json"], None),
+            error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None, column="error_envelope", row=row)),
+            result=_json_loads(row["result_json"], None, column="result_json", row=row),
             execution_metadata=_execution_metadata_from_dict(
-                _json_loads(row["execution_metadata"], {})
+                _json_loads(row["execution_metadata"], {}, column="execution_metadata", row=row)
             ),
-            snapshot=_json_loads(row["njr_snapshot"], {}),
+            snapshot=_json_loads(row["njr_snapshot"], {}, column="njr_snapshot", row=row),
             cursor=int(row["cursor"]),
         )
 
@@ -874,7 +903,7 @@ class JobRepository(JobHistoryStore):
             row = self._connection.execute(
                 "SELECT value FROM repository_metadata WHERE key = ?", (key,)
             ).fetchone()
-        return _json_loads(row["value"], default) if row is not None else default
+        return _json_loads(row["value"], default, column="value", row=row) if row is not None else default
 
     def set_setting(self, key: str, value: Any) -> None:
         with self.transaction() as connection:
@@ -902,7 +931,7 @@ class JobRepository(JobHistoryStore):
             rows = self._connection.execute("SELECT execution_metadata FROM jobs").fetchall()
         count = 0
         for row in rows:
-            metadata = _json_loads(row["execution_metadata"], {})
+            metadata = _json_loads(row["execution_metadata"], {}, column="execution_metadata", row=row)
             if isinstance(metadata, dict) and metadata.get("last_control_action") == action:
                 count += 1
         return count
@@ -917,7 +946,7 @@ class JobRepository(JobHistoryStore):
             row = self._connection.execute(
                 "SELECT artifact_references FROM jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
-        return list(_json_loads(row["artifact_references"], [])) if row is not None else []
+        return list(_json_loads(row["artifact_references"], [], column="artifact_references", row=row)) if row is not None else []
 
     def get_lineage(self, job_id: str) -> tuple[str | None, str | None]:
         with self._lock:
@@ -982,8 +1011,8 @@ class JobRepository(JobHistoryStore):
 
     def _insert_imported_job(self, connection: sqlite3.Connection, job: Job) -> None:
         snapshot, _record = _canonical_snapshot(job)
-        serialized_snapshot = _json_dumps(snapshot)
-        fingerprint = hashlib.sha256(serialized_snapshot.encode("utf-8")).hexdigest()
+        serialized_snapshot = snapshot_json(snapshot)
+        fingerprint = fingerprint_of_serialized(serialized_snapshot)
         parent_job_id, parent_artifact_id = _lineage(snapshot)
         next_order = connection.execute(
             "SELECT COALESCE(MAX(queue_order), 0) + 1 AS value FROM jobs"
@@ -1037,7 +1066,7 @@ class JobRepository(JobHistoryStore):
     def _row_to_job(self, row: sqlite3.Row) -> Job:
         from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
-        snapshot = _json_loads(row["njr_snapshot"], {})
+        snapshot = _json_loads(row["njr_snapshot"], {}, column="njr_snapshot", row=row)
         record = normalized_job_from_snapshot(snapshot)
         if record is None:
             raise JobRepositoryError(f"Stored NJR for {row['job_id']!r} cannot be reconstructed")
@@ -1049,9 +1078,9 @@ class JobRepository(JobHistoryStore):
             updated_at=_parse_datetime(row["updated_at"]) or datetime.utcnow(),
             started_at=_parse_datetime(row["started_at"]),
             completed_at=_parse_datetime(row["completed_at"]),
-            randomizer_metadata=_json_loads(row["randomizer_metadata"], {}),
+            randomizer_metadata=_json_loads(row["randomizer_metadata"], {}, column="randomizer_metadata", row=row),
             error_message=row["error_message"],
-            result=_json_loads(row["result_json"], None),
+            result=_json_loads(row["result_json"], None, column="result_json", row=row),
             worker_id=row["worker_id"],
             run_mode=str(row["run_mode"]),
             source=str(row["source"]),
@@ -1061,12 +1090,12 @@ class JobRepository(JobHistoryStore):
             variant_total=row["variant_total"],
             snapshot=snapshot,
             execution_metadata=_execution_metadata_from_dict(
-                _json_loads(row["execution_metadata"], {})
+                _json_loads(row["execution_metadata"], {}, column="execution_metadata", row=row)
             ),
             progress=float(row["progress"] or 0.0),
             eta_seconds=row["eta_seconds"],
         )
-        job.error_envelope = deserialize_envelope(_json_loads(row["error_envelope"], None))
+        job.error_envelope = deserialize_envelope(_json_loads(row["error_envelope"], None, column="error_envelope", row=row))
         job._normalized_record = record
         return job
 
@@ -1086,12 +1115,12 @@ class JobRepository(JobHistoryStore):
             error_message=row["error_message"],
             worker_id=row["worker_id"],
             run_mode=str(row["run_mode"]),
-            result=_json_loads(row["result_json"], None),
+            result=_json_loads(row["result_json"], None, column="result_json", row=row),
             prompt_source=str(row["prompt_source"]),
             prompt_pack_id=row["prompt_pack_id"],
-            snapshot=_json_loads(row["njr_snapshot"], {}),
+            snapshot=_json_loads(row["njr_snapshot"], {}, column="njr_snapshot", row=row),
             duration_ms=duration_ms,
-            error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None)),
+            error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None, column="error_envelope", row=row)),
         )
 
     def _emit(self, entry: JobHistoryEntry | None) -> None:
@@ -1100,8 +1129,13 @@ class JobRepository(JobHistoryStore):
         for callback in list(self._callbacks):
             try:
                 callback(entry)
-            except Exception:
-                continue
+            except Exception:  # noqa: BLE001 - one bad listener must not stop the others
+                logger.warning(
+                    "Job-history listener %r raised for job %s",
+                    callback,
+                    getattr(entry, "job_id", "?"),
+                    exc_info=True,
+                )
 
 
 __all__ = [

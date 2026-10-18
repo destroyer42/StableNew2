@@ -657,8 +657,14 @@ class JobQueue:
         for callback in list(self._status_callbacks):
             try:
                 callback(job, status)
-            except Exception:
-                continue
+            except Exception:  # noqa: BLE001 - one bad listener must not stop the others
+                logger.warning(
+                    "Queue status listener %r raised for job %s (%s)",
+                    callback,
+                    getattr(job, "job_id", "?"),
+                    getattr(status, "value", status),
+                    exc_info=True,
+                )
 
     # ------------------------------------------------------------------
     # PR-GUI-F2: Queue Manipulation Methods

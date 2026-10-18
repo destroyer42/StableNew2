@@ -404,9 +404,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1397,
-      "S110": 564,
-      "S112": 41
+      "BLE001": 1391,
+      "S110": 563,
+      "S112": 38
     },
     "counts": {
       "src/api/client.py": {
@@ -481,9 +481,8 @@
         "S110": 1
       },
       "src/controller/job_service.py": {
-        "BLE001": 13,
-        "S110": 3,
-        "S112": 1
+        "BLE001": 12,
+        "S110": 3
       },
       "src/controller/pipeline_controller.py": {
         "BLE001": 42,
@@ -906,7 +905,7 @@
         "BLE001": 1
       },
       "src/pipeline/executor.py": {
-        "BLE001": 65,
+        "BLE001": 64,
         "S110": 17
       },
       "src/pipeline/job_models_v2.py": {
@@ -923,8 +922,8 @@
         "BLE001": 2
       },
       "src/pipeline/pipeline_runner.py": {
-        "BLE001": 25,
-        "S110": 11
+        "BLE001": 23,
+        "S110": 10
       },
       "src/pipeline/prompt_pack_job_builder.py": {
         "BLE001": 8
@@ -940,12 +939,8 @@
         "BLE001": 2
       },
       "src/queue/job_queue.py": {
-        "BLE001": 3,
-        "S112": 3
-      },
-      "src/queue/job_repository.py": {
-        "BLE001": 1,
-        "S112": 1
+        "BLE001": 2,
+        "S112": 2
       },
       "src/queue/single_node_runner.py": {
         "BLE001": 1,
