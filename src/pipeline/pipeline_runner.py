@@ -20,7 +20,6 @@ from src.image_backends import (
     resolve_image_backend_id,
 )
 from src.learning.experiment_naming import (
-    build_learning_filename_prefix,
     build_learning_folder_label,
 )
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
@@ -39,6 +38,7 @@ from src.pipeline.result_contract_v26 import (
     build_diagnostics_descriptor,
     build_replay_descriptor,
 )
+from src.pipeline.run_stage_handlers import StageRunContext, resolve_stage_handler
 from src.pipeline.stage_sequencer import (
     StageExecution,
     StageExecutionPlan,
@@ -130,6 +130,17 @@ GPU_CAPABLE_STAGE_NAMES = frozenset(
 
 class PipelineJobTimeoutError(Exception):
     """Raised when a job exceeds the per-job wall-clock ceiling."""
+
+
+@dataclass(frozen=True)
+class _RunDirs:
+    """Where one run writes, resolved once before any stage executes."""
+
+    run_dir: Path
+    run_id: str
+    route_root: Path
+    output_route: str
+    learning_context: Any
 
 
 class PipelineRunner:
@@ -1077,6 +1088,9 @@ class PipelineRunner:
         """
         Execute the pipeline using a NormalizedJobRecord (NJR-only, v2.6+ contract).
         This is the ONLY supported production entrypoint.
+
+        Orchestration only: validate the plan, resolve where the run writes, hand each enabled stage to its handler
+        (``run_stage_handlers``), then assemble the result.
         """
         # Pure RunPlan construction/validation precedes any runtime/API side effect so a
         # malformed plan fails closed before metrics, cleanup, or backend calls.
@@ -1103,13 +1117,239 @@ class PipelineRunner:
         if any(job.stage_name == StageTypeEnum.TRAIN_LORA.value for job in plan.jobs):
             if len(plan.jobs) != 1 or plan.jobs[0].stage_name != StageTypeEnum.TRAIN_LORA.value:
                 raise ValueError("train_lora must be the only enabled stage in an NJR run plan.")
-            return self._run_train_lora_njr(
-                njr=njr,
-                plan=plan,
-                cancel_token=cancel_token,
-            )
+            return self._run_train_lora_njr(njr=njr, plan=plan, cancel_token=cancel_token)
 
         self._log_job_pressure_outlook(njr)
+        dirs = self._prepare_run_dir(njr)
+        self._stamp_run_identity(njr)
+
+        # Initialize stage tracking for runtime status
+        stage_chain = [stage.stage_name for stage in plan.jobs]
+        self._pipeline._current_stage_chain = stage_chain
+        self._pipeline._current_stage_index = 0
+
+        stage_events: list[dict[str, Any]] = []
+        success = False
+        error = None
+        metadata = dict(njr.config or {})
+        if image_backend_id:
+            metadata["image_backend_id"] = image_backend_id
+        metadata["output_dir"] = str(dirs.run_dir)
+        metadata["output_route"] = dirs.output_route
+        survivor_telemetry = self._start_gpu_survivor_telemetry(
+            njr=njr,
+            run_id=dirs.run_id,
+            workflow=stage_chain,
+            backend_id=image_backend_id or None,
+        )
+        stage_ctx = StageRunContext(
+            runner=self,
+            njr=njr,
+            plan=plan,
+            run_dir=dirs.run_dir,
+            image_backend_id=image_backend_id,
+            cancel_token=cancel_token,
+            survivor_telemetry=survivor_telemetry,
+            prompt=getattr(njr, "positive_prompt", "") or "",
+            negative_prompt=getattr(njr, "negative_prompt", "") or "",
+            adaptive_refinement_intent={},
+            learning_context=dirs.learning_context,
+            client=getattr(self._pipeline, "client", None),
+            metadata=metadata,
+        )
+        terminal_outcome: str | None = None
+        try:
+            self._execute_stage_plan(stage_ctx, stage_events, checkpoint_callback)
+            # A pipeline only succeeds if the final enabled stage produced durable outputs.
+            success = bool(stage_ctx.paths)
+            if not success:
+                error = "No images were generated successfully"
+            self._finalize_adaptive_refinement(metadata, stage_ctx.paths)
+        except CancellationError:
+            terminal_outcome = "cancelled"
+            raise
+        except Exception as exc:
+            terminal_outcome = "failed"
+            error = str(exc)
+            logger.error("[pipeline] execution failed: %s", exc, exc_info=True)
+            self._attach_failure_evidence(metadata, exc, stage_ctx.paths, stage_events)
+            stage_events.append(
+                {
+                    "stage": stage_ctx.current_stage_name or "pipeline",
+                    "phase": "error",
+                    "image_index": 1,
+                    "total_images": 1,
+                    "cancelled": True,
+                    "error_message": str(exc),
+                }
+            )
+        finally:
+            if survivor_telemetry is not None:
+                survivor_telemetry.close(
+                    outcome=terminal_outcome or ("runner_finished" if success else "failed")
+                )
+            # PR-PIPE-001: Clear job ID from executor after execution
+            self._pipeline._current_job_id = None
+            self._pipeline._current_njr_sha256 = None
+
+        result = self._build_run_result(
+            njr=njr,
+            plan=plan,
+            run_id=dirs.run_id,
+            success=success,
+            error=error,
+            stage_ctx=stage_ctx,
+            stage_events=stage_events,
+        )
+        self._write_run_metadata_file(
+            njr=njr,
+            run_id=dirs.run_id,
+            route_root=dirs.route_root,
+            metadata=metadata,
+            variants=result.variants,
+        )
+        self._last_run_result = result
+        return result
+
+    def _execute_stage_plan(
+        self,
+        ctx: StageRunContext,
+        stage_events: list[dict[str, Any]],
+        checkpoint_callback: Callable[[str, list[str], dict[str, Any] | None], None] | None,
+    ) -> None:
+        """Walk the enabled stages in order, handing each the images the previous one produced.
+
+        State lives on ``ctx`` (``paths``, ``variants``, ``metadata``, ``current_stage_name``) so a failure leaves the
+        caller exactly what had completed."""
+
+        njr = ctx.njr
+        # PR-HARDEN-008: Record wall-clock start for per-job timeout ceiling
+        job_start_time = time.monotonic()
+        ctx.adaptive_refinement_intent = self._begin_adaptive_refinement(
+            njr=njr,
+            plan=ctx.plan,
+            prompt=ctx.prompt,
+            negative_prompt=ctx.negative_prompt,
+            metadata=ctx.metadata,
+        )
+        # REPROCESSING SUPPORT: input_image_paths are the starting images, start_stage the first stage to run.
+        ctx.paths, start_stage = self._reprocess_inputs(njr)
+        reached_start_stage = start_stage is None  # no start_stage: begin immediately
+        telemetry = ctx.survivor_telemetry
+        for stage in ctx.plan.jobs:
+            ctx.current_stage_name = stage.stage_name
+            if not reached_start_stage:
+                if stage.stage_name != start_stage:
+                    logger.info(
+                        "[REPROCESS] Skipping stage '%s' (before start_stage '%s')",
+                        stage.stage_name,
+                        start_stage,
+                    )
+                    continue
+                reached_start_stage = True
+
+            # PR-HARDEN-008: Enforce per-job wall-clock ceiling before each stage
+            self._check_job_deadline(job_start_time, stage.stage_name)
+            if telemetry is not None:
+                telemetry.enter_stage(stage.stage_name, backend_id=ctx.image_backend_id or None)
+
+            handler = resolve_stage_handler(stage.stage_name, self._video_resolver.is_video_stage)
+            if handler is None:
+                logger.warning("Unknown stage type: %s, skipping", stage.stage_name)
+                continue
+            next_paths = handler.run(ctx, stage, ctx.paths)
+            if next_paths is None:  # nothing to process: the stage is skipped
+                continue
+            ctx.paths = next_paths
+
+            if checkpoint_callback is not None:
+                try:
+                    checkpoint_callback(
+                        stage.stage_name, list(ctx.paths), {"image_count": len(ctx.paths)}
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to emit stage checkpoint for %s", stage.stage_name, exc_info=True
+                    )
+            stage_events.append(
+                {
+                    "stage": stage.stage_name,
+                    "phase": "exit",
+                    "image_index": len(ctx.paths),
+                    "total_images": len(ctx.paths),
+                    "cancelled": False,
+                }
+            )
+            if telemetry is not None:
+                if ctx.paths:
+                    telemetry.record_event("publication_boundary")
+                telemetry.leave_stage(stage.stage_name)
+            self._pipeline._current_stage_index += 1
+
+    def _build_run_result(
+        self,
+        *,
+        njr: NormalizedJobRecord,
+        plan: Any,
+        run_id: str,
+        success: bool,
+        error: str | None,
+        stage_ctx: StageRunContext,
+        stage_events: list[dict[str, Any]],
+    ) -> PipelineRunResult:
+        metadata = stage_ctx.metadata
+        efficiency_metrics: dict[str, Any] = {}
+        if hasattr(self._pipeline, "get_run_efficiency_metrics"):
+            try:
+                efficiency_metrics = self._pipeline.get_run_efficiency_metrics(
+                    len(stage_ctx.variants)
+                )
+            except Exception:
+                efficiency_metrics = {}
+        if efficiency_metrics:
+            metadata["efficiency_metrics"] = efficiency_metrics
+
+        variants = canonicalize_variant_entries(stage_ctx.variants)
+        incomplete = list(getattr(self._pipeline, "_provenance_incomplete", None) or [])
+        if incomplete:
+            metadata["provenance_incomplete"] = incomplete
+
+        result = PipelineRunResult(
+            run_id=run_id,
+            success=success,
+            error=error,
+            variants=variants,
+            learning_records=[],
+            randomizer_mode=getattr(njr, "variant_mode", "standard"),
+            randomizer_plan_size=getattr(njr, "variant_total", 1),
+            metadata=metadata,
+            stage_plan=plan,
+            stage_events=stage_events,
+        )
+        try:
+            njr_snapshot = njr.to_queue_snapshot()
+        except Exception:
+            njr_snapshot = {"normalized_job": {"job_id": njr.job_id}}
+        result.metadata["replay_descriptor"] = build_replay_descriptor(
+            result.to_dict(),
+            njr_snapshot=njr_snapshot,
+        )
+        result.metadata["diagnostics_descriptor"] = build_diagnostics_descriptor(
+            result.to_dict(),
+            njr_snapshot=njr_snapshot,
+        )
+        logger.debug(
+            "[pipeline/result] PipelineRunResult created success=%s error=%s variants=%s",
+            success,
+            error,
+            len(variants),
+        )
+        return result
+
+    # Remove legacy run() and _pipeline_config_from_njr from production path
+
+    def _prepare_run_dir(self, njr: NormalizedJobRecord) -> _RunDirs:
+        """Resolve (and create) the output directory of this run: pack-model-vae naming, learning runs share one folder."""
 
         # Prepare output dir with pack-model-vae naming structure
         # Format: output/{pack_12chars}-{model_10+5chars}-{vae_12chars}/
@@ -1184,6 +1424,16 @@ class PipelineRunner:
                 "manifests_dir": str(manifests_dir.absolute()),
             },
         )
+        return _RunDirs(
+            run_dir=run_dir,
+            run_id=run_id,
+            route_root=route_root,
+            output_route=output_route,
+            learning_context=learning_context,
+        )
+
+    def _stamp_run_identity(self, njr: NormalizedJobRecord) -> None:
+        """Tell the executor which job (and NJR identity) its artifacts belong to."""
 
         # PR-PIPE-001: Set current job ID on executor for manifest tracking
         self._pipeline._current_job_id = njr.job_id
@@ -1202,877 +1452,154 @@ class PipelineRunner:
                 {"reason": "njr_sha256_unavailable", "error": f"{type(exc).__name__}: {exc}"[:300]}
             )
 
-        # Initialize stage tracking for runtime status
-        stage_chain = [stage.stage_name for stage in plan.jobs]
-        self._pipeline._current_stage_chain = stage_chain
-        self._pipeline._current_stage_index = 0
+    def _begin_adaptive_refinement(
+        self,
+        *,
+        njr: NormalizedJobRecord,
+        plan: Any,
+        prompt: str,
+        negative_prompt: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Read the job's adaptive-refinement intent and, when it is active, record the initial decision bundle."""
 
-        stage_events: list[dict[str, Any]] = []
-        success = False
-        error = None
-        variants = []
-        learning_records = []
-        metadata = dict(njr.config or {})
-        if image_backend_id:
-            metadata["image_backend_id"] = image_backend_id
-        metadata["output_dir"] = str(run_dir)
-        metadata["output_route"] = output_route
-        survivor_telemetry = self._start_gpu_survivor_telemetry(
-            njr=njr,
-            run_id=run_id,
-            workflow=stage_chain,
-            backend_id=image_backend_id or None,
+        adaptive_refinement_intent = extract_adaptive_refinement_intent(
+            getattr(njr, "intent_config", None) or {}
         )
-        telemetry_closed = False
-        terminal_outcome: str | None = None
+        if adaptive_refinement_intent.get("enabled") and adaptive_refinement_intent.get(
+            "mode"
+        ) in {
+            "observe",
+            "adetailer",
+            "full",
+        }:
+            prompt_intent = self._prompt_intent_analyzer.infer(
+                positive=prompt,
+                negative=negative_prompt,
+                context={
+                    "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
+                    "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
+                    "variant_index": getattr(njr, "variant_index", 0),
+                    "batch_index": getattr(njr, "batch_index", 0),
+                },
+            )
+            refinement_service, refinement_notes = self._resolve_refinement_policy_service(
+                adaptive_refinement_intent.get("detector_preference", "null")
+            )
+            decision_bundle = refinement_service.build_bundle(
+                mode=str(adaptive_refinement_intent.get("mode") or "observe"),
+                prompt_intent=prompt_intent,
+                image_path=None,
+                extra_observation={
+                    "stage_chain": [planned_stage.stage_name for planned_stage in plan.jobs],
+                    "enabled_stage_count": len(plan.jobs),
+                },
+            )
+            metadata["adaptive_refinement"] = {
+                "intent": dict(adaptive_refinement_intent),
+                "prompt_intent": dict(prompt_intent),
+                "decision_bundle": dict(decision_bundle),
+                "detector_notes": list(refinement_notes),
+                "image_decisions": [],
+            }
+        return adaptive_refinement_intent
 
-        def _emit_stage_checkpoint(
-            stage_name: str,
-            output_paths: list[str],
-            *,
-            stage_metadata: dict[str, Any] | None = None,
-        ) -> None:
-            if checkpoint_callback is None:
-                return
-            try:
-                checkpoint_callback(
-                    stage_name, list(output_paths or []), dict(stage_metadata or {})
+    def _reprocess_inputs(self, njr: NormalizedJobRecord) -> tuple[list[str], str | None]:
+        """The images a reprocess job starts from (verified to exist) and the stage it starts at."""
+
+        current_stage_paths: list[str] = []
+        input_images = getattr(njr, "input_image_paths", None) or []
+        start_stage = getattr(njr, "start_stage", None)
+        if input_images:
+            current_stage_paths = list(input_images)
+            logger.info(
+                "[pipeline/reprocess] starting with %s input image(s): %s",
+                len(current_stage_paths),
+                [str(p) for p in input_images[:3]],
+            )
+            # Verify input files exist
+            for img_path in input_images:
+                if not Path(img_path).exists():
+                    logger.error("[pipeline/reprocess] input image not found: %s", img_path)
+                    raise FileNotFoundError(f"Reprocess input image not found: {img_path}")
+            if start_stage:
+                logger.info("[pipeline/reprocess] will start from stage=%s", start_stage)
+        else:
+            logger.info("[pipeline] normal job (not reprocessing)")
+        return current_stage_paths, start_stage
+
+    def _finalize_adaptive_refinement(
+        self, metadata: dict[str, Any], current_stage_paths: list[str]
+    ) -> None:
+        """Attach the detector's assessment of the final outputs to the adaptive-refinement record."""
+
+        if metadata.get("adaptive_refinement"):
+            refinement_payload = dict(metadata["adaptive_refinement"])
+            detector_preference = (refinement_payload.get("intent") or {}).get(
+                "detector_preference"
+            ) or "null"
+            refinement_service, refinement_notes = self._resolve_refinement_policy_service(
+                detector_preference
+            )
+            assessments, assessment_notes = self._collect_refinement_assessments(
+                service=refinement_service,
+                output_paths=list(current_stage_paths or []),
+            )
+            decision_bundle = dict(refinement_payload.get("decision_bundle") or {})
+            observation = dict(decision_bundle.get("observation") or {})
+            if assessments:
+                observation["subject_assessment"] = dict(assessments[0])
+                observation["image_assessments"] = list(assessments)
+            decision_bundle["detector_id"] = (
+                assessments[0]["detector_id"]
+                if assessments
+                else refinement_service.assess(None).get("detector_id", "null")
+            )
+            decision_bundle["observation"] = observation
+            refinement_payload["decision_bundle"] = decision_bundle
+            refinement_payload["detector_notes"] = list(
+                dict.fromkeys(
+                    list(refinement_payload.get("detector_notes") or [])
+                    + refinement_notes
+                    + assessment_notes
                 )
-            except Exception:
-                logger.warning("Failed to emit stage checkpoint for %s", stage_name, exc_info=True)
+            )
+            metadata["adaptive_refinement"] = refinement_payload
+
+    def _attach_failure_evidence(
+        self,
+        metadata: dict[str, Any],
+        exc: BaseException,
+        current_stage_paths: list[str],
+        stage_events: list[dict[str, Any]],
+    ) -> None:
+        """Typed, content-free failure evidence for the queue (it must not parse messages)."""
 
         try:
-            # PR-HARDEN-008: Record wall-clock start for per-job timeout ceiling
-            job_start_time: float = time.monotonic()
-            # Execute stages sequentially, passing outputs forward
-            # Track all image paths through the pipeline (supports batch processing)
-            current_stage_paths: list[str] = []
-            last_result = None
-            prompt = getattr(njr, "positive_prompt", "") or ""
-            negative_prompt = getattr(njr, "negative_prompt", "") or ""
-            adaptive_refinement_intent = extract_adaptive_refinement_intent(
-                getattr(njr, "intent_config", None) or {}
-            )
-            if adaptive_refinement_intent.get("enabled") and adaptive_refinement_intent.get(
-                "mode"
-            ) in {
-                "observe",
-                "adetailer",
-                "full",
-            }:
-                prompt_intent = self._prompt_intent_analyzer.infer(
-                    positive=prompt,
-                    negative=negative_prompt,
-                    context={
-                        "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
-                        "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
-                        "variant_index": getattr(njr, "variant_index", 0),
-                        "batch_index": getattr(njr, "batch_index", 0),
-                    },
-                )
-                refinement_service, refinement_notes = self._resolve_refinement_policy_service(
-                    adaptive_refinement_intent.get("detector_preference", "null")
-                )
-                decision_bundle = refinement_service.build_bundle(
-                    mode=str(adaptive_refinement_intent.get("mode") or "observe"),
-                    prompt_intent=prompt_intent,
-                    image_path=None,
-                    extra_observation={
-                        "stage_chain": [planned_stage.stage_name for planned_stage in plan.jobs],
-                        "enabled_stage_count": len(plan.jobs),
-                    },
-                )
-                metadata["adaptive_refinement"] = {
-                    "intent": dict(adaptive_refinement_intent),
-                    "prompt_intent": dict(prompt_intent),
-                    "decision_bundle": dict(decision_bundle),
-                    "detector_notes": list(refinement_notes),
-                    "image_decisions": [],
-                }
+            # Typed, content-free evidence so the queue can classify this normalized failure
+            # (PR-QUEUE-WEBUI-171) without relying on message keywords or a raised exception.
+            from src.api.webui_failure_evidence import METADATA_KEY, build_failure_evidence
 
-            # REPROCESSING SUPPORT: Check if this is a reprocessing job
-            # If input_image_paths are provided, use them as starting images
-            input_images = getattr(njr, "input_image_paths", None) or []
-            start_stage = getattr(njr, "start_stage", None)
-            if input_images:
-                current_stage_paths = list(input_images)
-                logger.info(
-                    "[pipeline/reprocess] starting with %s input image(s): %s",
-                    len(current_stage_paths),
-                    [str(p) for p in input_images[:3]],
-                )
-                # Verify input files exist
-                for img_path in input_images:
-                    if not Path(img_path).exists():
-                        logger.error("[pipeline/reprocess] input image not found: %s", img_path)
-                        raise FileNotFoundError(f"Reprocess input image not found: {img_path}")
-                if start_stage:
-                    logger.info("[pipeline/reprocess] will start from stage=%s", start_stage)
-            else:
-                logger.info("[pipeline] normal job (not reprocessing)")
-
-            # Track whether we've reached the start_stage (for reprocessing mode)
-            reached_start_stage = start_stage is None  # If no start_stage, begin immediately
-
-            for stage in plan.jobs:
-                # REPROCESSING: Skip stages before start_stage
-                if not reached_start_stage:
-                    if stage.stage_name == start_stage:
-                        # We've reached the start stage, process this and all subsequent stages
-                        reached_start_stage = True
-                    else:
-                        # Skip this stage - we haven't reached start_stage yet
-                        logger.info(
-                            f"â­ï¸  [REPROCESS] Skipping stage '{stage.stage_name}' (before start_stage '{start_stage}')"
-                        )
-                        # Don't increment stage_index when skipping
-                        continue
-
-                # PR-HARDEN-008: Enforce per-job wall-clock ceiling before each stage
-                self._check_job_deadline(job_start_time, stage.stage_name)
-                if survivor_telemetry is not None:
-                    survivor_telemetry.enter_stage(
-                        stage.stage_name,
-                        backend_id=image_backend_id or None,
-                    )
-
-                # Increment stage index for runtime status tracking
-                # (Will be reset to 0 at the start of next NJR execution)
-
-                # Dispatch to the appropriate stage executor based on stage_name
-                if stage.stage_name == "txt2img":
-                    image_count = max(1, int(njr.images_per_prompt or 1))
-                    config_dict = self._stage_config_for_njr(njr, "txt2img")
-                    # Include prompt pack row index in naming to prevent overwrites
-                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
-
-                    # Build safe filename with human-readable identifiers (PR-FILENAME-001)
-                    from src.utils.file_io import build_safe_image_name
-
-                    # Use 1-based indexing to match GUI display (p01 = "Prompt 1", v01 = "Variant 1")
-                    if learning_context:
-                        base_prefix = build_learning_filename_prefix(
-                            stage=stage.stage_name,
-                            variable=learning_context.variable_under_test,
-                            value=learning_context.variant_value,
-                            variant_index=learning_context.variant_index,
-                            prompt_source=dict(
-                                thaw_json(getattr(njr, "extra_metadata", {})).get("learning", {}).get("prompt_source", {})
-                            ),
-                            model=str(config_dict.get("model") or ""),
-                            timestamp=str(
-                                thaw_json(getattr(njr, "extra_metadata", {})).get("learning", {}).get("experiment_timestamp", "")
-                            ),
-                        )
-                    else:
-                        base_prefix = (
-                            f"{stage.stage_name}_p{prompt_row + 1:02d}_v{njr.variant_index + 1:02d}"
-                        )
-                    matrix_values = (
-                        getattr(njr, "matrix_slot_values", None)
-                        if hasattr(njr, "matrix_slot_values")
-                        else None
-                    )
-                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(
-                        njr, "pack_name", None
-                    )
-                    seed = (njr.config or {}).get("seed") or getattr(njr, "extra_metadata", {}).get("seed")
-                    image_name = build_safe_image_name(
-                        base_prefix=base_prefix,
-                        matrix_values=matrix_values,
-                        seed=seed,
-                        pack_name=pack_name,
-                        max_length=100,  # Conservative limit for Windows paths
-                    )
-
-                    result = self._execute_image_backend(
-                        backend_id=image_backend_id,
-                        stage_name="txt2img",
-                        njr=njr,
-                        stage_config=config_dict,
-                        run_dir=run_dir,
-                        input_image_path=None,
-                        image_name=image_name,
-                        prompt=stage.prompt_text,
-                        negative_prompt=negative_prompt,
-                        cancel_token=cancel_token,
-                        survivor_telemetry=survivor_telemetry,
-                        selected_model=self._selected_stage_model(
-                            "txt2img", config_dict, njr=njr
-                        ),
-                        selected_vae=self._selected_stage_vae("txt2img", config_dict, njr=njr),
-                        learning_sample_names=bool(learning_context),
-                        image_count=image_count,
-                    )
-                    # Extract ALL image paths from metadata for batch processing
-                    if result and "all_paths" in result:
-                        current_stage_paths = result["all_paths"]
-                        logger.info(
-                            "[pipeline/txt2img] produced %s image(s)", len(current_stage_paths)
-                        )
-                    elif result and "path" in result:
-                        # Fallback for single image (backward compatibility)
-                        current_stage_paths = [result["path"]]
-                    else:
-                        current_stage_paths = []
-
-                    # Only append non-None results to variants
-                    if result is not None:
-                        variants.append(result)
-                    last_result = result
-
-                elif stage.stage_name == "img2img":
-                    if not current_stage_paths:
-                        logger.warning("img2img stage skipped: no input images from previous stage")
-                        continue
-
-                    # Get stage config from njr.stage_chain
-                    config_dict = self._stage_config_for_njr(njr, "img2img")
-
-                    # Process ALL images from previous stage through img2img
-                    next_stage_paths = []
-                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
-
-                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
-                    from pathlib import Path as PathLib
-
-                    from src.utils.file_io import build_safe_image_name
-
-                    # Use 1-based indexing to match GUI display
-                    base_prefix = (
-                        f"{stage.stage_name}_p{prompt_row + 1:02d}_v{njr.variant_index + 1:02d}"
-                    )
-                    matrix_values = (
-                        getattr(njr, "matrix_slot_values", None)
-                        if hasattr(njr, "matrix_slot_values")
-                        else None
-                    )
-                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(
-                        njr, "pack_name", None
-                    )
-
-                    # For reprocess jobs, get original input filename for uniqueness
-                    original_inputs = getattr(njr, "input_image_paths", None)
-                    use_original_name = original_inputs and getattr(njr, "start_stage", None)
-
-                    for img_idx, input_path in enumerate(current_stage_paths):
-                        logger.debug(
-                            "[pipeline/img2img] processing image %s/%s",
-                            img_idx + 1,
-                            len(current_stage_paths),
-                        )
-                        # For reprocess jobs, include original filename to prevent collisions
-                        if use_original_name and img_idx < len(original_inputs):
-                            input_stem = PathLib(original_inputs[img_idx]).stem[
-                                :30
-                            ]  # First 30 chars of original filename
-                            unique_prefix = f"{base_prefix}_{input_stem}"
-                        else:
-                            unique_prefix = base_prefix
-                        image_name = build_safe_image_name(
-                            base_prefix=unique_prefix,
-                            matrix_values=matrix_values,
-                            seed=None,
-                            batch_index=img_idx,
-                            pack_name=pack_name,
-                            max_length=100,
-                        )
-                        result = self._execute_image_backend(
-                            backend_id=image_backend_id,
-                            stage_name="img2img",
-                            njr=njr,
-                            stage_config=config_dict,
-                            run_dir=run_dir,
-                            input_image_path=Path(input_path),
-                            image_name=image_name,
-                            prompt=prompt,
-                            negative_prompt=negative_prompt,
-                            cancel_token=cancel_token,
-                            survivor_telemetry=survivor_telemetry,
-                            selected_model=self._selected_stage_model(
-                                "img2img", config_dict, njr=njr
-                            ),
-                            selected_vae=self._selected_stage_vae(
-                                "img2img", config_dict, njr=njr
-                            ),
-                        )
-                        # Collect output path from this image
-                        if result and "path" in result:
-                            next_stage_paths.append(result["path"])
-                        variants.append(result)
-
-                    # Update current_stage_paths for next stage
-                    current_stage_paths = next_stage_paths
-                    logger.info(
-                        "[pipeline/img2img] completed %s image(s)", len(current_stage_paths)
-                    )
-
-                elif stage.stage_name == "adetailer":
-                    if not current_stage_paths:
-                        logger.warning(
-                            "adetailer stage skipped: no input images from previous stage"
-                        )
-                        continue
-
-                    # Get stage config from njr.stage_chain
-                    config_dict = self._stage_config_for_njr(njr, "adetailer")
-
-                    # Process ALL images from previous stage through adetailer
-                    next_stage_paths = []
-                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
-                    refinement_mode = str(adaptive_refinement_intent.get("mode") or "disabled")
-                    refinement_enabled = bool(
-                        adaptive_refinement_intent.get("enabled")
-                    ) and refinement_mode in {
-                        "adetailer",
-                        "full",
-                    }
-                    refinement_prompt_intent = dict(
-                        (metadata.get("adaptive_refinement") or {}).get("prompt_intent") or {}
-                    )
-                    refinement_service, refinement_notes = self._resolve_refinement_policy_service(
-                        adaptive_refinement_intent.get("detector_preference", "null")
-                    )
-                    if refinement_enabled and metadata.get("adaptive_refinement"):
-                        metadata["adaptive_refinement"]["detector_notes"] = list(
-                            dict.fromkeys(
-                                list(metadata["adaptive_refinement"].get("detector_notes") or [])
-                                + refinement_notes
-                            )
-                        )
-                        metadata["adaptive_refinement"].setdefault("image_decisions", [])
-
-                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
-                    from pathlib import Path as PathLib
-
-                    from src.utils.file_io import build_safe_image_name
-
-                    # Use 1-based indexing to match GUI display
-                    base_prefix = (
-                        f"{stage.stage_name}_p{prompt_row + 1:02d}_v{njr.variant_index + 1:02d}"
-                    )
-                    matrix_values = (
-                        getattr(njr, "matrix_slot_values", None)
-                        if hasattr(njr, "matrix_slot_values")
-                        else None
-                    )
-                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(
-                        njr, "pack_name", None
-                    )
-
-                    # For reprocess jobs, get original input filename for uniqueness
-                    original_inputs = getattr(njr, "input_image_paths", None)
-                    use_original_name = original_inputs and getattr(njr, "start_stage", None)
-
-                    for img_idx, input_path in enumerate(current_stage_paths):
-                        logger.debug(
-                            "[pipeline/adetailer] processing image %s/%s",
-                            img_idx + 1,
-                            len(current_stage_paths),
-                        )
-
-                        # For reprocess jobs, aggressively free VRAM BEFORE each image to prevent timeout
-                        if (
-                            use_original_name and img_idx > 0
-                        ):  # Not first image (first one is fresh)
-                            try:
-                                if client and hasattr(client, "free_vram"):
-                                    logger.info("[pipeline/adetailer] freeing VRAM before image")
-                                    client.free_vram(unload_model=True)
-                                    time.sleep(1.0)  # Give WebUI time to stabilize
-                            except Exception:
-                                pass  # Non-fatal
-
-                        # For reprocess jobs, include original filename to prevent collisions
-                        if use_original_name and img_idx < len(original_inputs):
-                            input_stem = PathLib(original_inputs[img_idx]).stem[
-                                :30
-                            ]  # First 30 chars of original filename
-                            unique_prefix = f"{base_prefix}_{input_stem}"
-                        else:
-                            unique_prefix = base_prefix
-                        image_name = build_safe_image_name(
-                            base_prefix=unique_prefix,
-                            matrix_values=matrix_values,
-                            seed=None,
-                            batch_index=img_idx,
-                            pack_name=pack_name,
-                            max_length=100,
-                        )
-                        per_image_config = dict(config_dict)
-                        image_refinement_payload: dict[str, Any] | None = None
-                        if refinement_enabled:
-                            decision_bundle = refinement_service.build_bundle(
-                                mode=refinement_mode,
-                                prompt_intent=refinement_prompt_intent,
-                                image_path=Path(input_path),
-                                extra_observation={
-                                    "stage_name": "adetailer",
-                                    "image_index": img_idx,
-                                    "total_images": len(current_stage_paths),
-                                },
-                            )
-                            image_refinement_payload = {
-                                "intent": dict(adaptive_refinement_intent),
-                                "prompt_intent": dict(refinement_prompt_intent),
-                                "decision_bundle": dict(decision_bundle),
-                                "detector_notes": list(refinement_notes),
-                            }
-                            self._apply_adetailer_refinement_overrides(
-                                per_image_config,
-                                decision_bundle.get("applied_overrides"),
-                            )
-                            per_image_config["adaptive_refinement"] = image_refinement_payload
-                        result = self._execute_image_backend(
-                            backend_id=image_backend_id,
-                            stage_name="adetailer",
-                            njr=njr,
-                            stage_config=per_image_config,
-                            run_dir=run_dir,
-                            input_image_path=Path(input_path),
-                            image_name=image_name,
-                            prompt=prompt,
-                            negative_prompt=negative_prompt,
-                            cancel_token=cancel_token,
-                            survivor_telemetry=survivor_telemetry,
-                            selected_model=self._selected_stage_model(
-                                "adetailer", config_dict, njr=njr
-                            ),
-                            selected_vae=self._selected_stage_vae(
-                                "adetailer", config_dict, njr=njr
-                            ),
-                        )
-                        # Collect output path from this image
-                        if result and "path" in result:
-                            logger.info("[pipeline/adetailer] saved output=%s", result["path"])
-                            next_stage_paths.append(result["path"])
-                            if (
-                                refinement_enabled
-                                and metadata.get("adaptive_refinement")
-                                and image_refinement_payload
-                            ):
-                                metadata["adaptive_refinement"]["image_decisions"].append(
-                                    {
-                                        "input_image_path": str(input_path),
-                                        "output_path": str(result["path"]),
-                                        "decision_bundle": dict(
-                                            image_refinement_payload.get("decision_bundle") or {}
-                                        ),
-                                    }
-                                )
-                        else:
-                            logger.warning(
-                                "[pipeline/adetailer] no output from image index=%s", img_idx
-                            )
-                            if (
-                                refinement_enabled
-                                and metadata.get("adaptive_refinement")
-                                and image_refinement_payload
-                            ):
-                                metadata["adaptive_refinement"]["image_decisions"].append(
-                                    {
-                                        "input_image_path": str(input_path),
-                                        "output_path": None,
-                                        "decision_bundle": dict(
-                                            image_refinement_payload.get("decision_bundle") or {}
-                                        ),
-                                    }
-                                )
-                        variants.append(result)
-
-                        # For reprocess jobs, aggressively free VRAM after each image to prevent timeout
-                        if (
-                            use_original_name and img_idx < len(current_stage_paths) - 1
-                        ):  # Not last image
-                            try:
-                                if client and hasattr(client, "free_vram"):
-                                    logger.info("[pipeline/adetailer] freeing VRAM between images")
-                                    client.free_vram(unload_model=True)
-                            except Exception:
-                                pass  # Non-fatal
-
-                    # Update current_stage_paths for next stage
-                    current_stage_paths = next_stage_paths
-                    logger.info(
-                        "[pipeline/adetailer] completed %s image(s)", len(current_stage_paths)
-                    )
-
-                elif stage.stage_name == "upscale":
-                    if not current_stage_paths:
-                        logger.warning("upscale stage skipped: no input images from previous stage")
-                        continue
-
-                    # Get stage config from njr.stage_chain
-                    config_dict = self._stage_config_for_njr(njr, "upscale")
-
-                    refinement_mode = str(adaptive_refinement_intent.get("mode") or "disabled")
-                    refinement_enabled = (
-                        bool(adaptive_refinement_intent.get("enabled"))
-                        and refinement_mode == "full"
-                    )
-                    refinement_prompt_intent = dict(
-                        (metadata.get("adaptive_refinement") or {}).get("prompt_intent") or {}
-                    )
-                    refinement_service, refinement_notes = self._resolve_refinement_policy_service(
-                        adaptive_refinement_intent.get("detector_preference", "null")
-                    )
-                    if refinement_enabled and metadata.get("adaptive_refinement"):
-                        metadata["adaptive_refinement"]["detector_notes"] = list(
-                            dict.fromkeys(
-                                list(metadata["adaptive_refinement"].get("detector_notes") or [])
-                                + refinement_notes
-                            )
-                        )
-                        metadata["adaptive_refinement"].setdefault("image_decisions", [])
-
-                    # Process ALL images from previous stage through upscaler
-                    next_stage_paths = []
-                    prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
-
-                    # Build safe base name with human-readable identifiers (PR-FILENAME-001)
-                    from pathlib import Path as PathLib
-
-                    from src.utils.file_io import build_safe_image_name
-
-                    # Use 1-based indexing to match GUI display
-                    base_prefix = (
-                        f"{stage.stage_name}_p{prompt_row + 1:02d}_v{njr.variant_index + 1:02d}"
-                    )
-                    matrix_values = (
-                        getattr(njr, "matrix_slot_values", None)
-                        if hasattr(njr, "matrix_slot_values")
-                        else None
-                    )
-                    pack_name = getattr(njr, "prompt_pack_name", None) or getattr(
-                        njr, "pack_name", None
-                    )
-
-                    # For reprocess jobs, get original input filename for uniqueness
-                    original_inputs = getattr(njr, "input_image_paths", None)
-                    use_original_name = original_inputs and getattr(njr, "start_stage", None)
-
-                    for img_idx, input_path in enumerate(current_stage_paths):
-                        logger.debug(
-                            "[pipeline/upscale] processing image %s/%s",
-                            img_idx + 1,
-                            len(current_stage_paths),
-                        )
-
-                        # For reprocess jobs, aggressively free VRAM BEFORE each image to prevent timeout
-                        if use_original_name and img_idx > 0:  # Not first image
-                            try:
-                                if client and hasattr(client, "free_vram"):
-                                    logger.info("[pipeline/upscale] freeing VRAM before image")
-                                    client.free_vram(unload_model=True)
-                                    time.sleep(1.0)  # Give WebUI time to stabilize
-                            except Exception:
-                                pass  # Non-fatal
-
-                        # For reprocess jobs, include original filename to prevent collisions
-                        if use_original_name and img_idx < len(original_inputs):
-                            input_stem = PathLib(original_inputs[img_idx]).stem[
-                                :30
-                            ]  # First 30 chars of original filename
-                            unique_prefix = f"{base_prefix}_{input_stem}"
-                        else:
-                            unique_prefix = base_prefix
-                        image_name = build_safe_image_name(
-                            base_prefix=unique_prefix,
-                            matrix_values=matrix_values,
-                            seed=None,
-                            batch_index=img_idx,
-                            pack_name=pack_name,
-                            max_length=100,
-                        )
-                        per_image_config = dict(config_dict)
-                        image_refinement_payload: dict[str, Any] | None = None
-                        if refinement_enabled:
-                            decision_bundle = refinement_service.build_bundle(
-                                mode=refinement_mode,
-                                prompt_intent=refinement_prompt_intent,
-                                image_path=Path(input_path),
-                                extra_observation={
-                                    "stage_name": "upscale",
-                                    "image_index": img_idx,
-                                    "total_images": len(current_stage_paths),
-                                },
-                            )
-                            image_refinement_payload = {
-                                "intent": dict(adaptive_refinement_intent),
-                                "prompt_intent": dict(refinement_prompt_intent),
-                                "decision_bundle": dict(decision_bundle),
-                                "detector_notes": list(refinement_notes),
-                            }
-                            self._apply_upscale_refinement_overrides(
-                                per_image_config,
-                                decision_bundle.get("applied_overrides"),
-                            )
-                            per_image_config["adaptive_refinement"] = image_refinement_payload
-                        result = self._execute_image_backend(
-                            backend_id=image_backend_id,
-                            stage_name="upscale",
-                            njr=njr,
-                            stage_config=per_image_config,
-                            run_dir=run_dir,
-                            input_image_path=Path(input_path),
-                            image_name=image_name,
-                            prompt=prompt,
-                            negative_prompt=negative_prompt,
-                            cancel_token=cancel_token,
-                            survivor_telemetry=survivor_telemetry,
-                            selected_model=self._selected_stage_model(
-                                "upscale", config_dict, njr=njr
-                            ),
-                            selected_vae=self._selected_stage_vae(
-                                "upscale", config_dict, njr=njr
-                            ),
-                        )
-                        # Collect output path from this image
-                        if result and "path" in result:
-                            logger.info("[pipeline/upscale] saved output=%s", result["path"])
-                            next_stage_paths.append(result["path"])
-                            if (
-                                refinement_enabled
-                                and metadata.get("adaptive_refinement")
-                                and image_refinement_payload
-                            ):
-                                metadata["adaptive_refinement"]["image_decisions"].append(
-                                    {
-                                        "stage_name": "upscale",
-                                        "input_image_path": str(input_path),
-                                        "output_path": str(result["path"]),
-                                        "decision_bundle": dict(
-                                            image_refinement_payload.get("decision_bundle") or {}
-                                        ),
-                                    }
-                                )
-                        else:
-                            logger.warning(
-                                "[pipeline/upscale] no output from image index=%s", img_idx
-                            )
-                            if (
-                                refinement_enabled
-                                and metadata.get("adaptive_refinement")
-                                and image_refinement_payload
-                            ):
-                                metadata["adaptive_refinement"]["image_decisions"].append(
-                                    {
-                                        "stage_name": "upscale",
-                                        "input_image_path": str(input_path),
-                                        "output_path": None,
-                                        "decision_bundle": dict(
-                                            image_refinement_payload.get("decision_bundle") or {}
-                                        ),
-                                    }
-                                )
-                        variants.append(result)
-
-                    # Update current_stage_paths for next stage
-                    current_stage_paths = next_stage_paths
-                    logger.info(
-                        "[pipeline/upscale] completed %s image(s)", len(current_stage_paths)
-                    )
-
-                elif self._video_resolver.is_video_stage(stage.stage_name):
-                    if not current_stage_paths:
-                        logger.warning(
-                            "%s stage skipped: no input images from previous stage",
-                            stage.stage_name,
-                        )
-                        continue
-
-                    # Check for multi-segment sequence intent on video_workflow stages.
-                    stage_cfg = self._stage_config_dict_for_video(njr, stage.stage_name)
-                    sequence_config = stage_cfg.get("sequence_metadata") or {}
-                    if (
-                        stage.stage_name == "video_workflow"
-                        and isinstance(sequence_config, dict)
-                        and int(sequence_config.get("total_segments", 1)) > 1
-                    ):
-                        current_stage_paths = self._execute_sequence(
-                            stage_name=stage.stage_name,
-                            njr=njr,
-                            current_stage_paths=current_stage_paths,
-                            sequence_config=sequence_config,
-                            run_dir=run_dir,
-                            cancel_token=cancel_token,
-                            variants=variants,
-                            metadata=metadata,
-                            survivor_telemetry=survivor_telemetry,
-                        )
-                    else:
-                        current_stage_paths = self._execute_video_stage(
-                            stage_name=stage.stage_name,
-                            njr=njr,
-                            current_stage_paths=current_stage_paths,
-                            prompt=prompt,
-                            negative_prompt=negative_prompt,
-                            run_dir=run_dir,
-                            cancel_token=cancel_token,
-                            variants=variants,
-                            metadata=metadata,
-                            survivor_telemetry=survivor_telemetry,
-                        )
-                    logger.info(
-                        "[BATCH_PIPELINE] %s completed %d output artifact(s)",
-                        stage.stage_name,
-                        len(current_stage_paths),
-                    )
-
-                else:
-                    logger.warning(f"Unknown stage type: {stage.stage_name}, skipping")
-                    continue
-
-                _emit_stage_checkpoint(
-                    stage.stage_name,
-                    current_stage_paths,
-                    stage_metadata={"image_count": len(current_stage_paths)},
-                )
-
-                # Record stage event with actual image count
-                stage_events.append(
-                    {
-                        "stage": stage.stage_name,
-                        "phase": "exit",
-                        "image_index": len(current_stage_paths),
-                        "total_images": len(current_stage_paths),
-                        "cancelled": False,
-                    }
-                )
-                if survivor_telemetry is not None and current_stage_paths:
-                    survivor_telemetry.record_event("publication_boundary")
-                if survivor_telemetry is not None:
-                    survivor_telemetry.leave_stage(stage.stage_name)
-
-                # Increment stage index for next iteration
-                self._pipeline._current_stage_index += 1
-
-            # A pipeline only succeeds if the final enabled stage produced durable outputs.
-            success = bool(current_stage_paths)
-            if not success and error is None:
-                error = "No images were generated successfully"
-            if metadata.get("adaptive_refinement"):
-                refinement_payload = dict(metadata["adaptive_refinement"])
-                detector_preference = (refinement_payload.get("intent") or {}).get(
-                    "detector_preference"
-                ) or "null"
-                refinement_service, refinement_notes = self._resolve_refinement_policy_service(
-                    detector_preference
-                )
-                assessments, assessment_notes = self._collect_refinement_assessments(
-                    service=refinement_service,
-                    output_paths=list(current_stage_paths or []),
-                )
-                decision_bundle = dict(refinement_payload.get("decision_bundle") or {})
-                observation = dict(decision_bundle.get("observation") or {})
-                if assessments:
-                    observation["subject_assessment"] = dict(assessments[0])
-                    observation["image_assessments"] = list(assessments)
-                decision_bundle["detector_id"] = (
-                    assessments[0]["detector_id"]
-                    if assessments
-                    else refinement_service.assess(None).get("detector_id", "null")
-                )
-                decision_bundle["observation"] = observation
-                refinement_payload["decision_bundle"] = decision_bundle
-                refinement_payload["detector_notes"] = list(
-                    dict.fromkeys(
-                        list(refinement_payload.get("detector_notes") or [])
-                        + refinement_notes
-                        + assessment_notes
-                    )
-                )
-                metadata["adaptive_refinement"] = refinement_payload
-        except CancellationError:
-            terminal_outcome = "cancelled"
-            raise
-        except Exception as exc:
-            terminal_outcome = "failed"
-            error = str(exc)
-            logger.error("[pipeline] execution failed: %s", exc, exc_info=True)
-            try:
-                # Typed, content-free evidence so the queue can classify this normalized failure
-                # (PR-QUEUE-WEBUI-171) without relying on message keywords or a raised exception.
-                from src.api.webui_failure_evidence import METADATA_KEY, build_failure_evidence
-
-                metadata[METADATA_KEY] = build_failure_evidence(exc)
-                if metadata[METADATA_KEY].get("dispatch_certainty") == "unknown":
-                    metadata["action_required"] = True
-                metadata["completed_output_paths"] = list(current_stage_paths or []) if any(
-                    event.get("phase") == "exit" for event in stage_events
-                ) else []
-            except Exception:
-                logger.debug("failure evidence unavailable", exc_info=True)
-            stage_events.append(
-                {
-                    "stage": stage.stage_name if "stage" in locals() else "pipeline",
-                    "phase": "error",
-                    "image_index": 1,
-                    "total_images": 1,
-                    "cancelled": True,
-                    "error_message": str(exc),
-                }
-            )
-        finally:
-            if survivor_telemetry is not None and not telemetry_closed:
-                survivor_telemetry.close(
-                    outcome=terminal_outcome or ("runner_finished" if success else "failed")
-                )
-                telemetry_closed = True
-            # PR-PIPE-001: Clear job ID from executor after execution
-            self._pipeline._current_job_id = None
-            self._pipeline._current_njr_sha256 = None
-
-        efficiency_metrics: dict[str, Any] = {}
-        if hasattr(self._pipeline, "get_run_efficiency_metrics"):
-            try:
-                efficiency_metrics = self._pipeline.get_run_efficiency_metrics(len(variants))
-            except Exception:
-                efficiency_metrics = {}
-        if efficiency_metrics:
-            metadata["efficiency_metrics"] = efficiency_metrics
-
-        variants = canonicalize_variant_entries(variants)
-        incomplete = list(getattr(self._pipeline, "_provenance_incomplete", None) or [])
-        if incomplete:
-            metadata["provenance_incomplete"] = incomplete
-
-        result = PipelineRunResult(
-            run_id=run_id,
-            success=success,
-            error=error,
-            variants=variants,
-            learning_records=learning_records,
-            randomizer_mode=getattr(njr, "variant_mode", "standard"),
-            randomizer_plan_size=getattr(njr, "variant_total", 1),
-            metadata=metadata,
-            stage_plan=plan,
-            stage_events=stage_events,
-        )
-        try:
-            njr_snapshot = njr.to_queue_snapshot()
+            metadata[METADATA_KEY] = build_failure_evidence(exc)
+            if metadata[METADATA_KEY].get("dispatch_certainty") == "unknown":
+                metadata["action_required"] = True
+            metadata["completed_output_paths"] = list(current_stage_paths or []) if any(
+                event.get("phase") == "exit" for event in stage_events
+            ) else []
         except Exception:
-            njr_snapshot = {"normalized_job": {"job_id": njr.job_id}}
-        result.metadata["replay_descriptor"] = build_replay_descriptor(
-            result.to_dict(),
-            njr_snapshot=njr_snapshot,
-        )
-        result.metadata["diagnostics_descriptor"] = build_diagnostics_descriptor(
-            result.to_dict(),
-            njr_snapshot=njr_snapshot,
-        )
-        logger.debug(
-            "[pipeline/result] PipelineRunResult created success=%s error=%s variants=%s",
-            success,
-            error,
-            len(variants),
-        )
-        result_dict = result.to_dict()
-        logger.debug(
-            "[pipeline/result] result.to_dict success=%s error=%s",
-            result_dict.get("success"),
-            result_dict.get("error"),
-        )
+            logger.debug("failure evidence unavailable", exc_info=True)
+
+    def _write_run_metadata_file(
+        self,
+        *,
+        njr: NormalizedJobRecord,
+        run_id: str,
+        route_root: Any,
+        metadata: dict[str, Any],
+        variants: list[Any],
+    ) -> None:
+        """Write ``run_metadata`` for the finished run.  The result is already final, so a failure is only reported."""
+
         try:
             # Build stage_outputs from variants (each variant is a dict with path, config, etc.)
             stage_outputs = []
@@ -2121,10 +1648,6 @@ class PipelineRunner:
             logger.warning(
                 "Run metadata could not be written for %s: %s", run_id, exc, exc_info=True
             )
-        self._last_run_result = result
-        return result
-
-    # Remove legacy run() and _pipeline_config_from_njr from production path
 
     def __init__(
         self,
