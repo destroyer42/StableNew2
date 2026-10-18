@@ -12,11 +12,13 @@ staged-curation groups and run folders (a candidate list is a starting point for
 
 from __future__ import annotations
 
+import hashlib
+import heapq
 import json
 import re
 import sqlite3
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -43,6 +45,8 @@ class ReportOptions:
     output_root: Path | None = None
     learning_root: Path | None = None
     now: datetime | None = None
+    result_json: bool = False
+    progress: Callable[[str], None] | None = None
 
 
 def open_read_only(path: str | Path) -> sqlite3.Connection:
@@ -74,7 +78,20 @@ def _jobs_section(connection: sqlite3.Connection) -> dict[str, Any]:
         str(row["status"]): int(row["n"])
         for row in connection.execute("SELECT status, COUNT(*) AS n FROM jobs GROUP BY status")
     }
-    return {"total": sum(by_status.values()), "by_status": by_status}
+    first, last = connection.execute("SELECT MIN(created_at), MAX(created_at) FROM jobs").fetchone()
+    by_month = {
+        str(row[0]): int(row[1])
+        for row in connection.execute(
+            "SELECT SUBSTR(created_at, 1, 7) AS month, COUNT(*) FROM jobs GROUP BY month ORDER BY month"
+        )
+    }
+    return {
+        "total": sum(by_status.values()),
+        "by_status": by_status,
+        "created_first": first,
+        "created_last": last,
+        "by_month": by_month,
+    }
 
 
 def _column_bytes(connection: sqlite3.Connection) -> dict[str, int]:
@@ -168,6 +185,13 @@ def _learning_job_ids(root: Path | None) -> set[str]:
     return ids
 
 
+def _resolve(reference: str, output_root: Path | None) -> Path | None:
+    path = Path(reference)
+    if path.is_absolute():
+        return path
+    return output_root / path if output_root is not None else None
+
+
 def _classify_paths(references: list[str], output_root: Path | None) -> str:
     """``no_outputs``, ``unresolvable``, ``unchecked``, ``all_present``, ``partly_missing`` or ``all_missing``."""
 
@@ -175,11 +199,9 @@ def _classify_paths(references: list[str], output_root: Path | None) -> str:
         return "no_outputs"
     present = missing = 0
     for reference in references:
-        path = Path(reference)
-        if not path.is_absolute():
-            if output_root is None:
-                return "unresolvable"
-            path = output_root / path
+        path = _resolve(reference, output_root)
+        if path is None:
+            return "unresolvable"
         try:
             exists = path.exists()
         except (OSError, ValueError):
@@ -203,13 +225,16 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
     learning_ids = _learning_job_ids(options.learning_root)
     marks = ",".join("?" for _ in TERMINAL_STATUSES)
     counts: Counter[str] = Counter()
-    bytes_by_class: Counter[str] = Counter()
+    bytes_by_class: dict[str, Counter[str]] = {}
     candidates: list[dict[str, Any]] = []
     candidate_ids: list[str] = []
+    missing_dirs: Counter[str] = Counter()
+    samples: list[str] = []
     considered = 0
     for row in connection.execute(
         f"SELECT job_id, status, created_at, artifact_references, "
-        f"LENGTH(njr_snapshot) + COALESCE(LENGTH(result_json), 0) + LENGTH(execution_metadata) AS size "
+        f"LENGTH(njr_snapshot) AS snapshot_bytes, COALESCE(LENGTH(result_json), 0) AS result_bytes, "
+        f"LENGTH(execution_metadata) AS execution_bytes "
         f"FROM jobs WHERE status IN ({marks}) AND created_at < ?",
         (*TERMINAL_STATUSES, cutoff),
     ):
@@ -220,7 +245,9 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
         except (TypeError, ValueError):
             references = []
         outcome = _classify_paths(references, options.output_root)
-        size = int(row["size"] or 0)
+        snapshot_bytes = int(row["snapshot_bytes"] or 0)
+        result_bytes = int(row["result_bytes"] or 0)
+        size = snapshot_bytes + result_bytes + int(row["execution_bytes"] or 0)
         if outcome == "all_missing":
             if job_id in parents:
                 outcome = "protected_has_replay_children"
@@ -229,7 +256,20 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
             else:
                 outcome = "candidate"
         counts[outcome] += 1
-        bytes_by_class[outcome] += size
+        sums = bytes_by_class.setdefault(outcome, Counter())
+        sums["bytes"] += size
+        sums["snapshot_bytes"] += snapshot_bytes
+        sums["result_bytes"] += result_bytes
+        if outcome in {"candidate", "protected_in_learning_files", "protected_has_replay_children"}:
+            missing_dirs.update(
+                {
+                    str(resolved.parent)
+                    for reference in references
+                    if (resolved := _resolve(reference, options.output_root)) is not None
+                }
+            )
+            if outcome == "candidate" and len(samples) < 5 and references:
+                samples.append(references[0])
         if outcome == "candidate":
             candidate_ids.append(job_id)
             candidates.append(
@@ -253,8 +293,18 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
         },
         "terminal_jobs_older_than_cutoff": considered,
         "classes": {
-            name: {"jobs": counts[name], "bytes": bytes_by_class[name]} for name in sorted(counts)
+            name: {
+                "jobs": counts[name],
+                "bytes": bytes_by_class[name]["bytes"],
+                "snapshot_bytes": bytes_by_class[name]["snapshot_bytes"],
+                "result_bytes": bytes_by_class[name]["result_bytes"],
+            }
+            for name in sorted(counts)
         },
+        "missing_output_folders": [
+            {"folder": folder, "jobs": count} for folder, count in missing_dirs.most_common(_TOP)
+        ],
+        "candidate_sample_paths": samples,
         "candidates": {
             "jobs": len(candidates),
             "bytes": sum(item["bytes"] for item in candidates),
@@ -266,6 +316,157 @@ def _prune_section(connection: sqlite3.Connection, options: ReportOptions) -> di
     }
 
 
+_MIN_DUPLICATE_BYTES = 8192
+_MAX_DEPTH = 3
+_PROGRESS_EVERY = 2000
+
+
+def _compact(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _percentile(ordered: list[int], fraction: float) -> int:
+    return ordered[min(len(ordered) - 1, int(len(ordered) * fraction))] if ordered else 0
+
+
+def _walk_result(
+    value: Any,
+    path: str,
+    depth: int,
+    sizes: Counter[str],
+    appears: Counter[str],
+    seen: dict[str, list[Any]],
+    job_id: str,
+) -> None:
+    """Size every top-level key (and the sub-keys of large ones) and find repeated large blocks.
+
+    A block already seen elsewhere is counted as a copy and not descended into, so a repeated parent and its repeated
+    children are never both counted: the figures are outermost-first and do not overlap.
+    """
+
+    if isinstance(value, dict):
+        children = [(f"{path}.{key}" if path else str(key), child) for key, child in value.items()]
+    elif isinstance(value, list):
+        children = [(f"{path}[]", child) for child in value]
+    else:
+        return
+    for child_path, child in children:
+        if not isinstance(child, (dict, list)):
+            if depth == 0:
+                size = len(_compact(child))
+                sizes[child_path] += size
+                appears[child_path] += 1
+            continue
+        text = _compact(child)
+        size = len(text)
+        if depth <= 1:
+            sizes[child_path] += size
+            appears[child_path] += 1
+        if size < _MIN_DUPLICATE_BYTES:
+            continue
+        digest = hashlib.sha1(text.encode("utf-8")).hexdigest()
+        known = seen.get(digest)
+        if known is not None:
+            known[0] += 1
+            continue
+        seen[digest] = [1, size, child_path, job_id]
+        if depth + 1 < _MAX_DEPTH:
+            _walk_result(child, child_path, depth + 1, sizes, appears, seen, job_id)
+
+
+def _result_json_section(
+    connection: sqlite3.Connection, progress: Callable[[str], None] | None = None
+) -> dict[str, Any]:
+    """Where the ``result_json`` bytes are: by status and source, by key, by row size, and repeated blocks."""
+
+    by_status = {
+        str(row[0]): {"rows": int(row[1]), "bytes": int(row[2])}
+        for row in connection.execute(
+            "SELECT status, COUNT(*), COALESCE(SUM(LENGTH(result_json)), 0) FROM jobs "
+            "WHERE result_json IS NOT NULL GROUP BY status"
+        )
+    }
+    by_source = {
+        str(row[0]): {"rows": int(row[1]), "bytes": int(row[2])}
+        for row in connection.execute(
+            "SELECT source, COUNT(*), COALESCE(SUM(LENGTH(result_json)), 0) FROM jobs "
+            "WHERE result_json IS NOT NULL GROUP BY source"
+        )
+    }
+    total_rows = sum(item["rows"] for item in by_status.values())
+    sizes: Counter[str] = Counter()
+    appears: Counter[str] = Counter()
+    seen: dict[str, list[Any]] = {}
+    row_sizes: list[int] = []
+    largest: list[tuple[int, str, str, str]] = []
+    frozen_blocks = unparsed = done = 0
+    for row in connection.execute(
+        "SELECT job_id, status, created_at, result_json FROM jobs WHERE result_json IS NOT NULL"
+    ):
+        text = row["result_json"]
+        row_size = len(text)
+        row_sizes.append(row_size)
+        entry = (row_size, str(row["job_id"]), str(row["status"]), str(row["created_at"]))
+        if len(largest) < _TOP:
+            heapq.heappush(largest, entry)
+        elif row_size > largest[0][0]:
+            heapq.heapreplace(largest, entry)
+        try:
+            parsed = json.loads(text)
+        except (TypeError, ValueError):
+            unparsed += 1
+            continue
+        if _FROZEN_MARKER in text:
+            frozen_blocks += sum(1 for _ in _frozen_snapshots(parsed))
+        _walk_result(parsed, "", 0, sizes, appears, seen, str(row["job_id"]))
+        done += 1
+        if progress is not None and done % _PROGRESS_EVERY == 0:
+            progress(f"result_json: {done:,} of {total_rows:,} rows")
+    ordered = sorted(row_sizes)
+    repeated = {digest: group for digest, group in seen.items() if group[0] > 1}
+    extra_bytes = sum((group[0] - 1) * group[1] for group in repeated.values())
+    top_repeated = sorted(repeated.values(), key=lambda g: (g[0] - 1) * g[1], reverse=True)[:_TOP]
+    return {
+        "rows": total_rows,
+        "bytes": sum(row_sizes),
+        "unparsed_rows": unparsed,
+        "row_bytes": {
+            "mean": int(sum(row_sizes) / len(row_sizes)) if row_sizes else 0,
+            "median": _percentile(ordered, 0.5),
+            "p90": _percentile(ordered, 0.9),
+            "p99": _percentile(ordered, 0.99),
+            "max": ordered[-1] if ordered else 0,
+        },
+        "by_status": by_status,
+        "by_source": by_source,
+        "by_key": [
+            {"path": path, "bytes": size, "rows": appears[path]}
+            for path, size in sizes.most_common(2 * _TOP)
+        ],
+        "frozen_snapshot_blocks": frozen_blocks,
+        "repeated_blocks": {
+            "min_block_bytes": _MIN_DUPLICATE_BYTES,
+            "groups": len(repeated),
+            "extra_copies": sum(group[0] - 1 for group in repeated.values()),
+            "extra_bytes": extra_bytes,
+            "largest": [
+                {
+                    "path": group[2],
+                    "copies": group[0],
+                    "block_bytes": group[1],
+                    "extra_bytes": (group[0] - 1) * group[1],
+                    "first_job_id": group[3],
+                }
+                for group in top_repeated
+            ],
+        },
+        "largest_rows": [
+            {"job_id": job_id, "bytes": size, "status": status, "created_at": created}
+            for size, job_id, status, created in sorted(largest, reverse=True)
+        ],
+    }
+
+
 def build_report(
     connection: sqlite3.Connection,
     options: ReportOptions | None = None,
@@ -273,16 +474,21 @@ def build_report(
     path: Path | None = None,
 ) -> dict[str, Any]:
     options = options or ReportOptions()
-    return {
+    report = {
         "database": _database_section(connection, path),
         "jobs": _jobs_section(connection),
         "column_bytes": _column_bytes(connection),
         "duplicated_snapshots": _duplicated_snapshots(connection),
         "prune": _prune_section(connection, options),
     }
+    if options.result_json:
+        report["result_json"] = _result_json_section(connection, options.progress)
+    return report
 
 
 def _mb(value: int | float) -> str:
+    if value and abs(value) < 1_000_000:
+        return f"{value / 1_000:,.1f} KB"
     return f"{value / 1_000_000:,.1f} MB"
 
 
@@ -296,6 +502,8 @@ def format_report(report: dict[str, Any]) -> str:
         f"Jobs: {jobs['total']:,} ("
         + ", ".join(f"{name} {count:,}" for name, count in sorted(jobs["by_status"].items()))
         + ")",
+        f"Created: {jobs['created_first']} to {jobs['created_last']}; by month: "
+        + ", ".join(f"{month} {count:,}" for month, count in jobs["by_month"].items()),
         "",
         "Bytes by column:",
         *(
@@ -327,19 +535,73 @@ def format_report(report: dict[str, Any]) -> str:
             "pass --learning-root"
         )
     for name, info in prune["classes"].items():
-        lines.append(f"  {name:<32} {info['jobs']:>8,} jobs  {_mb(info['bytes']):>12}")
+        lines.append(
+            f"  {name:<32} {info['jobs']:>8,} jobs  {_mb(info['bytes']):>12}"
+            f"  (snapshot {_mb(info['snapshot_bytes'])}, result {_mb(info['result_bytes'])})"
+        )
     cand = prune["candidates"]
     lines.append(
         f"  => candidates: {cand['jobs']:,} jobs, {_mb(cand['bytes'])} of snapshot/result/metadata text"
     )
     if cand["jobs"]:
         lines.append(f"     created between {cand['oldest']} and {cand['newest']}")
+    if prune["missing_output_folders"]:
+        lines.append("  Folders whose recorded outputs are missing (jobs per folder):")
+        lines.extend(
+            f"    {item['jobs']:>7,}  {item['folder']}" for item in prune["missing_output_folders"]
+        )
+    if prune["candidate_sample_paths"]:
+        lines.append("  Sample missing paths:")
+        lines.extend(f"    {path}" for path in prune["candidate_sample_paths"])
+    if "result_json" in report:
+        lines += _format_result_json(report["result_json"])
     lines += [
         "",
         "Not checked: staged-curation groups and run folders. Nothing here deletes anything;",
         "use --candidates-csv to keep the list for the delete decision.",
     ]
     return "\n".join(lines)
+
+
+def _format_result_json(section: dict[str, Any]) -> list[str]:
+    stats = section["row_bytes"]
+    lines = [
+        "",
+        f"result_json: {section['rows']:,} rows, {_mb(section['bytes'])}"
+        + (f" ({section['unparsed_rows']:,} unparsable)" if section["unparsed_rows"] else ""),
+        f"  row size: mean {_mb(stats['mean'])}, median {_mb(stats['median'])}, p90 {_mb(stats['p90'])}, "
+        f"p99 {_mb(stats['p99'])}, max {_mb(stats['max'])}",
+        "  by status:  "
+        + ", ".join(
+            f"{name} {_mb(item['bytes'])}" for name, item in sorted(section["by_status"].items())
+        ),
+        "  by source:  "
+        + ", ".join(
+            f"{name} {_mb(item['bytes'])}" for name, item in sorted(section["by_source"].items())
+        ),
+        "  biggest keys (bytes, rows containing it):",
+    ]
+    lines.extend(
+        f"    {_mb(item['bytes']):>12}  {item['rows']:>7,}  {item['path']}"
+        for item in section["by_key"]
+    )
+    repeated = section["repeated_blocks"]
+    lines += [
+        f"  Frozen experiment snapshots inside result_json: {section['frozen_snapshot_blocks']:,}",
+        f"  Repeated blocks of {repeated['min_block_bytes']:,}+ bytes (outermost; no double counting): "
+        f"{repeated['groups']:,} distinct, {repeated['extra_copies']:,} extra copies, "
+        f"{_mb(repeated['extra_bytes'])} would be saved by storing each once",
+    ]
+    lines.extend(
+        f"    {item['copies']:>6,} x {_mb(item['block_bytes']):>9}  {item['path']}  (first in {item['first_job_id']})"
+        for item in repeated["largest"]
+    )
+    lines.append("  Largest rows:")
+    lines.extend(
+        f"    {_mb(item['bytes']):>12}  {item['job_id']}  {item['status']}  {item['created_at']}"
+        for item in section["largest_rows"][:5]
+    )
+    return lines
 
 
 def candidates_csv(report: dict[str, Any]) -> str:

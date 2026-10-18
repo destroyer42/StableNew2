@@ -53,6 +53,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--older-than-days", type=int, default=30, help="only jobs older than this (default 30)"
     )
+    parser.add_argument(
+        "--result-json",
+        action="store_true",
+        help="also break down the result_json column (reads and parses every result; slower, prints progress)",
+    )
     parser.add_argument("--json", action="store_true", help="print the full report as JSON")
     parser.add_argument("--candidates-csv", type=Path, help="write the candidate job ids here")
     args = parser.parse_args(argv)
@@ -67,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
         output_root=args.output_root,
         learning_root=learning_root,
         now=datetime.now(),
+        result_json=args.result_json,
+        progress=(lambda message: print(message, file=sys.stderr)) if args.result_json else None,
     )
     connection = report_module.open_read_only(args.database)
     try:
