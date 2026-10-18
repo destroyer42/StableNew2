@@ -184,7 +184,7 @@ def test_gp6_video_workflow_path_creates_video_artifact(tmp_path: Path, monkeypa
         )
 
         def execute(self, pipeline, request: VideoExecutionRequest):
-            assert request.workflow_id == "ltx_multiframe_anchor_v1"
+            assert request.workflow_id == "synthetic_anchor_video_v1"
             assert request.end_anchor_path == end_path
             return VideoExecutionResult.from_stage_result(
                 backend_id="dummy_workflow",
@@ -236,7 +236,7 @@ def test_gp6_video_workflow_path_creates_video_artifact(tmp_path: Path, monkeypa
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "workflow_version": "1.0.0",
                     "backend_id": "dummy_workflow",
                     "end_anchor_path": str(end_path),
@@ -256,7 +256,7 @@ def test_gp6_video_workflow_path_creates_video_artifact(tmp_path: Path, monkeypa
     assert result.metadata["video_workflow_artifact"]["frame_paths"] == [str(preview_frame)]
     assert (
         result.metadata["replay_descriptor"]["backends"][0]["workflow_id"]
-        == "ltx_multiframe_anchor_v1"
+        == "synthetic_anchor_video_v1"
     )
     assert result.variants[0]["video_backend_id"] == "dummy_workflow"
     assert Path(result.metadata["video_workflow_artifact"]["primary_path"]).exists()

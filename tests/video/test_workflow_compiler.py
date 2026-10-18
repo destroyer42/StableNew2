@@ -3,18 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.video import VideoExecutionRequest, WorkflowCompiler
-from tests.helpers.video_contract_registry import build_ltx_contract_registry
+from tests.helpers.video_contract_registry import build_synthetic_contract_registry
 
 
-def test_workflow_compiler_builds_deterministic_payload_for_builtin_ltx_workflow(
+def test_workflow_compiler_builds_deterministic_payload_for_synthetic_anchor_workflow(
     tmp_path: Path,
 ) -> None:
-    registry = build_ltx_contract_registry()
+    registry = build_synthetic_contract_registry()
     compiler = WorkflowCompiler()
     request = VideoExecutionRequest(
         backend_id="comfy",
         stage_name="video_workflow",
-        stage_config={"workflow_id": "ltx_multiframe_anchor_v1"},
+        stage_config={"workflow_id": "synthetic_anchor_video_v1"},
         output_dir=tmp_path,
         input_image_path=tmp_path / "start.png",
         end_anchor_path=tmp_path / "end.png",
@@ -29,11 +29,11 @@ def test_workflow_compiler_builds_deterministic_payload_for_builtin_ltx_workflow
 
     compiled = compiler.compile_registered(
         registry,
-        workflow_id="ltx_multiframe_anchor_v1",
+        workflow_id="synthetic_anchor_video_v1",
         request=request,
     )
 
-    assert compiled.workflow_id == "ltx_multiframe_anchor_v1"
+    assert compiled.workflow_id == "synthetic_anchor_video_v1"
     assert compiled.backend_id == "comfy"
     assert compiled.compiled_inputs["start_anchor"] == str(tmp_path / "start.png")
     assert compiled.compiled_inputs["end_anchor"] == str(tmp_path / "end.png")
@@ -51,12 +51,12 @@ def test_workflow_compiler_builds_deterministic_payload_for_builtin_ltx_workflow
 
 
 def test_workflow_compiler_fails_fast_when_required_anchor_is_missing(tmp_path: Path) -> None:
-    registry = build_ltx_contract_registry()
+    registry = build_synthetic_contract_registry()
     compiler = WorkflowCompiler()
     request = VideoExecutionRequest(
         backend_id="comfy",
         stage_name="video_workflow",
-        stage_config={"workflow_id": "ltx_multiframe_anchor_v1"},
+        stage_config={"workflow_id": "synthetic_anchor_video_v1"},
         output_dir=tmp_path,
         input_image_path=tmp_path / "start.png",
         image_name="clip_002",
@@ -65,7 +65,7 @@ def test_workflow_compiler_fails_fast_when_required_anchor_is_missing(tmp_path: 
     try:
         compiler.compile_registered(
             registry,
-            workflow_id="ltx_multiframe_anchor_v1",
+            workflow_id="synthetic_anchor_video_v1",
             request=request,
         )
     except ValueError as exc:
@@ -77,13 +77,13 @@ def test_workflow_compiler_fails_fast_when_required_anchor_is_missing(tmp_path: 
 def test_workflow_compiler_builds_conditioned_payload_from_nested_stage_config(
     tmp_path: Path,
 ) -> None:
-    registry = build_ltx_contract_registry()
+    registry = build_synthetic_contract_registry()
     compiler = WorkflowCompiler()
     request = VideoExecutionRequest(
         backend_id="comfy",
         stage_name="video_workflow",
         stage_config={
-            "workflow_id": "ltx_multiframe_anchor_v1_conditioned",
+            "workflow_id": "synthetic_anchor_video_v1_conditioned",
             "camera_intent": {
                 "preset": "dolly_in",
                 "strength": 0.4,
@@ -111,7 +111,7 @@ def test_workflow_compiler_builds_conditioned_payload_from_nested_stage_config(
 
     compiled = compiler.compile_registered(
         registry,
-        workflow_id="ltx_multiframe_anchor_v1_conditioned",
+        workflow_id="synthetic_anchor_video_v1_conditioned",
         request=request,
     )
 

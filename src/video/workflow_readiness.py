@@ -7,7 +7,7 @@ It never terminates, adopts, restarts or reconfigures any process (A1111, Comfy,
 never retries or replays a job; a failing check simply fails the job with what is blocking.
 
 A workflow opts in by declaring ``backend_defaults["resource_readiness"]``; workflows without the
-declaration are not checked (so approved workflows such as the LTX pair are unaffected).
+declaration are not checked.
 
 Thresholds for ``wan22_ti2v_5b`` come from the PR-VID-110 measurements on the RTX 4070 Ti 12 GB
 (12,282 MiB): the operator-media run peaked at 11,690 MiB whole-GPU with 2,120 MiB already used

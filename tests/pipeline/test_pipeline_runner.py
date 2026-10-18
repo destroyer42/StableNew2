@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from src.pipeline.animatediff_retirement import AnimateDiffRetiredError
 from src.pipeline.job_models_v2 import (
     NormalizedJobRecord,
     SourceDescriptor,
@@ -15,6 +16,7 @@ from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, norm
 from src.refinement.quality_metrics import build_refinement_learning_context
 from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
 from src.services.runtime_transition_service import RuntimeTransitionCoordinator
+from src.utils.error_envelope_v2 import get_attached_envelope
 from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
 from src.video.assembly_models import AssembledVideoResult, ExportReadyOutputBundle
 from src.video.svd_native_backend import SVDNativeVideoBackend
@@ -805,7 +807,9 @@ def test_normalize_run_result_preserves_missing_success_as_unknown() -> None:
     assert canonical["error"] is None
 
 
-def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
+def test_run_njr_refuses_enabled_animatediff_stage_before_any_client_call(tmp_path: Path) -> None:
+    """AnimateDiff execution is retired: run_njr fails at entry, before metrics, cleanup or any client call."""
+
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     input_path = tmp_path / "seed.png"
     input_path.write_bytes(b"seed")
@@ -825,42 +829,18 @@ def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
         start_stage="animatediff",
     )
     pipeline = Mock()
-    pipeline.run_animatediff_stage.return_value = {
-        "video_path": str(tmp_path / "clip.mp4"),
-        "output_paths": [str(tmp_path / "clip.mp4")],
-        "frame_paths": [str(tmp_path / "frame_000000.png")],
-        "frame_count": 1,
-        "manifest_path": str(tmp_path / "clip.json"),
-        "artifact": {
-            "schema": "stablenew.artifact.v2.6",
-            "stage": "animatediff",
-            "artifact_type": "video",
-            "primary_path": str(tmp_path / "clip.mp4"),
-            "output_paths": [str(tmp_path / "clip.mp4")],
-            "manifest_path": str(tmp_path / "clip.json"),
-            "input_image_path": str(input_path),
-        },
-    }
     runner._pipeline = pipeline
 
-    result = runner.run_njr(record, cancel_token=None)
+    with pytest.raises(AnimateDiffRetiredError, match="AnimateDiff execution is retired") as caught:
+        runner.run_njr(record, cancel_token=None)
 
-    pipeline.run_animatediff_stage.assert_called_once()
-    assert result.success is True
-    assert result.metadata["animatediff_artifact"]["count"] == 1
-    assert result.metadata["animatediff_artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
-    assert result.metadata["animatediff_artifact"]["manifest_paths"] == [
-        str(tmp_path / "clip.json")
-    ]
-    assert (
-        result.metadata["animatediff_artifact"]["artifacts"][0]["schema"]
-        == "stablenew.artifact.v2.6"
-    )
-    assert result.metadata["video_artifacts"]["animatediff"]["backend_id"] == "animatediff"
-    assert result.metadata["video_primary_artifact"]["stage"] == "animatediff"
-    assert result.metadata["video_primary_artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
-    assert result.metadata["video_backend_results"]["animatediff"]["backend_id"] == "animatediff"
-    assert result.variants[0]["video_backend_id"] == "animatediff"
+    # Nothing was touched: no executor call, no client call (cleanup, probe or request), no output directory.
+    assert pipeline.mock_calls == []
+    assert pipeline.client.mock_calls == []
+    assert not (tmp_path / "runs").exists()
+    envelope = get_attached_envelope(caught.value)
+    assert envelope is not None and envelope.error_type == "AnimateDiffRetiredError"
+    assert envelope.job_id == "runner-animatediff"
 
 
 def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
@@ -979,7 +959,7 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
         )
 
         def execute(self, pipeline, request):
-            assert request.workflow_id == "ltx_multiframe_anchor_v1"
+            assert request.workflow_id == "synthetic_anchor_video_v1"
             assert request.end_anchor_path == end_path
             return VideoExecutionResult.from_stage_result(
                 backend_id="comfy",
@@ -1026,7 +1006,7 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "workflow_version": "1.0.0",
                     "end_anchor_path": str(end_path),
                 },
@@ -1064,7 +1044,7 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
     assert result.metadata["replay_descriptor"]["backends"][0]["backend_id"] == "comfy"
     assert (
         result.metadata["replay_descriptor"]["backends"][0]["workflow_id"]
-        == "ltx_multiframe_anchor_v1"
+        == "synthetic_anchor_video_v1"
     )
     assert result.metadata["diagnostics_descriptor"]["primary_stage"] == "video_workflow"
     # PR-VIDEO-215: stage-specific key for video_workflow must be stamped
@@ -1143,7 +1123,7 @@ def test_run_njr_emits_secondary_motion_policy_for_video_stage(tmp_path: Path) -
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "workflow_version": "1.0.0",
                     "motion_profile": "cinematic",
                 },
@@ -1252,7 +1232,7 @@ def test_run_njr_injects_apply_mode_secondary_motion_and_collects_summary(tmp_pa
             StageConfig(
                 stage_type="video_workflow",
                 enabled=True,
-                extra={"workflow_id": "ltx_multiframe_anchor_v1", "workflow_version": "1.0.0"},
+                extra={"workflow_id": "synthetic_anchor_video_v1", "workflow_version": "1.0.0"},
             )
         ],
         input_image_paths=[str(input_path)],
@@ -1399,124 +1379,6 @@ def test_run_njr_injects_apply_mode_secondary_motion_under_svd_postprocess(tmp_p
     )
 
 
-def test_run_njr_injects_apply_mode_secondary_motion_into_animatediff_stage(tmp_path: Path) -> None:
-    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
-    input_path = tmp_path / "seed.png"
-    output_video = tmp_path / "animatediff.mp4"
-    input_path.write_bytes(b"seed")
-    output_video.write_bytes(b"mp4")
-
-    class _AnimateDiffBackend:
-        backend_id = "animatediff"
-        capabilities = VideoBackendCapabilities(
-            backend_id="animatediff",
-            stage_types=("animatediff",),
-            requires_input_image=True,
-            supports_prompt_text=True,
-            supports_negative_prompt=True,
-        )
-
-        def execute(self, pipeline, request):
-            runtime_block = request.stage_config.get("secondary_motion")
-            assert isinstance(runtime_block, dict)
-            assert runtime_block["enabled"] is True
-            assert runtime_block["intent"]["mode"] == "apply"
-            assert runtime_block["policy_id"]
-            assert runtime_block["intensity"] > 0.0
-            assert runtime_block["cap_pixels"] > 0
-            assert runtime_block["regions"] == ["hair"]
-            return VideoExecutionResult.from_stage_result(
-                backend_id="animatediff",
-                stage_name="animatediff",
-                result={
-                    "path": str(output_video),
-                    "video_path": str(output_video),
-                    "output_paths": [str(output_video)],
-                    "secondary_motion": {
-                        "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},
-                        "policy": {
-                            "enabled": True,
-                            "policy_id": str(runtime_block["policy_id"]),
-                            "backend_mode": str(runtime_block["backend_mode"]),
-                        },
-                        "apply_result": {
-                            "status": "applied",
-                            "application_path": "frame_directory_worker",
-                            "metrics": {"frames_in": 16, "frames_out": 16},
-                        },
-                    },
-                    "secondary_motion_summary": {
-                        "schema": "stablenew.secondary-motion-summary.v1",
-                        "enabled": True,
-                        "status": "applied",
-                        "policy_id": str(runtime_block["policy_id"]),
-                        "application_path": "frame_directory_worker",
-                        "intent": {"mode": "apply", "intent": "micro_sway"},
-                        "backend_mode": str(runtime_block["backend_mode"]),
-                        "skip_reason": "",
-                        "metrics": {"frames_in": 16, "frames_out": 16},
-                    },
-                    "artifact": {
-                        "schema": "stablenew.artifact.v2.6",
-                        "stage": "animatediff",
-                        "artifact_type": "video",
-                        "primary_path": str(output_video),
-                        "output_paths": [str(output_video)],
-                        "input_image_path": str(input_path),
-                    },
-                },
-            )
-
-    registry = VideoBackendRegistry()
-    registry.register(_AnimateDiffBackend())
-    runner._video_backends = registry
-    record = _record_from_legacy_kwargs(
-        job_id="runner-animatediff-secondary-motion-apply",
-        config={},
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=42,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=0.0,
-        stage_chain=[
-            StageConfig(stage_type="animatediff", enabled=True, extra={"enabled": True, "fps": 12})
-        ],
-        input_image_paths=[str(input_path)],
-        start_stage="animatediff",
-    )
-    record = _with_workload(
-        record,
-        positive_prompt="portrait woman with flowing hair",
-        negative_prompt="camera shake",
-        intent_config={
-            "secondary_motion": {
-                "schema": "stablenew.secondary-motion.v1",
-                "enabled": True,
-                "mode": "apply",
-                "intent": "micro_sway",
-                "regions": ["hair"],
-                "allow_native_backend": False,
-                "algorithm_version": "v1",
-            }
-        },
-    )
-    original_extra = dict(record.stage_chain[0].extra or {})
-    runner._pipeline = Mock()
-
-    result = runner.run_njr(record, cancel_token=None)
-
-    assert result.success is True
-    assert record.stage_chain[0].extra == original_extra
-    assert result.metadata["secondary_motion"]["summary"]["status"] == "applied"
-    assert (
-        result.metadata["secondary_motion"]["summary"]["application_path"]
-        == "frame_directory_worker"
-    )
-
-
 def test_mixed_image_and_video_stage_plan_is_rejected_before_runner(
     tmp_path: Path,
 ) -> None:
@@ -1586,7 +1448,7 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
                     "video_path": str(out),
                     "output_paths": [str(out)],
                     "manifest_path": None,
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "artifact": {
                         "schema": "stablenew.artifact.v2.6",
                         "stage": "video_workflow",
@@ -1597,8 +1459,8 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
                         "input_image_path": str(input_path),
                     },
                 },
-                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
-                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+                backend_metadata={"workflow_id": "synthetic_anchor_video_v1"},
+                replay_manifest_fragment={"workflow_id": "synthetic_anchor_video_v1"},
             )
 
     registry = VideoBackendRegistry()
@@ -1621,7 +1483,7 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "sequence_metadata": {
                         "sequence_id": "seq-test-216",
                         "total_segments": 2,
@@ -1712,7 +1574,7 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
                     "video_path": str(out),
                     "output_paths": [str(out)],
                     "manifest_path": None,
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "artifact": {
                         "schema": "stablenew.artifact.v2.6",
                         "stage": "video_workflow",
@@ -1723,8 +1585,8 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
                         "input_image_path": str(input_path),
                     },
                 },
-                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
-                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+                backend_metadata={"workflow_id": "synthetic_anchor_video_v1"},
+                replay_manifest_fragment={"workflow_id": "synthetic_anchor_video_v1"},
             )
 
     def _fake_assemble(self, request):
@@ -1772,7 +1634,7 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "sequence_metadata": {
                         "sequence_id": "seq-test-217",
                         "total_segments": 2,
@@ -1836,7 +1698,7 @@ def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> No
                     "video_path": str(output_video),
                     "output_paths": [str(output_video)],
                     "manifest_path": None,
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "artifact": {
                         "schema": "stablenew.artifact.v2.6",
                         "stage": "video_workflow",
@@ -1847,8 +1709,8 @@ def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> No
                         "input_image_path": str(input_path),
                     },
                 },
-                backend_metadata={"workflow_id": "ltx_multiframe_anchor_v1"},
-                replay_manifest_fragment={"workflow_id": "ltx_multiframe_anchor_v1"},
+                backend_metadata={"workflow_id": "synthetic_anchor_video_v1"},
+                replay_manifest_fragment={"workflow_id": "synthetic_anchor_video_v1"},
             )
 
     registry = VideoBackendRegistry()
@@ -1871,7 +1733,7 @@ def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> No
                 stage_type="video_workflow",
                 enabled=True,
                 extra={
-                    "workflow_id": "ltx_multiframe_anchor_v1",
+                    "workflow_id": "synthetic_anchor_video_v1",
                     "sequence_metadata": {
                         "sequence_id": "seq-plan-219",
                         "total_segments": 2,

@@ -27,7 +27,7 @@ class TestVideoSegmentPlan:
             "segment_length_frames": 25,
             "prompt": "a sunset",
             "negative_prompt": "blurry",
-            "workflow_id": "ltx_multiframe_anchor_v1",
+            "workflow_id": "synthetic_anchor_video_v1",
         }
         defaults.update(kwargs)
         return VideoSegmentPlan(**defaults)
@@ -49,7 +49,7 @@ class TestVideoSegmentPlan:
         assert restored.segment_length_frames == 25
         assert restored.prompt == "a sunset"
         assert restored.negative_prompt == "blurry"
-        assert restored.workflow_id == "ltx_multiframe_anchor_v1"
+        assert restored.workflow_id == "synthetic_anchor_video_v1"
         assert restored.extra == {"custom_key": "value"}
 
     def test_from_dict_defaults(self):
@@ -77,7 +77,7 @@ class TestVideoSequenceJob:
         defaults = {
             "sequence_id": "seq-001",
             "job_id": "job-abc",
-            "workflow_id": "ltx_multiframe_anchor_v1",
+            "workflow_id": "synthetic_anchor_video_v1",
             "total_segments": 3,
             "segment_length_frames": 25,
             "overlap_frames": 2,

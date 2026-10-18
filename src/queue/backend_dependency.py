@@ -101,7 +101,8 @@ def _classify_dependency(
         return DependencyAssessment(unresolved, "unknown_image_backend")
     if kind == "video":
         if "animatediff" in stages:
-            # AnimateDiff executes through the WebUI executor; it is never assumed independent.
+            # AnimateDiff execution is retired (refused at run time); a historical enabled stage is still never
+            # assumed independent, so it is held like any other WebUI-dependent job until it is refused.
             return DependencyAssessment(
                 BackendDependency.REQUIRES_WEBUI
                 if stages == {"animatediff"}

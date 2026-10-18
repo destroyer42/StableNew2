@@ -4,8 +4,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from src.video import (
-    AnimateDiffVideoBackend,
     ComfyWorkflowVideoBackend,
     SVDNativeVideoBackend,
     VideoBackendCapabilities,
@@ -14,7 +15,7 @@ from src.video import (
     build_default_video_backend_registry,
 )
 from src.video.workflow_registry import WorkflowRegistry
-from tests.helpers.video_contract_registry import build_ltx_contract_registry
+from tests.helpers.video_contract_registry import build_synthetic_contract_registry
 
 
 def _ready_transition() -> object:
@@ -31,15 +32,18 @@ def _ready_process_manager(base_url: str = "http://127.0.0.1:8188") -> object:
 
 
 def _backend_contract_registry() -> WorkflowRegistry:
-    return build_ltx_contract_registry()
+    return build_synthetic_contract_registry()
 
 
 def test_default_video_backend_registry_registers_builtin_backends() -> None:
     registry = build_default_video_backend_registry()
 
-    assert registry.list_backend_ids() == ["animatediff", "comfy", "svd_native"]
-    assert registry.list_stage_types() == ["animatediff", "svd_native", "video_workflow"]
-    assert registry.get_for_stage("animatediff").backend_id == "animatediff"
+    assert registry.list_backend_ids() == ["comfy", "svd_native"]
+    assert registry.list_stage_types() == ["svd_native", "video_workflow"]
+    # AnimateDiff execution is retired: no backend claims the stage any more.
+    assert not registry.is_registered_stage("animatediff")
+    with pytest.raises(KeyError):
+        registry.get_for_stage("animatediff")
     assert registry.get_for_stage("svd_native").backend_id == "svd_native"
     assert registry.get_for_stage("video_workflow").backend_id == "comfy"
 
@@ -47,11 +51,11 @@ def test_default_video_backend_registry_registers_builtin_backends() -> None:
 def test_video_backend_registry_rejects_duplicate_stage_claims() -> None:
     class _FirstBackend:
         backend_id = "first"
-        capabilities = VideoBackendCapabilities(backend_id="first", stage_types=("animatediff",))
+        capabilities = VideoBackendCapabilities(backend_id="first", stage_types=("fake_stage",))
 
     class _SecondBackend:
         backend_id = "second"
-        capabilities = VideoBackendCapabilities(backend_id="second", stage_types=("animatediff",))
+        capabilities = VideoBackendCapabilities(backend_id="second", stage_types=("fake_stage",))
 
     registry = VideoBackendRegistry()
     registry.register(_FirstBackend())
@@ -59,66 +63,9 @@ def test_video_backend_registry_rejects_duplicate_stage_claims() -> None:
     try:
         registry.register(_SecondBackend())
     except ValueError as exc:
-        assert "animatediff" in str(exc)
+        assert "fake_stage" in str(exc)
     else:
         raise AssertionError("Expected duplicate stage registration to fail")
-
-
-def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
-    pipeline = Mock()
-    pipeline.run_animatediff_stage.return_value = {
-        "video_path": str(tmp_path / "clip.mp4"),
-        "output_paths": [str(tmp_path / "clip.mp4")],
-        "frame_paths": [str(tmp_path / "frame_0001.png")],
-        "manifest_path": str(tmp_path / "clip.json"),
-        "secondary_motion": {
-            "summary": {
-                "schema": "stablenew.secondary-motion-summary.v1",
-                "status": "applied",
-                "policy_id": "animatediff_motion_v1",
-            }
-        },
-        "secondary_motion_summary": {
-            "schema": "stablenew.secondary-motion-summary.v1",
-            "status": "applied",
-            "policy_id": "animatediff_motion_v1",
-        },
-        "artifact": {
-            "schema": "stablenew.artifact.v2.6",
-            "stage": "animatediff",
-            "artifact_type": "video",
-            "primary_path": str(tmp_path / "clip.mp4"),
-            "output_paths": [str(tmp_path / "clip.mp4")],
-            "manifest_path": str(tmp_path / "clip.json"),
-            "input_image_path": str(tmp_path / "seed.png"),
-        },
-    }
-    backend = AnimateDiffVideoBackend()
-
-    result = backend.execute(
-        pipeline,
-        VideoExecutionRequest(
-            backend_id="animatediff",
-            stage_name="animatediff",
-            stage_config={"enabled": True},
-            output_dir=tmp_path,
-            input_image_path=tmp_path / "seed.png",
-            image_name="clip",
-            prompt="animate this",
-            negative_prompt="",
-        ),
-    )
-
-    assert result is not None
-    assert result.backend_id == "animatediff"
-    assert result.primary_path == str(tmp_path / "clip.mp4")
-    assert result.output_paths == [str(tmp_path / "clip.mp4")]
-    variant_payload = result.to_variant_payload()
-    assert variant_payload["video_backend_id"] == "animatediff"
-    assert variant_payload["artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
-    assert (
-        variant_payload["video_replay_manifest"]["secondary_motion_summary"]["status"] == "applied"
-    )
 
 
 def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
@@ -193,8 +140,8 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXAnchorBridge": {"input": {}},
-        "models": {"checkpoints": ["ltx_video.safetensors"]},
+        "SyntheticAnchorBridge": {"input": {}},
+        "models": {"checkpoints": ["synthetic_video.safetensors"]},
     }
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.return_value = {
@@ -253,7 +200,7 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
             stage_name="video_workflow",
             stage_config={
                 "enabled": True,
-                "workflow_id": "ltx_multiframe_anchor_v1",
+                "workflow_id": "synthetic_anchor_video_v1",
                 "secondary_motion": {
                     "enabled": True,
                     "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},

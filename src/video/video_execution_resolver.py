@@ -8,7 +8,7 @@
   is chosen only by ``backend_id``; nothing is inferred from stage names, task order or models.
 * **Legacy bridge (historical records only):** a stage config with no ``video_execution`` block
   whose stage type is one of the accepted stage-owned video stages (``svd_native``,
-  ``animatediff``, ``video_workflow``) resolves through the registry's stage claim and the
+  ``video_workflow``) resolves through the registry's stage claim and the
   fixed baseline mapping below.  It exists so historical NJRs stay replayable and accepted
   jobs keep working.  Removal condition: every producer compiles the neutral block and no
   historical record needs stage-owned routing (replay migration proven), then delete
@@ -46,10 +46,6 @@ VIDEO_EXECUTION_KEY = "video_execution"
 # baseline control of svd_native: the accepted SVD path has always carried it as context only.
 LEGACY_STAGE_BINDINGS: dict[str, tuple[str, tuple[str, ...]]] = {
     "svd_native": (VIDEO_TASK_IMAGE_TO_VIDEO, (CONTROL_SOURCE_IMAGE,)),
-    "animatediff": (
-        VIDEO_TASK_IMAGE_TO_VIDEO,
-        (CONTROL_SOURCE_IMAGE, CONTROL_PROMPT_TEXT, CONTROL_NEGATIVE_PROMPT),
-    ),
     "video_workflow": (
         VIDEO_TASK_IMAGE_TO_VIDEO,
         (CONTROL_SOURCE_IMAGE, CONTROL_PROMPT_TEXT, CONTROL_NEGATIVE_PROMPT),

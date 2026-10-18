@@ -12,7 +12,6 @@
     "src/config/app_config.py": 1,
     "src/controller/app_controller.py": 116,
     "src/controller/app_controller_services/runtime_projection_coordinator.py": 2,
-    "src/controller/cluster_controller.py": 1,
     "src/controller/core_pipeline_controller.py": 7,
     "src/controller/job_execution_controller.py": 5,
     "src/controller/job_history_service.py": 13,
@@ -147,10 +146,10 @@
     "src/photo_optimize/submission.py": 6,
     "src/pipeline/cli_njr_builder.py": 4,
     "src/pipeline/config_variant_plan_v2.py": 3,
-    "src/pipeline/executor.py": 39,
+    "src/pipeline/executor.py": 37,
     "src/pipeline/job_builder_v2.py": 1,
     "src/pipeline/njr_core_v26.py": 9,
-    "src/pipeline/pipeline_runner.py": 33,
+    "src/pipeline/pipeline_runner.py": 31,
     "src/pipeline/reprocess_builder.py": 17,
     "src/pipeline/variant_planner.py": 1,
     "src/pipeline/video.py": 1,
@@ -198,5 +197,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1686
+  "total": 1681
 }

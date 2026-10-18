@@ -10,8 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from src.cluster.worker_model import WorkerId
-from src.queue.job_model import Job, JobExecutionMetadata, JobStatus
+from src.queue.job_model import Job, JobExecutionMetadata, JobStatus, WorkerId
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 
 if TYPE_CHECKING:

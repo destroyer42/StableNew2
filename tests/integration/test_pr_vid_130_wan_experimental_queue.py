@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 from PIL import Image
 
+from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.video_workflow_controller import VideoWorkflowController
 from src.pipeline.result_contract_v26 import collect_canonical_artifacts
@@ -19,10 +20,12 @@ from src.video import ComfyWorkflowVideoBackend
 from src.video.workflow_catalog import build_builtin_workflow_specs
 from src.video.workflow_contracts import WorkflowSpec
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
+from tests.helpers.video_contract_registry import (
+    SYNTHETIC_DISABLED_ID,
+    build_synthetic_disabled_registry,
+)
 from tests.integration.test_pr_vid_120_neutral_video_queue import _build_stack
 from tests.video.test_wan22_experimental_workflow import WAN_ID, _FakeComfy, _readiness, _stats
-
-LTX_ID = "ltx_multiframe_anchor_v1"
 
 
 def _images(tmp_path: Path) -> tuple[Path, Path]:
@@ -60,10 +63,18 @@ def _block(record) -> dict:
     return stage["extra"]["video_execution"]
 
 
-def test_ltx_submission_is_rejected_before_queue_admission(tmp_path) -> None:
-    _source, _end = _images(tmp_path)
-    controller, submitted = _capture_controller(tmp_path)
-    ok, reason = controller.validate_form_data({"workflow_id": LTX_ID, "workflow_version": "1.0.0"})
+def test_disabled_workflow_submission_is_rejected_before_queue_admission(tmp_path) -> None:
+    submitted: list = []
+    service = SimpleNamespace(
+        submit_njrs=lambda records, _policy: [submitted.extend(records) or "job-x"][0]
+    )
+    controller = VideoWorkflowController(
+        app_controller=SimpleNamespace(job_service=service, output_dir=str(tmp_path / "out")),
+        workflow_registry=DefaultWorkflowRegistryPort(build_synthetic_disabled_registry()),
+    )
+    ok, reason = controller.validate_form_data(
+        {"workflow_id": SYNTHETIC_DISABLED_ID, "workflow_version": "1.0.0"}
+    )
     assert not ok and "not approved" in str(reason)
     assert submitted == []
 
@@ -100,7 +111,7 @@ def test_wan_admission_is_capability_driven_and_records_the_per_job_opt_in(tmp_p
 def test_specs_projection_marks_wan_experimental_and_hides_unsupported_inputs(tmp_path) -> None:
     controller, _ = _capture_controller(tmp_path)
     specs = {s["workflow_id"]: s for s in controller.list_workflow_specs()}
-    assert specs[WAN_ID]["experimental"] is True and LTX_ID not in specs
+    assert specs[WAN_ID]["experimental"] is True and "ltx_multiframe_anchor_v1" not in specs
     assert specs[WAN_ID]["form_visibility"]["end_anchor"] is False
     assert specs[WAN_ID]["form_visibility"]["experimental"] is True
     assert specs[WAN_ID]["form_visibility"]["seed"] is True
@@ -270,6 +281,35 @@ def test_disabled_workflow_cannot_run_even_with_opt_in(tmp_path) -> None:
     service.runner.run_once(queue.get_job(job_id))
     failed = repository.get_job(job_id)
     assert failed is not None and failed.status is JobStatus.FAILED
+    assert client.queued == []
+    service.runner.stop()
+    repository.close()
+
+
+def test_stored_job_naming_a_retired_workflow_still_loads_and_fails_clearly(tmp_path) -> None:
+    """A snapshot made while a catalog workflow existed must stay readable after it is removed,
+    and an execution request for it must fail with a readable reason, never a bare KeyError."""
+
+    retired_id = "ltx_multiframe_anchor_v1"
+    client = _FakeComfy(tmp_path)
+    repository, queue, service, _controller = _build_stack(
+        tmp_path, [_wan_backend(tmp_path, client)]
+    )
+    job_id = _submit_forged(tmp_path, service, opt_in=True, workflow_id=retired_id)
+
+    # The snapshot deserializes and still displays the workflow it was made with.
+    reloaded = repository.get_job_model(job_id)
+    extra = reloaded._normalized_record.stage_chain[0].to_dict()["extra"]
+    assert extra["workflow_id"] == retired_id
+    assert extra["video_execution"]["workflow_id"] == retired_id
+
+    service.runner.run_once(queue.get_job(job_id))
+
+    failed = repository.get_job(job_id)
+    assert failed is not None and failed.status is JobStatus.FAILED
+    reason = str(failed.error_message or failed.result)
+    assert f"Workflow '{retired_id}'" in reason
+    assert "is not registered" in reason and "was removed" in reason
     assert client.queued == []
     service.runner.stop()
     repository.close()

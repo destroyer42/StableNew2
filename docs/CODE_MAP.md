@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-413 of 590 modules have a docstring.
+409 of 581 modules have a docstring.
 
 ## src/
 
@@ -52,12 +52,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `observation.py`: Tier-1 observational inventory (PR-IMG-MODELS-152): bounded, cancellable, header-only, no hashing
 - `registry.py`: Offline local-file identity registry; never contacts A1111 or a network
 
-## src/cluster/
-
-- `__init__.py`: Cluster primitives (worker descriptors, registry)
-- `worker_model.py`: Worker descriptor models for cluster-aware execution
-- `worker_registry.py`: In-memory worker registry for cluster V2 foundation
-
 ## src/conditioning/
 
 - `__init__.py`: Structural-conditioning inputs for image generation (PR-IMG-CNET-210)
@@ -85,7 +79,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `app_controller.py`: StableNew - App Controller (Skeleton + CancelToken + Worker Thread Stub)
 - `batch_operations_service.py`: Unified Review / Video Workflow batch operations (PR-BATCH-OPS-201)
 - `batch_output_resolution.py`: Resolve a batch's recorded outputs against the file system (PR-BATCH-OPS-201)
-- `cluster_controller.py`: Cluster controller responsible for worker registry initialization
 - `content_visibility_resolver.py`: (no docstring)
 - `core_pipeline_controller.py`: Controller-owned base pipeline controller
 - `global_prompt_policy_service.py`: Controller-side projection of current global prompt intent
@@ -477,7 +470,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Pipeline module
 - `adetailer_contract.py`: ADetailer-Neo control truth (PR-REFINE-160): the arguments the pinned extension accepts, and the facts derive…
 - `adetailer_effectiveness.py`: Versioned ADetailer effectiveness evidence (PR-REFINE-160): what was detected, what ran, what changed, what w…
-- `animatediff_models.py`: Typed AnimateDiff runtime helpers for NJR pipeline execution
+- `animatediff_retirement.py`: AnimateDiff execution retirement policy: one predicate, one error, one stable message
 - `artifact_contract.py`: (no docstring)
 - `cli_njr_builder.py`: (no docstring)
 - `compile_evidence.py`: One bounded, read-only model/LoRA evidence context per PromptPack build (PR-PROMPT-140)
@@ -555,7 +548,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `failure_triage.py`: Classify a FAILED job from the typed evidence that was persisted with it
 - `gpu_loss_assessment.py`: Classify one failed job against host GPU evidence
 - `job_history_store.py`: History projection contracts implemented by the SQLite job repository
-- `job_model.py`: Job model for single-node and future cluster execution
+- `job_model.py`: Job model for single-node execution
 - `job_queue.py`: Thread-safe runnable projection with priority + FIFO behavior
 - `job_repository.py`: Transactional SQLite authority for StableNew job lifecycle state
 - `single_node_runner.py`: Single-node job runner that executes jobs from an in-memory queue
@@ -669,7 +662,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/video/
 
 - `__init__.py`: Video utilities package for StableNew v2.6
-- `animatediff_backend.py`: (no docstring)
 - `assembly_models.py`: Typed models for stitched and interpolated assembled-video outputs
 - `assembly_service.py`: StableNew-owned post-video assembly orchestration
 - `comfy_api_client.py`: (no docstring)
@@ -679,7 +671,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `comfy_workflow_backend.py`: (no docstring)
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: (no docstring)
-- `continuity_store.py`: (no docstring)
 - `depth_map_resolver.py`: (no docstring)
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
@@ -689,9 +680,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `sequence_manifest.py`: Sequence manifest builder and writer for multi-segment video
 - `sequence_models.py`: Sequence and segment planning models for long-form video generation
 - `sequence_planner.py`: Sequence planner for multi-segment long-form video
-- `story_plan_compiler.py`: (no docstring)
-- `story_plan_models.py`: (no docstring)
-- `story_plan_store.py`: (no docstring)
 - `svd_capabilities.py`: Capability discovery for native SVD postprocess helpers
 - `svd_config.py`: Typed configuration models for native SVD image-to-video
 - `svd_errors.py`: Typed error surface for native SVD runtime

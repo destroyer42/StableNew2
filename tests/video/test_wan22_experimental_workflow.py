@@ -23,15 +23,15 @@ from src.video.video_backend_types import (
     CONTROL_SOURCE_IMAGE,
 )
 from src.video.video_execution_resolver import VideoContractError, VideoExecutionResolver
-from src.video.workflow_catalog import (
-    WAN22_MODEL_FILES,
-    WAN22_STOCK_NODES,
-    build_builtin_workflow_specs,
-)
+from src.video.workflow_catalog import WAN22_MODEL_FILES, WAN22_STOCK_NODES
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_contracts import WorkflowSpec
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
+from tests.helpers.video_contract_registry import (
+    SYNTHETIC_ANCHOR_ID,
+    build_synthetic_contract_registry,
+)
 
 WAN_ID = "wan22_ti2v_5b_i2v_v1"
 # The PR-VID-110 qualified, fixed-length revision these tests pin; 1.1.0 (PR-VID-190) is
@@ -284,10 +284,8 @@ def test_readiness_uses_driver_free_vram_plus_comfy_held_and_reports_what_blocks
     assert not low_ram.ready and "system RAM" in low_ram.message
     no_gpu = _readiness(ok_stats).evaluate(spec, system_stats={"devices": []})
     assert not no_gpu.ready and "no CUDA device" in no_gpu.message
-    ltx = next(
-        item for item in build_builtin_workflow_specs() if item.workflow_id == "ltx_multiframe_anchor_v1"
-    )
-    assert _readiness(ok_stats).evaluate(ltx, system_stats={}).ready  # only declared policies
+    undeclared = build_synthetic_contract_registry().get(SYNTHETIC_ANCHOR_ID)
+    assert _readiness(ok_stats).evaluate(undeclared, system_stats={}).ready  # only declared policies
 
 
 def test_comfys_own_free_figure_is_not_trusted_and_an_unreadable_driver_fails_closed() -> None:

@@ -410,3 +410,38 @@ def test_control_action_count_at_workstation_scale_reads_only_metadata(
             repository._connection.set_trace_callback(None)
         assert queries == ["SELECT execution_metadata FROM jobs"]
         assert repository._connection.total_changes == changes
+
+
+def test_worker_id_round_trips_through_repository_and_history(tmp_path: Path) -> None:
+    path = tmp_path / "worker.sqlite3"
+    repository = JobRepository(path)
+    job = _job("with-worker")
+    job.worker_id = "local"
+    JobQueue(repository=repository).submit(job)
+    repository.close()
+
+    with JobRepository(path) as restarted:
+        model = restarted.get_job_model("with-worker")
+        entry = restarted.get_job("with-worker")
+        assert model is not None and model.worker_id == "local"
+        assert entry is not None and entry.worker_id == "local"
+
+
+def test_legacy_row_without_worker_id_still_loads(tmp_path: Path) -> None:
+    path = tmp_path / "legacy.sqlite3"
+    repository = JobRepository(path)
+    JobQueue(repository=repository).submit(_job("legacy"))
+    repository.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("UPDATE jobs SET worker_id = NULL WHERE job_id = ?", ("legacy",))
+        connection.commit()
+    finally:
+        connection.close()
+
+    with JobRepository(path) as restarted:
+        model = restarted.get_job_model("legacy")
+        entry = restarted.get_job("legacy")
+        assert model is not None and model.worker_id is None
+        assert entry is not None and entry.worker_id is None

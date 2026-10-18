@@ -8,7 +8,6 @@ import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from src.cluster.worker_registry import WorkerRegistry
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -37,7 +36,6 @@ class JobExecutionController:
         poll_interval: float = 0.05,
         history_store: JobHistoryStore | None = None,
         repository: JobRepository | None = None,
-        worker_registry: WorkerRegistry | None = None,
         replay_runner: Any | None = None,
         queue: JobQueue | None = None,
         runner: SingleNodeJobRunner | None = None,
@@ -61,7 +59,6 @@ class JobExecutionController:
             )
             repository = JobRepository(path)
         self._history_store = repository
-        self._worker_registry = worker_registry or WorkerRegistry()
         self._queue = queue or JobQueue(repository=repository)
         self._execute_job = execute_job
         self._auto_run_enabled = True
@@ -272,9 +269,6 @@ class JobExecutionController:
 
     def get_queue(self) -> JobQueue:
         return self._queue
-
-    def get_worker_registry(self) -> WorkerRegistry:
-        return self._worker_registry
 
     def get_runner(self) -> SingleNodeJobRunner:
         return self._runner

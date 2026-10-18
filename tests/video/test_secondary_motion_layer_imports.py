@@ -14,7 +14,6 @@ IMPORT_BLOCKLIST = {
     "src.gui_v2",
     "src.controller",
     "src.pipeline.executor",
-    "src.video.animatediff_backend",
     "src.video.svd_native_backend",
     "src.video.comfy_workflow_backend",
 }
@@ -47,7 +46,6 @@ def _is_blocked_import(name: str) -> bool:
         or name.startswith("src.gui_v2.")
         or name.startswith("src.controller.")
         or name.startswith("src.pipeline.executor.")
-        or name.startswith("src.video.animatediff_backend.")
         or name.startswith("src.video.svd_native_backend.")
         or name.startswith("src.video.comfy_workflow_backend.")
     )
