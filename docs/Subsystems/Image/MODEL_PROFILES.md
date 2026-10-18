@@ -55,7 +55,7 @@ Enforced where:
 - Compiler: `apply_zimage_compile_policy` first runs `validate_zimage_config` (so inherited values must already be normalized, section 5), then `normalize_image_backend_options`, requires Forge and exactly `ZIMAGE_PROFILE_V1`, and fills defaults.
 - Backend: `validate_njr_intent` -> `validate_zimage_njr` (which also re-validates every enabled stage's `extra` and the NJR scalar fields); `_validate_request` re-validates `execution_config`, stage config, `extra`, seed, image count, VAE; `_before_dispatch` runs host RAM and `verify_zimage_assets`, which requires the StableNew-owned managed Forge, checks `verify_pinned_launch` against the revision, and hashes the exact served paths from `get_models` / `get_module_catalog` (ambiguity refuses).
 - Executor wire seam: `project_zimage_wire_payload` keeps only an allow-list of payload keys plus `distilled_cfg_scale`, `send_images`, `save_images=False`, and refuses a `shift` field or a changed prompt; `verify_zimage_dispatch_state` reads `/options` immediately before the POST and refuses unless the 20 pinned sampling options (`SAMPLING_OPTIONS`), the checkpoint and the module set match. It never writes server options. Both are unconditional calls in `Pipeline.run_txt2img_stage`; they are no-ops for other models, and refuse a Z-Image checkpoint that lacks its profile (IMAGE_PIPELINE 2.3).
-- Evidence: `backend_metadata["zimage_profile"]` carries `qualification_status = "one_generation_observed; INSTRUMENTATION_GAP"`. Physical qualification is inconclusive and on HOLD (STATUS.md); do not describe the profile as qualified [V].
+- Evidence: `backend_metadata["zimage_profile"]` carries `qualification_status = "one_generation_observed; INSTRUMENTATION_GAP"`. Physical qualification is inconclusive and no repeat attempt is authorized (STATUS.md Holds); do not describe the profile as qualified [V].
 
 ### 2.3 Klein Base 9B (refused, no profile)
 
@@ -199,7 +199,7 @@ Stage methods swallow generic exceptions (IMAGE_PIPELINE 11). Raise a refusal fr
 4. Conflicting immutable intent is refused, never silently rewritten. Only values the profile owns are replaced, and only at compile time, with recorded evidence.
 5. No backend switching and no profile fallback; a missing or unknown profile reference fails closed.
 6. Profile work requires the StableNew-owned managed Forge at the pinned runtime; external processes are not adopted (AGENTS.md).
-7. Physical qualification is HOLD (STATUS.md): a new version may be added in code and tests, but `_LATEST_PROFILE` must not move, and nothing here may claim hardware qualification, without owner authorization.
+7. Physical qualification is unauthorized for Z-Image (STATUS.md Holds): a new version may be added in code and tests, but `_LATEST_PROFILE` must not move, and nothing here may claim hardware qualification, without owner authorization.
 8. Tests never contact a WebUI, model or GPU; assert both the error and that no generation POST was recorded.
 
 ## 13. How to test

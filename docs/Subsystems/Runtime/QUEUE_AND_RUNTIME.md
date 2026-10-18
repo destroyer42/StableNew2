@@ -209,13 +209,13 @@ Related [A]: B9 (silent provenance and swallowed listener errors) is partly visi
 9. Shutdown order is fence -> cancel -> teardown -> quiescence -> repository close. Never close the repository under a live worker.
 10. Each process manager owns its own anonymous container; never name or share a job object.
 11. Persisted state goes through the repository or `src/utils/atomic_io.py`.
-12. Physical GPU work is on HOLD (section 13). Protected actions need owner approval (`AGENTS.md` section 5).
+12. The physical-GPU hold was lifted on 2026-10-18 (section 13); the device-loss quarantine is unchanged. Protected actions need owner approval (`AGENTS.md` section 5).
 
-## 13. GPU HOLD constraints
+## 13. GPU constraints (the standing hold was lifted on 2026-10-18)
 
-`STATUS.md` Holds: physical GPU qualification is on HOLD after the 2026-10-12 device-loss incident. For this subsystem that means:
+The owner lifted the physical-GPU hold: device loss is intermittent and has no accepted root cause (`STATUS.md` Holds), and jobs are running. For this subsystem:
 
-- No real generation, qualification, WebUI/Forge/Comfy start, restart or stop of a real runtime, and no outage-recovery exercise without explicit owner authorization. Note that production `WebUIOutageCoordinator.recover` performs a real owned restart on a confirmed outage, and `RuntimeTransitionCoordinator` stops real owned runtimes; never trigger either against a live manager outside an authorized session.
+- Physical work (real generation, qualification, starting or stopping a managed runtime) is allowed when a package's acceptance needs it. Production `WebUIOutageCoordinator.recover` performs a real owned restart on a confirmed outage, and `RuntimeTransitionCoordinator` stops real owned runtimes; never trigger either against a live manager from a test, gate or CI.
 - Tests must be hermetic: no WebUI, model, GPU, `nvidia-smi` or display. The autouse fixtures pin `STABLENEW_GPU_HOST_PROBE=0`, `STABLENEW_GPU_SESSION_TELEMETRY=0`, `STABLENEW_WEBUI_AUTOSTART=0`, `STABLENEW_COMFY_AUTOSTART=0`, `STABLENEW_NO_WEBUI=1`, and replace the WebUI container with a no-op. Inject probes, manager getters, clocks and runners instead of touching the real ones.
 - Do not weaken containment to "make progress": no auto-release of the quarantine, no hold release without proof, no recovery while quarantined, no replay of failed work.
 - Restart-while-queued physical verification (held then released against a running Forge) is an open owner decision, not something to run opportunistically.

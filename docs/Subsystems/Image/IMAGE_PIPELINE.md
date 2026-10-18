@@ -195,7 +195,7 @@ Provenance is best-effort in places and can be lost silently (audit B9) [V/A]: t
 8. Conditioning bytes (OpenPose) never enter the NJR, logs or manifests; the job-owned snapshot is hash-verified at the POST.
 9. The registry never gains network or scan-at-import behavior; evidence modules stay header-only and path-free in reports.
 10. Persisted state goes through `src/utils/atomic_io.py`.
-11. Physical GPU work is on HOLD (STATUS.md Holds): no real generation, qualification, runtime restart or Forge start without explicit owner authorization. Tests must not contact a WebUI, model, GPU or display unless explicitly opt-in (`real_backend` marker).
+11. The physical-GPU hold was lifted on 2026-10-18 (STATUS.md Holds); the device-loss quarantine remains. Tests must not contact a WebUI, model, GPU or display unless explicitly opt-in (`real_backend` marker).
 12. Protected actions (push to `main`, merge, publish, secrets, material architecture changes) need explicit owner approval (`AGENTS.md` section 5).
 
 ## 10. How to test
