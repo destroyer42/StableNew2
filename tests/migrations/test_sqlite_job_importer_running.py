@@ -267,3 +267,18 @@ def test_reopening_repository_never_dispatches_imported_interrupted_job(tmp_path
             queue = JobQueue(repository=repository)
             assert queue.claim_next_job() is None
             assert queue.get_next_job() is None
+
+
+def test_running_under_the_history_job_status_alias_is_not_made_runnable(tmp_path: Path) -> None:
+    item = _running_record("aliased")
+    item["job_status"] = item.pop("status")
+    database = tmp_path / "jobs.sqlite3"
+    source = tmp_path / "history.json"
+    source.write_text(json.dumps(item), encoding="utf-8")
+
+    result = import_legacy_state(
+        database_path=database, sources=[(source, "history")], dry_run=False
+    )
+
+    assert result.validation["runnable_count"] == 0
+    assert result.validation["status_by_identity"] == {"aliased": "failed"}

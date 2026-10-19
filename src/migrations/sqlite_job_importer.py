@@ -394,7 +394,8 @@ def _record_to_job(raw: Mapping[str, Any], source_kind: str) -> Job:
         raise LegacyImportError(
             f"identity {identity!r} disagrees with immutable NJR {record.job_id!r}"
         )
-    raw_status = str(raw.get("status") or "queued").lower()
+    # ``job_status`` is the alias ``HistoryRecord.from_dict`` accepts; ignoring it would default a RUNNING record to QUEUED.
+    raw_status = str(raw.get("status") or raw.get("job_status") or "queued").lower()
     if raw_status not in _STATUS_MAP:
         raise LegacyImportError(f"job {identity}: unsupported status {raw_status!r}")
     status = _STATUS_MAP[raw_status]
