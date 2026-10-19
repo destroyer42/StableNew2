@@ -283,7 +283,7 @@ def launch_contained(
         # Whatever went wrong (including an interrupt), a child that may be suspended or uncontained is never left behind
         # and the container is released exactly once. ``created`` reaches a child whose Popen call did not return.
         child = process if process is not None else (created[0] if created else None)
-        if process is not None or getattr(child, "pid", None) is not None:
+        if child is not None and (process is not None or getattr(child, "pid", None) is not None):
             _terminate_uncontained(child, container, close_streams=not adopting)
         else:
             _release(container)  # nothing reachable was created: only the container can be released
