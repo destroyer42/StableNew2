@@ -15,15 +15,14 @@ from src.api.webui_process_manager import (
     clear_global_webui_process_manager,
     kill_orphaned_webui_processes_blocking_port,
 )
-from src.utils.process_container_v2 import NullProcessContainer
 from src.video.comfy_process_manager import ComfyProcessConfig, ComfyProcessManager
-from tests.helpers.webui_mocks import DummyProcess
+from tests.helpers.webui_mocks import DummyProcess, RecordingContainer
 
 
 def _manager(monkeypatch, *, working_dir=None, base_url=None) -> WebUIProcessManager:
     monkeypatch.setattr(
         "src.api.webui_process_manager.build_process_container",
-        lambda job_id, config: NullProcessContainer(job_id, config),
+        lambda job_id, config: RecordingContainer(job_id, config),  # explicit successful containment
     )
     manager = WebUIProcessManager(
         WebUIProcessConfig(
@@ -233,6 +232,10 @@ def test_owned_disposable_process_tree_is_stopped(monkeypatch, tmp_path) -> None
         "time.sleep(60)"
     )
     manager = _manager(monkeypatch, working_dir=str(tmp_path))
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.build_process_container",
+        lambda job_id, config: RecordingContainer(job_id, config, resume_for_real=True),
+    )
     manager._config.command = [sys.executable, "-c", code]
     monkeypatch.setattr(
         "src.utils.single_instance.SingleInstanceLock.is_gui_running", lambda: True

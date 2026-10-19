@@ -71,9 +71,11 @@ def test_the_job_object_is_anonymous() -> None:
         second.close()
 
 
-def test_each_webui_process_manager_gets_a_unique_container_label(
+def test_each_webui_launch_gets_a_unique_container_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A container is built per launch (never at construction, never reused), each with its own label."""
+
     import src.api.webui_process_manager as wpm
 
     labels: list[str] = []
@@ -86,6 +88,10 @@ def test_each_webui_process_manager_gets_a_unique_container_label(
     config = wpm.WebUIProcessConfig(command=["python", "--version"], working_dir=".")
     first = wpm.WebUIProcessManager(config)
     second = wpm.WebUIProcessManager(config)
-    assert len(labels) == 2 and labels[0] != labels[1]
+    assert labels == []
+    first._build_launch_container(required=False)
+    second._build_launch_container(required=False)
+    first._build_launch_container(required=False)
+    assert len(labels) == 3 and len(set(labels)) == 3
     assert all(label.startswith("webui_process_manager-") for label in labels)
     del first, second

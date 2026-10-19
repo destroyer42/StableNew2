@@ -139,7 +139,11 @@ def _terminate_uncontained(process: subprocess.Popen[Any], container: ProcessCon
         process.wait(timeout=_KILL_WAIT_SECONDS)
     except (subprocess.TimeoutExpired, OSError):
         pass
-    for stream in (process.stdin, process.stdout, process.stderr):
+    for stream in (
+        getattr(process, "stdin", None),
+        getattr(process, "stdout", None),
+        getattr(process, "stderr", None),
+    ):
         try:
             if stream is not None:
                 stream.close()  # no reader exists yet, so this cannot block
@@ -148,24 +152,31 @@ def _terminate_uncontained(process: subprocess.Popen[Any], container: ProcessCon
     _release(container)
 
 
-def _spawn_contained(
+def launch_contained(
     command: Sequence[str],
     *,
     label: str,
-    require_containment: bool | None,
-    cwd: str | None,
-    env: Mapping[str, str] | None,
+    required: bool,
+    container: ProcessContainer,
+    creationflags: int = 0,
+    require_suspended: bool = False,
+    **popen_kwargs: Any,
 ) -> _Spawned:
-    """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
+    """Start ``command`` inside ``container``; the one place a child is created, placed and resumed.
 
-    Raises ``ContainmentError`` (with the child already killed) when containment is required and could not be
-    established, and ``OSError`` when the child cannot launch at all."""
+    Takes ownership of ``container``: on any failure it is released, so the caller never tears it down twice.  On
+    Windows the child is created suspended, assigned to the job object and only then resumed, so it and its
+    descendants provably start inside the job.  Where ``required`` and containment cannot be established (no
+    container, no suspended-start support when ``require_suspended``, an assignment the OS refuses or that raises, a
+    resume the OS refuses) the child is killed, waited for and ``ContainmentError`` is raised.  An interrupt anywhere
+    after the child exists kills it too.  ``popen_kwargs`` go to ``subprocess.Popen`` unchanged.
 
-    required = containment_required() if require_containment is None else require_containment
-    container = build_process_container(label, ProcessContainerConfig(enabled=True))
+    Raises ``OSError`` when the child cannot launch at all."""
+
     if isinstance(container, NullProcessContainer):
         reason = getattr(container, "reason", "") or "no container available"
         if required:
+            _release(container)
             raise ContainmentError(
                 f"{label}: an OS process container is required on this platform but none is available "
                 f"({reason}); the child was not started"
@@ -175,20 +186,19 @@ def _spawn_contained(
             label,
             reason,
         )
-    suspended = os.name == "nt" and bool(getattr(container, "supports_suspended_start", False))
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    can_suspend = bool(getattr(container, "supports_suspended_start", False))
+    if required and require_suspended and os.name == "nt" and not can_suspend:
+        _release(container)
+        raise ContainmentError(
+            f"{label}: the OS process container cannot adopt a suspended child, so containment before the first "
+            "instruction cannot be guaranteed; the child was not started"
+        )
+    suspended = os.name == "nt" and can_suspend
     if suspended:
         creationflags |= _CREATE_SUSPENDED
+    popen_kwargs["creationflags"] = creationflags if os.name == "nt" else 0
     try:
-        process = subprocess.Popen(  # noqa: S603 - argv list, no shell
-            list(command),
-            cwd=cwd,
-            env=None if env is None else dict(env),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            creationflags=creationflags,
-        )
+        process = subprocess.Popen(list(command), **popen_kwargs)  # noqa: S603 - argv list, no shell
     except BaseException:
         _release(container)
         raise
@@ -209,9 +219,13 @@ def _spawn_contained(
         if not attached:
             logger.warning("[managed_process] %s: %s; running it uncontained", label, failure)
         if suspended:
-            from src.utils.win_jobobject import resume_suspended_process
-
-            if not resume_suspended_process(process.pid):
+            try:
+                resumed = bool(container.resume_suspended(process.pid))
+            except Exception as exc:  # noqa: BLE001
+                raise ContainmentError(
+                    f"{label}: resuming the suspended child failed: {exc}; it was stopped"
+                ) from exc
+            if not resumed:
                 raise ContainmentError(
                     f"{label}: the suspended child could not be resumed; it was stopped"
                 )
@@ -220,6 +234,34 @@ def _spawn_contained(
         _terminate_uncontained(process, container)
         raise
     return _Spawned(process, container, attached)
+
+
+def _spawn_contained(
+    command: Sequence[str],
+    *,
+    label: str,
+    require_containment: bool | None,
+    cwd: str | None,
+    env: Mapping[str, str] | None,
+) -> _Spawned:
+    """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
+
+    Raises ``ContainmentError`` (with the child already killed) when containment is required and could not be
+    established, and ``OSError`` when the child cannot launch at all."""
+
+    required = containment_required() if require_containment is None else require_containment
+    return launch_contained(
+        command,
+        label=label,
+        required=required,
+        container=build_process_container(label, ProcessContainerConfig(enabled=True)),
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        cwd=cwd,
+        env=None if env is None else dict(env),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
 
 def _kill_tree(process: subprocess.Popen[Any], container: ProcessContainer | None) -> None:
