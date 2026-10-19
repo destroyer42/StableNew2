@@ -9,6 +9,7 @@ from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
 from src.video.driving_video_inspection import inspect_driving_video as _inspect_video
+from src.video.motion_source_preparation import prepare_for_form
 from src.video.video_workflow_batch import (
     BatchAdmissionResult,
     BatchPlan,
@@ -98,8 +99,9 @@ class VideoWorkflowController:
                     "frame_count": frame_count_projection(spec),
                     "operator_controls": operator_controls_projection(spec),
                     "motion_readiness": motion_readiness_projection(spec),
-                    "operator_projection": self._mapping_dict(
+                    "operator_projection": dict(
                         (getattr(spec, "backend_defaults", None) or {}).get("operator_projection")
+                        or {}
                     ),
                 }
             )
@@ -139,12 +141,6 @@ class VideoWorkflowController:
             "continuity_pack_name": "",
             "continuity_pack_summary": None,
         }
-
-    @staticmethod
-    def _mapping_dict(value: Any) -> dict[str, Any]:
-        if isinstance(value, Mapping):
-            return dict(value)
-        return {}
 
     def validate_source_image(self, path: str | Path) -> tuple[bool, str | None]:
         return self._njr_builder.validate_source_image(path)
@@ -255,3 +251,9 @@ class VideoWorkflowController:
         """Bounded, read-only probe plus small preview frames (worker-thread safe)."""
 
         return _inspect_video(video_path, cancel=cancel)
+
+    def prepare_motion_source(self, form: Any, request: Any, cancel: Any = None) -> Any:
+        """Prepare the form's driving clip for its workflow (worker-thread safe)."""
+
+        builder = self._njr_builder
+        return prepare_for_form(builder.spec_for(form), form, request, builder.output_dir(), cancel)

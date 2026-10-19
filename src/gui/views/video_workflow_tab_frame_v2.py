@@ -13,6 +13,7 @@ from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
 from src.gui.view_contracts.video_batch_contract import VideoBatchSession
 from src.gui.view_contracts.video_experiment_contract import VideoExperimentSession
+from src.gui.view_contracts.video_motion_prep_contract import MotionPreparationSession
 from src.gui.view_contracts.video_motion_readiness_contract import MotionReadinessSession
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
@@ -22,6 +23,7 @@ from src.gui.view_contracts.workspace_density_contract import changed_value_coun
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
+from src.gui.views.video_workflow_motion_prep_panel_v2 import WorkflowMotionPreparationPanel
 from src.gui.views.video_workflow_motion_readiness_panel_v2 import WorkflowMotionReadinessPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
@@ -178,6 +180,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             inspect_video=lambda path, cancel: self._experiment_controller().inspect_driving_video(
                 path, cancel
             ),
+        )
+        # Optional "Prepare Motion Source" (PR-VID-MOTION-210): transient, never saved with the
+        # form; the controller prepares, the job builder re-verifies what it produced.
+        self._motion_prep_session = MotionPreparationSession(
+            prepare=lambda form, request, cancel: (
+                self._experiment_controller().prepare_motion_source(form, request, cancel)
+            )
         )
 
         self.columnconfigure(0, weight=1)
@@ -498,13 +507,25 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         # PR-VID-196: exact prepared-source preview, bounded driving-video facts, geometry/timing
         # advisories and workflow-aware motion guidance.  Read-only; hidden until there is content.
+        motion_container = ttk.Frame(body, style="Panel.TFrame")
+        motion_container.grid(row=6, column=0, columnspan=4, sticky="ew")
+        motion_container.columnconfigure(0, weight=1)
         self.motion_readiness_panel = WorkflowMotionReadinessPanel(
-            body,
+            motion_container,
             session=self._motion_readiness_session,
             read_inputs=self._read_motion_readiness_inputs,
         )
-        self.motion_readiness_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.motion_readiness_panel.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self.motion_readiness_panel.grid_remove()
+        # PR-VID-MOTION-210: optional exact preparation of the driving clip for this workflow.
+        self.motion_prep_panel = WorkflowMotionPreparationPanel(
+            motion_container,
+            session=self._motion_prep_session,
+            read_form=self._read_motion_prep_form,
+            on_change=self._invalidate_experiment_preview,
+        )
+        self.motion_prep_panel.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        self.motion_prep_panel.grid_remove()
         # PR-GUI-110: collapsible; every control and value stays alive while collapsed, and a collapsed header
         # that hides non-default values says so (see _refresh_conditioning_status).
         self.conditioning_section = DisclosureSection(body, title="Advanced Conditioning")
@@ -820,6 +841,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state["frame_count"] = self._frame_count_labels.get(self.frame_count_var.get())
         if bool(visible.get("pose_video", False)):
             state["pose_video_path"] = self.pose_video_var.get().strip()
+            if for_submission:
+                # The prepared record, or a blocker while a preparation is running/failed/stale.
+                state.update(self.motion_prep_panel.submission_fields())
         if self.workflow_controls_panel.control_names:
             state["operator_controls"] = self.workflow_controls_panel.get_values()
         if for_submission:
@@ -1070,6 +1094,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         readiness_panel = getattr(self, "motion_readiness_panel", None)
         if readiness_panel is not None:
             readiness_panel.request_refresh()  # debounced; the session de-duplicates unchanged inputs
+        prep_panel = getattr(self, "motion_prep_panel", None)
+        if prep_panel is not None:
+            prep_panel.refresh()
 
     def _refresh_conditioning_status(self, workflow_meta: dict[str, Any]) -> None:
         """Collapsed-header hint: say so when hidden conditioning is active or edited from its default."""
@@ -1119,6 +1146,29 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             "readiness": readiness if isinstance(readiness, dict) else None,
             "frame_count": meta.get("frame_count"),
             "selected_frames": selected,
+        }
+
+    def _read_motion_prep_form(self) -> dict[str, Any]:
+        """What the Prepare Motion Source panel needs from the form (Tk reads happen here)."""
+
+        meta = self._workflow_map.get(self.workflow_var.get(), {})
+        readiness = dict(meta.get("motion_readiness") or {})
+        accepts = bool(readiness.get("accepts_driving_video"))
+        consumption = dict(readiness.get("driving_frame_consumption") or {})
+        frame_meta = dict(meta.get("frame_count") or {})
+        available = accepts and bool(consumption.get("verified")) and bool(frame_meta)
+        reason = ""
+        if accepts and not available:
+            detail = str(consumption.get("reason") or "") or "it declares no generation length."
+            reason = f"Preparation is not offered for this workflow: {detail}"
+        return {
+            "available": available,
+            "unavailable_reason": reason,
+            "workflow_id": str(meta.get("workflow_id") or self.workflow_var.get()),
+            "workflow_version": str(meta.get("workflow_version") or ""),
+            "frame_count": self._frame_count_labels.get(self.frame_count_var.get()),
+            "output_fps": frame_meta.get("fps"),
+            "clip_path": self.pose_video_var.get().strip(),
         }
 
     def _invalidate_experiment_preview(self) -> None:

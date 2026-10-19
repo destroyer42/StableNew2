@@ -82,7 +82,13 @@ def _driving_video_provenance(stage_config: Mapping[str, Any]) -> dict[str, Any]
     path = str(stage_config.get("pose_video_path") or "").strip()
     if not path:
         return {}
-    return {"pose_video": {"path": path, "sha256": stage_config.get("pose_video_sha256")}}
+    record: dict[str, Any] = {
+        "pose_video": {"path": path, "sha256": stage_config.get("pose_video_sha256")}
+    }
+    preparation = stage_config.get("motion_source_preparation")
+    if isinstance(preparation, Mapping) and preparation:
+        record["motion_source_preparation"] = dict(preparation)  # PR-VID-MOTION-210
+    return record
 
 
 def _file_sha256(path: Any) -> str | None:
