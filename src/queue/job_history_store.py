@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 
 
 INTERRUPTED_RESTART_ACTION_REQUIRED = "INTERRUPTED_RESTART_ACTION_REQUIRED"
+#: Persisted when an operator's Cancel and Return could not be honoured because dispatch was not provably absent: the
+#: job is CANCELLED (never requeued) and carries an envelope of this type plus the control action below.
+CANCEL_RETURN_REFUSED_DISPATCH_UNCERTAIN = "CANCEL_RETURN_REFUSED_DISPATCH_UNCERTAIN"
+RETURN_REFUSED_CONTROL_ACTION = "return_to_queue_refused_dispatch_uncertain"
 
 
 def _utcnow() -> datetime:

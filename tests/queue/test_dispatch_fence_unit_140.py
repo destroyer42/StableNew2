@@ -6,6 +6,7 @@ import threading
 import time
 from pathlib import Path
 
+from src.queue.dispatch_evidence import NEVER_INVOKED
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
@@ -57,7 +58,7 @@ def test_return_to_queue_and_cancellation_of_the_running_job_still_work_when_fen
     queue.claim_next_job()
     queue.fence_dispatch()
 
-    queue.cancel_running_job(return_to_queue=True)
+    queue.cancel_running_job(return_to_queue=True, assessment=NEVER_INVOKED)
 
     assert repository.get_job_model("A").status is JobStatus.QUEUED  # durable: resumes on the next start
     assert queue.claim_next_job() is None

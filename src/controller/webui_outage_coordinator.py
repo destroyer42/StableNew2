@@ -24,7 +24,7 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -32,11 +32,8 @@ from src.api.webui_failure_evidence import (
     DispatchCertainty,
     FailureAssessment,
     FailureCategory,
-    assess_exception,
-    assess_result,
-    completed_work,
 )
-from src.queue.backend_dependency import BackendDependency, classify_job
+from src.queue.dispatch_evidence import assess_dispatch
 from src.queue.job_queue import JobQueue
 from src.utils import LogContext, log_with_ctx
 
@@ -197,18 +194,8 @@ class WebUIOutageCoordinator:
     ) -> OutageDecision:
         """Classify one failed job; take one fresh read-only health assessment only for a suspected outage."""
 
-        dependency = classify_job(job).dependency
-        runs_webui = dependency is not BackendDependency.INDEPENDENT_VIDEO
-        if exc is not None:
-            assessment = assess_exception(exc, job_runs_webui_stage=runs_webui)
-        else:
-            assessment = assess_result(result, job_runs_webui_stage=runs_webui)
-        if (
-            job.execution_metadata.stage_checkpoints
-            or completed_work(result or {})
-            or completed_work(getattr(job, "result", None) or {})
-        ):
-            assessment = replace(assessment, safe_to_requeue=False)
+        # The same dispatch-certainty verdict the operator's Cancel and Return is held to (src/queue/dispatch_evidence).
+        assessment, runs_webui = assess_dispatch(job, result=result, exc=exc)
         if not runs_webui or not assessment.suspects_outage or self._fenced():
             return OutageDecision(assessment)
         probe = self._fresh_probe()

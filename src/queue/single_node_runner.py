@@ -12,8 +12,10 @@ from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
+from src.api.webui_failure_evidence import FailureAssessment
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.pipeline.pipeline_runner import normalize_run_result
+from src.queue.dispatch_evidence import NEVER_INVOKED, NO_EVIDENCE, assess_dispatch
 from src.queue.job_model import Job, JobStatus, StageCheckpoint
 from src.queue.job_queue import JobQueue
 from src.utils import LogContext, log_with_ctx
@@ -149,6 +151,9 @@ class SingleNodeJobRunner:
         self._cancel_current = threading.Event()
         self._current_cancel_token: CancelToken | None = None
         self._cancel_return_to_queue = False
+        # The job the run callable was last invoked for: the worker's own proof of whether a stop request found
+        # the job before or after anything could have been dispatched.
+        self._invoked_job_id: str | None = None
         # PR-CORE1-D21B: Activity callback
         self._on_activity = on_activity
         # BUGFIX: Pause state callback
@@ -222,7 +227,12 @@ class SingleNodeJobRunner:
             return False
         if job.execution_metadata.stage_checkpoints:
             return False
-        restored = self.job_queue.return_undispatched_to_queue(job.job_id, reason="webui_outage")
+        assessment = getattr(decision, "assessment", None)
+        if assessment is None:
+            return False
+        restored = self.job_queue.return_undispatched_to_queue(
+            job.job_id, reason="webui_outage", assessment=assessment
+        )
         if restored is None:
             return False
         self._notify(restored, JobStatus.QUEUED)
@@ -279,7 +289,39 @@ class SingleNodeJobRunner:
         """Invoke the job's callable exactly once: a failure is assessed, never replayed."""
         if self.run_callable is None:
             return None
+        self._invoked_job_id = job.job_id
         return self.run_callable(job)
+
+    def _return_evidence(
+        self, job: Job, *, result: dict[str, Any] | None, exc: BaseException | None
+    ) -> FailureAssessment:
+        """Dispatch evidence for a stop request that asked to return the job (never guessed; unknown stays unknown)."""
+        if self._invoked_job_id != job.job_id:
+            return NEVER_INVOKED  # the callable was never called: no stage, no backend request can have started
+        try:
+            return assess_dispatch(job, result=result, exc=exc)[0]
+        except Exception:  # noqa: BLE001 - fail closed: an unassessable attempt is never requeued
+            logger.exception("Dispatch assessment failed for job %s; it will not be returned to the queue", job.job_id)
+            return NO_EVIDENCE
+
+    def _settle_cancel(
+        self, job: Job, *, result: dict[str, Any] | None = None, exc: BaseException | None = None
+    ) -> Job:
+        """Carry out the pending Cancel (and Return) of ``job`` and announce the status it actually reached.
+
+        A return happens only on positive evidence that nothing was dispatched; otherwise the queue cancels the job
+        and records the operator-action-required envelope (see ``JobQueue.cancel_running_job``).
+        """
+        evidence = (
+            self._return_evidence(job, result=result, exc=exc) if self._cancel_return_to_queue else None
+        )
+        settled = self.job_queue.cancel_running_job(
+            return_to_queue=self._cancel_return_to_queue, job_id=job.job_id, assessment=evidence
+        )
+        if settled is None:  # the job moved on first: report what is durable
+            settled = self.job_queue.get_job(job.job_id) or job
+        self._notify(settled, settled.status)
+        return settled
 
     def _launch_worker(self, mode: str, job: Job | None = None) -> None:
         """Start a worker thread of ``mode``; the caller holds ``_lifecycle_lock``."""
@@ -447,18 +489,13 @@ class SingleNodeJobRunner:
                 },
             )
             self._notify(job, JobStatus.RUNNING)
+            self._invoked_job_id = None
             self._current_job = job
             self._current_cancel_token = CancelToken()
             job._cancel_token = self._current_cancel_token
             try:
                 if self._cancel_current.is_set():
-                    queued_job = self.job_queue.cancel_running_job(
-                        return_to_queue=self._cancel_return_to_queue
-                    )
-                    self._notify(
-                        queued_job or job,
-                        JobStatus.QUEUED if self._cancel_return_to_queue else JobStatus.CANCELLED,
-                    )
+                    self._settle_cancel(job)
                     continue
                 if self.run_callable:
                     job_log = (
@@ -486,13 +523,7 @@ class SingleNodeJobRunner:
                 metadata["duration_ms"] = duration_ms
                 canonical_result["metadata"] = metadata
                 if self._cancel_current.is_set():
-                    queued_job = self.job_queue.cancel_running_job(
-                        return_to_queue=self._cancel_return_to_queue
-                    )
-                    self._notify(
-                        queued_job or job,
-                        JobStatus.QUEUED if self._cancel_return_to_queue else JobStatus.CANCELLED,
-                    )
+                    self._settle_cancel(job, result=canonical_result)
                     continue
                 error_message = canonical_result.get("error")
                 success = canonical_result.get("success")
@@ -559,8 +590,7 @@ class SingleNodeJobRunner:
                 self._after_failure(decision)
             except Exception as exc:  # noqa: BLE001
                 if self._cancel_current.is_set() or isinstance(exc, CancellationError):
-                    self.job_queue.mark_cancelled(job.job_id, "cancelled")
-                    self._notify(job, JobStatus.CANCELLED)
+                    self._settle_cancel(job, exc=exc)
                     continue
                 decision = self._observe_failure(job, exc=exc)
                 if self._restore_if_undispatched(job, decision):
@@ -612,6 +642,7 @@ class SingleNodeJobRunner:
             return None
         self._cancel_current.clear()
         self._cancel_return_to_queue = False
+        self._invoked_job_id = None
         self._current_cancel_token = CancelToken()
         job._cancel_token = self._current_cancel_token
         self._current_job = job
@@ -630,13 +661,7 @@ class SingleNodeJobRunner:
         self._notify(job, JobStatus.RUNNING)
         try:
             if self._cancel_current.is_set():
-                queued_job = self.job_queue.cancel_running_job(
-                    return_to_queue=self._cancel_return_to_queue
-                )
-                self._notify(
-                    queued_job or job,
-                    JobStatus.QUEUED if self._cancel_return_to_queue else JobStatus.CANCELLED,
-                )
+                self._settle_cancel(job)
                 return None
             # PR-CORE1-D21B: Activity before running job
             if self._on_activity:
@@ -648,13 +673,7 @@ class SingleNodeJobRunner:
                 result = None
             canonical_result = normalize_run_result(result, default_run_id=job.job_id)
             if self._cancel_current.is_set():
-                queued_job = self.job_queue.cancel_running_job(
-                    return_to_queue=self._cancel_return_to_queue
-                )
-                self._notify(
-                    queued_job or job,
-                    JobStatus.QUEUED if self._cancel_return_to_queue else JobStatus.CANCELLED,
-                )
+                self._settle_cancel(job, result=canonical_result)
                 return canonical_result
             error_message = canonical_result.get("error")
             success = canonical_result.get("success")
@@ -701,8 +720,7 @@ class SingleNodeJobRunner:
             return canonical_result
         except Exception as exc:  # noqa: BLE001
             if self._cancel_current.is_set() or isinstance(exc, CancellationError):
-                self.job_queue.mark_cancelled(job.job_id, "cancelled")
-                self._notify(job, JobStatus.CANCELLED)
+                self._settle_cancel(job, exc=exc)
                 return None
             # PR-CORE1-D21B: Activity on exception
             if self._on_activity:

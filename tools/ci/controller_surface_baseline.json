@@ -5,7 +5,7 @@
   "ceilings": {
     "src/controller/app_controller.py": 7302,
     "src/controller/job_history_service.py": 647,
-    "src/controller/job_service.py": 1230,
+    "src/controller/job_service.py": 1227,
     "src/controller/pipeline_controller.py": 1757
   }
 }

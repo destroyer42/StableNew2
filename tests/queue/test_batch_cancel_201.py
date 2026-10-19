@@ -9,6 +9,7 @@ import pytest
 
 from src.controller.batch_operations_service import BatchOperationRefused
 from src.queue.batch_membership import BatchKey, BatchKind
+from src.queue.dispatch_evidence import NEVER_INVOKED
 from src.queue.job_model import JobStatus
 from src.queue.job_repository import InvalidLifecycleTransition, JobStatusChanged
 from tests.helpers.batch_ops_201 import (
@@ -185,7 +186,7 @@ def test_a_member_that_returned_to_the_queue_after_confirmation_is_not_cancelled
     a_ids, _ = _populate(stack, a=3, b=0, ordinary=0)
     plan = stack.operations.plan_cancel_remaining(A)
     stack.queue.claim_next_job()
-    stack.queue.cancel_running_job(return_to_queue=True)  # back to QUEUED after the dialog
+    stack.queue.cancel_running_job(return_to_queue=True, assessment=NEVER_INVOKED)  # back to QUEUED after the dialog
     # Confirmation covered only the other two jobs.
     result = stack.operations.cancel_remaining(A, confirmed_job_ids=a_ids[1:])
     assert result.cancelled == tuple(a_ids[1:]) and status_of(stack, a_ids[0]) is JobStatus.QUEUED

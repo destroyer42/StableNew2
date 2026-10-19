@@ -150,13 +150,15 @@ class JobExecutionController:
         Converts status dict to RuntimeJobStatus and forwards to app_state.
         """
         job_id = str(status_data.get("job_id") or "")
-        job = self._queue.get_job(job_id) if job_id else None
         reported = max(0.0, min(1.0, float(status_data.get("progress") or 0.0)))
-        if job is not None and job.status == JobStatus.RUNNING:
-            job.progress = max(job.progress, reported)
-            eta = status_data.get("eta_seconds")
-            job.eta_seconds = float(eta) if eta is not None else None
-            self._queue.persist_runtime_state(job)
+        # Serialized with every lifecycle transition by the queue: a report that loses the race with a return, a
+        # completion or a cancel is dropped instead of being written onto the job's new state.
+        job = (
+            self._queue.record_progress(job_id, reported, status_data.get("eta_seconds"))
+            if job_id
+            else None
+        )
+        if job is not None:
             reported = job.progress
         status_data["progress"] = reported
 
@@ -226,10 +228,10 @@ class JobExecutionController:
         self.start()
 
     def cancel_job(self, job_id: str) -> None:
-        # Mark as cancelled so runner will skip it if not already running.
-        job = next((j for j in self._queue.list_jobs() if j.job_id == job_id), None)
-        if job and job.status == JobStatus.QUEUED:
-            job.mark_status(JobStatus.CANCELLED)
+        # Only a still-QUEUED job is cancelled here, through the queue's guarded transition: the repository decides
+        # and the projection follows. The live job is never edited on its own, and a job a worker already claimed
+        # is left alone.
+        self._queue.cancel_if_queued(job_id, "cancelled")
 
     def get_job_status(self, job_id: str) -> JobStatus | None:
         job = next((j for j in self._queue.list_jobs() if j.job_id == job_id), None)

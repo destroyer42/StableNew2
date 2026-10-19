@@ -542,7 +542,12 @@ class JobRepository(JobHistoryStore):
         result: dict[str, Any] | None = None,
         expected_status: JobStatus | None = None,
     ) -> Job:
-        """Apply one lifecycle transition atomically.
+        """Apply one lifecycle transition atomically; ``job`` is the caller's candidate and is only read.
+
+        The guarded UPDATE is the durable commit point. When this returns, the transition is committed and the
+        returned ``Job`` is the committed row, read in the same transaction; when it raises, nothing was written. In
+        both cases the candidate itself is left exactly as the caller built it (terminal states reset progress and ETA
+        in the *row*, never in the candidate).
 
         ``expected_status`` makes the transition conditional: the durable status is read inside the same
         transaction that writes it, and a different status raises ``JobStatusChanged`` before any write.
@@ -564,6 +569,7 @@ class JobRepository(JobHistoryStore):
             now = datetime.utcnow()
             started_at = row["started_at"]
             completed_at = row["completed_at"]
+            progress, eta_seconds = float(job.progress), job.eta_seconds
             if status == JobStatus.RUNNING and not started_at:
                 started_at = _iso(job.started_at) or now.isoformat()
             if status == JobStatus.QUEUED:
@@ -571,8 +577,7 @@ class JobRepository(JobHistoryStore):
                 completed_at = None
             elif status in _TERMINAL_STATUSES:
                 completed_at = _iso(job.completed_at) or now.isoformat()
-                job.progress = 0.0
-                job.eta_seconds = None
+                progress, eta_seconds = 0.0, None
             effective_result = result if result is not None else job.result
             effective_error = error_message or job.error_message
             connection.execute(
@@ -588,8 +593,8 @@ class JobRepository(JobHistoryStore):
                     started_at,
                     completed_at,
                     now.isoformat(),
-                    float(job.progress),
-                    job.eta_seconds,
+                    progress,
+                    eta_seconds,
                     str(job.worker_id) if job.worker_id is not None else None,
                     _json_dumps(_execution_metadata_to_dict(job.execution_metadata)),
                     effective_error,
@@ -602,11 +607,33 @@ class JobRepository(JobHistoryStore):
                     current.value,
                 ),
             )
-        persisted = self.get_job_model(job.job_id)
-        if persisted is None:
-            raise JobRepositoryError(f"Failed to reload transitioned job {job.job_id!r}")
-        self._emit(self.get_job(job.job_id))
+            committed_row = connection.execute(
+                "SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)
+            ).fetchone()
+            persisted = self._row_to_job(committed_row)
+            entry = self._row_to_history(committed_row)
+        try:
+            self._emit(entry)
+        except Exception:  # noqa: BLE001 - the transition is already durable; announcing it is best-effort
+            logger.exception("Announcing the committed transition of %s failed", job.job_id)
         return persisted
+
+    def update_progress(self, job_id: str, progress: float, eta_seconds: float | None) -> bool:
+        """Record progress/ETA only while the row is still RUNNING; ``False`` when it is in any other state.
+
+        The status guard is part of the UPDATE, so a report that arrives after the job left RUNNING (returned to the
+        queue, finished, cancelled) can never write onto its new row.
+        """
+
+        with self.transaction() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE jobs SET progress = ?, eta_seconds = ?, updated_at = ?
+                WHERE job_id = ? AND status = 'running'
+                """,
+                (float(progress), eta_seconds, datetime.utcnow().isoformat(), job_id),
+            )
+            return cursor.rowcount == 1
 
     def persist_runtime_state(self, job: Job) -> None:
         with self.transaction() as connection:

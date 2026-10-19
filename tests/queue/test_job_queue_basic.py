@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 
+from src.queue.dispatch_evidence import NEVER_INVOKED
 from src.queue.job_model import JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from tests.helpers.njr_factory import make_queue_job
@@ -152,7 +153,7 @@ def test_cancel_running_job_return_to_queue_requeues_at_back() -> None:
     running = queue.get_next_job()
     queue.mark_running(running.job_id)
 
-    returned = queue.cancel_running_job(return_to_queue=True)
+    returned = queue.cancel_running_job(return_to_queue=True, assessment=NEVER_INVOKED)
 
     assert returned is running
     assert running.status == JobStatus.QUEUED
