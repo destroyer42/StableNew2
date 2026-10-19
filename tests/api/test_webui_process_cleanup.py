@@ -15,15 +15,14 @@ from src.api.webui_process_manager import (
     clear_global_webui_process_manager,
     kill_orphaned_webui_processes_blocking_port,
 )
-from src.utils.process_container_v2 import NullProcessContainer
 from src.video.comfy_process_manager import ComfyProcessConfig, ComfyProcessManager
-from tests.helpers.webui_mocks import DummyProcess
+from tests.helpers.webui_mocks import DummyProcess, RecordingContainer
 
 
 def _manager(monkeypatch, *, working_dir=None, base_url=None) -> WebUIProcessManager:
     monkeypatch.setattr(
         "src.api.webui_process_manager.build_process_container",
-        lambda job_id, config: NullProcessContainer(job_id, config),
+        lambda job_id, config: RecordingContainer(job_id, config),  # explicit successful containment
     )
     manager = WebUIProcessManager(
         WebUIProcessConfig(
@@ -233,18 +232,22 @@ def test_owned_disposable_process_tree_is_stopped(monkeypatch, tmp_path) -> None
         "time.sleep(60)"
     )
     manager = _manager(monkeypatch, working_dir=str(tmp_path))
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.build_process_container",
+        lambda job_id, config: RecordingContainer(job_id, config),
+    )
     manager._config.command = [sys.executable, "-c", code]
     monkeypatch.setattr(
         "src.utils.single_instance.SingleInstanceLock.is_gui_running", lambda: True
     )
     manager.start()
-    deadline = time.monotonic() + 5.0
-    while not child_pid_file.exists() and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert child_pid_file.exists()
-    child_pid = int(child_pid_file.read_text())
-
+    child_pid = None
     try:
+        deadline = time.monotonic() + 5.0
+        while not child_pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert child_pid_file.exists()
+        child_pid = int(child_pid_file.read_text())
         assert manager.owns_process is True
         assert psutil.pid_exists(child_pid)
         assert manager.stop_webui(grace_seconds=0.2) is True

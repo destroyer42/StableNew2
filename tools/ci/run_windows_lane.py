@@ -23,6 +23,8 @@ WINDOWS_LANE_TARGETS = (
     # fail-closed child containment: suspended start, job-object attach, tree kill, owner death (needs a real job object)
     "tests/utils/test_process_containment_failsafe.py",
     "tests/utils/test_managed_process.py",
+    # fail-closed WebUI launch containment: suspended start, anonymous kill-on-close job, unwind, external isolation
+    "tests/api/test_webui_containment_failsafe.py",
     "tests/api",
     "tests/safety",
     "tests/services/test_runtime_transition_service.py",

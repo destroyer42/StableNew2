@@ -33,6 +33,7 @@ def test_the_lane_covers_each_platform_contract_it_exists_for() -> None:
     for contract, marker in {
         "process containment": "test_job_object_isolation",
         "fail-closed child containment": "test_process_containment_failsafe",
+        "fail-closed managed WebUI containment": "test_webui_containment_failsafe",
         "atomic replacement": "test_atomic_io",
         "windows path escaping": "test_diagnose_asset_registry_cache_145",
         "sqlite persistence": "test_job_repository_sqlite",

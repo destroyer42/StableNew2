@@ -40,6 +40,13 @@ class ProcessContainer(ABC):
         """Place ``pid`` in the container.  Returns ``True`` only if the OS accepted it."""
         raise NotImplementedError
 
+    def resume_suspended(self, pid: int) -> bool:
+        """Resume a child created suspended and already placed in this container (``True`` only if the OS accepted).
+
+        Only a container with ``supports_suspended_start`` can honour this; any other refuses, so a caller that
+        created a child suspended never believes it is running when it is not."""
+        return False
+
     def kill_all(self) -> None:
         """Kill all processes managed by this container."""
         raise NotImplementedError
@@ -140,6 +147,11 @@ class WindowsContainerAdapter(ProcessContainer):
 
     def add_pid(self, pid: int) -> bool:
         return bool(self._inner.assign(pid))
+
+    def resume_suspended(self, pid: int) -> bool:
+        from src.utils.win_jobobject import resume_suspended_process
+
+        return bool(resume_suspended_process(pid))
 
     def kill_all(self) -> None:
         self._inner.kill_all()

@@ -153,20 +153,23 @@ def _never_create_real_process_containers_for_webui_managers(monkeypatch: pytest
     """A test-built ``WebUIProcessManager`` must never own a real OS job object / cgroup.
 
     ``stop_webui()`` terminates every process in its container. Tests that mark a fake process as owned and stop
-    the manager therefore exercise a real ``TerminateJobObject``/cgroup kill unless the container is a no-op.
-    Container behavior itself is covered by ``tests/utils/test_job_object_isolation.py`` and
-    ``tests/utils/test_process_container_v2.py``, which call the factory directly. Tests that need a specific
-    container still replace this with their own ``monkeypatch.setattr`` (they run after this fixture).
+    the manager therefore exercise a real ``TerminateJobObject``/cgroup kill unless the container is a double.
+    The double is an explicit *successful* container (the OS accepts the pid and the resume, and nothing is touched):
+    a managed WebUI launch is fail-closed on Windows, so a no-op ``NullProcessContainer`` would make every test launch
+    fail, and production checks are never weakened to suit tests. Container behavior itself is covered by
+    ``tests/utils/test_job_object_isolation.py``, ``tests/utils/test_process_container_v2.py`` and
+    ``tests/api/test_webui_containment_failsafe.py``. Tests that need a specific container (refusing, raising, real)
+    still replace this with their own ``monkeypatch.setattr`` (they run after this fixture).
     """
 
     try:
         import src.api.webui_process_manager as webui_process_manager
-        from src.utils.process_container_v2 import NullProcessContainer
+        from tests.helpers.webui_mocks import RecordingContainer
 
         monkeypatch.setattr(
             webui_process_manager,
             "build_process_container",
-            lambda job_id, config: NullProcessContainer(job_id, config),
+            lambda job_id, config: RecordingContainer(job_id, config),
         )
     except Exception:  # pragma: no cover - isolation must never break collection
         pass
