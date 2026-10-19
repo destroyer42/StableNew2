@@ -142,6 +142,15 @@ READER_DRAIN_SECONDS = 2.0
 LAUNCH_UNWIND_WAIT_SECONDS = 5.0
 
 
+def _best_effort(description: str, action: Callable[[], Any], *, warn: bool = False) -> None:
+    """Run one step of a cleanup that must run every step whatever any one of them raises (logged, never propagated)."""
+    try:
+        action()
+    except Exception as exc:  # noqa: BLE001 - an unwind must reach its remaining steps and its state reset
+        log = logger.warning if warn else logger.debug
+        log("WebUI launch unwind: %s failed: %s", description, exc)
+
+
 class WebUIProcessManager:
     """Owns the lifecycle of the external WebUI process."""
 
@@ -724,35 +733,17 @@ class WebUIProcessManager:
         The state reset is in ``finally``: even a second interrupt during the unwind never leaves the manager pointing
         at a child that has already been killed."""
         try:
-            try:
-                self._stop_orphan_monitor()
-            except Exception:
-                logger.debug("Orphan monitor stop failed while unwinding a launch", exc_info=True)
-            for action in (container.kill_all, process.kill):
-                try:
-                    action()
-                except Exception:
-                    logger.debug("WebUI launch unwind step failed", exc_info=True)
-            try:
-                process.wait(timeout=LAUNCH_UNWIND_WAIT_SECONDS)
-            except Exception:
-                logger.warning(
-                    "WebUI launch unwind: pid %s did not confirm exit", getattr(process, "pid", None)
-                )
-            try:
-                container.teardown()
-            except Exception:
-                logger.debug("WebUI launch unwind: container teardown failed", exc_info=True)
-            try:
-                self._stop_output_capture()
-            except Exception:
-                logger.debug("WebUI launch unwind: output capture stop failed", exc_info=True)
+            _best_effort("stop orphan monitor", self._stop_orphan_monitor)
+            _best_effort("container kill", container.kill_all)
+            _best_effort("process kill", process.kill)
+            _best_effort(
+                "wait for exit", lambda: process.wait(timeout=LAUNCH_UNWIND_WAIT_SECONDS), warn=True
+            )
+            _best_effort("container teardown", container.teardown)
+            _best_effort("stop output capture", self._stop_output_capture)
             for stream in (getattr(process, "stdout", None), getattr(process, "stderr", None)):
                 if stream is not None and not any(stream is item for item in self._abandoned_streams):
-                    try:
-                        stream.close()
-                    except Exception:
-                        pass
+                    _best_effort("close output stream", stream.close)
         finally:
             self._abandoned_streams = []
             self._process = None

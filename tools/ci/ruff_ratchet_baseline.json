@@ -404,8 +404,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1353,
-      "S110": 538,
+      "BLE001": 1350,
+      "S110": 537,
       "S112": 38
     },
     "counts": {
@@ -423,8 +423,8 @@
         "BLE001": 6
       },
       "src/api/webui_process_manager.py": {
-        "BLE001": 37,
-        "S110": 9
+        "BLE001": 34,
+        "S110": 8
       },
       "src/api/webui_resource_service.py": {
         "BLE001": 4,
