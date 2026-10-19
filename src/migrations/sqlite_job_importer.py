@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from src.pipeline.job_models_v2 import LoRATag, NormalizedJobRecord, StageConfig, migrate_legacy_njr
+from src.queue.job_history_store import INTERRUPTED_RESTART_ACTION_REQUIRED
 from src.queue.job_model import (
     Job,
     JobExecutionMetadata,
@@ -23,14 +24,20 @@ from src.queue.job_model import (
     StageCheckpoint,
 )
 from src.queue.job_repository import JobRepository
-from src.utils.error_envelope_v2 import deserialize_envelope
+from src.utils.error_envelope_v2 import (
+    UnifiedErrorEnvelope,
+    deserialize_envelope,
+    serialize_envelope,
+)
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 _STATUS_MAP = {
     "pending": JobStatus.QUEUED,
     "paused": JobStatus.QUEUED,
     "queued": JobStatus.QUEUED,
-    "running": JobStatus.QUEUED,
+    # A legacy RUNNING record was interrupted at an unknown point: it is never made runnable (see
+    # ``_interrupted_envelope``). FAILED is the existing non-runnable, action-required representation.
+    "running": JobStatus.FAILED,
     "completed": JobStatus.COMPLETED,
     "failed": JobStatus.FAILED,
     "cancelled": JobStatus.CANCELLED,
@@ -301,13 +308,64 @@ def _execution_metadata(raw: Mapping[str, Any], interrupted: bool) -> JobExecuti
                     metadata=dict(item.get("metadata") or {}),
                 )
             )
-    action = "legacy_running_requeued" if interrupted else container.get("last_control_action")
+    # Same marker the repository's restart recovery writes, so triage and readiness treat both alike. Nothing was
+    # requeued, so the legacy requeue count is carried over unchanged.
+    action = (
+        "restart_interrupted_action_required"
+        if interrupted
+        else container.get("last_control_action")
+    )
     return JobExecutionMetadata(
         external_pids=[],
         retry_attempts=retries,
         stage_checkpoints=checkpoints,
         last_control_action=str(action) if action else None,
-        return_to_queue_count=int(container.get("return_to_queue_count") or 0) + int(interrupted),
+        return_to_queue_count=int(container.get("return_to_queue_count") or 0),
+    )
+
+
+_INTERRUPTED_MESSAGE = (
+    "This legacy job was RUNNING when its source was captured. Whether its generation was dispatched or completed "
+    "is unknown (this is not a confirmed execution failure), so it was imported as not runnable and was not "
+    "replayed. Inspect available artifacts/backend state, then use Replay Job if you intentionally want a new "
+    "execution."
+)
+
+
+def _interrupted_envelope(
+    identity: str,
+    prior: UnifiedErrorEnvelope | None,
+    source_kind: str,
+    prior_message: str | None,
+) -> UnifiedErrorEnvelope:
+    """The typed action-required envelope, matching ``JobRepository.recover_interrupted_jobs``."""
+    context: dict[str, Any] = {
+        "recovery_identifier": INTERRUPTED_RESTART_ACTION_REQUIRED,
+        "action_required": True,
+        "generation_outcome": "ambiguous",
+        "automatic_replay": False,
+        "legacy_original_status": "running",
+        "legacy_source_kind": source_kind,
+    }
+    if prior is not None:
+        context["prior_error_envelope"] = serialize_envelope(prior)
+    if prior_message:
+        context["prior_error_message"] = prior_message
+    return UnifiedErrorEnvelope(
+        error_type=INTERRUPTED_RESTART_ACTION_REQUIRED,
+        subsystem="legacy_import",
+        severity="ERROR",
+        message=_INTERRUPTED_MESSAGE,
+        cause=None,
+        stack=prior.stack if prior is not None else "",
+        job_id=identity,
+        stage=prior.stage if prior is not None else None,
+        remediation=(
+            "Inspect available artifacts and backend state, then use Replay Job only if you intentionally "
+            "want a new execution."
+        ),
+        context=context,
+        retry_info=prior.retry_info if prior is not None else None,
     )
 
 
@@ -344,6 +402,10 @@ def _record_to_job(raw: Mapping[str, Any], source_kind: str) -> Job:
     metadata_raw = raw.get("metadata")
     metadata: Mapping[str, Any] = metadata_raw if isinstance(metadata_raw, Mapping) else {}
     snapshot_mapping: Mapping[str, Any] = snapshot if isinstance(snapshot, Mapping) else {}
+    interrupted = raw_status == "running"
+    prior_envelope = deserialize_envelope(
+        raw.get("error_envelope") if isinstance(raw.get("error_envelope"), Mapping) else None
+    )
     job = Job(
         job_id=identity,
         priority=_priority(raw.get("priority")),
@@ -352,9 +414,20 @@ def _record_to_job(raw: Mapping[str, Any], source_kind: str) -> Job:
         updated_at=_parse_datetime(raw.get("updated_at")) or created,
         started_at=_parse_datetime(raw.get("started_at")),
         completed_at=_parse_datetime(raw.get("completed_at")),
-        error_message=(str(raw["error_message"]) if raw.get("error_message") else None),
-        error_envelope=deserialize_envelope(
-            raw.get("error_envelope") if isinstance(raw.get("error_envelope"), Mapping) else None
+        error_message=(
+            _INTERRUPTED_MESSAGE
+            if interrupted
+            else (str(raw["error_message"]) if raw.get("error_message") else None)
+        ),
+        error_envelope=(
+            _interrupted_envelope(
+                identity,
+                prior_envelope,
+                source_kind,
+                str(raw["error_message"]) if raw.get("error_message") else None,
+            )
+            if interrupted
+            else prior_envelope
         ),
         result=_extract_result(raw),
         run_mode=str(metadata.get("run_mode") or raw.get("run_mode") or "queue"),
@@ -362,7 +435,7 @@ def _record_to_job(raw: Mapping[str, Any], source_kind: str) -> Job:
         prompt_source=str(metadata.get("prompt_source") or raw.get("prompt_source") or "manual"),
         prompt_pack_id=metadata.get("prompt_pack_id") or raw.get("prompt_pack_id"),
         snapshot=dict(snapshot_mapping),
-        execution_metadata=_execution_metadata(raw, raw_status == "running"),
+        execution_metadata=_execution_metadata(raw, interrupted),
     )
     if (
         status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
