@@ -53,12 +53,21 @@ Direct interpreter launch, a `.cmd` launcher through `cmd.exe /d /s /c` with `sh
 
 ## Residual risks
 
-* The remaining interrupt window is inside CPython `subprocess.Popen._execute_child` on Windows, between `CreateProcess`
-  returning and `self.pid` being assigned (it runs `_close_pipe_fds` first). An interrupt there leaves a suspended, not yet
-  contained child with nothing on the `Popen` object to terminate. Closing it needs a different creation primitive, for example
-  calling `CreateProcessW` ourselves with `PROC_THREAD_ATTRIBUTE_JOB_LIST` so the child is born inside the job (no suspended
-  state at all) instead of `subprocess`; that is an owner decision, not part of this package. Arbitrary bytecode-level
-  asynchronous interrupts are not otherwise claimed to be prevented.
+* The remaining interrupt window that can leave a child is inside CPython `subprocess.Popen._execute_child` on Windows, between
+  `CreateProcess` returning and `self.pid` being assigned (it runs `_close_pipe_fds` first). An interrupt there leaves a
+  suspended, not yet contained child with nothing on the `Popen` object to terminate. Closing it needs a different creation
+  primitive, for example calling `CreateProcessW` ourselves with `PROC_THREAD_ATTRIBUTE_JOB_LIST` so the child is born inside
+  the job (no suspended state at all) instead of `subprocess`; that is an owner decision, not part of this package.
+* A second asynchronous interrupt delivered in the few bytecodes between an exception reaching `launch_contained`'s handler
+  and the first call of the cleanup is not covered. Once cleanup starts, each step (container kill, direct kill, wait, stream
+  close, container release) runs even if an earlier one is interrupted.
+* If `adopt` is interrupted before `_adopt_launch` has stored the process, its open pipe streams are closed by garbage
+  collection rather than explicitly; if a reader thread has started but the manager has not yet stored it, the reset closes that
+  stream under a reader that has already seen EOF from the killed child (it could block only if a descendant escaped the job).
+* An interrupt after adoption completed, between `launch_contained` returning and `_start_locked` storing the result, leaves
+  the manager owning the live, contained child (`_launch_survived`); it is neither reset nor killed, and a retry converges on
+  the same process.
+* Arbitrary bytecode-level asynchronous interrupts are not otherwise claimed to be prevented.
 * Linux and other platforms keep best-effort containment, reported with a WARNING.
 * A descendant that escapes containment and holds the output pipes is not killed by the manager; its reader is abandoned so
   shutdown is bounded, and the pipe closes when the descendant exits.

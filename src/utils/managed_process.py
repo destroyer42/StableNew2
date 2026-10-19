@@ -145,8 +145,9 @@ def _terminate_uncontained(
 ) -> None:
     """Kill a child that was just spawned and could not be contained, and release everything it was given.
 
-    The container is released in a ``finally``: a second interrupt during the kill or the wait still releases it (and
-    exactly once). ``close_streams=False`` is for a child whose output readers may already exist: closing a stream under
+    Every step runs even if an earlier one is interrupted (nested ``finally``): a second interrupt during the container
+    kill still performs the direct kill, the wait, the stream close and the one container release; the first exception
+    then propagates. ``close_streams=False`` is for a child whose output readers may already exist: closing a stream under
     a blocked reader blocks, so its owner drains and closes them with its own bound."""
 
     try:
@@ -154,27 +155,33 @@ def _terminate_uncontained(
             container.kill_all()
         except Exception as exc:  # noqa: BLE001
             logger.debug("[managed_process] container kill failed: %s", exc)
-        try:
-            process.kill()
-        except OSError:
-            pass
-        try:
-            process.wait(timeout=_KILL_WAIT_SECONDS)
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-        if close_streams:
-            for stream in (
-                getattr(process, "stdin", None),
-                getattr(process, "stdout", None),
-                getattr(process, "stderr", None),
-            ):
-                try:
-                    if stream is not None:
-                        stream.close()  # no reader exists yet, so this cannot block
-                except OSError:
-                    pass
     finally:
-        _release(container)
+        try:
+            try:
+                process.kill()
+            except OSError:
+                pass
+        finally:
+            try:
+                try:
+                    process.wait(timeout=_KILL_WAIT_SECONDS)
+                except (subprocess.TimeoutExpired, OSError):
+                    pass
+            finally:
+                try:
+                    if close_streams:
+                        for stream in (
+                            getattr(process, "stdin", None),
+                            getattr(process, "stdout", None),
+                            getattr(process, "stderr", None),
+                        ):
+                            try:
+                                if stream is not None:
+                                    stream.close()  # no reader exists yet, so this cannot block
+                            except OSError:
+                                pass
+                finally:
+                    _release(container)
 
 
 def launch_contained(
@@ -192,8 +199,11 @@ def launch_contained(
 
     **Cleanup ownership.** This function owns the child *and* ``container`` from the first moment either exists until it
     returns. On any failure, including an interrupt at any point after the child exists, it kills the child (through the
-    container and directly), waits, and releases the container exactly once, then re-raises. The caller must not kill or
-    tear down either after an exception. On a normal return ownership passes to the caller.
+    container and directly), waits, and releases the container exactly once, then re-raises; a second interrupt during
+    those steps still runs the remaining ones. The caller must not kill or tear down either after an exception, except
+    that an exception that arrives after ``adopt`` completed (an interrupt between this function returning and the caller
+    storing the result) finds a live, adopted child that the caller already owns. On a normal return ownership passes to
+    the caller.
 
     ``adopt(process, container)`` runs after the child is contained and resumed, still under that ownership: it is where a
     caller publishes the child as its own. If ``adopt`` raises, this function kills and releases as above, so there is no
@@ -273,7 +283,7 @@ def launch_contained(
         # Whatever went wrong (including an interrupt), a child that may be suspended or uncontained is never left behind
         # and the container is released exactly once. ``created`` reaches a child whose Popen call did not return.
         child = process if process is not None else (created[0] if created else None)
-        if child is not None and getattr(child, "pid", None) is not None:
+        if process is not None or getattr(child, "pid", None) is not None:
             _terminate_uncontained(child, container, close_streams=not adopting)
         else:
             _release(container)  # nothing reachable was created: only the container can be released

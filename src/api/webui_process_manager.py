@@ -183,6 +183,8 @@ class WebUIProcessManager:
         # One container per launch, created in ``_start_locked`` and released with the launch (never reused).
         self._process_container: ProcessContainer | None = None
         self._abandoned_streams: list[Any] = []
+        # The child whose adoption completed (set last in ``_adopt_launch``); see ``_launch_survived``.
+        self._adopted_process: subprocess.Popen[Any] | None = None
         self._last_startup_failure: str | None = None
         self._claim_global_registration()
 
@@ -637,6 +639,7 @@ class WebUIProcessManager:
             # descendant outside the job. Elsewhere containment stays best-effort.
             required = os.name == "nt"
             container = self._build_launch_container(required=required)
+            self._adopted_process = None
             try:
                 spawned = launch_contained(
                     launch_command,
@@ -659,7 +662,12 @@ class WebUIProcessManager:
                     bufsize=1,
                 )
             except BaseException as exc:
-                # The child and container are already gone (launch_contained released them); reset only what this
+                if self._launch_survived():
+                    # Adoption completed and the child is alive: the exception came after the hand-over (an interrupt
+                    # between ``launch_contained`` returning and this frame storing the result). The manager owns a live,
+                    # contained child; resetting would orphan it. Nothing failed, so nothing is torn down.
+                    raise
+                # Otherwise launch_contained already killed the child and released the container; reset only what this
                 # manager published or started.
                 self._reset_failed_launch()
                 if isinstance(exc, ContainmentError):
@@ -727,6 +735,23 @@ class WebUIProcessManager:
 
         # Start orphan monitor thread to kill WebUI if StableNew GUI exits
         self._start_orphan_monitor()
+        self._adopted_process = process  # last: the launch is now fully this manager's
+
+    def _launch_survived(self) -> bool:
+        """Whether the child of this launch was fully adopted and is still alive (so a late exception must not reset it).
+
+        Adoption sets the marker as its last statement. If ``launch_contained`` killed the child because adoption was
+        interrupted afterwards, the child is dead and this is False, so the state is reset."""
+        process = self._process
+        try:
+            return (
+                process is not None
+                and self._adopted_process is process
+                and self._owns_process
+                and process.poll() is None
+            )
+        except Exception:  # noqa: BLE001 - an unreadable child is treated as not surviving
+            return False
 
     def _reset_failed_launch(self) -> None:
         """Reset the manager state of a launch that failed (bounded; the state reset itself is in a ``finally``).
@@ -743,6 +768,7 @@ class WebUIProcessManager:
                     _best_effort("close output stream", stream.close)
         finally:
             self._abandoned_streams = []
+            self._adopted_process = None
             self._process = None
             self._pid = None
             self._owns_process = False

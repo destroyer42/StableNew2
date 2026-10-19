@@ -441,6 +441,85 @@ def test_a_second_interrupt_while_killing_still_releases_the_container_once(
     assert container.events.count("teardown") == 1
 
 
+def test_a_second_interrupt_in_the_container_kill_still_kills_the_child_directly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launches = _Launches(monkeypatch)
+
+    class _InterruptedKill(RecordingContainer):
+        def kill_all(self) -> None:
+            super().kill_all()
+            raise KeyboardInterrupt
+
+    container = _InterruptedKill()
+
+    def _adopt(process: Any, owned: Any) -> None:
+        raise RuntimeError("adopt failed")
+
+    with pytest.raises(KeyboardInterrupt):  # the second interrupt wins; the cleanup still completed
+        launch_contained(
+            ["python", "webui.py"], label="t", required=True, container=container, adopt=_adopt
+        )
+
+    assert launches.processes[0].kill_count == 1
+    assert container.events.count("teardown") == 1
+
+
+def test_a_double_that_reports_no_pid_is_still_killed_when_a_later_step_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NoPid(FakeWebUIProcess):
+        def __init__(self) -> None:
+            super().__init__()
+            self.pid = None  # type: ignore[assignment]
+
+    process = _NoPid()
+    monkeypatch.setattr(subprocess, "Popen", lambda command, **kwargs: process)
+    container = RecordingContainer()
+
+    with pytest.raises(RuntimeError):
+        launch_contained(
+            ["python", "webui.py"],
+            label="t",
+            required=True,
+            container=container,
+            adopt=lambda p, owned: (_ for _ in ()).throw(RuntimeError("late")),
+        )
+
+    assert process.killed and container.events.count("teardown") == 1
+
+
+def test_an_interrupt_after_adoption_completed_never_orphans_the_adopted_child(
+    monkeypatch: pytest.MonkeyPatch, windows_policy: None
+) -> None:
+    """The gap after ``launch_contained`` returns and before ``_start_locked`` stores the result."""
+
+    launches = _Launches(monkeypatch)
+    made = _use_containers(monkeypatch, lambda: RecordingContainer())
+    manager = _manager(monkeypatch)
+    monkeypatch.setattr(manager, "_start_orphan_monitor", lambda: None)
+    real_launch = wpm.launch_contained
+
+    def _launch_then_interrupt(*args: Any, **kwargs: Any) -> Any:
+        real_launch(*args, **kwargs)
+        raise KeyboardInterrupt  # adoption has completed; the caller never receives the result
+
+    monkeypatch.setattr(wpm, "launch_contained", _launch_then_interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        manager.start()
+
+    # The manager still owns the live, contained child: nothing was killed, released or forgotten.
+    assert manager.owns_process and manager.pid == launches.processes[0].pid
+    assert not launches.processes[0].killed and made[0].events.count("teardown") == 0
+    assert manager._process_container is made[0]
+    monkeypatch.setattr(wpm, "launch_contained", real_launch)
+    assert manager.start() is launches.processes[0]  # a retry converges on the same process
+    assert len(launches.calls) == 1
+    assert manager.stop_webui(grace_seconds=0.1)
+    assert made[0].events[-2:] == ["kill_all", "teardown"]
+
+
 def test_a_launch_that_creates_no_child_releases_only_the_container(tmp_path: Path) -> None:
     container = RecordingContainer()
 
