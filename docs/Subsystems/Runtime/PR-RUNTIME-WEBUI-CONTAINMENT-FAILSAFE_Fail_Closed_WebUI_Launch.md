@@ -51,5 +51,12 @@ Direct interpreter launch, a `.cmd` launcher through `cmd.exe /d /s /c` with `sh
 * Linux and other platforms keep best-effort containment, reported with a WARNING.
 * A descendant that escapes containment and holds the output pipes is not killed by the manager; its reader is abandoned so
   shutdown is bounded, and the pipe closes when the descendant exits.
+* The occupied-endpoint check runs before an earlier, ended launch is reaped: if that launch's root exited but its own server
+  descendant still holds the port, the next start is refused as "external" and the descendant keeps running (still contained;
+  it dies on `stop`, GUI exit or process exit).
+* The 2 s reader drain can expire while a heavy WebUI is still dying; the reader is then abandoned and ends at EOF. Each launch
+  uses fresh output tails, so an abandoned reader cannot write into the next launch's tails.
+* `main_window_v2.py` swallows a startup exception; the manager therefore also logs a containment failure itself and keeps it in
+  `get_status()["last_startup_failure"]`.
 * The hosted `windows` check is the first run on the hosted runner; qualification against a real Forge launch is not part of this
   package.

@@ -241,13 +241,13 @@ def test_owned_disposable_process_tree_is_stopped(monkeypatch, tmp_path) -> None
         "src.utils.single_instance.SingleInstanceLock.is_gui_running", lambda: True
     )
     manager.start()
-    deadline = time.monotonic() + 5.0
-    while not child_pid_file.exists() and time.monotonic() < deadline:
-        time.sleep(0.05)
-    assert child_pid_file.exists()
-    child_pid = int(child_pid_file.read_text())
-
+    child_pid = None
     try:
+        deadline = time.monotonic() + 5.0
+        while not child_pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert child_pid_file.exists()
+        child_pid = int(child_pid_file.read_text())
         assert manager.owns_process is True
         assert psutil.pid_exists(child_pid)
         assert manager.stop_webui(grace_seconds=0.2) is True

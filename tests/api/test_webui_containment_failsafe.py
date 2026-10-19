@@ -321,6 +321,46 @@ def test_failure_after_publication_unwinds_the_launch(
     assert manager.is_running() is False
 
 
+def test_a_second_interrupt_during_the_unwind_still_resets_launch_state(
+    monkeypatch: pytest.MonkeyPatch, windows_policy: None
+) -> None:
+    launches = _Launches(monkeypatch)
+    _use_containers(monkeypatch, lambda: RecordingContainer())
+    manager = _manager(monkeypatch)
+
+    def _first_interrupt(session: str) -> None:
+        launches.processes[0].wait = _second_interrupt  # type: ignore[method-assign]
+        raise KeyboardInterrupt
+
+    def _second_interrupt(timeout: float | None = None) -> int:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(manager, "_start_output_capture", _first_interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        manager.start()
+
+    assert launches.processes[0].killed
+    _assert_no_published_launch(manager)
+
+
+def test_each_launch_gets_fresh_output_tails(
+    monkeypatch: pytest.MonkeyPatch, windows_policy: None
+) -> None:
+    _Launches(monkeypatch)
+    _use_containers(monkeypatch, lambda: RecordingContainer())
+    manager = _manager(monkeypatch)
+    monkeypatch.setattr(manager, "_start_orphan_monitor", lambda: None)
+    manager.start()
+    first_tail = manager._stdout_tail
+    first_tail.append("from the first launch")
+    manager.stop_webui(grace_seconds=0.1)
+
+    manager.start()
+
+    assert manager._stdout_tail is not first_tail and list(manager._stdout_tail) == []
+
+
 def test_failure_after_publication_reports_the_original_error(
     monkeypatch: pytest.MonkeyPatch, windows_policy: None
 ) -> None:

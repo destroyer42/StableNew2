@@ -657,17 +657,18 @@ class WebUIProcessManager:
             self._publish_launch(spawned.process, spawned.container, run_session_id, ctx)
         except WebUIContainmentError as exc:
             self._last_startup_failure = str(exc)
+            logger.error("%s", exc)  # visible even to callers that swallow the exception
             raise
         except Exception as exc:  # noqa: BLE001 - surface structured error
             self._last_startup_failure = str(exc)
             raise WebUIStartupError(f"Failed to start WebUI: {exc}") from exc
 
         self._last_startup_failure = None
-        return self._process
+        return spawned.process
 
     def _publish_launch(
         self,
-        process: subprocess.Popen,
+        process: subprocess.Popen[Any],
         container: ProcessContainer,
         run_session_id: str,
         ctx: LogContext,
@@ -704,8 +705,9 @@ class WebUIProcessManager:
                     "pid": self._pid,
                 },
             )
-            self._stdout_tail.clear()
-            self._stderr_tail.clear()
+            # Fresh tails per launch: a reader abandoned by an earlier launch keeps its own (old) deques.
+            self._stdout_tail = deque(maxlen=200)
+            self._stderr_tail = deque(maxlen=200)
             self._start_output_capture(run_session_id)
 
             # Start orphan monitor thread to kill WebUI if StableNew GUI exits
@@ -714,45 +716,52 @@ class WebUIProcessManager:
             self._unwind_failed_launch(process, container)
             raise
 
-    def _unwind_failed_launch(self, process: subprocess.Popen, container: ProcessContainer) -> None:
-        """Kill a just-launched child through its own container and reset every piece of launch state (bounded)."""
+    def _unwind_failed_launch(
+        self, process: subprocess.Popen[Any], container: ProcessContainer
+    ) -> None:
+        """Kill a just-launched child through its own container and reset every piece of launch state (bounded).
+
+        The state reset is in ``finally``: even a second interrupt during the unwind never leaves the manager pointing
+        at a child that has already been killed."""
         try:
-            self._stop_orphan_monitor()
-        except Exception:
-            logger.debug("Orphan monitor stop failed while unwinding a launch", exc_info=True)
-        for action in (container.kill_all, process.kill):
             try:
-                action()
+                self._stop_orphan_monitor()
             except Exception:
-                logger.debug("WebUI launch unwind step failed", exc_info=True)
-        try:
-            process.wait(timeout=LAUNCH_UNWIND_WAIT_SECONDS)
-        except Exception:
-            logger.warning(
-                "WebUI launch unwind: pid %s did not confirm exit", getattr(process, "pid", None)
-            )
-        try:
-            container.teardown()
-        except Exception:
-            logger.debug("WebUI launch unwind: container teardown failed", exc_info=True)
-        try:
-            self._stop_output_capture()
-        except Exception:
-            logger.debug("WebUI launch unwind: output capture stop failed", exc_info=True)
-        for stream in (getattr(process, "stdout", None), getattr(process, "stderr", None)):
-            if stream is not None and not any(stream is item for item in self._abandoned_streams):
+                logger.debug("Orphan monitor stop failed while unwinding a launch", exc_info=True)
+            for action in (container.kill_all, process.kill):
                 try:
-                    stream.close()
+                    action()
                 except Exception:
-                    pass
-        self._abandoned_streams = []
-        self._process = None
-        self._pid = None
-        self._owns_process = False
-        self._launch_session_command = None
-        self._process_container = None
-        self._start_time = None
-        self._proven_ready_since_launch = False
+                    logger.debug("WebUI launch unwind step failed", exc_info=True)
+            try:
+                process.wait(timeout=LAUNCH_UNWIND_WAIT_SECONDS)
+            except Exception:
+                logger.warning(
+                    "WebUI launch unwind: pid %s did not confirm exit", getattr(process, "pid", None)
+                )
+            try:
+                container.teardown()
+            except Exception:
+                logger.debug("WebUI launch unwind: container teardown failed", exc_info=True)
+            try:
+                self._stop_output_capture()
+            except Exception:
+                logger.debug("WebUI launch unwind: output capture stop failed", exc_info=True)
+            for stream in (getattr(process, "stdout", None), getattr(process, "stderr", None)):
+                if stream is not None and not any(stream is item for item in self._abandoned_streams):
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+        finally:
+            self._abandoned_streams = []
+            self._process = None
+            self._pid = None
+            self._owns_process = False
+            self._launch_session_command = None
+            self._process_container = None
+            self._start_time = None
+            self._proven_ready_since_launch = False
 
     def _reap_previous_launch(self) -> None:
         """Release what an earlier launch left behind (it ended on its own): its container, readers and PID.
