@@ -25,13 +25,21 @@ invariant 16); this record is the evidence for the change.
   start, assignment, resume, kill-and-release on any failure or interrupt). `_spawn_contained` (`run_bounded`, `ManagedProcess`)
   now calls it, so PR #150's behavior is shared rather than duplicated. `ProcessContainer.resume_suspended` (Windows: via
   `NtResumeProcess`) keeps the resume with the container that created the job.
-* `src/api/webui_process_manager.py`: a fresh container per launch; the child is published (pid, ownership, launch command, readers,
-  orphan monitor) only after containment and resume succeed; `WebUIContainmentError` (a `WebUIStartupError`) for every
-  containment failure; `_unwind_failed_launch` kills the child through its job, waits (bounded), releases the container, stops the
-  readers and monitor and resets all launch state for any failure or interrupt after publication; `_reap_previous_launch` releases
-  the container/readers/pid of a launch that ended on its own; `restart_webui` stops at a containment failure instead of looping;
+* `src/api/webui_process_manager.py`: a fresh container per launch; `WebUIContainmentError` (a `WebUIStartupError`) for every
+  containment failure; the child is published (pid, ownership, launch command, readers, orphan monitor) by `_adopt_launch`, which
+  `launch_contained` runs only after containment and resume succeed and while it still owns the child; `_reset_failed_launch`
+  resets only the manager state after a failure (no second kill, no second teardown); `_reap_previous_launch` releases the
+  container/readers/pid of a launch that ended on its own; `restart_webui` stops at a containment failure instead of looping;
   `get_status()["last_startup_failure"]`; output readers drain within `READER_DRAIN_SECONDS` and a still-blocked reader is
   abandoned with its stream left open.
+* Ownership hand-offs (follow-up review of PR #153). Cleanup ownership is explicit: `launch_contained` owns the child *and* the
+  container from the first moment either exists until `adopt` returns; on any failure or interrupt in that span it kills the
+  child once (container, then process, bounded wait) and releases the container once (in a `finally`, so a second interrupt
+  still releases it), then re-raises. Two leaks were reproduced on `10a0a6bf` and fixed: (A) an interrupt inside `Popen` after
+  the child was created (the suspended child was never reached) is now covered by registering the `Popen` object before the OS
+  process exists (`_TrackedPopen`) and putting the call inside the guard; (B) an interrupt after containment but before the
+  manager recorded the child left a contained, running, unowned WebUI (reproduced with a quiet stand-in) and is now covered by
+  running adoption inside `launch_contained`'s ownership.
 * Tests: `tests/api/test_webui_containment_failsafe.py` (fake-process tests that run everywhere, and real job-object tests on the
   base interpreter that the hosted Windows lane executes); the autouse `tests/conftest.py` double is now an explicit successful
   container (`RecordingContainer`) instead of a `NullProcessContainer`, which a fail-closed launch correctly refuses; the file is a
@@ -45,9 +53,12 @@ Direct interpreter launch, a `.cmd` launcher through `cmd.exe /d /s /c` with `sh
 
 ## Residual risks
 
-* An asynchronous interrupt delivered between `subprocess.Popen` returning and the next statements, or between `launch_contained`
-  returning and `_publish_launch` starting, is not covered by a handler; the job handle is only closed with the process (kill on
-  close), so such a child would stay contained but running until StableNew exits.
+* The remaining interrupt window is inside CPython `subprocess.Popen._execute_child` on Windows, between `CreateProcess`
+  returning and `self.pid` being assigned (it runs `_close_pipe_fds` first). An interrupt there leaves a suspended, not yet
+  contained child with nothing on the `Popen` object to terminate. Closing it needs a different creation primitive, for example
+  calling `CreateProcessW` ourselves with `PROC_THREAD_ATTRIBUTE_JOB_LIST` so the child is born inside the job (no suspended
+  state at all) instead of `subprocess`; that is an owner decision, not part of this package. Arbitrary bytecode-level
+  asynchronous interrupts are not otherwise claimed to be prevented.
 * Linux and other platforms keep best-effort containment, reported with a WARNING.
 * A descendant that escapes containment and holds the output pipes is not killed by the manager; its reader is abandoned so
   shutdown is bounded, and the pipe closes when the descendant exits.

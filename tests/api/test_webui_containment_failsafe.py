@@ -31,7 +31,8 @@ from src.api.webui_process_manager import (
     WebUIStartupError,
     clear_global_webui_process_manager,
 )
-from src.utils.process_container_v2 import build_process_container
+from src.utils.managed_process import launch_contained
+from src.utils.process_container_v2 import ProcessContainerConfig, build_process_container
 from tests.helpers.webui_mocks import FakeWebUIProcess, RecordingContainer
 
 windows_only = pytest.mark.skipif(os.name != "nt", reason="Windows job objects")
@@ -316,6 +317,8 @@ def test_failure_after_publication_unwinds_the_launch(
     assert time.monotonic() - started < 15.0
     assert launches.processes[0].killed
     assert made[0].events[-2:] == ["kill_all", "teardown"]
+    assert made[0].events.count("kill_all") == 1 and made[0].events.count("teardown") == 1
+    assert launches.processes[0].kill_count == 1
     _assert_no_published_launch(manager)
     assert manager.exit_diagnostics() is None
     assert manager.is_running() is False
@@ -359,6 +362,220 @@ def test_each_launch_gets_fresh_output_tails(
     manager.start()
 
     assert manager._stdout_tail is not first_tail and list(manager._stdout_tail) == []
+
+
+# --- ownership hand-off boundaries ------------------------------------------------------------------------------
+#
+# Cleanup ownership is explicit: ``launch_contained`` owns the child and its container from the first moment either
+# exists until its ``adopt`` callback (the manager publishing the child) has returned. Any failure or interrupt up to
+# and including adoption kills the child once and releases the container once; the manager only resets its own state.
+
+
+def test_adopt_runs_after_containment_and_a_normal_return_passes_ownership_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launches = _Launches(monkeypatch)
+    container = RecordingContainer()
+    adopted: list[tuple[Any, list[str]]] = []
+
+    spawned = launch_contained(
+        ["python", "webui.py"],
+        label="t",
+        required=True,
+        container=container,
+        adopt=lambda process, owned: adopted.append((process, list(owned.events))),
+    )
+
+    assert spawned.process is launches.processes[0]
+    expected = ["add_pid", "resume"] if os.name == "nt" else ["add_pid"]
+    assert adopted == [
+        (launches.processes[0], expected)
+    ]  # adopted only after placement (and resume)
+    assert (
+        container.events == expected
+    )  # nothing killed or released: ownership passed to the caller
+    assert not launches.processes[0].killed
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("adopt failed"), KeyboardInterrupt()])
+def test_a_failed_or_interrupted_adopt_kills_once_and_releases_once(
+    monkeypatch: pytest.MonkeyPatch, failure: BaseException
+) -> None:
+    launches = _Launches(monkeypatch)
+    container = RecordingContainer()
+
+    def _adopt(process: Any, owned: Any) -> None:
+        raise failure
+
+    with pytest.raises(type(failure)):
+        launch_contained(
+            ["python", "webui.py"], label="t", required=True, container=container, adopt=_adopt
+        )
+
+    assert launches.processes[0].kill_count == 1
+    assert container.events.count("kill_all") == 1 and container.events.count("teardown") == 1
+    assert container.events[-2:] == ["kill_all", "teardown"]
+    # Output streams are left open: a reader may hold them and closing under it would block.
+    assert not launches.processes[0].stdout.closed and not launches.processes[0].stderr.closed
+
+
+def test_a_second_interrupt_while_killing_still_releases_the_container_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launches = _Launches(monkeypatch)
+    container = RecordingContainer()
+
+    def _adopt(process: Any, owned: Any) -> None:
+        process.wait = _interrupt_again  # type: ignore[method-assign]
+        raise KeyboardInterrupt
+
+    def _interrupt_again(timeout: float | None = None) -> int:
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        launch_contained(
+            ["python", "webui.py"], label="t", required=True, container=container, adopt=_adopt
+        )
+
+    assert launches.processes[0].kill_count == 1
+    assert container.events.count("teardown") == 1
+
+
+def test_a_launch_that_creates_no_child_releases_only_the_container(tmp_path: Path) -> None:
+    container = RecordingContainer()
+
+    with pytest.raises(OSError):
+        launch_contained(
+            [str(tmp_path / "definitely-not-an-executable")],
+            label="t",
+            required=True,
+            container=container,
+            stdout=subprocess.PIPE,
+        )
+
+    assert container.events == ["teardown"]  # nothing to kill, and no double teardown
+
+
+def test_an_interrupt_on_the_first_statement_of_adoption_leaves_nothing_behind(
+    monkeypatch: pytest.MonkeyPatch, windows_policy: None
+) -> None:
+    launches = _Launches(monkeypatch)
+    made = _use_containers(monkeypatch, lambda: RecordingContainer())
+    manager = _manager(monkeypatch)
+
+    def _interrupted(process: Any, container: Any, run_session_id: str, ctx: Any) -> None:
+        raise KeyboardInterrupt  # before this manager has recorded the child at all
+
+    monkeypatch.setattr(manager, "_adopt_launch", _interrupted)
+
+    with pytest.raises(KeyboardInterrupt):
+        manager.start()
+
+    assert launches.processes[0].kill_count == 1
+    assert made[0].events.count("kill_all") == 1 and made[0].events.count("teardown") == 1
+    _assert_no_published_launch(manager)
+
+
+@windows_only
+def test_an_interrupt_inside_popen_after_the_child_exists_still_kills_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CPython creates the child suspended, then closes the thread handle: an interrupt there used to lose the child."""
+
+    import psutil
+
+    real_close = subprocess._winapi.CloseHandle  # type: ignore[attr-defined]
+    me = psutil.Process()
+    before = {c.pid for c in me.children()}
+    seen: list[int] = []
+
+    def _interrupting_close(handle: Any) -> None:
+        children = {c.pid for c in me.children()} - before
+        if children and not seen:
+            seen.extend(children)
+            monkeypatch.setattr(subprocess._winapi, "CloseHandle", real_close)  # type: ignore[attr-defined]
+            raise KeyboardInterrupt
+        return real_close(handle)
+
+    monkeypatch.setattr(subprocess._winapi, "CloseHandle", _interrupting_close)  # type: ignore[attr-defined]
+    inner = build_process_container("interrupt-popen", ProcessContainerConfig(enabled=True))
+    counts = {"kill_all": 0, "teardown": 0}
+
+    class _Counting:
+        def __getattr__(self, name: str) -> Any:
+            return getattr(inner, name)
+
+        def kill_all(self) -> None:
+            counts["kill_all"] += 1
+            inner.kill_all()
+
+        def teardown(self) -> None:
+            counts["teardown"] += 1
+            inner.teardown()
+
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            launch_contained(
+                [_PY, "-c", "import time; time.sleep(60)"],
+                label="t",
+                required=True,
+                container=_Counting(),  # type: ignore[arg-type]
+                require_suspended=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        assert seen, "the injected interrupt must land after the child was created"
+        assert _wait_for(lambda: not _alive(seen[0]), 10.0)
+        assert counts["teardown"] == 1
+    finally:
+        _force_cleanup(*seen)
+
+
+@windows_only
+def test_real_interrupt_between_containment_and_ownership_leaves_no_survivor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Quiet: a child that never writes cannot die of a broken pipe, so only an explicit kill can end it.
+    script, marker, child_marker, child_pid_file = _wrapper_script(tmp_path, quiet=True)
+    counts = {"kill_all": 0, "teardown": 0}
+
+    class _Counting:
+        def __init__(self, inner: Any) -> None:
+            self._inner = inner
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._inner, name)
+
+        def kill_all(self) -> None:
+            counts["kill_all"] += 1
+            self._inner.kill_all()
+
+        def teardown(self) -> None:
+            counts["teardown"] += 1
+            self._inner.teardown()
+
+    _real_container(monkeypatch, wrap=_Counting)
+    manager = _real_manager(monkeypatch, [_PY, str(script)], working_dir=str(tmp_path))
+    spawned_pids: list[int] = []
+
+    def _interrupted(process: Any, container: Any, run_session_id: str, ctx: Any) -> None:
+        spawned_pids.append(
+            process.pid
+        )  # contained and RUNNING, but not yet recorded by the manager
+        assert _wait_for(lambda: _read_pid(child_pid_file) is not None)
+        spawned_pids.append(_read_pid(child_pid_file) or 0)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(manager, "_adopt_launch", _interrupted)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            manager.start()
+        assert len(spawned_pids) == 2
+        assert _wait_for(lambda: not _alive(spawned_pids[0]) and not _alive(spawned_pids[1]), 10.0)
+        assert counts == {"kill_all": 1, "teardown": 1}
+        _assert_no_published_launch(manager)
+    finally:
+        _force_cleanup(*spawned_pids)
 
 
 def test_failure_after_publication_reports_the_original_error(
@@ -666,7 +883,9 @@ def _read_pid(path: Path) -> int | None:
         return None
 
 
-def _wrapper_script(tmp_path: Path, name: str = "webui_stub.py") -> tuple[Path, Path, Path, Path]:
+def _wrapper_script(
+    tmp_path: Path, name: str = "webui_stub.py", *, quiet: bool = False
+) -> tuple[Path, Path, Path, Path]:
     """A stand-in WebUI: it marks that it ran, prints a line, starts a grandchild that holds its pipes, and sleeps."""
 
     marker = tmp_path / f"{name}.parent.marker"
@@ -681,7 +900,7 @@ def _wrapper_script(tmp_path: Path, name: str = "webui_stub.py") -> tuple[Path, 
             child = subprocess.Popen([sys.executable, "-c",
                 "import os, time; open({child_marker.as_posix()!r}, 'w').write(str(os.getpid())); time.sleep(120)"])
             open({child_pid.as_posix()!r}, "w").write(str(child.pid))
-            print("stub-webui-ready", flush=True)
+            {"pass" if quiet else 'print("stub-webui-ready", flush=True)'}
             time.sleep(120)
             """
         ),

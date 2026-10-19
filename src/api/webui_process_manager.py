@@ -138,8 +138,6 @@ STARTUP_PROBE_SLICE_SECONDS = 5.0
 #: Total time to let the output readers drain once the process is dead. A descendant that escaped containment can keep
 #: a pipe open indefinitely; the reader is then abandoned (never closed under), so shutdown stays bounded.
 READER_DRAIN_SECONDS = 2.0
-#: Bound on waiting for a freshly created child that is being unwound after a failed launch.
-LAUNCH_UNWIND_WAIT_SECONDS = 5.0
 
 
 def _best_effort(description: str, action: Callable[[], Any], *, warn: bool = False) -> None:
@@ -647,6 +645,9 @@ class WebUIProcessManager:
                     container=container,
                     creationflags=creationflags,
                     require_suspended=True,
+                    # launch_contained owns the child and its container until adoption completes: a failure or an
+                    # interrupt anywhere up to and including adoption kills and releases them there, exactly once.
+                    adopt=lambda process, owned: self._adopt_launch(process, owned, run_session_id, ctx),
                     cwd=self._config.working_dir or None,
                     env=self._config.build_env(),
                     stdout=popen_stdout,
@@ -657,13 +658,17 @@ class WebUIProcessManager:
                     errors="replace",
                     bufsize=1,
                 )
-            except ContainmentError as exc:
-                raise WebUIContainmentError(
-                    f"WebUI containment failed: {exc}. StableNew will not run uncontained WebUI; the new "
-                    "process was stopped and nothing was left running. Retrying cannot succeed until the "
-                    "underlying Windows job-object condition changes."
-                ) from exc
-            self._publish_launch(spawned.process, spawned.container, run_session_id, ctx)
+            except BaseException as exc:
+                # The child and container are already gone (launch_contained released them); reset only what this
+                # manager published or started.
+                self._reset_failed_launch()
+                if isinstance(exc, ContainmentError):
+                    raise WebUIContainmentError(
+                        f"WebUI containment failed: {exc}. StableNew will not run uncontained WebUI; the new "
+                        "process was stopped and nothing was left running. Retrying cannot succeed until the "
+                        "underlying Windows job-object condition changes."
+                    ) from exc
+                raise
         except WebUIContainmentError as exc:
             self._last_startup_failure = str(exc)
             logger.error("%s", exc)  # visible even to callers that swallow the exception
@@ -675,71 +680,63 @@ class WebUIProcessManager:
         self._last_startup_failure = None
         return spawned.process
 
-    def _publish_launch(
+    def _adopt_launch(
         self,
         process: subprocess.Popen[Any],
         container: ProcessContainer,
         run_session_id: str,
         ctx: LogContext,
     ) -> None:
-        """Publish a contained, running child as this manager's session, or unwind it completely.
+        """Publish a contained, running child as this manager's session (called by ``launch_contained``).
 
-        Called only once the OS has confirmed containment and the child is running. Any failure (including an
-        interrupt) from here on kills the child through its container and leaves the manager as if it never launched.
+        Runs only once the OS has confirmed containment and the child is running, and still inside
+        ``launch_contained``'s cleanup ownership: if this raises, or is interrupted at any point, the child is killed
+        and the container released there, and ``_reset_failed_launch`` resets the state set here. This method therefore
+        never kills the child or tears the container down itself.
         """
-        try:
-            self._process_container = container
-            self._process = process
-            self._pid = process.pid
-            self._owns_process = True
-            self._launch_session_command = tuple(self._config.command)
-            self._claim_global_registration()
-            self._start_time = time.time()
-            self._proven_ready_since_launch = False
-            launch_msg = format_launch_message(
-                run_session_id=run_session_id,
-                pid=self._pid,
-                command=self._config.command,
-                cwd=self._config.working_dir,
-            )
-            logger.debug(launch_msg)
-            log_with_ctx(
-                logger,
-                logging.INFO,
-                "WebUI launch profile resolved",
-                ctx=ctx,
-                extra_fields={
-                    "event": "webui_launch_profile_resolved",
-                    "launch_profile": self._config.launch_profile,
-                    "pid": self._pid,
-                },
-            )
-            # Fresh tails per launch: a reader abandoned by an earlier launch keeps its own (old) deques.
-            self._stdout_tail = deque(maxlen=200)
-            self._stderr_tail = deque(maxlen=200)
-            self._start_output_capture(run_session_id)
+        self._process_container = container
+        self._process = process
+        self._pid = process.pid
+        self._owns_process = True
+        self._launch_session_command = tuple(self._config.command)
+        self._claim_global_registration()
+        self._start_time = time.time()
+        self._proven_ready_since_launch = False
+        launch_msg = format_launch_message(
+            run_session_id=run_session_id,
+            pid=self._pid,
+            command=self._config.command,
+            cwd=self._config.working_dir,
+        )
+        logger.debug(launch_msg)
+        log_with_ctx(
+            logger,
+            logging.INFO,
+            "WebUI launch profile resolved",
+            ctx=ctx,
+            extra_fields={
+                "event": "webui_launch_profile_resolved",
+                "launch_profile": self._config.launch_profile,
+                "pid": self._pid,
+            },
+        )
+        # Fresh tails per launch: a reader abandoned by an earlier launch keeps its own (old) deques.
+        self._stdout_tail = deque(maxlen=200)
+        self._stderr_tail = deque(maxlen=200)
+        self._start_output_capture(run_session_id)
 
-            # Start orphan monitor thread to kill WebUI if StableNew GUI exits
-            self._start_orphan_monitor()
-        except BaseException:
-            self._unwind_failed_launch(process, container)
-            raise
+        # Start orphan monitor thread to kill WebUI if StableNew GUI exits
+        self._start_orphan_monitor()
 
-    def _unwind_failed_launch(
-        self, process: subprocess.Popen[Any], container: ProcessContainer
-    ) -> None:
-        """Kill a just-launched child through its own container and reset every piece of launch state (bounded).
+    def _reset_failed_launch(self) -> None:
+        """Reset the manager state of a launch that failed (bounded; the state reset itself is in a ``finally``).
 
-        The state reset is in ``finally``: even a second interrupt during the unwind never leaves the manager pointing
-        at a child that has already been killed."""
+        The child and its container were already killed and released by ``launch_contained``, so nothing here terminates
+        a process or tears a container down: that would be a second termination. The readers get EOF from the dead
+        child, are drained within their bound and are abandoned if a descendant still holds a pipe."""
+        process = self._process
         try:
             _best_effort("stop orphan monitor", self._stop_orphan_monitor)
-            _best_effort("container kill", container.kill_all)
-            _best_effort("process kill", process.kill)
-            _best_effort(
-                "wait for exit", lambda: process.wait(timeout=LAUNCH_UNWIND_WAIT_SECONDS), warn=True
-            )
-            _best_effort("container teardown", container.teardown)
             _best_effort("stop output capture", self._stop_output_capture)
             for stream in (getattr(process, "stdout", None), getattr(process, "stderr", None)):
                 if stream is not None and not any(stream is item for item in self._abandoned_streams):

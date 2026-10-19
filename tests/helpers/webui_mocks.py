@@ -76,6 +76,7 @@ class FakeWebUIProcess:
         self.stderr = io.BytesIO(b"") if stderr is None else stderr
         self.returncode: int | None = None
         self.killed = False
+        self.kill_count = 0
         self.terminated = False
 
     def poll(self) -> int | None:
@@ -87,6 +88,7 @@ class FakeWebUIProcess:
 
     def kill(self) -> None:
         self.killed = True
+        self.kill_count += 1
         self.returncode = -9
 
     def wait(self, timeout: float | None = None) -> int | None:

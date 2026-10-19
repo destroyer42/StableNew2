@@ -124,32 +124,57 @@ class _Spawned:
     contained: bool
 
 
-def _terminate_uncontained(process: subprocess.Popen[Any], container: ProcessContainer) -> None:
-    """Kill a child that was just spawned and could not be contained, and release everything it was given."""
+class _TrackedPopen(subprocess.Popen):  # type: ignore[type-arg]
+    """``Popen`` that records itself in ``created`` *before* the OS process exists.
+
+    An interrupt anywhere inside ``Popen.__init__`` after the child was created (the pipe-handle cleanup, the assignment of
+    ``pid``, the return) would otherwise lose the only reference to a suspended, not yet contained child. The caller keeps
+    ``created`` and can still reach it. The one window this cannot close is inside CPython ``_execute_child``, between
+    ``CreateProcess`` returning and ``self.pid`` being assigned: there the object holds nothing to terminate."""
+
+    def __init__(self, *args: Any, _created: list[Any], **kwargs: Any) -> None:
+        _created.append(self)
+        super().__init__(*args, **kwargs)
+
+
+_REAL_POPEN = subprocess.Popen
+
+
+def _terminate_uncontained(
+    process: subprocess.Popen[Any], container: ProcessContainer, *, close_streams: bool = True
+) -> None:
+    """Kill a child that was just spawned and could not be contained, and release everything it was given.
+
+    The container is released in a ``finally``: a second interrupt during the kill or the wait still releases it (and
+    exactly once). ``close_streams=False`` is for a child whose output readers may already exist: closing a stream under
+    a blocked reader blocks, so its owner drains and closes them with its own bound."""
 
     try:
-        container.kill_all()
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("[managed_process] container kill failed: %s", exc)
-    try:
-        process.kill()
-    except OSError:
-        pass
-    try:
-        process.wait(timeout=_KILL_WAIT_SECONDS)
-    except (subprocess.TimeoutExpired, OSError):
-        pass
-    for stream in (
-        getattr(process, "stdin", None),
-        getattr(process, "stdout", None),
-        getattr(process, "stderr", None),
-    ):
         try:
-            if stream is not None:
-                stream.close()  # no reader exists yet, so this cannot block
+            container.kill_all()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[managed_process] container kill failed: %s", exc)
+        try:
+            process.kill()
         except OSError:
             pass
-    _release(container)
+        try:
+            process.wait(timeout=_KILL_WAIT_SECONDS)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        if close_streams:
+            for stream in (
+                getattr(process, "stdin", None),
+                getattr(process, "stdout", None),
+                getattr(process, "stderr", None),
+            ):
+                try:
+                    if stream is not None:
+                        stream.close()  # no reader exists yet, so this cannot block
+                except OSError:
+                    pass
+    finally:
+        _release(container)
 
 
 def launch_contained(
@@ -160,16 +185,27 @@ def launch_contained(
     container: ProcessContainer,
     creationflags: int = 0,
     require_suspended: bool = False,
+    adopt: Callable[[subprocess.Popen[Any], ProcessContainer], None] | None = None,
     **popen_kwargs: Any,
 ) -> _Spawned:
-    """Start ``command`` inside ``container``; the one place a child is created, placed and resumed.
+    """Start ``command`` inside ``container``; the one place a contained child is created, placed and resumed.
 
-    Takes ownership of ``container``: on any failure it is released, so the caller never tears it down twice.  On
-    Windows the child is created suspended, assigned to the job object and only then resumed, so it and its
-    descendants provably start inside the job.  Where ``required`` and containment cannot be established (no
-    container, no suspended-start support when ``require_suspended``, an assignment the OS refuses or that raises, a
-    resume the OS refuses) the child is killed, waited for and ``ContainmentError`` is raised.  An interrupt anywhere
-    after the child exists kills it too.  ``popen_kwargs`` go to ``subprocess.Popen`` unchanged.
+    **Cleanup ownership.** This function owns the child *and* ``container`` from the first moment either exists until it
+    returns. On any failure, including an interrupt at any point after the child exists, it kills the child (through the
+    container and directly), waits, and releases the container exactly once, then re-raises. The caller must not kill or
+    tear down either after an exception. On a normal return ownership passes to the caller.
+
+    ``adopt(process, container)`` runs after the child is contained and resumed, still under that ownership: it is where a
+    caller publishes the child as its own. If ``adopt`` raises, this function kills and releases as above, so there is no
+    window between "contained" and "owned" in which the child belongs to nobody; the caller only resets the state its
+    ``adopt`` set. Output streams are left open on that path (a reader may hold them) for the caller to drain with its
+    own bound.
+
+    On Windows the child is created suspended, assigned to the job object and only then resumed, so it and its descendants
+    provably start inside the job. Where ``required`` and containment cannot be established (no container, no
+    suspended-start support when ``require_suspended``, an assignment the OS refuses or that raises, a resume the OS
+    refuses) the child is not left running and ``ContainmentError`` is raised. ``popen_kwargs`` go to ``subprocess.Popen``
+    unchanged.
 
     Raises ``OSError`` when the child cannot launch at all."""
 
@@ -197,43 +233,52 @@ def launch_contained(
     if suspended:
         creationflags |= _CREATE_SUSPENDED
     popen_kwargs["creationflags"] = creationflags if os.name == "nt" else 0
-    try:
-        process = subprocess.Popen(list(command), **popen_kwargs)  # noqa: S603 - argv list, no shell
-    except BaseException:
-        _release(container)
-        raise
-    if isinstance(container, NullProcessContainer):
-        return _Spawned(process, container, False)
 
-    attached = False
+    process: subprocess.Popen[Any] | None = None
+    created: list[Any] = []
+    adopting = False
     try:
-        failure = ""
-        try:
-            attached = bool(container.add_pid(process.pid))
-            if not attached:
-                failure = "the OS refused to place the child in its container"
-        except Exception as exc:  # noqa: BLE001 - reported below as a containment failure
-            failure = f"placing the child in its container failed: {exc}"
-        if not attached and required:
-            raise ContainmentError(f"{label}: {failure}; the child was stopped")
-        if not attached:
-            logger.warning("[managed_process] %s: %s; running it uncontained", label, failure)
-        if suspended:
+        if subprocess.Popen is _REAL_POPEN:
+            process = _TrackedPopen(list(command), _created=created, **popen_kwargs)  # noqa: S603 - argv list, no shell
+        else:  # a test double: nothing can track it before it returns
+            process = subprocess.Popen(list(command), **popen_kwargs)  # noqa: S603
+        contained = False
+        if not isinstance(container, NullProcessContainer):
+            failure = ""
             try:
-                resumed = bool(container.resume_suspended(process.pid))
-            except Exception as exc:  # noqa: BLE001
-                raise ContainmentError(
-                    f"{label}: resuming the suspended child failed: {exc}; it was stopped"
-                ) from exc
-            if not resumed:
-                raise ContainmentError(
-                    f"{label}: the suspended child could not be resumed; it was stopped"
-                )
+                contained = bool(container.add_pid(process.pid))
+                if not contained:
+                    failure = "the OS refused to place the child in its container"
+            except Exception as exc:  # noqa: BLE001 - reported below as a containment failure
+                failure = f"placing the child in its container failed: {exc}"
+            if not contained and required:
+                raise ContainmentError(f"{label}: {failure}; the child was stopped")
+            if not contained:
+                logger.warning("[managed_process] %s: %s; running it uncontained", label, failure)
+            if suspended:
+                try:
+                    resumed = bool(container.resume_suspended(process.pid))
+                except Exception as exc:  # noqa: BLE001
+                    raise ContainmentError(
+                        f"{label}: resuming the suspended child failed: {exc}; it was stopped"
+                    ) from exc
+                if not resumed:
+                    raise ContainmentError(
+                        f"{label}: the suspended child could not be resumed; it was stopped"
+                    )
+        if adopt is not None:
+            adopting = True
+            adopt(process, container)
     except BaseException:
-        # Whatever went wrong (including an interrupt), a child that may be suspended or uncontained is never left behind.
-        _terminate_uncontained(process, container)
+        # Whatever went wrong (including an interrupt), a child that may be suspended or uncontained is never left behind
+        # and the container is released exactly once. ``created`` reaches a child whose Popen call did not return.
+        child = process if process is not None else (created[0] if created else None)
+        if child is not None and getattr(child, "pid", None) is not None:
+            _terminate_uncontained(child, container, close_streams=not adopting)
+        else:
+            _release(container)  # nothing reachable was created: only the container can be released
         raise
-    return _Spawned(process, container, attached)
+    return _Spawned(process, container, contained)
 
 
 def _spawn_contained(
