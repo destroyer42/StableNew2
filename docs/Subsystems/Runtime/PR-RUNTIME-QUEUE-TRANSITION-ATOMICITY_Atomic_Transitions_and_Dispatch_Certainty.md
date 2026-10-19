@@ -92,13 +92,13 @@ requeued) now asserts the accepted policy. The other updated tests only pass the
    writer that bypasses the queue can cause one.
 4. **The offline legacy importer** (`src/migrations/sqlite_job_importer.py`) still maps a legacy `running` record to QUEUED
    (`legacy_running_requeued`), unlike live restart recovery (FAILED, action-required). It is an import, not a live transition,
-   and was not changed; aligning it is a migration-contract decision.
+   and was not changed here; aligned later by PR-RUNTIME-NO-IMPLICIT-REPLAY (future imports only).
 
 ## Residual risks and next package
 
 * `src/pipeline/replay_engine.py` retries `run_njr` without the checkpoint callback on any `TypeError`; a `TypeError` raised after
   a stage dispatched would re-invoke the runner. Pre-existing, outside the queue, and the next place a "never replay an
-  ambiguous dispatch" audit should look.
+  ambiguous dispatch" audit should look. Resolved by PR-RUNTIME-NO-IMPLICIT-REPLAY.
 * The operator-return heap position (back of the queue) is not durable: after a restart the job reappears at its durable
   `queue_order`.
 * `JobExecutionController.cancel_job` is reachable only through `PipelineController.stop_pipeline`, which needs an

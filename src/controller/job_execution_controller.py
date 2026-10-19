@@ -12,7 +12,7 @@ from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import normalize_run_result
-from src.pipeline.replay_engine import ReplayEngine
+from src.pipeline.replay_engine import ReplayEngine, resolve_run_njr_kwargs
 from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
 from src.queue.job_history_store import JobHistoryStore
 from src.queue.job_model import Job, JobPriority, JobStatus
@@ -87,10 +87,20 @@ class JobExecutionController:
                 def __init__(self, fn: Callable[[Any], Any]) -> None:
                     self._fn = fn
 
-                def run_njr(self, record: NormalizedJobRecord, *_: Any, **__: Any) -> Any:
-                    # Call run_njr method on the runner, not the runner as a function
-                    if hasattr(self._fn, "run_njr"):
-                        return self._fn.run_njr(record, *_, **__)
+                def run_njr(
+                    self,
+                    record: NormalizedJobRecord,
+                    cancel_token: Any = None,
+                    run_plan: Any = None,
+                    checkpoint_callback: Any = None,
+                ) -> Any:
+                    # A wrapped runner is called once, with arguments proven to bind before the call.
+                    target = getattr(self._fn, "run_njr", None)
+                    if callable(target):
+                        kwargs = resolve_run_njr_kwargs(
+                            target, record, cancel_token, run_plan, checkpoint_callback
+                        )
+                        return target(record, cancel_token, **kwargs)
                     return self._fn(record)  # type: ignore[arg-type]
 
             replay_target = _ExecuteAdapter(self._execute_job)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import inspect
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,55 @@ logger = logging.getLogger(__name__)
 
 class ReplayValidationError(InvalidHistoryRecord):
     """Raised when replay metadata is present but invalid."""
+
+
+class RunnerCompatibilityError(RuntimeError):
+    """Raised before invocation when ``run_njr`` cannot be proven to accept the replay call.
+
+    Compatibility is decided from the runner's signature, never by calling it and inspecting the failure: a
+    ``TypeError`` from inside an execution body is indistinguishable from an argument mismatch at the catch site, and
+    a second call would dispatch the same generation again.
+    """
+
+
+def resolve_run_njr_kwargs(
+    run_njr: Callable[..., Any],
+    record: NormalizedJobRecord,
+    cancel_token: Any,
+    run_plan: Any,
+    checkpoint_callback: Callable[..., None] | None,
+) -> dict[str, Any]:
+    """Return the keyword arguments to pass, proven to bind to ``run_njr`` without calling it.
+
+    The checkpoint callback is passed only when the signature accepts it; a runner that cannot accept it runs without
+    checkpoint persistence (the one-shot degradation the replay path has always allowed). A runner that cannot accept
+    the base call is refused.
+    """
+    try:
+        signature = inspect.signature(run_njr)
+    except (TypeError, ValueError) as exc:
+        raise RunnerCompatibilityError(
+            "run_njr signature cannot be inspected, so argument compatibility cannot be proven "
+            f"before invocation: {exc}"
+        ) from exc
+    base: dict[str, Any] = {"run_plan": run_plan}
+    candidates = []
+    if checkpoint_callback is not None:
+        candidates.append({**base, "checkpoint_callback": checkpoint_callback})
+    candidates.append(base)
+    for index, kwargs in enumerate(candidates):
+        try:
+            signature.bind(record, cancel_token, **kwargs)
+        except TypeError:
+            continue
+        if checkpoint_callback is not None and index == len(candidates) - 1:
+            logger.warning(
+                "run_njr does not accept checkpoint_callback; running once without checkpoint persistence"
+            )
+        return kwargs
+    raise RunnerCompatibilityError(
+        f"run_njr{signature} cannot accept (record, cancel_token, run_plan=...); refusing to invoke"
+    )
 
 
 def validate_replay_snapshot(snapshot: Mapping[str, Any]) -> tuple[bool, list[str]]:
@@ -191,17 +241,12 @@ class ReplayEngine:
                 if callable(persist):
                     persist()
 
-        if checkpoint_callback is not None:
-            try:
-                return self._runner.run_njr(
-                    record,
-                    self._cancel_token,
-                    run_plan=plan,
-                    checkpoint_callback=checkpoint_callback,
-                )
-            except TypeError:
-                return self._runner.run_njr(record, self._cancel_token, run_plan=plan)
-        return self._runner.run_njr(record, self._cancel_token, run_plan=plan)
+        kwargs = resolve_run_njr_kwargs(
+            self._runner.run_njr, record, self._cancel_token, plan, checkpoint_callback
+        )
+        # Exactly one invocation per attempt: compatibility was proven above, so nothing raised from here on is an
+        # argument mismatch and nothing is retried.
+        return self._runner.run_njr(record, self._cancel_token, **kwargs)
 
     def replay_history_record(self, record: HistoryRecord | Mapping[str, Any]) -> Any:
         """Validate history entry, hydrate NJR, then delegate to replay_njr."""
