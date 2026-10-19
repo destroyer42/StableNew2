@@ -234,7 +234,7 @@ def test_owned_disposable_process_tree_is_stopped(monkeypatch, tmp_path) -> None
     manager = _manager(monkeypatch, working_dir=str(tmp_path))
     monkeypatch.setattr(
         "src.api.webui_process_manager.build_process_container",
-        lambda job_id, config: RecordingContainer(job_id, config, resume_for_real=True),
+        lambda job_id, config: RecordingContainer(job_id, config),
     )
     manager._config.command = [sys.executable, "-c", code]
     monkeypatch.setattr(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 from collections.abc import Iterable
 from typing import Any
 
@@ -95,12 +96,23 @@ class FakeWebUIProcess:
         self.returncode = code
 
 
+def _is_own_child(pid: int) -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        import psutil
+
+        return psutil.Process(pid).ppid() == os.getpid()
+    except Exception:
+        return False
+
+
 class RecordingContainer(ProcessContainer):
     """A process container whose outcome the test chooses, and which never reaches the OS.
 
     The defaults describe *successful* containment (the OS accepts the pid and the resume); a test that needs
-    refusal passes it explicitly. ``events`` records every call in order. ``resume_for_real`` is for a test that
-    launches a real child on Windows, which is created suspended and must actually be resumed to run."""
+    refusal passes it explicitly. ``events`` records every call in order. A real child of the test process (created
+    suspended on Windows) is really resumed so it can run; fake pids are only answered."""
 
     supports_suspended_start = True
 
@@ -113,14 +125,12 @@ class RecordingContainer(ProcessContainer):
         add_pid_error: BaseException | None = None,
         resume_result: bool = True,
         resume_error: BaseException | None = None,
-        resume_for_real: bool = False,
     ) -> None:
         super().__init__(job_id, config or ProcessContainerConfig(enabled=True))
         self._add_pid_result = add_pid_result
         self._add_pid_error = add_pid_error
         self._resume_result = resume_result
         self._resume_error = resume_error
-        self._resume_for_real = resume_for_real
         self.events: list[str] = []
         self.pids: list[int] = []
 
@@ -136,8 +146,9 @@ class RecordingContainer(ProcessContainer):
         self.events.append("resume")
         if self._resume_error is not None:
             raise self._resume_error
-        if self._resume_for_real:
-            # The child really was created suspended (a real Popen): let it run, though nothing is contained.
+        if self._resume_result and _is_own_child(pid):
+            # A real Popen child of this test process was created suspended: let it run, though nothing is contained.
+            # Only a direct child is ever resumed, so a fake pid can never touch an unrelated process.
             from src.utils.win_jobobject import resume_suspended_process
 
             return resume_suspended_process(pid)
