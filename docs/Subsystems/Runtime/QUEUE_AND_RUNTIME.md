@@ -276,4 +276,5 @@ Per-PR records stay in `docs/Subsystems/Runtime/` as historical evidence. They m
 | `docs/Subsystems/Runtime/PR-RUNTIME-110_Comfy_Video_Runner_Liveness.md` | Comfy wait liveness reporting |
 | `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md` | The device-loss incident record behind the HOLD |
 | `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` | Dump attribution for the same incident |
+| `docs/Subsystems/Runtime/DIAG-GPU-140_Forge_Job_Start_Device_Loss_Recurrence.md` | 2026-10-20 recurrence: Forge job-start device loss, 17-marker history, correlator UTC fix |
 | `docs/audits/2026-10-16_repo_audit_and_roadmap.md` | Audit B2, B3, B7, B9, B10 and the P3 plan referenced above |
