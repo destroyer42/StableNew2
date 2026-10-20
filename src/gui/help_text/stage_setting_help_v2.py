@@ -95,9 +95,9 @@ ADETAILER_STAGE_HELP = {
 SVD_SETTING_HELP = {
     "preset": "Applies a tested group of SVD settings for a common outcome. Use presets as a safe starting point, then deviate only when you know which motion or postprocess behavior needs to change.",
     "model": "Chooses the SVD model variant. XT-style models usually give stronger quality but cost more, while lighter variants are useful when you want faster experiments.",
-    "frames": "Total frame count in the generated clip. 14 frames is the recommended conservative target for ~12GB Windows GPUs; 25 frames is a higher-memory option that may be much slower. More frames increase clip length and cost.",
-    "fps": "Playback speed of the exported clip. Higher FPS makes the output play faster and smoother if enough frames exist, while lower FPS stretches the same motion over more time.",
-    "motion_bucket": "Controls how much motion SVD is encouraged to add. Lower values tend to keep motion subtle and more realistic; higher values push stronger movement but increase artifact and drift risk. Around 40-90 is a practical safe band for realism-first work.",
+    "frames": "Total frame count in the generated clip. SVD XT is trained for 25 frames (the base Img2Vid model for 14), and admission refuses more than the model supports. Use frame interpolation for smoother playback.",
+    "fps": "Frame rate the model is conditioned on and the clip is exported at. SVD was trained around 6-7 fps; frame interpolation raises playback smoothness without changing the motion. XT 1.1 is locked to 6 fps.",
+    "motion_bucket": "Controls how much motion SVD is encouraged to add. The model's reference value is 127; around 100-127 gives visible motion, lower values keep it subtle, higher values push stronger movement with more drift risk. XT 1.1 is locked to 127.",
     "noise_aug": "Noise augmentation strength before motion generation. Lower values preserve the source image more faithfully; higher values can help stylized movement but increase instability.",
     "inference_steps": "Sampling steps used for the video generation pass. More steps can improve quality and consistency, but they also increase runtime quickly.",
     "seed": BASE_GENERATION_SETTING_HELP["seed"],
@@ -105,7 +105,7 @@ SVD_SETTING_HELP = {
     "resize_mode": "How the source image is fit into the target size. Choose crop-oriented modes when composition matters most, and letterbox-like modes when preserving the entire source frame matters more.",
     "output": "Selects whether SVD exports a video file, GIF, or raw frames. This changes packaging and downstream usability, not the core motion generation itself.",
     "route": "Controls where the produced artifacts are routed for follow-up work. Pick the route that matches whether you want reprocess-style follow-up, dedicated SVD output review, or test isolation.",
-    "decode_chunk": "Chunk size used while decoding frames. Higher values may improve throughput on strong hardware, but smaller values are safer when memory is limited.",
+    "decode_chunk": "How many frames the temporal VAE decodes together. Frames decoded together stay consistent, so small chunks flicker at chunk boundaries; frames are split into even chunks no larger than this. 8 fits 12 GB GPUs; larger values need more memory.",
     "save_frames": "Keeps the individual generated frames on disk in addition to packaged outputs. Enable it when you need later inspection or clip assembly, disable it when you only want the final packaged result.",
     "cpu_offload": "Moves more model work to CPU to reduce VRAM pressure. This is safer on constrained GPUs but usually slows the run.",
     "forward_chunking": "Breaks some forward passes into smaller chunks. Enable it when memory is tight; disable it only if you need maximum throughput and your hardware can handle it.",
@@ -144,7 +144,7 @@ VIDEO_WORKFLOW_SETTING_HELP = {
 MOVIE_CLIPS_SETTING_HELP = {
     "fps": "Frames per second for the assembled clip. Higher values make playback faster and smoother if enough frames exist, while lower values stretch the same frame set over more time.",
     "codec": "Container or encoding target for the rendered clip. Change it for compatibility or file-size reasons rather than to alter the visual content itself.",
-    "quality": "Export quality preset for the clip package. Higher quality usually means larger files and longer export time; medium is a safer default when you are still iterating.",
+    "quality": "Encoder speed preset. Picture quality is held constant (CRF 16, BT.709); slower presets make smaller files for the same quality and take longer to export.",
     "mode": "Controls how the current image list is assembled into the output clip. Confirm it before building because it affects the final packaging behavior more than the source images themselves.",
 }
 

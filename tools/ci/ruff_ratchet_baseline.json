@@ -404,7 +404,7 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1349,
+      "BLE001": 1347,
       "S110": 536,
       "S112": 38
     },
@@ -887,7 +887,7 @@
         "S110": 1
       },
       "src/pipeline/video.py": {
-        "BLE001": 5
+        "BLE001": 3
       },
       "src/prompting/prompt_optimizer_service.py": {
         "BLE001": 2

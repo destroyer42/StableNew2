@@ -25,6 +25,20 @@ from src.video.svd_models import is_svd_model_cached, resolve_svd_cache_dir
 logger = logging.getLogger(__name__)
 
 
+def balanced_decode_chunk_size(num_frames: int, max_chunk_size: int) -> int:
+    """Largest-first even split of ``num_frames`` into chunks no larger than ``max_chunk_size``.
+
+    The SVD temporal VAE decoder only sees the frames inside one chunk, so a short trailing
+    chunk (25 frames at 8 gives 8, 8, 8, 1) decodes its frames almost without temporal
+    context. Splitting evenly (7, 7, 7, 4) keeps the same peak memory bound.
+    """
+
+    frames = max(1, int(num_frames))
+    ceiling = max(1, min(int(max_chunk_size), frames))
+    chunk_count = -(-frames // ceiling)
+    return -(-frames // chunk_count)
+
+
 class SVDService:
     """Loads and caches native SVD pipelines and generates frames."""
 
@@ -98,7 +112,9 @@ class SVDService:
             self._ensure_not_cancelled(cancel_token, "native SVD preprocessing")
             prepared_width, prepared_height = image.size
             call_kwargs: dict[str, Any] = {
-                "decode_chunk_size": config.decode_chunk_size,
+                "decode_chunk_size": balanced_decode_chunk_size(
+                    config.num_frames, config.decode_chunk_size
+                ),
                 "height": prepared_height,
                 "motion_bucket_id": config.motion_bucket_id,
                 "noise_aug_strength": config.noise_aug_strength,
@@ -109,6 +125,9 @@ class SVDService:
                 "width": prepared_width,
                 "generator": generator,
             }
+            if self._supports_call_parameter(pipeline, "fps"):
+                # SVD is micro-conditioned on fps; without this the model always sees its default.
+                call_kwargs["fps"] = config.fps
             if self._supports_step_callback(pipeline):
                 call_kwargs["callback_on_step_end"] = self._build_step_callback(
                     cancel_token=cancel_token,
@@ -205,12 +224,16 @@ class SVDService:
     @staticmethod
     def _supports_step_callback(pipeline: Any) -> bool:
         """Use only Diffusers' documented callback_on_step_end parameter when present."""
+        return SVDService._supports_call_parameter(pipeline, "callback_on_step_end")
+
+    @staticmethod
+    def _supports_call_parameter(pipeline: Any, name: str) -> bool:
         try:
             target = pipeline.__call__ if callable(pipeline) else pipeline
             signature = inspect.signature(target)
         except (TypeError, ValueError):
             return False
-        return "callback_on_step_end" in signature.parameters
+        return name in signature.parameters
 
     def _build_step_callback(
         self,
@@ -263,7 +286,8 @@ class SVDService:
             f"decode_chunk_size={config.decode_chunk_size}, dtype={config.torch_dtype}, "
             f"cpu_offload={config.cpu_offload}, forward_chunking={config.forward_chunking}. "
             "StableNew did not automatically rerun or downgrade this job. "
-            "Use the 12 GB conservative baseline when retrying explicitly. "
+            "Lower Decode chunk first (it bounds VAE decode memory), then frames, "
+            "when retrying explicitly. "
             f"Original error: {exc}"
         )
 
