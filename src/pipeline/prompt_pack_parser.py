@@ -22,6 +22,7 @@ class PackRow:
     #: The slot's raw ``controlnet_openpose`` declaration (PR-IMG-CNET-210), exactly as authored; ``None`` when the slot has
     #: none. Structural conditioning input, never prompt text, so TXT/TSV interchange (which has no field for it) is lossy.
     conditioning: Any = field(default=None, hash=False)
+    controlnet_units: Any = field(default=None, hash=False)
 
 
 def _parse_line_embeddings(line: str) -> list[tuple[str, float]]:

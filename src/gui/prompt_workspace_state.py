@@ -232,6 +232,16 @@ class PromptWorkspaceState:
         slot.openpose = copy.deepcopy(dict(declaration)) if declaration is not None else None
         self.dirty = True
 
+    def set_slot_controlnet_units(
+        self, index: int, declaration: Mapping[str, object] | None
+    ) -> None:
+        if not self.current_pack:
+            raise RuntimeError("No prompt pack loaded")
+        self.current_pack.get_slot(index).controlnet_units = (
+            copy.deepcopy(dict(declaration)) if declaration is not None else None
+        )
+        self.dirty = True
+
     def get_slot_openpose(self, index: int) -> object | None:
         if not self.current_pack:
             return None
@@ -298,6 +308,7 @@ class PromptWorkspaceState:
                 negative_embeddings=getattr(original, "negative_embeddings", []).copy(),
                 loras=getattr(original, "loras", []).copy(),
                 openpose=copy.deepcopy(getattr(original, "openpose", None)),
+                controlnet_units=copy.deepcopy(getattr(original, "controlnet_units", None)),
             )
             self.current_pack.slots.insert(index + 1, duplicate)
             self.dirty = True

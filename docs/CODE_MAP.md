@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-423 of 580 modules have a docstring.
+427 of 584 modules have a docstring.
 
 ## src/
 
@@ -56,6 +56,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/conditioning/
 
 - `__init__.py`: Structural-conditioning inputs for image generation (PR-IMG-CNET-210)
+- `controlnet.py`: Versioned, ordered ControlNet declarations and frozen records (PR-IMG-CNET-220)
 - `openpose.py`: The ``openpose.v1`` PromptPack conditioning contract (PR-IMG-CNET-210)
 - `openpose_catalog.py`: Registry-backed listing of the OpenPose reference library for the editor (PR-IMG-CNET-210)
 - `openpose_diagnostics.py`: OpenPose input/modality feedback; no inference, mutation or model loading (PR-IMG-CNET-211)
@@ -317,6 +318,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `action_explainer_panel_v2.py`: (no docstring)
 - `config_sweep_widget_v2.py`: Config Sweep Widget for PR-CORE-E
+- `controlnet_units_panel.py`: Ordered ControlNet authoring; resource discovery is off Tk, never a compiler
 - `disclosure_section_v2.py`: Keyboard-accessible collapsible section (PR-GUI-110)
 - `embedding_picker_panel.py`: Embedding picker panel with per-embedding weight controls
 - `expander_v2.py`: Unified expander button used by Pipeline Tab cards
@@ -362,6 +364,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `backend_capabilities.py`: Backend-owned capability facts that presentation layers consult (PR-IMG-FORGE-120)
 - `exact_model_profile.py`: Small dispatch seam for two independent immutable model contracts, not a new registry
 - `forge_controlnet.py`: Forge ControlNet execution contract for one pre-rendered OpenPose unit (PR-IMG-CNET-210)
+- `forge_controlnet_units.py`: All-or-nothing admission and wire projection for ordered pre-rendered units
 - `forge_klein_assets.py`: Local, cryptographic identity of the Klein files the serving Forge will actually load (PR-IMG-116 review repa…
 - `forge_klein_lora.py`: FLUX.2 Klein 4B LoRA compatibility interpretation and v2 admission (PR-IMG-117)
 - `forge_klein_profile.py`: FLUX.2 Klein 4B FP8 model profile for the existing ``forge_webui`` backend (PR-IMG-116)
@@ -469,6 +472,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `config_merger_v2.py`: ConfigMergerV2: Merge PromptPack-derived base configs with stage card overrides
 - `config_normalizer.py`: (no docstring)
 - `config_variant_plan_v2.py`: Config Variant Plan V2 — Config Sweep Support (PR-CORE-E)
+- `controlnet_compile.py`: Multi-unit adapter at the existing PromptPack conditioning compile seam
 - `exact_profile_effective_config.py`: Effective-configuration preparation for the generic (non-PromptPack) NJR builder (PR-IMG-MODELS-159)
 - `executor.py`: Pipeline execution module
 - `global_prompt_policy.py`: Freeze and read the operator-selected global prompt policy

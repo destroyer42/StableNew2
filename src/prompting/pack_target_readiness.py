@@ -97,6 +97,13 @@ def validate_pack_structure(pack: Any) -> PackStructure:
             elif not getattr(slot, "values", None):
                 warnings.append(f"Matrix slot '{name}' has no values")
     for prompt_slot in getattr(pack, "slots", []) or []:
+        from src.conditioning.controlnet import declaration_problems as unit_problems
+
+        multi = getattr(prompt_slot, "controlnet_units", None)
+        if multi is not None:
+            if getattr(prompt_slot, "openpose", None) is not None:
+                errors.append(f"Slot {int(prompt_slot.index) + 1}: choose either legacy OpenPose or ordered ControlNet units")
+            errors.extend(f"Slot {int(prompt_slot.index) + 1}: {problem}" for problem in unit_problems(multi))
         raw = getattr(prompt_slot, "openpose", None)
         if raw is None:
             continue
@@ -201,6 +208,11 @@ def assess_pack_readiness(
     openpose_unverified = False
     openpose_target = assess_openpose_target(policy, backend_id)
     for slot in getattr(pack, "slots", []) or []:
+        from src.conditioning.controlnet import enabled as units_enabled
+        from src.image_backends.model_policy import EVIDENCE_REGISTRY
+
+        if units_enabled(getattr(slot, "controlnet_units", None)) and (not openpose_target.executable or policy.evidence != EVIDENCE_REGISTRY):
+            refusals.append(f"row {int(getattr(slot, 'index', 0)) + 1}: ControlNet requires registry-verified SDXL on Forge")
         raw = getattr(slot, "openpose", None)
         if raw is None or declaration_problems(raw) or not declaration_enabled(raw):
             continue  # invalid declarations are structural errors; disabled ones are not executed

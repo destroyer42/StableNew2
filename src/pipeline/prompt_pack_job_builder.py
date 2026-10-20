@@ -12,6 +12,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
+from src.conditioning.controlnet import SLOT_FIELD as CONTROLNET_SLOT_FIELD
+from src.conditioning.controlnet import FrozenControlNet
 from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_SLOT_FIELD
 from src.contracts import PackJobEntry
 from src.image_backends.forge_klein_lora import LoraResolver
@@ -35,6 +37,7 @@ from src.pipeline.config_contract_v26 import (
     extract_adaptive_refinement_intent,
     extract_secondary_motion_intent,
 )
+from src.pipeline.controlnet_compile import CompiledUnits, compile_units
 from src.pipeline.global_prompt_policy import has_frozen_global_prompt_policy
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import (
@@ -119,7 +122,7 @@ class _PreparedPrompt:
     global_positive_enabled: bool = False
     normalizations: tuple[dict[str, Any], ...] = ()
     #: The slot's verified, frozen OpenPose conditioning (PR-IMG-CNET-210); ``None`` when the slot has none.
-    conditioning: CompiledConditioning | None = None
+    conditioning: CompiledConditioning | CompiledUnits | None = None
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -602,9 +605,10 @@ class PromptPackNormalizedJobBuilder:
         )
         if prepared.conditioning is not None:
             # Structured conditioning is frozen next to the other execution settings (never prompt text, never bytes).
-            config_for_builder[OPENPOSE_SLOT_FIELD] = prepared.conditioning.frozen.to_config()
+            field = CONTROLNET_SLOT_FIELD if isinstance(prepared.conditioning.frozen, FrozenControlNet) else OPENPOSE_SLOT_FIELD
+            config_for_builder[field] = prepared.conditioning.frozen.to_config()
             provenance_metadata["conditioning"] = {
-                OPENPOSE_SLOT_FIELD: {
+                field: {
                     **prepared.conditioning.frozen.evidence(),
                     "target": dict(prepared.conditioning.target),
                 }
@@ -818,7 +822,10 @@ class PromptPackNormalizedJobBuilder:
         for prompt in prepared:
             row = self._selected_pack_row(prompt.entry)
             raw = getattr(row, "conditioning", None) if row is not None else None
-            if raw is None:
+            multi = getattr(row, "controlnet_units", None) if row is not None else None
+            if raw is not None and multi is not None:
+                raise ValueError("Use either legacy OpenPose or ordered ControlNet units for a slot, not both.")
+            if raw is None and multi is None:
                 continue
             if build is None:
                 if self._openpose_compiler is None:
@@ -834,6 +841,13 @@ class PromptPackNormalizedJobBuilder:
                 f"{(prompt.entry.pack_row_index or 0) + 1}"
                 + (f" / variant {prompt.matrix_index + 1}" if prompt.matrix_count > 1 else "")
             )
+            if multi is not None:
+                prompt.conditioning = compile_units(
+                    build, multi,
+                    stage_names=tuple(stage.stage_type for stage in prompt.stages if stage.enabled),
+                    label=label, model_name=model_name, backend_id=str(backend_id), policy_for=evidence.policy_for,
+                )
+                continue
             prompt.conditioning = build.compile_slot(
                 raw,
                 label=label,

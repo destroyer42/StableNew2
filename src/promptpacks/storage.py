@@ -19,6 +19,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.conditioning.controlnet import SLOT_FIELD as CONTROLNET_SLOT_FIELD
 from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_SLOT_FIELD
 from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.utils.embedding_prompt_utils import (
@@ -182,6 +183,7 @@ def prompt_pack_rows(document: dict[str, Any]) -> list[PackRow]:
                     negative_phrases=negative_phrases,
                     # Conditioning travels with its slot's row (matrix variants and row-index selection included).
                     conditioning=copy.deepcopy(raw_slot.get(OPENPOSE_SLOT_FIELD)),
+                    controlnet_units=copy.deepcopy(raw_slot.get(CONTROLNET_SLOT_FIELD)),
                 )
             )
     return rows
@@ -194,7 +196,7 @@ def slots_with_conditioning(document: dict[str, Any]) -> list[int]:
     return [
         int(slot.get("index", position)) if isinstance(slot.get("index", position), int) else position
         for position, slot in enumerate(slots)
-        if isinstance(slot, dict) and slot.get(OPENPOSE_SLOT_FIELD) is not None
+        if isinstance(slot, dict) and (slot.get(OPENPOSE_SLOT_FIELD) is not None or slot.get(CONTROLNET_SLOT_FIELD) is not None)
     ]
 
 

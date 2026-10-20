@@ -102,6 +102,12 @@ def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
             )
         )
     edit = _mapping(_mapping(_mapping(record.config).get("img2img")).get("image_edit_inputs"))
+    from src.conditioning.controlnet import SLOT_FIELD, FrozenControlNet
+
+    raw_units = _mapping(record.config).get(SLOT_FIELD)
+    if raw_units is not None:
+        for index, unit in enumerate(FrozenControlNet.from_config(raw_units).units):
+            checks.append(InputCheck(f"ControlNet unit {index + 1} ({unit.modality})", unit.image.snapshot_path, unit.image.asset_sha256))
     mask = _mapping(edit.get("mask"))
     if mask.get("path"):
         checks.append(InputCheck("inpainting mask", str(mask["path"]), _recorded_sha(mask.get("sha256"))))

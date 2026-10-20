@@ -71,6 +71,10 @@ def freeze_prompt_pack_source(
         row = prompt_pack_row_by_index(document, int(source.get("selected_prompt_index", 0) or 0))
     except (OSError, PromptPackFormatError, ValueError) as exc:
         raise ValueError(f"Selected PromptPack cannot be frozen: {exc}") from exc
+    from src.conditioning.controlnet import enabled
+
+    if enabled(getattr(row, "controlnet_units", None)):
+        raise ValueError("Selected PromptPack row has ControlNet units, which Learning experiments and Model Comparison do not support.")
     conditioning = getattr(row, "conditioning", None)
     if conditioning is not None and not (
         isinstance(conditioning, Mapping) and conditioning.get("enabled") is False

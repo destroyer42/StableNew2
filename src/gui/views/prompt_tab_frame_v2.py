@@ -41,6 +41,7 @@ from src.gui.view_contracts.prompt_editor_contract import (
     find_undefined_slots,
     get_prompt_tab_column_specs,
 )
+from src.gui.widgets.controlnet_units_panel import ControlNetUnitsPanel
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
@@ -223,6 +224,8 @@ class PromptTabFrame(ttk.Frame):
                 self.openpose_picker.set_content_visibility_mode(self._content_visibility_mode)
             except Exception:
                 pass
+        if hasattr(self, "controlnet_picker"):
+            self.controlnet_picker.set_content_visibility_mode(self._content_visibility_mode)
         self._refresh_pack_list()
         self._refresh_editor()
         self._refresh_metadata()
@@ -511,6 +514,8 @@ class PromptTabFrame(ttk.Frame):
             on_change_callback=self._on_openpose_changed,
         )
         self.openpose_picker.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.controlnet_picker = ControlNetUnitsPanel(self.prompts_tab, on_change_callback=self._on_controlnet_changed)
+        self.controlnet_picker.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
     def _build_template_panel(self) -> None:
         self.template_panel = ttk.LabelFrame(self.prompts_tab, text="Cinematic Template", padding=6)
@@ -1132,6 +1137,8 @@ class PromptTabFrame(ttk.Frame):
             # Update OpenPose picker (a programmatic load: never marks the pack modified)
             if hasattr(self, "openpose_picker"):
                 self.openpose_picker.set_declaration(getattr(slot, "openpose", None))
+            if hasattr(self, "controlnet_picker"):
+                self.controlnet_picker.set_declaration(getattr(slot, "controlnet_units", None))
 
             # Refresh matrix tab if it exists
             if hasattr(self, "matrix_tab_panel"):
@@ -1213,6 +1220,13 @@ class PromptTabFrame(ttk.Frame):
             self._mark_pack_modified()
         except Exception:
             logger.debug("Could not store the slot's OpenPose declaration", exc_info=True)
+        self._refresh_metadata()
+
+    def _on_controlnet_changed(self) -> None:
+        if self._suppress_editor_change:
+            return
+        self.workspace_state.set_slot_controlnet_units(self.workspace_state.get_current_slot_index(), self.controlnet_picker.get_declaration())
+        self._mark_pack_modified()
         self._refresh_metadata()
 
     def _on_embeddings_changed(self) -> None:
@@ -1441,6 +1455,8 @@ class PromptTabFrame(ttk.Frame):
         self._model_projection = projection
         if hasattr(self, "openpose_picker"):
             self.openpose_picker.set_target(getattr(projection, "openpose", None))
+        if hasattr(self, "controlnet_picker"):
+            self.controlnet_picker.set_target(getattr(projection, "openpose", None))
         self._refresh_metadata(scan_style=False)
 
     def _snapshot_prompt_state(self) -> PromptStateSnapshot:
