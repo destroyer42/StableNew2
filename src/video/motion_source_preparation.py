@@ -482,6 +482,7 @@ def prepare_motion_source(
         )
 
     try:
+        run.check()  # a cancel that arrived before any work started outranks every other outcome
         clip = Path(str(request.clip_path or "").strip()).expanduser()
         if not clip.is_file():
             raise _Stop(

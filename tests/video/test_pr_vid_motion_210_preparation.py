@@ -850,3 +850,21 @@ def test_a_relative_output_root_still_yields_absolute_recorded_paths(tmp_path, m
         tmp_path / "relative_out" / prep.PREPARED_DIRNAME
     )
     assert not any(name.startswith(".preparing-") for name in os.listdir(derived.parent))
+
+
+def test_a_cancel_before_start_is_reported_as_cancelled_even_without_ffmpeg(tmp_path, monkeypatch):
+    monkeypatch.setattr(prep, "resolve_ffmpeg_executable", lambda: None)
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"x")
+    event = threading.Event()
+    event.set()
+    cancelled = prepare_motion_source(
+        MotionSourceRequest(str(clip), _contract()), output_root=tmp_path / "out", cancel=event
+    )
+    assert cancelled.status == prep.STATUS_CANCELLED and cancelled.record is None
+    # Without a cancel the same request still fails closed.
+    failed = prepare_motion_source(
+        MotionSourceRequest(str(clip), _contract()), output_root=tmp_path / "out"
+    )
+    assert failed.status == prep.STATUS_FAILED_PREPARATION and failed.code == "ffmpeg_unavailable"
+    assert _published(tmp_path) == []
