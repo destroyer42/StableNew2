@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-406 of 563 modules have a docstring.
+411 of 568 modules have a docstring.
 
 ## src/
 
@@ -271,6 +271,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
 - `video_batch_contract.py`: Toolkit-neutral state for the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_experiment_contract.py`: Toolkit-neutral state for the Video Workflow "Compare one control" section (PR-VID-194)
+- `video_motion_prep_contract.py`: Toolkit-neutral state for the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_motion_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_workspace_contract.py`: (no docstring)
 - `window_layout_contract.py`: Screen-aware main-window geometry policy (PR-GUI-100)
@@ -304,6 +305,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
+- `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_workflow_tab_frame_v2.py`: (no docstring)
 
@@ -651,8 +653,11 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: (no docstring)
 - `depth_map_resolver.py`: (no docstring)
+- `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
+- `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
+- `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories
 - `movie_clip_models.py`: Data models for Movie Clip build requests, results, and manifests
 - `movie_clip_service.py`: Movie Clip service: post-video assembly/export orchestration

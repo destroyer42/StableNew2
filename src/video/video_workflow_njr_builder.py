@@ -30,6 +30,8 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_TESTING,
 )
 from src.video.continuity_models import normalize_continuity_link
+from src.video.motion_source_plan import motion_source_contract
+from src.video.motion_source_preparation import validate_prepared_record
 from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
 from src.video.video_workflow_intent import (
     EXPERIMENTAL_OPT_IN_FIELD,
@@ -48,6 +50,13 @@ from src.video.workflow_frame_count import (
 from src.video.workflow_source_preparation import prepare_declared_workflow_source
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
+# Optional form key: the record ``prepare_motion_source`` returned (PR-VID-MOTION-210).  Absent
+# means the clip is used exactly as it always was.
+PREPARED_MOTION_SOURCE_FIELD = "prepared_motion_source"
+# Optional form key set by an operator surface whose preparation is running, failed, was cancelled
+# or is out of date: its text is refused as-is, so a job never silently falls back to the
+# unprepared clip the operator meant to replace.
+MOTION_SOURCE_BLOCKED_FIELD = "motion_source_preparation_blocked"
 _DEFAULT_OUTPUT_ROUTES = (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_MOVIE_CLIPS,
@@ -213,14 +222,16 @@ class FrozenVideoInputs:
     # (label, path, sha256) of file-backed end/mid anchors and an uploaded depth map the workflow
     # actually uses.  Evidence only: re-hashed by ``verify_unchanged``, never stored in the NJR.
     shared_files: tuple[tuple[str, str, str], ...] = ()
+    motion_source_preparation: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
 class SharedFrozenInputs:
     """Inputs that do not depend on the source image, frozen once and shared by a whole batch."""
 
-    driving_video: Mapping[str, str] | None  # {"path", "sha256"}
+    driving_video: Mapping[str, str] | None  # {"path", "sha256"}; the prepared clip when prepared
     files: tuple[tuple[str, str, str], ...]  # (label, path, sha256)
+    motion_source_preparation: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -348,14 +359,35 @@ class VideoWorkflowNjrBuilder:
         spec = self.spec_for(form_data)
         declared_inputs = set(spec.declared_input_names)
         driving: dict[str, str] | None = None
+        preparation: dict[str, Any] | None = None
         driving_text = str(form_data.get("pose_video_path") or "").strip()
-        if "pose_video" in declared_inputs and driving_text:
+        files: list[tuple[str, str, str]] = []
+        blocked = str(form_data.get(MOTION_SOURCE_BLOCKED_FIELD) or "").strip()
+        if blocked:
+            raise ValueError(blocked)
+        prepared = form_data.get(PREPARED_MOTION_SOURCE_FIELD)
+        if prepared:
+            # An optional, explicit preparation: every byte is re-verified now, and the derived
+            # clip (what actually runs) is frozen together with the record of where it came from.
+            if "pose_video" not in declared_inputs or not driving_text:
+                raise ValueError(
+                    "A prepared motion source needs a workflow that takes a driving video and "
+                    "the driving video it was prepared from."
+                )
+            preparation = validate_prepared_record(
+                prepared,
+                original_path=driving_text,
+                contract=motion_source_contract(spec, form_data.get("frame_count")),
+                hash_file=sha256_file,
+            )
+            derived, original = preparation["derived"], preparation["original"]
+            driving = {"path": str(derived["path"]), "sha256": str(derived["sha256"])}
+            files.append(("original driving video", str(original["path"]), str(original["sha256"])))
+        elif "pose_video" in declared_inputs and driving_text:
             # Frozen by path and content hash: the source file is only ever read (staged by the
             # backend as a copy), and provenance records exactly which clip drove the motion.
             driving_path = Path(driving_text).expanduser().resolve()
             driving = {"path": str(driving_path), "sha256": sha256_file(driving_path)}
-
-        files: list[tuple[str, str, str]] = []
 
         def add(label: str, raw_path: str) -> None:
             path = Path(raw_path).expanduser()
@@ -374,7 +406,9 @@ class VideoWorkflowNjrBuilder:
             depth_input = _normalize_depth_input(form_data)
             if depth_input["mode"] == "upload" and depth_input["path"]:
                 add("depth map", depth_input["path"])
-        return SharedFrozenInputs(driving_video=driving, files=tuple(files))
+        return SharedFrozenInputs(
+            driving_video=driving, files=tuple(files), motion_source_preparation=preparation
+        )
 
     def freeze_inputs(
         self,
@@ -423,6 +457,7 @@ class VideoWorkflowNjrBuilder:
             prepared_source_path=prepared_source_path,
             prepared_source_sha256=sha256_file(prepared_source_path),
             shared_files=shared.files,
+            motion_source_preparation=shared.motion_source_preparation,
         )
 
     @staticmethod
@@ -539,6 +574,11 @@ class VideoWorkflowNjrBuilder:
         if driving_provenance is not None:
             workflow_config["pose_video_path"] = driving_provenance["path"]
             workflow_config["pose_video_sha256"] = driving_provenance["sha256"]
+        preparation_record = (
+            dict(frozen.motion_source_preparation) if frozen.motion_source_preparation else None
+        )
+        if preparation_record is not None:
+            workflow_config["motion_source_preparation"] = preparation_record
         source_preparation = dict(frozen.source_preparation) if frozen.source_preparation else None
         if source_preparation is not None:
             workflow_config["source_preparation"] = source_preparation
@@ -594,6 +634,11 @@ class VideoWorkflowNjrBuilder:
             extra_metadata["video_workflow"]["operator_controls"] = dict(frozen_controls)
         if driving_provenance is not None:
             extra_metadata["video_workflow"]["pose_video"] = dict(driving_provenance)
+        if preparation_record is not None:
+            extra_metadata["video_workflow"]["motion_source_preparation"] = {
+                side: {key: preparation_record[side].get(key) for key in ("path", "sha256")}
+                for side in ("original", "derived")
+            } | {"settings": dict(preparation_record["settings"])}
         if frozen_frame_count is not None and length_policy is not None:
             extra_metadata["video_workflow"].update(
                 frame_count=frozen_frame_count,
@@ -643,6 +688,8 @@ class VideoWorkflowNjrBuilder:
 
 __all__ = [
     "HASH_CHUNK_BYTES",
+    "MOTION_SOURCE_BLOCKED_FIELD",
+    "PREPARED_MOTION_SOURCE_FIELD",
     "FrozenVideoInputs",
     "SharedFrozenInputs",
     "VideoWorkflowBuild",

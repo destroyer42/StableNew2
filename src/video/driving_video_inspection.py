@@ -122,6 +122,9 @@ class DrivingVideoFacts:
     frame_count_basis: str  # "reported" | "estimated" | "unknown"
     duration_seconds: float | None
     duration_basis: str  # "stream" | "container" | "unknown"
+    # The reported rate as FFprobe wrote it ("30000/1001"); "" when unknown.  ``reported_fps`` is a
+    # float, which cannot name an exact frame timeline (PR-VID-MOTION-210).
+    fps_rational: str = ""
 
     @property
     def frame_count(self) -> int | None:
@@ -303,10 +306,12 @@ def parse_probe_output(stdout: bytes) -> DrivingVideoFacts:
     base = _rate(video.get("r_frame_rate"))
     if average is not None:
         fps, fps_basis = average, "average"
+        fps_text = str(video.get("avg_frame_rate")).strip()
     elif base is not None:
         fps, fps_basis = base, "base"
+        fps_text = str(video.get("r_frame_rate")).strip()
     else:
-        fps, fps_basis = None, "unknown"
+        fps, fps_basis, fps_text = None, "unknown", ""
     variable = (
         average is not None and base is not None and abs(average - base) / max(base, 1e-9) > 0.01
     )
@@ -351,6 +356,7 @@ def parse_probe_output(stdout: bytes) -> DrivingVideoFacts:
         frame_count_basis=frame_basis,
         duration_seconds=duration,
         duration_basis=duration_basis,
+        fps_rational=fps_text,
     )
 
 
@@ -454,14 +460,23 @@ def inspect_driving_video(
     ffprobe: str | Path | None = None,
     ffmpeg: str | Path | None = None,
     frame_count: int = PREVIEW_FRAME_COUNT,
+    positions: Sequence[float] | None = None,
     cancel: threading.Event | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> DrivingVideoInspection:
-    """Inspect ``path`` within the module's bounds.  Never raises for a bad or missing file."""
+    """Inspect ``path`` within the module's bounds.  Never raises for a bad or missing file.
+
+    ``positions`` (seconds, at most ``PREVIEW_FRAME_COUNT``) replaces the default representative
+    seek times, so a caller that knows the clip's frame timeline can preview exact frames."""
 
     started = clock()
     text = str(path or "").strip()
     wanted = max(0, min(int(frame_count), PREVIEW_FRAME_COUNT))
+    explicit = (
+        [max(0.0, float(item)) for item in positions][:PREVIEW_FRAME_COUNT] if positions else None
+    )
+    if explicit is not None:
+        wanted = len(explicit)
 
     def done(
         status: str,
@@ -574,7 +589,7 @@ def inspect_driving_video(
             )
         )
     else:
-        for position in preview_positions(facts.duration_seconds, wanted):
+        for position in explicit or preview_positions(facts.duration_seconds, wanted):
             if cancel is not None and cancel.is_set():
                 issues.append(InspectionIssue(ISSUE_CANCELLED, "Inspection was cancelled."))
                 break
@@ -633,7 +648,9 @@ def inspect_driving_video(
         status = STATUS_PARTIAL
     elif wanted and not frames:
         status = STATUS_PARTIAL
-    elif wanted and len(frames) < len(preview_positions(facts.duration_seconds, wanted)):
+    elif wanted and len(frames) < len(
+        explicit or preview_positions(facts.duration_seconds, wanted)
+    ):
         status = STATUS_PARTIAL
     else:
         status = STATUS_OK
