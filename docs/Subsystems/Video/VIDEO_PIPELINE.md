@@ -163,6 +163,8 @@ The window compares any two playable arms with one clock (`ComparisonClock`): a 
 
 ## 6. Qualification evidence versus production
 
+**Eval kit (PR-VID-EVAL-320) [V].** Candidates are compared with an eval run instead of a per-candidate qualification package (operator procedure: `docs/runbooks/video_eval_kit.md`). A suite (`src/video/video_eval_suite.py`, `stablenew.video-eval-suite.v1`) fixes cases (source image pinned by SHA-256, prompt), arms (an SVD configuration or a Video Workflow form, merged over the tab defaults) and one seed. `VideoWorkflowController.preview_eval_run` builds one NJR per case per arm with the production builders (`VideoWorkflowNjrBuilder`; `SVDController.build_admitted_njr`, the same path as `submit_svd_job`), all or none; `submit_eval_run` re-hashes the images and crosses `JobService.submit_njrs` once (`src/video/video_eval_run.py`). Eval membership is recorded only in `<output>/video_eval/<run_id>/run.json`, never in the NJR. `build_eval_report` (`src/video/video_eval_report.py`) is a post-execution consumer: it classifies each job with the experiment review's `classify_entry`, measures finished clips on the bounded review preview (`src/video/video_eval_metrics.py`: motion, jitter ratio, brightness flicker, colour drift, sharpness retention), flags differences from the baseline arm and writes `metrics.json`, `ratings.csv` (ratings survive a rebuild) and `index.html`. Flags are guardrails, never a ranking; the owner's rating decides.
+
 Experimental status is a statement about evidence, not a toggle. Wan2.2 TI2V-5B has an accepted real run on the target machine (about 83 s for 49 frames at 480x832 including a cold managed-Comfy start) and a characterization of what prompt motion does and does not do. Wan-Animate-2 passed local execution and an owner motion-value verdict but fails the frozen automated motion-curve guardrail, and the adjudication is "technically not yet promotion-ready". Identity preservation is observed, never guaranteed (`VideoBackendCapabilities` deliberately has no such capability). Qualification harnesses are operator-only code in `tools/qualification/vid*` and `tools/acceptance/vid130_wan_acceptance.py`; they are not part of the production path or CI. Physical GPU work is on HOLD (`STATUS.md` Holds).
 
 ## 7. Movie Clips and assembly
@@ -290,6 +292,7 @@ Per-PR records stay in `docs/Subsystems/Video/` as historical evidence. They may
 | `docs/Subsystems/Video/PR-POSTPROC-100_Restoration_Isolation.md` | CodeFormer/upscale isolation, GFPGAN retirement, equivalence evidence |
 | `docs/Subsystems/Video/PR-SVD-100_Folder_Batch_Submission.md` | SVD folder batch contract |
 | `docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md` | Movie Clips tab behavior and SVD handoff |
+| `docs/runbooks/video_eval_kit.md` | Eval suites, runs, metrics and the contact sheet (PR-VID-EVAL-320) |
 | `docs/runbooks/managed_comfy_runtime.md` | Operator procedure for building and launching the managed runtime |
 | `docs/audits/2026-10-20_video_experience_roadmap.md` | Owner-accepted video roadmap (quality, ease, models, length, learning) and decisions D1-D8 |
 | `docs/audits/2026-10-16_repo_audit_and_roadmap.md` | Audit B7, B8, B11, E3, E5, G7 and roadmap P3-3, P3-4, P4-6, P5-7 |
