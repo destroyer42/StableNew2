@@ -18,6 +18,16 @@ from src.api.webui_runtime_identity import (
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.gui.content_visibility import normalize_content_visibility_mode
 from src.utils.config import ConfigManager
+from src.video.managed_comfy_runtime import (
+    ManagedComfyContract,
+    ManagedComfyContractError,
+    ManagedComfyDetection,
+    assess_comfy_command,
+    detect_managed_comfy,
+    load_managed_comfy_contract,
+    port_from_base_url,
+    with_required_flags,
+)
 
 #: Runtime selector values. "default" is the product default (managed Forge); it persists a blank identity.
 RUNTIME_DEFAULT = "default"
@@ -40,10 +50,29 @@ class EngineSettingsDialog(ttk.Frame):
         content_visibility_mode: str = "nsfw",
         on_content_visibility_mode_change: Callable[[str], None] | None = None,
         running_runtime_identity: str | None = None,
+        managed_comfy_contract: ManagedComfyContract | None = None,
+        managed_comfy_detector: Callable[[ManagedComfyContract, int], ManagedComfyDetection]
+        | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
         self.config_manager = config_manager
+        self._comfy_contract_error = ""
+        if managed_comfy_contract is None:
+            try:
+                managed_comfy_contract = load_managed_comfy_contract()
+            except ManagedComfyContractError as exc:
+                self._comfy_contract_error = str(exc)
+        self._comfy_contract = managed_comfy_contract
+        self._comfy_detector = managed_comfy_detector or (
+            lambda contract, port: detect_managed_comfy(contract, port=port)
+        )
+        self._comfy_command: list[str] = []
+        self._initial_comfy: tuple[tuple[str, ...], str, str] = ((), "", "")
+        self._comfy_base_url_var = tk.StringVar()
+        self._comfy_workdir = ""
+        self._comfy_command_text_var = tk.StringVar()
+        self._comfy_status_var = tk.StringVar()
         self._running_identity = running_runtime_identity
         self._initial_runtime = ""
         self._initial_identity_raw = ""
@@ -112,12 +141,16 @@ class EngineSettingsDialog(ttk.Frame):
         visibility_frame = ttk.LabelFrame(self, text="Content Visibility", padding=8)
         health_frame = ttk.LabelFrame(self, text="Health Checks", padding=8)
         optimizer_frame = ttk.LabelFrame(self, text="Prompt Optimizer", padding=8)
+        comfy_frame = ttk.LabelFrame(self, text="Video runtime (ComfyUI)", padding=8)
 
         webui_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=4)
         paths_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=4)
         visibility_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=4)
         health_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=4)
         optimizer_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=4)
+        comfy_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=4)
+        comfy_frame.columnconfigure(1, weight=1)
+        self._build_comfy_section(comfy_frame)
 
         webui_frame.columnconfigure(1, weight=1)
         paths_frame.columnconfigure(1, weight=1)
@@ -227,9 +260,143 @@ class EngineSettingsDialog(ttk.Frame):
             var_type="int",
         )
 
+    # ---- video runtime (ComfyUI launch configuration; applied at restart) -------------------------------
+    def _build_comfy_section(self, frame: ttk.LabelFrame) -> None:
+        self._add_label_entry(frame, "ComfyUI URL:", self._comfy_base_url_var, row=0)
+        ttk.Label(frame, text="Launch command:").grid(row=1, column=0, sticky="nw", pady=2)
+        ttk.Label(
+            frame, textvariable=self._comfy_command_text_var, style="Muted.TLabel", wraplength=420
+        ).grid(row=1, column=1, sticky="w", padx=(4, 0), pady=2)
+        ttk.Label(
+            frame, textvariable=self._comfy_status_var, style="Muted.TLabel", wraplength=480
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 4))
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=3, column=0, columnspan=2, sticky="w")
+        self.use_managed_comfy_button = ttk.Button(
+            buttons, text="Use managed install", command=self.use_managed_comfy_install
+        )
+        self.use_managed_comfy_button.grid(row=0, column=0, padx=(0, 4))
+        self.add_comfy_flags_button = ttk.Button(
+            buttons, text="Add required flags", command=self.add_required_comfy_flags
+        )
+        self.add_comfy_flags_button.grid(row=0, column=1, padx=(0, 4))
+        self.clear_comfy_command_button = ttk.Button(
+            buttons, text="Clear launch command", command=self.clear_comfy_command
+        )
+        self.clear_comfy_command_button.grid(row=0, column=2)
+
+    def _load_comfy_settings(self, settings: dict[str, Any]) -> None:
+        self._comfy_command = [str(part) for part in settings.get("comfy_command") or []]
+        self._comfy_workdir = str(settings.get("comfy_workdir") or "")
+        self._comfy_base_url_var.set(str(settings.get("comfy_base_url") or ""))
+        self._initial_comfy = self._comfy_state()
+        self._comfy_base_url_var.trace_add("write", lambda *_a: self._refresh_comfy_labels())
+        self._refresh_comfy_labels()
+
+    def _comfy_state(self) -> tuple[tuple[str, ...], str, str]:
+        return (
+            tuple(self._comfy_command),
+            self._comfy_workdir,
+            self._comfy_base_url_var.get().strip(),
+        )
+
+    def comfy_settings_changed(self) -> bool:
+        return self._comfy_state() != self._initial_comfy
+
+    def comfy_command(self) -> list[str]:
+        return list(self._comfy_command)
+
+    def comfy_status_text(self) -> str:
+        contract = self._comfy_contract
+        if contract is None:
+            return f"Managed ComfyUI contract unavailable: {self._comfy_contract_error}"
+        assessment = assess_comfy_command(self._comfy_command, contract)
+        if assessment.kind == "none":
+            return (
+                "No launch command: StableNew only uses a ComfyUI that is already running at the URL, "
+                "and refuses workflows that need launch flags it cannot verify (Wan-Animate-2). "
+                "Use managed install to let StableNew launch its own ComfyUI."
+            )
+        source = (
+            f"Managed ComfyUI {contract.release}"
+            if assessment.kind == "managed"
+            else "Custom ComfyUI command"
+        )
+        if assessment.missing_flags:
+            return (
+                f"{source}. Missing required flags: {' '.join(assessment.missing_flags)}; workflows that "
+                "need them (Wan-Animate-2) are refused. Add required flags to fix."
+            )
+        return f"{source}. All required launch flags are present."
+
+    def _refresh_comfy_labels(self) -> None:
+        self._comfy_command_text_var.set(
+            " ".join(self._comfy_command) if self._comfy_command else "(none)"
+        )
+        self._comfy_status_var.set(self.comfy_status_text())
+        contract = self._comfy_contract
+        missing = bool(
+            contract is not None
+            and self._comfy_command
+            and assess_comfy_command(self._comfy_command, contract).missing_flags
+        )
+        try:
+            self.use_managed_comfy_button.state(
+                ["!disabled"] if contract is not None else ["disabled"]
+            )
+            self.add_comfy_flags_button.state(["!disabled"] if missing else ["disabled"])
+            self.clear_comfy_command_button.state(
+                ["!disabled"] if self._comfy_command else ["disabled"]
+            )
+        except (AttributeError, tk.TclError):
+            pass
+
+    def use_managed_comfy_install(self) -> bool:
+        """Select the managed installation the contract describes (explicit operator action)."""
+
+        contract = self._comfy_contract
+        if contract is None:
+            return False
+        detection = self._comfy_detector(
+            contract, port_from_base_url(self._comfy_base_url_var.get())
+        )
+        if not detection.found:
+            messagebox.showwarning(
+                "Managed ComfyUI not found",
+                "\n".join(detection.problems)
+                + "\n\nSee docs/runbooks/managed_comfy_runtime.md to build it.",
+            )
+            return False
+        updates = detection.settings_updates()
+        self._comfy_command = list(updates["comfy_command"])
+        self._comfy_workdir = str(updates["comfy_workdir"])
+        self._comfy_base_url_var.set(str(updates["comfy_base_url"]))
+        self._refresh_comfy_labels()
+        return True
+
+    def add_required_comfy_flags(self) -> None:
+        contract = self._comfy_contract
+        if contract is None or not self._comfy_command:
+            return
+        self._comfy_command = with_required_flags(self._comfy_command, contract.required_flags)
+        self._refresh_comfy_labels()
+
+    def clear_comfy_command(self) -> None:
+        self._comfy_command = []
+        self._comfy_workdir = ""
+        self._refresh_comfy_labels()
+
+    def _collect_comfy_values(self, values: dict[str, Any]) -> None:
+        # Only a changed configuration is written; an unchanged one never rewrites what is persisted.
+        if not self.comfy_settings_changed():
+            return
+        values["comfy_command"] = list(self._comfy_command)
+        values["comfy_workdir"] = self._comfy_workdir
+        values["comfy_base_url"] = self._comfy_base_url_var.get().strip()
+
     def _build_actions(self) -> None:
         btn_frame = ttk.Frame(self)
-        btn_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=(8, 8))
+        btn_frame.grid(row=7, column=0, sticky="ew", padx=8, pady=(8, 8))
         btn_frame.columnconfigure((0, 1, 2), weight=1)
 
         restore_btn = ttk.Button(btn_frame, text="Restore Defaults", command=self.restore_defaults)
@@ -241,7 +408,7 @@ class EngineSettingsDialog(ttk.Frame):
 
     def _add_label_entry(
         self,
-        parent: ttk.Frame,
+        parent: ttk.Frame | ttk.Labelframe,
         label: str,
         var: tk.Variable,
         *,
@@ -306,6 +473,7 @@ class EngineSettingsDialog(ttk.Frame):
             else:
                 var.set(int(value or 0))
         self._load_runtime_choice(settings)
+        self._load_comfy_settings(settings)
         self._runtime_var.trace_add("write", self._on_runtime_changed)
         self._webui_base_url_var.trace_add("write", lambda *_a: self._refresh_runtime_labels())
         self._refresh_runtime_labels()
@@ -395,6 +563,7 @@ class EngineSettingsDialog(ttk.Frame):
         }
         values["prompt_optimizer"]["warn_on_large_chunk_count"] = True
         values["prompt_optimizer"]["opt_out_pipeline_names"] = []
+        self._collect_comfy_values(values)
         choice = self.selected_runtime()
         identity = self._selected_identity()
         if choice != self._initial_runtime:
@@ -411,6 +580,9 @@ class EngineSettingsDialog(ttk.Frame):
     def _validate(self, values: dict[str, Any]) -> bool:
         if self._selected_identity() is None:
             messagebox.showwarning("Settings", "Choose a WebUI runtime before saving.")
+            return False
+        if self.comfy_settings_changed() and not self._comfy_base_url_var.get().strip():
+            messagebox.showwarning("Settings", "ComfyUI URL must be provided.")
             return False
         base_url = str(values.get("webui_base_url") or "").strip()
         if not base_url:
@@ -429,6 +601,12 @@ class EngineSettingsDialog(ttk.Frame):
                 pass
         if self.restart_required():
             messagebox.showinfo("Settings", self.runtime_notice_text())
+        if self.comfy_settings_changed():
+            messagebox.showinfo(
+                "Settings",
+                "Restart StableNew to apply the video runtime (ComfyUI) change. A ComfyUI that is "
+                "already running is not stopped or changed.",
+            )
         if callable(self._on_content_visibility_mode_change):
             try:
                 self._on_content_visibility_mode_change(
