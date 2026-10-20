@@ -311,9 +311,12 @@ def test_a_driving_video_is_refused_by_the_prompt_only_workflow(tmp_path) -> Non
 def test_missing_pinned_memory_flag_refuses_before_any_runtime_start(tmp_path) -> None:
     manager = _ManagedFake(command=["python.exe", "main.py", "--port", "8000"])
     client = _AnimateComfy(tmp_path)
-    with pytest.raises(RuntimeError, match="--disable-pinned-memory"):
+    with pytest.raises(RuntimeError, match="--disable-pinned-memory") as refused:
         _backend(client, manager).execute(None, _request(tmp_path, WAN_ANIMATE2_PROMPT_ID))
     assert manager.starts == 0 and client.queued == []
+    # PR-VID-UX-310: the refusal names the screen and the one-click fix that exist.
+    assert "Engine Settings > Video runtime (ComfyUI)" in str(refused.value)
+    assert "Add required flags" in str(refused.value)
 
 
 def test_an_unverifiable_external_runtime_is_refused(tmp_path, monkeypatch) -> None:
@@ -327,8 +330,9 @@ def test_an_unverifiable_external_runtime_is_refused(tmp_path, monkeypatch) -> N
         readiness=WorkflowResourceReadiness(ram_probe=lambda: 24.0, gpu_probe=_driver_probe(client.stats)),
         transition=_no_transition(),
     )
-    with pytest.raises(RuntimeError, match="cannot be verified"):
+    with pytest.raises(RuntimeError, match="cannot be verified") as refused:
         backend.execute(None, _request(tmp_path, WAN_ANIMATE2_PROMPT_ID))
+    assert "Use managed install" in str(refused.value)
     assert client.queued == [] and client.uploaded == []
 
 
