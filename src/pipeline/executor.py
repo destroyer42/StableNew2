@@ -5478,8 +5478,17 @@ class Pipeline:
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Load input image as base64
-            input_image_b64 = self._load_image_base64(input_image_path)
+            # Frozen edits load and hash each snapshot once; the same verified bytes reach the wire.
+            from src.pipeline.image_edit_inputs import KEY as IMAGE_EDIT_INPUTS
+            from src.pipeline.image_edit_inputs import verified_inputs as verified_edit_inputs
+
+            frozen_edit = None
+            if IMAGE_EDIT_INPUTS in config:
+                frozen_edit = verified_edit_inputs(config, input_image_path)
+            input_image_b64 = (
+                base64.b64encode(frozen_edit[0]).decode("ascii")
+                if frozen_edit is not None else self._load_image_base64(input_image_path)
+            )
             if not input_image_b64:
                 logger.error(f"Failed to load input image: {input_image_path}")
                 return None
@@ -5552,7 +5561,10 @@ class Pipeline:
 
             mask_image_path = config.get("mask_image_path") or config.get("mask_path")
             if mask_image_path:
-                mask_image_b64 = self._load_image_base64(Path(str(mask_image_path)))
+                mask_image_b64 = (
+                    base64.b64encode(frozen_edit[1]).decode("ascii")
+                    if frozen_edit is not None else self._load_image_base64(Path(str(mask_image_path)))
+                )
                 if not mask_image_b64:
                     logger.error(f"Failed to load mask image: {mask_image_path}")
                     return None

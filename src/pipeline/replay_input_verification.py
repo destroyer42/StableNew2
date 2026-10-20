@@ -101,6 +101,10 @@ def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
                 _recorded_sha(conditioning.get("asset_sha256")),
             )
         )
+    edit = _mapping(_mapping(_mapping(record.config).get("img2img")).get("image_edit_inputs"))
+    mask = _mapping(edit.get("mask"))
+    if mask.get("path"):
+        checks.append(InputCheck("inpainting mask", str(mask["path"]), _recorded_sha(mask.get("sha256"))))
     return checks
 
 

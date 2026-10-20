@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-18
+Updated: 2026-10-20
 
 This file is **current state only**: baseline, supported capabilities, what is active and next, open owner
 decisions, holds and known debt. It is capped at 150 lines and checked by `tools/ci/ci_truth.py`. It does not narrate
@@ -47,6 +47,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   truth (`docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md`); supported-option upscale defaults (`docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md`).
 - PromptPacks (versioned JSON), Review and reprocess, Photo Optimize with scope-aware editing and historical baselines
   (`docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md`), cross-workflow model compatibility preflight.
+- Review mask editing for registry-resolved SDXL base / Forge: original-pixel painting, frozen input previews and canonical queue admission (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`); outpainting and physical masked-output acceptance are deferred.
 - Learning: designed experiments, ratings, Model Comparison, staged curation. Recommendations are applied from the Learning tab's
   Recommendations selector (default Apply with confirm); rated review drafts are saved on navigation or with Save All Drafts.
 - History browser: the Pipeline tab's Job History opens a searchable, paged view of every job (status, date, pack, prompt/model text;
