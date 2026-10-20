@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-417 of 574 modules have a docstring.
+418 of 575 modules have a docstring.
 
 ## src/
 
@@ -660,6 +660,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
+- `managed_comfy_runtime.py`: Read-only production view of the StableNew-managed ComfyUI runtime contract
 - `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
 - `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories
