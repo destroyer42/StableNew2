@@ -195,9 +195,10 @@ def _format_missing_dependency_message(spec: Any, dependency_result: Any) -> str
 def _build_missing_runtime_message(base_url: str, reason: Exception | None = None) -> str:
     message = (
         "ComfyUI is not running and StableNew has no managed ComfyUI launch configuration. "
-        f"Tried base URL '{base_url}'. Configure ComfyUI in Engine Settings so presets/settings.json "
-        "contains a valid comfy_command and comfy_workdir, or start ComfyUI manually before running "
-        "the video_workflow stage."
+        f"Tried base URL '{base_url}'. In Engine Settings > Video runtime (ComfyUI), choose "
+        "'Use managed install' (it writes comfy_command and comfy_workdir in presets/settings.json) "
+        "and restart StableNew, or start ComfyUI yourself at that URL before running the "
+        "video_workflow stage."
     )
     if reason is not None:
         message = f"{message} Last probe error: {reason}"
@@ -891,15 +892,16 @@ class ComfyWorkflowVideoBackend:
             raise RuntimeError(
                 f"Workflow '{spec.workflow_id}' requires a StableNew-managed ComfyUI launched with "
                 f"{' '.join(required)}; no managed launch configuration is available and an "
-                "external runtime's launch flags cannot be verified. Configure comfy_command in "
-                "Engine Settings."
+                "external runtime's launch flags cannot be verified. In Engine Settings > Video "
+                "runtime (ComfyUI), choose 'Use managed install' and restart StableNew."
             )
         missing = [flag for flag in required if flag not in command]
         if missing:
             raise RuntimeError(
                 f"Workflow '{spec.workflow_id}' requires the managed ComfyUI to be launched with "
-                f"{' '.join(missing)}, which the configured comfy_command does not include. Add "
-                "it to comfy_command in Engine Settings; StableNew will not rewrite it for you."
+                f"{' '.join(missing)}, which the configured comfy_command does not include. In "
+                "Engine Settings > Video runtime (ComfyUI), choose 'Add required flags' (or 'Use "
+                "managed install') and restart StableNew; StableNew does not rewrite it on its own."
             )
 
     def _release_owned_runtime(self) -> dict[str, Any]:

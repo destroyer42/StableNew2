@@ -81,6 +81,16 @@ managed-Comfy configuration in StableNew's own machine-local `presets/settings.j
 `comfy_command` array is the supported way to configure the managed runtime: each executable and argument is
 its own array element, so a path containing spaces is represented correctly.
 
+**In the app (recommended):** open Engine Settings > Video runtime (ComfyUI) and click **Use managed install**.
+StableNew reads `config/managed_comfy_runtime.json`, finds `<release>-py<minor>` under the install root, checks the
+interpreter, source version, runtime folders and model path config (file checks only; it imports nothing and
+starts nothing), and fills `comfy_command`, `comfy_workdir` and `comfy_base_url` with exactly the command the
+verifier prints below, keeping the port of the configured URL. **Add required flags** appends only the missing
+contract flags to a custom command. Nothing is written until **Save & Close**, and a restart applies it. If the
+installation is not found, the dialog lists what is missing and changes nothing.
+
+**By hand (equivalent):**
+
 1. Print the command for your install. Use the port from your `comfy_base_url`:
 
    ```powershell
