@@ -23,13 +23,18 @@ _FEATURE_PACKAGES: dict[str, tuple[tuple[str, str], ...]] = {
 # writes a line with this prefix to stderr; the runner logs it and records it in stage metadata.
 WORKER_WARNING_PREFIX = "STABLENEW-POSTPROCESS-WARNING: "
 
+# What a worker did, as a small JSON file next to its output frames (stdout/stderr can carry library
+# noise or be capped, so they are not a reliable channel for a record the manifest depends on).
+WORKER_REPORT_FILENAME = "worker_report.json"
+
 POSTPROCESS_INSTALL_HINT = (
     "Install the optional postprocess runtime with scripts/bootstrap_windows.ps1 -WithPostprocess."
 )
 
 # The legacy GFPGANer loader (BasicSR-era package paths and a torchvision compatibility shim) was
-# retired by PR-POSTPROC-100 without a qualified replacement. GFPGAN stays a named method and
-# fails closed instead of pretending a runtime exists.
+# retired by PR-POSTPROC-100 without a qualified replacement, and the method itself by owner decision
+# D8 (PR-VID-POST-304): it is no longer offered, and a stored config that still names it is refused
+# at admission with this issue instead of pretending a runtime exists.
 GFPGAN_UNSUPPORTED_ISSUE = "GFPGAN runtime (not part of the supported postprocess profile)"
 
 
