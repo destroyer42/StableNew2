@@ -25,7 +25,11 @@ VERIFIED_POSE_FRAME_CONSUMPTION_REVISIONS = frozenset(
 _NODE_WITH_POSE_INPUT = "WanAnimate2ToVideo"
 # Nodes that carry the clip to ``pose_video`` in the qualified graph.  None resamples frame rate or
 # changes the frame count (decoded frames in order; per-frame resize with a centre crop).
-_VERIFIED_POSE_CHAIN_NODES = frozenset({"LoadVideo", "GetVideoComponents", "ResizeImageMaskNode"})
+_VERIFIED_POSE_CHAIN = (
+    ("ResizeImageMaskNode", "input"),
+    ("GetVideoComponents", "video"),
+    ("LoadVideo", "file"),
+)
 _CONSUMPTION_RULE = (
     "Each generated frame is conditioned on one driving frame, in order from the start of the "
     "clip, with no frame-rate conversion; a shorter clip repeats its last frame."
@@ -40,35 +44,45 @@ class DrivingFrameConsumption:
     runtime_revision: str = ""
 
 
-def _pose_chain_classes(template: Mapping[str, Any], node_id: str) -> list[str] | None:
-    """Class types from the pose input back to its source, or None when the chain is not linear."""
+def _verified_pose_chain(template: Mapping[str, Any], node_id: str) -> bool:
+    """Check ordered image/video ports through to the declared driving-file placeholder.
+
+    Recognising class names alone cannot prove timing: GetVideoComponents output 1 is audio,
+    and a LoadVideo of a literal or another binding is not the clip the frame plan describes.
+    Node IDs are deliberately irrelevant; only the connected path is inspected.
+    """
 
     node = template.get(node_id)
     if not isinstance(node, Mapping):
-        return None
-    link = (node.get("inputs") or {}).get("pose_video")
-    classes: list[str] = []
+        return False
+    inputs = node.get("inputs")
+    if not isinstance(inputs, Mapping):
+        return False
+    link = inputs.get("pose_video")
     seen: set[str] = set()
-    while isinstance(link, (list, tuple)) and link:
+    for expected_class, input_name in _VERIFIED_POSE_CHAIN:
+        if (
+            not isinstance(link, (list, tuple))
+            or len(link) != 2
+            or type(link[1]) is not int
+            or link[1] != 0
+        ):
+            return False
         upstream = str(link[0])
         if upstream in seen:
-            return None
+            return False
         seen.add(upstream)
         upstream_node = template.get(upstream)
-        if not isinstance(upstream_node, Mapping):
-            return None
-        class_type = str(upstream_node.get("class_type") or "")
-        classes.append(class_type)
-        inputs = upstream_node.get("inputs") or {}
-        link = next(
-            (
-                inputs[name]
-                for name in ("input", "video", "images", "image")
-                if isinstance(inputs.get(name), (list, tuple))
-            ),
-            None,
-        )
-    return classes or None
+        if (
+            not isinstance(upstream_node, Mapping)
+            or upstream_node.get("class_type") != expected_class
+        ):
+            return False
+        inputs = upstream_node.get("inputs")
+        if not isinstance(inputs, Mapping):
+            return False
+        link = inputs.get(input_name)
+    return isinstance(link, str) and link == "{{input.pose_video}}"
 
 
 def driving_frame_consumption(spec: Any) -> DrivingFrameConsumption:
@@ -94,11 +108,15 @@ def driving_frame_consumption(spec: Any) -> DrivingFrameConsumption:
         return DrivingFrameConsumption(
             False, "The graph's driving-frame consumer is not recognised."
         )
-    animate_inputs = template[animate_ids[0]].get("inputs") or {}
-    if animate_inputs.get("video_frame_offset") != 0:
+    animate_inputs = template[animate_ids[0]].get("inputs")
+    if not isinstance(animate_inputs, Mapping):
+        return DrivingFrameConsumption(
+            False, "The graph's driving-frame inputs are not recognised."
+        )
+    offset = animate_inputs.get("video_frame_offset")
+    if type(offset) is not int or offset != 0 or "continue_motion" in animate_inputs:
         return DrivingFrameConsumption(False, "The graph seeks into the driving video.")
-    chain = _pose_chain_classes(template, animate_ids[0])
-    if chain is None or not set(chain) <= _VERIFIED_POSE_CHAIN_NODES or "LoadVideo" not in chain:
+    if not _verified_pose_chain(template, animate_ids[0]):
         return DrivingFrameConsumption(
             False, "The driving video passes through nodes whose timing was not verified."
         )
