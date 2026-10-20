@@ -116,7 +116,7 @@ Incomplete historical rows (no durable id, snapshot or executed config) stay rea
 
 | Data | Location | Writer | Atomic |
 |---|---|---|---|
-| Evidence records (ratings, review feedback, curation events, video experiment reviews), append-only JSONL | `data/learning/learning_records.jsonl` (`get_learning_records_path`, `WorkspacePaths.learning_records`) | `LearningRecordWriter.append_record` (temp line, fsync, append, fsync; returns `False` and logs on failure) | Appended with fsync; a torn final line is possible after a hard reset (the rating-count readers skip lines that fail to parse) |
+| Evidence records (ratings, review feedback, curation events, video experiment reviews), append-only JSONL | `data/learning/learning_records.jsonl` (`get_learning_records_path`, `WorkspacePaths.learning_records`) | `LearningRecordWriter.append_record` (temp line, fsync, append, fsync; returns `False` and logs on failure) | Appended with fsync under a process-wide per-path lock (`evidence_file_lock`), each append staged through its own temp file; a torn final line is possible after a hard reset (the rating-count readers skip lines that fail to parse) |
 | Experiment sessions | `data/learning/experiments/<experiment_id>/session.json`, `meta.json`, plus `index.json` | `LearningExperimentStore` via `atomic_write_text` | Yes |
 | Discovered/curation groups | `data/learning/discovered_experiments/<group_id>/meta.json`, `items.json`, `review_state.json`, `selection_events.json`; `scan_index.json` in the same folder | `DiscoveredReviewStore` via `atomic_write_text` | Yes |
 | Tab session, last experiment, learning toggle | `state/ui_state.json` key `learning` (`get_ui_state_store`) | `LearningTabFrame._persist_learning_session_state` | Yes (errors swallowed) |

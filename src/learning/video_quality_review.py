@@ -36,7 +36,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.learning.learning_record import LearningRecord, LearningRecordWriter
+from src.learning.learning_record import (
+    LearningRecord,
+    LearningRecordWriter,
+    evidence_file_lock,
+)
 
 RECORD_KIND = "video_workflow_quality_rating"
 REVIEW_KEY = "video_quality_review"
@@ -455,6 +459,12 @@ class VideoReviewStore:
     def save_clip(self, target: ReviewTarget, draft: ClipReviewDraft) -> SaveOutcome:
         target.check()
         valid = draft.validate()
+        # Resolve the latest revision and append under the evidence file's lock, so concurrent saves
+        # (from any store instance on this path) get distinct, ordered revisions.
+        with evidence_file_lock(self._writer.records_path):
+            return self._save_clip_locked(target, valid)
+
+    def _save_clip_locked(self, target: ReviewTarget, valid: ClipReviewDraft) -> SaveOutcome:
         latest = self.load(target.experiment_id).clip_for(target.job_id, target.artifact_sha256)
         if latest is not None and latest.draft.comparable() == valid.comparable():
             return SaveOutcome(UNCHANGED, latest.revision, latest.review_id)
@@ -486,6 +496,26 @@ class VideoReviewStore:
             reviewed_at=_now(),
         )
         new = probe.metadata[REVIEW_KEY]
+        with evidence_file_lock(self._writer.records_path):
+            return self._save_preference_locked(
+                new,
+                experiment_id=experiment_id,
+                preferred_job_id=preferred_job_id,
+                preferred_arm_label=preferred_arm_label,
+                preferred_artifact_sha256=preferred_artifact_sha256,
+                reason=reason,
+            )
+
+    def _save_preference_locked(
+        self,
+        new: dict[str, Any],
+        *,
+        experiment_id: str,
+        preferred_job_id: str | None,
+        preferred_arm_label: str,
+        preferred_artifact_sha256: str,
+        reason: Any,
+    ) -> SaveOutcome:
         latest = self.load(experiment_id).preference
         if latest is not None and (
             latest.preferred_job_id,

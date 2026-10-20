@@ -299,6 +299,9 @@ class SaveWork:
     group: ReviewGroup
     preferred_job_id: str | None = None
     reason: str = ""
+    #: What the form (or preference) held when the save began.  A success acknowledges exactly this,
+    #: never whatever the operator typed while the worker was running.
+    submitted: tuple[Any, ...] = ()
 
 
 class VideoReviewSession:
@@ -627,7 +630,14 @@ class VideoReviewSession:
         self.saving.add(job_id)
         self.messages[job_id] = "Saving..."
         self._changed()
-        return SaveWork(self._next_token(), self._load_token, job_id, draft, self.group)
+        return SaveWork(
+            self._next_token(),
+            self._load_token,
+            job_id,
+            draft,
+            self.group,
+            submitted=form.snapshot(),
+        )
 
     def run_save(self, work: SaveWork) -> WorkOutcome:
         try:
@@ -651,12 +661,17 @@ class VideoReviewSession:
             self._changed()
             return False
         result = outcome.value
+        newer = (
+            "; newer edits are not saved yet"
+            if self.forms[work.job_id].snapshot() != work.submitted
+            else ""
+        )
         if result.status == SAVED:
-            self._baseline[work.job_id] = self.forms[work.job_id].snapshot()
-            self.messages[work.job_id] = f"Saved (revision {result.revision})."
+            self._baseline[work.job_id] = work.submitted
+            self.messages[work.job_id] = f"Saved (revision {result.revision}){newer or '.'}"
         elif result.status == UNCHANGED:
-            self._baseline[work.job_id] = self.forms[work.job_id].snapshot()
-            self.messages[work.job_id] = "No changes to save."
+            self._baseline[work.job_id] = work.submitted
+            self.messages[work.job_id] = f"No changes to save{newer or '.'}"
         else:  # an unknown status is not a success
             self.messages[work.job_id] = (
                 f"Save FAILED, your edits are kept: unexpected result {result.status!r}."
@@ -691,6 +706,7 @@ class VideoReviewSession:
             self.group,
             preferred_job_id=self.preference_job,
             reason=self.preference_reason,
+            submitted=(self.preference_job, self.preference_reason.strip()),
         )
 
     def _finish_preference(self, work: SaveWork, outcome: WorkOutcome) -> bool:
@@ -703,11 +719,16 @@ class VideoReviewSession:
             return False
         result = outcome.value
         if result.status in {SAVED, UNCHANGED}:
-            self._pref_baseline = (self.preference_job, self.preference_reason.strip())
+            self._pref_baseline = work.submitted
+            newer = (
+                "; newer edits are not saved yet"
+                if (self.preference_job, self.preference_reason.strip()) != work.submitted
+                else ""
+            )
             self.preference_message = (
-                f"Saved manual preference (revision {result.revision})."
+                f"Saved manual preference (revision {result.revision}){newer or '.'}"
                 if result.status == SAVED
-                else "No changes to save."
+                else f"No changes to save{newer or '.'}"
             )
         else:
             self.preference_message = (

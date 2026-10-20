@@ -673,3 +673,119 @@ def test_long_text_values_are_shortened_in_pair_labels_and_the_original_needs_a_
     h2.session._file_exists = lambda path: True
     h2.load()
     assert h2.session.original_path("job-A") is None  # never hand a non-video path to the OS opener
+
+
+# ------------------------------------------------------------------ R1: edits while a save is in flight
+
+
+def _fill(
+    h: _Harness, job: str, overall: str = "3", outcome: str = "achieved", notes: str = "first"
+) -> None:
+    h.session.set_field(job, "overall", overall)
+    h.session.set_field(job, "outcome", outcome)
+    h.session.set_field(job, "notes", notes)
+
+
+def test_an_edit_made_while_a_clip_save_runs_stays_dirty_after_success():
+    h = _Harness(_group(ArmState.PLAYABLE, ArmState.PLAYABLE))
+    h.load()
+    _fill(h, "job-A")
+    work = h.session.begin_save("job-A")
+    outcome = h.session.run_save(work)  # the worker has stored exactly what was submitted...
+    h.session.set_field("job-A", "overall", "5")  # ...and the operator keeps editing meanwhile
+    h.session.set_field("job-A", "notes", "changed while saving")
+
+    assert h.session.finish_save(work, outcome) is True
+
+    assert (
+        h.saved[0][1].overall_rating == 3 and h.saved[0][1].notes == "first"
+    )  # the submitted snapshot
+    assert h.session.is_dirty("job-A")  # the later edits are NOT acknowledged
+    assert h.session.forms["job-A"].overall == "5"
+    assert h.session.forms["job-A"].notes == "changed while saving"
+    assert "Saved (revision 1)" in h.session.messages["job-A"]
+    assert "newer edits are not saved" in h.session.messages["job-A"]
+    # Saving again submits the newer values, and only then is the form clean.
+    h.save_result = SaveOutcome("saved", 2, "id2")
+    again = h.session.begin_save("job-A")
+    h.session.finish_save(again, h.session.run_save(again))
+    assert h.saved[1][1].overall_rating == 5 and not h.session.is_dirty("job-A")
+    assert h.session.messages["job-A"] == "Saved (revision 2)."
+
+
+def test_an_edit_during_an_unchanged_result_is_not_acknowledged_either():
+    h = _Harness(_group(ArmState.PLAYABLE, ArmState.PLAYABLE))
+    h.load()
+    _fill(h, "job-A")
+    h.save_result = SaveOutcome("unchanged", 1, "id")
+    work = h.session.begin_save("job-A")
+    outcome = h.session.run_save(work)
+    h.session.set_field("job-A", "outcome", "not_achieved")
+
+    h.session.finish_save(work, outcome)
+
+    assert h.session.is_dirty("job-A")
+    assert "newer edits are not saved" in h.session.messages["job-A"]
+
+
+def test_a_failed_save_with_a_concurrent_edit_keeps_everything_dirty_and_honest():
+    h = _Harness(_group(ArmState.PLAYABLE, ArmState.PLAYABLE))
+    h.load()
+    _fill(h, "job-A")
+    h.save_result = ReviewSaveError("disk full")
+    work = h.session.begin_save("job-A")
+    outcome = h.session.run_save(work)
+    h.session.set_field("job-A", "overall", "1")
+
+    assert h.session.finish_save(work, outcome) is False
+
+    assert h.session.is_dirty("job-A")
+    assert h.session.messages["job-A"].startswith("Save FAILED, your edits are kept")
+
+
+def test_an_unedited_form_is_clean_after_success_as_before():
+    h = _Harness(_group(ArmState.PLAYABLE, ArmState.PLAYABLE))
+    h.load()
+    _fill(h, "job-A", notes="  padded  ")  # snapshot() strips, like the validated draft
+    work = h.session.begin_save("job-A")
+
+    h.session.finish_save(work, h.session.run_save(work))
+
+    assert not h.session.is_dirty("job-A")
+    assert h.session.messages["job-A"] == "Saved (revision 1)."
+
+
+def test_an_edit_made_while_a_preference_save_runs_stays_dirty_after_success():
+    h = _Harness(_group(ArmState.PLAYABLE, ArmState.PLAYABLE))
+    h.load()
+    h.session.set_preference("job-A", "first reason")
+    work = h.session.begin_save_preference()
+    outcome = h.session.run_save(work)
+    h.session.set_preference("job-B", "changed my mind")  # edited while the save was in flight
+
+    assert h.session.finish_save(work, outcome) is True
+
+    assert h.preferences[0] == ("job-A", "first reason")  # exactly what was submitted
+    assert h.session.preference_dirty()
+    assert (h.session.preference_job, h.session.preference_reason) == ("job-B", "changed my mind")
+    assert "newer edits are not saved" in h.session.preference_message
+    h.save_result = SaveOutcome("saved", 2, "id2")
+    again = h.session.begin_save_preference()
+    h.session.finish_save(again, h.session.run_save(again))
+    assert h.preferences[1] == ("job-B", "changed my mind")
+    assert not h.session.preference_dirty()
+
+
+def test_a_reason_edited_during_a_preference_save_stays_dirty_for_an_unchanged_result_too():
+    h = _Harness(_group(ArmState.PLAYABLE, ArmState.PLAYABLE))
+    h.load()
+    h.session.set_preference("job-A", "short")
+    h.save_result = SaveOutcome("unchanged", 1, "id")
+    work = h.session.begin_save_preference()
+    outcome = h.session.run_save(work)
+    h.session.set_preference("job-A", "short and then longer")
+
+    h.session.finish_save(work, outcome)
+
+    assert h.session.preference_dirty()
+    assert "newer edits are not saved" in h.session.preference_message
