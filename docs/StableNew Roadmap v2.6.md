@@ -35,7 +35,7 @@ feature.
 - PromptPack is one typed source rather than universal identity.
 - StableNew owns orchestration; backends execute typed requests.
 - MVP execution is same-process and single-node.
-- Native SVD XT is the only MVP video backend.
+- Production video backends are native SVD XT and approved Comfy workflows (`AGENTS.md` section 2).
 
 The accepted first post-v2.6 image architecture direction is one typed image
 backend per image NJR. That work begins only after the MVP/release proof is

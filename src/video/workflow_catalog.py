@@ -5,6 +5,8 @@ from typing import Any
 from src.video.workflow_catalog_wan_animate2 import build_wan_animate2_specs
 from src.video.workflow_contracts import (
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
+    WORKFLOW_GOVERNANCE_APPROVED,
+    WORKFLOW_GOVERNANCE_EXPERIMENTAL,
     WorkflowDependencySpec,
     WorkflowInputBinding,
     WorkflowOutputBinding,
@@ -24,11 +26,16 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
 __all__ = ["WAN22_RUNTIME_PROVENANCE", "WAN22_RUNTIME_VERSION", "build_builtin_workflow_specs"]
 
 
-# --- Wan2.2 TI2V-5B prompt-directed image-to-video (PR-VID-130, EXPERIMENTAL) -----------------
+# --- Wan2.2 TI2V-5B prompt-directed image-to-video (PR-VID-130; 1.2.0 APPROVED, PR-VID-GOV-316) --
 # Promoted unchanged from the graph qualified in PR-VID-110 (tools/qualification/vid110/
 # workflows.py::build_lane_a, operator-media geometry).  Stock ComfyUI 0.3.65 nodes only; the
 # three model files are pinned by name, upstream revision and sha256.  Prompt-directed I2V only:
 # no end/mid anchors, no control or pose video, and no identity-preservation claim.
+#
+# Governance (owner decision D1, 2026-10-20): only the newest version, WAN22_RUNTIME_VERSION, is
+# ``approved``.  A published version's spec is pinned byte for byte, governance included
+# (tests/video/test_pr_comfy_runtime_100_workflow_versions.py), so 1.0.0 and 1.1.0 stay
+# ``experimental``; a stored job that names them replays under the opt-in it recorded.
 WAN22_UPSTREAM_REPO = "Comfy-Org/Wan_2.2_ComfyUI_Repackaged"
 WAN22_UPSTREAM_REVISION = "c4f60d30c55a624e35427060fdd217579a6c1d77"
 WAN22_MODEL_FILES = (
@@ -120,13 +127,15 @@ def _build_wan22_ti2v_5b_i2v_v1_1() -> WorkflowSpec:
 
 def _build_wan22_ti2v_5b_i2v_v1_2() -> WorkflowSpec:
     """The 1.1.0 graph, files, frame-count and runtime policy, requalified on the managed
-    ComfyUI v0.38.0 runtime (PR-COMFY-RUNTIME-100); only qualification provenance differs."""
+    ComfyUI v0.38.0 runtime (PR-COMFY-RUNTIME-100) and approved for production
+    (PR-VID-GOV-316); only qualification provenance and governance differ."""
 
     return _build_wan22_ti2v_5b_i2v(
         workflow_version=WAN22_RUNTIME_VERSION,
         frame_count_policy=WAN22_FRAME_COUNT_POLICY,
         runtime_policy=WAN22_RUNTIME_POLICY,
         provenance_overrides=WAN22_RUNTIME_PROVENANCE,
+        governance_state=WORKFLOW_GOVERNANCE_APPROVED,
     )
 
 
@@ -136,7 +145,9 @@ def _build_wan22_ti2v_5b_i2v(
     frame_count_policy: dict[str, int] | None = None,
     runtime_policy: dict[str, Any] | None = None,
     provenance_overrides: dict[str, str] | None = None,
+    governance_state: str = WORKFLOW_GOVERNANCE_EXPERIMENTAL,
 ) -> WorkflowSpec:
+    approved = governance_state == WORKFLOW_GOVERNANCE_APPROVED
     variable_length = frame_count_policy is not None
     frame_count_bindings = (
         (
@@ -161,10 +172,17 @@ def _build_wan22_ti2v_5b_i2v(
         "workflow_identity": "stock ComfyUI Wan2.2 TI2V-5B, catalog-pinned",
     }
     extra_defaults: dict[str, Any] = {}
-    governance_notes = (
-        "EXPERIMENTAL: runs only with an explicit per-job opt-in. Qualified in PR-VID-110 "
-        "(CONDITIONAL); qualification-derived resource readiness applies before dispatch."
-    )
+    if approved:
+        governance_notes = (
+            "APPROVED for production by owner decision D1 (2026-10-20); versions 1.0.0 and 1.1.0 "
+            "stay experimental. Qualified in PR-VID-110 (CONDITIONAL); qualification-derived "
+            "resource readiness applies before dispatch."
+        )
+    else:
+        governance_notes = (
+            "EXPERIMENTAL: runs only with an explicit per-job opt-in. Qualified in PR-VID-110 "
+            "(CONDITIONAL); qualification-derived resource readiness applies before dispatch."
+        )
     if frame_count_policy is not None:
         fixed_settings.pop("frames")
         extra_defaults["frame_count_policy"] = dict(frame_count_policy)
@@ -180,9 +198,14 @@ def _build_wan22_ti2v_5b_i2v(
         workflow_id="wan22_ti2v_5b_i2v_v1",
         workflow_version=workflow_version,
         backend_id="comfy",
-        display_name="Wan2.2 TI2V-5B Prompt-Directed I2V (Experimental)",
+        display_name=(
+            "Wan2.2 TI2V-5B Prompt-Directed I2V"
+            if approved
+            else "Wan2.2 TI2V-5B Prompt-Directed I2V (Experimental)"
+        ),
         description=(
-            "Experimental prompt-directed image-to-video with stock ComfyUI nodes and the "
+            ("Prompt-directed" if approved else "Experimental prompt-directed")
+            + " image-to-video with stock ComfyUI nodes and the "
             "PR-VID-110 qualified Wan2.2 TI2V-5B files. One source image and a prompt; no "
             "anchors, control video or pose video. Near the 12 GB VRAM ceiling; identity "
             "preservation is observed, not guaranteed."
@@ -262,7 +285,7 @@ def _build_wan22_ti2v_5b_i2v(
                 for node in WAN22_STOCK_NODES
             ),
         ),
-        governance_state="experimental",
+        governance_state=governance_state,
         pinned_revision=f"catalog:wan22_ti2v_5b_i2v_v1@{workflow_version}",
         governance_notes=governance_notes,
         backend_defaults={

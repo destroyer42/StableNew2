@@ -186,14 +186,16 @@ def test_gpu_telemetry_is_parsed_recorded_and_flushed_per_row(
     assert peaks["throttle_reasons_seen"] == "0x4"
 
 
-def test_qualification_candidates_are_never_approved_production_workflows() -> None:
-    """Qualification candidates may exist in production only as opt-in experimental workflows.
+def test_only_the_owner_promoted_qualification_candidate_is_an_approved_workflow() -> None:
+    """Qualification candidates are production workflows only as the owner decided.
 
-    PR-VID-130/190 deliberately registered the qualified Wan2.2 / Wan-Animate-2 graphs as
-    ``experimental`` (per-job opt-in, never default-runnable); the original "appears nowhere in
-    src" invariant is superseded by tests/video/test_wan22_experimental_workflow.py.  What must
-    still hold: the throwaway qualification harness is not imported by production code, and no
-    candidate is ever an approved (default-runnable) workflow or a registered backend.
+    PR-VID-130/190 registered the qualified Wan2.2 / Wan-Animate-2 graphs as ``experimental``
+    (per-job opt-in, never default-runnable); the original "appears nowhere in src" invariant is
+    superseded by tests/video/test_wan22_experimental_workflow.py.  Owner decision D1
+    (2026-10-20, PR-VID-GOV-316) promoted exactly one candidate, Wan2.2 TI2V-5B 1.2.0.  What must
+    still hold: the throwaway qualification harness is not imported by production code, every
+    other candidate (older TI2V versions, both Wan-Animate-2 modes) stays experimental and
+    non-default-runnable, and no candidate is a registered backend.
     """
 
     from src.video.workflow_registry import build_default_workflow_registry
@@ -218,9 +220,23 @@ def test_qualification_candidates_are_never_approved_production_workflows() -> N
         for version in registry.list_versions(workflow_id)
     ]
     assert candidate_specs, "expected the experimental Wan workflows to be registered"
-    assert {spec.governance_state for spec in candidate_specs} == {"experimental"}
-    runnable_ids = {spec.workflow_id for spec in registry.list_specs_for_backend("comfy")}
-    assert not {spec.workflow_id for spec in candidate_specs} & runnable_ids
+    promoted = {("wan22_ti2v_5b_i2v_v1", "1.2.0")}
+    approved = {
+        (spec.workflow_id, spec.workflow_version)
+        for spec in candidate_specs
+        if spec.governance_state == "approved"
+    }
+    assert approved == promoted
+    assert {
+        spec.governance_state
+        for spec in candidate_specs
+        if (spec.workflow_id, spec.workflow_version) not in promoted
+    } == {"experimental"}
+    runnable = {
+        (spec.workflow_id, spec.workflow_version)
+        for spec in registry.list_specs_for_backend("comfy")
+    }
+    assert runnable == promoted  # nothing else is default-runnable
     for name in ("workflow_registry.py", "video_backend_registry.py"):
         assert not pattern.search((REPO_ROOT / "src" / "video" / name).read_text(encoding="utf-8"))
 

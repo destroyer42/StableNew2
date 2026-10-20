@@ -202,8 +202,13 @@ def test_experimental_needs_opt_in_and_disabled_never_runs() -> None:
     with pytest.raises(KeyError, match="explicit experimental opt-in"):
         registry.get(WAN_ID, WAN_V1)
     assert registry.get(WAN_ID, WAN_V1, allow_experimental=True).is_experimental
-    assert WAN_ID not in [s.workflow_id for s in registry.list_specs_for_backend("comfy")]
-    assert WAN_ID in [s.workflow_id for s in registry.list_offerable_specs("comfy")]
+    # PR-VID-GOV-316: only 1.2.0 is approved (and so runnable without an opt-in); the published
+    # fixed-length and variable-length revisions stay experimental.
+    runnable = [(s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")]
+    assert (WAN_ID, WAN_V1) not in runnable and (WAN_ID, "1.1.0") not in runnable
+    assert (WAN_ID, "1.2.0") in runnable
+    offerable = [(s.workflow_id, s.workflow_version) for s in registry.list_offerable_specs("comfy")]
+    assert {(WAN_ID, WAN_V1), (WAN_ID, "1.1.0"), (WAN_ID, "1.2.0")} <= set(offerable)
 
     disabled = WorkflowRegistry()
     off = _wan_spec()

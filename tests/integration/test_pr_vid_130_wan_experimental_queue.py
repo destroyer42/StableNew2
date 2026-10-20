@@ -108,12 +108,14 @@ def test_wan_admission_is_capability_driven_and_records_the_per_job_opt_in(tmp_p
     assert extra["source_preparation"]["target_dimensions"] == {"width": 480, "height": 832}
 
 
-def test_specs_projection_marks_wan_experimental_and_hides_unsupported_inputs(tmp_path) -> None:
+def test_specs_projection_marks_wan_approved_and_hides_unsupported_inputs(tmp_path) -> None:
     controller, _ = _capture_controller(tmp_path)
     specs = {s["workflow_id"]: s for s in controller.list_workflow_specs()}
-    assert specs[WAN_ID]["experimental"] is True and "ltx_multiframe_anchor_v1" not in specs
+    # PR-VID-GOV-316: the offered revision (1.2.0) is approved, so the projection carries no
+    # experimental flag; the experimental opt-in mechanics below stay pinned on the published 1.0.0.
+    assert specs[WAN_ID]["experimental"] is False and "ltx_multiframe_anchor_v1" not in specs
     assert specs[WAN_ID]["form_visibility"]["end_anchor"] is False
-    assert specs[WAN_ID]["form_visibility"]["experimental"] is True
+    assert specs[WAN_ID]["form_visibility"]["experimental"] is False
     assert specs[WAN_ID]["form_visibility"]["seed"] is True
 
 

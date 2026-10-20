@@ -145,6 +145,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # Per-job authorization for an experimental workflow: off by default, never restored
         # from saved state and never a global setting.
         self.experimental_opt_in_var = tk.BooleanVar(value=False)
+        # Why Queue is disabled for the selected workflow (empty when it is not). Batch mode also
+        # disables the single-image Queue, but says so through its own panel.
+        self.queue_block_reason_var = tk.StringVar(value="")
+        self._queue_blocked_by_batch = False
         self.source_summary_var = tk.StringVar(value="Source: none selected")
         self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
         self._submitted_effective_settings: dict[str, Any] = {}
@@ -241,6 +245,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.experimental_opt_in_var.trace_add(
             "write", lambda *_args: self._invalidate_experiment_preview()
         )
+        self.experimental_opt_in_var.trace_add("write", lambda *_args: self._refresh_queue_gate())
         for prompt_widget in (self.prompt_text, self.negative_prompt_text):
             for sequence in ("<KeyRelease>", "<<Paste>>", "<<Cut>>"):
                 prompt_widget.bind(
@@ -335,6 +340,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         # Packed next to the button only while an experimental workflow is selected
         # (see _apply_workflow_capabilities).
+        # The reason label is packed after the opt-in only while Queue waits for it
+        # (see _refresh_queue_gate).
+        self.queue_block_label = ttk.Label(
+            action_bar, textvariable=self.queue_block_reason_var, style="Muted.TLabel"
+        )
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
         self.source_summary_label = ttk.Label(
             header, textvariable=self.source_summary_var, style="Muted.TLabel", justify="left"
@@ -969,6 +979,30 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             self.experimental_opt_in_check.pack_forget()
             self.experimental_opt_in_var.set(False)
+        self._refresh_queue_gate()
+
+    def _queue_block_reason(self) -> str:
+        """Why the selected workflow cannot be queued yet, or an empty string.
+
+        An approved workflow needs no opt-in. A still-experimental one runs only with this job's
+        own opt-in, so Queue stays disabled until it is ticked rather than failing after the click.
+        The controller still refuses an un-opted-in experimental job (defence in depth)."""
+
+        workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
+        if workflow_meta.get("experimental") and not self.experimental_opt_in_var.get():
+            return "Queue is off until you tick the experimental opt-in for this job."
+        return ""
+
+    def _refresh_queue_gate(self) -> None:
+        if not hasattr(self, "queue_block_label"):
+            return  # the header is still being built
+        reason = self._queue_block_reason()
+        self.queue_block_reason_var.set(reason)
+        blocked = bool(reason) or self._queue_blocked_by_batch
+        self.queue_workflow_button.configure(state="disabled" if blocked else "normal")
+        self.queue_block_label.pack_forget()
+        if reason:
+            self.queue_block_label.pack(side="left", padx=(12, 0), before=self.status_label)
 
     def _apply_frame_count_choices(self, workflow_meta: dict[str, Any], enabled: bool) -> None:
         """Offer exactly the legal lengths the selected workflow declares (default selected)."""
@@ -1200,7 +1234,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
     def _on_batch_mode_change(self, active: bool) -> None:
         # One authoritative source mode at a time: batch mode disables the single-image queue.
-        self.queue_workflow_button.configure(state="disabled" if active else "normal")
+        self._queue_blocked_by_batch = bool(active)
+        self._refresh_queue_gate()
         if hasattr(self, "workflow_controls_panel"):  # the body is built after the header
             self._refresh_workspace_summary()
 
