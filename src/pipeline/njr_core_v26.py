@@ -10,7 +10,7 @@ from typing import Any, Literal
 CURRENT_NJR_SCHEMA_VERSION = "2.6"
 
 _IMAGE_STAGE_TYPES = {"txt2img", "img2img", "adetailer", "upscale"}
-_VIDEO_STAGE_TYPES = {"animatediff", "svd_native", "video_workflow"}
+_VIDEO_STAGE_TYPES = {"animatediff", "svd_native", "video_workflow", "movie_assembly"}
 _TRAINING_STAGE_TYPES = {"train_lora"}
 
 type JsonScalar = str | int | float | bool | None

@@ -145,7 +145,12 @@ MOVIE_CLIPS_SETTING_HELP = {
     "fps": "Frames per second for the assembled clip. Higher values make playback faster and smoother if enough frames exist, while lower values stretch the same frame set over more time.",
     "codec": "Container or encoding target for the rendered clip. Change it for compatibility or file-size reasons rather than to alter the visual content itself.",
     "quality": "Encoder speed preset. Picture quality is held constant (CRF 16, BT.709); slower presets make smaller files for the same quality and take longer to export.",
-    "mode": "Controls how the current image list is assembled into the output clip. Confirm it before building because it affects the final packaging behavior more than the source images themselves.",
+    "mode": "Controls how the current list is assembled into the output clip. Sequence: every image becomes one frame, in list order. Slideshow: every item is a clip; stills hold for their duration, videos play in full, and neighbours can crossfade.",
+    "resolution": "Output frame size. Match first clip uses the first item's size; every item is fitted inside the frame without stretching (black bars where the shapes differ).",
+    "transition": "Crossfade length between neighbouring slideshow items, in seconds. 0 makes hard cuts. It may be at most half of the shortest item.",
+    "still_seconds": "How long a still is shown in slideshow mode. Select stills in the list and use Set for Selected to give them their own duration.",
+    "audio": "Optional music track. It is cut or padded with silence to the movie's length and fades out over the chosen seconds; clip audio is not kept.",
+    "clip_name": "File name of the assembled movie (letters, digits, dot, dash and underscore).",
 }
 
 

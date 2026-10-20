@@ -13,6 +13,7 @@ _CANONICAL_STAGE_ORDER = {
     "animatediff": 4,
     "svd_native": 5,
     "video_workflow": 6,
+    "movie_assembly": 7,
 }
 
 

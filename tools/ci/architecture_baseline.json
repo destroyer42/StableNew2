@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "totals": {
-    "daemon_threads": 16,
+    "daemon_threads": 14,
     "raw_threads": 9,
     "utils_upward_imports": 18,
     "controller_gui_imports": 17
@@ -11,7 +11,7 @@
       "daemon_threads": 2
     },
     "src/controller/app_controller.py": {
-      "daemon_threads": 3,
+      "daemon_threads": 1,
       "controller_gui_imports": 12
     },
     "src/controller/app_controller_services/gui_config_service.py": {

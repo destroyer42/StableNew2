@@ -32,7 +32,8 @@ class StageType(str, Enum):
 
     Ordering: TXT2IMG -> IMG2IMG -> ADETAILER -> UPSCALE -> ANIMATEDIFF -> VIDEO_WORKFLOW
 
-    TRAIN_LORA is standalone and must not be combined with any other stage.
+    TRAIN_LORA is standalone and must not be combined with any other stage. MOVIE_ASSEMBLY (FFmpeg assembly of
+    existing outputs, PR-VID-ASM-332) is also the only stage of its job.
 
     Note: Refiner and Hires are advanced txt2img metadata, not separate stage
     types.
@@ -45,6 +46,7 @@ class StageType(str, Enum):
     ANIMATEDIFF = "animatediff"
     SVD_NATIVE = "svd_native"
     VIDEO_WORKFLOW = "video_workflow"
+    MOVIE_ASSEMBLY = "movie_assembly"
     TRAIN_LORA = "train_lora"
 
     def is_generation_stage(self) -> bool:

@@ -106,8 +106,9 @@ of the roadmap; where they conflict with this file, this file and the repository
    once per experiment by hash, forward-only (an NJR contract change, its own PR). Open: backfilling existing rows, and whether to prune jobs
    whose images and manifests were deleted (archive then delete, or delete), both only after the owner reads the output of
    `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
-10. Decided 2026-10-20: Movie Clips assembly becomes a queued workload; approved Comfy workflows become production video backends
-   and Wan2.2 TI2V-5B is promoted (implemented by their roadmap PRs; until then the Video lines above stay current).
+10. Decided 2026-10-20: Movie Clips assembly becomes a queued workload (implemented: a CPU `movie_assembly` job on the canonical
+   path, `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows become production video backends and
+   Wan2.2 TI2V-5B is promoted (implemented by their roadmap PRs; until then the Video lines above stay current).
 11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a single
    composition root (P3-2, decision 11), a durable CANCELLING status (decision 12), and moving the executor into `image_backends` (decision 14).
 

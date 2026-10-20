@@ -5,12 +5,14 @@ enabled stages of the RunPlan, asks ``resolve_stage_handler`` for the handler of
 A handler turns "the images the previous stage produced" into "the images this stage produced"; it returns ``None`` when
 the stage must be skipped (nothing to process), which the runner treats exactly like the old ``continue``.
 
-There are three handlers:
+There are four handlers:
 
 * ``Txt2ImgHandler``: generates the first images of a job.
 * ``PerImageStageHandler``: img2img, adetailer and upscale.  They only differ by a ``PerImageStageSpec`` (which
   adaptive-refinement modes apply to the stage, whether the VRAM is freed around reprocess images, ...).
 * ``VideoStageHandler``: video stages, delegating to the runner's video/sequence executors.
+* ``MovieAssemblyHandler``: ``movie_assembly`` (PR-VID-ASM-332), FFmpeg assembly of existing outputs from the NJR's
+  frozen spec; no backend, model or GPU.
 
 Handlers reach the runner's helpers through the runner instance (``runner._execute_image_backend``, ...), so the existing
 test seams keep working and no second execution path exists: every image is still produced by
@@ -374,6 +376,79 @@ class VideoStageHandler(StageHandler):
         return next_paths
 
 
+class MovieAssemblyHandler(StageHandler):
+    """Assemble the frozen clips into one movie and record it like any other video artifact."""
+
+    def run(self, ctx: StageRunContext, stage: Any, paths: list[str]) -> list[str] | None:
+        from src.pipeline.artifact_contract import build_artifact_record
+        from src.video.movie_assembly_engine import ENGINE_ID, run_movie_assembly
+        from src.video.movie_assembly_models import MOVIE_ASSEMBLY_STAGE, MovieAssemblySpec
+        from src.video.video_artifact_helpers import build_video_artifact_bundle
+
+        njr = ctx.njr
+        spec = MovieAssemblySpec.from_dict(njr.config.get(MOVIE_ASSEMBLY_STAGE) or {})
+        if [str(path) for path in paths] != [clip.path for clip in spec.clips]:
+            raise ValueError(
+                "The job's input files and its frozen movie assembly disagree; it cannot run."
+            )
+        outcome = run_movie_assembly(
+            spec, run_dir=ctx.run_dir, cancel_token=ctx.cancel_token, job_id=str(njr.job_id)
+        )
+        output = str(outcome.output_path)
+        manifest = str(outcome.manifest_path)
+        record = build_artifact_record(
+            stage=MOVIE_ASSEMBLY_STAGE,
+            artifact_type="video",
+            primary_path=output,
+            output_paths=[output],
+            manifest_path=manifest,
+            input_image_path=spec.clips[0].path,
+            job_id=str(njr.job_id),
+        )
+        aggregate = build_video_artifact_bundle(
+            stage=MOVIE_ASSEMBLY_STAGE,
+            backend_id=ENGINE_ID,
+            primary_path=output,
+            output_paths=[output],
+            video_paths=[output],
+            manifest_path=manifest,
+            source_image_path=spec.clips[0].path,
+            artifact_records=[record],
+        )
+        timeline = outcome.timeline
+        aggregate["assembly"] = {
+            "clip_count": len(spec.clips),
+            "total_frames": timeline.total_frames,
+            "duration_seconds": round(timeline.duration_seconds, 6),
+            "width": spec.width,
+            "height": spec.height,
+            "fps": timeline.fps,
+            "output_sha256": outcome.output_sha256,
+        }
+        metadata = ctx.metadata
+        metadata.setdefault("video_artifacts", {})[MOVIE_ASSEMBLY_STAGE] = dict(aggregate)
+        metadata["video_primary_artifact"] = dict(aggregate)
+        metadata["video_primary_backend_id"] = ENGINE_ID
+        metadata["video_primary_stage"] = MOVIE_ASSEMBLY_STAGE
+        metadata["movie_assembly_artifact"] = dict(aggregate)
+        ctx.variants.append(
+            {
+                "stage": MOVIE_ASSEMBLY_STAGE,
+                "backend_id": ENGINE_ID,
+                "path": output,
+                "output_path": output,
+                "output_paths": [output],
+                "video_path": output,
+                "manifest_path": manifest,
+                "artifact": record,
+            }
+        )
+        logger.info(
+            "[BATCH_PIPELINE] movie_assembly wrote %s (%d frames)", output, timeline.total_frames
+        )
+        return [output]
+
+
 _IMAGE_HANDLERS: Mapping[str, StageHandler] = {
     "txt2img": Txt2ImgHandler(),
     "img2img": PerImageStageHandler(IMG2IMG_SPEC),
@@ -381,6 +456,7 @@ _IMAGE_HANDLERS: Mapping[str, StageHandler] = {
     "upscale": PerImageStageHandler(UPSCALE_SPEC),
 }
 _VIDEO_HANDLER = VideoStageHandler()
+_ASSEMBLY_HANDLER = MovieAssemblyHandler()
 
 
 def resolve_stage_handler(
@@ -391,6 +467,8 @@ def resolve_stage_handler(
     handler = _IMAGE_HANDLERS.get(stage_name)
     if handler is not None:
         return handler
+    if stage_name == "movie_assembly":
+        return _ASSEMBLY_HANDLER
     if is_video_stage(stage_name):
         return _VIDEO_HANDLER
     return None
@@ -400,6 +478,7 @@ __all__ = [
     "ADETAILER_SPEC",
     "IMG2IMG_SPEC",
     "UPSCALE_SPEC",
+    "MovieAssemblyHandler",
     "PerImageStageHandler",
     "PerImageStageSpec",
     "StageHandler",
