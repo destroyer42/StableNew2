@@ -261,4 +261,5 @@ Per-PR records stay in `docs/Subsystems/Video/` as historical evidence. They may
 | `docs/Subsystems/Video/PR-SVD-100_Folder_Batch_Submission.md` | SVD folder batch contract |
 | `docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md` | Movie Clips tab behavior and SVD handoff |
 | `docs/runbooks/managed_comfy_runtime.md` | Operator procedure for building and launching the managed runtime |
+| `docs/audits/2026-10-20_video_experience_roadmap.md` | Owner-accepted video roadmap (quality, ease, models, length, learning) and decisions D1-D8 |
 | `docs/audits/2026-10-16_repo_audit_and_roadmap.md` | Audit B7, B8, B11, E3, E5, G7 and roadmap P3-3, P3-4, P4-6, P5-7 |
