@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import tkinter as tk
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from tkinter import ttk
 from typing import Any
 
@@ -22,7 +22,11 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     SECONDARY_CONTROL_MIN_WIDTH,
     get_two_pair_form_column_specs,
 )
-from src.utils.webui_resource_names import normalize_vae_config_value, vae_names_match
+from src.utils.webui_resource_names import (
+    normalize_vae_config_value,
+    strip_webui_resource_suffix,
+    vae_names_match,
+)
 
 
 class BaseGenerationPanelV2(BaseStageCardV2):
@@ -30,6 +34,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
 
     MIN_DIMENSION = 64
     MAX_DIMENSION = 4096
+    GEOMETRY_HELP = (
+        "Width and height are the source of truth. "
+        "The preset dropdown is only a helper for common resolution pairs."
+    )
     LABEL_COLUMN_MIN_WIDTH = LABEL_COLUMN_MIN_WIDTH
     PRIMARY_CONTROL_MIN_WIDTH = PRIMARY_CONTROL_MIN_WIDTH
     SECONDARY_CONTROL_MIN_WIDTH = SECONDARY_CONTROL_MIN_WIDTH
@@ -66,6 +74,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._models = models
         self._vaes = vaes
         self._samplers = samplers
+        # Menu presentation only: never published as resource availability or used for admission.
+        self._scheduler_options: tuple[str, ...] = ()
         self._embed_mode = embed_mode
         self._on_change = on_change
         self._sync_enabled = False
@@ -172,7 +182,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         row_idx = 0
         helper = ttk.Label(
             parent,
-            text="Width and height are the source of truth. The preset dropdown is only a helper for common resolution pairs.",
+            text=self.GEOMETRY_HELP,
             style=MUTED_LABEL_STYLE,
             wraplength=420,
             justify="left",
@@ -495,6 +505,13 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         return ()
 
     def refresh_from_adapters(self) -> None:
+        # READY observers must project the same published catalogs as resource listeners.
+        # AppController has no scheduler adapter accessor; querying it again used to
+        # erase the scheduler list after a successful resource publication.
+        resources = self._published_resources()
+        if resources is not None:
+            self.apply_resource_update(resources)
+            return
         try:
             models = self._build_model_values()
             vaes = self._build_vae_values()
@@ -510,6 +527,90 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             self._update_combo(self._scheduler_combo, self.scheduler_var, schedulers)
         except Exception:
             pass
+
+    def _published_resources(self) -> dict[str, list[Any]] | None:
+        resources = getattr(getattr(self._controller, "app_state", None), "resources", None)
+        if not isinstance(resources, Mapping):
+            return None
+        catalogs = {}
+        for key in ("models", "vaes", "samplers", "schedulers"):
+            entries = resources.get(key, [])
+            if not isinstance(entries, (list, tuple)):
+                return None
+            catalogs[key] = list(entries)
+        return catalogs
+
+    def apply_resource_update(self, resources: dict[str, list[Any]]) -> None:
+        """Project catalogs without replacing operator intent or bypassing model policy."""
+        sync_enabled = self._sync_enabled
+        self._sync_enabled = False
+        try:
+            self._apply_resource_catalogs(resources)
+        finally:
+            self._sync_enabled = sync_enabled
+        self._update_current_config()
+
+    def _apply_resource_catalogs(self, resources: dict[str, list[Any]]) -> None:
+        for key, mapping_attr, combo, variable in (
+            ("models", "_model_name_map", self._model_combo, self.model_var),
+            ("vaes", "_vae_name_map", self._vae_combo, self.vae_var),
+        ):
+            entries = resources.get(key)
+            if not entries:
+                continue
+            old_mapping = getattr(self, mapping_attr)
+            current = str(variable.get())
+            identity = old_mapping.get(current, current)
+            mapping = {"No VAE (model default)": ""} if key == "vaes" else {}
+            for entry in entries:
+                raw_display = (
+                    getattr(entry, "display_name", None)
+                    or getattr(entry, "name", None)
+                    or str(entry)
+                )
+                internal = getattr(entry, "name", None) or str(entry)
+                display = strip_webui_resource_suffix(raw_display)
+                if key == "vaes":
+                    display = normalize_vae_config_value(display) or "No VAE (model default)"
+                mapping[display] = str(internal)
+            # Resolve identity against both API names and display labels, including hash aliases.
+            matches = [
+                display for display, internal in mapping.items()
+                if identity == internal or strip_webui_resource_suffix(identity) == display
+                or (key == "vaes" and vae_names_match(identity, internal))
+            ]
+            getattr(self, mapping_attr).clear()
+            getattr(self, mapping_attr).update(mapping)
+            self._update_combo(
+                combo, variable, mapping, selection=matches[0] if len(matches) == 1 else None
+            )
+            if key == "models" and current and not matches:
+                # Keep translation of the unavailable selection without offering it as an option.
+                self._model_name_map[current] = identity
+        for key, combo, variable in (
+            ("samplers", self._sampler_combo, self.sampler_var),
+            ("schedulers", self._scheduler_combo, self.scheduler_var),
+        ):
+            if resources.get(key):
+                values = [str(getattr(entry, "name", entry)) for entry in resources[key]]
+                self._update_combo(combo, variable, values)
+            elif key == "schedulers":
+                # A saved config can restore an empty widget from its last displayed menu.
+                # Authoritative AppState remains empty so consumers still invalidate stale work.
+                self._update_combo(combo, variable, self._scheduler_options)
+        projection = getattr(self, "_model_policy_projection", None)
+        if projection is not None:
+            projection.refresh()  # resource delivery must never unlock/overwrite fixed controls
+        helper = self._helper_label
+        if helper is not None and self._model_combo is not None:
+            if resources.get("models") and self.model_var.get() not in self._model_combo["values"]:
+                helper.configure(text=self._unavailable_model_message(self.model_var.get()))
+            elif str(helper.cget("text")).startswith("Selected model unavailable:"):
+                helper.configure(text=self.GEOMETRY_HELP)
+
+    @staticmethod
+    def _unavailable_model_message(model: str) -> str:
+        return f"Selected model unavailable: {model}. Refresh resources or select an available model."
 
     def _names_from_adapter(
         self,
@@ -550,11 +651,17 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         combo: ttk.Combobox | None,
         variable: tk.Variable,
         values: Iterable[str],
+        *,
+        selection: str | None = None,
     ) -> None:
         if combo is None:
             return
         current = str(variable.get())
         new_values = tuple(values)
+        if not new_values:
+            return  # missing/failed resource response is not an instruction to clear intent
+        if variable is self.scheduler_var:
+            self._scheduler_options = new_values
         combo["values"] = new_values
         reverse_lookup = {}
         if variable is self.model_var:
@@ -564,13 +671,16 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         elif variable is self.vae_var:
             reverse_lookup = {internal: display for display, internal in self._vae_name_map.items()}
         if current in new_values:
-            variable.set(current)
+            return
+        elif selection is not None:
+            variable.set(selection)
         elif current in reverse_lookup and reverse_lookup[current] in new_values:
             variable.set(reverse_lookup[current])
+        elif variable is self.model_var and current:
+            if self._helper_label is not None:
+                self._helper_label.configure(text=self._unavailable_model_message(current))
         elif new_values:
             variable.set(new_values[0])
-        elif isinstance(variable, tk.StringVar):
-            variable.set("")
 
     def _build_full_width_row(
         self,
@@ -765,6 +875,12 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 self.subseed_strength_var.set(str(self._safe_float(subseed_strength, 0.0)))
         finally:
             self._sync_enabled = True
+        resources = self._published_resources()
+        if resources is not None:
+            self.apply_resource_update(resources)
+        projection = getattr(self, "_model_policy_projection", None)
+        if projection is not None:
+            projection.refresh()
         self._update_current_config()
         if callable(self._on_change):
             try:

@@ -89,6 +89,17 @@ Name matching is whole-name after stripping directory, a ` [hash]` suffix and a 
 - GUI projections of the same policy: `src/gui_v2/model_policy_projection.py` (pure) and `src/gui/model_policy_panel_projection.py` (Tk glue: fixed values shown disabled, draft restore), `src/gui/zimage_optional_control_projection.py` (disables Z-Image-unsupported controls, never removes stored intent), `src/gui/model_readiness_presenter.py` (explicit "Check readiness" button, worker thread).
 - `src/learning/model_profiles.py` (style priors for Learning) is a different concept; do not merge it with `ModelPolicy`.
 
+The Base Generation panel resolves displayed checkpoint labels to internal resource names before projecting policy. Resource
+publication and READY sidebar refresh share validated AppState catalogs. Empty/missing catalogs remain empty in AppState and
+notify consumers, including Learning cancellation. The Pipeline panel preserves its working selections and menu presentation;
+its last displayed scheduler choices can restore the widget on saved-config load and never establish resource availability.
+The transport cannot distinguish failed refresh from a successful empty catalog, so retained choices are presentation only;
+consumers must use the published catalog to assess availability. Non-empty model replacements reconcile aliases and preserve
+the selected checkpoint; an absent selection is shown as unavailable instead of selecting the first checkpoint.
+Resource refresh and saved-recipe restoration reapply the
+existing fixed controls. Add to Queue submits the frozen Preview NJRs and clears successful drafts without resetting working
+generation settings; no resource projection recompiles or substitutes those records.
+
 ## 5. Effective-config adaptation and global-positive policy
 
 The rule: values an exact profile owns are replaced with the profile's own, with a content-free change record; values the operator owns (geometry, counts, seed, stages, assets, optional features) are never touched, so a real conflict is refused. Source intent and the executable config stay separate.
