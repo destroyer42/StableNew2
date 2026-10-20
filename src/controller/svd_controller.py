@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.pipeline.njr_core_v26 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
 from src.video.svd_capabilities import get_svd_postprocess_capabilities, get_svd_preflight
@@ -140,17 +141,8 @@ class SVDController:
         config: SVDConfig,
         output_route: str | None = None,
     ) -> str:
-        valid, reason = self.validate_config(config)
-        if not valid:
-            raise RuntimeError(reason or "SVD configuration is invalid")
-        config = self.prepare_for_admission(config)
-        preflight = get_svd_preflight(config, source_image_path=source_image_path)
-        if not preflight.available:
-            raise RuntimeError("SVD admission blocked: " + "; ".join(preflight.blocking_reasons))
-        njr = self._build_svd_njr(
-            source_image_path=source_image_path,
-            config=config,
-            output_route=output_route,
+        njr = self.build_admitted_njr(
+            source_image_path=source_image_path, config=config, output_route=output_route
         )
 
         job_service = getattr(self._app_controller, "job_service", None)
@@ -161,6 +153,31 @@ class SVDController:
         if not job_ids:
             raise RuntimeError("Failed to enqueue SVD job")
         return job_ids[0]
+
+    def build_admitted_njr(
+        self,
+        *,
+        source_image_path: str | Path,
+        config: SVDConfig,
+        output_route: str | None = None,
+    ) -> NormalizedJobRecord:
+        """Validate, freeze and preflight one fresh SVD job and return its NJR without submitting it.
+
+        The single SVD NJR path for a caller that admits several jobs in one ``submit_njrs`` call."""
+
+        valid, reason = self.validate_config(config)
+        if not valid:
+            raise RuntimeError(reason or "SVD configuration is invalid")
+        config = self.prepare_for_admission(config)
+        preflight = get_svd_preflight(config, source_image_path=source_image_path)
+        if not preflight.available:
+            raise RuntimeError("SVD admission blocked: " + "; ".join(preflight.blocking_reasons))
+        njr: NormalizedJobRecord = self._build_svd_njr(
+            source_image_path=source_image_path,
+            config=config,
+            output_route=output_route,
+        )
+        return njr
 
     def discover_folder_sources(self, folder: str | Path) -> SVDFolderDiscovery:
         return discover_svd_folder_sources(folder)

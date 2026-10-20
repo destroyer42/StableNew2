@@ -20,6 +20,7 @@ from src.gui.view_contracts.video_workspace_contract import (
     summarize_video_workflow_source,
 )
 from src.gui.view_contracts.workspace_density_contract import changed_value_count
+from src.gui.views.video_eval_panel_v2 import VideoEvalPanel
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
@@ -673,6 +674,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.experiment_panel.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.experiment_panel.grid_remove()
 
+        self.eval_panel = VideoEvalPanel(
+            body,
+            get_controller=self._experiment_controller,
+            output_dir=lambda: str(getattr(self.app_controller, "output_dir", "") or "output"),
+            show_prompts=lambda: (
+                str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw") != "sfw"
+            ),
+            on_queued=self._on_batch_queued_refresh_only,
+        )
+        self.eval_panel.grid(row=13, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+
     def _add_labeled_entry(
         self,
         parent: ttk.Frame,
@@ -1191,6 +1203,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.queue_workflow_button.configure(state="disabled" if active else "normal")
         if hasattr(self, "workflow_controls_panel"):  # the body is built after the header
             self._refresh_workspace_summary()
+
+    def _on_batch_queued_refresh_only(self, _job_ids: list[str]) -> None:
+        # Eval admission ran on a worker; GUI-visible queue state is refreshed here, on Tk.
+        sync = getattr(self.app_controller, "sync_queue_state_after_direct_submission", None)
+        if callable(sync):
+            sync()
 
     def _on_batch_queued(self, job_ids: list[str]) -> None:
         # Admission ran on a worker; refreshing GUI-visible queue state happens here, on Tk.
