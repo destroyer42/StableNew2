@@ -265,3 +265,37 @@ def test_command_line_reads_session_telemetry_from_a_subdirectory(tmp_path, monk
     timeline = json.loads(out.read_text(encoding="utf-8"))["timeline"]
     assert timeline[0]["classification"] == "stablenew_open_no_proven_active_generation"
     assert timeline[0]["nearby_survivor_telemetry"][0]["scope"] == "session"
+
+
+def test_naive_repository_timestamps_are_utc_not_local_time(monkeypatch) -> None:
+    """The job repository writes naive ``datetime.utcnow()`` values; reading them as local
+    time shifted the job by the machine's UTC offset and hid it (2026-10-20 incident)."""
+
+    from datetime import datetime, timedelta, timezone
+
+    tool = _load_tool()
+
+    class _EasternLocalTime(datetime):
+        """A machine at UTC-4, so the test also fails the old behaviour on a UTC CI runner."""
+
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return datetime(2026, 10, 20, 18, 57, tzinfo=timezone(timedelta(hours=-4)))
+
+    monkeypatch.setattr(tool, "datetime", _EasternLocalTime)
+    result = tool.correlate(
+        [{"timestamp_utc": "2026-10-20T22:57:28Z"}],
+        jobs=[
+            {
+                "job_id": "forge-txt2img",
+                "status": "failed",
+                "started_at": "2026-10-20T22:57:10.794010",
+                "completed_at": "2026-10-20T22:57:28.567300",
+                "updated_at": "2026-10-20T22:57:28.567300",
+                "source": "queue",
+            }
+        ],
+        telemetry=None,
+        webui_log_files=None,
+    )
+    assert [job["job_id"] for job in result[0]["active_sqlite_jobs"]] == ["forge-txt2img"]
