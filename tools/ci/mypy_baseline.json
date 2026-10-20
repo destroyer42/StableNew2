@@ -39,7 +39,7 @@
     "src/gui/design_system_v2.py": 26,
     "src/gui/dialogs/multi_folder_selector.py": 16,
     "src/gui/dropdown_loader_v2.py": 1,
-    "src/gui/engine_settings_dialog.py": 12,
+    "src/gui/engine_settings_dialog.py": 2,
     "src/gui/enhanced_slider.py": 30,
     "src/gui/job_history_panel_v2.py": 4,
     "src/gui/layout_v2.py": 2,
@@ -183,5 +183,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1538
+  "total": 1528
 }

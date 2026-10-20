@@ -408,7 +408,7 @@ class EngineSettingsDialog(ttk.Frame):
 
     def _add_label_entry(
         self,
-        parent: ttk.Frame,
+        parent: ttk.Frame | ttk.Labelframe,
         label: str,
         var: tk.Variable,
         *,
