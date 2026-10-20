@@ -99,6 +99,36 @@ def bundle_from_execution_result(execution_result: VideoExecutionResult) -> dict
     )
 
 
+def video_bundle_from_result(result: Any) -> dict[str, Any] | None:
+    """The canonical video-artifact bundle a persisted job result carries, or ``None``.
+
+    Read order mirrors how history stamps results: the top-level ``video_bundle``, then the runner's
+    ``metadata.video_primary_artifact`` / ``video_artifacts`` / ``video_workflow_artifact``.  Pure; it
+    inspects only the result mapping, never the file system.
+    """
+
+    if not isinstance(result, dict):
+        return None
+    bundle = result.get("video_bundle")
+    if isinstance(bundle, dict) and bundle:
+        return dict(bundle)
+    metadata = result.get("metadata")
+    if isinstance(metadata, list):
+        metadata = next((item for item in reversed(metadata) if isinstance(item, dict)), None)
+    if not isinstance(metadata, dict):
+        return None
+    for key in ("video_primary_artifact", "video_workflow_artifact"):
+        candidate = metadata.get(key)
+        if isinstance(candidate, dict) and candidate:
+            return dict(candidate)
+    artifacts = metadata.get("video_artifacts")
+    if isinstance(artifacts, dict):
+        for candidate in artifacts.values():
+            if isinstance(candidate, dict) and candidate:
+                return dict(candidate)
+    return None
+
+
 def extract_primary_video_path(bundle: dict[str, Any]) -> str | None:
     """Return the best primary output path from a video-artifact bundle."""
     primary = bundle.get("primary_path")
@@ -143,4 +173,5 @@ __all__ = [
     "extract_primary_video_path",
     "extract_source_image_for_handoff",
     "extract_video_frame_paths",
+    "video_bundle_from_result",
 ]

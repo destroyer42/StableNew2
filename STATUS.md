@@ -59,7 +59,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - Native SVD XT queue-first path with source-aware targets, provenance and replay lineage. Comfy Video Workflow
   (Wan2.2 TI2V-5B, Wan-Animate-2) is experimental; Wan2.2 TI2V-5B is the only conditionally qualified directed-motion
   candidate. Motion source readiness: `docs/Subsystems/Video/PR-VID-196_Motion_Source_Readiness.md`; optional Prepare Motion Source
-  (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`.
+  (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`. One-variable experiments can be reopened from History or the tab, compared side by side and rated (action outcome kept apart from quality) as Learning evidence that never feeds image recommendations: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`.
 
 **Runtime safety** (all on the production construction path)
 
