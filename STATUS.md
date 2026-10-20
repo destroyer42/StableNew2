@@ -60,7 +60,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - Native SVD XT queue-first path with source-aware targets, provenance and replay lineage. Comfy Video Workflow
   (Wan2.2 TI2V-5B, Wan-Animate-2) is experimental; Wan2.2 TI2V-5B is the only conditionally qualified directed-motion
   candidate. Motion source readiness: `docs/Subsystems/Video/PR-VID-196_Motion_Source_Readiness.md`; optional Prepare Motion Source
-  (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`.
+  (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`. One-variable experiments can be reopened from History or the tab, compared side by side and rated (action outcome kept apart from quality) as Learning evidence that never feeds image recommendations: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`.
 
 **Runtime safety** (all on the production construction path)
 
@@ -81,6 +81,8 @@ process isolation, startup wiring, crash-safe writes, pinned dev environment, Wi
 process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
 `docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done, and the eight living subsystem docs (P2-2) are written;
 P2-6 wave 1 retired the leaf harnesses; the rest stay with named retirement conditions (`tools/qualification/README.md`). Phase 3 has started: P3-3 (contained, bounded child processes, `src/utils/managed_process.py`) P3-4 (typed Comfy transport and cancellation, `src/api/http_transport.py`; the port scan and dead launcher are gone) and P3-5 (provenance never lost silently; one NJR hash identity, `src/utils/njr_identity.py`) P3-6 (queue lock and idle discipline, without the CANCELLING status that needs an owner decision) and P3-1 (30 unreferenced modules deleted), and P4-1 (stage handlers: `run_njr` is orchestration only) are merged. Phases 4 and 5 are a candidate list; each package needs a contract check and an owner decision first.
+
+Video: the owner-accepted video roadmap is `docs/audits/2026-10-20_video_experience_roadmap.md` (phases A-E, decisions D1-D8).
 
 Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
 of the roadmap; where they conflict with this file, this file and the repository are current.
@@ -104,8 +106,8 @@ of the roadmap; where they conflict with this file, this file and the repository
    once per experiment by hash, forward-only (an NJR contract change, its own PR). Open: backfilling existing rows, and whether to prune jobs
    whose images and manifests were deleted (archive then delete, or delete), both only after the owner reads the output of
    `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
-10. Movie Clips assembly runs outside `JobService` (no NJR, queue or history record): make CPU-only assembly a queued
-   workload, or explicitly exempt bounded media utilities? See `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.
+10. Decided 2026-10-20: Movie Clips assembly becomes a queued workload; approved Comfy workflows become production video backends
+   and Wan2.2 TI2V-5B is promoted (implemented by their roadmap PRs; until then the Video lines above stay current).
 11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a single
    composition root (P3-2, decision 11), a durable CANCELLING status (decision 12), and moving the executor into `image_backends` (decision 14).
 

@@ -78,7 +78,7 @@ def test_svd_submission_round_trips_from_controller_into_pipeline_runner(
     assert njr.stage_chain[0].stage_type == "svd_native"
     assert njr.stage_chain[0].sampler_name == "native"
     assert njr.stage_chain[0].extra["inference"]["model_id"] == config.inference.model_id
-    assert njr.stage_chain[0].extra["inference"]["num_frames"] == 14
+    assert njr.stage_chain[0].extra["inference"]["num_frames"] == 25
     assert (
         njr.stage_chain[0].extra["inference"]["motion_bucket_id"]
         == config.inference.motion_bucket_id

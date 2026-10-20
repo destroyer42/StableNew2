@@ -89,7 +89,7 @@
     "src/gui/views/prompt_tab_frame_v2.py": 53,
     "src/gui/views/review_tab_frame_v2.py": 9,
     "src/gui/views/stage_cards_panel_v2.py": 1,
-    "src/gui/views/svd_tab_frame_v2.py": 2,
+    "src/gui/views/svd_tab_frame_v2.py": 1,
     "src/gui/views/video_workflow_experiment_panel_v2.py": 1,
     "src/gui/views/video_workflow_tab_frame_v2.py": 12,
     "src/gui/widgets/action_explainer_panel_v2.py": 5,
@@ -116,7 +116,6 @@
     "src/learning/experiment_store.py": 1,
     "src/learning/learning_analytics.py": 2,
     "src/learning/learning_profile_sidecar.py": 4,
-    "src/learning/learning_record.py": 1,
     "src/learning/model_capabilities.py": 4,
     "src/learning/model_comparison.py": 20,
     "src/learning/model_evidence_readiness.py": 1,
@@ -183,5 +182,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1538
+  "total": 1536
 }

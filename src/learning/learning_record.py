@@ -8,12 +8,30 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+
+_EVIDENCE_LOCKS: dict[str, threading.RLock] = {}
+_EVIDENCE_LOCKS_GUARD = threading.Lock()
+
+
+def evidence_file_lock(path: str | os.PathLike[str]) -> threading.RLock:
+    """The process-wide lock for one evidence file, shared by every writer/store of that path.
+
+    Appends take it so two writers never interleave bytes, and read-modify-append callers (the video
+    review store resolving a revision) hold it across the whole sequence.  It is re-entrant, so a caller
+    holding it may still call ``append_record``.  Process-local by design: a second StableNew process is
+    out of scope and not made worse.
+    """
+
+    key = os.path.normcase(os.path.abspath(path))
+    with _EVIDENCE_LOCKS_GUARD:
+        return _EVIDENCE_LOCKS.setdefault(key, threading.RLock())
 
 
 def _now_iso() -> str:
@@ -179,27 +197,30 @@ class LearningRecordWriter:
         Returns ``False`` (after logging a warning with the traceback) when the record could not be written, so a caller
         that reports a user-visible save can tell the difference instead of claiming a rating that was never stored.
         """
+        # Each append stages through its own file, so concurrent writers can never share or truncate one.
+        temp_path = self.records_path.with_name(f"{self.records_path.name}.{uuid.uuid4().hex}.tmp")
         try:
             line = record.to_json() + "\n"
-            temp_path = self.records_path.with_suffix(self.records_path.suffix + ".tmp")
             with open(temp_path, "w", encoding="utf-8") as temp_file:
                 temp_file.write(line)
                 temp_file.flush()
                 os.fsync(temp_file.fileno())
-            with open(self.records_path, "a", encoding="utf-8") as dest:
-                with open(temp_path, encoding="utf-8") as src:
-                    data = src.read()
-                dest.write(data)
-                dest.flush()
-                os.fsync(dest.fileno())
-            try:
-                temp_path.unlink(missing_ok=True)  # type: ignore[arg-type]
-            except Exception:
-                pass
+            with evidence_file_lock(self.records_path):
+                with open(self.records_path, "a", encoding="utf-8") as dest:
+                    with open(temp_path, encoding="utf-8") as src:
+                        data = src.read()
+                    dest.write(data)
+                    dest.flush()
+                    os.fsync(dest.fileno())
             return True
         except Exception:
             logger.warning("Failed to write learning record to %s", self.records_path, exc_info=True)
             return False
+        finally:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                logger.debug("Could not remove staging file %s", temp_path)
 
     def write(self, record: LearningRecord) -> None:
         """Backward compatible alias for append_record."""

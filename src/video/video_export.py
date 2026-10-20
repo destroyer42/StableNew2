@@ -9,7 +9,14 @@ from pathlib import Path
 
 from PIL import Image
 
-from src.pipeline.video import VideoCreator, resolve_ffmpeg_executable
+from src.controller.runtime_state import CancellationError, CancelToken
+from src.pipeline.video import (
+    VideoCreator,
+    VideoEncodeCancelled,
+    VideoEncodeSettings,
+    resolve_ffmpeg_executable,
+    run_ffmpeg,
+)
 from src.video.svd_errors import SVDExportError
 
 
@@ -24,6 +31,8 @@ def export_image_sequence_video(
     duration_per_image: float = 3.0,
     transition_duration: float = 0.5,
     creator: VideoCreator | None = None,
+    settings: VideoEncodeSettings | None = None,
+    cancel_token: CancelToken | None = None,
 ) -> Path:
     if not image_paths:
         raise SVDExportError("No image paths provided for export")
@@ -46,13 +55,18 @@ def export_image_sequence_video(
             quality=quality,
         )
     else:
-        ok = resolved_creator.create_video_from_images(
-            image_paths=image_paths,
-            output_path=output,
-            fps=fps,
-            codec=codec,
-            quality=quality,
-        )
+        try:
+            ok = resolved_creator.create_video_from_images(
+                image_paths=image_paths,
+                output_path=output,
+                fps=fps,
+                codec=codec,
+                quality=quality,
+                settings=settings,
+                cancel=None if cancel_token is None else cancel_token.is_cancelled,
+            )
+        except VideoEncodeCancelled as exc:
+            raise CancellationError("video export cancelled") from exc
 
     if not ok:
         raise SVDExportError("VideoCreator failed to export image-sequence video")
@@ -64,6 +78,8 @@ def export_video_mp4(
     frames: list[Image.Image],
     output_path: str | Path,
     fps: int,
+    settings: VideoEncodeSettings | None = None,
+    cancel_token: CancelToken | None = None,
 ) -> Path:
     if not frames:
         raise SVDExportError("No frames provided for MP4 export")
@@ -85,6 +101,8 @@ def export_video_mp4(
             output_path=output,
             fps=fps,
             creator=creator,
+            settings=settings,
+            cancel_token=cancel_token,
         )
     return output
 
@@ -94,11 +112,29 @@ def export_video_gif(
     frames: list[Image.Image],
     output_path: str | Path,
     fps: int,
+    cancel_token: CancelToken | None = None,
 ) -> Path:
+    """Export a looping GIF.
+
+    With FFmpeg, one palette is built from the whole clip and applied with error diffusion,
+    so colours do not shift from frame to frame. Without FFmpeg, Pillow's per-frame palette is
+    the fallback.
+    """
+
     if not frames:
         raise SVDExportError("No frames provided for GIF export")
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
+    ffmpeg_executable = resolve_ffmpeg_executable()
+    if ffmpeg_executable is not None:
+        _export_gif_with_ffmpeg(
+            frames=frames,
+            output=output,
+            fps=fps,
+            ffmpeg_executable=ffmpeg_executable,
+            cancel_token=cancel_token,
+        )
+        return output
     duration_ms = max(1, int(round(1000 / max(1, fps))))
     first_frame, *rest = [frame.convert("RGB") for frame in frames]
     try:
@@ -113,6 +149,47 @@ def export_video_gif(
     except Exception as exc:
         raise SVDExportError(f"Failed to export GIF: {exc}") from exc
     return output
+
+
+def _export_gif_with_ffmpeg(
+    *,
+    frames: list[Image.Image],
+    output: Path,
+    fps: int,
+    ffmpeg_executable: Path,
+    cancel_token: CancelToken | None,
+) -> None:
+    with tempfile.TemporaryDirectory(prefix="gif_export_", dir=str(output.parent)) as temp_dir:
+        save_video_frames(frames=frames, output_dir=temp_dir, prefix="frame")
+        cmd = [
+            str(ffmpeg_executable),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-y",
+            "-framerate",
+            str(int(fps)),
+            "-start_number",
+            "0",
+            "-i",
+            str(Path(temp_dir) / "frame_%06d.png"),
+            "-filter_complex",
+            "split[a][b];[a]palettegen=stats_mode=full[p];[b][p]paletteuse=dither=sierra2_4a",
+            "-loop",
+            "0",
+            str(output),
+        ]
+        try:
+            result = run_ffmpeg(
+                cmd, cancel=None if cancel_token is None else cancel_token.is_cancelled
+            )
+        except VideoEncodeCancelled as exc:
+            output.unlink(missing_ok=True)
+            raise CancellationError("GIF export cancelled") from exc
+        if result.returncode != 0:
+            output.unlink(missing_ok=True)
+            raise SVDExportError(f"Failed to export GIF: {result.stderr}")
 
 
 def save_video_frames(

@@ -78,18 +78,18 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert hasattr(tab, "admission_label")
         assert hasattr(tab, "capabilities_label")
         assert tab.output_format_var.get() == "mp4"
-        assert tab.preset_var.get() == "Recommended 12GB / XT 14f"
-        assert tab.frames_var.get() == 14
+        assert tab.preset_var.get() == "Recommended 12GB / XT 25f"
+        assert tab.frames_var.get() == 25
         assert tab.fps_var.get() == 7
         assert tab.inference_steps_var.get() == 25
-        assert tab.decode_chunk_size_var.get() == 2
+        assert tab.decode_chunk_size_var.get() == 8
         assert tab.cpu_offload_var.get() is True
         assert tab.forward_chunking_var.get() is True
         assert tab.face_restore_method_var.get() == "CodeFormer"
         assert tab.resize_mode_var.get() == "center_crop"
         assert tab.target_preset_var.get() == "Match Source Aspect"
-        assert tab.motion_bucket_var.get() == 48
-        assert tab.noise_aug_var.get() == 0.01
+        assert tab.motion_bucket_var.get() == 110
+        assert tab.noise_aug_var.get() == 0.02
         assert tab.local_files_only_var.get() is True
         assert tab.cache_dir_var.get() == str(get_default_svd_cache_dir())
         assert tuple(tab.rife_multiplier_combo.cget("values")) == ("2", "4")
@@ -164,14 +164,14 @@ def test_svd_tab_state_round_trip(tk_root: tk.Tk) -> None:
 def test_svd_recommended_preset_is_complete_and_self_consistent(tk_root: tk.Tk) -> None:
     tab = SVDTabFrameV2(tk_root)
     try:
-        assert tab.preset_var.get() == "Recommended 12GB / XT 14f"
+        assert tab.preset_var.get() == "Recommended 12GB / XT 25f"
         assert tab.model_var.get() == "stabilityai/stable-video-diffusion-img2vid-xt"
-        assert tab.frames_var.get() == 14
+        assert tab.frames_var.get() == 25
         assert tab.fps_var.get() == 7
-        assert tab.motion_bucket_var.get() == 48
-        assert tab.noise_aug_var.get() == 0.01
+        assert tab.motion_bucket_var.get() == 110
+        assert tab.noise_aug_var.get() == 0.02
         assert tab.inference_steps_var.get() == 25
-        assert tab.decode_chunk_size_var.get() == 2
+        assert tab.decode_chunk_size_var.get() == 8
         assert tab.output_format_var.get() == "mp4"
         assert tab.save_frames_var.get() is False
         assert tab.target_preset_var.get() == "Match Source Aspect"
@@ -194,16 +194,16 @@ def test_selecting_recommended_reapplies_all_governed_generation_values(tk_root:
         tab.motion_bucket_var.set(140)
         tab.noise_aug_var.set(0.06)
         tab.decode_chunk_size_var.set(4)
-        tab.preset_var.set("Recommended 12GB / XT 14f")
+        tab.preset_var.set("Recommended 12GB / XT 25f")
         tab._on_preset_selected()
 
-        assert tab.preset_var.get() == "Recommended 12GB / XT 14f"
+        assert tab.preset_var.get() == "Recommended 12GB / XT 25f"
         assert tab.model_var.get() == "stabilityai/stable-video-diffusion-img2vid-xt"
-        assert tab.frames_var.get() == 14
+        assert tab.frames_var.get() == 25
         assert tab.fps_var.get() == 7
-        assert tab.motion_bucket_var.get() == 48
-        assert tab.noise_aug_var.get() == 0.01
-        assert tab.decode_chunk_size_var.get() == 2
+        assert tab.motion_bucket_var.get() == 110
+        assert tab.noise_aug_var.get() == 0.02
+        assert tab.decode_chunk_size_var.get() == 8
         assert tab.output_format_var.get() == "mp4"
         assert tab.save_frames_var.get() is False
         assert tab.target_preset_var.get() == "Match Source Aspect"
@@ -249,7 +249,7 @@ def test_matching_restored_effective_state_reconciles_to_recommended(tk_root: tk
         state = tab.get_svd_state()
         state["preset_name"] = "Custom"
         assert tab.restore_svd_state(state) is True
-        assert tab.preset_var.get() == "Recommended 12GB / XT 14f"
+        assert tab.preset_var.get() == "Recommended 12GB / XT 25f"
     finally:
         tab.destroy()
 
@@ -259,12 +259,12 @@ def test_manual_governed_change_marks_custom_and_named_selection_restores_it(
 ) -> None:
     tab = SVDTabFrameV2(tk_root)
     try:
-        tab.frames_var.set(25)
+        tab.frames_var.set(20)
         assert tab.preset_var.get() == "Custom"
-        tab.preset_var.set("Recommended 12GB / XT 14f")
+        tab.preset_var.set("Recommended 12GB / XT 25f")
         tab._on_preset_selected()
-        assert tab.preset_var.get() == "Recommended 12GB / XT 14f"
-        assert tab.frames_var.get() == 14
+        assert tab.preset_var.get() == "Recommended 12GB / XT 25f"
+        assert tab.frames_var.get() == 25
     finally:
         tab.destroy()
 
@@ -543,7 +543,7 @@ def test_svd_tab_prefers_xt_default_model_when_controller_list_is_unsorted(tk_ro
     try:
         assert tab.model_var.get() == "stabilityai/stable-video-diffusion-img2vid-xt"
         tab._refresh_model_options()
-        assert tab.frames_var.get() == 14
+        assert tab.frames_var.get() == 25
     finally:
         tab.destroy()
 
@@ -581,7 +581,7 @@ def test_svd_tab_preset_applies_expected_values(tk_root: tk.Tk) -> None:
         assert tab.output_format_var.get() == "frames"
         assert tab.save_frames_var.get() is True
         assert tab.frames_var.get() == 25
-        assert tab.decode_chunk_size_var.get() == 4
+        assert tab.decode_chunk_size_var.get() == 13
         assert "Memory:" in tab.summary_label.cget("text")
     finally:
         tab.destroy()
@@ -702,5 +702,41 @@ def test_svd_tab_defers_recent_history_refresh_until_mapped(tk_root: tk.Tk) -> N
         tk_root.update()
 
         tab._refresh_recent_runs.assert_called_once()
+    finally:
+        tab.destroy()
+
+
+def test_restored_untouched_legacy_default_is_upgraded_to_the_new_default(tk_root: tk.Tk) -> None:
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        state = tab.get_svd_state()
+        state.update(
+            {
+                "preset_name": "Recommended 12GB / XT 14f",
+                "num_frames": 14,
+                "fps": 7,
+                "num_inference_steps": 25,
+                "decode_chunk_size": 2,
+                "motion_bucket_id": 48,
+                "noise_aug_strength": 0.01,
+            }
+        )
+        assert tab.restore_svd_state(state) is True
+        assert tab.preset_var.get() == "Recommended 12GB / XT 25f"
+        assert tab.frames_var.get() == 25
+        assert tab.decode_chunk_size_var.get() == 8
+        assert tab.motion_bucket_var.get() == 110
+    finally:
+        tab.destroy()
+
+
+def test_selecting_xt_1_1_shows_its_trained_conditioning(tk_root: tk.Tk) -> None:
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        tab.motion_bucket_var.set(48)
+        tab.fps_var.set(9)
+        tab.model_var.set("stabilityai/stable-video-diffusion-img2vid-xt-1-1")
+        assert tab.motion_bucket_var.get() == 127
+        assert tab.fps_var.get() == 6
     finally:
         tab.destroy()
