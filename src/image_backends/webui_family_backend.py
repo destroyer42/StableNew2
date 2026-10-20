@@ -30,6 +30,7 @@ from src.image_backends.image_backend_types import (
     ImageExecutionRequest,
     ImageExecutionResult,
 )
+from src.image_backends.masked_inpaint import validate_frozen_mask_target
 from src.services.runtime_transition_service import (
     RuntimeTransitionCoordinator,
     RuntimeTransitionError,
@@ -183,6 +184,12 @@ class WebUIFamilyImageBackend:
         """Reject work this backend cannot run, before the runner dispatches any stage."""
 
         self._reject_foreign_model_profile(getattr(njr, "backend_options", None))
+        validate_frozen_mask_target(
+            str(getattr(njr, "base_model", "") or ""),
+            {"image": {"backend_id": self.backend_id}},
+            getattr(njr, "config", None) or {},
+            stage_names,
+        )
         validate_openpose_intent(
             getattr(njr, "config", None),
             stage_names,
@@ -194,6 +201,12 @@ class WebUIFamilyImageBackend:
         """Pure intent check, run before any runtime side effect (raise to refuse)."""
 
         self._reject_foreign_model_profile(request.backend_options)
+        validate_frozen_mask_target(
+            request.selected_model or "",
+            {"image": {"backend_id": self.backend_id}},
+            request.stage_config,
+            [request.stage_name],
+        )
         if request.stage_name == "txt2img":
             validate_openpose_intent(
                 request.execution_config,

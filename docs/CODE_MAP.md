@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-418 of 575 modules have a docstring.
+423 of 580 modules have a docstring.
 
 ## src/
 
@@ -93,6 +93,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `job_service_outage.py`: WebUI outage and GPU device-loss containment owned at the JobService boundary (PR-QUEUE-WEBUI-171, PR-QUEUE-G…
 - `job_service_shutdown.py`: Shutdown admission fence and runner quiescence owned at the JobService boundary (PR-RUNTIME-SHUTDOWN-140)
 - `learning_execution_controller.py`: Controller wrapper for learning execution (non-GUI)
+- `masked_edit_service.py`: Prepare one masked Review edit with the existing builder and reprocess admission boundary
 - `photo_optimize_submission.py`: Extracted Photo Optimize preparation/admission from AppController; existing authorities only
 - `pipeline_controller.py`: Compatibility wrapper that exposes the GUI pipeline controller at src.controller
 - `process_auto_scanner_service.py`: Background scanner and cleaner for stray Python processes
@@ -168,6 +169,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `log_trace_panel_v2.py`: Trace and operator log panel for GUI V2
 - `main_window.py`: (no docstring)
 - `main_window_v2.py`: (no docstring)
+- `mask_editor_dialog.py`: Review's still-image mask editor
 - `model_comparison_readiness.py`: Single-flight worker mailbox; all Tk calls remain in the polling owner
 - `model_list_adapter_v2.py`: Thin adapter to fetch available models/VAEs for GUI V2 without GUI/toolkit deps
 - `model_policy_panel_projection.py`: Tk glue that shows the selected model's policy on the Base Generation panel (PR-IMG-130A; generalizes PR-IMG-…
@@ -334,6 +336,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
+- `mask_editor_state.py`: Original-pixel mask editing and viewport transforms; no Tk, files or backend state
 - `model_policy_projection.py`: Toolkit-neutral projection of a model policy onto the Base Generation controls (PR-IMG-130A)
 - `openpose_conditioning_view.py`: Toolkit-neutral presentation of a slot's OpenPose conditioning (PR-IMG-CNET-210)
 - `pack_lora_selection_projection.py`: Read-only, visibility-aware reporting of frozen explicit selection evidence
@@ -367,6 +370,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `forge_zimage_profile.py`: PR-IMG-MODELS-155: one immutable Z-Image bundle; pure intent and wire contracts
 - `image_backend_registry.py`: Registry and capability validation for one image backend per NJR
 - `image_backend_types.py`: Typed, StableNew-owned contracts for still-image execution backends
+- `masked_inpaint.py`: Capability projection for bounded Review mask edits; ModelPolicy remains authoritative
 - `model_inventory_reconcile.py`: Explicit, GET-only reconciliation of the offline inventory with one already-running WebUI endpoint (PR-IMG-MO…
 - `model_policy.py`: Model-family capability / operator-policy registry (PR-IMG-130A)
 - `model_policy_lora.py`: One LoRA-selection assessment against a model policy (PR-IMG-130B; extracted from the PR-IMG-130A projection)
@@ -468,6 +472,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `exact_profile_effective_config.py`: Effective-configuration preparation for the generic (non-PromptPack) NJR builder (PR-IMG-MODELS-159)
 - `executor.py`: Pipeline execution module
 - `global_prompt_policy.py`: Freeze and read the operator-selected global prompt policy
+- `image_edit_inputs.py`: Bounded, content-addressed image-edit inputs in existing mutable state, like OpenPose snapshots
 - `intent_artifact_contract.py`: (no docstring)
 - `job_builder_v2.py`: JobBuilderV2: Build normalized job records from merged configs
 - `job_models_v2.py`: Job models for V2 queue system

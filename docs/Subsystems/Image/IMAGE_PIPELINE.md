@@ -97,6 +97,25 @@ Common to every stage method [V/A]: runtime admission, model/VAE sync, drift che
 
 Conditioning is refused, never silently dropped, on any other stage, model family or backend.
 
+### 3.2 Frozen masked img2img from Review
+
+Review's mask editor compiles one still image through the existing reprocess/image-edit builder and admission boundary.
+The initial target is a registry-resolved SDXL base checkpoint on Forge (`src/image_backends/masked_inpaint.py`, projecting
+ModelPolicy); exact profiles, other backends and unverified families are refused, never substituted or silently unmasked.
+
+`src/pipeline/image_edit_inputs.py` reuses bounded image validation and the OpenPose snapshot writer under the existing
+mutable state home, `state/image_edit_inputs`. `config.img2img.image_edit_inputs` (`stablenew.image_edit.inputs.v1`) records
+the original path and source/mask snapshot paths, SHA-256, byte count, dimensions and format. The source input path and
+`ImageEditSpec.mask_image_path` point at these job-owned snapshots; the NJR contains no image bytes. Masks are nonempty
+grayscale PNGs matching source geometry, white changes / black preserves (`inpainting_mask_invert=False`, original fill).
+
+Admission verifies original-source drift plus snapshot content; missing, corrupt or changed inputs refuse the whole request.
+The img2img executor re-verifies snapshots and base64-encodes those same inspected bytes, avoiding a second mutable-file
+read before the generation payload. Original working files may subsequently change without changing an admitted job's
+inputs. Persisted replay/retry input checks include the mask digest. Queue, cancellation, backend identity, NJR schema,
+repository ownership and output/history contracts are unchanged. CPU tests establish input/payload contracts; physical
+masked-output acceptance remains a separate owner-authorized run. Outpainting is not implemented.
+
 ## 4. Model profiles, policy and adaptation
 
 ### 4.1 Exact profiles
