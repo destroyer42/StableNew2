@@ -181,7 +181,9 @@ def test_submit_svd_folder_batch_rejects_zero_compatible_sources_without_submiss
     submit.assert_not_called()
 
 
-def test_submit_svd_folder_batch_fixed_target_and_blank_seed_are_preserved(tmp_path, monkeypatch) -> None:
+def test_submit_svd_folder_batch_fixed_target_is_preserved_and_blank_seed_is_frozen_per_source(
+    tmp_path, monkeypatch
+) -> None:
     _write_image(tmp_path / "a.png", (768, 768))
     _write_image(tmp_path / "b.tiff", (900, 600))
     captured = {}
@@ -201,10 +203,14 @@ def test_submit_svd_folder_batch_fixed_target_and_blank_seed_are_preserved(tmp_p
         config=SVDConfig.from_dict({"preprocess": {"target_width": 768, "target_height": 768}}),
         match_source_aspect=False,
     )
+    seeds = []
     for njr in captured["njrs"]:
         preprocess = njr.config["svd_native"]["preprocess"]
         assert (preprocess["target_width"], preprocess["target_height"]) == (768, 768)
-        assert njr.config["svd_native"]["inference"]["seed"] is None
+        seeds.append(njr.config["svd_native"]["inference"]["seed"])
+    # A blank seed is frozen at admission: each job records its own concrete seed.
+    assert all(isinstance(seed, int) and 0 <= seed < 2**32 for seed in seeds)
+    assert len(set(seeds)) == len(seeds)
 
 
 def test_get_postprocess_capabilities_exposes_runtime_status() -> None:
@@ -219,17 +225,18 @@ def test_get_postprocess_capabilities_exposes_runtime_status() -> None:
     assert "gfpgan" in result
 
 
-def test_build_default_config_is_conservative_xt_core_baseline() -> None:
+def test_build_default_config_is_the_xt_operating_point_for_12gb() -> None:
     app_controller = SimpleNamespace(output_dir="output", job_service=Mock())
     controller = SVDController(app_controller=app_controller, svd_service=Mock())
     result = controller.build_default_config()
 
     assert result.preprocess.resize_mode == "center_crop"
     assert result.inference.model_id == "stabilityai/stable-video-diffusion-img2vid-xt"
-    assert result.inference.num_frames == 14
-    assert result.inference.motion_bucket_id == 48
-    assert result.inference.noise_aug_strength == 0.01
-    assert result.inference.decode_chunk_size == 2
+    assert result.inference.num_frames == 25
+    assert result.inference.fps == 7
+    assert result.inference.motion_bucket_id == 110
+    assert result.inference.noise_aug_strength == 0.02
+    assert result.inference.decode_chunk_size == 8
     assert result.inference.num_inference_steps == 25
     assert result.inference.local_files_only is True
     assert result.inference.cpu_offload is True

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from dataclasses import replace
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
 from src.video.svd_capabilities import get_svd_postprocess_capabilities, get_svd_preflight
 from src.video.svd_config import SVDConfig
-from src.video.svd_models import get_default_svd_cache_dir
+from src.video.svd_models import get_default_svd_cache_dir, resolve_svd_model_spec
 from src.video.svd_postprocess import validate_svd_postprocess_config
 from src.video.svd_preprocess import (
     SVDFolderDiscovery,
@@ -48,11 +49,11 @@ class SVDController:
                     "resize_mode": "center_crop",
                 },
                 "inference": {
-                    "num_frames": 14,
+                    "num_frames": 25,
                     "fps": 7,
-                    "motion_bucket_id": 48,
-                    "noise_aug_strength": 0.01,
-                    "decode_chunk_size": 2,
+                    "motion_bucket_id": 110,
+                    "noise_aug_strength": 0.02,
+                    "decode_chunk_size": 8,
                     "num_inference_steps": 25,
                     "local_files_only": True,
                     "cache_dir": str(get_default_svd_cache_dir()),
@@ -77,6 +78,34 @@ class SVDController:
             }
         )
         return base_config
+
+    def prepare_for_admission(self, config: SVDConfig) -> SVDConfig:
+        """Freeze what a fresh submission must not leave to run time.
+
+        A blank or negative seed becomes a concrete random seed recorded in the job, so the
+        result can be reproduced or varied. A checkpoint with trained-in conditioning gets it.
+        Raises ``RuntimeError`` when the frame count exceeds what the model was trained for.
+        Replays never pass through here: a frozen NJR keeps the values it was admitted with.
+        """
+
+        spec = resolve_svd_model_spec(config.inference.model_id)
+        inference = config.inference
+        if inference.num_frames > spec.max_num_frames:
+            raise RuntimeError(
+                f"{spec.display_name} supports at most {spec.max_num_frames} frames "
+                f"(requested {inference.num_frames}). Use frame interpolation or a loop export "
+                "for a longer clip."
+            )
+        frozen = inference
+        if frozen.seed is None or frozen.seed < 0:
+            frozen = replace(frozen, seed=secrets.randbelow(2**32))
+        if spec.locked_motion_bucket_id is not None:
+            frozen = replace(frozen, motion_bucket_id=spec.locked_motion_bucket_id)
+        if spec.locked_fps is not None:
+            frozen = replace(frozen, fps=spec.locked_fps)
+        if frozen == inference:
+            return config
+        return replace(config, inference=frozen)
 
     def get_postprocess_capabilities(
         self, config: SVDConfig | None = None
@@ -113,6 +142,7 @@ class SVDController:
         valid, reason = self.validate_config(config)
         if not valid:
             raise RuntimeError(reason or "SVD configuration is invalid")
+        config = self.prepare_for_admission(config)
         preflight = get_svd_preflight(config, source_image_path=source_image_path)
         if not preflight.available:
             raise RuntimeError("SVD admission blocked: " + "; ".join(preflight.blocking_reasons))
@@ -158,14 +188,18 @@ class SVDController:
         preflight = get_svd_preflight(config, source_image_path=discovery.sources[0].path)
         if not preflight.available:
             raise RuntimeError("SVD admission blocked: " + "; ".join(preflight.blocking_reasons))
+        self.prepare_for_admission(config)  # refuse an illegal frame count before any NJR
         njrs = []
         for source in discovery.sources:
-            source_config = config
+            # Frozen per source: an unset seed gives each source its own recorded seed.
+            source_config = self.prepare_for_admission(config)
             if match_source_aspect:
                 width, height = select_svd_target_size(source.width, source.height)
                 source_config = replace(
-                    config,
-                    preprocess=replace(config.preprocess, target_width=width, target_height=height),
+                    source_config,
+                    preprocess=replace(
+                        source_config.preprocess, target_width=width, target_height=height
+                    ),
                 )
             njrs.append(
                 self._build_svd_njr(

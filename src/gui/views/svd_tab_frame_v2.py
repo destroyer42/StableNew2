@@ -21,12 +21,15 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
+from src.video.svd_errors import SVDConfigError
 from src.video.svd_models import (
     get_default_svd_cache_dir,
     get_default_svd_model_id,
     get_supported_svd_models,
     get_svd_model_options,
+    resolve_svd_model_spec,
 )
+from src.video.svd_preprocess import read_svd_source_size
 from src.video.svd_target import SVD_TARGET_SIZES, select_svd_target_size
 
 logger = logging.getLogger(__name__)
@@ -51,20 +54,23 @@ _RESIZE_MODES = ("letterbox", "center_crop", "contain_then_crop")
 _OUTPUT_FORMATS = ("mp4", "gif", "frames")
 _FACE_RESTORE_METHODS = ("CodeFormer", "GFPGAN")
 _DEFAULT_TARGET_PRESET = _TARGET_AUTO_LABEL
-_DEFAULT_SVD_PRESET = "Recommended 12GB / XT 14f"
+_DEFAULT_SVD_PRESET = "Recommended 12GB / XT 25f"
 _CUSTOM_SVD_PRESET = "Custom"
 _SVD_OUTPUT_ROUTES = (OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING)
+_SVD_MAX_FRAMES = 25
+# Decode chunk 8 splits a 25-frame clip as 7/7/7/4 (see balanced_decode_chunk_size); High Memory
+# presets decode in two halves. Larger chunks give the temporal VAE more context: less flicker.
 _SVD_PRESETS: dict[str, dict[str, Any]] = {
-    "Recommended 12GB / XT 14f": {
+    "Recommended 12GB / XT 25f": {
         "model_id": "stabilityai/stable-video-diffusion-img2vid-xt",
-        "frames": 14,
+        "frames": 25,
         "fps": 7,
         "output_format": "mp4",
         "save_frames": False,
         "num_inference_steps": 25,
-        "decode_chunk_size": 2,
-        "motion_bucket": 48,
-        "noise_aug": 0.01,
+        "decode_chunk_size": 8,
+        "motion_bucket": 110,
+        "noise_aug": 0.02,
         "cpu_offload": True,
         "forward_chunking": True,
         "local_files_only": True,
@@ -77,8 +83,8 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "mp4",
         "save_frames": False,
         "num_inference_steps": 30,
-        "decode_chunk_size": 4,
-        "motion_bucket": 72,
+        "decode_chunk_size": 13,
+        "motion_bucket": 110,
         "noise_aug": 0.02,
     },
     "Subtle Motion / Realism 25f / High Memory": {
@@ -87,9 +93,9 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "mp4",
         "save_frames": False,
         "num_inference_steps": 35,
-        "decode_chunk_size": 4,
-        "motion_bucket": 48,
-        "noise_aug": 0.01,
+        "decode_chunk_size": 13,
+        "motion_bucket": 72,
+        "noise_aug": 0.02,
         "resize_mode": "center_crop",
     },
     "Short 14f MP4": {
@@ -98,8 +104,8 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "mp4",
         "save_frames": False,
         "num_inference_steps": 28,
-        "decode_chunk_size": 4,
-        "motion_bucket": 64,
+        "decode_chunk_size": 7,
+        "motion_bucket": 110,
         "noise_aug": 0.02,
     },
     "GIF Preview": {
@@ -108,7 +114,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "gif",
         "save_frames": False,
         "num_inference_steps": 25,
-        "decode_chunk_size": 4,
+        "decode_chunk_size": 7,
         "motion_bucket": 110,
         "noise_aug": 0.05,
     },
@@ -118,8 +124,8 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "mp4",
         "save_frames": False,
         "num_inference_steps": 25,
-        "decode_chunk_size": 4,
-        "motion_bucket": 140,
+        "decode_chunk_size": 13,
+        "motion_bucket": 160,
         "noise_aug": 0.06,
     },
     "Frames Only 25f / High Memory": {
@@ -128,10 +134,21 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "output_format": "frames",
         "save_frames": True,
         "num_inference_steps": 30,
-        "decode_chunk_size": 4,
-        "motion_bucket": 72,
+        "decode_chunk_size": 13,
+        "motion_bucket": 110,
         "noise_aug": 0.02,
     },
+}
+# The pre-2026-10-20 default. Saved tab state that still matches it exactly is upgraded to the
+# new default on restore; any value the operator changed keeps the state as "Custom".
+_LEGACY_DEFAULT_SVD_PRESET_NAME = "Recommended 12GB / XT 14f"
+_LEGACY_DEFAULT_SVD_PRESET: dict[str, Any] = {
+    "frames": 14,
+    "fps": 7,
+    "num_inference_steps": 25,
+    "decode_chunk_size": 2,
+    "motion_bucket": 48,
+    "noise_aug": 0.01,
 }
 
 
@@ -173,10 +190,10 @@ class SVDTabFrameV2(ttk.Frame):
         self._folder_batch_preview: dict[str, Any] = {}
         self.preset_var = tk.StringVar(value=_DEFAULT_SVD_PRESET)
         self.model_var = tk.StringVar(value=default_model)
-        self.frames_var = tk.IntVar(value=14)
+        self.frames_var = tk.IntVar(value=25)
         self.fps_var = tk.IntVar(value=7)
-        self.motion_bucket_var = tk.IntVar(value=48)
-        self.noise_aug_var = tk.DoubleVar(value=0.01)
+        self.motion_bucket_var = tk.IntVar(value=110)
+        self.noise_aug_var = tk.DoubleVar(value=0.02)
         self.inference_steps_var = tk.IntVar(value=25)
         self.seed_var = tk.StringVar()
         self.target_preset_var = tk.StringVar(value=_DEFAULT_TARGET_PRESET)
@@ -187,7 +204,7 @@ class SVDTabFrameV2(ttk.Frame):
         self.cpu_offload_var = tk.BooleanVar(value=True)
         self.forward_chunking_var = tk.BooleanVar(value=True)
         self.local_files_only_var = tk.BooleanVar(value=True)
-        self.decode_chunk_size_var = tk.IntVar(value=2)
+        self.decode_chunk_size_var = tk.IntVar(value=8)
         self.cache_dir_var = tk.StringVar(value=str(get_default_svd_cache_dir()))
         self.face_restore_enabled_var = tk.BooleanVar(value=False)
         self.face_restore_method_var = tk.StringVar(value="CodeFormer")
@@ -217,6 +234,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._apply_preset(_DEFAULT_SVD_PRESET, update_status=False)
         self._apply_runtime_defaults()
         self._install_preset_state_traces()
+        self.model_var.trace_add("write", self._apply_model_conditioning_lock)
         self._refresh_capabilities()
         self._refresh_summary()
         self._refresh_recent_runs()
@@ -393,7 +411,7 @@ class SVDTabFrameV2(ttk.Frame):
         )
         row += 1
         self._add_spinbox(
-            settings, row, "Frames", self.frames_var, from_=1, to=64, help_key="frames"
+            settings, row, "Frames", self.frames_var, from_=1, to=_SVD_MAX_FRAMES, help_key="frames"
         )
         row += 1
         self._add_spinbox(settings, row, "FPS", self.fps_var, from_=1, to=30, help_key="fps")
@@ -1090,10 +1108,7 @@ class SVDTabFrameV2(ttk.Frame):
         if not source:
             return None
         try:
-            from PIL import Image
-
-            with Image.open(source) as image:
-                return image.size
+            return read_svd_source_size(source)
         except Exception:
             return None
 
@@ -1272,8 +1287,8 @@ class SVDTabFrameV2(ttk.Frame):
         decode_chunk = int(self.decode_chunk_size_var.get())
         frames = int(self.frames_var.get())
         memory_note = ""
-        if decode_chunk >= 6 or (decode_chunk >= 4 and frames >= 25):
-            memory_note = "\nMemory: high decode setting for this frame count; lower Decode chunk if the app stalls."
+        if decode_chunk > 8 and frames > 8:
+            memory_note = "\nMemory: decode chunk above 8 may need more than 12 GB; lower Decode chunk if the job runs out of memory."
         target_width, target_height = self._effective_target_size()
         target_text = f"SVD target: {target_width}x{target_height}"
         if self.target_preset_var.get() == _TARGET_AUTO_LABEL:
@@ -1326,6 +1341,20 @@ class SVDTabFrameV2(ttk.Frame):
             self.decode_chunk_size_var,
         ):
             variable.trace_add("write", self._on_generation_setting_changed)
+
+    def _apply_model_conditioning_lock(self, *_args: Any) -> None:
+        """Show the conditioning a locked checkpoint (XT 1.1) will be admitted with."""
+
+        try:
+            spec = resolve_svd_model_spec(self.model_var.get())
+        except SVDConfigError:
+            return  # not an SVD model id (e.g. an empty selection); nothing is locked
+        if spec.locked_motion_bucket_id is not None:
+            self.motion_bucket_var.set(int(spec.locked_motion_bucket_id))
+        if spec.locked_fps is not None:
+            self.fps_var.set(int(spec.locked_fps))
+        if int(self.frames_var.get()) > spec.max_num_frames:
+            self.frames_var.set(int(spec.max_num_frames))
 
     def _on_generation_setting_changed(self, *_args: Any) -> None:
         if self._preset_sync_in_progress:
@@ -1746,6 +1775,10 @@ class SVDTabFrameV2(ttk.Frame):
             )
             if self._is_folder_mode():
                 self._refresh_folder_batch_preview()
+            if payload.get("preset_name") == _LEGACY_DEFAULT_SVD_PRESET_NAME and self._preset_matches(
+                _LEGACY_DEFAULT_SVD_PRESET, self._generation_preset_state()
+            ):
+                self._apply_preset(_DEFAULT_SVD_PRESET, update_status=False)
             self._refresh_capabilities()
             self._reconcile_preset()
             self._refresh_summary(source_path or None)
