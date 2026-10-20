@@ -19,6 +19,10 @@ class SVDModelSpec:
     default_num_frames: int
     recommended: bool
     notes: str
+    max_num_frames: int = 25
+    # Conditioning the checkpoint was trained with and must be run at (None = operator choice).
+    locked_motion_bucket_id: int | None = None
+    locked_fps: int | None = None
 
 
 _SUPPORTED_SVD_MODELS: dict[str, SVDModelSpec] = {
@@ -28,6 +32,7 @@ _SUPPORTED_SVD_MODELS: dict[str, SVDModelSpec] = {
         default_num_frames=14,
         recommended=False,
         notes="Shorter clip model with lower default frame count.",
+        max_num_frames=14,
     ),
     "stabilityai/stable-video-diffusion-img2vid-xt": SVDModelSpec(
         model_id="stabilityai/stable-video-diffusion-img2vid-xt",
@@ -42,6 +47,8 @@ _SUPPORTED_SVD_MODELS: dict[str, SVDModelSpec] = {
         default_num_frames=25,
         recommended=False,
         notes="Newer consistency-focused checkpoint; download once before using local-only mode.",
+        locked_motion_bucket_id=127,
+        locked_fps=6,
     ),
 }
 

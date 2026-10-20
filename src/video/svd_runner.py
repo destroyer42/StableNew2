@@ -213,6 +213,7 @@ class SVDRunner:
                         frames=frames,
                         output_path=output_path,
                         fps=effective_fps,
+                        cancel_token=cancel_token,
                     )
                     self._track_output(video_path, owned_outputs, output_existence)
                 elif config.output.output_format == "gif":
@@ -222,6 +223,7 @@ class SVDRunner:
                         frames=frames,
                         output_path=output_path,
                         fps=effective_fps,
+                        cancel_token=cancel_token,
                     )
                     self._track_output(gif_path, owned_outputs, output_existence)
                 elif not frame_paths:

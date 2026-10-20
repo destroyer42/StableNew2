@@ -11,6 +11,10 @@ from src.video.svd_config import SVDPreprocessConfig
 from src.video.svd_errors import SVDInputError
 from src.video.svd_models import SVDPreprocessResult
 
+_EXIF_ORIENTATION_TAG = 0x0112
+# Orientations 5-8 rotate by 90 or 270 degrees, swapping width and height.
+_EXIF_TRANSPOSING_ORIENTATIONS = frozenset({5, 6, 7, 8})
+
 SVD_SUPPORTED_IMAGE_SUFFIXES = frozenset(
     {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
 )
@@ -43,8 +47,7 @@ def probe_svd_source_image(path: str | Path) -> SVDSourceProbe:
     try:
         with Image.open(source) as image:
             image.verify()
-        with Image.open(source) as image:
-            width, height = image.size
+        width, height = read_svd_source_size(source)
     except Exception as exc:
         raise SVDInputError(f"Failed to open source image: {exc}") from exc
     if width <= 0 or height <= 0:
@@ -87,10 +90,34 @@ def discover_svd_folder_sources(folder: str | Path) -> SVDFolderDiscovery:
     )
 
 
-def load_svd_source_image(path: str | Path) -> Image.Image:
+def read_svd_source_size(path: str | Path) -> tuple[int, int]:
+    """Return the display size of a source image, after its EXIF orientation is applied."""
+
+    with Image.open(Path(path)) as image:
+        width, height = image.size
+        orientation = image.getexif().get(_EXIF_ORIENTATION_TAG, 1)
+    if orientation in _EXIF_TRANSPOSING_ORIENTATIONS:
+        return int(height), int(width)
+    return int(width), int(height)
+
+
+def load_svd_source_image(
+    path: str | Path, *, background: tuple[int, int, int] = (0, 0, 0)
+) -> Image.Image:
+    """Open a source as display-oriented RGB; transparency is composited over ``background``."""
+
     validate_svd_source_image(path)
     try:
-        return Image.open(Path(path)).convert("RGB")
+        with Image.open(Path(path)) as opened:
+            oriented = ImageOps.exif_transpose(opened)
+            if oriented.mode in ("RGBA", "LA") or (
+                oriented.mode == "P" and "transparency" in oriented.info
+            ):
+                rgba = oriented.convert("RGBA")
+                flattened = Image.new("RGB", rgba.size, tuple(int(v) for v in background))
+                flattened.paste(rgba, mask=rgba.getchannel("A"))
+                return flattened
+            return oriented.convert("RGB")
     except Exception as exc:
         raise SVDInputError(f"Failed to open source image: {exc}") from exc
 
@@ -115,7 +142,7 @@ def prepare_svd_input(
     temp_root = Path(temp_dir)
     temp_root.mkdir(parents=True, exist_ok=True)
 
-    image = load_svd_source_image(source)
+    image = load_svd_source_image(source, background=config.pad_color)
     original_width, original_height = image.size
 
     prepared, was_resized, was_padded, was_cropped = _prepare_image(image, config)

@@ -4,11 +4,156 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from src.utils import save_image_from_base64
+from src.utils.managed_process import run_bounded
 
 logger = logging.getLogger(__name__)
+
+#: x264/x265 speed presets; any other ``quality`` value keeps the default preset.
+X264_PRESETS = frozenset(
+    {
+        "ultrafast",
+        "superfast",
+        "veryfast",
+        "faster",
+        "fast",
+        "medium",
+        "slow",
+        "slower",
+        "veryslow",
+    }
+)
+_CRF_CODECS = frozenset({"libx264", "libx265"})
+_FASTSTART_SUFFIXES = frozenset({".mp4", ".mov", ".m4v"})
+ENCODE_TIMEOUT_SECONDS = 900.0
+_ENCODE_MAX_STDOUT_BYTES = 64 * 1024
+_ENCODE_MAX_STDERR_BYTES = 256 * 1024
+
+
+@dataclass(frozen=True)
+class VideoEncodeSettings:
+    """How StableNew encodes every MP4 it writes from frames.
+
+    CRF (constant quality) instead of x264's default 23: 16 is visually transparent for
+    generated video. Frames are RGB PNGs, so the RGB->YUV conversion is pinned to BT.709 and
+    the stream is tagged, which keeps colours stable across players. ``+faststart`` lets a
+    clip start playing before it is fully read.
+    """
+
+    crf: int = 16
+    preset: str = "slow"
+    pix_fmt: str = "yuv420p"
+
+    def __post_init__(self) -> None:
+        if not 0 <= int(self.crf) <= 51:
+            raise ValueError("crf must be in 0..51")
+        if self.preset not in X264_PRESETS:
+            raise ValueError(f"Unknown encoder preset: {self.preset}")
+
+
+#: Operator-facing encode profiles. ``balanced`` is the default. Names must not collide with
+#: an x264 preset name, which ``quality`` also accepts.
+ENCODE_PROFILES: dict[str, VideoEncodeSettings] = {
+    "draft": VideoEncodeSettings(crf=20, preset="medium"),
+    "balanced": VideoEncodeSettings(crf=16, preset="slow"),
+    "archival": VideoEncodeSettings(crf=12, preset="slow"),
+}
+DEFAULT_ENCODE_SETTINGS = ENCODE_PROFILES["balanced"]
+
+
+def resolve_encode_settings(
+    quality: str | None, settings: VideoEncodeSettings | None = None
+) -> VideoEncodeSettings:
+    """Resolve the settings for a legacy ``quality`` argument.
+
+    ``quality`` historically carried an x264 speed preset name; it still selects the preset,
+    but no longer leaves the quality at x264's CRF 23 default. A profile name selects a profile.
+    """
+
+    if settings is not None:
+        return settings
+    key = str(quality or "").strip().lower()
+    if key in ENCODE_PROFILES:
+        return ENCODE_PROFILES[key]
+    if key in X264_PRESETS:
+        return VideoEncodeSettings(crf=DEFAULT_ENCODE_SETTINGS.crf, preset=key)
+    return DEFAULT_ENCODE_SETTINGS
+
+
+def build_video_encode_args(
+    *, codec: str, settings: VideoEncodeSettings, output_path: Path
+) -> list[str]:
+    """Encoder arguments shared by every frames-to-video path."""
+
+    args = ["-c:v", codec]
+    if codec in _CRF_CODECS:
+        args += ["-crf", str(int(settings.crf)), "-preset", settings.preset]
+    args += [
+        # Even dimensions are required by 4:2:0; the matrix is pinned so the tags are true.
+        # setparams stamps the frames too: FFmpeg lets frame colour properties override the
+        # output-level tags below, which alone leave primaries and transfer "unknown".
+        "-vf",
+        "scale=trunc(iw/2)*2:trunc(ih/2)*2:out_color_matrix=bt709:out_range=tv,"
+        "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv",
+        "-pix_fmt",
+        settings.pix_fmt,
+        "-colorspace",
+        "bt709",
+        "-color_primaries",
+        "bt709",
+        "-color_trc",
+        "bt709",
+        "-color_range",
+        "tv",
+    ]
+    if output_path.suffix.lower() in _FASTSTART_SUFFIXES:
+        args += ["-movflags", "+faststart"]
+    return args
+
+
+class VideoEncodeCancelled(RuntimeError):
+    """The encode was stopped by its cancel signal; the partial output was removed."""
+
+
+def run_ffmpeg(
+    cmd: list[str],
+    *,
+    timeout_seconds: float = ENCODE_TIMEOUT_SECONDS,
+    cancel: Callable[[], bool] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run one FFmpeg command contained, bounded and cancellable.
+
+    Raises ``VideoEncodeCancelled`` on cancel. A timeout or launch failure is returned as a
+    failed ``CompletedProcess`` so callers keep their existing failure reporting.
+    """
+
+    outcome = run_bounded(
+        cmd,
+        timeout_seconds=timeout_seconds,
+        max_stdout_bytes=_ENCODE_MAX_STDOUT_BYTES,
+        max_stderr_bytes=_ENCODE_MAX_STDERR_BYTES,
+        cancel=cancel,
+    )
+    if outcome.cancelled:
+        raise VideoEncodeCancelled("FFmpeg encode cancelled")
+    stderr = outcome.stderr.decode("utf-8", errors="replace")
+    if outcome.launch_error:
+        return subprocess.CompletedProcess(cmd, -1, "", f"could not start: {outcome.launch_error}")
+    if outcome.timed_out:
+        return subprocess.CompletedProcess(
+            cmd, -1, "", f"timed out after {timeout_seconds:.0f}s and was stopped. {stderr}"
+        )
+    return subprocess.CompletedProcess(
+        cmd,
+        outcome.returncode if outcome.returncode is not None else -1,
+        outcome.stdout.decode("utf-8", errors="replace"),
+        stderr,
+    )
 
 
 def _candidate_ffmpeg_paths() -> list[Path]:
@@ -92,6 +237,37 @@ def write_video_frames(
     return saved_paths
 
 
+def _stage_numbered_frames(image_paths: list[Path], temp_dir: Path) -> int:
+    """Stage images as ``frame_%06d.png`` for the image2 demuxer; return the staged count.
+
+    PNG sources are linked (or copied without symlink privilege); other formats are converted
+    losslessly to PNG so one numbered pattern covers mixed inputs.
+    """
+
+    from PIL import Image
+
+    count = 0
+    for img_path in image_paths:
+        if not img_path.exists():
+            logger.warning(f"Image not found: {img_path}")
+            continue
+        target = temp_dir / f"frame_{count:06d}.png"
+        try:
+            if img_path.suffix.lower() == ".png":
+                try:
+                    target.symlink_to(img_path.absolute())
+                except OSError:
+                    shutil.copy2(img_path, target)
+            else:
+                with Image.open(img_path) as image:
+                    image.convert("RGB").save(target, format="PNG")
+        except Exception as e:
+            logger.warning(f"Failed to stage {img_path.name}: {e}")
+            continue
+        count += 1
+    return count
+
+
 class VideoCreator:
     """Create videos from image sequences using FFmpeg."""
 
@@ -136,16 +312,21 @@ class VideoCreator:
         fps: int = 24,
         codec: str = "libx264",
         quality: str = "medium",
+        *,
+        settings: VideoEncodeSettings | None = None,
+        cancel: Callable[[], bool] | None = None,
     ) -> bool:
         """
-        Create video from a list of images.
+        Create a video from an image sequence, one image per frame.
 
         Args:
-            image_paths: List of paths to images
+            image_paths: Images; they are ordered by file name
             output_path: Path for output video
             fps: Frames per second (default: 24)
             codec: Video codec (default: libx264)
-            quality: Quality preset (default: medium)
+            quality: An encode profile (fast/balanced/archival) or an x264 speed preset
+            settings: Explicit encode settings (overrides ``quality``)
+            cancel: Cooperative cancel probe; a cancel raises ``VideoEncodeCancelled``
 
         Returns:
             True if video created successfully
@@ -158,98 +339,57 @@ class VideoCreator:
             logger.error("No images provided for video creation")
             return False
 
+        encode = resolve_encode_settings(quality, settings)
+        sorted_paths = sorted(image_paths, key=lambda x: x.name)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        # A private staging folder: never a shared "temp" folder that could hold other files.
+        temp_dir = Path(tempfile.mkdtemp(prefix=".ffmpeg_frames_", dir=str(output_path.parent)))
         try:
-            # Sort images by name for proper sequence
-            sorted_paths = sorted(image_paths, key=lambda x: x.name)
-
-            # Create temporary file list for FFmpeg
-            temp_dir = output_path.parent / "temp"
-            temp_dir.mkdir(exist_ok=True)
-
-            # Copy/symlink images with sequential names
-            temp_images = []
-            for i, img_path in enumerate(sorted_paths):
-                if not img_path.exists():
-                    logger.warning(f"Image not found: {img_path}")
-                    continue
-
-                temp_name = f"frame_{i:06d}{img_path.suffix}"
-                temp_path = temp_dir / temp_name
-
-                # Prefer symlinks for speed, but fall back to a real copy on
-                # Windows installs that do not have symlink privileges.
-                try:
-                    temp_path.symlink_to(img_path.absolute())
-                except Exception:
-                    try:
-                        shutil.copy2(img_path, temp_path)
-                    except Exception as e:
-                        logger.warning(f"Failed to link/copy {img_path.name}: {e}")
-                        continue
-                    temp_images.append(temp_path)
-                    continue
-                temp_images.append(temp_path)
-
-            if not temp_images:
+            frame_count = _stage_numbered_frames(sorted_paths, temp_dir)
+            if not frame_count:
                 logger.error("No valid images for video creation")
                 return False
 
-            list_file = output_path.parent / "ffmpeg_input.txt"
-            _write_concat_input_file(temp_images, list_file, 1 / max(1, fps))
-
+            # image2 at an integer frame rate: exact frame timing, no per-frame float durations.
             cmd = [
                 str(self.ffmpeg_executable),
-                "-f",
-                "concat",
-                "-safe",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-nostdin",
+                "-y",
+                "-framerate",
+                str(int(fps)),
+                "-start_number",
                 "0",
-                "-y",  # Overwrite output
                 "-i",
-                str(list_file),
-                "-c:v",
-                codec,
-                "-preset",
-                quality,
-                "-pix_fmt",
-                "yuv420p",  # Compatibility
-                "-r",
-                str(fps),
+                str(temp_dir / "frame_%06d.png"),
+                *build_video_encode_args(codec=codec, settings=encode, output_path=output_path),
                 "-frames:v",
-                str(len(temp_images)),
+                str(frame_count),
                 str(output_path),
             ]
 
-            logger.info(f"Creating video with {len(temp_images)} frames")
+            logger.info(f"Creating video with {frame_count} frames")
             logger.info(f"FFmpeg command: {' '.join(cmd)}")
-
-            # Execute FFmpeg
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minute timeout
-            )
-
-            # Cleanup temp directory
             try:
-                list_file.unlink(missing_ok=True)
-                shutil.rmtree(temp_dir)
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp directory: {e}")
-
+                result = run_ffmpeg(cmd, cancel=cancel)
+            except VideoEncodeCancelled:
+                output_path.unlink(missing_ok=True)
+                raise
             if result.returncode == 0:
                 logger.info(f"Video created successfully: {output_path.name}")
                 return True
-            else:
-                logger.error(f"FFmpeg failed: {result.stderr}")
-                return False
-
-        except subprocess.TimeoutExpired:
-            logger.error("FFmpeg timed out")
+            logger.error(f"FFmpeg failed: {result.stderr}")
+            output_path.unlink(missing_ok=True)
             return False
+        except VideoEncodeCancelled:
+            raise
         except Exception as e:
             logger.error(f"Video creation failed: {e}")
             return False
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     def create_slideshow_video(
         self,
@@ -291,21 +431,24 @@ class VideoCreator:
             per_image_duration = max(duration_per_image, 1 / max(1, fps))
             _write_concat_input_file(image_paths, list_file, per_image_duration)
 
-            # Build FFmpeg command
+            # Build FFmpeg command (stills with per-image durations need the concat demuxer)
             cmd = [
                 str(self.ffmpeg_executable),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-nostdin",
                 "-f",
                 "concat",
                 "-safe",
                 "0",
                 "-i",
                 str(list_file),
-                "-c:v",
-                codec,
-                "-preset",
-                quality,
-                "-pix_fmt",
-                "yuv420p",
+                *build_video_encode_args(
+                    codec=codec,
+                    settings=resolve_encode_settings(quality),
+                    output_path=output_path,
+                ),
                 "-r",
                 str(fps),
                 "-y",  # Overwrite output file
@@ -314,7 +457,7 @@ class VideoCreator:
 
             logger.info(f"Creating video with {len(image_paths)} images at {fps} fps")
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = run_ffmpeg(cmd)
 
             # Clean up temp file
             list_file.unlink(missing_ok=True)
@@ -326,9 +469,6 @@ class VideoCreator:
                 logger.error(f"FFmpeg failed: {result.stderr}")
                 return False
 
-        except subprocess.TimeoutExpired:
-            logger.error("FFmpeg command timed out")
-            return False
         except Exception as e:
             logger.error(f"Failed to create video: {e}")
             return False
