@@ -21,10 +21,18 @@ from xml.etree import ElementTree
 
 
 def _parse_timestamp(value: str) -> datetime:
+    """Parse an ISO-8601 instant; a value without an offset is UTC.
+
+    Every source this tool reads is UTC by contract: the job repository writes naive
+    ``datetime.utcnow()`` values, telemetry and Windows events carry ``timestamp_utc`` /
+    ``SystemTime``, and ``--incident`` is documented as UTC. Reading a naive value as local
+    time shifted repository jobs by the machine's UTC offset and hid the active job.
+    """
+
     normalized = value.strip().replace("Z", "+00:00")
     parsed = datetime.fromisoformat(normalized)
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
+        return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
 
 
