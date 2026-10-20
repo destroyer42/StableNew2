@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-423 of 580 modules have a docstring.
+429 of 586 modules have a docstring.
 
 ## src/
 
@@ -104,6 +104,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `submission_policy_v26.py`: Typed policy for submitting an already compiled NJR to the queue
 - `svd_controller.py`: Controller surface for native SVD selected-image jobs
 - `svd_submission_service.py`: Thin form-data bridge for SVD submissions owned by AppController
+- `video_eval_controller.py`: Video eval suites on the Video Workflow controller (PR-VID-EVAL-320)
 - `video_workflow_controller.py`: (no docstring)
 - `webui_connection_controller.py`: (no docstring)
 - `webui_outage_coordinator.py`: Contain a WebUI outage inside the existing queue/worker/manager boundaries
@@ -305,6 +306,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `stage_cards_panel.py`: (no docstring)
 - `stage_cards_panel_v2.py`: (no docstring)
 - `svd_tab_frame_v2.py`: (no docstring)
+- `video_eval_panel_v2.py`: Video Workflow tab: queue an eval suite and build its contact sheet (PR-VID-EVAL-320)
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
@@ -691,6 +693,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_artifact_helpers.py`: Generic helpers for normalizing workflow-video output bundles
 - `video_backend_registry.py`: (no docstring)
 - `video_backend_types.py`: (no docstring)
+- `video_eval_metrics.py`: Deterministic clip measurements for the video eval kit (PR-VID-EVAL-320)
+- `video_eval_report.py`: Measure an admitted eval run and write its contact sheet (PR-VID-EVAL-320)
+- `video_eval_run.py`: Plan and admit one video eval run on the canonical path (PR-VID-EVAL-320)
+- `video_eval_suite.py`: Video eval suite: a fixed set of source images and prompts run against named arms (PR-VID-EVAL-320)
 - `video_execution_resolver.py`: Single canonical resolver for video execution: explicit backend, task and controls
 - `video_export.py`: Export helpers for native video generation outputs and assembled-video flows
 - `video_review_group.py`: Reconstruct one Video Workflow experiment from canonical persisted jobs (PR-VID-QUALITY-211)
