@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import tkinter as tk
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from tkinter import ttk
 from typing import Any
 
@@ -74,6 +74,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._models = models
         self._vaes = vaes
         self._samplers = samplers
+        # Menu presentation only: never published as resource availability or used for admission.
+        self._scheduler_options: tuple[str, ...] = ()
         self._embed_mode = embed_mode
         self._on_change = on_change
         self._sync_enabled = False
@@ -506,9 +508,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         # READY observers must project the same published catalogs as resource listeners.
         # AppController has no scheduler adapter accessor; querying it again used to
         # erase the scheduler list after a successful resource publication.
-        app_state = getattr(self._controller, "app_state", None)
-        resources = getattr(app_state, "resources", None)
-        if resources and any(resources.get(key) for key in ("models", "samplers", "schedulers")):
+        resources = self._published_resources()
+        if resources is not None:
             self.apply_resource_update(resources)
             return
         try:
@@ -526,6 +527,18 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             self._update_combo(self._scheduler_combo, self.scheduler_var, schedulers)
         except Exception:
             pass
+
+    def _published_resources(self) -> dict[str, list[Any]] | None:
+        resources = getattr(getattr(self._controller, "app_state", None), "resources", None)
+        if not isinstance(resources, Mapping):
+            return None
+        catalogs = {}
+        for key in ("models", "vaes", "samplers", "schedulers"):
+            entries = resources.get(key, [])
+            if not isinstance(entries, (list, tuple)):
+                return None
+            catalogs[key] = list(entries)
+        return catalogs
 
     def apply_resource_update(self, resources: dict[str, list[Any]]) -> None:
         """Project catalogs without replacing operator intent or bypassing model policy."""
@@ -581,6 +594,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             if resources.get(key):
                 values = [str(getattr(entry, "name", entry)) for entry in resources[key]]
                 self._update_combo(combo, variable, values)
+            elif key == "schedulers":
+                # A saved config can restore an empty widget from its last displayed menu.
+                # Authoritative AppState remains empty so consumers still invalidate stale work.
+                self._update_combo(combo, variable, self._scheduler_options)
         projection = getattr(self, "_model_policy_projection", None)
         if projection is not None:
             projection.refresh()  # resource delivery must never unlock/overwrite fixed controls
@@ -643,6 +660,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         new_values = tuple(values)
         if not new_values:
             return  # missing/failed resource response is not an instruction to clear intent
+        if variable is self.scheduler_var:
+            self._scheduler_options = new_values
         combo["values"] = new_values
         reverse_lookup = {}
         if variable is self.model_var:
@@ -856,8 +875,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 self.subseed_strength_var.set(str(self._safe_float(subseed_strength, 0.0)))
         finally:
             self._sync_enabled = True
-        resources = getattr(getattr(self._controller, "app_state", None), "resources", None)
-        if resources:
+        resources = self._published_resources()
+        if resources is not None:
             self.apply_resource_update(resources)
         projection = getattr(self, "_model_policy_projection", None)
         if projection is not None:

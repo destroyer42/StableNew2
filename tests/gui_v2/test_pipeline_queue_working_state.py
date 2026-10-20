@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.api.webui_resource_service import normalize_resource_map
 from src.api.webui_resources import WebUIResource, WebUIResourceType
 from src.assets.compatibility import CompatibilityProfile, CompatibilityStatus, ModelFamily
 from src.contracts import WebUIProjection
@@ -235,8 +236,10 @@ def test_clear_and_invalidate_are_not_resource_refreshes(ui):
 @pytest.mark.parametrize(
     "payload", [{}, {"models": []}, {"schedulers": []}, {"upscalers": ["new"]}]
 )
-def test_incomplete_resource_publication_preserves_valid_generation_resources(ui, payload):
+def test_incomplete_resource_publication_preserves_gui_but_invalidates_resources(ui, payload):
     before = snapshot(ui)
+    notifications = []
+    ui.state.subscribe("resources", lambda: notifications.append(deepcopy(ui.state.resources)))
     ui.sink.apply_webui_projection(WebUIProjection(1, resources=payload))
     while ui.pending:
         ui.pending.pop(0)()
@@ -252,8 +255,12 @@ def test_incomplete_resource_publication_preserves_valid_generation_resources(ui
         "policy",
     ):
         assert after[key] == before[key], key
-    for key in ("models", "samplers", "schedulers"):
-        assert after["resources"][key] == before["resources"][key]
+    assert after["resources"] == normalize_resource_map(payload)
+    assert notifications == [after["resources"]]
+    # READY must not repopulate an explicitly invalidated catalog from controller discovery.
+    ui.app.resource_service.list_models = lambda: pytest.fail("invalidated resources rediscovered")
+    SidebarPanelV2.refresh_base_generation_from_webui(ui.sidebar)
+    assert snapshot(ui) == after
 
 
 def test_ready_refresh_uses_published_schedulers_and_preserves_model_alias(ui):
