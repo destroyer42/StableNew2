@@ -404,7 +404,7 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1349,
+      "BLE001": 1347,
       "S110": 536,
       "S112": 38
     },
