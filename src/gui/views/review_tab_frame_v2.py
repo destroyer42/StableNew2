@@ -588,13 +588,17 @@ class ReviewTabFrame(ttk.Frame):
             "Different settings are split into separate jobs.",
         )
 
+        self.edit_mask_button = ttk.Button(
+            run_box, text="Edit Mask…", command=self._open_mask_editor,
+        )
+        self.edit_mask_button.grid(row=5, column=0, sticky="ew", pady=(0, 6))
         self.reprocess_selected_button = ttk.Button(
             run_box,
             text="Reprocess Selected",
             style="Primary.TButton",
             command=lambda: self._reprocess(batch_all=False),
         )
-        self.reprocess_selected_button.grid(row=5, column=0, sticky="ew", pady=(0, 6))
+        self.reprocess_selected_button.grid(row=6, column=0, sticky="ew", pady=(0, 6))
 
         self.reprocess_all_button = ttk.Button(
             run_box,
@@ -602,14 +606,14 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=lambda: self._reprocess(batch_all=True),
         )
-        self.reprocess_all_button.grid(row=6, column=0, sticky="ew")
+        self.reprocess_all_button.grid(row=7, column=0, sticky="ew")
         klein_check = ttk.Checkbutton(
             run_box,
             text="FLUX.2 Klein single-reference edit (Forge)",
             variable=self.klein_edit_var,
             style="Dark.TCheckbutton",
         )
-        klein_check.grid(row=7, column=0, sticky="w", pady=(6, 0))
+        klein_check.grid(row=8, column=0, sticky="w", pady=(6, 0))
         attach_tooltip(
             klein_check,
             "Edit exactly one selected image with FLUX.2 Klein 4B FP8 (img2img only, fixed Euler/Beta/"
@@ -631,7 +635,7 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabelframe",
             padding=8,
         )
-        feedback_box.grid(row=7, column=0, sticky="ew", pady=(8, 0))
+        feedback_box.grid(row=9, column=0, sticky="ew", pady=(8, 0))
         configure_grid_columns(feedback_box, get_single_pair_form_column_specs())
         ttk.Label(feedback_box, text="Rating", style="Dark.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
@@ -1441,6 +1445,18 @@ class ReviewTabFrame(ttk.Frame):
             return prompt_pack_id
         payload_summary = str(getattr(entry, "payload_summary", "") or "").strip()
         return payload_summary[:80] if payload_summary else "History job"
+
+    def _open_mask_editor(self) -> None:
+        from src.gui.mask_editor_dialog import MaskEditorDialog
+
+        paths = self._get_selected_review_paths()
+        if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            messagebox.showwarning("Edit Mask", "Select exactly one PNG, JPEG or WebP still image.", parent=self)
+            return
+        if self.app_controller is None:
+            messagebox.showwarning("Edit Mask", "The application controller is unavailable.", parent=self)
+            return
+        MaskEditorDialog(self, source_path=paths[0], controller=self.app_controller)
 
     def _get_selected_review_paths(self) -> list[Path]:
         idxs = list(self.images_list.curselection())

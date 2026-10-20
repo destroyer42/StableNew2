@@ -88,7 +88,30 @@ Rules:
 2. The exception net in `prepare_review_batch` is `(ValueError, OSError, TypeError)`; `OperationNotSupportedError` and `KleinProfileError` are `ValueError` subclasses, so refusals become blocked rows. A new refusal type must subclass one of these or it aborts the whole preview.
 3. Do not stamp or rewrite a source image between preview and confirm (section 5.3).
 
-### 3.3 Thumbnails and compare
+### 3.3 Review mask editing
+
+`ReviewTabFrame` offers **Edit Mask** for exactly one PNG, JPEG or WebP still image. `MaskEditorDialog` owns transient
+editing only; `MaskDocument` / `MaskViewport` keep brush strokes, erasing, bounded undo/redo, clear, zoom and pan aligned to
+original-image coordinates. Red overlay / white mask means change; black means preserve. Source files are never overwritten.
+
+The operator supplies a replacement editing prompt, denoising strength, mask blur, masked-region padding and the
+masked-region/whole-image choice. **Preview frozen job** calls `prepare_mask_edit` off Tk: it uses the existing
+`ReprocessJobBuilder`, captures source and mask into job-owned content-addressed mutable-state snapshots, and freezes an
+img2img NJR with source lineage. Preview shows original source, mask identity/hash/geometry, model, prompt, backend,
+resolved stage settings and restrictions. Any edit invalidates that preview; late worker results are discarded.
+
+**Add prepared job to Queue** rechecks the original source and both snapshots, assesses operation compatibility and submits
+the exact previewed NJR through `submit_reprocess_njrs` -> `JobService.submit_njrs`. A failed admission preserves the draft
+and requires a fresh preview before another attempt. The dialog admits a preview at most once; no automatic replay occurs.
+Loading, hashing, snapshot writes, compilation and admission run off Tk; widget updates return through the existing
+`BackgroundWorkRunner` / `TkUiDispatcher`. Source decode limits are 20 MiB, 64–4096 pixels per side; animations are refused.
+
+This first slice supports registry-resolved SDXL base checkpoints on Forge only. `masked_inpaint` projects the existing
+ModelPolicy at preparation, admission and backend validation; unknown families and unsupported backends fail before
+admission. Physical output quality is not qualified by these CPU contracts. Outpainting is deferred. See
+`IMAGE_PIPELINE.md` section 3.2 for the persisted input contract and dispatch integrity.
+
+### 3.4 Thumbnails and compare
 
 - `ThumbnailWidget` (`src/gui/widgets/thumbnail_widget_v2.py`): latest-request-wins, one in-flight decode per path, decode via `load_image_thumbnail` (`src/utils/image_utils.py`) on a thread from `ThreadRegistry.spawn`, result marshalled with `after(0)`. Responsive mode decodes once at the maximum edge and rescales on resize (`src/gui/view_contracts/workspace_density_contract.py`). A failed worker start releases only its own request marker and shows "Preview unavailable".
 - There is no decoded-thumbnail cache and no thumbnail grid; the list is a `Listbox` with one preview pane [V].
