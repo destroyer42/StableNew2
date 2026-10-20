@@ -404,8 +404,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1350,
-      "S110": 537,
+      "BLE001": 1349,
+      "S110": 536,
       "S112": 38
     },
     "counts": {
@@ -829,8 +829,8 @@
         "S110": 1
       },
       "src/learning/learning_record.py": {
-        "BLE001": 5,
-        "S110": 3
+        "BLE001": 4,
+        "S110": 2
       },
       "src/learning/learning_record_builder.py": {
         "BLE001": 1

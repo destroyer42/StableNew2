@@ -22,7 +22,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | WebUI process, outage and startup hold | `docs/Subsystems/Runtime/QUEUE_AND_RUNTIME.md`; `src/api/webui_process_manager.py`, `src/controller/webui_outage_coordinator.py`, `src/controller/job_service_outage.py` |
 | GPU device-loss containment | `src/controller/gpu_loss_coordinator.py`; `docs/Subsystems/Runtime/PR-QUEUE-GPU-180_GPU_Loss_Dispatch_Containment.md` |
 | Native SVD video | `docs/Subsystems/Video/VIDEO_PIPELINE.md`; `src/video/svd_service.py` -> `src/video/svd_native_backend.py` -> `src/video/svd_runner.py` |
-| Comfy Video Workflow | `src/video/workflow_catalog.py` -> `src/video/video_workflow_njr_builder.py` -> `src/video/comfy_workflow_backend.py`; driving-clip preparation `src/video/motion_source_preparation.py`; `docs/Subsystems/Video/` |
+| Comfy Video Workflow | `src/video/workflow_catalog.py` -> `src/video/video_workflow_njr_builder.py` -> `src/video/comfy_workflow_backend.py`; driving-clip preparation `src/video/motion_source_preparation.py`; experiment review `src/video/video_review_group.py` -> `src/learning/video_review_service.py`; `docs/Subsystems/Video/` |
 | Artifacts, replay and history | `src/pipeline/artifact_contract.py`, `src/pipeline/result_contract_v26.py`, `src/pipeline/replay_engine.py`, `src/history/` |
 | Learning and experiments | `docs/Subsystems/Learning/LEARNING.md`; `src/learning/`, `src/gui/controllers/learning_controller.py` |
 | Review, reprocess and batch operations | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/queue/batch_projection.py` |

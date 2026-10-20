@@ -25,6 +25,7 @@ from src.queue.job_history_store import (
     JobHistoryEntry,
 )
 from src.video.video_artifact_helpers import extract_source_image_for_handoff
+from src.video.video_review_group import snapshot_is_experiment_arm
 
 _IMAGE_OUTPUT_SUFFIXES = {
     ".png",
@@ -54,6 +55,7 @@ class HistoryActionState:
     video_workflow: bool
     movie_clips: bool
     explain: bool
+    video_review: bool = False
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -134,6 +136,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         self.explain_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.review_btn = ttk.Button(
+            action_bar,
+            text="Review Experiment",
+            command=self._on_review_video_experiment,
+            state=tk.DISABLED,
+        )
+        self.review_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.browse_btn = ttk.Button(action_bar, text="Browse All...", command=self._on_browse_all)
         self.browse_btn.pack(side=tk.LEFT, padx=(4, 0))
         self._browser_window: tk.Toplevel | None = None
@@ -213,6 +222,9 @@ class JobHistoryPanelV2(ttk.Frame):
             label="Send to Movie Clips", command=self._on_send_to_movie_clips
         )
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
+        self._history_menu.add_command(
+            label="Review Video Experiment", command=self._on_review_video_experiment
+        )
         self.history_tree.bind("<Button-3>", self._on_context_menu)
         self.empty_state_var = tk.StringVar(
             value="No recent jobs yet. Queue an image or video job to populate history."
@@ -446,6 +458,16 @@ class JobHistoryPanelV2(ttk.Frame):
             except Exception:
                 pass
 
+    def _on_review_video_experiment(self) -> None:
+        """Reopen the compare-and-rate window for the experiment the selected job belongs to."""
+
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).video_review:
+            return
+        from src.gui.views.video_experiment_review_window import open_video_experiment_review
+
+        open_video_experiment_review(self, self.controller, entry.job_id)
+
     def _on_send_to_svd(self) -> None:
         entry = self._selected_entry()
         if not entry or not self._history_action_state(entry).svd:
@@ -504,6 +526,10 @@ class JobHistoryPanelV2(ttk.Frame):
         )
         self.movie_clips_btn.configure(state=tk.NORMAL if actions.movie_clips else tk.DISABLED)
         self.explain_btn.configure(state=tk.NORMAL if actions.explain else tk.DISABLED)
+        self.review_btn.configure(state=tk.NORMAL if actions.video_review else tk.DISABLED)
+        self._history_menu.entryconfigure(
+            "Review Video Experiment", state=tk.NORMAL if actions.video_review else tk.DISABLED
+        )
         self._history_menu.entryconfigure(
             "Animate with SVD", state=tk.NORMAL if actions.svd else tk.DISABLED
         )
@@ -617,7 +643,14 @@ class JobHistoryPanelV2(ttk.Frame):
                 and self._usable_movie_clips_source(entry) is not None
             ),
             explain=self._controller_supports("explain_job"),
+            video_review=(
+                self._review_repository_available() and snapshot_is_experiment_arm(entry.snapshot)
+            ),
         )
+
+    def _review_repository_available(self) -> bool:
+        repository = getattr(getattr(self.controller, "job_service", None), "history_store", None)
+        return callable(getattr(repository, "list_experiment_sibling_entries", None))
 
     def _entry_supports_image_handoff(self, entry: JobHistoryEntry) -> bool:
         """Returns True if the entry has a still-image primary output suitable for SVD."""
