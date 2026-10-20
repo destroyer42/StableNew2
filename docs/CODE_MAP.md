@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-411 of 568 modules have a docstring.
+417 of 574 modules have a docstring.
 
 ## src/
 
@@ -273,6 +273,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_experiment_contract.py`: Toolkit-neutral state for the Video Workflow "Compare one control" section (PR-VID-194)
 - `video_motion_prep_contract.py`: Toolkit-neutral state for the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_motion_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Motion source readiness" panel (PR-VID-196)
+- `video_review_contract.py`: Toolkit-neutral state for the Video Experiment Review window (PR-VID-QUALITY-211)
 - `video_workspace_contract.py`: (no docstring)
 - `window_layout_contract.py`: Screen-aware main-window geometry policy (PR-GUI-100)
 - `workspace_density_contract.py`: Pure sizing/disclosure rules for the focused operator workspace (PR-GUI-110)
@@ -302,6 +303,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `stage_cards_panel.py`: (no docstring)
 - `stage_cards_panel_v2.py`: (no docstring)
 - `svd_tab_frame_v2.py`: (no docstring)
+- `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
@@ -425,6 +427,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `value_identity.py`: Deterministic grouping identity for JSON-like Learning variant values
 - `variable_metadata.py`: Variable metadata registry for learning experiments
 - `variable_selection_contract.py`: (no docstring)
+- `video_quality_review.py`: Durable video quality-review evidence (PR-VID-QUALITY-211)
+- `video_review_service.py`: Open, rate and reopen a Video Workflow experiment review (PR-VID-QUALITY-211)
 
 ## src/learning/learning_controller_services/
 
@@ -661,6 +665,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories
 - `movie_clip_models.py`: Data models for Movie Clip build requests, results, and manifests
 - `movie_clip_service.py`: Movie Clip service: post-video assembly/export orchestration
+- `review_preview.py`: Bounded, read-only review previews of existing video outputs (PR-VID-QUALITY-211)
 - `sequence_manifest.py`: Sequence manifest builder and writer for multi-segment video
 - `sequence_models.py`: Sequence and segment planning models for long-form video generation
 - `sequence_planner.py`: Sequence planner for multi-segment long-form video
@@ -682,6 +687,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_backend_types.py`: (no docstring)
 - `video_execution_resolver.py`: Single canonical resolver for video execution: explicit backend, task and controls
 - `video_export.py`: Export helpers for native video generation outputs and assembled-video flows
+- `video_review_group.py`: Reconstruct one Video Workflow experiment from canonical persisted jobs (PR-VID-QUALITY-211)
 - `video_workflow_batch.py`: Multi-source Video Workflow batch: assess, freeze and atomically admit (PR-VID-BATCH-200)
 - `video_workflow_experiment.py`: One-variable operator experiments for Video Workflow (PR-VID-194)
 - `video_workflow_intent.py`: Producer-side, capability-driven video workflow intent (PR-VID-130)
