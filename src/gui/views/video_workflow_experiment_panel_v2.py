@@ -39,6 +39,7 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
         session: VideoExperimentSession,
         read_form: Callable[[], tuple[str, dict[str, Any]]],
         on_queued: Callable[[list[str]], None] | None = None,
+        on_review: Callable[[str], None] | None = None,
         runner: BackgroundWorkRunner | None = None,
     ) -> None:
         super().__init__(master, text="Compare one control", padding=8)
@@ -48,6 +49,8 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
         self._session = session
         self._read_form = read_form
         self._on_queued = on_queued
+        self._on_review = on_review
+        self._review_job_id = ""
         self._candidate_widgets: list[Any] = []
         self._label_to_name: dict[str, str] = {}
         self.enabled_var = tk.BooleanVar(value=False)
@@ -115,6 +118,10 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
         ttk.Label(
             self.detail, textvariable=self.message_var, style="Muted.TLabel", wraplength=640
         ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.review_button = ttk.Button(
+            self, text="Review Experiment...", style="Dark.TButton", command=self._on_review_clicked
+        )
+        self.review_button.grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
         self.refresh()
 
     # ------------------------------------------------------------------ session binding
@@ -327,8 +334,22 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
     def _finish_queue(self, work: QueueWork, outcome: WorkOutcome) -> None:
         job_ids = self._session.finish_queue(work, outcome)
         self.refresh()
+        if job_ids:
+            self._review_job_id = job_ids[0]  # any admitted arm reopens the whole experiment
         if job_ids and self._on_queued is not None:
             self._on_queued(job_ids)
+
+    # ------------------------------------------------------------------ review
+
+    @property
+    def review_job_id(self) -> str:
+        return self._review_job_id
+
+    def _on_review_clicked(self) -> None:
+        """Open the review window for the last queued experiment (or empty, to enter a job id)."""
+
+        if self._on_review is not None:
+            self._on_review(self._review_job_id)
 
 
 __all__ = ["WorkflowExperimentPanel"]

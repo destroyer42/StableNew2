@@ -53,6 +53,9 @@ REPOSITORY_SCHEMA_VERSION = 1
 # Every batch identity (Review, versioned descriptor, top-level) is stored under a JSON key of this name.
 # Matching the key alone keeps the prefilter independent of the serializer's whitespace.
 _BATCH_ID_MARKER = '"batch_id"'
+#: Rowids examined on each side of a job when looking for its experiment siblings (an experiment has at most 4 arms
+#: and is inserted in one transaction, so its rows are adjacent).
+EXPERIMENT_SIBLING_WINDOW = 16
 _IN_CHUNK = 400
 _TERMINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 _ALLOWED_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
@@ -872,6 +875,35 @@ class JobRepository(JobHistoryStore):
                     )
                 )
         return children
+
+    def list_experiment_sibling_entries(
+        self, job_id: str, experiment_id: str, *, window: int = EXPERIMENT_SIBLING_WINDOW
+    ) -> list[JobHistoryEntry]:
+        """Jobs stored next to ``job_id`` whose immutable snapshot mentions ``experiment_id`` (read-only).
+
+        An experiment is admitted by ONE ``record_job_submissions`` transaction, so its arms occupy consecutive
+        rowids. The query therefore examines at most ``2 * window + 1`` rows around the selected job (never the
+        table), and a bounded miss means "not found", not "scan further". This is only a candidate prefilter:
+        whether a returned job really is an arm is decided from its NJR by ``src.video.video_review_group``. No
+        schema, index or lifecycle effect.
+        """
+
+        marker = str(experiment_id or "")
+        if not marker:
+            return []
+        span = max(0, min(int(window), 64))
+        with self._lock:
+            anchor = self._connection.execute(
+                "SELECT rowid AS cursor FROM jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            if anchor is None:
+                return []
+            rows = self._connection.execute(
+                "SELECT * FROM jobs WHERE rowid BETWEEN ? AND ? AND instr(njr_snapshot, ?) > 0 "
+                "ORDER BY rowid ASC",
+                (int(anchor["cursor"]) - span, int(anchor["cursor"]) + span, marker),
+            ).fetchall()
+        return [self._row_to_history(row) for row in rows]
 
     def _row_to_batch_candidate(self, row: sqlite3.Row) -> BatchCandidateRow:
         return BatchCandidateRow(

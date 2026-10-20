@@ -668,6 +668,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 self.get_video_workflow_state(for_submission=True),
             ),
             on_queued=self._on_experiment_queued,
+            on_review=self._on_open_experiment_review,
         )
         self.experiment_panel.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.experiment_panel.grid_remove()
@@ -1224,6 +1225,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if callable(sync):
             sync()
         self.status_var.set(f"Queued {len(job_ids)} experiment jobs: " + ", ".join(job_ids))
+
+    def _on_open_experiment_review(self, job_id: str) -> None:
+        # Entry point to the compare-and-rate window; it reads canonical history, never the form.
+        from src.gui.views.video_experiment_review_window import open_video_experiment_review
+
+        if open_video_experiment_review(self, self.app_controller, job_id) is None:
+            self.status_var.set("Experiment review is unavailable: no job repository.")
 
     def _set_text_value(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", "end")

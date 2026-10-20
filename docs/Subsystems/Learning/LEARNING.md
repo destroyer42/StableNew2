@@ -10,7 +10,7 @@ How to keep this true:
 
 ## 1. Scope and the canonical path
 
-Learning is a post-execution subsystem plus a thin experiment designer. It designs controlled one-variable image experiments, turns them into ordinary queued jobs, collects ratings and review/curation decisions as evidence records, and derives advisory parameter recommendations. It also reviews outputs that were not produced by an experiment (Discovered Outputs) and advances chosen candidates through derived stages (Staged Curation). Video learning, multi-variable experiments and automatic tuning do not exist.
+Learning is a post-execution subsystem plus a thin experiment designer. It designs controlled one-variable image experiments, turns them into ordinary queued jobs, collects ratings and review/curation decisions as evidence records, and derives advisory parameter recommendations. It also reviews outputs that were not produced by an experiment (Discovered Outputs) and advances chosen candidates through derived stages (Staged Curation). Video Workflow experiments are reviewed by hand and the review is kept as separate evidence (section 3.3) that never feeds recommendations; automated video learning, multi-variable experiments and automatic tuning do not exist.
 
 Learning adds no queue, runner, history or compiler authority. Every job it creates is an NJR submitted through `JobService.submit_njrs`:
 
@@ -81,8 +81,11 @@ A separate `study_type == "model_comparison"` experiment (`study_type()` in `src
 | Model Comparison image | same method; `rating_classification` picks the kind | `learning_model_comparison_rating` |
 | Review tab | `LearningController.save_review_feedback` (also stamps embedded/sidecar review metadata through `ReviewMetadataService`) | `review_tab_feedback` |
 | Staged curation decision | `record_staged_curation_selection` -> `CurationLearningBridge.build_learning_record` | `staged_curation_event` |
+| Video experiment clip review and manual preference | Review Experiment window -> `VideoReviewService` (`src/learning/video_review_service.py`, `video_quality_review.py`) | `video_workflow_quality_rating` |
 
 `record_rating` raises when `LearningRecordWriter.append_record` returns `False`, so a failed write is shown and not cached as saved. Review drafts (`save_review_draft`) are resumable UI state in `LearningState.review_drafts`, not evidence, until they are committed: Save Rating / Save & Next, leaving the image (navigation commits a rated draft), **Save All Drafts** in the review panel, or **Save Stored Drafts...** in the tab header (the drafts left in other saved sessions, with a preview first; `learning_stored_drafts.py`). `src/learning/draft_commit.py` is the one rule: only a draft with an overall rating, only for an image with no saved rating (replacing a saved rating stays an explicit, confirmed Save Rating); everything else stays a draft. Viewing an image with untouched controls, or with controls equal to its saved rating, creates no draft, and a resumed session keeps its drafts. Controlled experiment ratings and observational review/curation records stay semantically distinct; only the former can reach the `experiment_strong` tier.
+
+**Video review evidence is isolated by construction.** `video_workflow_quality_rating` records keep every field inside `metadata.video_quality_review` (schema `stablenew.video-quality-review.v1`) and carry none of the image keys other readers use (`user_rating`, `image_path`, `experiment_id`, `experiment_name`, `learning_context`, `variant_value`, `variable_under_test`), so the recommendation engine (unknown kind), `LearningAnalytics` and the `LearningRecordWriter` per-experiment readers ignore them even at 5 stars. A clip review is identified by `(job_id, artifact_sha256)`, edits append a higher `revision` (readers resolve the latest valid one), an unchanged save appends nothing and a failed write raises (`ReviewSaveError`) so no UI reports a save that did not happen. The rubric separates the overall 1 to 5 rating from the requested-action outcome (achieved, partially, not, cannot assess); a manual preference is the operator's own pick, not a computed winner. Detail: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`.
 
 ### 3.4 Discovered Outputs
 
@@ -113,7 +116,7 @@ Incomplete historical rows (no durable id, snapshot or executed config) stay rea
 
 | Data | Location | Writer | Atomic |
 |---|---|---|---|
-| Evidence records (ratings, review feedback, curation events), append-only JSONL | `data/learning/learning_records.jsonl` (`get_learning_records_path`, `WorkspacePaths.learning_records`) | `LearningRecordWriter.append_record` (temp line, fsync, append, fsync; returns `False` and logs on failure) | Appended with fsync; a torn final line is possible after a hard reset (the rating-count readers skip lines that fail to parse) |
+| Evidence records (ratings, review feedback, curation events, video experiment reviews), append-only JSONL | `data/learning/learning_records.jsonl` (`get_learning_records_path`, `WorkspacePaths.learning_records`) | `LearningRecordWriter.append_record` (temp line, fsync, append, fsync; returns `False` and logs on failure) | Appended with fsync under a process-wide per-path lock (`evidence_file_lock`), each append staged through its own temp file; a torn final line is possible after a hard reset (the rating-count readers skip lines that fail to parse) |
 | Experiment sessions | `data/learning/experiments/<experiment_id>/session.json`, `meta.json`, plus `index.json` | `LearningExperimentStore` via `atomic_write_text` | Yes |
 | Discovered/curation groups | `data/learning/discovered_experiments/<group_id>/meta.json`, `items.json`, `review_state.json`, `selection_events.json`; `scan_index.json` in the same folder | `DiscoveredReviewStore` via `atomic_write_text` | Yes |
 | Tab session, last experiment, learning toggle | `state/ui_state.json` key `learning` (`get_ui_state_store`) | `LearningTabFrame._persist_learning_session_state` | Yes (errors swallowed) |
@@ -156,6 +159,7 @@ Because both layers stay in the compiler, the invariant "randomization never hap
 6. Model Comparison ratings never feed ordinary recommendations or automatic Model selection; they claim preference under each frozen envelope, not causality.
 7. Uncontrolled results (seed read-back missing or mismatched, tested LoRA not executed, backend restart boundary) are excluded from inference, not repaired.
 8. A rating shown as saved must be saved: do not ignore the `append_record` result.
+8a. Video review evidence never reaches image Learning: keep it under `metadata.video_quality_review`, never give it the image rating keys, and never feed it to `RecommendationEngine` or analytics (`tests/learning/test_video_quality_review_211.py` runs the real readers).
 9. Persisted Learning state is written with `src/utils/atomic_io.py` (or the fsync append of the records file). UI-thread-only: Tk variables and widgets are touched on the Tk thread (`app_controller._run_in_gui_thread`); background work uses `get_thread_registry().spawn`.
 10. No image crops, detector frames or binary artifacts in records; adaptive-refinement context is stored only as compact scalar fields, mapped from the canonical `adaptive_refinement` carrier, and `face_detected` is nullable (a confirmed negative needs a successful zero-detection assessment).
 11. Learning tests must not contact a WebUI, model or GPU.
@@ -172,6 +176,7 @@ Configuration is `pyproject.toml` only; run focused tests first, then `python to
 | Controller NJR construction, automation modes, resume state, review feedback, completion, run summary, queue cap | `tests/controller/test_learning_*.py`, `tests/controller/test_pipeline_controller_learning_queue_cap.py` | `unittest.mock.Mock` pipeline/app controllers with `SimpleNamespace` stage cards and var stubs |
 | Tab and panel contracts, persistence, model-policy projection | `tests/gui_v2/test_learning_*.py`, `tests/gui_v2/test_discovered_review_inbox.py`, `tests/gui_v2/test_curation_exact_profile_preflight_158.py` | Tk-free where possible |
 | Curation | `tests/curation/` | In-memory models |
+| Video experiment review evidence | `tests/learning/test_video_quality_review_211.py`, `test_video_review_service_211.py` | Temp record files and a temp `JobRepository`; no `data/learning` |
 | Review metadata and sidecars | `tests/review/` | Temp image dirs |
 | End to end | `tests/integration/test_learning_review_recommendation_e2e.py`, `tests/learning_v2/smoke_test_learning_workflow.py` | Stub runners |
 | Tk-free guarantee for execution code | `tests/safety/test_learning_execution_no_tk_imports.py` | Import inspection |
@@ -221,6 +226,7 @@ Per-PR records stay as historical evidence and may describe superseded behavior;
 | `docs/Subsystems/Learning/PR-LEARN-130D_Model_Scoped_Learning_Capability_Correctness.md` | Model-scoped variable and recommendation applicability through `ModelPolicy` |
 | `docs/Subsystems/Learning/PR-LEARN-140_Model_Comparison_Study.md` | Model Comparison contract, claim and bounded scope |
 | `docs/Subsystems/Learning/PR-LEARN-141_Ordinary_Global_Prompt_Correctness.md` | Executor-base prompt freeze and legacy-preview refusal policy |
+| `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md` | Video experiment review: rubric, evidence record shape, revisions and isolation from image Learning |
 | `docs/Subsystems/Learning/PR-LEARN-142_Model_Comparison_Evidence_Readiness.md` | Checkpoint evidence preparation for the study |
 | `docs/Subsystems/Learning/PR-LEARN-COMPARE-145_Checkpoint_Evidence_and_Comparison_Compatibility.md` | Structural checkpoint evidence and comparison compatibility |
 | `docs/Subsystems/Randomizer/Randomizer_Spec_v2.6.md` | Randomizer contract and ownership |

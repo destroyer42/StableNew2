@@ -116,7 +116,6 @@
     "src/learning/experiment_store.py": 1,
     "src/learning/learning_analytics.py": 2,
     "src/learning/learning_profile_sidecar.py": 4,
-    "src/learning/learning_record.py": 1,
     "src/learning/model_capabilities.py": 4,
     "src/learning/model_comparison.py": 20,
     "src/learning/model_evidence_readiness.py": 1,

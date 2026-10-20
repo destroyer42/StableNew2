@@ -606,3 +606,31 @@ def test_normal_queue_button_is_unchanged_when_experiment_mode_is_off(tk_root, t
     tab._on_submit()
     assert len(service.calls) == 1 and len(service.calls[0]) == 1
     assert service.calls[0][0].learning_context is None
+
+
+@pytest.mark.gui
+def test_queueing_an_experiment_makes_an_admitted_job_the_review_entry(
+    tk_root, tmp_path, monkeypatch
+):
+    """PR-VID-QUALITY-211: Review Experiment opens canonical history from any admitted arm id."""
+
+    from src.gui.views import video_experiment_review_window as review_window
+
+    _tab, panel, runner, _app_stub, _controller, _service, _clip = _ready_tab(tk_root, tmp_path)
+    opened: list[str] = []
+    monkeypatch.setattr(
+        review_window,
+        "open_video_experiment_review",
+        lambda parent, controller, job_id="": opened.append(job_id) or object(),
+    )
+    panel._on_review_clicked()
+    assert opened == [""] and panel.review_job_id == ""  # nothing queued: the window opens empty
+
+    panel._on_preview()
+    runner.drain()
+    panel._on_queue()
+    runner.drain()
+
+    assert panel.review_job_id == "job-0"
+    panel._on_review_clicked()
+    assert opened == ["", "job-0"]
