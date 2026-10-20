@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from src.video.workflow_catalog import build_builtin_workflow_specs
 from src.video.workflow_contracts import WorkflowSpec
 
@@ -141,6 +143,28 @@ class WorkflowRegistry:
         """Look a spec up for form validation: experimental allowed, disabled never."""
 
         return self.get(workflow_id, workflow_version, allow_experimental=True)
+
+
+def _version_key(version: str) -> tuple[Any, ...]:
+    parts: list[tuple[int, Any]] = []
+    for part in str(version or "").split("."):
+        parts.append((0, int(part)) if part.isdigit() else (1, part))
+    return tuple(parts)
+
+
+def latest_spec_per_workflow(specs: list[Any]) -> list[Any]:
+    """One selectable entry per workflow: its newest registered version, ordered by workflow id.
+
+    Older versions stay registered so existing jobs replay against their exact pinned revision."""
+
+    latest: dict[str, Any] = {}
+    for spec in specs:
+        current = latest.get(spec.workflow_id)
+        if current is None or _version_key(spec.workflow_version) > _version_key(
+            current.workflow_version
+        ):
+            latest[spec.workflow_id] = spec
+    return [latest[workflow_id] for workflow_id in sorted(latest)]
 
 
 def build_default_workflow_registry() -> WorkflowRegistry:

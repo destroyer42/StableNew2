@@ -7,6 +7,7 @@ from typing import Any
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.controller.video_eval_controller import VideoEvalControllerMixin
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
 from src.video.driving_video_inspection import inspect_driving_video as _inspect_video
 from src.video.motion_source_preparation import prepare_for_form
@@ -32,10 +33,11 @@ from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
 from src.video.workflow_controls import operator_controls_projection
 from src.video.workflow_frame_count import frame_count_projection
 from src.video.workflow_motion_guidance import motion_readiness_projection
+from src.video.workflow_registry import latest_spec_per_workflow
 from src.video.workflow_source_preparation import preview_declared_workflow_source
 
 
-class VideoWorkflowController:
+class VideoWorkflowController(VideoEvalControllerMixin):
     """Queue-backed controller surface for workflow-driven video jobs."""
 
     def __init__(
@@ -53,28 +55,8 @@ class VideoWorkflowController:
         self._experiments = VideoWorkflowExperimentService(self._njr_builder)
         self._batches = VideoWorkflowBatchService(self._njr_builder)
 
-    @staticmethod
-    def _version_key(version: str) -> tuple[Any, ...]:
-        parts = []
-        for part in str(version or "").split("."):
-            parts.append((0, int(part)) if part.isdigit() else (1, part))
-        return tuple(parts)
-
-    def _latest_per_workflow(self, specs: list[Any]) -> list[Any]:
-        """One selectable entry per workflow: its newest registered version.  Older versions stay
-        registered so existing jobs replay against their exact pinned revision."""
-
-        latest: dict[str, Any] = {}
-        for spec in specs:
-            current = latest.get(spec.workflow_id)
-            if current is None or self._version_key(spec.workflow_version) > self._version_key(
-                current.workflow_version
-            ):
-                latest[spec.workflow_id] = spec
-        return [latest[workflow_id] for workflow_id in sorted(latest)]
-
     def list_workflow_specs(self) -> list[dict[str, Any]]:
-        specs = self._latest_per_workflow(
+        specs = latest_spec_per_workflow(
             list(self._workflow_registry.list_specs_for_backend("comfy"))
         )
         records: list[dict[str, Any]] = []
