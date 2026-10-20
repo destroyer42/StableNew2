@@ -117,7 +117,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 - The physical-GPU hold was lifted by the owner on 2026-10-18: the owner has been running jobs, and device loss looks
   intermittent (a loss can come early in a run, or the GPU can be stressed for hours without one). Records:
   `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
-  `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` (16 losses since 2026-09-07; no root cause accepted). The device-loss
+  `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` and `docs/Subsystems/Runtime/DIAG-GPU-140_Forge_Job_Start_Device_Loss_Recurrence.md` (17 losses since 2026-09-07, 8 after XMP-off; the last three each 4-9 s into a Forge txt2img job; no root cause accepted). The device-loss
   quarantine stays the response to a loss. Tests, gates and CI still never touch a GPU or a real runtime; a package runs physical work only when its acceptance needs it.
 - Character Training is on HOLD pending a real trainer decision (no trainer is bundled; cancellation reaches only the immediate process; weight discovery can fall back to an older file). LoRA consumption is independent and stays supported: `docs/Subsystems/Training/Character_Embedding_Workflow_v2.6.md` section 0.1.
 - Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs resource and
