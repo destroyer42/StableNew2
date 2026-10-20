@@ -158,6 +158,10 @@ class DropdownLoader:
             self._apply_base_generation_panel(base_panel, resources)
 
     def _apply_base_generation_panel(self, panel: Any, resources: dict[str, list[Any]]) -> None:
+        updater = getattr(panel, "apply_resource_update", None)
+        if callable(updater):
+            updater(resources)
+            return
         self._apply_combo(
             panel,
             "_model_combo",

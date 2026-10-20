@@ -141,6 +141,9 @@ class ModelPolicyPanelProjection:
             except Exception:
                 logger.debug("Could not read the selected LoRAs", exc_info=True)
         model_name = panel.model_var.get()
+        normalize_model = getattr(panel, "_normalize_model_name", None)
+        if callable(normalize_model):
+            model_name = normalize_model(model_name)
         policy = (
             self._policy_resolver(model_name)
             if self._policy_resolver is not None

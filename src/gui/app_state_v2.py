@@ -371,6 +371,11 @@ class AppStateV2:
         if value is None:
             return
         normalized = normalize_resource_map(value)
+        # The refresh transport represents missing/failed endpoints as empty lists.
+        # Keep usable generation catalogs until a non-empty replacement is published.
+        for key in ("models", "samplers", "schedulers"):
+            if not normalized[key]:
+                normalized[key] = list(self.resources.get(key) or [])
         if self.resources != normalized:
             self.resources = normalized
             self._notify("resources")
