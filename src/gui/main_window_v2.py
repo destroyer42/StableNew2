@@ -43,6 +43,7 @@ from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.gui.zone_map_v2 import get_root_zone_config
 from src.services.operator_readiness_service import (
     OperatorReadinessService,
+    configured_comfy_command,
     product_support_surfaces,
 )
 from src.services.ui_state_store import get_ui_state_store
@@ -633,6 +634,9 @@ class MainWindowV2:
             coordinator = getattr(job_service, "gpu_loss", None)
             return coordinator.snapshot() if coordinator is not None else None
 
+        def comfy_command_provider() -> tuple[str, ...]:
+            return configured_comfy_command(getattr(controller, "_config_manager", None))
+
         return OperatorReadinessService(
             repository=repository,
             webui_connection=getattr(controller, "webui_connection_controller", None),
@@ -640,6 +644,7 @@ class MainWindowV2:
             output_dir_provider=output_dir_provider,
             webui_outage_provider=webui_outage_provider,
             gpu_loss_provider=gpu_loss_provider,
+            comfy_command_provider=comfy_command_provider,
         )
 
     def _watch_gpu_quarantine(self) -> None:

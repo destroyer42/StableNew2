@@ -175,7 +175,7 @@ class _Probes:
         )
 
 
-def _tab(tk_root, tmp_path: Path, monkeypatch, probes: _Probes):
+def _tab(tk_root, tmp_path: Path, monkeypatch, probes: _Probes, *, shown: bool = True):
     service = _JobService()
     app = SimpleNamespace(job_service=service, output_dir=str(tmp_path / "output"))
     app.sync_queue_state_after_direct_submission = lambda: None
@@ -194,6 +194,8 @@ def _tab(tk_root, tmp_path: Path, monkeypatch, probes: _Probes):
     tab.set_source_image_path(str(source))
     tab.workflow_var.set(TI2V_ID)
     tab._refresh_workspace_summary()
+    if shown:
+        tab._on_tab_shown()  # what Tk does when the tab is mapped (the test root is withdrawn)
     return tab, runner
 
 
@@ -205,7 +207,7 @@ def test_a_blocked_gate_disables_queue_with_the_reason_and_a_refresh_enables_it(
     probes.ram = 15.0  # below the 16 GB floor once ComfyUI's own start-up is counted
     tab, runner = _tab(tk_root, tmp_path, monkeypatch, probes)
     strip = tab.runtime_readiness_strip
-    assert len(runner.jobs) == 1  # selecting the workflow started one probe, on the worker
+    assert len(runner.jobs) == 1  # showing the tab started one probe, on the worker
 
     runner.drain()
 
@@ -256,6 +258,7 @@ def test_selecting_another_workflow_discards_the_previous_workflows_answer(
     )
     tab.workflow_var.set(next(k for k, v in tab._workflow_map.items() if v["workflow_id"] == other))
     tab._refresh_workspace_summary()
+    tab.runtime_readiness_strip.request_refresh()  # the tab is shown (the test root is withdrawn)
 
     # The new selection is being probed; the old workflow's blocked gate must not describe it.
     assert tab.runtime_readiness_strip._session.view().state == STATE_LOADING
@@ -274,3 +277,19 @@ def test_the_probe_never_submits_anything(tk_root, tmp_path, monkeypatch) -> Non
 
     assert probes.requested >= 2  # the gates were evaluated more than once
     assert service.calls == []  # and nothing reached JobService.submit_njrs
+
+
+@pytest.mark.gui
+def test_a_hidden_tab_probes_nothing_until_it_is_shown(tk_root, tmp_path, monkeypatch) -> None:
+    probes = _Probes()
+    tab, runner = _tab(tk_root, tmp_path, monkeypatch, probes, shown=False)
+
+    tab._refresh_workspace_summary()
+    assert runner.jobs == [] and probes.requested == 0  # no host read at start-up
+    assert tab.runtime_readiness_strip._session.view().state == STATE_IDLE
+
+    tab._on_tab_shown()
+    runner.drain()
+
+    assert probes.requested == 1
+    assert tab.runtime_readiness_strip._session.view().state == STATE_READY

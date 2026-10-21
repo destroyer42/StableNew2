@@ -366,6 +366,7 @@ def default_preflight_probes(
     base_url: str | None = None,
     autostart: bool | None = None,
     managed_contract: ManagedComfyContract | None = None,
+    config_manager: Any = None,
 ) -> PreflightProbes:
     """The app's probes: the configured launch command, a 1 s endpoint check and read-only ``GET``s of a serving ComfyUI."""
 
@@ -374,10 +375,9 @@ def default_preflight_probes(
     from src.video.comfy_api_client import ComfyApiClient
     from src.video.comfy_healthcheck import probe_comfy_endpoint
     from src.video.comfy_process_manager import build_default_comfy_process_config
-    from src.video.managed_comfy_runtime import load_managed_comfy_contract
     from src.video.workflow_readiness import _driver_gpu_memory_mib
 
-    config = build_default_comfy_process_config()
+    config = build_default_comfy_process_config(config_manager)
     command = (
         tuple(comfy_command)
         if comfy_command is not None
@@ -385,12 +385,6 @@ def default_preflight_probes(
     )
     url = base_url or str(getattr(config, "base_url", "") or "http://127.0.0.1:8188")
     auto = bool(getattr(config, "autostart_enabled", False)) if autostart is None else autostart
-    if managed_contract is None:
-        try:
-            managed_contract = load_managed_comfy_contract()
-        except Exception:  # noqa: BLE001 - the contract is only used to name the command's kind
-            managed_contract = None
-
     def _object_info(target: str) -> Mapping[str, Any] | None:
         try:
             return ComfyApiClient(base_url=target).get_object_info()

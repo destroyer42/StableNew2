@@ -331,7 +331,8 @@ def test_the_default_probes_only_read_and_never_queue_or_start_anything(monkeypa
         "src.video.comfy_healthcheck.probe_comfy_endpoint", lambda *_a, **_k: "healthy"
     )
     monkeypatch.setattr(
-        "src.video.comfy_process_manager.build_default_comfy_process_config", lambda: None
+        "src.video.comfy_process_manager.build_default_comfy_process_config",
+        lambda _manager=None: None,
     )
     monkeypatch.setattr(
         "src.video.workflow_readiness._driver_gpu_memory_mib", lambda _i=0: (12282.0, 11000.0)

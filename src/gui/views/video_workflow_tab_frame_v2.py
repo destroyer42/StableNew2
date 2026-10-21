@@ -556,6 +556,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.runtime_readiness_strip.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self.runtime_readiness_strip.grid_remove()
+        self.bind("<Map>", self._on_tab_shown, add="+")
         self.motion_readiness_panel.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         self.motion_readiness_panel.grid_remove()
         # PR-VID-MOTION-210: optional exact preparation of the driving clip for this workflow.
@@ -1077,8 +1078,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.experimental_opt_in_var.set(False)  # a new selection never inherits opt-in
             self._apply_workflow_capabilities(workflow_meta)
             strip = getattr(self, "runtime_readiness_strip", None)
-            if strip is not None:
-                strip.request_refresh()
+            if strip is not None and self.winfo_ismapped():
+                strip.request_refresh()  # a hidden tab probes nothing; showing it does (_on_tab_shown)
         self.workflow_detail_var.set(format_workflow_capability_label(workflow_meta))
         summary = summarize_video_workflow_source(
             source_image_path=self.source_image_var.get().strip(),
@@ -1225,6 +1226,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def _experiment_controller(self) -> Any:
         getter = getattr(self.app_controller, "get_video_workflow_controller", None)
         return getter() if callable(getter) else None
+
+    def _on_tab_shown(self, _event: Any = None) -> None:
+        """Re-check the runtime when the tab is shown, so a hidden tab never probes the host at start-up."""
+
+        strip = getattr(self, "runtime_readiness_strip", None)
+        if strip is not None:
+            strip.request_refresh(force=True)
 
     def _read_runtime_readiness_selection(self) -> tuple[str, str]:
         """The selected workflow for the runtime strip; empty (strip hidden) when there is no controller."""

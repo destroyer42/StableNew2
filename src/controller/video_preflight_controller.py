@@ -7,6 +7,7 @@ It queues nothing and starts or stops no process; the gates live in ``src/video/
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 from src.video.workflow_preflight import (
@@ -20,6 +21,7 @@ from src.video.workflow_preflight import (
 class VideoPreflightControllerMixin:
     """Requires ``_workflow_registry`` and ``_preflight_probes`` (a probe factory, or ``None`` for the app's)."""
 
+    _app_controller: Any
     _workflow_registry: Any
     _preflight_probes: Callable[[], PreflightProbes] | None
 
@@ -32,6 +34,9 @@ class VideoPreflightControllerMixin:
         and, when ComfyUI is already serving, its node list."""
 
         spec = self._workflow_registry.get(workflow_id, workflow_version)
-        return evaluate_workflow_preflight(
-            spec, (self._preflight_probes or default_preflight_probes)()
+        # The app's own ConfigManager, so the probe reads the settings the app runs on and nothing else.
+        probes = self._preflight_probes or partial(
+            default_preflight_probes,
+            config_manager=getattr(self._app_controller, "_config_manager", None),
         )
+        return evaluate_workflow_preflight(spec, probes())
