@@ -277,4 +277,5 @@ Per-PR records stay in `docs/Subsystems/Runtime/` as historical evidence. They m
 | `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md` | The device-loss incident record behind the HOLD |
 | `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` | Dump attribution for the same incident |
 | `docs/Subsystems/Runtime/DIAG-GPU-140_Forge_Job_Start_Device_Loss_Recurrence.md` | 2026-10-20 recurrence: Forge job-start device loss, 17-marker history, correlator UTC fix |
+| `docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md` | 2026-10-20/21: three losses in 11 hours, failing CUDA call differs each time, NVML hang recorder, PCIe Gen3 isolation protocol |
 | `docs/audits/2026-10-16_repo_audit_and_roadmap.md` | Audit B2, B3, B7, B9, B10 and the P3 plan referenced above |
