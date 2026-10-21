@@ -17,8 +17,6 @@ from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service_dispatch import dispatch_next_now
 from src.controller.submission_policy_v26 import SubmissionPolicy
-from src.pipeline.animatediff_retirement import require_animatediff_not_enabled
-from src.pipeline.secondary_motion_retirement import require_secondary_motion_not_enabled
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     JobView,
@@ -27,6 +25,7 @@ from src.pipeline.job_models_v2 import (
     UnifiedJobSummary,
 )
 from src.pipeline.result_contract_v26 import build_diagnostics_descriptor
+from src.pipeline.retired_execution import require_no_retired_execution
 from src.queue.job_history_store import JobHistoryStore
 from src.queue.job_model import Job, JobExecutionMetadata, JobStatus, RetryAttempt
 from src.queue.job_queue import JobQueue
@@ -562,8 +561,7 @@ class JobService:
         """Basic validation of normalized job metadata before queue acceptance."""
         if not record.job_id:
             return False, {"code": "missing_job_id", "message": "Normalized job is missing job_id."}
-        require_animatediff_not_enabled(record)  # retired AnimateDiff: typed refusal before queue admission
-        require_secondary_motion_not_enabled(record)  # retired secondary motion: same refusal
+        require_no_retired_execution(record)  # retired AnimateDiff / secondary motion: typed refusal before queue admission
         prompt_source = record.prompt_source
         prompt_pack_id = record.prompt_pack_id
         if record.source.kind is SourceKind.PROMPT_PACK and not prompt_pack_id:

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-445 of 597 modules have a docstring.
+446 of 598 modules have a docstring.
 
 ## src/
 
@@ -502,6 +502,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `reprocess_builder.py`: ReprocessJobBuilder: Create jobs to reprocess existing images through specific stages
 - `resolution_layer.py`: Deterministic prompt and pipeline config resolution helpers
 - `result_contract_v26.py`: (no docstring)
+- `retired_execution.py`: One admission check for every retired execution (AnimateDiff, secondary motion)
 - `run_config.py`: Run configuration model with prompt source tracking
 - `run_plan.py`: (no docstring)
 - `run_stage_handlers.py`: Per-stage execution handlers for ``PipelineRunner.run_njr`` (roadmap P4-1)
