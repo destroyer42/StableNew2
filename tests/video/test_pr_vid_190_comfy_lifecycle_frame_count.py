@@ -305,9 +305,10 @@ def test_experimental_opt_in_is_still_required_per_job(tmp_path: Path) -> None:
 def test_only_the_newest_revision_is_offered_and_the_old_one_still_resolves(tmp_path) -> None:
     controller, _ = _capture_controller(tmp_path)
     [offered] = [s for s in controller.list_workflow_specs() if s["workflow_id"] == WAN_ID]
-    assert offered["workflow_version"] == "1.2.0"  # PR-COMFY-RUNTIME-100 requalification
+    # PR-VID-WAN-324: the frames-out revision, approved 2026-10-21, is the newest; 1.2.0 stays resolvable.
+    assert offered["workflow_version"] == "1.3.0"
     assert offered["frame_count"]["default"] == 49
-    for older in (V1, V11):
+    for older in (V1, V11, "1.2.0"):
         ok, reason = controller.validate_form_data(_form(workflow_version=older))
         assert ok, reason  # existing 1.0.0/1.1.0 jobs can still be validated and replayed exactly
 

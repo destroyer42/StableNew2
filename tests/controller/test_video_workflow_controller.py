@@ -67,9 +67,9 @@ def test_list_workflow_specs_offers_the_approved_ti2v_and_the_experimental_anima
     assert spec["form_visibility"]["experimental"] is False
     assert spec["form_visibility"]["seed"] is True
     assert spec["form_visibility"]["motion_profile"] is False
-    # Only the newest revision is offered; its length is a selectable, frozen-at-admission
-    # frame count that defaults to the qualified 49 frames at a fixed 24 fps.
-    assert spec["workflow_version"] == "1.2.0"
+    # Only the newest revision is offered (the approved frames-out 1.3.0, PR-VID-WAN-324); its length is
+    # a selectable, frozen-at-admission frame count that defaults to the qualified 49 frames at 24 fps.
+    assert spec["workflow_version"] == "1.3.0"
     assert "frames" not in spec["operator_projection"]["fixed_settings"]
     assert spec["form_visibility"]["frame_count"] is True
     assert spec["frame_count"]["default"] == 49

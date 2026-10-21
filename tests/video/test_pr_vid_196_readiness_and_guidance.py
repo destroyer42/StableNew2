@@ -597,6 +597,7 @@ def test_registered_workflow_versions_and_graphs_are_unchanged():
         "wan22_ti2v_5b_i2v_v1@1.0.0": "42dac69b34130c4db06ea5dc0e91dd7b35bba2ff0c960ab24b406437adb58332",
         "wan22_ti2v_5b_i2v_v1@1.1.0": "e5821b1cf6eadf0d93e666f4a606d7540d53298cf3bfc51402393f80388fe731",
         "wan22_ti2v_5b_i2v_v1@1.2.0": "5bce60b5e7d0b233a3ddbff2225546e41b7f4415af001a0da6de443757df0bec",
+        "wan22_ti2v_5b_i2v_v1@1.3.0": "61971186f6921b95427fa94c4f2c0fe2f30d180cec06839519cbd5fbaf478d18",
         "wan_animate2_drive_i2v_v1@1.0.0": "c610171704dc2aff829a1cc7e494f3b01cff0108eb9a64ed830fedaa63f0704e",
         "wan_animate2_drive_i2v_v1@1.1.0": "75da00b523e0762d2d42e67dca30a328e99ace1175d6d7fa23041394de68d9d3",
         "wan_animate2_drive_i2v_v1@1.2.0": "57ca14d77b305beca3626fbfa5dde75144c06bb49b065807ba88666ac8f979db",

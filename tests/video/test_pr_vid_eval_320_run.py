@@ -289,6 +289,6 @@ def test_an_approved_workflow_arm_is_queueable_without_an_opt_in(tmp_path) -> No
     assert plan.eligible, plan.summary()
     assert plan.experimental_arms == ()
     workflow = plan.jobs[0].njr.config["video_workflow"]
-    assert workflow["workflow_version"] == "1.2.0"
+    assert workflow["workflow_version"] == "1.3.0"  # the approved frames-out revision (PR-VID-WAN-324)
     assert workflow["video_execution"]["experimental_opt_in"] is False
     assert job_service.calls == []  # a preview admits nothing
