@@ -60,7 +60,7 @@ def write_svd_run_manifest(
         "count": len(output_paths),
         "config": config.to_dict(),
         "postprocess": result.postprocess,
-        "export": result.export,
+        "export": getattr(result, "export", None),
         "preprocess": {
             "source_path": str(result.preprocess.source_path),
             "prepared_path": str(result.preprocess.prepared_path),
@@ -111,7 +111,7 @@ def build_svd_history_record(*, config: SVDConfig, result: SVDResult) -> dict[st
         "count": len(output_paths),
         "config": config.to_dict(),
         "postprocess": result.postprocess,
-        "export": result.export,
+        "export": getattr(result, "export", None),
         "artifact": artifact_manifest_payload(
             stage="svd_native",
             image_or_output_path=output_paths[0] if output_paths else "",
