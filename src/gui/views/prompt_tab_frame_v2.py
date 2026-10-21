@@ -34,8 +34,6 @@ from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.prompt_editor_contract import (
-    PROMPT_PICKER_COLUMN_MIN_WIDTH,
-    PROMPT_PICKER_ROW_MIN_HEIGHT,
     build_editor_warning_text,
     build_slot_labels,
     find_undefined_slots,
@@ -46,6 +44,7 @@ from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.gui.widgets.openpose_picker_panel import OpenPosePickerPanel
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
 from src.image_backends.image_backend_types import configured_image_backend_id
 from src.image_backends.model_policy import resolve_model_policy
@@ -154,11 +153,12 @@ class PromptTabFrame(ttk.Frame):
 
         self.left_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.center_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
-        self.right_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
+        self.options_scroll = ScrollableFrame(self)
+        self.right_frame = self.options_scroll.inner
 
         self.left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 4), pady=4)
         self.center_frame.grid(row=0, column=1, sticky="nsew", padx=4, pady=4)
-        self.right_frame.grid(row=0, column=2, sticky="nsew", padx=(4, 0), pady=4)
+        self.options_scroll.grid(row=0, column=2, sticky="nsew", padx=(4, 0), pady=4)
 
         self._build_left_panel()
         self._build_center_panel()
@@ -384,11 +384,10 @@ class PromptTabFrame(ttk.Frame):
     def _build_prompts_tab(self) -> None:
         """Build positive and negative prompt editors in Prompts tab."""
         # Configure grid layout for split view
-        self.prompts_tab.rowconfigure(1, weight=3)  # positive editor row
-        self.prompts_tab.rowconfigure(4, weight=1)  # negative editor row
-        self.prompts_tab.rowconfigure(5, weight=1, minsize=PROMPT_PICKER_ROW_MIN_HEIGHT)
-        self.prompts_tab.columnconfigure(0, weight=1, minsize=PROMPT_PICKER_COLUMN_MIN_WIDTH)
-        self.prompts_tab.columnconfigure(1, weight=1, minsize=PROMPT_PICKER_COLUMN_MIN_WIDTH)
+        self.prompts_tab.rowconfigure(1, weight=3, minsize=126)
+        self.prompts_tab.rowconfigure(4, weight=1, minsize=78)
+        self.prompts_tab.columnconfigure(0, weight=1)
+        self.prompts_tab.columnconfigure(1, weight=1)
 
         # Positive prompt header (row 0)
         positive_header = ttk.Frame(self.prompts_tab)
@@ -437,6 +436,9 @@ class PromptTabFrame(ttk.Frame):
             foreground=TOKENS.colors.accent_primary,
         )
 
+        self.template_scroll = ScrollableFrame(self.editor_notebook)
+        self.editor_notebook.add(self.template_scroll, text="Template")
+        self.template_scroll.inner.columnconfigure(0, weight=1)
         self._build_template_panel()
 
         # Negative prompt header (row 3)
@@ -489,37 +491,40 @@ class PromptTabFrame(ttk.Frame):
             foreground=TOKENS.colors.accent_primary,
         )
 
-        # LoRA picker panel (row 5, column 0)
+        self.lora_scroll = ScrollableFrame(self.editor_notebook)
+        self.editor_notebook.add(self.lora_scroll, text="LoRAs")
         self.lora_picker = LoRAPickerPanel(
-            self.prompts_tab,
+            self.lora_scroll.inner,
             on_change_callback=self._on_loras_changed,
             webui_root=STABLENEW_WEBUI_ROOT or None,
         )
-        self.lora_picker.grid(row=5, column=0, sticky="nsew", padx=(0, 3))
+        self.lora_picker.pack(fill="both", expand=True)
 
         # Override keyword insertion to insert into prompt editor
         self.lora_picker._insert_keywords_to_prompt = self._insert_keywords_to_prompt
 
-        # Embedding picker panel (row 5, column 1)
+        self.embedding_scroll = ScrollableFrame(self.editor_notebook)
+        self.editor_notebook.add(self.embedding_scroll, text="Embeddings")
         self.embedding_picker = EmbeddingPickerPanel(
-            self.prompts_tab,
+            self.embedding_scroll.inner,
             on_change_callback=self._on_embeddings_changed,
             webui_root=STABLENEW_WEBUI_ROOT or None,
         )
-        self.embedding_picker.grid(row=5, column=1, sticky="nsew", padx=(3, 0))
+        self.embedding_picker.pack(fill="both", expand=True)
 
-        # OpenPose reference picker (row 6, full width): structural conditioning for this slot (PR-IMG-CNET-210).
+        self.conditioning_scroll = ScrollableFrame(self.editor_notebook)
+        self.editor_notebook.add(self.conditioning_scroll, text="Conditioning")
         self.openpose_picker = OpenPosePickerPanel(
-            self.prompts_tab,
+            self.conditioning_scroll.inner,
             on_change_callback=self._on_openpose_changed,
         )
-        self.openpose_picker.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-        self.controlnet_picker = ControlNetUnitsPanel(self.prompts_tab, on_change_callback=self._on_controlnet_changed)
-        self.controlnet_picker.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.openpose_picker.pack(fill="x", pady=(6, 0))
+        self.controlnet_picker = ControlNetUnitsPanel(self.conditioning_scroll.inner, on_change_callback=self._on_controlnet_changed)
+        self.controlnet_picker.pack(fill="x", pady=(6, 0))
 
     def _build_template_panel(self) -> None:
-        self.template_panel = ttk.LabelFrame(self.prompts_tab, text="Cinematic Template", padding=6)
-        self.template_panel.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.template_panel = ttk.LabelFrame(self.template_scroll.inner, text="Cinematic Template", padding=6)
+        self.template_panel.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self.template_panel.columnconfigure(1, weight=1)
 
         ttk.Label(self.template_panel, text="Template", style=BODY_LABEL_STYLE).grid(
@@ -942,10 +947,22 @@ class PromptTabFrame(ttk.Frame):
             ("preserve_lora_relative_order", "Preserve LoRAs"),
             ("preserve_unknown_order", "Preserve Unknown"),
             ("enable_score_based_classification", "Score-Based"),
-            ("allow_subject_anchor_boost", "Anchor Boost"),
+            ("allow_subject_anchor_boost", "Anchor (inactive)"),
             ("log_before_after", "Log Before/After"),
             ("log_bucket_assignments", "Log Buckets"),
         ]
+        explanations = {
+            "enabled": "Apply prompt optimization during compilation. The authored prompt stays unchanged.",
+            "optimize_positive": "Optimize the positive prompt when optimization is enabled.",
+            "optimize_negative": "Optimize the negative prompt when optimization is enabled and the target supports it.",
+            "dedupe_enabled": "Remove repeated prompt chunks during optimization.",
+            "preserve_lora_relative_order": "Keep LoRA references in their authored relative order.",
+            "preserve_unknown_order": "Keep unclassified chunks in their authored relative order.",
+            "enable_score_based_classification": "Use classification scores to assign prompt chunks to ordering buckets.",
+            "allow_subject_anchor_boost": "Reserved setting: the current optimizer does not change subject anchors. This option has no effect.",
+            "log_before_after": "Record the prompt text before and after optimization in diagnostic logs.",
+            "log_bucket_assignments": "Record optimizer bucket assignments in diagnostic logs.",
+        }
         for index, (key, label) in enumerate(checkbox_specs):
             row = index // 2
             column = index % 2
@@ -958,6 +975,7 @@ class PromptTabFrame(ttk.Frame):
             )
             checkbutton.grid(row=row, column=column, sticky="w", padx=2, pady=2)
             self._prompt_optimizer_widgets.append(checkbutton)
+            attach_tooltip(checkbutton, explanations[key])
 
         threshold_row = (len(checkbox_specs) + 1) // 2
         ttk.Label(parent, text="Chunk Warn").grid(
@@ -973,6 +991,10 @@ class PromptTabFrame(ttk.Frame):
         )
         chunk_spin.grid(row=threshold_row, column=1, sticky="ew", pady=(4, 2))
         self._prompt_optimizer_widgets.append(chunk_spin)
+        attach_tooltip(
+            chunk_spin,
+            "Warn when a prompt contains more than this many parsed chunks. This does not truncate the prompt.",
+        )
         ttk.Label(parent, text="Anchor Min").grid(
             row=threshold_row + 1, column=0, sticky="w", pady=(2, 0)
         )
@@ -986,9 +1008,19 @@ class PromptTabFrame(ttk.Frame):
         )
         anchor_spin.grid(row=threshold_row + 1, column=1, sticky="ew", pady=(2, 0))
         self._prompt_optimizer_widgets.append(anchor_spin)
+        attach_tooltip(
+            anchor_spin,
+            "Reserved threshold for Anchor Boost. The current optimizer's anchor operation has no effect.",
+        )
         ttk.Label(
             parent, textvariable=self.optimizer_note_var, wraplength=300, justify="left"
         ).grid(row=threshold_row + 2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Label(
+            parent,
+            text="Optimization reorders prompt chunks for compilation; authored text is preserved. Hover over an option for details. Anchor Boost currently has no effect.",
+            wraplength=260,
+            justify="left",
+        ).grid(row=threshold_row + 3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
     def get_prompt_optimizer_config(self) -> dict[str, object]:
         return {

@@ -13,9 +13,11 @@ from tests.helpers.njr_factory import make_pipeline_njr
 class DummyJobService:
     def __init__(self) -> None:
         self.submitted: list[NormalizedJobRecord] = []
+        self.policy = None
 
     def submit_njrs(self, records, policy=None) -> list[str]:
         self.submitted.extend(records)
+        self.policy = policy
         return [record.job_id for record in records]
 
 
@@ -73,6 +75,8 @@ def test_replay_job_from_history_submits_snapshot_job():
         seed=99,
     )
     entry, _ = _make_snapshot_entry(record)
+    # An old Run Now action is provenance, not authority to start this replay.
+    entry.snapshot["source"] = "run_now_button"
     history_service = DummyHistoryService(entry)
     controller = object.__new__(DummyPipelineController)
     controller._job_service = DummyJobService()
@@ -85,7 +89,7 @@ def test_replay_job_from_history_submits_snapshot_job():
     queued = controller.replay_job_from_history(record.job_id)
 
     assert queued == 1
-    assert controller._app_state.preview_jobs
+    assert controller._app_state.preview_jobs is None
     # Replay submits a NEW NJR identity with parent lineage back to the history record.
     (replayed,) = controller._job_service.submitted
     assert replayed.job_id != record.job_id
@@ -93,4 +97,4 @@ def test_replay_job_from_history_submits_snapshot_job():
     assert replayed.source.parent_job_id == record.job_id
     assert replayed.workload.config == record.workload.config
     assert replayed.provenance.seed == 99
-    assert controller._app_state.preview_jobs == [replayed]
+    assert controller._job_service.policy.start_when_idle is False

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 388,
+    "total": 386,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -43,7 +43,6 @@
       "src/gui/main_window_v2.py",
       "src/gui/model_policy_panel_projection.py",
       "src/gui/model_readiness_presenter.py",
-      "src/gui/preview_panel_v2.py",
       "src/gui/prompt_adaptation_dialog.py",
       "src/gui/prompt_target_presenter.py",
       "src/gui/review_batch_dialog.py",
@@ -65,7 +64,6 @@
       "src/gui/views/svd_tab_frame_v2.py",
       "src/gui/views/video_workflow_motion_readiness_panel_v2.py",
       "src/gui/views/video_workflow_tab_frame_v2.py",
-      "src/gui/widgets/embedding_picker_panel.py",
       "src/gui/widgets/openpose_picker_panel.py",
       "src/gui/zimage_optional_control_projection.py",
       "src/gui_v2/adaptation_notice.py",
@@ -397,8 +395,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1339,
-      "S110": 532,
+      "BLE001": 1338,
+      "S110": 530,
       "S112": 38
     },
     "counts": {
@@ -482,8 +480,8 @@
         "S110": 21
       },
       "src/controller/pipeline_controller_services/history_handoff_service.py": {
-        "BLE001": 2,
-        "S110": 2
+        "BLE001": 1,
+        "S110": 1
       },
       "src/controller/process_auto_scanner_service.py": {
         "BLE001": 13,
@@ -544,7 +542,7 @@
       },
       "src/gui/job_history_panel_v2.py": {
         "BLE001": 14,
-        "S110": 11
+        "S110": 10
       },
       "src/gui/learning_review_dialog_v2.py": {
         "BLE001": 3,

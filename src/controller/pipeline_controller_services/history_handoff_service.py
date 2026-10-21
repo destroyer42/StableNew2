@@ -54,9 +54,7 @@ class HistoryHandoffService:
         *,
         job_id: str,
         history_service: Any,
-        app_state: Any,
         submit_normalized_jobs: Callable[..., int],
-        set_last_run_config: Callable[[dict[str, Any]], None],
     ) -> int:
         if history_service is None:
             return 0
@@ -69,19 +67,13 @@ class HistoryHandoffService:
         if njr is None:
             return 0
         records = [compile_replay_intent(ReplayIntent(njr))]
-        setter = getattr(app_state, "set_preview_jobs", None)
-        if callable(setter):
-            try:
-                setter(records)
-            except Exception:
-                pass
+        # Replay submits a stored executable envelope. It is not a Pipeline draft
+        # edit, and must not leave an already-submitted identity in Add to Queue.
         run_config = record.metadata or record.njr_snapshot.get("run_config") or {}
-        if run_config:
-            set_last_run_config(dict(run_config))
         return submit_normalized_jobs(
             records,
             run_config=run_config,
-            source=record.njr_snapshot.get("source", "gui"),
+            source="history_replay",
             prompt_source=record.njr_snapshot.get("prompt_source", "manual"),
         )
 

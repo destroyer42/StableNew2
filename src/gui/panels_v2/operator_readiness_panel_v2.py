@@ -7,6 +7,7 @@ from collections.abc import Callable
 from tkinter import messagebox, ttk
 from typing import Any
 
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.services.operator_readiness_service import (
     OperatorReadinessRecord,
     OperatorReadinessService,
@@ -76,7 +77,7 @@ class OperatorReadinessPanelV2(ttk.Frame):
         self.support_labels: dict[str, ttk.Label] = {}
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(3, weight=1)
+        self.rowconfigure(1, weight=1)
 
         header = ttk.Frame(self)
         header.grid(row=0, column=0, sticky="ew", pady=(0, 6))
@@ -95,7 +96,11 @@ class OperatorReadinessPanelV2(ttk.Frame):
         if on_open_diagnostics is None:
             self.diagnostics_button.state(["disabled"])
 
-        self.intro_frame = ttk.LabelFrame(self, text="First-run guidance")
+        self.body_scroll = ScrollableFrame(self)
+        self.body_scroll.grid(row=1, column=0, sticky="nsew")
+        body = self.body_scroll.inner
+        body.columnconfigure(0, weight=1)
+        self.intro_frame = ttk.LabelFrame(body, text="First-run guidance")
         self.intro_frame.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         self.intro_frame.columnconfigure(0, weight=1)
         self.intro_text = ttk.Label(
@@ -126,11 +131,11 @@ class OperatorReadinessPanelV2(ttk.Frame):
         self.dismiss_intro.grid(row=1, column=0, sticky="w", padx=8, pady=(0, 6))
 
         self.intro_reopen_button = ttk.Button(
-            self, text="Show first-run guidance", command=self._show_intro
+            body, text="Show first-run guidance", command=self._show_intro
         )
         self.intro_reopen_button.grid(row=2, column=0, sticky="w", pady=(0, 6))
 
-        self.content = ttk.Frame(self)
+        self.content = ttk.Frame(body)
         self.content.grid(row=3, column=0, sticky="nsew")
         self.content.columnconfigure(0, weight=1)
         self.content.rowconfigure(1, weight=1)

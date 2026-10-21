@@ -128,3 +128,16 @@ def test_thumbnail_unchecked_does_not_lookup_or_display(tmp_path: Path) -> None:
     )
     assert panel.thumbnail.loaded is None
     assert panel.thumbnail.cleared == 1
+
+
+def test_thumbnail_adapter_enforces_explicit_sfw_mode(tmp_path: Path) -> None:
+    artifact = tmp_path / "image.png"
+    artifact.write_bytes(b"image")
+    panel = _thumbnail_panel()
+    panel._content_visibility_mode = "sfw"
+    panel._update_thumbnail(
+        SimpleNamespace(job_id="job", positive_prompt="explicit", output_paths=[str(artifact)]),
+        show_preview=True,
+    )
+    assert panel.thumbnail.loaded is None
+    assert panel.thumbnail.placeholder == "No generated preview yet"

@@ -14,11 +14,13 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.pipeline_controller_services.history_handoff_service import (
     HistoryHandoffService,
 )
 from src.gui import theme_v2 as theme_mod
 from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
+from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.queue.job_history_store import (
     INTERRUPTED_RESTART_ACTION_REQUIRED,
@@ -147,6 +149,19 @@ class JobHistoryPanelV2(ttk.Frame):
         self.browse_btn.pack(side=tk.LEFT, padx=(4, 0))
         self._browser_window: tk.Toplevel | None = None
 
+        self.show_artifact_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            self,
+            text="Show selected artifact",
+            variable=self.show_artifact_var,
+            command=self._refresh_selected_artifact,
+        ).pack(anchor=tk.W)
+
+        self.replay_status_var = tk.StringVar(value="")
+        ttk.Label(self, textvariable=self.replay_status_var, wraplength=560).pack(
+            fill=tk.X, pady=(0, 4)
+        )
+
         # D-GUI-003: Enhanced columns with row/variant/batch info
         columns = (
             "time",
@@ -208,6 +223,10 @@ class JobHistoryPanelV2(ttk.Frame):
         # Layout treeview and scrollbar
         self.history_tree.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
+        self.artifact_frame = ttk.LabelFrame(tree_frame, text="Recorded artifact")
+        self.artifact_thumbnail = ThumbnailWidget(self.artifact_frame, width=144, height=144)
+        self.artifact_thumbnail.pack()
+        self._shown_artifact_path: str | None = None
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
         self.history_tree.bind("<<TreeviewSelect>>", self._on_select)
@@ -239,6 +258,17 @@ class JobHistoryPanelV2(ttk.Frame):
                 self._on_history_items_changed()
             except Exception:
                 pass
+        self._artifact_state = app_state or getattr(controller, "app_state", None)
+        if self._artifact_state is not None and hasattr(self._artifact_state, "subscribe"):
+            self._artifact_state.subscribe(
+                "content_visibility_mode", self._refresh_selected_artifact
+            )
+
+    def destroy(self) -> None:
+        state = self._artifact_state
+        if state is not None and hasattr(state, "unsubscribe"):
+            state.unsubscribe("content_visibility_mode", self._refresh_selected_artifact)
+        super().destroy()
 
     def _on_refresh(self) -> None:
         ctrl = self.controller
@@ -271,6 +301,8 @@ class JobHistoryPanelV2(ttk.Frame):
         rows = [(entry, self._entry_values(entry)) for entry in entries]
         signature = tuple((entry.job_id, values) for entry, values in rows)
         if signature == self._last_history_signature:
+            self._entries = {entry.job_id: entry for entry in entries}
+            self._refresh_selected_artifact()
             self.empty_state_var.set(
                 "No recent jobs yet. Queue an image or video job to populate history."
                 if not entries
@@ -419,9 +451,20 @@ class JobHistoryPanelV2(ttk.Frame):
         if not callable(handler):
             return
         try:
-            handler(self._selected_job_id)
+            accepted = handler(self._selected_job_id)
         except Exception:
-            pass
+            self.replay_status_var.set(
+                "Replay failed. Check the application log; no success was confirmed."
+            )
+            return
+        if accepted:
+            self.replay_status_var.set(
+                "Replay queued as a new job. Queue holds still apply. Pipeline Preview is unchanged."
+            )
+        else:
+            self.replay_status_var.set(
+                "Replay was not queued. Check the application log and queue admission state."
+            )
 
     def _on_browse_all(self) -> None:
         """Open (or raise) the searchable browser over the whole history in its own window."""
@@ -517,6 +560,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self._history_menu.tk_popup(event.x_root, event.y_root)
 
     def _update_action_buttons(self, entry: JobHistoryEntry | None) -> None:
+        self._refresh_selected_artifact(entry)
         actions = self._history_action_state(entry)
         self.open_btn.configure(state=tk.NORMAL if actions.open_folder else tk.DISABLED)
         self.replay_btn.configure(state=tk.NORMAL if actions.replay else tk.DISABLED)
@@ -551,6 +595,44 @@ class JobHistoryPanelV2(ttk.Frame):
 
     def _controller_supports(self, name: str) -> bool:
         return callable(getattr(self.controller, name, None))
+
+    def _refresh_selected_artifact(self, entry: JobHistoryEntry | None = None) -> None:
+        if not hasattr(self, "artifact_thumbnail"):
+            return
+        entry = entry or self._selected_entry()
+        path = None
+        if entry is not None and self.show_artifact_var.get():
+            state = self.app_state or getattr(self.controller, "app_state", None)
+            mode = getattr(state, "content_visibility_mode", "nsfw")
+            njr = None
+            if mode == "sfw":
+                try:
+                    njr = HistoryHandoffService().hydrate_njr_from_snapshot(entry.snapshot)
+                except (TypeError, ValueError, KeyError, AttributeError):
+                    njr = None
+            subject = {
+                "name": entry.payload_summary,
+                "positive_prompt": njr.positive_prompt if njr else "",
+                "negative_prompt": njr.negative_prompt if njr else "",
+            }
+            if (mode != "sfw" or njr is not None) and ContentVisibilityResolver(mode).is_visible(
+                subject
+            ):
+                thumbnail = self._extract_primary_artifact(entry).get("thumbnail_path")
+                path = (
+                    str(thumbnail)
+                    if self._is_existing_file(thumbnail, _IMAGE_OUTPUT_SUFFIXES)
+                    else self._usable_image_artifact_path(entry)
+                )
+        if path:
+            self.artifact_frame.grid(row=0, column=2, sticky="n", padx=(8, 0))
+            if path != self._shown_artifact_path:
+                self.artifact_thumbnail.set_image_from_path(path)
+                self._shown_artifact_path = path
+        else:
+            self.artifact_thumbnail.clear()
+            self.artifact_frame.grid_remove()
+            self._shown_artifact_path = None
 
     @staticmethod
     def _is_existing_file(path_value: object, suffixes: set[str]) -> bool:
