@@ -5,10 +5,10 @@ GitHub check-run records, not jq inside workflow YAML.
 
 Reuse is allowed only when ALL of the following hold, otherwise the normal validation runs:
 
-* the current PR base is already an ancestor of the previous head (reused integration evidence was earned on a tree that
-  already contains the current base; it is not reused once the base has advanced past the previously validated head);
+* the current PR base is an ancestor of the previous head, or its advance from their common ancestor changes only
+  documentation. An executable base advance cannot reuse the previous integration evidence;
 * the latest GitHub-Actions ``required`` check run for the previous head concluded ``success``;
-* the latest ``full-suite`` check run for the previous head concluded ``success`` or ``skipped`` (skipped means the plan
+* the latest ``full-suite`` and ``windows`` runs for the previous head concluded ``success`` or ``skipped`` (skipped means the plan
   did not select the census). A check merely having ``status == completed`` is never enough: failure, cancelled,
   timed_out, action_required, neutral, stale, an in-progress run or a missing run all block reuse;
 * only check runs created by the GitHub Actions app count, and the latest one per name wins (not an arbitrary first match).
@@ -26,10 +26,12 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from validation_plan import changed_files_direct, classify
+
 ROOT = Path(__file__).resolve().parents[2]
 GITHUB_ACTIONS_APP = "github-actions"
 REQUIRED_CHECK = "required"
-SELECTED_CHECKS = ("full-suite",)
+SELECTED_CHECKS = ("full-suite", "windows")
 SELECTED_OK = frozenset({"success", "skipped"})
 
 
@@ -53,36 +55,72 @@ def latest_actions_check_runs(check_runs: Iterable[dict]) -> dict[str, dict]:
     return latest
 
 
-def evaluate(check_runs: Iterable[dict], *, base_is_ancestor: bool) -> Decision:
+def evaluate(
+    check_runs: Iterable[dict], *, base_is_ancestor: bool, base_docs_only: bool = False
+) -> Decision:
     """Pure policy: may the previous head's evidence be reused?"""
 
-    if not base_is_ancestor:
-        return Decision(False, "the current base is not an ancestor of the previous head (main advanced): normal validation")
+    if not (base_is_ancestor or base_docs_only):
+        return Decision(
+            False, "the current base contains unvalidated executable changes: normal validation"
+        )
     latest = latest_actions_check_runs(check_runs)
     required = latest.get(REQUIRED_CHECK)
     if required is None:
         return Decision(False, "no required check run for the previous head")
-    if required.get("conclusion") != "success":
-        return Decision(False, f"previous required check is {required.get('status')}/{required.get('conclusion')}, not success")
+    if required.get("status") != "completed" or required.get("conclusion") != "success":
+        return Decision(
+            False,
+            f"previous required check is {required.get('status')}/{required.get('conclusion')}, not success",
+        )
     for name in SELECTED_CHECKS:
         run = latest.get(name)
         if run is None:
             return Decision(False, f"no {name} check run for the previous head")
-        if run.get("conclusion") not in SELECTED_OK:
-            return Decision(False, f"previous {name} is {run.get('status')}/{run.get('conclusion')}, not success or skipped")
+        if run.get("status") != "completed" or run.get("conclusion") not in SELECTED_OK:
+            return Decision(
+                False,
+                f"previous {name} is {run.get('status')}/{run.get('conclusion')}, not success or skipped",
+            )
     return Decision(True, "previous head's required gate and selected jobs concluded green")
 
 
 def fetch_check_runs(repo: str, sha: str) -> list[dict]:
     out = subprocess.run(
-        ["gh", "api", "--paginate", f"repos/{repo}/commits/{sha}/check-runs?per_page=100", "--jq", ".check_runs[]"],
-        capture_output=True, text=True, check=True,
+        [
+            "gh",
+            "api",
+            "--paginate",
+            f"repos/{repo}/commits/{sha}/check-runs?per_page=100",
+            "--jq",
+            ".check_runs[]",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     return [json.loads(line) for line in out.splitlines() if line.strip()]
 
 
 def base_is_ancestor(base: str, before: str, root: Path = ROOT) -> bool:
-    return subprocess.run(["git", "merge-base", "--is-ancestor", base, before], cwd=root, capture_output=True).returncode == 0
+    return (
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", base, before], cwd=root, capture_output=True
+        ).returncode
+        == 0
+    )
+
+
+def base_advance_is_docs_only(base: str, before: str, root: Path = ROOT) -> bool:
+    """Prove the base introduced no executable changes since the validated head diverged."""
+    common = subprocess.run(
+        ["git", "merge-base", base, before],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return classify(changed_files_direct(common, base, root)).docs_only
 
 
 def decide(
@@ -92,6 +130,7 @@ def decide(
     *,
     fetch: Callable[[str, str], list[dict]] = fetch_check_runs,
     ancestor: Callable[[str, str], bool] = base_is_ancestor,
+    docs_only: Callable[[str, str], bool] = base_advance_is_docs_only,
 ) -> Decision:
     """Fail closed: any error obtaining the evidence means no reuse."""
 
@@ -99,14 +138,19 @@ def decide(
         return Decision(False, "missing repository, previous head or base")
     try:
         is_ancestor = ancestor(base, before)
-        runs = fetch(repo, before) if is_ancestor else []
+        docs_base = not is_ancestor and docs_only(base, before)
+        runs = fetch(repo, before) if is_ancestor or docs_base else []
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
-        return Decision(False, f"could not read the previous head's evidence ({type(exc).__name__})")
-    return evaluate(runs, base_is_ancestor=is_ancestor)
+        return Decision(
+            False, f"could not read the previous head's evidence ({type(exc).__name__})"
+        )
+    return evaluate(runs, base_is_ancestor=is_ancestor, base_docs_only=docs_base)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--repo", default="")
     parser.add_argument("--before", default="")
     parser.add_argument("--base", default="")
