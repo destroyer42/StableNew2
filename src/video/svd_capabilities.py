@@ -10,12 +10,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from src.video.restoration.runtime import POSTPROCESS_INSTALL_HINT
+from src.video.restoration.upscale_models import SOURCE_MODEL_PATH, requests_two_times
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import is_svd_model_cached, resolve_svd_cache_dir, resolve_svd_model_spec
 from src.video.svd_postprocess import (
     get_codeformer_runtime_issues,
     get_gfpgan_runtime_issues,
     get_realesrgan_runtime_issues,
+    resolve_svd_upscale_model,
 )
 from src.video.svd_preprocess import validate_svd_source_image
 
@@ -198,15 +200,9 @@ def apply_recommended_svd_defaults(config: SVDConfig | None = None) -> SVDConfig
     capabilities = get_svd_postprocess_capabilities(active_config)
     payload = active_config.to_dict()
 
-    if capabilities["codeformer"].available:
-        payload["postprocess"]["face_restore"]["method"] = "CodeFormer"
-        payload["postprocess"]["face_restore"]["enabled"] = True
-    elif capabilities["gfpgan"].available:
-        payload["postprocess"]["face_restore"]["method"] = "GFPGAN"
-        payload["postprocess"]["face_restore"]["enabled"] = True
-    else:
-        payload["postprocess"]["face_restore"]["method"] = "CodeFormer"
-        payload["postprocess"]["face_restore"]["enabled"] = False
+    # CodeFormer is the only offered face method (GFPGAN is retired, decision D8).
+    payload["postprocess"]["face_restore"]["method"] = "CodeFormer"
+    payload["postprocess"]["face_restore"]["enabled"] = bool(capabilities["codeformer"].available)
     payload["postprocess"]["upscale"]["enabled"] = bool(capabilities["realesrgan"].available)
     payload["postprocess"]["interpolation"]["enabled"] = bool(capabilities["rife"].available)
 
@@ -237,6 +233,8 @@ def _detect_codeformer(config: SVDConfig) -> SVDCapability:
 
 
 def _detect_gfpgan(config: SVDConfig) -> SVDCapability:
+    """GFPGAN is retired (D8): reported so a stored config naming it explains itself, never available."""
+
     missing = list(dict.fromkeys(get_gfpgan_runtime_issues(config.postprocess)))
     return SVDCapability(
         name="GFPGAN",
@@ -259,8 +257,20 @@ def _detect_realesrgan(config: SVDConfig) -> SVDCapability:
         name="RealESRGAN",
         status="experimental",
         available=True,
-        detail="Detected modern loader, local weight, and worker runtime.",
+        detail="Detected modern loader, local weight, and worker runtime."
+        + _upscale_model_note(config),
     )
+
+
+def _upscale_model_note(config: SVDConfig) -> str:
+    """Which weights the configured scale would use, so a 2x resize through the 4x model is visible."""
+
+    selection = resolve_svd_upscale_model(config.postprocess)
+    if selection is None or not requests_two_times(config.postprocess.upscale.scale):
+        return ""
+    if selection.source == SOURCE_MODEL_PATH:
+        return " 2x resizes the 4x model's output; add RealESRGAN_x2plus.pth beside the 4x weights for native 2x."
+    return f" Native 2x model: {Path(selection.model_path).name}."
 
 
 def _missing_detail(missing: list[str]) -> str:

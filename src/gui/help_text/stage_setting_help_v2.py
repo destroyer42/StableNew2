@@ -111,13 +111,13 @@ SVD_SETTING_HELP = {
     "forward_chunking": "Breaks some forward passes into smaller chunks. Enable it when memory is tight; disable it only if you need maximum throughput and your hardware can handle it.",
     "local_files_only": "Prevents remote model downloads and only uses files already available locally. Keep it enabled for deterministic offline work or when avoiding accidental network fetches matters.",
     "cache_dir": "Directory where SVD model files are cached. Change it only when storage layout or manual model management requires a different location.",
-    "face_cleanup": "Runs an optional face restoration cleanup after SVD output. Useful when faces soften during animation, but review carefully because cleanup tools can alter expression or identity.",
-    "face_method": "Chooses the face-cleanup backend. Use the method that best matches the tradeoff you want between preservation and aggressive repair.",
-    "face_fidelity": "How strongly the face cleanup should preserve source identity versus aggressively correcting defects. Midrange values are safest until you know the subject tolerates stronger cleanup.",
+    "face_cleanup": "Runs an optional face restoration cleanup after SVD output. Faces are tracked and smoothed across frames so the cleanup does not shimmer. Useful when faces soften during animation, but review carefully because cleanup tools can alter expression or identity.",
+    "face_method": "The face-cleanup backend. CodeFormer is the only supported method (GFPGAN was retired).",
+    "face_fidelity": "How strongly the face cleanup should preserve source identity versus aggressively correcting defects. Higher keeps the generated face and flickers less (default 0.85); lower repairs more but re-invents the face from frame to frame.",
     "rife_interpolate": "Enables duration-preserving temporal smoothing after SVD generation. RIFE adds frames and raises playback FPS by the same factor, so clip duration stays unchanged; it adds processing time and can hallucinate motion.",
     "rife_multiplier": "Temporal smoothing factor. 2x turns 14 frames at 7 fps into 28 frames at 14 fps; 4x produces 56 frames at 28 fps. Only 2x and 4x are supported.",
     "rife_exe": "Path to the RIFE executable used for interpolation. Set it only when local post-processing is available and you want interpolation in this workflow.",
-    "upscale_frames": "Upscales generated frames after motion generation. Use it when final delivery size matters more than raw turnaround speed.",
+    "upscale_frames": "Upscales generated frames after motion generation, before interpolation so it runs once per generated frame. A 2x request uses native 2x weights (RealESRGAN_x2plus.pth beside the 4x weights) when present. Use it when final delivery size matters more than raw turnaround speed.",
 }
 
 VIDEO_WORKFLOW_SETTING_HELP = {
@@ -145,7 +145,12 @@ MOVIE_CLIPS_SETTING_HELP = {
     "fps": "Frames per second for the assembled clip. Higher values make playback faster and smoother if enough frames exist, while lower values stretch the same frame set over more time.",
     "codec": "Container or encoding target for the rendered clip. Change it for compatibility or file-size reasons rather than to alter the visual content itself.",
     "quality": "Encoder speed preset. Picture quality is held constant (CRF 16, BT.709); slower presets make smaller files for the same quality and take longer to export.",
-    "mode": "Controls how the current image list is assembled into the output clip. Confirm it before building because it affects the final packaging behavior more than the source images themselves.",
+    "mode": "Controls how the current list is assembled into the output clip. Sequence: every image becomes one frame, in list order. Slideshow: every item is a clip; stills hold for their duration, videos play in full, and neighbours can crossfade.",
+    "resolution": "Output frame size. Match first clip uses the first item's size; every item is fitted inside the frame without stretching (black bars where the shapes differ).",
+    "transition": "Crossfade length between neighbouring slideshow items, in seconds. 0 makes hard cuts. It may be at most half of the shortest item.",
+    "still_seconds": "How long a still is shown in slideshow mode. Select stills in the list and use Set for Selected to give them their own duration.",
+    "audio": "Optional music track. It is cut or padded with silence to the movie's length and fades out over the chosen seconds; clip audio is not kept.",
+    "clip_name": "File name of the assembled movie (letters, digits, dot, dash and underscore).",
 }
 
 

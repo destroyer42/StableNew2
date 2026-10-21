@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from src.controller.svd_controller import SVDController
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
+from src.video.svd_config import DEFAULT_FACE_RESTORE_FIDELITY
 from src.video.svd_models import get_default_svd_cache_dir
 
 
@@ -738,5 +739,47 @@ def test_selecting_xt_1_1_shows_its_trained_conditioning(tk_root: tk.Tk) -> None
         tab.model_var.set("stabilityai/stable-video-diffusion-img2vid-xt-1-1")
         assert tab.motion_bucket_var.get() == 127
         assert tab.fps_var.get() == 6
+    finally:
+        tab.destroy()
+
+
+def test_gfpgan_is_not_offered_as_a_face_method(tk_root: tk.Tk) -> None:
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        assert tuple(tab.face_method_combo.cget("values")) == ("CodeFormer",)
+        assert "GFPGAN" not in tab.capabilities_label.cget("text")
+    finally:
+        tab.destroy()
+
+
+def test_face_fidelity_default_is_the_shared_default_and_reaches_the_job_form(
+    tk_root: tk.Tk,
+) -> None:
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        tab.face_restore_enabled_var.set(True)
+
+        face_restore = tab._build_form_data()["postprocess"]["face_restore"]
+
+        assert tab.face_restore_fidelity_var.get() == DEFAULT_FACE_RESTORE_FIDELITY == 0.85
+        assert face_restore["fidelity_weight"] == 0.85
+        assert face_restore["method"] == "CodeFormer"
+    finally:
+        tab.destroy()
+
+
+def test_a_saved_retired_face_method_turns_face_cleanup_off_instead_of_switching_engines(
+    tk_root: tk.Tk,
+) -> None:
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        assert tab.restore_svd_state(
+            {"face_restore_enabled": True, "face_restore_method": "GFPGAN"}
+        )
+
+        assert tab.face_restore_method_var.get() == "CodeFormer"
+        assert tab.face_restore_enabled_var.get() is False
+        assert "retired" in tab.status_label.cget("text")
+        assert tab._build_form_data()["postprocess"]["face_restore"]["enabled"] is False
     finally:
         tab.destroy()

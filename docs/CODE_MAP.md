@@ -95,6 +95,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `job_service_shutdown.py`: Shutdown admission fence and runner quiescence owned at the JobService boundary (PR-RUNTIME-SHUTDOWN-140)
 - `learning_execution_controller.py`: Controller wrapper for learning execution (non-GUI)
 - `masked_edit_service.py`: Prepare one masked Review edit with the existing builder and reprocess admission boundary
+- `movie_clips_submission_service.py`: Movie Clips admission (PR-VID-ASM-332): the tab's request becomes one queued assembly job
 - `photo_optimize_submission.py`: Extracted Photo Optimize preparation/admission from AppController; existing authorities only
 - `pipeline_controller.py`: Compatibility wrapper that exposes the GUI pipeline controller at src.controller
 - `process_auto_scanner_service.py`: Background scanner and cleaner for stray Python processes
@@ -675,8 +676,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
 - `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
 - `motion_source_readiness.py`: Observational readiness of a motion source (PR-VID-196): geometry and timing advisories
-- `movie_clip_models.py`: Data models for Movie Clip build requests, results, and manifests
-- `movie_clip_service.py`: Movie Clip service: post-video assembly/export orchestration
+- `movie_assembly_compiler.py`: Admission for Movie Clips assembly (PR-VID-ASM-332): intent -> frozen spec -> NJR
+- `movie_assembly_engine.py`: Execution of a frozen Movie Clips assembly (PR-VID-ASM-332)
+- `movie_assembly_models.py`: The frozen Movie Clips assembly contract (PR-VID-ASM-332)
 - `review_preview.py`: Bounded, read-only review previews of existing video outputs (PR-VID-QUALITY-211)
 - `sequence_manifest.py`: Sequence manifest builder and writer for multi-segment video
 - `sequence_models.py`: Sequence and segment planning models for long-form video generation
@@ -737,4 +739,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `legacy_face_helper.py`: Isolated legacy face helper for CodeFormer: the ``facelib`` fork shipped in the codeformer wheel
 - `model_loader.py`: Load restoration/upscale checkpoints through Spandrel (StableNew-owned seam)
 - `runtime.py`: Readiness for StableNew's optional local restoration/upscale runtime
+- `temporal.py`: Temporal stabilisation for per-frame face restoration (PR-VID-POST-304)
+- `upscale_models.py`: Choose the RealESRGAN weights for an upscale request (PR-VID-POST-304)
 - `upscaler.py`: RealESRGAN-style RRDB upscaling with StableNew-owned padding, tiling and resizing

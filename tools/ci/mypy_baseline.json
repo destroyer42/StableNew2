@@ -10,7 +10,7 @@
     "src/assets/cache_lock.py": 4,
     "src/cli.py": 2,
     "src/config/app_config.py": 1,
-    "src/controller/app_controller.py": 116,
+    "src/controller/app_controller.py": 114,
     "src/controller/app_controller_services/runtime_projection_coordinator.py": 2,
     "src/controller/core_pipeline_controller.py": 7,
     "src/controller/job_execution_controller.py": 5,
@@ -79,7 +79,7 @@
     "src/gui/views/learning_plan_table.py": 1,
     "src/gui/views/learning_review_panel.py": 16,
     "src/gui/views/learning_tab_frame_v2.py": 7,
-    "src/gui/views/movie_clips_tab_frame_v2.py": 2,
+    "src/gui/views/movie_clips_tab_frame_v2.py": 1,
     "src/gui/views/photo_optimize_editors.py": 19,
     "src/gui/views/photo_optimize_layout.py": 69,
     "src/gui/views/photo_optimize_results.py": 79,
@@ -172,7 +172,6 @@
     "src/video/comfy_process_manager.py": 2,
     "src/video/continuity_models.py": 1,
     "src/video/depth_map_resolver.py": 1,
-    "src/video/movie_clip_service.py": 2,
     "src/video/svd_config.py": 7,
     "src/video/svd_postprocess_worker.py": 4,
     "src/video/svd_runner.py": 2,
@@ -182,5 +181,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1526
+  "total": 1521
 }

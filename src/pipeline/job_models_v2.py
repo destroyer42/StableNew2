@@ -44,6 +44,7 @@ _STAGE_DISPLAY_MAP: dict[str, str] = {
     "animatediff": "AnimateDiff",
     "svd_native": "SVD Img2Vid",
     "video_workflow": "Video Workflow",
+    "movie_assembly": "Movie Assembly",
     "train_lora": "Train LoRA",
 }
 
@@ -169,6 +170,7 @@ StageType = Literal[
     "animatediff",
     "svd_native",
     "video_workflow",
+    "movie_assembly",
     "train_lora",
 ]
 

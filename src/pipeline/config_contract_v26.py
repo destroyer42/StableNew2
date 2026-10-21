@@ -36,6 +36,7 @@ _EXECUTION_HINT_KEYS = {
     "animatediff",
     "svd_native",
     "video_workflow",
+    "movie_assembly",
     "train_lora",
     "hires_fix",
     "refiner",

@@ -23,8 +23,14 @@ from src.video.motion.secondary_motion_provenance import build_secondary_motion_
 from src.video.restoration.runtime import (
     GFPGAN_UNSUPPORTED_ISSUE,
     POSTPROCESS_INSTALL_HINT,
+    WORKER_REPORT_FILENAME,
     WORKER_WARNING_PREFIX,
     missing_packages,
+)
+from src.video.restoration.upscale_models import (
+    UpscaleModelSelection,
+    requests_two_times,
+    resolve_upscale_model,
 )
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
 from src.video.svd_errors import SVDPostprocessError
@@ -93,11 +99,27 @@ def get_codeformer_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str
     return issues
 
 
+def resolve_svd_upscale_model(postprocess: SVDPostprocessConfig) -> UpscaleModelSelection | None:
+    """The weights an upscale stage would load for this config (native 2x for a 2x request when present)."""
+
+    upscale = postprocess.upscale
+    return resolve_upscale_model(
+        scale=upscale.scale, model_path=upscale.model_path, model_path_x2=upscale.model_path_x2
+    )
+
+
 def get_realesrgan_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str]:
     issues: list[str] = list(missing_packages("upscale"))
-    model_path = postprocess.upscale.model_path
-    if not model_path or not Path(model_path).exists():
+    upscale = postprocess.upscale
+    if resolve_svd_upscale_model(postprocess) is None:
         issues.append("RealESRGAN weight")
+    # An explicitly configured 2x weight that is not there is a mistake to fix, not a quiet fallback.
+    if (
+        requests_two_times(upscale.scale)
+        and upscale.model_path_x2
+        and not Path(upscale.model_path_x2).is_file()
+    ):
+        issues.append("RealESRGAN x2 weight")
     return issues
 
 
@@ -209,6 +231,30 @@ class SVDPostprocessRunner:
         self._status_callback = status_callback
         self._cancel_token = cancel_token
         self._stage_warnings: list[str] = []
+        self._stage_report: dict[str, Any] | None = None
+
+    @staticmethod
+    def _record_stage(
+        metadata: dict[str, Any], stage_name: str, frames_in: int, frames_out: int, **extra: Any
+    ) -> None:
+        """Append one executed stage, in execution order, with the frame counts it saw."""
+
+        metadata["stages"].append(
+            {"stage": stage_name, "frames_in": frames_in, "frames_out": frames_out, **extra}
+        )
+
+    @staticmethod
+    def _read_worker_report(path: Path) -> dict[str, Any] | None:
+        """What the worker wrote about itself, or ``None`` (absent or unreadable is not a failure)."""
+
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as exc:
+            logger.warning("[SVD][postprocess] ignoring unreadable worker report %s: %s", path, exc)
+            return None
+        return payload if isinstance(payload, dict) else None
 
     def _record_stage_warnings(self, metadata: dict[str, Any], stage_name: str) -> None:
         """Surface warnings a successful worker reported (e.g. a face left unrestored)."""
@@ -256,19 +302,24 @@ class SVDPostprocessRunner:
             "applied": [],
             "skipped": [],
         }
+        # Stage order is a quality decision, not an accident of the code: face restore first (it works on
+        # the generator's own frames), then upscale, then interpolation. Upscaling before RIFE means the
+        # slow GAN runs on N frames, not N x multiplier, and RIFE interpolates already-upscaled frames.
         enabled_stage_names = [
             stage_name
             for stage_name, enabled in (
                 ("secondary_motion", postprocess.secondary_motion.enabled),
                 ("face_restore", postprocess.face_restore.enabled),
-                ("interpolation", postprocess.interpolation.enabled),
                 ("upscale", postprocess.upscale.enabled),
+                ("interpolation", postprocess.interpolation.enabled),
             )
             if enabled
         ]
         total_enabled_stages = len(enabled_stage_names)
+        metadata["stages"] = []
 
         if postprocess.secondary_motion.enabled:
+            frames_in = len(current_frames)
             self._emit_status(
                 stage_detail="postprocess: secondary_motion",
                 progress=0.0
@@ -298,6 +349,7 @@ class SVDPostprocessRunner:
                         "skip_reason": str(summary.get("skip_reason") or ""),
                     }
                 )
+            self._record_stage(metadata, "secondary_motion", frames_in, len(current_frames))
             self._emit_status(
                 stage_detail="postprocess: secondary_motion",
                 progress=len(metadata["applied"]) / total_enabled_stages,
@@ -306,6 +358,7 @@ class SVDPostprocessRunner:
             )
 
         if postprocess.face_restore.enabled:
+            frames_in = len(current_frames)
             self._emit_status(
                 stage_detail="postprocess: face_restore",
                 progress=0.0
@@ -325,10 +378,68 @@ class SVDPostprocessRunner:
                 ),
             )
             metadata["applied"].append("face_restore")
-            metadata["face_restore"] = postprocess.face_restore.to_dict()
+            face_restore_metadata = postprocess.face_restore.to_dict()
+            if self._stage_report is not None:
+                face_restore_metadata["worker_report"] = self._stage_report
+            metadata["face_restore"] = face_restore_metadata
+            self._record_stage(
+                metadata,
+                "face_restore",
+                frames_in,
+                len(current_frames),
+                temporal_smoothing=postprocess.face_restore.temporal_smoothing,
+            )
             self._record_stage_warnings(metadata, "face_restore")
             self._emit_status(
                 stage_detail="postprocess: face_restore",
+                progress=len(metadata["applied"]) / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
+
+        if postprocess.upscale.enabled:
+            frames_in = len(current_frames)
+            self._emit_status(
+                stage_detail="postprocess: upscale",
+                progress=0.0
+                if total_enabled_stages == 0
+                else len(metadata["applied"]) / total_enabled_stages,
+                current_step=len(metadata["applied"]),
+                total_steps=total_enabled_stages,
+            )
+            selection = resolve_svd_upscale_model(postprocess)
+            if selection is None:
+                raise SVDPostprocessError("RealESRGAN upscale has no usable model weights")
+            current_frames = cast(
+                list[Image.Image],
+                self._run_worker_stage(
+                    stage_name="upscale",
+                    action="upscale",
+                    frames=current_frames,
+                    payload={
+                        **postprocess.upscale.to_dict(),
+                        "selected_model_path": selection.model_path,
+                    },
+                    work_dir=root,
+                ),
+            )
+            metadata["applied"].append("upscale")
+            upscale_metadata = postprocess.upscale.to_dict()
+            upscale_metadata["model_selection"] = selection.to_dict()
+            if self._stage_report is not None:
+                upscale_metadata["worker_report"] = self._stage_report
+            metadata["upscale"] = upscale_metadata
+            self._record_stage(
+                metadata,
+                "upscale",
+                frames_in,
+                len(current_frames),
+                model=selection.model_name,
+                model_source=selection.source,
+            )
+            self._record_stage_warnings(metadata, "upscale")
+            self._emit_status(
+                stage_detail="postprocess: upscale",
                 progress=len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
@@ -361,37 +472,11 @@ class SVDPostprocessRunner:
                 }
             )
             metadata["interpolation"] = interpolation_metadata
+            self._record_stage(
+                metadata, "interpolation", interpolation_input_frame_count, len(current_frames)
+            )
             self._emit_status(
                 stage_detail="postprocess: interpolation",
-                progress=len(metadata["applied"]) / total_enabled_stages,
-                current_step=len(metadata["applied"]),
-                total_steps=total_enabled_stages,
-            )
-
-        if postprocess.upscale.enabled:
-            self._emit_status(
-                stage_detail="postprocess: upscale",
-                progress=0.0
-                if total_enabled_stages == 0
-                else len(metadata["applied"]) / total_enabled_stages,
-                current_step=len(metadata["applied"]),
-                total_steps=total_enabled_stages,
-            )
-            current_frames = cast(
-                list[Image.Image],
-                self._run_worker_stage(
-                    stage_name="upscale",
-                    action="upscale",
-                    frames=current_frames,
-                    payload=postprocess.upscale.to_dict(),
-                    work_dir=root,
-                ),
-            )
-            metadata["applied"].append("upscale")
-            metadata["upscale"] = postprocess.upscale.to_dict()
-            self._record_stage_warnings(metadata, "upscale")
-            self._emit_status(
-                stage_detail="postprocess: upscale",
                 progress=len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
@@ -490,12 +575,14 @@ class SVDPostprocessRunner:
             len(frames),
         )
         result_payload: dict[str, Any] = {}
+        self._stage_report = None
         try:
             save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
             config_payload = {
                 "action": action,
                 "input_dir": str(input_dir.resolve()),
                 "output_dir": str(output_dir.resolve()),
+                "report_path": str((output_dir / WORKER_REPORT_FILENAME).resolve()),
                 "payload": payload,
             }
             cmd = [
@@ -523,6 +610,7 @@ class SVDPostprocessRunner:
             ]
             for warning in self._stage_warnings:
                 logger.warning("[SVD][postprocess] stage=%s warning: %s", stage_name, warning)
+            self._stage_report = self._read_worker_report(output_dir / WORKER_REPORT_FILENAME)
             if expect_result:
                 stdout = completed.stdout.strip()
                 if stdout:

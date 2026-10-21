@@ -56,9 +56,29 @@ def _recorded_sha(value: Any) -> str | None:
     return text if len(text) == 64 and all(char in "0123456789abcdef" for char in text) else None
 
 
+def assembly_input_checks(spec: Mapping[str, Any]) -> list[InputCheck]:
+    """The clips and audio track a frozen Movie Clips assembly spec recorded, each with its digest (PR-VID-ASM-332)."""
+
+    checks = [
+        InputCheck("assembly clip", str(clip["path"]), _recorded_sha(clip.get("sha256")))
+        for clip in spec.get("clips") or ()
+        if isinstance(clip, Mapping) and clip.get("path")
+    ]
+    audio = _mapping(spec.get("audio"))
+    if audio.get("path"):
+        checks.append(
+            InputCheck("assembly audio track", str(audio["path"]), _recorded_sha(audio.get("sha256")))
+        )
+    return checks
+
+
 def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
     """Every file the record froze, with the digest it recorded where it recorded one."""
 
+    assembly = _mapping(_mapping(record.config).get("movie_assembly"))
+    if assembly:
+        # Every assembly input is frozen with its digest; the generic source-image checks would only repeat them.
+        return assembly_input_checks(assembly)
     metadata = record.extra_metadata
     workflow = _mapping(metadata.get("video_workflow"))
     identity = _mapping(workflow.get("source_identity"))
@@ -137,4 +157,11 @@ def verify_inputs(
     return issues
 
 
-__all__ = ["InputCheck", "InputIssue", "frozen_input_checks", "sha256_of", "verify_inputs"]
+__all__ = [
+    "InputCheck",
+    "InputIssue",
+    "assembly_input_checks",
+    "frozen_input_checks",
+    "sha256_of",
+    "verify_inputs",
+]
