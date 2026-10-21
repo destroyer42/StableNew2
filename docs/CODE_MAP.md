@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-446 of 598 modules have a docstring.
+450 of 602 modules have a docstring.
 
 ## src/
 
@@ -108,6 +108,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_controller.py`: Controller surface for native SVD selected-image jobs
 - `svd_submission_service.py`: Thin form-data bridge for SVD submissions owned by AppController
 - `video_eval_controller.py`: Video eval suites on the Video Workflow controller (PR-VID-EVAL-320)
+- `video_preflight_controller.py`: Read-only workflow readiness on the Video Workflow controller (PR-VID-UX-311)
 - `video_workflow_controller.py`: (no docstring)
 - `webui_connection_controller.py`: (no docstring)
 - `webui_outage_coordinator.py`: Contain a WebUI outage inside the existing queue/worker/manager boundaries
@@ -280,6 +281,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_motion_prep_contract.py`: Toolkit-neutral state for the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_motion_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_review_contract.py`: Toolkit-neutral state for the Video Experiment Review window (PR-VID-QUALITY-211)
+- `video_runtime_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workspace_contract.py`: (no docstring)
 - `window_layout_contract.py`: Screen-aware main-window geometry policy (PR-GUI-100)
 - `workspace_density_contract.py`: Pure sizing/disclosure rules for the focused operator workspace (PR-GUI-110)
@@ -316,6 +318,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
+- `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workflow_tab_frame_v2.py`: (no docstring)
 
 ## src/gui/widgets/
@@ -725,6 +728,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_controls.py`: Neutral, spec-declared operator controls for workflow-owned generation inputs (PR-VID-192)
 - `workflow_frame_count.py`: Neutral, spec-declared generation-length contract (PR-VID-190)
 - `workflow_motion_guidance.py`: Display-only, evidence-grounded motion guidance for a Video Workflow (PR-VID-196)
+- `workflow_preflight.py`: Read-only readiness gates for a Comfy video workflow, answered before the job is queued (PR-VID-UX-311)
 - `workflow_readiness.py`: Bounded, workflow-specific resource-readiness check (PR-VID-130)
 - `workflow_registry.py`: (no docstring)
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry

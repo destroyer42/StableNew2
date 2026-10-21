@@ -212,6 +212,36 @@ def _isolate_global_prompt_user_state(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 @pytest.fixture(autouse=True)
+def _hermetic_video_preflight_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Video Workflow tab probes runtime readiness on a worker (PR-VID-UX-311).
+
+    Without this, any test that builds the tab or the controller would read the host's RAM, run ``nvidia-smi`` and
+    poll 127.0.0.1 from a worker thread. Substitute probes that find a ready, idle machine; a test about the probes
+    passes its own ``preflight_probes`` and is unaffected.
+    """
+
+    try:
+        import src.controller.video_preflight_controller as controller_module
+        from src.video.workflow_preflight import PreflightProbes
+    except Exception:  # pragma: no cover - isolation must never break collection
+        return
+
+    def _ready_probes() -> PreflightProbes:
+        return PreflightProbes(
+            command=("comfy-test-command",),
+            base_url="http://127.0.0.1:1",
+            autostart=True,
+            endpoint_state=lambda _url: "free",
+            fetch_object_info=lambda _url: None,
+            fetch_system_stats=lambda _url: None,
+            ram_probe=lambda: 64.0,
+            gpu_probe=lambda _index: (12282.0, 12000.0),
+        )
+
+    monkeypatch.setattr(controller_module, "default_preflight_probes", _ready_probes)
+
+
+@pytest.fixture(autouse=True)
 def _mock_webui_discovery(monkeypatch, tmp_path: Path):
     """Prevent tests from launching or probing real WebUI services.
 

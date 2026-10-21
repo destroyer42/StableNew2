@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +8,7 @@ from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPo
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.video_eval_controller import VideoEvalControllerMixin
+from src.controller.video_preflight_controller import VideoPreflightControllerMixin
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
 from src.video.driving_video_inspection import inspect_driving_video as _inspect_video
 from src.video.motion_source_preparation import prepare_for_form
@@ -33,11 +34,12 @@ from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
 from src.video.workflow_controls import operator_controls_projection
 from src.video.workflow_frame_count import frame_count_projection
 from src.video.workflow_motion_guidance import motion_readiness_projection
+from src.video.workflow_preflight import PreflightProbes
 from src.video.workflow_registry import latest_spec_per_workflow
 from src.video.workflow_source_preparation import preview_declared_workflow_source
 
 
-class VideoWorkflowController(VideoEvalControllerMixin):
+class VideoWorkflowController(VideoEvalControllerMixin, VideoPreflightControllerMixin):
     """Queue-backed controller surface for workflow-driven video jobs."""
 
     def __init__(
@@ -45,8 +47,10 @@ class VideoWorkflowController(VideoEvalControllerMixin):
         *,
         app_controller,
         workflow_registry: WorkflowRegistryPort | None = None,
+        preflight_probes: Callable[[], PreflightProbes] | None = None,
     ) -> None:
         self._app_controller = app_controller
+        self._preflight_probes = preflight_probes
         self._workflow_registry = workflow_registry or DefaultWorkflowRegistryPort()
         self._njr_builder = VideoWorkflowNjrBuilder(
             workflow_registry=self._workflow_registry,

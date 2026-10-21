@@ -15,6 +15,7 @@ from src.gui.view_contracts.video_batch_contract import VideoBatchSession
 from src.gui.view_contracts.video_experiment_contract import VideoExperimentSession
 from src.gui.view_contracts.video_motion_prep_contract import MotionPreparationSession
 from src.gui.view_contracts.video_motion_readiness_contract import MotionReadinessSession
+from src.gui.view_contracts.video_runtime_readiness_contract import RuntimeReadinessSession
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
@@ -26,6 +27,7 @@ from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
 from src.gui.views.video_workflow_motion_prep_panel_v2 import WorkflowMotionPreparationPanel
 from src.gui.views.video_workflow_motion_readiness_panel_v2 import WorkflowMotionReadinessPanel
+from src.gui.views.video_workflow_runtime_strip_v2 import WorkflowRuntimeReadinessStrip
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
@@ -193,6 +195,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._motion_prep_session = MotionPreparationSession(
             prepare=lambda form, request, cancel: (
                 self._experiment_controller().prepare_motion_source(form, request, cancel)
+            )
+        )
+
+        # Read-only runtime readiness gates (PR-VID-UX-311): transient display state; a blocked gate keeps
+        # Queue disabled with its reason, an unknown one never does.
+        self._runtime_readiness_session = RuntimeReadinessSession(
+            evaluate=lambda workflow_id, version: (
+                self._experiment_controller().workflow_preflight(workflow_id, version)
             )
         )
 
@@ -538,7 +548,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             session=self._motion_readiness_session,
             read_inputs=self._read_motion_readiness_inputs,
         )
-        self.motion_readiness_panel.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self.runtime_readiness_strip = WorkflowRuntimeReadinessStrip(
+            motion_container,
+            session=self._runtime_readiness_session,
+            read_selection=self._read_runtime_readiness_selection,
+            on_change=self._refresh_queue_gate,
+        )
+        self.runtime_readiness_strip.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self.runtime_readiness_strip.grid_remove()
+        self.motion_readiness_panel.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         self.motion_readiness_panel.grid_remove()
         # PR-VID-MOTION-210: optional exact preparation of the driving clip for this workflow.
         self.motion_prep_panel = WorkflowMotionPreparationPanel(
@@ -547,7 +565,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             read_form=self._read_motion_prep_form,
             on_change=self._invalidate_experiment_preview,
         )
-        self.motion_prep_panel.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        self.motion_prep_panel.grid(row=2, column=0, sticky="ew", pady=(0, 6))
         self.motion_prep_panel.grid_remove()
         # PR-GUI-110: collapsible; every control and value stays alive while collapsed, and a collapsed header
         # that hides non-default values says so (see _refresh_conditioning_status).
@@ -1007,6 +1025,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
         if workflow_meta.get("experimental") and not self.experimental_opt_in_var.get():
             return "Queue is off until you tick the experimental opt-in for this job."
+        runtime_reason = self._runtime_readiness_session.block_reason()
+        if runtime_reason:
+            # The full reason, and what to do about it, is in the Runtime readiness strip below.
+            return (
+                runtime_reason
+                if len(runtime_reason) <= 120
+                else runtime_reason[:117].rstrip() + "... (see Runtime readiness)"
+            )
         return ""
 
     def _refresh_queue_gate(self) -> None:
@@ -1050,6 +1076,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self._capability_workflow_id = workflow_meta.get("workflow_id")
             self.experimental_opt_in_var.set(False)  # a new selection never inherits opt-in
             self._apply_workflow_capabilities(workflow_meta)
+            strip = getattr(self, "runtime_readiness_strip", None)
+            if strip is not None:
+                strip.request_refresh()
         self.workflow_detail_var.set(format_workflow_capability_label(workflow_meta))
         summary = summarize_video_workflow_source(
             source_image_path=self.source_image_var.get().strip(),
@@ -1196,6 +1225,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def _experiment_controller(self) -> Any:
         getter = getattr(self.app_controller, "get_video_workflow_controller", None)
         return getter() if callable(getter) else None
+
+    def _read_runtime_readiness_selection(self) -> tuple[str, str]:
+        """The selected workflow for the runtime strip; empty (strip hidden) when there is no controller."""
+
+        if self._experiment_controller() is None:
+            return ("", "")
+        meta = self._workflow_map.get(self.workflow_var.get(), {})
+        return (str(meta.get("workflow_id") or ""), str(meta.get("workflow_version") or ""))
 
     def _read_motion_readiness_inputs(self) -> dict[str, Any]:
         """Plain snapshot of what the readiness panel shows (Tk reads happen here, never on a worker)."""
