@@ -130,5 +130,3 @@ def test_apply_realesrgan_converts_rgb_to_bgr_and_back() -> None:
 
     assert seen == {"first_pixel_bgr": (30, 20, 10), "outscale": 2.0}
     assert result.mode == "RGB" and result.getpixel((0, 0)) == (10, 20, 30)
-
-

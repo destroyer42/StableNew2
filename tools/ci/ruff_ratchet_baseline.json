@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 394,
+    "total": 392,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -180,7 +180,6 @@
       "tests/controller/test_runtime_backend_port_wiring.py",
       "tests/controller/test_shutdown_coordinator_140.py",
       "tests/controller/test_shutdown_quiescence_140.py",
-      "tests/controller/test_svd_controller.py",
       "tests/controller/test_video_workflow_controller.py",
       "tests/controller/test_webui_endpoint_lifecycle_170.py",
       "tests/controller/test_webui_lifecycle_convergence_130.py",
@@ -215,7 +214,6 @@
       "tests/gui_v2/test_review_batch_200.py",
       "tests/gui_v2/test_thumbnail_tooltip_recovery_111.py",
       "tests/gui_v2/test_video_workflow_motion_readiness_ui.py",
-      "tests/gui_v2/test_video_workflow_tab_frame_v2.py",
       "tests/gui_v2/test_workspace_density_contract_110.py",
       "tests/gui_v2/test_workspace_layout_resilience_v2.py",
       "tests/gui_v2/test_zimage_effective_config_159_gui.py",
@@ -403,8 +401,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1343,
-      "S110": 533,
+      "BLE001": 1339,
+      "S110": 532,
       "S112": 38
     },
     "counts": {
@@ -1048,9 +1046,6 @@
       "src/video/driving_video_inspection.py": {
         "BLE001": 1
       },
-      "src/video/motion/secondary_motion_video_reencode.py": {
-        "BLE001": 3
-      },
       "src/video/restoration/codeformer.py": {
         "BLE001": 1
       },
@@ -1061,8 +1056,8 @@
         "BLE001": 2
       },
       "src/video/svd_postprocess.py": {
-        "BLE001": 3,
-        "S110": 2
+        "BLE001": 2,
+        "S110": 1
       },
       "src/video/svd_postprocess_worker.py": {
         "BLE001": 2,

@@ -197,10 +197,7 @@ def interpolate_video_file(
         )
     finally:
         for image in frames:
-            try:
-                image.close()
-            except Exception:
-                pass
+            image.close()
         shutil.rmtree(work_dir, ignore_errors=True)
     return VideoInterpolationResult(
         source_video_path=str(source),

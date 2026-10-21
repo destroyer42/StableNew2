@@ -553,5 +553,3 @@ def test_comfy_workflow_backend_executes_conditioned_synthetic_workflow_with_res
     manifest_payload = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
     assert manifest_payload["conditioning"]["camera_intent"]["preset"] == "dolly_in"
     assert manifest_payload["conditioning"]["depth_input"]["resolved_path"] == str(depth_map)
-
-
