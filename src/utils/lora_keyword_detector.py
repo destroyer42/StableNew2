@@ -24,10 +24,15 @@ class LoRAMetadata:
     keywords: list[str] = field(default_factory=list)
     source: Literal["civitai", "txt", "readme", "none"] = "none"
     description: str = ""
+    errors: tuple[str, ...] = ()
 
 
 def detect_lora_keywords(
-    lora_name: str, webui_root: Path | str | None = None, lora_folders: list[Path] | None = None
+    lora_name: str,
+    webui_root: Path | str | None = None,
+    lora_folders: list[Path] | None = None,
+    *,
+    lora_path: Path | None = None,
 ) -> LoRAMetadata:
     """Detect keywords for a LoRA by scanning metadata files.
 
@@ -53,50 +58,58 @@ def detect_lora_keywords(
         search_paths.extend(lora_folders)
 
     # Search for LoRA file
-    lora_file = _find_lora_file(lora_name, search_paths)
+    lora_file = lora_path or _find_lora_file(lora_name, search_paths)
     if not lora_file:
         return metadata
 
     metadata.path = lora_file
 
-    # Try to extract keywords from various sources
-    # Priority: .civitai.info > .txt > README
-
-    # 1. Check for .civitai.info (most reliable)
-    civitai_info = lora_file.with_suffix(".safetensors.civitai.info")
-    if not civitai_info.exists():
-        # Try without safetensors
-        civitai_info = lora_file.with_name(f"{lora_file.stem}.civitai.info")
-
-    if civitai_info.exists():
-        keywords = _extract_keywords_from_civitai(civitai_info)
-        if keywords:
-            metadata.keywords = keywords
-            metadata.source = "civitai"
-            return metadata
-
-    # 2. Check for .txt file
-    txt_file = lora_file.with_suffix(".txt")
-    if txt_file.exists():
-        keywords, desc = _extract_keywords_from_txt(txt_file)
-        if keywords:
-            metadata.keywords = keywords
-            metadata.description = desc
-            metadata.source = "txt"
-            return metadata
-
-    # 3. Check for README in same directory
-    readme_file = lora_file.parent / "README.md"
-    if not readme_file.exists():
-        readme_file = lora_file.parent / "README.txt"
-
-    if readme_file.exists():
-        keywords = _extract_keywords_from_readme(readme_file, lora_name)
-        if keywords:
-            metadata.keywords = keywords
-            metadata.source = "readme"
-            return metadata
-
+    errors: list[str] = []
+    candidates = (
+        (lora_file.with_name(lora_file.name + ".civitai.info"), "civitai"),
+        (lora_file.with_suffix(".civitai.info"), "civitai"),
+        (lora_file.with_suffix(".txt"), "txt"),
+        (lora_file.parent / "README.md", "readme"),
+        (lora_file.parent / "README.txt", "readme"),
+    )
+    for candidate, source in candidates:
+        try:
+            # No sidecar may escape the adapter's own directory via a symlink/junction.
+            if not candidate.resolve().is_relative_to(lora_file.parent.resolve()):
+                raise ValueError("sidecar outside local directory")
+            with candidate.open("rb") as stream:
+                raw = stream.read(512 * 1024 + 1)
+            if len(raw) > 512 * 1024:
+                raise ValueError("sidecar exceeds read limit")
+            text = raw.decode("utf-8")
+            keywords: list[str] = []
+            description = text
+            if source == "civitai":
+                data = json.loads(text)
+                if not isinstance(data, dict):
+                    raise ValueError("sidecar is not an object")
+                model = data.get("model")
+                model = model if isinstance(model, dict) else {}
+                words = data.get("trainedWords") or model.get("trainedWords") or []
+                if isinstance(words, list):
+                    keywords = [str(word).strip()[:256] for word in words[:100] if word]
+                description = str(data.get("description") or model.get("description") or "")
+            if not keywords:
+                keywords = _extract_trigger_words_from_text(
+                    _extract_lora_section(description, lora_name) or description
+                    if source == "readme"
+                    else description
+                )
+            if not metadata.keywords and keywords:
+                metadata.keywords = keywords
+                metadata.source = source  # type: ignore[assignment]
+            # Keep all local descriptions for content-visibility classification, even without triggers.
+            metadata.description += "\n" + description[:8192]
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError, TypeError):
+            errors.append("Local keyword metadata unavailable")
+    metadata.errors = tuple(dict.fromkeys(errors))
     return metadata
 
 

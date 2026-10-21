@@ -213,6 +213,18 @@ The PromptPack compiler calls `adapt_structured_prompt` on structured components
 
 `src/utils/lora_scanner.py` and `src/utils/embedding_scanner.py` are thin projections over the registry. The active embedding root is `<webui_root>/embeddings`.
 
+PromptPack LoRA discovery uses `AssetRegistry.refresh(persist=False)` through the existing LoRA adapter: the same
+identity and metadata readers, with a disposable snapshot and no cache-file write. A tracked worker performs discovery,
+keyword/sidecar reads and local preview lookup. The local browser decodes only the current four-card page on a tracked
+worker, with byte/pixel limits and at most four Tk images. Refresh requests coalesce and only the latest result is applied
+through `GuiInvoker`; failed discovery visibly retains unverified inventory and all authored selections/strengths.
+Unreadable metadata, conflicting evidence, ambiguous aliases and missing previews remain explicit unknown/unavailable facts.
+`src/gui_v2/lora_browser.py` projects registry evidence and the existing ModelPolicy/LoRA assessment without admitting work.
+Filename hints alone establish neither side of a pairing. Matching family evidence is only possibly compatible, never
+physical checkpoint–LoRA qualification. Content visibility filters precede search/paging/decoding and redact retained
+hidden selections, tooltips and annotations. Local browsing writes no source asset, model, PromptPack or user cache and
+performs no network lookup or download.
+
 ## 6. Refinement, ADetailer and YuNet (`src/refinement/`)
 
 - Adaptive refinement intent: `AdaptiveRefinementIntent` (`refinement_policy_models.py`), modes `disabled`, `observe`, `adetailer`, `full`, extracted from the NJR intent by `extract_adaptive_refinement_intent` (`src/pipeline/config_contract_v26.py`).

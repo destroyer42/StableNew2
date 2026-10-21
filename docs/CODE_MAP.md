@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-437 of 594 modules have a docstring.
+440 of 597 modules have a docstring.
 
 ## src/
 
@@ -50,6 +50,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `controlnet_structure.py`: Bounded safetensors-header evidence for ControlNet weights (PR-IMG-CNET-210)
 - `gguf.py`: Bounded GGUF container inspection for the observational inventory (PR-IMG-MODELS-152)
 - `inventory_report.py`: Deterministic, bounded, redacted operator report over the observational inventory (PR-IMG-MODELS-152)
+- `lora_preview.py`: Bounded, read-only local adapter preview access
 - `observation.py`: Tier-1 observational inventory (PR-IMG-MODELS-152): bounded, cancellable, header-only, no hashing
 - `registry.py`: Offline local-file identity registry; never contacts A1111 or a network
 
@@ -326,8 +327,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `embedding_picker_panel.py`: Embedding picker panel with per-embedding weight controls
 - `expander_v2.py`: Unified expander button used by Pipeline Tab cards
 - `image_thumbnail.py`: Reusable image thumbnail widget for Tkinter
+- `lora_browser_dialog.py`: Paged local LoRA browser
 - `lora_keyword_dialog.py`: Dialog for displaying and copying LoRA keywords
-- `lora_picker_panel.py`: Simple LoRA picker panel for managing LoRAs with strength controls
+- `lora_picker_panel.py`: Authored LoRA controls and local browser; all discovery is off Tk
 - `matrix_helper_widget.py`: (no docstring)
 - `matrix_slot_picker.py`: MatrixSlotPickerDialog - Modal dialog for selecting matrix slot to insert
 - `matrix_tab_panel.py`: MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab
@@ -341,6 +343,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
+- `lora_browser.py`: Pure browser projection; registry evidence and ModelPolicy remain authoritative
 - `mask_editor_state.py`: Original-pixel mask editing and viewport transforms; no Tk, files or backend state
 - `model_policy_projection.py`: Toolkit-neutral projection of a model policy onto the Base Generation controls (PR-IMG-130A)
 - `openpose_conditioning_view.py`: Toolkit-neutral presentation of a slot's OpenPose conditioning (PR-IMG-CNET-210)

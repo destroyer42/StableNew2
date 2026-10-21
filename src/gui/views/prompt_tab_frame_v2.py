@@ -1171,7 +1171,7 @@ class PromptTabFrame(ttk.Frame):
         self._highlight_matrix_tokens()
         self._validate_matrix_slots()
         self._refresh_template_preview()
-        self._refresh_metadata()
+        self._refresh_metadata(scan_style=False)
 
     def _on_negative_modified(self, _event=None) -> None:
         """Handle edits to negative prompt editor."""
@@ -1207,7 +1207,7 @@ class PromptTabFrame(ttk.Frame):
             self._mark_pack_modified()
         except Exception:
             pass
-        self._refresh_metadata()
+        self._refresh_metadata(scan_style=False)
 
     def _on_openpose_changed(self) -> None:
         """Persist the OpenPose picker's declaration onto the current slot (a plain JSON value; never prompt text)."""
@@ -1256,8 +1256,8 @@ class PromptTabFrame(ttk.Frame):
     def _refresh_metadata(self, *, scan_style: bool = True) -> None:
         """Refresh metadata/preview panel with full prompt preview.
 
-        ``scan_style=False`` (a model-target refresh) reuses the last Style Consistency resolution instead of resolving
-        it again, because resolving may scan LoRA directories and a model switch must never initiate that.
+        ``scan_style=False`` (model-target refresh or LoRA/positive-text editing) reuses the last Style Consistency
+        resolution: those presentation actions must not initiate another LoRA scan.
         """
         pack = self.workspace_state.current_pack
         slot_index = self.workspace_state.get_current_slot_index()
@@ -1453,6 +1453,8 @@ class PromptTabFrame(ttk.Frame):
         """Receive the Base Generation model-policy projection (read-only context; never changes authoring state)."""
 
         self._model_projection = projection
+        if hasattr(self, "lora_picker"):
+            self.lora_picker.set_model_policy(getattr(projection, "policy", None), getattr(projection, "model_name", ""))
         if hasattr(self, "openpose_picker"):
             self.openpose_picker.set_target(getattr(projection, "openpose", None))
         if hasattr(self, "controlnet_picker"):
