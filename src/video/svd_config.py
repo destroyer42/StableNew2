@@ -18,8 +18,17 @@ SVDUpscaleMethod = Literal["RealESRGAN"]
 _VALID_RESIZE_MODES = {"letterbox", "center_crop", "contain_then_crop"}
 _VALID_OUTPUT_FORMATS = {"mp4", "gif", "frames"}
 _VALID_DTYPES = {"float16", "bfloat16", "float32"}
-_VALID_FACE_RESTORE_METHODS = {"CodeFormer", "GFPGAN"}
+# GFPGAN is retired (owner decision D8, PR-VID-POST-304). It stays a *valid* method so a stored
+# config or NJR that names it still loads and displays; admission refuses it when it is enabled
+# (``validate_svd_postprocess_config``) and it is no longer offered for new work.
+RETIRED_FACE_RESTORE_METHODS: tuple[str, ...] = ("GFPGAN",)
+OFFERED_FACE_RESTORE_METHODS: tuple[str, ...] = ("CodeFormer",)
+_VALID_FACE_RESTORE_METHODS = {*OFFERED_FACE_RESTORE_METHODS, *RETIRED_FACE_RESTORE_METHODS}
 _VALID_UPSCALE_METHODS = {"RealESRGAN"}
+# One default for every origin (dataclass, ``from_dict``, controller, tab, worker). CodeFormer's
+# fidelity weight trades restoration strength (0) for staying close to the input face (1); 0.85
+# keeps identity and re-hallucinates less from frame to frame.
+DEFAULT_FACE_RESTORE_FIDELITY = 0.85
 
 
 def _default_codeformer_weight_path() -> str | None:
@@ -37,6 +46,13 @@ def _default_gfpgan_weight_path() -> str | None:
 def _default_realesrgan_weight_path() -> str | None:
     candidate = (
         Path.home() / "stable-diffusion-webui" / "models" / "RealESRGAN" / "RealESRGAN_x4plus.pth"
+    )
+    return str(candidate) if candidate.exists() else None
+
+
+def _default_realesrgan_x2_weight_path() -> str | None:
+    candidate = (
+        Path.home() / "stable-diffusion-webui" / "models" / "RealESRGAN" / "RealESRGAN_x2plus.pth"
     )
     return str(candidate) if candidate.exists() else None
 
@@ -211,7 +227,10 @@ class SVDInterpolationConfig:
 class SVDFaceRestoreConfig:
     enabled: bool = False
     method: SVDFaceRestoreMethod = "CodeFormer"
-    fidelity_weight: float = 0.7
+    fidelity_weight: float = DEFAULT_FACE_RESTORE_FIDELITY
+    # Smooth landmarks and the restoration residual across the frames of the clip so the face does
+    # not re-flicker per frame (src/video/restoration/temporal.py).
+    temporal_smoothing: bool = True
     codeformer_weight_path: str | None = field(default_factory=_default_codeformer_weight_path)
     gfpgan_weight_path: str | None = field(default_factory=_default_gfpgan_weight_path)
     facelib_model_root: str | None = field(default_factory=_default_facelib_model_root)
@@ -229,7 +248,8 @@ class SVDFaceRestoreConfig:
         return cls(
             enabled=bool(payload.get("enabled", False)),
             method=str(payload.get("method", "CodeFormer")),
-            fidelity_weight=float(payload.get("fidelity_weight", 0.7)),
+            fidelity_weight=float(payload.get("fidelity_weight", DEFAULT_FACE_RESTORE_FIDELITY)),
+            temporal_smoothing=bool(payload.get("temporal_smoothing", True)),
             codeformer_weight_path=(str(payload.get("codeformer_weight_path")).strip() or None)
             if payload.get("codeformer_weight_path") not in (None, "")
             else _default_codeformer_weight_path(),
@@ -252,6 +272,9 @@ class SVDUpscaleConfig:
     scale: float = 2.0
     tile: int = 0
     model_path: str | None = field(default_factory=_default_realesrgan_weight_path)
+    # Optional native 2x weights. A 2x request uses them when present (configured here or the
+    # standard file beside ``model_path``); otherwise the 4x model runs and the result is resized.
+    model_path_x2: str | None = field(default_factory=_default_realesrgan_x2_weight_path)
 
     def __post_init__(self) -> None:
         _require(self.method in _VALID_UPSCALE_METHODS, f"Invalid upscale method: {self.method}")
@@ -269,6 +292,9 @@ class SVDUpscaleConfig:
             model_path=(str(payload.get("model_path")).strip() or None)
             if payload.get("model_path") not in (None, "")
             else _default_realesrgan_weight_path(),
+            model_path_x2=(str(payload.get("model_path_x2")).strip() or None)
+            if payload.get("model_path_x2") not in (None, "")
+            else _default_realesrgan_x2_weight_path(),
         )
 
     def to_dict(self) -> dict[str, Any]:

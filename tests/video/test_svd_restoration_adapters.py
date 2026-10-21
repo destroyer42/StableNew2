@@ -18,6 +18,7 @@ from PIL import Image  # noqa: E402
 from src.video.restoration import codeformer as codeformer_module  # noqa: E402
 from src.video.restoration import model_loader, upscaler  # noqa: E402
 from src.video.restoration.runtime import WORKER_WARNING_PREFIX  # noqa: E402
+from src.video.restoration.temporal import TemporalFaceStabilizer  # noqa: E402
 
 CPU = torch.device("cpu")
 
@@ -95,6 +96,17 @@ def test_two_times_network_pads_odd_borders_and_crops_back(monkeypatch) -> None:
 
     assert result.shape == (26, 34, 3)
     assert np.array_equal(result, np.repeat(np.repeat(image, 2, axis=0), 2, axis=1))
+
+
+def test_a_native_2x_network_serves_a_2x_request_without_any_resize(monkeypatch) -> None:
+    instance, network = _upscaler(monkeypatch, scale=2)
+    image = _bgr(13, 17)
+
+    result = instance.enhance(image, outscale=2.0)
+
+    # No Lanczos pass: the output is the network's own 2x result, produced by a single inference.
+    assert np.array_equal(result, np.repeat(np.repeat(image, 2, axis=0), 2, axis=1))
+    assert network.calls == 1
 
 
 def test_only_three_channel_8bit_frames_are_accepted(monkeypatch) -> None:
@@ -294,6 +306,142 @@ def test_legacy_helper_gets_the_explicit_model_root_without_process_or_path_side
     # The override is scoped to construction: facelib's own defaults are restored afterwards.
     assert detection.WEIGHTS_DIR == parsing.WEIGHTS_DIR == "site-packages/codeformer/weights/facelib"
     assert os.getcwd() == cwd and sys.path == path
+
+
+# --- CodeFormer temporal stabilisation (PR-VID-POST-304) -----------------------------------
+
+_FACE = np.array([[100, 120], [160, 120], [130, 150], [108, 180], [152, 180]], dtype=np.float32)
+
+
+class _TrackingHelper(_Helper):
+    """Detects one face whose landmarks the test scripts per frame and records what gets aligned."""
+
+    def __init__(self, scripted: list) -> None:
+        super().__init__(faces=0)
+        self.scripted = list(scripted)
+        self.all_landmarks_5: list = []
+        self.aligned: list = []
+        self.history: list = []  # every (restored, cropped) pair over the whole clip
+
+    def clean_all(self) -> None:
+        super().clean_all()
+        self.all_landmarks_5 = []
+
+    def add_restored_face(self, restored, cropped) -> None:
+        super().add_restored_face(restored, cropped)
+        self.history.append((restored, cropped))
+
+    def get_face_landmarks_5(self, **kwargs) -> None:
+        super().get_face_landmarks_5(**kwargs)
+        self.all_landmarks_5 = [np.array(face, dtype=np.float32) for face in self.scripted.pop(0)]
+
+    def align_warp_face(self) -> None:
+        rng = np.random.default_rng(3)  # identical, static crops frame after frame
+        self.aligned.append([face.copy() for face in self.all_landmarks_5])
+        self.cropped_faces = [
+            rng.integers(0, 256, size=(32, 32, 3), dtype=np.uint8) for _ in self.all_landmarks_5
+        ]
+
+
+class _Offset:
+    """A 'network' that adds a per-call offset so each frame's restoration differs."""
+
+    def __init__(self, offsets: list[float], fail_on: int | None = None) -> None:
+        self.offsets = list(offsets)
+        self.fail_on = fail_on
+        self.calls = 0
+
+    def __call__(self, tensor, weight):
+        self.calls += 1
+        if self.fail_on == self.calls:
+            raise RuntimeError("boom")
+        return (tensor + self.offsets[self.calls - 1],)
+
+
+def _temporal_restorer(helper, model, **kwargs):
+    return codeformer_module.CodeFormerRestorer(
+        weight_path="unused",
+        facelib_model_root="unused",
+        device=CPU,
+        helper=helper,
+        model=model,
+        temporal=TemporalFaceStabilizer(**kwargs),
+    )
+
+
+def test_aligned_landmarks_are_the_smoothed_track_when_temporal_smoothing_is_on() -> None:
+    helper = _TrackingHelper([[_FACE], [_FACE + [10.0, 0.0]]])
+    restorer = _temporal_restorer(helper, _Model(), landmark_alpha=0.5)
+    image = Image.new("RGB", (40, 24), (10, 20, 30))
+
+    restorer.restore(image, fidelity=0.7)
+    restorer.restore(image, fidelity=0.7)
+
+    assert np.allclose(helper.aligned[0][0], _FACE)  # a track's first frame is untouched
+    assert np.allclose(helper.aligned[1][0], _FACE + [5.0, 0.0])  # halfway, not the raw detection
+
+
+def test_landmarks_are_left_alone_without_a_stabilizer() -> None:
+    helper = _TrackingHelper([[_FACE], [_FACE + [10.0, 0.0]]])
+    restorer = _restorer(helper, _Model())
+    image = Image.new("RGB", (40, 24), (10, 20, 30))
+
+    restorer.restore(image, fidelity=0.7)
+    restorer.restore(image, fidelity=0.7)
+
+    assert np.allclose(helper.aligned[1][0], _FACE + [10.0, 0.0])
+
+
+def test_the_restoration_residual_is_smoothed_across_frames() -> None:
+    helper = _TrackingHelper([[_FACE], [_FACE]])
+    model = _Offset([0.2, -0.2])  # +/-0.2 in [-1, 1] tensor space = +/-25.5 levels
+    restorer = _temporal_restorer(helper, model, residual_alpha=0.5)
+    image = Image.new("RGB", (40, 24), (10, 20, 30))
+
+    restorer.restore(image, fidelity=0.7)
+    restorer.restore(image, fidelity=0.7)
+
+    (first, cropped_first), (second, cropped_second) = helper.history
+    assert np.array_equal(cropped_first, cropped_second)
+    raw_first = np.clip(cropped_first.astype(int) + 25.5, 0, 255)
+    assert np.abs(first.astype(int) - np.rint(raw_first)).max() <= 1
+    # The raw second frame would be -25.5 below the input; averaging the two residuals cancels them.
+    unclipped = cropped_second.astype(int)
+    interior = (unclipped > 40) & (unclipped < 215)
+    assert interior.any()
+    assert np.abs(second.astype(int) - unclipped)[interior].max() <= 2
+
+
+def test_a_face_the_network_failed_on_forgets_its_history_instead_of_being_half_restored(
+    capsys,
+) -> None:
+    helper = _TrackingHelper([[_FACE], [_FACE], [_FACE]])
+    model = _Offset([0.2, 0.0, 0.2], fail_on=2)
+    restorer = _temporal_restorer(helper, model, residual_alpha=0.5)
+    image = Image.new("RGB", (40, 24), (10, 20, 30))
+
+    for _ in range(3):
+        restorer.restore(image, fidelity=0.7)
+
+    (_a, _c1), (failed, cropped_failed), (third, cropped_third) = helper.history
+    assert np.abs(failed.astype(int) - cropped_failed).max() <= 1  # left exactly unrestored
+    assert WORKER_WARNING_PREFIX in capsys.readouterr().err
+    raw_third = np.clip(cropped_third.astype(int) + 25.5, 0, 255)
+    # History was dropped by the failure, so the third frame is the plain restoration again.
+    assert np.abs(third.astype(int) - np.rint(raw_third)).max() <= 1
+
+
+def test_frames_without_a_face_still_age_the_tracks() -> None:
+    helper = _TrackingHelper([[_FACE], [], [], [], [_FACE + [30.0, 0.0]]])
+    restorer = _temporal_restorer(helper, _Model(), landmark_alpha=0.5, max_gap=2)
+    image = Image.new("RGB", (40, 24), (10, 20, 30))
+
+    for _ in range(5):
+        restorer.restore(image, fidelity=0.7)
+
+    # Three missed frames exceed max_gap=2, so the reappearing face is a new, unsmoothed track.
+    assert np.allclose(helper.aligned[-1][0], _FACE + [30.0, 0.0])
+    assert restorer.temporal.report()["tracks_started"] == 2
 
 
 # --- Spandrel loader seam ------------------------------------------------------------------

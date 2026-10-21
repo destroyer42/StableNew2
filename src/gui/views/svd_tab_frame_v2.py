@@ -21,6 +21,11 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
+from src.video.svd_config import (
+    DEFAULT_FACE_RESTORE_FIDELITY,
+    OFFERED_FACE_RESTORE_METHODS,
+    RETIRED_FACE_RESTORE_METHODS,
+)
 from src.video.svd_errors import SVDConfigError
 from src.video.svd_models import (
     get_default_svd_cache_dir,
@@ -52,7 +57,8 @@ _TARGET_PRESETS: dict[str, tuple[int, int] | None] = {
 }
 _RESIZE_MODES = ("letterbox", "center_crop", "contain_then_crop")
 _OUTPUT_FORMATS = ("mp4", "gif", "frames")
-_FACE_RESTORE_METHODS = ("CodeFormer", "GFPGAN")
+# GFPGAN is retired (decision D8): a stored config may still name it, but it is not offered.
+_FACE_RESTORE_METHODS = OFFERED_FACE_RESTORE_METHODS
 _DEFAULT_TARGET_PRESET = _TARGET_AUTO_LABEL
 _DEFAULT_SVD_PRESET = "Recommended 12GB / XT 25f"
 _CUSTOM_SVD_PRESET = "Custom"
@@ -208,7 +214,7 @@ class SVDTabFrameV2(ttk.Frame):
         self.cache_dir_var = tk.StringVar(value=str(get_default_svd_cache_dir()))
         self.face_restore_enabled_var = tk.BooleanVar(value=False)
         self.face_restore_method_var = tk.StringVar(value="CodeFormer")
-        self.face_restore_fidelity_var = tk.DoubleVar(value=0.7)
+        self.face_restore_fidelity_var = tk.DoubleVar(value=DEFAULT_FACE_RESTORE_FIDELITY)
         self.interpolation_enabled_var = tk.BooleanVar(value=False)
         self.interpolation_multiplier_var = tk.IntVar(value=2)
         self.rife_executable_var = tk.StringVar()
@@ -582,7 +588,7 @@ class SVDTabFrameV2(ttk.Frame):
             "face_cleanup", SVD_SETTING_HELP["face_cleanup"], face_cleanup_check
         )
         row += 1
-        self._add_combo(
+        self.face_method_combo = self._add_combo(
             settings,
             row,
             "Face method",
@@ -1152,7 +1158,7 @@ class SVDTabFrameV2(ttk.Frame):
             self._sync_admission_visibility("")
             self.animate_btn.configure(state="normal")
         parts: list[str] = []
-        for key in ("codeformer", "realesrgan", "rife", "gfpgan"):
+        for key in ("codeformer", "realesrgan", "rife"):
             entry = capabilities.get(key)
             if not isinstance(entry, dict):
                 continue
@@ -1308,6 +1314,16 @@ class SVDTabFrameV2(ttk.Frame):
             )
         )
         self._update_submission_action()
+
+    def _drop_retired_face_method(self, method: str) -> None:
+        """A saved retired method cannot run: turn face cleanup off rather than quietly switching engines."""
+
+        self.face_restore_method_var.set(_FACE_RESTORE_METHODS[0])
+        self.face_restore_enabled_var.set(False)
+        self._set_status(
+            f"The saved face method {method} is retired; face cleanup was turned off. "
+            f"Tick Face cleanup to use {_FACE_RESTORE_METHODS[0]}."
+        )
 
     def _set_status(self, message: str) -> None:
         self._status_text = message
@@ -1755,6 +1771,8 @@ class SVDTabFrameV2(ttk.Frame):
             )
             if face_restore_method in _FACE_RESTORE_METHODS:
                 self.face_restore_method_var.set(face_restore_method)
+            elif face_restore_method in RETIRED_FACE_RESTORE_METHODS:
+                self._drop_retired_face_method(face_restore_method)
             self.face_restore_fidelity_var.set(
                 float(payload.get("face_restore_fidelity", self.face_restore_fidelity_var.get()))
             )
