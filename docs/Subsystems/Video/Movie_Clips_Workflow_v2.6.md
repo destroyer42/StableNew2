@@ -1,7 +1,7 @@
 # Movie Clips Workflow v2.6
 
 Status: Retained subsystem reference; post-MVP except native SVD XT handoff
-Updated: 2026-09-05
+Updated: 2026-10-20
 
 ## 1. Purpose
 
@@ -14,49 +14,60 @@ artifacts.
 
 ## 2. Architectural Boundary
 
-Movie Clips is not a fresh-generation execution path and not a queue
-submission replacement.
+Movie Clips is not a generation path: it assembles outputs that already exist.
+Since PR-VID-ASM-332 (owner decision D6) it runs on the canonical path as a
+queued CPU workload:
 
-Canonical relationship:
-
-Intent -> NJR -> Queue -> Runner -> Canonical artifacts/history
-                                            |
-                                            v
-                                      Movie Clips
-                                 (post-artifact assembly/export)
+Intent (Movie Clips tab) -> Compiler (freeze + hash) -> NJR (`movie_assembly`)
+-> JobService -> Queue/Repository -> PipelineRunner.run_njr
+-> MovieAssemblyHandler -> movie + manifest -> History
 
 Movie Clips may consume:
 
-- run folders
-- manually selected images
+- run folders (images and videos)
+- manually selected images and videos
 - history-handoff image sources
 - canonical workflow-video, sequence, or assembled-video source bundles
 
 Movie Clips may not:
 
-- create alternate job models
-- replace queue submission
+- create alternate job models, queues or runners
+- run FFmpeg outside the queued job
 - bypass canonical artifact/history ownership
 
 ## 3. Current User Workflows
 
 Current supported source modes:
 
-- load images from a run folder
-- add images manually
+- load a run folder (images and videos, in file-name order as a starting point)
+- add images and videos manually (appended in the order chosen)
+
+The list order is the movie order. Move Up and Move Down reorder it; nothing
+re-sorts it by name. A file may appear more than once.
 
 Current core controls:
 
-- FPS
-- codec
-- quality
-- sequence vs slideshow mode
+- FPS, codec and quality (encode profile or x264 speed preset; CRF 16, BT.709)
+- mode: sequence (every image is one frame; images only) or slideshow (stills
+  hold for their duration, videos play in full); adding a video switches to
+  slideshow
+- Still (s) with Set for Selected: the default and per-still hold time
+- resolution: match the first clip, or a fixed size; every item is fitted
+  inside the frame with black bars, never stretched
+- transition: crossfade seconds between slideshow items (0 = hard cuts; at most
+  half of the shortest item)
+- music: an optional audio track, cut or padded to the movie and faded out
+- clip name
 
 Current output behavior:
 
-- writes clip artifacts under `output/movie_clips/`
-- writes a stable manifest alongside each built clip
-- surfaces success or failure without crashing the app
+- Queue Assembly checks every file (hash, size, duration) and queues one job;
+  the tab reports the job id or the reason it was refused
+- the job shows in the Queue, can be cancelled there, and the movie appears in
+  History (open, reveal, send onward)
+- writes the movie under `output/movie_clips/<run>/` and a manifest under its
+  `manifests/` folder; a file changed or moved after queueing makes the job
+  fail with a clear message instead of assembling something else
 
 ### 3.1 Native SVD Quickstart
 
@@ -87,11 +98,16 @@ Quickstart:
 
 | Layer | Location | Responsibility |
 |------|----------|----------------|
-| View contract | `src/gui/view_contracts/movie_clips_contract.py` | UI-facing labels, defaults, formatting |
-| Tab frame | `src/gui/views/movie_clips_tab_frame_v2.py` | source selection, image list, clip settings, status |
-| Data models | `src/video/movie_clip_models.py` | typed request/result/manifest objects |
-| Service | `src/video/movie_clip_service.py` | ordering, validation, manifest writing, export orchestration |
-| Low-level export | `src/pipeline/video.py`, `src/video/video_export.py` | FFmpeg-facing helpers |
+| View contract | `src/gui/view_contracts/movie_clips_contract.py` | UI-facing labels, defaults, formatting, reorder helper |
+| Tab frame | `src/gui/views/movie_clips_tab_frame_v2.py` | source selection, ordered clip list, settings, status |
+| Admission | `src/controller/movie_clips_submission_service.py` | intent from the tab, freeze, one `JobService.submit_njrs` |
+| Contract | `src/video/movie_assembly_models.py` | frozen spec, validation, frame plan |
+| Compiler | `src/video/movie_assembly_compiler.py` | read, hash and measure inputs; build the NJR |
+| Handler | `src/pipeline/run_stage_handlers.py` (`MovieAssemblyHandler`) | run the frozen spec inside `run_njr`; record the artifact |
+| Engine | `src/video/movie_assembly_engine.py` | re-verify inputs, FFmpeg command, bounded cancellable run, manifest |
+| Encoder | `src/pipeline/video.py` | shared `VideoEncodeSettings`, encode filter and arguments, `run_ffmpeg` |
+
+Full detail: `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.
 
 ## 5. Current Product Direction
 
@@ -123,9 +139,11 @@ completed PR narratives are not active runtime documentation.
 
 Relevant tests include:
 
-- `tests/video/test_movie_clip_service.py`
+- `tests/video/test_movie_assembly_332_contract.py` (spec, frame plan, command, admission)
+- `tests/video/test_movie_assembly_332_engine.py` (real FFmpeg on KB-sized clips)
+- `tests/pipeline/test_movie_assembly_332_canonical.py` (classification, replay, cancel, queue and History)
+- `tests/controller/test_movie_clips_submission_332.py`
 - `tests/gui_v2/test_movie_clips_tab_v2.py`
-- `tests/video/test_movie_clips_tab_service_smoke.py`
 
 ## 7. Non-Goals
 
@@ -133,5 +151,5 @@ Movie Clips is still not:
 
 - a second orchestration system
 - a replacement for workflow-video generation
-- a timeline editor
+- a timeline editor (no per-video trims, no clip audio passthrough)
 - a backend-owned export path

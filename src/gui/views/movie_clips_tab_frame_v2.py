@@ -1,7 +1,9 @@
 """Movie Clips tab frame for StableNew v2.6.
 
 PR-GUI-VIDEO-001: Tab shell, source selection, ordered image list,
-clip settings, and UI-state persistence.
+clip settings, and UI-state persistence. PR-VID-ASM-332: images and videos in
+the operator's order (Move Up/Down), per-still durations, resolution,
+crossfade and music track; Build queues an assembly job.
 """
 
 from __future__ import annotations
@@ -19,20 +21,32 @@ from src.gui.theme_v2 import style_listbox_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.movie_clips_contract import (
+    AUDIO_FILE_TYPES,
     CODEC_OPTIONS,
+    DEFAULT_CLIP_NAME,
     DEFAULT_CODEC,
+    DEFAULT_FADE_OUT_SECONDS,
     DEFAULT_FPS,
     DEFAULT_MODE,
     DEFAULT_QUALITY,
+    DEFAULT_RESOLUTION,
+    DEFAULT_STILL_SECONDS,
+    DEFAULT_TRANSITION_SECONDS,
     MODE_OPTIONS,
     QUALITY_OPTIONS,
+    RESOLUTION_OPTIONS,
+    SOURCE_FILE_TYPES,
     SOURCE_MODE_FOLDER,
     SOURCE_MODE_MANUAL,
     build_clip_settings_summary,
     extract_source_paths_from_bundle,
     format_canonical_source_summary,
+    format_clip_entry,
     format_image_list_summary,
     format_source_mode_label,
+    is_media_path,
+    is_video_path,
+    move_items,
 )
 from src.gui.view_contracts.pipeline_layout_contract import (
     PRIMARY_CONTROL_MIN_WIDTH,
@@ -71,6 +85,8 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._source_mode: str = SOURCE_MODE_FOLDER
         self._last_folder: str = ""
         self._image_paths: list[Path] = []
+        #: Per-item still duration in slideshow mode (``None``: the Still (s) default), parallel to ``_image_paths``.
+        self._clip_durations: list[float | None] = []
         self._source_bundle: dict[str, Any] | None = None
         self._build_status: str = ""
         self._setting_tooltips: dict[str, Any] = {}
@@ -83,6 +99,12 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.codec_var = tk.StringVar(value=DEFAULT_CODEC)
         self.quality_var = tk.StringVar(value=DEFAULT_QUALITY)
         self.mode_var = tk.StringVar(value=DEFAULT_MODE)
+        self.resolution_var = tk.StringVar(value=DEFAULT_RESOLUTION)
+        self.transition_var = tk.DoubleVar(value=DEFAULT_TRANSITION_SECONDS)
+        self.still_seconds_var = tk.DoubleVar(value=DEFAULT_STILL_SECONDS)
+        self.audio_path_var = tk.StringVar()
+        self.fade_out_var = tk.DoubleVar(value=DEFAULT_FADE_OUT_SECONDS)
+        self.clip_name_var = tk.StringVar(value=DEFAULT_CLIP_NAME)
         self.source_summary_var = tk.StringVar(value=summarize_movie_clips_source().empty_state)
         self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
 
@@ -103,6 +125,8 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.bind("<Map>", self._on_map, add="+")
         for variable in (self.fps_var, self.codec_var, self.quality_var, self.mode_var):
             variable.trace_add("write", lambda *_: self._update_effective_settings_summary())
+        # Slideshow rows show each still's duration; a frame sequence shows plain names.
+        self.mode_var.trace_add("write", lambda *_: self._refresh_list_widget(keep_selection=True))
         self._update_effective_settings_summary()
         if self.app_state is not None and hasattr(self.app_state, "subscribe"):
             try:
@@ -162,7 +186,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
 
         self.load_btn = ttk.Button(
             header,
-            text="Load Images",
+            text="Load Folder",
             style="Dark.TButton",
             command=self._on_load_images,
         )
@@ -215,7 +239,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         # Left: ordered image list
         list_frame = ttk.LabelFrame(
             body,
-            text="Selected Images (ordered)",
+            text="Clips (in movie order)",
             style="Dark.TLabelframe",
             padding=6,
         )
@@ -247,11 +271,20 @@ class MovieClipsTabFrameV2(ttk.Frame):
 
         self.add_images_btn = ttk.Button(
             btn_row,
-            text="Add Images...",
+            text="Add Files...",
             style="Dark.TButton",
             command=self._on_add_images,
         )
         self.add_images_btn.pack(side="left", padx=(0, 6))
+
+        self.move_up_btn = ttk.Button(
+            btn_row, text="Move Up", style="Dark.TButton", command=lambda: self._on_move(-1)
+        )
+        self.move_up_btn.pack(side="left", padx=(0, 6))
+        self.move_down_btn = ttk.Button(
+            btn_row, text="Move Down", style="Dark.TButton", command=lambda: self._on_move(1)
+        )
+        self.move_down_btn.pack(side="left", padx=(0, 6))
 
         self.remove_selected_btn = ttk.Button(
             btn_row,
@@ -269,8 +302,37 @@ class MovieClipsTabFrameV2(ttk.Frame):
         )
         self.clear_all_btn.pack(side="left")
 
+        duration_row = ttk.Frame(list_frame, style="Panel.TFrame")
+        duration_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        still_label = ttk.Label(duration_row, text="Still (s)", style="Dark.TLabel")
+        still_label.pack(side="left", padx=(0, 6))
+        self.still_seconds_spin = ttk.Spinbox(
+            duration_row,
+            from_=0.1,
+            to=300.0,
+            increment=0.5,
+            textvariable=self.still_seconds_var,
+            width=6,
+            style="Dark.TSpinbox",
+        )
+        self.still_seconds_spin.pack(side="left", padx=(0, 6))
+        self.apply_duration_btn = ttk.Button(
+            duration_row,
+            text="Set for Selected",
+            style="Dark.TButton",
+            command=self._on_apply_duration,
+        )
+        self.apply_duration_btn.pack(side="left")
+        self._attach_setting_help(
+            "still_seconds",
+            MOVIE_CLIPS_SETTING_HELP["still_seconds"],
+            still_label,
+            self.still_seconds_spin,
+            self.apply_duration_btn,
+        )
+
         self.list_summary_label = ttk.Label(
-            btn_row,
+            duration_row,
             text=format_image_list_summary(0),
             style="Dark.TLabel",
         )
@@ -346,7 +408,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         )
 
         mode_label = ttk.Label(settings_frame, text="Mode", style="Dark.TLabel", anchor="w")
-        mode_label.grid(row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 12))
+        mode_label.grid(row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         self.mode_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.mode_var,
@@ -355,7 +417,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
             style="Dark.TCombobox",
             width=14,
         )
-        self.mode_combo.grid(row=4, column=1, sticky="ew", pady=(0, 12))
+        self.mode_combo.grid(row=4, column=1, sticky="ew", pady=(0, 6))
         self._attach_setting_help(
             "mode",
             MOVIE_CLIPS_SETTING_HELP["mode"],
@@ -363,20 +425,74 @@ class MovieClipsTabFrameV2(ttk.Frame):
             self.mode_combo,
         )
 
+        self.resolution_combo = ttk.Combobox(
+            settings_frame,
+            textvariable=self.resolution_var,
+            values=RESOLUTION_OPTIONS,
+            style="Dark.TCombobox",
+            width=14,
+        )
+        self._add_setting_row(5, "Resolution", "resolution", self.resolution_combo)
+        self.transition_spin = ttk.Spinbox(
+            settings_frame,
+            from_=0.0,
+            to=5.0,
+            increment=0.25,
+            textvariable=self.transition_var,
+            width=6,
+            style="Dark.TSpinbox",
+        )
+        self._add_setting_row(6, "Transition (s)", "transition", self.transition_spin)
+        self.clip_name_entry = ttk.Entry(
+            settings_frame, textvariable=self.clip_name_var, style="Dark.TEntry", width=16
+        )
+        self._add_setting_row(7, "Clip name", "clip_name", self.clip_name_entry)
+
+        audio_frame = ttk.Frame(settings_frame, style="Panel.TFrame")
+        audio_frame.columnconfigure(0, weight=1)
+        self.audio_entry = ttk.Entry(
+            audio_frame, textvariable=self.audio_path_var, style="Dark.TEntry", width=12
+        )
+        self.audio_entry.grid(row=0, column=0, sticky="ew")
+        self.audio_browse_btn = ttk.Button(
+            audio_frame, text="...", width=3, style="Dark.TButton", command=self._on_browse_audio
+        )
+        self.audio_browse_btn.grid(row=0, column=1, padx=(4, 0))
+        self.audio_clear_btn = ttk.Button(
+            audio_frame,
+            text="x",
+            width=2,
+            style="Dark.TButton",
+            command=lambda: self.audio_path_var.set(""),
+        )
+        self.audio_clear_btn.grid(row=0, column=2, padx=(4, 0))
+        self._add_setting_row(8, "Music", "audio", audio_frame)
+        self.fade_out_spin = ttk.Spinbox(
+            settings_frame,
+            from_=0.0,
+            to=10.0,
+            increment=0.5,
+            textvariable=self.fade_out_var,
+            width=6,
+            style="Dark.TSpinbox",
+        )
+        self._add_setting_row(9, "Fade out (s)", "audio", self.fade_out_spin, bottom=12)
+
         ttk.Separator(settings_frame, orient="horizontal").grid(
-            row=5, column=0, columnspan=2, sticky="ew", pady=(0, 10)
+            row=10, column=0, columnspan=2, sticky="ew", pady=(0, 10)
         )
 
         self.build_btn = ttk.Button(
             settings_frame,
-            text="Build Clip",
+            text="Queue Assembly",
             style="Primary.TButton",
             command=self._on_build_clip,
         )
-        self.build_btn.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.build_btn.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(0, 6))
         self.build_tooltip = attach_tooltip(
             self.build_btn,
-            "Assemble the currently ordered image list into a rendered clip using the FPS, codec, quality, and mode shown here.",
+            "Assemble the currently ordered image list (stills and videos) into one movie with the settings shown "
+            "here. The job is queued: follow it in the Queue, cancel it there, and find the movie in History.",
         )
 
         self.build_status_label = ttk.Label(
@@ -386,7 +502,15 @@ class MovieClipsTabFrameV2(ttk.Frame):
             wraplength=160,
             justify="center",
         )
-        self.build_status_label.grid(row=7, column=0, columnspan=2, sticky="ew")
+        self.build_status_label.grid(row=12, column=0, columnspan=2, sticky="ew")
+
+    def _add_setting_row(
+        self, row: int, text: str, help_key: str, widget: tk.Widget, *, bottom: int = 6
+    ) -> None:
+        label = ttk.Label(self._settings_frame, text=text, style="Dark.TLabel", anchor="w")
+        label.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, bottom))
+        widget.grid(row=row, column=1, sticky="ew", pady=(0, bottom))
+        self._attach_setting_help(help_key, MOVIE_CLIPS_SETTING_HELP[help_key], label, widget)
 
     def _attach_setting_help(self, key: str, text: str, *widgets: tk.Widget | None) -> None:
         live_widgets = [widget for widget in widgets if widget is not None]
@@ -435,50 +559,92 @@ class MovieClipsTabFrameV2(ttk.Frame):
         if not folder.is_dir():
             self._set_status("Folder not found.")
             return
-        images = sorted(
-            [p for p in folder.iterdir() if p.suffix.lower() in _IMAGE_EXTENSIONS],
-            key=lambda p: p.name,
-        )
-        if not images:
-            self._set_status("No images found in folder.")
+        # Name order is only the starting order; Move Up/Down changes it and nothing re-sorts it later.
+        media = sorted([p for p in folder.iterdir() if is_media_path(p)], key=lambda p: p.name)
+        if not media:
+            self._set_status("No images or videos found in folder.")
             return
         self._source_bundle = None
-        self._set_image_list(images)
-        self._set_status(f"Loaded {len(images)} images from folder.")
+        self._set_image_list(media)
+        self._switch_to_slideshow_for_videos()
+        self._set_status(f"Loaded {len(media)} file(s) from folder.")
 
     def _on_add_images(self) -> None:
         files = filedialog.askopenfilenames(
-            title="Select Images",
-            filetypes=[
-                ("Image Files", "*.png *.jpg *.jpeg *.webp *.bmp *.tiff *.tif"),
-                ("All Files", "*.*"),
-            ],
+            title="Select Images or Videos", filetypes=SOURCE_FILE_TYPES
         )
         if not files:
             return
-        new_paths = [Path(f) for f in files if Path(f).suffix.lower() in _IMAGE_EXTENSIONS]
-        # Merge keeping deterministic order, dedupe by resolved path
-        existing_resolved = {p.resolve() for p in self._image_paths}
-        added = [p for p in new_paths if p.resolve() not in existing_resolved]
-        if added:
-            self._source_bundle = None
-            self._set_image_list(sorted(self._image_paths + added, key=lambda p: p.name))
-            self._set_status(f"Added {len(added)} image(s).")
-        else:
-            self._set_status("No new images added.")
+        self.add_files([Path(f) for f in files])
+
+    def add_files(self, paths: list[Path]) -> None:
+        """Append images and videos at the end of the list, in the given order (a file may appear twice)."""
+
+        added = [path for path in paths if is_media_path(path)]
+        if not added:
+            self._set_status("No images or videos added.")
+            return
+        self._source_bundle = None
+        self._set_image_list(self._image_paths + added, self._clip_durations + [None] * len(added))
+        switched = self._switch_to_slideshow_for_videos()
+        note = " Mode switched to slideshow for the videos." if switched else ""
+        self._set_status(f"Added {len(added)} file(s).{note}")
+
+    def _switch_to_slideshow_for_videos(self) -> bool:
+        """A frame sequence takes images only: a list with a video switches to slideshow."""
+
+        if self.mode_var.get() != "slideshow" and any(is_video_path(p) for p in self._image_paths):
+            self.mode_var.set("slideshow")
+            return True
+        return False
+
+    def _on_move(self, delta: int) -> None:
+        selected = self._selected_indices()
+        if not selected:
+            return
+        self._sync_durations()
+        pairs, positions = move_items(
+            list(zip(self._image_paths, self._clip_durations, strict=True)), selected, delta
+        )
+        self._image_paths = [path for path, _ in pairs]
+        self._clip_durations = [duration for _, duration in pairs]
+        self._source_bundle = None
+        self._refresh_list_widget(selection=positions)
+
+    def _on_apply_duration(self) -> None:
+        self._sync_durations()
+        selected = [i for i in self._selected_indices() if not is_video_path(self._image_paths[i])]
+        seconds = self._read_float(self.still_seconds_var, DEFAULT_STILL_SECONDS)
+        if not selected:
+            self._set_status(f"Stills without their own duration show for {seconds:g} s.")
+            self._refresh_list_widget(keep_selection=True)
+            return
+        for index in selected:
+            self._clip_durations[index] = seconds
+        self._refresh_list_widget(selection=self._selected_indices())
+        self._set_status(f"{len(selected)} still(s) now show for {seconds:g} s.")
+
+    def _on_browse_audio(self) -> None:
+        path = filedialog.askopenfilename(title="Select Music Track", filetypes=AUDIO_FILE_TYPES)
+        if path:
+            self.audio_path_var.set(path)
 
     def _on_remove_selected(self) -> None:
-        selected = list(self.image_list.curselection())
+        selected = self._selected_indices()
         if not selected:
             return
         selected_set = set(selected)
         self._image_paths = [p for i, p in enumerate(self._image_paths) if i not in selected_set]
+        self._clip_durations = [
+            d for i, d in enumerate(self._clip_durations) if i not in selected_set
+        ]
         self._source_bundle = None
         self._refresh_list_widget()
         self._update_summary()
 
     def _on_clear_all(self) -> None:
         self._image_paths = []
+        self._clip_durations = []
         self._source_bundle = None
         self._refresh_list_widget()
         self._update_summary()
@@ -502,17 +668,17 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.set_source_bundle(bundle, status_message="Loaded latest video output.")
 
     def _on_build_clip(self) -> None:
-        """Delegate clip build to controller (wired in PR-VIDEO-002)."""
+        """Ask the controller to queue the assembly (PR-VID-ASM-332); the queue does the work."""
         controller = self.app_controller
         handler = getattr(controller, "on_build_movie_clip", None)
         if not callable(handler):
             self._set_build_status("Controller not connected.")
             return
         if not self._image_paths:
-            self._set_build_status("No images selected.")
+            self._set_build_status("No images or videos selected.")
             return
         settings = self._collect_settings()
-        self._set_build_status("Building...")
+        self._set_build_status("Checking and queueing...")
         try:
             handler(
                 image_paths=list(self._image_paths),
@@ -528,12 +694,10 @@ class MovieClipsTabFrameV2(ttk.Frame):
     # Controller callbacks
     # ------------------------------------------------------------------
 
-    def _on_build_complete(self, output_path: str) -> None:
-        summary = summarize_movie_clips_source(
-            image_paths=[str(path) for path in self._image_paths],
-            bundle=self._source_bundle,
+    def _on_build_complete(self, job_id: str) -> None:
+        self._set_build_status(
+            f"Queued assembly job {str(job_id)[:8]}. Follow it in the Queue; the movie appears in History."
         )
-        self._set_build_status(f"Done: {Path(output_path).name} | {summary.headline}")
 
     def _on_build_error(self, reason: str) -> None:
         self._set_build_status(f"Error: {reason}")
@@ -542,19 +706,53 @@ class MovieClipsTabFrameV2(ttk.Frame):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _set_image_list(self, paths: list[Path]) -> None:
-        self._image_paths = paths
+    def _set_image_list(
+        self, paths: list[Path], durations: list[float | None] | None = None
+    ) -> None:
+        self._image_paths = list(paths)
+        self._clip_durations = list(durations) if durations is not None else [None] * len(paths)
         self._refresh_list_widget()
         self._update_summary()
         self._update_source_summary()
 
-    def _refresh_list_widget(self) -> None:
+    def _refresh_list_widget(
+        self, *, selection: list[int] | None = None, keep_selection: bool = False
+    ) -> None:
+        if keep_selection:
+            selection = self._selected_indices()
+        self._sync_durations()
+        mode = self.mode_var.get()
+        default_seconds = self._read_float(self.still_seconds_var, DEFAULT_STILL_SECONDS)
         try:
             self.image_list.delete(0, tk.END)
-            for p in self._image_paths:
-                self.image_list.insert(tk.END, p.name)
-        except Exception:
-            pass
+            for path, duration in zip(self._image_paths, self._clip_durations, strict=True):
+                self.image_list.insert(
+                    tk.END,
+                    format_clip_entry(
+                        path, mode=mode, duration_seconds=duration, default_seconds=default_seconds
+                    ),
+                )
+            for index in selection or []:
+                self.image_list.selection_set(index)
+        except tk.TclError:
+            logger.debug("Movie Clips list refresh skipped", exc_info=True)
+
+    def _sync_durations(self) -> None:
+        """Keep one duration slot per list item, whoever last replaced ``_image_paths``."""
+
+        count = len(self._image_paths)
+        self._clip_durations = (list(self._clip_durations) + [None] * count)[:count]
+
+    def _selected_indices(self) -> list[int]:
+        selection = self.image_list.curselection()  # type: ignore[no-untyped-call]
+        return [int(index) for index in selection]
+
+    @staticmethod
+    def _read_float(variable: tk.DoubleVar, default: float) -> float:
+        try:
+            return float(variable.get())
+        except (tk.TclError, TypeError, ValueError):
+            return default
 
     def _update_summary(self) -> None:
         try:
@@ -620,11 +818,19 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.after_idle(self.on_content_visibility_mode_changed)
 
     def _collect_settings(self) -> dict[str, Any]:
+        self._sync_durations()
         return {
             "fps": self.fps_var.get(),
             "codec": self.codec_var.get(),
             "quality": self.quality_var.get(),
             "mode": self.mode_var.get(),
+            "resolution": self.resolution_var.get().strip() or DEFAULT_RESOLUTION,
+            "still_seconds": self._read_float(self.still_seconds_var, DEFAULT_STILL_SECONDS),
+            "clip_durations": list(self._clip_durations),
+            "transition_seconds": self._read_float(self.transition_var, DEFAULT_TRANSITION_SECONDS),
+            "audio_path": self.audio_path_var.get().strip(),
+            "audio_fade_out_seconds": self._read_float(self.fade_out_var, DEFAULT_FADE_OUT_SECONDS),
+            "clip_name": self.clip_name_var.get().strip() or DEFAULT_CLIP_NAME,
         }
 
     # ------------------------------------------------------------------
@@ -643,6 +849,10 @@ class MovieClipsTabFrameV2(ttk.Frame):
             "codec": self.codec_var.get(),
             "quality": self.quality_var.get(),
             "mode": self.mode_var.get(),
+            "resolution": self.resolution_var.get(),
+            "still_seconds": self._read_float(self.still_seconds_var, DEFAULT_STILL_SECONDS),
+            "transition_seconds": self._read_float(self.transition_var, DEFAULT_TRANSITION_SECONDS),
+            "audio_fade_out_seconds": self._read_float(self.fade_out_var, DEFAULT_FADE_OUT_SECONDS),
         }
 
     def set_source_frame_paths(
@@ -686,6 +896,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._source_bundle = dict(bundle)
         self.source_mode_var.set(SOURCE_MODE_MANUAL)
         self._set_image_list(source_paths)
+        self._switch_to_slideshow_for_videos()
         self._set_status(status_message or format_canonical_source_summary(bundle))
 
     def restore_movie_clips_state(self, payload: dict[str, Any] | None) -> bool:
@@ -710,6 +921,16 @@ class MovieClipsTabFrameV2(ttk.Frame):
             clip_mode = payload.get("mode", DEFAULT_MODE)
             if clip_mode in ("sequence", "slideshow"):
                 self.mode_var.set(clip_mode)
+            resolution = payload.get("resolution")
+            if isinstance(resolution, str) and resolution.strip():
+                self.resolution_var.set(resolution.strip())
+            for key, variable in (
+                ("still_seconds", self.still_seconds_var),
+                ("transition_seconds", self.transition_var),
+                ("audio_fade_out_seconds", self.fade_out_var),
+            ):
+                if isinstance(payload.get(key), (int, float)):
+                    variable.set(float(payload[key]))
             return True
         except Exception as exc:
             logger.warning(f"Failed to restore movie clips state: {exc}")

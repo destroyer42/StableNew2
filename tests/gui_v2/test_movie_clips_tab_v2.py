@@ -1,6 +1,7 @@
 """GUI regression tests for MovieClipsTabFrameV2.
 
 PR-GUI-VIDEO-001: Tab shell, source selection, image list, settings, persistence.
+PR-VID-ASM-332: user order (no re-sort), videos in Add, reorder, per-still durations, queued job status.
 """
 
 from __future__ import annotations
@@ -21,8 +22,10 @@ from src.gui.view_contracts.movie_clips_contract import (
     build_clip_settings_summary,
     extract_source_paths_from_bundle,
     format_canonical_source_summary,
+    format_clip_entry,
     format_image_list_summary,
     format_source_mode_label,
+    move_items,
     sort_image_names,
 )
 from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
@@ -41,11 +44,11 @@ def test_format_source_mode_label_manual():
 
 
 def test_format_image_list_summary_zero():
-    assert format_image_list_summary(0) == "No images selected"
+    assert format_image_list_summary(0) == "No items selected"
 
 
 def test_format_image_list_summary_one():
-    assert format_image_list_summary(1) == "1 image selected"
+    assert format_image_list_summary(1) == "1 item selected"
 
 
 def test_format_image_list_summary_many():
@@ -478,9 +481,10 @@ def test_tab_build_clip_empty_list_no_delegate(tk_root: tk.Tk):
         tab.destroy()
 
 
-def test_tab_on_build_complete_sets_status(tab: MovieClipsTabFrameV2):
-    tab._on_build_complete("/some/output/video.mp4")
-    assert "video.mp4" in tab._build_status
+def test_tab_on_build_complete_reports_the_queued_job(tab: MovieClipsTabFrameV2):
+    tab._on_build_complete("0123456789abcdef")
+    assert "Queued assembly job 01234567" in tab._build_status
+    assert "History" in tab._build_status
 
 
 def test_tab_on_build_error_sets_status(tab: MovieClipsTabFrameV2):
@@ -504,8 +508,8 @@ def test_tab_wires_on_build_complete_callback(tk_root: tk.Tk, tmp_path: Path):
         # Extract the on_complete kwarg that was passed to the controller
         cb = controller.on_build_movie_clip.call_args.kwargs.get("on_complete")
         assert callable(cb)
-        cb("/output/myclip.mp4")
-        assert "myclip.mp4" in tab._build_status
+        cb("feedfacecafe")
+        assert "feedface" in tab._build_status
     finally:
         tab.destroy()
 
@@ -543,5 +547,125 @@ def test_tab_build_passes_settings_to_controller(tk_root: tk.Tk, tmp_path: Path)
         assert settings["codec"] == "libx265"
         assert settings["quality"] == "slow"
         assert settings["mode"] == "slideshow"
+    finally:
+        tab.destroy()
+
+
+# ---------------------------------------------------------------------------
+# PR-VID-ASM-332: user order, videos, reorder, per-still durations
+# ---------------------------------------------------------------------------
+
+
+def test_move_items_moves_a_block_and_stops_at_the_edges() -> None:
+    assert move_items(["a", "b", "c", "d"], [1, 2], -1) == (["b", "c", "a", "d"], [0, 1])
+    assert move_items(["a", "b", "c", "d"], [1, 2], 1) == (["a", "d", "b", "c"], [2, 3])
+    assert move_items(["a", "b", "c"], [0, 2], -1) == (["a", "c", "b"], [0, 1])
+    assert move_items(["a", "b", "c"], [0], -1) == (["a", "b", "c"], [0])
+    assert move_items(["a", "b", "c"], [2], 1) == (["a", "b", "c"], [2])
+
+
+def test_format_clip_entry_shows_how_each_item_plays() -> None:
+    def entry(path: str, mode: str, seconds: float | None) -> str:
+        return format_clip_entry(path, mode=mode, duration_seconds=seconds, default_seconds=3)
+
+    assert entry("x/a.png", "sequence", None) == "a.png"
+    assert entry("a.png", "slideshow", None) == "a.png  (3 s)"
+    assert entry("a.png", "slideshow", 1.5) == "a.png  (1.5 s)"
+    assert entry("c.mp4", "slideshow", None) == "c.mp4  (video)"
+
+
+def test_resolution_default_matches_the_compiler() -> None:
+    from src.gui.view_contracts.movie_clips_contract import RESOLUTION_MATCH_FIRST
+    from src.video.movie_assembly_compiler import RESOLUTION_MATCH_FIRST as COMPILER_MATCH_FIRST
+
+    assert RESOLUTION_MATCH_FIRST == COMPILER_MATCH_FIRST
+
+
+def test_tab_add_files_appends_in_order_and_switches_to_slideshow(tk_root: tk.Tk, tmp_path: Path):
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        tab._set_image_list([tmp_path / "m.png"])
+        tab.add_files([tmp_path / "z.png", tmp_path / "a.mp4", tmp_path / "notes.txt"])
+        assert [p.name for p in tab._image_paths] == ["m.png", "z.png", "a.mp4"]  # not re-sorted
+        assert tab.mode_var.get() == "slideshow"  # a frame sequence takes images only
+        assert "Mode switched to slideshow" in tab.status_label.cget("text")
+        assert tab.image_list.get(2) == "a.mp4  (video)"
+    finally:
+        tab.destroy()
+
+
+def test_tab_folder_load_includes_videos(tk_root: tk.Tk, tmp_path: Path):
+    for name in ("b.png", "a.mp4", "c.txt"):
+        (tmp_path / name).write_bytes(b"")
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        tab.folder_var.set(str(tmp_path))
+        tab._on_load_images()
+        assert [p.name for p in tab._image_paths] == ["a.mp4", "b.png"]
+        assert tab.mode_var.get() == "slideshow"
+    finally:
+        tab.destroy()
+
+
+def test_tab_move_keeps_durations_with_their_items(tk_root: tk.Tk, tmp_path: Path):
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        tab.mode_var.set("slideshow")
+        tab._set_image_list([tmp_path / "a.png", tmp_path / "b.png", tmp_path / "c.png"])
+        tab.image_list.selection_set(2)
+        tab.still_seconds_var.set(1.5)
+        tab._on_apply_duration()
+        tab._on_move(-1)
+        tab._on_move(-1)
+        assert [p.name for p in tab._image_paths] == ["c.png", "a.png", "b.png"]
+        assert tab._clip_durations == [1.5, None, None]
+        assert list(tab.image_list.curselection()) == [0]
+        assert tab.image_list.get(0) == "c.png  (1.5 s)"
+        tab._on_move(1)
+        assert [p.name for p in tab._image_paths] == ["a.png", "c.png", "b.png"]
+    finally:
+        tab.destroy()
+
+
+def test_tab_set_duration_skips_videos(tk_root: tk.Tk, tmp_path: Path):
+    tab = MovieClipsTabFrameV2(tk_root)
+    try:
+        tab.add_files([tmp_path / "a.png", tmp_path / "v.mp4"])
+        tab.image_list.selection_set(0, 1)
+        tab.still_seconds_var.set(4.0)
+        tab._on_apply_duration()
+        assert tab._clip_durations == [4.0, None]
+    finally:
+        tab.destroy()
+
+
+def test_tab_build_passes_order_durations_and_assembly_settings(tk_root: tk.Tk, tmp_path: Path):
+    controller = MagicMock()
+    tab = MovieClipsTabFrameV2(tk_root, app_controller=controller)
+    try:
+        tab.add_files([tmp_path / "z.png", tmp_path / "a.mp4", tmp_path / "m.png"])
+        tab.image_list.selection_set(2)
+        tab.still_seconds_var.set(2.0)
+        tab._on_apply_duration()
+        tab.still_seconds_var.set(3.5)
+        tab.resolution_var.set("1280x720")
+        tab.transition_var.set(0.75)
+        tab.audio_path_var.set(str(tmp_path / "music.mp3"))
+        tab.fade_out_var.set(2.0)
+        tab.clip_name_var.set("trip")
+        tab._on_build_clip()
+
+        kwargs = controller.on_build_movie_clip.call_args.kwargs
+        assert [Path(p).name for p in kwargs["image_paths"]] == ["z.png", "a.mp4", "m.png"]
+        settings = kwargs["settings"]
+        assert settings["mode"] == "slideshow"
+        assert settings["clip_durations"] == [None, None, 2.0]
+        assert settings["still_seconds"] == 3.5
+        assert settings["resolution"] == "1280x720"
+        assert settings["transition_seconds"] == 0.75
+        assert settings["audio_path"] == str(tmp_path / "music.mp3")
+        assert settings["audio_fade_out_seconds"] == 2.0
+        assert settings["clip_name"] == "trip"
+        assert "queueing" in tab._build_status.lower()
     finally:
         tab.destroy()

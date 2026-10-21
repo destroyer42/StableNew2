@@ -404,8 +404,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1347,
-      "S110": 536,
+      "BLE001": 1343,
+      "S110": 535,
       "S112": 38
     },
     "counts": {
@@ -720,8 +720,8 @@
         "S110": 16
       },
       "src/gui/views/movie_clips_tab_frame_v2.py": {
-        "BLE001": 8,
-        "S110": 6
+        "BLE001": 7,
+        "S110": 5
       },
       "src/gui/views/photo_optimize_tab_frame_v2.py": {
         "BLE001": 10,
@@ -1051,9 +1051,6 @@
         "BLE001": 1
       },
       "src/video/motion/secondary_motion_video_reencode.py": {
-        "BLE001": 3
-      },
-      "src/video/movie_clip_service.py": {
         "BLE001": 3
       },
       "src/video/restoration/codeformer.py": {
