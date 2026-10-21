@@ -12,7 +12,7 @@ can carry it in its stage config; ``normalize_interpolation_request`` validates 
 from __future__ import annotations
 
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -159,6 +159,78 @@ def interpolate_video_file(
 
     source = Path(video_path)
     root = Path(output_dir)
+    work_dir = root / f"{source.stem}_smooth_work"
+
+    def _load() -> list[Image.Image]:
+        return _decode_frames(video_path=source, work_dir=work_dir, cancel_token=cancel_token)
+
+    return _smooth(
+        load_frames=_load,
+        source_label=str(source),
+        output_path=root / f"{source.stem}_smooth.mp4",
+        work_dir=work_dir,
+        source_fps=source_fps,
+        request=request,
+        cancel_token=cancel_token,
+        status_callback=status_callback,
+    )
+
+
+def interpolate_frame_files(
+    *,
+    frame_paths: Sequence[str | Path],
+    output_dir: str | Path,
+    stem: str,
+    source_fps: int,
+    request: VideoInterpolationRequest,
+    cancel_token: CancelToken | None = None,
+    status_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> VideoInterpolationResult:
+    """Smooth lossless frame files straight into ``<stem>_smooth.mp4``.
+
+    A frames-out workflow (PR-VID-WAN-324) never needs the encoded clip decoded again, so RIFE sees the
+    original PNGs and the only lossy step is the one final encode.
+    """
+
+    root = Path(output_dir)
+    paths = [Path(path) for path in frame_paths]
+    if not paths:
+        raise SVDExportError("No frames were provided for interpolation")
+    if len(paths) > MAX_SOURCE_FRAMES:
+        raise SVDExportError(
+            f"The clip has {len(paths)} frames; interpolation handles at most {MAX_SOURCE_FRAMES}."
+        )
+
+    def _load() -> list[Image.Image]:
+        frames: list[Image.Image] = []
+        for path in paths:
+            with Image.open(path) as image:
+                frames.append(image.convert("RGB"))
+        return frames
+
+    return _smooth(
+        load_frames=_load,
+        source_label=str(paths[0].parent),
+        output_path=root / f"{stem}_smooth.mp4",
+        work_dir=root / f"{stem}_smooth_work",
+        source_fps=source_fps,
+        request=request,
+        cancel_token=cancel_token,
+        status_callback=status_callback,
+    )
+
+
+def _smooth(
+    *,
+    load_frames: Callable[[], list[Image.Image]],
+    source_label: str,
+    output_path: Path,
+    work_dir: Path,
+    source_fps: int,
+    request: VideoInterpolationRequest,
+    cancel_token: CancelToken | None,
+    status_callback: Callable[[dict[str, Any]], None] | None,
+) -> VideoInterpolationResult:
     if source_fps < 1:
         raise ValueError("source_fps must be a positive integer")
     multiplier = request.multiplier or default_rife_multiplier(source_fps)
@@ -179,12 +251,10 @@ def interpolate_video_file(
     if not valid:
         raise SVDPostprocessError(reason or "RIFE interpolation is not available")
 
-    work_dir = root / f"{source.stem}_smooth_work"
-    output_path = root / f"{source.stem}_smooth.mp4"
     frames: list[Image.Image] = []
     input_count = 0
     try:
-        frames = _decode_frames(video_path=source, work_dir=work_dir, cancel_token=cancel_token)
+        frames = load_frames()
         input_count = len(frames)
         smoothed, metadata = SVDPostprocessRunner(
             status_callback=status_callback, cancel_token=cancel_token
@@ -200,7 +270,7 @@ def interpolate_video_file(
             image.close()
         shutil.rmtree(work_dir, ignore_errors=True)
     return VideoInterpolationResult(
-        source_video_path=str(source),
+        source_video_path=source_label,
         video_path=str(output_path),
         input_frame_count=input_count,
         output_frame_count=len(frames),
@@ -215,6 +285,7 @@ def interpolate_video_file(
 __all__ = [
     "VideoInterpolationRequest",
     "VideoInterpolationResult",
+    "interpolate_frame_files",
     "interpolate_video_file",
     "normalize_interpolation_request",
 ]
