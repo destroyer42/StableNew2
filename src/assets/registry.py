@@ -211,8 +211,12 @@ def _sidecar_fingerprint(path: Path) -> dict[str, int] | None:
 
 def _read_sidecar_json(path: Path) -> tuple[dict[str, Any], str | None]:
     try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
+        with path.open("rb") as stream:
+            raw = stream.read(8 * 1024 * 1024 + 1)
+        if len(raw) > 8 * 1024 * 1024:
+            return {}, "sidecar exceeds read limit"
+        text = raw.decode("utf-8")
+    except (OSError, UnicodeError) as exc:
         return {}, f"{type(exc).__name__}: {exc}"
     try:
         parsed = json.loads(text)
@@ -400,6 +404,7 @@ class AssetRegistry:
         checkpoint_paths: Iterable[Path] | None = None,
         cancelled: Callable[[], bool] | None = None,
         progress: Callable[[Path, int, int], None] | None = None,
+        persist: bool = True,
     ) -> RefreshResult:
         """Refresh selected kinds, or only exact served checkpoints (never scan in that mode).
 
@@ -414,14 +419,26 @@ class AssetRegistry:
         self._require_readable_cache()
         counters = self.last_refresh = RefreshCounters()
         entries, computed, hits = self._prepare_refresh(
-            kinds, checkpoint_paths, cancelled, progress, counters
+            kinds, checkpoint_paths, cancelled, progress, counters, read_only=not persist,
         )
         selected = set(kinds) if kinds is not None else set(AssetKind)
-        self._commit_entries(
-            entries,
-            cancelled=cancelled,
-            prune_kinds={item.value for item in selected} if checkpoint_paths is None else None,
-        )
+        if persist:
+            self._commit_entries(
+                entries,
+                cancelled=cancelled,
+                prune_kinds={item.value for item in selected} if checkpoint_paths is None else None,
+            )
+        else:
+            # Browsing uses the same identity/evidence reader without modifying user cache files.
+            # This instance's snapshot is a disposable projection, never executable admission.
+            if cancelled and cancelled():
+                raise InterruptedError("Asset discovery cancelled")
+            retained = {
+                key: value for key, value in self._entries.items()
+                if checkpoint_paths is not None or value.get("kind") not in {item.value for item in selected}
+            }
+            self._entries = {**retained, **entries}
+            self._snapshot = self._make_snapshot()
         return RefreshResult(self._snapshot, computed, hits, counters.snapshot())
 
     def _require_readable_cache(self) -> None:
@@ -596,6 +613,7 @@ class AssetRegistry:
         cancelled: Callable[[], bool] | None,
         progress: Callable[[Path, int, int], None] | None,
         counters: RefreshCounters,
+        *, read_only: bool = False,
     ) -> tuple[dict[str, dict[str, Any]], int, int]:
         selected = set(kinds) if kinds is not None else set(AssetKind)
         next_entries: dict[str, dict[str, Any]] = {}
@@ -614,7 +632,7 @@ class AssetRegistry:
                     sorted(
                         (
                             path
-                            for path in root.rglob("*")
+                            for path in self._refresh_paths(root, read_only, cancelled)
                             if path.is_file()
                             and path.suffix.lower() in _extensions_for(kind)
                             and _contained(kind, root, path)
@@ -634,6 +652,12 @@ class AssetRegistry:
                 key = str(path.resolve())
                 stat = path.stat()
                 cached = self._entries.get(key)
+                if read_only:
+                    # Browsing never follows model/sidecar aliases outside the configured library.
+                    if not path.resolve().is_relative_to(root.resolve()):
+                        raise ValueError("Asset outside local library")
+                    if any(not item.resolve().is_relative_to(root.resolve()) for item in _sidecar_candidates(path)):
+                        raise ValueError("Sidecar outside local library")
                 reason = self._identity_reason(cached, kind, stat)
                 model_valid = reason is CheckpointMiss.CURRENT
                 # A reference image has no sidecar contract: it is never searched for, read or fingerprinted.
@@ -726,6 +750,21 @@ class AssetRegistry:
         if cancelled and cancelled():
             raise InterruptedError("Checkpoint evidence refresh cancelled")
         return next_entries, computed, hits
+
+    @staticmethod
+    def _refresh_paths(root: Path, read_only: bool, cancelled: Callable[[], bool] | None) -> Iterable[Path]:
+        if not read_only:
+            yield from root.rglob("*")
+            return
+        # pathlib.rglob suppresses directory errors; that could turn an inaccessible folder into
+        # an authoritative empty browser. Fail the projection instead, preserving working choices.
+        def failed(error: OSError) -> None:
+            raise error
+        for directory, folders, files in root.walk(on_error=failed, follow_symlinks=False):
+            if cancelled and cancelled():
+                raise InterruptedError("Asset discovery cancelled")
+            folders[:] = [name for name in folders if not (directory / name).is_junction()]
+            yield from (directory / name for name in files)
 
     def _read_cache_file(self) -> tuple[CacheState, int | None, dict[str, dict[str, Any]]]:
         """Parse the persisted cache without touching in-memory state; says why when it yields nothing.

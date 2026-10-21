@@ -141,6 +141,11 @@ Owner module `src/image_backends/forge_klein_lora.py`; the policy points to it t
 - Evidence comes only from the `AssetRegistry` record (SHA-256, embedded metadata, CivitAI-style sidecar) via `classify_klein_lora`. Exact whole-value match against `KLEIN_4B_BASE_MODEL_VALUES` -> `compatible`; an anchored other-FLUX identifier or a resolved SD/SDXL/SD3 family -> `incompatible`; Klein evidence plus contradicting evidence or a registry conflict -> `conflicting`; generic FLUX, unknown or no evidence -> `unverified`. Only `compatible` is runnable. Never a filename, Forge listing or operator choice.
 - Limits: at most `max_loras` tags (1), weight in (0, 2.0], well-formed `<lora:name:weight>` tags, every NJR-declared LoRA must be in the rendered prompt, `lora_strengths` overrides refused.
 - `RegistryLoraResolver(cache_only=True)` is the UI/compile projection (snapshot only, can only make the UI more cautious); the backend resolver refreshes the LoRA kind.
+- The local PromptPack LoRA browser projects a worker-returned read-only registry snapshot. It calls the same
+  `assess_lora_selection`/`classify_klein_lora` authorities and displays the profile's selection limit without changing
+  authored choices. Explicit Klein metadata is labeled possibly compatible, with no physical pairing claim. Ordinary
+  family matches require non-filename evidence for both target and adapter; absent or conflicting evidence stays unknown.
+  This browser evidence does not refresh the persisted compile snapshot or replace Preview/dispatch admission.
 - At dispatch: `_assert_lora_served` requires Forge to list the adapter and (when the registry locations are known) to serve the same file path; after generation `observe_lora_consumption` parses Forge's own `[LORA] Loaded` / mismatch log lines, and an explicit mismatch fails the job (`consumed is False`); `None` (silence) is accepted because Forge caches identical adapter sets.
 - PromptPack selection: `src/prompting/pack_lora_selection.py` (contract `klein_lora_selection/1`) freezes the chosen adapter into `NJR.extra_metadata["klein_lora_selection"]` and config metadata; `frozen_selection_problems` re-checks it against refreshed evidence at both `validate_njr_intent` and `_validate_request`. A selection without an exact profile is refused (`ForgeUnsupportedIntentError`).
 

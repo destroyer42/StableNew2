@@ -330,6 +330,15 @@ def test_lora_picker_filters_nsfw_resources_in_sfw_mode(monkeypatch, tk_root) ->
     panel = LoRAPickerPanel(parent)
     try:
         panel._scan_loras()
+        # Discovery now returns through Tk dispatch; apply the fake worker result explicitly.
+        from pathlib import Path
+
+        from src.utils.lora_scanner import LoRAResource
+
+        panel._finish_refresh(panel._request_id, {
+            "PortraitHelper": LoRAResource("PortraitHelper", Path("portrait"), 0, [], "none", "portrait lighting helper"),
+            "NSFWPosePack": LoRAResource("NSFWPosePack", Path("private"), 0, [], "none", "nude anatomy helper"),
+        }, False)
         assert list(panel.lora_name_combo["values"]) == ["PortraitHelper"]
     finally:
         panel.destroy()

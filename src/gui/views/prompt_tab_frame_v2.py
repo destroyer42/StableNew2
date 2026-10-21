@@ -1453,6 +1453,8 @@ class PromptTabFrame(ttk.Frame):
         """Receive the Base Generation model-policy projection (read-only context; never changes authoring state)."""
 
         self._model_projection = projection
+        if hasattr(self, "lora_picker"):
+            self.lora_picker.set_model_policy(getattr(projection, "policy", None), getattr(projection, "model_name", ""))
         if hasattr(self, "openpose_picker"):
             self.openpose_picker.set_target(getattr(projection, "openpose", None))
         if hasattr(self, "controlnet_picker"):

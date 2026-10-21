@@ -1,28 +1,27 @@
-"""Simple LoRA picker panel for managing LoRAs with strength controls.
-
-v2.6 Changes:
-- Replaced autocomplete text entry with dropdown combobox for simpler selection
-- User selects from available LoRAs and clicks Add button
-- Removed 70+ lines of autocomplete complexity
-
-This widget provides a basic interface for adding/removing LoRAs and adjusting
-their strengths. Keyword detection will be added in Phase A.
-"""
+"""Authored LoRA controls and local browser; all discovery is off Tk."""
 
 from __future__ import annotations
 
+import threading
 import tkinter as tk
 from collections.abc import Callable
-from pathlib import Path
 from tkinter import ttk
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
+from src.assets.registry import AssetRegistrySnapshot
+from src.controller.content_visibility_resolver import REDACTED_TEXT
 from src.gui.enhanced_slider import EnhancedSlider
+from src.gui.gui_invoker import GuiInvoker
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.lora_keyword_dialog import LoRAKeywordDialog
-from src.utils.lora_keyword_detector import detect_lora_keywords
-from src.utils.lora_scanner import get_lora_scanner
+from src.gui_v2.lora_browser import visible_resource
+from src.image_backends.model_policy import ModelPolicy
+from src.utils.lora_keyword_detector import LoRAMetadata
+from src.utils.lora_scanner import LoRAResource, LoRAScanner, get_lora_scanner
+from src.utils.thread_registry import get_thread_registry
+
+if TYPE_CHECKING:
+    from src.gui.widgets.lora_browser_dialog import LoRABrowserDialog
 
 
 class LoRAPickerPanel(ttk.Frame):
@@ -52,16 +51,30 @@ class LoRAPickerPanel(ttk.Frame):
         self._annotations: dict[str, str] = {}
         #: Called whenever the selection changes (add/remove/strength/set/clear), after ``on_change_callback``.
         self.selection_listener: Callable[[], None] | None = None
-        # Initialize scanner
-        self.scanner = get_lora_scanner(webui_root)
+        self.scanner: LoRAScanner | None = None  # constructed by the discovery worker, never on Tk
         self._content_visibility_mode = self._discover_content_visibility_mode()
         self._available_loras: list[str] = []
         self._visible_loras: list[str] = []
+        self._resources: dict[str, LoRAResource] = {}
+        self._verified = False
+        self._browser: LoRABrowserDialog | None = None
+        self._keyword_dialog: LoRAKeywordDialog | None = None
+        self._policy: ModelPolicy | None = None
+        self._model_name = ""
+        self._asset_snapshot = AssetRegistrySnapshot(())
 
         self._build_ui()
 
-        # Scan LoRAs in background
-        self.after(100, self._scan_loras)
+        self._init_discovery()
+        self._initial_scan: str | None = self.after(100, self._scan_loras)
+        self.bind("<Destroy>", self._on_destroy, add="+")
+
+    def _init_discovery(self) -> None:
+        self._closed = False
+        self._scan_active = False
+        self._request_id = 0
+        self._cancel_scan = threading.Event()
+        self._invoker = GuiInvoker(self)
 
     def _build_ui(self) -> None:
         """Build the LoRA picker UI."""
@@ -79,6 +92,13 @@ class LoRAPickerPanel(ttk.Frame):
 
         ttk.Button(header_frame, text="↻ Refresh", command=self.refresh_loras, width=10).grid(
             row=0, column=1, sticky="e"
+        )
+        ttk.Button(header_frame, text="Browse…", command=self.open_browser).grid(row=0, column=2)
+        self.discovery_status = tk.StringVar(
+            value="Local inventory not verified yet; saved choices retained."
+        )
+        ttk.Label(header_frame, textvariable=self.discovery_status, wraplength=360).grid(
+            row=1, column=0, columnspan=3, sticky="ew"
         )
 
         # Add button frame
@@ -121,7 +141,7 @@ class LoRAPickerPanel(ttk.Frame):
         self._canvas = canvas
 
         # Enable mousewheel scrolling
-        canvas.bind_all(
+        canvas.bind(
             "<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
         )
 
@@ -137,29 +157,34 @@ class LoRAPickerPanel(ttk.Frame):
 
     def set_content_visibility_mode(self, mode: str) -> None:
         self._content_visibility_mode = str(mode or "nsfw")
+        self._close_keywords()
         self._refresh_visible_lora_names()
+        self._refresh_selected_projection()
+        self._render_browser()
 
     def _refresh_visible_lora_names(self) -> None:
-        resolver = ContentVisibilityResolver(self._content_visibility_mode)
         visible: list[str] = []
         for name in self._available_loras:
-            resource = self.scanner.get_lora_info(name)
-            subject = {
-                "name": name,
-                "keywords": list(getattr(resource, "keywords", []) or []),
-                "description": str(getattr(resource, "description", "") or ""),
-            }
-            if resolver.is_visible(subject):
+            resource = self._resources.get(name)
+            if resource and visible_resource(resource, self._content_visibility_mode):
                 visible.append(name)
         self._visible_loras = sorted(visible)
         self.lora_name_combo["values"] = self._visible_loras
+        if self.lora_name_var.get() not in self._visible_loras:
+            self.lora_name_var.set("")
+
+    def _hidden_selection(self, name: str) -> bool:
+        resource = self._resources.get(name)
+        return self._content_visibility_mode == "sfw" and (
+            resource is None or not visible_resource(resource, self._content_visibility_mode)
+        )
 
     def _on_add_lora(self) -> None:
         """Add a new LoRA to the list."""
         name = self.lora_name_var.get().strip()
         if not name:
             return
-        if self._visible_loras and name not in self._visible_loras:
+        if name not in self._visible_loras:
             return
 
         # Check for duplicates
@@ -180,14 +205,7 @@ class LoRAPickerPanel(ttk.Frame):
 
     def _add_lora_entry(self, name: str, strength: float) -> None:
         """Add a LoRA entry widget to the list."""
-        resolver = ContentVisibilityResolver(self._content_visibility_mode)
-        resource = self.scanner.get_lora_info(name)
-        subject = {
-            "name": name,
-            "keywords": list(getattr(resource, "keywords", []) or []),
-            "description": str(getattr(resource, "description", "") or ""),
-        }
-        hidden = self._content_visibility_mode == "sfw" and not resolver.is_visible(subject)
+        hidden = self._hidden_selection(name)
         display_name = REDACTED_TEXT if hidden else name
         entry_frame = ttk.Frame(self.lora_list_frame, relief="solid", borderwidth=1, padding=(6, 4))
         entry_frame.pack(fill="x", padx=2, pady=2)
@@ -248,10 +266,20 @@ class LoRAPickerPanel(ttk.Frame):
         slider.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
         annotation_label = ttk.Label(
-            entry_frame, text="", justify="left", wraplength=self.NAME_WRAP_LENGTH, foreground="#e0a030"
+            entry_frame,
+            text="",
+            justify="left",
+            wraplength=self.NAME_WRAP_LENGTH,
+            foreground="#e0a030",
         )
         annotation_label.grid(row=2, column=0, sticky="ew")
         annotation_label.grid_remove()
+        inventory_label = ttk.Label(
+            entry_frame,
+            text="Inventory not verified; selection retained",
+            wraplength=self.NAME_WRAP_LENGTH,
+        )
+        inventory_label.grid(row=3, column=0, sticky="ew")
 
         self._lora_entries.append((name, strength_var, entry_frame))
         self._entry_widgets[name] = {
@@ -264,12 +292,15 @@ class LoRAPickerPanel(ttk.Frame):
             "strength_slider": slider,
             "keywords_button": keywords_button,
             "remove_button": remove_button,
+            "inventory_label": inventory_label,
         }
+        self._refresh_selected_projection()
 
     def _notify_selection(self) -> None:
         listener = self.selection_listener
         if listener is not None:
             listener()
+        self._render_browser()
 
     def set_annotations(self, annotations: dict[str, str]) -> None:
         """Show a note under each named selected LoRA (empty clears all); selections are never changed."""
@@ -279,8 +310,14 @@ class LoRAPickerPanel(ttk.Frame):
             label = widgets.get("annotation_label")
             if label is None:
                 continue
-            text = self._annotations.get(name, "")
-            cast(Any, label).configure(text=f"⚠ {text}" if text and not text.startswith("verified") else text)
+            text = (
+                REDACTED_TEXT
+                if self._hidden_selection(name) and self._annotations.get(name)
+                else self._annotations.get(name, "")
+            )
+            cast(Any, label).configure(
+                text=f"⚠ {text}" if text and not text.startswith("verified") else text
+            )
             if text:
                 cast(Any, label).grid()
             else:
@@ -328,32 +365,31 @@ class LoRAPickerPanel(ttk.Frame):
 
     def _show_keywords(self, lora_name: str) -> None:
         """Show keyword detection dialog for a LoRA."""
-        # Check cache first
-        cached_resource = self.scanner.get_lora_info(lora_name)
-
-        if cached_resource and cached_resource.keywords:
-            # Use cached data
-            from src.utils.lora_keyword_detector import LoRAMetadata
-
-            metadata = LoRAMetadata(
-                name=lora_name,
-                path=cached_resource.path,
-                keywords=cached_resource.keywords,
-                source=cached_resource.source,
-                description=cached_resource.description,
-            )
-        else:
-            # Detect keywords on-demand
-            webui_path = Path(self.webui_root) if self.webui_root else None
-            metadata = detect_lora_keywords(lora_name, webui_root=webui_path)
-
+        resource = self._resources.get(lora_name)
+        if resource is None or self._hidden_selection(lora_name):
+            self.discovery_status.set("Keyword evidence unavailable; refresh local inventory.")
+            return
+        metadata = LoRAMetadata(
+            name=lora_name,
+            path=resource.path,
+            keywords=resource.keywords,
+            source=resource.source,
+            description=resource.description,
+        )
         # Show dialog
-        dialog = LoRAKeywordDialog(
+        self._close_keywords()
+        dialog = self._keyword_dialog = LoRAKeywordDialog(
             self,
             metadata=metadata,
             on_copy=lambda keywords: self._insert_keywords_to_prompt(keywords),
         )
         dialog.grab_set()
+
+    def _close_keywords(self) -> None:
+        dialog = self._keyword_dialog
+        self._keyword_dialog = None
+        if dialog is not None and dialog.winfo_exists():
+            dialog.destroy()
 
     def _insert_keywords_to_prompt(self, keywords: str) -> None:
         """Callback to insert keywords into prompt editor.
@@ -365,19 +401,140 @@ class LoRAPickerPanel(ttk.Frame):
         self.clipboard_append(keywords)
 
     def _scan_loras(self) -> None:
-        """Scan for available LoRAs in background."""
-        try:
-            self.scanner.scan_loras()
-            self._available_loras = self.scanner.get_lora_names()
-            self._refresh_visible_lora_names()
-        except Exception:
-            pass
+        self._initial_scan = None
+        self.refresh_loras()
 
     def refresh_loras(self) -> None:
-        """Force rescan of LoRA directory."""
+        """Latest wins; at most one tracked scan and one coalesced pending request."""
+        if self._closed:
+            return
+        self._request_id += 1
+        self._verified = False
+        self._cancel_scan.set()
+        self.discovery_status.set(
+            "Discovering local LoRAs… retained choices are not currently verified."
+        )
+        self._refresh_selected_projection()
+        self._render_browser()
+        if not self._scan_active:
+            self._launch_refresh()
+
+    def _launch_refresh(self) -> None:
+        self._scan_active = True
+        request = self._request_id
+        cancel = self._cancel_scan = threading.Event()
+        root, scanner, invoker = self.webui_root, self.scanner, self._invoker
+
+        def work() -> None:
+            resources, failed = {}, False
+            snapshot = AssetRegistrySnapshot(())
+            try:
+                worker_scanner = scanner if scanner is not None else get_lora_scanner(root)
+                resources = worker_scanner.scan_loras(read_only=True, cancelled=cancel.is_set)
+                snapshot = worker_scanner.registry.snapshot
+            except Exception:  # path/content-bearing exception text must never reach the GUI
+                failed = True
+            invoker.invoke(lambda: self._finish_refresh(request, resources, failed, snapshot))
+
         try:
-            self.scanner.scan_loras(force_rescan=True)
-            self._available_loras = self.scanner.get_lora_names()
-            self._refresh_visible_lora_names()
+            get_thread_registry().spawn(
+                target=work, name="LoRA-Discovery", daemon=False, purpose="Read local LoRA evidence"
+            )
         except Exception:
-            pass
+            self._finish_refresh(request, {}, True)
+
+    def _finish_refresh(
+        self,
+        request: int,
+        resources: dict[str, LoRAResource],
+        failed: bool,
+        snapshot: AssetRegistrySnapshot | None = None,
+    ) -> None:
+        if self._closed:
+            return
+        self._scan_active = False
+        if request != self._request_id:
+            self._launch_refresh()
+            return
+        if failed:
+            self.discovery_status.set(
+                "Local discovery failed. Retained choices/inventory are unverified. Retry Refresh."
+            )
+        else:
+            self._close_keywords()
+            self._resources = resources
+            self._asset_snapshot = snapshot or AssetRegistrySnapshot(())
+            self._available_loras = list(resources)
+            self._verified = True
+            self.discovery_status.set(
+                "Local discovery complete. Preview/compile and backend admission remain required."
+            )
+        self._refresh_visible_lora_names()
+        self._refresh_selected_projection()
+        self._render_browser()
+
+    def _refresh_selected_projection(self) -> None:
+        for name, widgets in self._entry_widgets.items():
+            hidden = self._hidden_selection(name)
+            label = cast(Any, widgets["name_label"])
+            label.configure(text=REDACTED_TEXT if hidden else name)
+            tooltip = getattr(label, "tooltip", None)
+            if tooltip is not None:
+                tooltip._hide()
+                tooltip.text = REDACTED_TEXT if hidden else name
+            cast(Any, widgets["keywords_button"]).state(["disabled"] if hidden else ["!disabled"])
+            available = name in self._resources
+            note = "Inventory not verified; selection retained"
+            if self._verified:
+                note = (
+                    "Discovered locally; pairing unqualified"
+                    if available
+                    else "Unavailable locally; selection retained"
+                )
+            cast(Any, widgets["inventory_label"]).configure(text=note)
+        self.set_annotations(self._annotations)
+
+    def set_model_policy(self, policy: ModelPolicy | None, model_name: str = "") -> None:
+        self._policy = policy
+        self._model_name = model_name
+        self._render_browser()
+
+    def open_browser(self) -> None:
+        from src.gui.widgets.lora_browser_dialog import LoRABrowserDialog
+
+        if self._browser is None or self._browser.closed:
+            self._browser = LoRABrowserDialog(self)
+        else:
+            self._browser.lift()
+
+    def _render_browser(self) -> None:
+        if self._browser is not None and not self._browser.closed:
+            self._browser.render()
+
+    def choose_from_browser(self, name: str, strength: float, selected: bool) -> None:
+        if not selected:
+            self._remove_lora_entry(name)
+            return
+        if name not in self._visible_loras:
+            return
+        for entry_name, variable, _ in self._lora_entries:
+            if entry_name == name:
+                variable.set(strength)
+                break
+        else:
+            self._add_lora_entry(name, strength)
+        if self.on_change_callback:
+            self.on_change_callback()
+        self._notify_selection()
+
+    def _on_destroy(self, event: tk.Event) -> None:
+        if event.widget is not self or self._closed:
+            return
+        self._closed = True
+        self._cancel_scan.set()
+        if self._initial_scan is not None:
+            self.after_cancel(self._initial_scan)
+            self._initial_scan = None
+        if self._browser is not None and not self._browser.closed:
+            self._browser.destroy()
+        self._invoker.dispose()

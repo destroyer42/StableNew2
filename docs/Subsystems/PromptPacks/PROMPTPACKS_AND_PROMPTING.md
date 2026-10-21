@@ -183,6 +183,14 @@ Freezing: the controller reads the editable policy at compile time (`overlay_cur
 - Projection, not authority. The Base Generation model-policy projection reaches the tab through `on_model_projection`; `project_prompt_target` (`src/prompting/prompt_compatibility.py`) produces advisories and `PromptTargetPresenter` (`src/gui/prompt_target_presenter.py`) applies them as labels and control availability only. Disabling the optimizer or embedding controls for a model leaves stored values untouched. The explicit "Adapt" preview (`PromptAdaptationDialog`, `src/gui_v2/prompt_adaptation_preview.py`) is read-only and never dirties or saves the pack.
 - Validate reports structure and target readiness as two separate answers from the in-memory pack (`PromptWorkspaceState.pack_for_validation`, `assess_pack_readiness`, `validate_pack_structure` in `src/prompting/pack_target_readiness.py`). It is pure and states its own limit: execution readiness is only confirmed by Preview, because the compiler also applies Pipeline-tab stages, Override-pack-configs and saved settings. Do not rebuild that configuration inside the editor; that would be a second compile authority.
 - Hidden-content mode redacts prompt text and asset names in the tab and in the Klein review dialog (`ContentVisibilityResolver`).
+- The existing LoRA picker opens a local visual browser with name search, four-item pages, lazy local previews,
+  keyword sources, family evidence, compatibility advisories and selected strengths. Browsing and Refresh use tracked
+  workers and Tk dispatch; discovery failure is visible and retains choices/weights as unverified. Missing saved LoRAs
+  remain in the authored controls. Browser selection updates those same controls and the current workspace slot; only
+  an explicit save persists the PromptPack. Visibility changes immediately redact names/tooltips/annotations, close
+  keyword dialogs and invalidate pending preview results. No download, replacement preview or asset/cache write occurs.
+  The browser never edits an NJR or submits work; Preview and Add to Queue retain their existing compiler and JobService
+  boundaries, and a family match is never physical qualification of a checkpoint–LoRA pairing.
 - The Prompt tab never calls a backend, the queue or a runner.
 
 ## 10. Out-of-box state (audit G5)
