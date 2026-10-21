@@ -60,9 +60,13 @@ def block_enables_secondary_motion(block: Any) -> bool:
 
     if not isinstance(block, Mapping):
         return False
-    policy = block.get("policy") if isinstance(block.get("policy"), Mapping) else {}
-    intent = block.get("intent") if isinstance(block.get("intent"), Mapping) else {}
-    return bool(block.get("enabled", policy.get("enabled", intent.get("enabled", False))))
+    policy = block.get("policy")
+    intent = block.get("intent")
+    intent_enabled = intent.get("enabled", False) if isinstance(intent, Mapping) else False
+    fallback = (
+        policy.get("enabled", intent_enabled) if isinstance(policy, Mapping) else intent_enabled
+    )
+    return bool(block.get("enabled", fallback))
 
 
 def stage_enables_secondary_motion(stage: Any) -> bool:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from src.video.loop_export import LoopMode, loop_export_validation_error
 from src.video.svd_errors import SVDConfigError
@@ -196,7 +196,7 @@ class SVDOutputConfig:
             output_format=str(payload.get("output_format", "mp4")),
             save_frames=bool(payload.get("save_frames", False)),
             save_preview_image=bool(payload.get("save_preview_image", True)),
-            loop_mode=str(payload.get("loop_mode") or "none"),
+            loop_mode=cast(LoopMode, str(payload.get("loop_mode") or "none")),
             extend_to_seconds=float(payload.get("extend_to_seconds") or 0.0),
         )
 

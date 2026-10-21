@@ -11,7 +11,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from PIL import Image
 
@@ -348,15 +348,12 @@ class SVDPostprocessRunner:
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
-            current_frames = cast(
-                list[Image.Image],
-                self._run_worker_stage(
-                    stage_name="face_restore",
-                    action="face_restore",
-                    frames=current_frames,
-                    payload=postprocess.face_restore.to_dict(),
-                    work_dir=root,
-                ),
+            current_frames = self._run_worker_stage(
+                stage_name="face_restore",
+                action="face_restore",
+                frames=current_frames,
+                payload=postprocess.face_restore.to_dict(),
+                work_dir=root,
             )
             metadata["applied"].append("face_restore")
             face_restore_metadata = postprocess.face_restore.to_dict()
@@ -391,18 +388,15 @@ class SVDPostprocessRunner:
             selection = resolve_svd_upscale_model(postprocess)
             if selection is None:
                 raise SVDPostprocessError("RealESRGAN upscale has no usable model weights")
-            current_frames = cast(
-                list[Image.Image],
-                self._run_worker_stage(
-                    stage_name="upscale",
-                    action="upscale",
-                    frames=current_frames,
-                    payload={
-                        **postprocess.upscale.to_dict(),
-                        "selected_model_path": selection.model_path,
-                    },
-                    work_dir=root,
-                ),
+            current_frames = self._run_worker_stage(
+                stage_name="upscale",
+                action="upscale",
+                frames=current_frames,
+                payload={
+                    **postprocess.upscale.to_dict(),
+                    "selected_model_path": selection.model_path,
+                },
+                work_dir=root,
             )
             metadata["applied"].append("upscale")
             upscale_metadata = postprocess.upscale.to_dict()
