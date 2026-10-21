@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from src.pipeline.animatediff_retirement import require_animatediff_not_enabled
+from src.pipeline.secondary_motion_retirement import require_secondary_motion_not_enabled
 from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceDescriptor, SourceKind
 from src.queue.batch_membership import (
     REPLAY_ORIGIN_KEY,
@@ -41,6 +42,8 @@ def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> 
     parent = intent.record
     # Retired AnimateDiff execution: an enabled stage is never replayed (a disabled placeholder replays unchanged).
     require_animatediff_not_enabled(parent)
+    # Retired secondary motion: a parent that enabled it is not replayed either (D8).
+    require_secondary_motion_not_enabled(parent)
     inherited, archived = split_active_membership(parent.extra_metadata)
     metadata = {
         **inherited,

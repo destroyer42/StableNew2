@@ -10,7 +10,6 @@ from typing import Any
 
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.video.container_metadata import write_video_container_metadata
-from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 from src.video.svd_config import SVDConfig
 from src.video.svd_errors import (
     SVDExportError,
@@ -138,7 +137,6 @@ class SVDRunner:
             logger.info("[SVD] inference completed frame_count=%s", len(frames))
             postprocess_enabled = any(
                 (
-                    config.postprocess.secondary_motion.enabled,
                     config.postprocess.face_restore.enabled,
                     config.postprocess.interpolation.enabled,
                     config.postprocess.upscale.enabled,
@@ -153,7 +151,6 @@ class SVDRunner:
                     total_steps=sum(
                         1
                         for enabled in (
-                            config.postprocess.secondary_motion.enabled,
                             config.postprocess.face_restore.enabled,
                             config.postprocess.interpolation.enabled,
                             config.postprocess.upscale.enabled,
@@ -282,17 +279,6 @@ class SVDRunner:
                 "manifest_path": str(manifest_path_hint),
                 "config": config.to_dict(),
             }
-            secondary_motion = (
-                (postprocess_metadata or {}).get("secondary_motion")
-                if isinstance(postprocess_metadata, dict)
-                else None
-            )
-            if isinstance(secondary_motion, dict):
-                metadata_payload["secondary_motion"] = secondary_motion
-                metadata_payload["secondary_motion_summary"] = extract_secondary_motion_summary(
-                    {"secondary_motion": secondary_motion}
-                )
-
             portable_provenance_summary: dict[str, Any] | None = None
             if video_path is not None:
                 try:

@@ -28,7 +28,6 @@ from src.learning.run_metadata import write_run_metadata
 from src.pipeline.artifact_contract import build_artifact_record, canonicalize_variant_entries
 from src.pipeline.config_contract_v26 import (
     extract_adaptive_refinement_intent,
-    extract_secondary_motion_intent,
     validate_train_lora_execution_config,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -55,8 +54,6 @@ from src.training.lora_manager import LoRAManager
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
 from src.utils.gpu_survivor_telemetry import GpuSurvivorTelemetry
-from src.video.motion.secondary_motion_policy_service import SecondaryMotionPolicyService
-from src.video.motion.secondary_motion_provenance import build_secondary_motion_summary
 from src.video.video_backend_registry import (
     VideoBackendRegistry,
     build_default_video_backend_registry,
@@ -76,41 +73,6 @@ def _merge_output_dir_into_metadata(data: Mapping[str, Any]) -> dict[str, Any]:
     if output_dir and "output_dir" not in metadata:
         metadata["output_dir"] = output_dir
     return metadata
-
-
-def _build_secondary_motion_runtime_block(
-    observation: Mapping[str, Any] | None,
-) -> dict[str, Any] | None:
-    if not isinstance(observation, Mapping):
-        return None
-    intent = (
-        dict(observation.get("intent") or {})
-        if isinstance(observation.get("intent"), Mapping)
-        else {}
-    )
-    policy = (
-        dict(observation.get("policy") or {})
-        if isinstance(observation.get("policy"), Mapping)
-        else {}
-    )
-    if not intent or not policy:
-        return None
-    if str(intent.get("mode") or "").lower() != "apply":
-        return None
-    return {
-        "enabled": bool(policy.get("enabled", intent.get("enabled", False))),
-        "policy_id": str(policy.get("policy_id") or ""),
-        "intent": intent,
-        "policy": policy,
-        "seed": intent.get("seed"),
-        "backend_mode": str(policy.get("backend_mode") or ""),
-        "intensity": float(policy.get("intensity", 0.0) or 0.0),
-        "damping": float(policy.get("damping", 1.0) or 1.0),
-        "frequency_hz": float(policy.get("frequency_hz", 0.0) or 0.0),
-        "cap_pixels": int(policy.get("cap_pixels", 0) or 0),
-        "regions": list(intent.get("regions") or []),
-        "skip_reason": "",
-    }
 
 
 DEFAULT_JOB_TIMEOUT_SEC: float = 600.0
@@ -451,22 +413,6 @@ class PipelineRunner:
                 workflow_id=video_intent.workflow_id,
                 workflow_version=video_intent.workflow_version,
             )
-        secondary_motion_intent = extract_secondary_motion_intent(
-            getattr(njr, "intent_config", None) or {}
-        )
-        secondary_motion_enabled = bool(secondary_motion_intent.get("enabled")) and str(
-            secondary_motion_intent.get("mode") or "disabled"
-        ).lower() in {"observe", "apply"}
-        secondary_motion_subject_summary = self._extract_secondary_motion_subject_summary(metadata)
-        if secondary_motion_enabled:
-            metadata.setdefault(
-                "secondary_motion",
-                {
-                    "intent": dict(secondary_motion_intent),
-                    "video_stage_policies": [],
-                },
-            )
-
         next_stage_paths: list[str] = []
         manifest_paths: list[str] = []
         artifact_records: list[dict[str, Any]] = []
@@ -488,7 +434,6 @@ class PipelineRunner:
                 normalized_mid_anchor_paths = [Path(raw_mid_anchor_paths)]
             else:
                 normalized_mid_anchor_paths = [Path(item) for item in raw_mid_anchor_paths if item]
-            secondary_motion_observation: dict[str, Any] | None = None
             request_context_metadata = {
                 "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
                 "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
@@ -507,38 +452,10 @@ class PipelineRunner:
                     source_descriptor = source_to_dict()
                     if isinstance(source_descriptor, Mapping):
                         request_context_metadata["source_descriptor"] = dict(source_descriptor)
-            if secondary_motion_enabled:
-                secondary_motion_observation = (
-                    self._secondary_motion_policy_service.build_observation(
-                        intent=secondary_motion_intent,
-                        stage_name=stage_name,
-                        backend_id=backend.backend_id,
-                        prompt=prompt,
-                        negative_prompt=negative_prompt,
-                        motion_profile=str(config_dict.get("motion_profile") or ""),
-                        subject_summary=secondary_motion_subject_summary,
-                    )
-                )
-                request_context_metadata["secondary_motion_policy"] = dict(
-                    secondary_motion_observation["policy"]
-                )
-
-            request_stage_config = dict(config_dict)
-            motion_runtime_block = _build_secondary_motion_runtime_block(
-                secondary_motion_observation
-            )
-            if motion_runtime_block:
-                if stage_name == "svd_native":
-                    request_postprocess = dict(request_stage_config.get("postprocess") or {})
-                    request_postprocess["secondary_motion"] = motion_runtime_block
-                    request_stage_config["postprocess"] = request_postprocess
-                elif stage_name == "video_workflow":
-                    request_stage_config["secondary_motion"] = motion_runtime_block
-
             request = VideoExecutionRequest(
                 backend_id=backend.backend_id,
                 stage_name=stage_name,
-                stage_config=request_stage_config,
+                stage_config=dict(config_dict),
                 output_dir=run_dir,
                 input_image_path=Path(input_path) if input_path else None,
                 end_anchor_path=Path(config_dict["end_anchor_path"])
@@ -561,31 +478,6 @@ class PipelineRunner:
             execution_result = backend.execute(self._pipeline, request)
             if execution_result is None:
                 continue
-            if secondary_motion_enabled and secondary_motion_observation:
-                secondary_motion_payload = metadata.setdefault(
-                    "secondary_motion",
-                    {
-                        "intent": dict(secondary_motion_intent),
-                        "video_stage_policies": [],
-                    },
-                )
-                stage_policy_entry = {
-                    "stage_name": stage_name,
-                    "backend_id": backend.backend_id,
-                    "batch_index": img_idx,
-                    "motion_profile": str(config_dict.get("motion_profile") or ""),
-                    "policy": dict(secondary_motion_observation["policy"]),
-                    "prompt_features": dict(secondary_motion_observation["prompt_features"]),
-                    "subject_summary": dict(secondary_motion_observation["subject_summary"]),
-                }
-                if input_path:
-                    stage_policy_entry["input_image_path"] = str(input_path)
-                secondary_motion_payload["primary_policy"] = dict(
-                    secondary_motion_payload.get("primary_policy")
-                    or secondary_motion_observation["policy"]
-                )
-                secondary_motion_payload["video_stage_policies"].append(stage_policy_entry)
-
             backend_results.append(execution_result)
             variant_payload = execution_result.to_variant_payload()
             variants.append(variant_payload)
@@ -619,24 +511,6 @@ class PipelineRunner:
                 collected_frame_paths.extend(item for item in variant_frame_paths if item)
             if variant_frame_paths and not video_path and not gif_path:
                 frame_path_count += len(variant_frame_paths)
-            secondary_motion_result = variant_payload.get("secondary_motion")
-            if isinstance(secondary_motion_result, dict):
-                secondary_motion_payload = metadata.setdefault(
-                    "secondary_motion",
-                    {
-                        "intent": dict(secondary_motion_intent),
-                        "video_stage_policies": [],
-                    },
-                )
-                secondary_motion_payload["apply_result"] = dict(
-                    secondary_motion_result.get("apply_result") or {}
-                )
-                secondary_motion_payload["summary"] = build_secondary_motion_summary(
-                    intent=secondary_motion_result.get("intent"),
-                    policy=secondary_motion_result.get("policy"),
-                    apply_result=secondary_motion_result.get("apply_result"),
-                )
-
         output_count = (
             len(next_stage_paths)
             or len(video_paths)
@@ -1096,9 +970,12 @@ class PipelineRunner:
         # malformed plan fails closed before metrics, cleanup, or backend calls.
         from src.pipeline.animatediff_retirement import require_animatediff_not_enabled
         from src.pipeline.run_plan import build_run_plan_from_njr
+        from src.pipeline.secondary_motion_retirement import require_secondary_motion_not_enabled
 
         # Retired AnimateDiff execution is refused first, before metrics, cleanup or any client call.
         require_animatediff_not_enabled(njr)
+        # Retired secondary motion is refused the same way, so a job queued before the retirement fails typed.
+        require_secondary_motion_not_enabled(njr)
         plan = build_run_plan_from_njr(njr)
         if hasattr(self._pipeline, "_begin_run_metrics"):
             self._pipeline._begin_run_metrics()
@@ -1687,7 +1564,6 @@ class PipelineRunner:
         self._video_backends = video_backend_registry or build_default_video_backend_registry()
         self._prompt_intent_analyzer = PromptIntentAnalyzer()
         self._refinement_policy_service = SubjectScalePolicyService()
-        self._secondary_motion_policy_service = SecondaryMotionPolicyService()
         self._character_embedder = character_embedder
         self._lora_manager = lora_manager
 
@@ -1894,38 +1770,6 @@ class PipelineRunner:
             cache[key] = dict(assessment)
             assessments.append(dict(assessment))
         return assessments, notes
-
-    @staticmethod
-    def _extract_secondary_motion_subject_summary(
-        metadata: Mapping[str, Any] | None,
-    ) -> dict[str, Any]:
-        if not isinstance(metadata, Mapping):
-            return {}
-        refinement_payload = metadata.get("adaptive_refinement")
-        if not isinstance(refinement_payload, Mapping):
-            return {}
-        decision_bundle = refinement_payload.get("decision_bundle")
-        if isinstance(decision_bundle, Mapping):
-            observation = decision_bundle.get("observation")
-            if isinstance(observation, Mapping):
-                subject_assessment = observation.get("subject_assessment")
-                if isinstance(subject_assessment, Mapping):
-                    return dict(subject_assessment)
-        image_decisions = refinement_payload.get("image_decisions")
-        if isinstance(image_decisions, list):
-            for item in image_decisions:
-                if not isinstance(item, Mapping):
-                    continue
-                decision_bundle = item.get("decision_bundle")
-                if not isinstance(decision_bundle, Mapping):
-                    continue
-                observation = decision_bundle.get("observation")
-                if not isinstance(observation, Mapping):
-                    continue
-                subject_assessment = observation.get("subject_assessment")
-                if isinstance(subject_assessment, Mapping):
-                    return dict(subject_assessment)
-        return {}
 
     def _ensure_not_cancelled(self, cancel_token: CancelToken | None, context: str) -> None:
         if (
