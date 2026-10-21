@@ -6,6 +6,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.utils.embedding_prompt_utils import normalize_embedding_entries
 from src.utils.embedding_scanner import get_embedding_scanner
 
@@ -46,7 +47,9 @@ class EmbeddingPickerPanel(ttk.Frame):
             command=self.refresh_embeddings,
         ).pack(side="right")
         self.note_var = tk.StringVar(value="")
-        self.note_label = ttk.Label(self, textvariable=self.note_var, wraplength=300, justify="left")
+        self.note_label = ttk.Label(
+            self, textvariable=self.note_var, wraplength=300, justify="left"
+        )
 
         self._build_section(
             title="Positive",
@@ -87,18 +90,10 @@ class EmbeddingPickerPanel(ttk.Frame):
         list_frame = ttk.Frame(section, relief="sunken", borderwidth=1)
         list_frame.pack(fill="both", expand=True)
 
-        canvas = tk.Canvas(list_frame, height=110, bg="#2b2b2b", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
-        inner = ttk.Frame(canvas)
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        canvas.bind_all(
-            "<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-        )
-        list_assign(inner)
+        scroll = ScrollableFrame(list_frame)
+        scroll._canvas.configure(height=110)
+        scroll.pack(fill="both", expand=True)
+        list_assign(scroll.inner)
 
     def _notify_change(self) -> None:
         if self.on_change_callback:
