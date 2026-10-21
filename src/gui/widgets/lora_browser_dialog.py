@@ -208,7 +208,7 @@ class LoRABrowserDialog(tk.Toplevel):
                 daemon=False,
                 purpose="Decode visible local previews",
             )
-        except Exception:
+        except (RuntimeError, OSError):
             self._finish_thumbnails(generation, {})
 
     def _finish_thumbnails(self, generation: int, images: dict[str, Image.Image | None]) -> None:

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 395,
+    "total": 394,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -66,7 +66,6 @@
       "src/gui/views/video_workflow_motion_readiness_panel_v2.py",
       "src/gui/views/video_workflow_tab_frame_v2.py",
       "src/gui/widgets/embedding_picker_panel.py",
-      "src/gui/widgets/lora_picker_panel.py",
       "src/gui/widgets/openpose_picker_panel.py",
       "src/gui/zimage_optional_control_projection.py",
       "src/gui_v2/adaptation_notice.py",
@@ -405,7 +404,7 @@
     "metric": "findings per src file",
     "totals": {
       "BLE001": 1343,
-      "S110": 535,
+      "S110": 533,
       "S112": 38
     },
     "counts": {
@@ -778,8 +777,7 @@
         "S110": 3
       },
       "src/gui/widgets/lora_picker_panel.py": {
-        "BLE001": 2,
-        "S110": 2
+        "BLE001": 2
       },
       "src/gui/widgets/matrix_helper_widget.py": {
         "BLE001": 1,
