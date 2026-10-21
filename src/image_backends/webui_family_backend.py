@@ -165,6 +165,8 @@ class WebUIFamilyImageBackend:
             # Not every execution field is forwarded here: structural conditioning must be carried explicitly or the
             # executor would never see it (admission and the wire step both read this key).
             config[OPENPOSE_FIELD] = dict(execution[OPENPOSE_FIELD])
+        if execution.get("controlnet_units") is not None:
+            config["controlnet_units"] = execution["controlnet_units"]
         return {key: value for key, value in config.items() if value is not None}
 
     # -- Identity-specific hooks (no-ops here; ``ForgeWebUIImageBackend`` overrides for model profiles) --
@@ -184,6 +186,9 @@ class WebUIFamilyImageBackend:
         """Reject work this backend cannot run, before the runner dispatches any stage."""
 
         self._reject_foreign_model_profile(getattr(njr, "backend_options", None))
+        from src.image_backends.forge_controlnet_units import validate_intent
+
+        validate_intent(getattr(njr, "config", None), stage_names, backend_id=self.backend_id)
         validate_frozen_mask_target(
             str(getattr(njr, "base_model", "") or ""),
             {"image": {"backend_id": self.backend_id}},
@@ -208,6 +213,11 @@ class WebUIFamilyImageBackend:
             [request.stage_name],
         )
         if request.stage_name == "txt2img":
+            from src.image_backends.forge_controlnet_units import validate_intent
+
+            validate_intent(
+                request.execution_config, (request.stage_name,), backend_id=self.backend_id
+            )
             validate_openpose_intent(
                 request.execution_config,
                 (request.stage_name,),

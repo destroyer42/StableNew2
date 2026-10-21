@@ -44,7 +44,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - Exact model profiles: FLUX.2 Klein 4B FP8 (`docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`) and
   Z-Image-Turbo FP8 (`docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md`; physical qualification
   inconclusive, see Holds). Klein Base 9B is refused (`NO_GO_RESOURCE_RISK`).
-- SDXL PromptPack OpenPose ControlNet (`docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md`); ADetailer control
+- SDXL PromptPack ControlNet: legacy OpenPose and up to two ordered pre-rendered OpenPose/Canny/Depth units (`docs/Subsystems/Image/IMAGE_PIPELINE.md` section 3.1); ADetailer control
   truth (`docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md`); supported-option upscale defaults (`docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md`).
 - PromptPacks (versioned JSON), Review and reprocess, Photo Optimize with scope-aware editing and historical baselines
   (`docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md`), cross-workflow model compatibility preflight.

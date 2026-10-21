@@ -111,7 +111,7 @@ def _decode(value: Any) -> bytes:
 
 
 def classify_openpose_response(
-    response: Any, *, expected: int, input_bytes: bytes
+    response: Any, *, expected: int, input_bytes: bytes, additional_inputs: tuple[bytes, ...] = ()
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Use Forge Processed metadata, decoded input identity and exact counts; never guess by truncation.
 
@@ -162,10 +162,10 @@ def classify_openpose_response(
     if received < end:
         refuse("missing_generations", "fewer images than the metadata claims")
     # One unit, optionally one low-res and one high-res detect map. More extras cannot be this supported contract.
-    if received > end + 2:
+    if received > end + 2 * (1 + len(additional_inputs)):
         refuse("unexpected_images", "too many extra images for the single supported unit")
     try:
-        reference = _pixels(input_bytes)
+        references = {_pixels(data) for data in (input_bytes, *additional_inputs)}
         identities = [_pixels(_decode(value)) for value in images]
     except (
         ValueError,
@@ -177,11 +177,11 @@ def classify_openpose_response(
         Image.DecompressionBombError,
     ) as exc:
         refuse("invalid_image", f"an image could not be decoded safely ({type(exc).__name__})")
-    if any(identity == reference for identity in identities[first:end]):
+    if any(identity in references for identity in identities[first:end]):
         refuse(
             "pose_in_generation_slot", "a declared generation is identical to the supplied pose map"
         )
-    if any(identity != reference for identity in identities[end:]):
+    if any(identity not in references for identity in identities[end:]):
         refuse("unexpected_images", "trailing images cannot be identified as the supplied pose map")
     classified = dict(response)
     classified["images"] = list(images[first:end])

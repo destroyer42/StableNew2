@@ -159,6 +159,17 @@ A slot may carry `controlnet_openpose`, the `openpose.v1` declaration defined on
 - The builder calls `OpenPoseCompiler` once per build session (`_freeze_conditioning`), which owns target gating, image verification and the job-owned snapshot. Target rules, dispatch and wire behavior are in `IMAGE_PIPELINE.md` section 3.1.
 - The editor reports declaration problems and target blocks in Validate (`validate_pack_structure`, `assess_pack_readiness`).
 
+The alternative optional `controlnet_units` slot field (`controlnet.v1`) contains `units`, an ordered list of at most two
+`controlnet-unit.v1` declarations. Each carries `modality` (`openpose`, `canny`, `depth`) and the same independently authored
+asset/model/strength/guidance/control/resize settings as the legacy unit; `preprocessor` must be `None`. It cannot coexist
+with `controlnet_openpose`. Existing OpenPose declarations are never rewritten or migrated. `PromptSlot.controlnet_units`,
+`PackRow.controlnet_units` and workspace clone/save/load preserve the raw value and expose malformed input for correction.
+The ordered-unit panel refreshes local resources off Tk and never substitutes a missing model/reference. Native JSON
+retains units; flattened TXT/TSV export is lossy and warns. Learning and Model Comparison refuse enabled units.
+The compiler adapter freezes every enabled unit before any NJR is constructed, preserving order, settings and input SHA-256
+in one frozen envelope. Target and dispatch rules live in `IMAGE_PIPELINE.md` section 3.1. Preview and queue still use the
+existing NJRs; replay carries the envelope unchanged and verifies each snapshot. No second compiler or queue is introduced.
+
 ## 8. Global prompt user state
 
 Saved Global Positive and Global Negative text is per-user state, not repository content. Text lives in `<GlobalPrompts>/global_positive.txt` and `global_negative.txt`; the enabled flags stay in `presets/settings.json` through `ConfigManager`. `resolve_global_prompt_dir` (`src/prompting/global_prompt_paths.py`, pure) resolves: explicit argument, `STABLENEW_GLOBAL_PROMPT_DIR`, then `%LOCALAPPDATA%\StableNew\GlobalPrompts` or the XDG equivalent. `ConfigManager` (`get_/save_global_positive_prompt`, `..._negative_prompt`, `save_global_*_state`) is the only persistence API; the directory is created on first write. Code defaults: `DEFAULT_GLOBAL_POSITIVE_PROMPT` (empty) and `DEFAULT_GLOBAL_NEGATIVE_PROMPT` in `src/utils/config.py`.

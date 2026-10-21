@@ -5126,11 +5126,14 @@ class Pipeline:
             # PR-IMG-CNET-210: one ControlNet unit joins alwayson_scripts only on the request that is actually sent. The
             # unit-free ``payload`` stays the copy used for logs and manifests (it never carries image bytes), and the
             # snapshot is re-verified by hash here, immediately before the POST.
-            from src.image_backends.forge_controlnet import apply_openpose_wire_unit
-
-            wire_payload, conditioning_evidence = apply_openpose_wire_unit(
-                config if config.get(OPENPOSE_SLOT_FIELD) is not None else txt2img_config, payload
+            from src.image_backends.forge_controlnet_units import (
+                apply_conditioning,
+                classify_response,
             )
+
+            conditioning_config = config if config.get(OPENPOSE_SLOT_FIELD) is not None or config.get("controlnet_units") is not None else txt2img_config
+            conditioning_field = "controlnet_units" if conditioning_config.get("controlnet_units") is not None else OPENPOSE_SLOT_FIELD
+            wire_payload, conditioning_evidence = apply_conditioning(conditioning_config, payload)
             response = self._generate_images_with_progress(
                 "txt2img",
                 wire_payload,
@@ -5140,17 +5143,10 @@ class Pipeline:
                 cancel_token=cancel_token,
             )
             if conditioning_evidence is not None:
-                from src.conditioning.openpose_snapshot import FrozenOpenPose, verify_frozen
-                from src.image_backends.openpose_output import classify_openpose_response
-
                 generated_expected = max(
                     1, int(payload.get("batch_size", 1) or 1) * int(payload.get("n_iter", 1) or 1)
                 )
-                pose_config = config if config.get(OPENPOSE_SLOT_FIELD) is not None else txt2img_config
-                response, output_evidence = classify_openpose_response(
-                    response, expected=generated_expected,
-                    input_bytes=verify_frozen(FrozenOpenPose.from_config(pose_config[OPENPOSE_SLOT_FIELD])),
-                )
+                response, output_evidence = classify_response(response, conditioning_config, expected=generated_expected)
                 conditioning_evidence = {**conditioning_evidence, **output_evidence}
 
             if not response or "images" not in response or not response["images"]:
@@ -5226,7 +5222,7 @@ class Pipeline:
                     }
                 ]
             if conditioning_evidence is not None:
-                base_metadata["controlnet_openpose"] = dict(conditioning_evidence)
+                base_metadata[conditioning_field] = dict(conditioning_evidence)
             saved_variants: list[tuple[Path, dict[str, Any]]] = []
             response_images = response.get("images") if isinstance(response, dict) else None
             if not isinstance(response_images, list):
@@ -5417,7 +5413,7 @@ class Pipeline:
                         }
                     ]
                 if conditioning_evidence is not None:
-                    metadata["controlnet_openpose"] = dict(conditioning_evidence)
+                    metadata[conditioning_field] = dict(conditioning_evidence)
             if adaptive_refinement:
                 metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
                     adaptive_refinement,

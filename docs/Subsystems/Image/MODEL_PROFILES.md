@@ -190,7 +190,7 @@ Refusals are exceptions raised before any generation POST; there is no shared co
 | Hypernetworks, frozen Klein selection without a profile | `ForgeUnsupportedIntentError` | Forge cannot do it |
 | Unqualified multi-component checkpoint | `ForgeUnqualifiedModelError` (carries `ModelReadiness`) | Dependency gate |
 | Module baseline unverifiable | `ForgeVAEError` | Could not read or set Forge modules |
-| OpenPose on a profile model | `OpenPoseDispatchError` with `CODE_BACKEND` (`backend_unsupported`) | Conditioning refused for exact profiles |
+| OpenPose or ordered ControlNet units on a profile model | `OpenPoseDispatchError` with `CODE_BACKEND` (`backend_unsupported`) | Conditioning refused for exact profiles; ordered units require registry-verified SDXL on Forge (IMAGE_PIPELINE 3.1) |
 | Preflight | `OperationNotSupportedError` (codes in 9.1) | Nothing was queued |
 | Learning/Model Comparison | `ValueError` with an operator sentence | Whole study refused; rebuild preview |
 

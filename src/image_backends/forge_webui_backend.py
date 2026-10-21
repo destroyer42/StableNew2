@@ -56,6 +56,19 @@ from src.image_backends.forge_controlnet import (
     validate_openpose_intent,
 )
 from src.image_backends.forge_controlnet import declared as openpose_declared
+from src.image_backends.forge_controlnet_units import (
+    RUNTIME_KEY as UNITS_RUNTIME_KEY,
+)
+from src.image_backends.forge_controlnet_units import (
+    UnitsAdmission,
+    admit_units,
+)
+from src.image_backends.forge_controlnet_units import (
+    validate_intent as validate_units_intent,
+)
+from src.image_backends.forge_controlnet_units import (
+    validate_target as validate_units_target,
+)
 from src.image_backends.forge_klein_assets import (
     _active_manager,
     verify_klein_assets,
@@ -216,6 +229,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         self._memory_probe = memory_probe
         self._controlnet_root_override = controlnet_root
         self._openpose: dict[str | None, OpenPoseAdmission] = {}
+        self._controlnet_units: dict[str | None, UnitsAdmission] = {}
         self._lora_resolver = lora_resolver
         self._lora_evidence: dict[
             str | None, tuple[tuple[KleinLoraDecision, ...], tuple[LoraTag, ...]]
@@ -287,6 +301,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         config = getattr(njr, "config", None) or {}
         config = config if isinstance(config, Mapping) else {}
         self._validate_openpose_njr(njr, backend_options, config, stage_names)
+        if validate_units_intent(config, stage_names, backend_id=self.backend_id) is not None:
+            validate_units_target(str(getattr(njr, "base_model", "") or ""), self.backend_id, backend_options)
         hypernetworks = requested_hypernetworks_for_njr(njr)
         if hypernetworks and not self.capabilities.supports_hypernetworks:
             raise ForgeUnsupportedIntentError(
@@ -500,6 +516,10 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             )
 
     def _validate_openpose_request(self, request: ImageExecutionRequest) -> None:
+        if request.stage_name == "txt2img" and validate_units_intent(request.execution_config, (request.stage_name,), backend_id=self.backend_id) is not None:
+            if request.input_image_path is not None:
+                raise OpenPoseDispatchError(CODE_BACKEND, "ControlNet applies to base txt2img, not image edits.")
+            validate_units_target(request.selected_model or "", self.backend_id, request.backend_options)
         frozen = validate_openpose_intent(
             request.execution_config, (request.stage_name,), backend_id=self.backend_id, backend_supported=True
         )
@@ -530,11 +550,14 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             return None
         return None if webui_root is None else Path(webui_root) / "models" / "ControlNet"
 
-    def _admit_openpose(self, pipeline: Any, request: ImageExecutionRequest) -> OpenPoseAdmission:
+    def _admit_openpose(self, pipeline: Any, request: ImageExecutionRequest) -> OpenPoseAdmission | UnitsAdmission:
         """Read-only admission against the running Forge (the executor re-verifies the bytes at the wire)."""
 
-        frozen = FrozenOpenPose.from_config(request.execution_config.get(OPENPOSE_FIELD))
-        verify_frozen(frozen)  # missing/changed snapshot: refuse now, before anything is selected or written
+        multi = validate_units_intent(request.execution_config, (request.stage_name,), backend_id=self.backend_id)
+        frozen = None if multi is not None else FrozenOpenPose.from_config(request.execution_config.get(OPENPOSE_FIELD))
+        for image in ([unit.image for unit in multi.units] if multi is not None else [frozen]):
+            assert image is not None
+            verify_frozen(image)  # missing/changed snapshot: refuse before anything is selected or written
         client = getattr(pipeline, "client", None)
         reader = getattr(client, "get_controlnet_catalog", None)
         if not callable(reader):
@@ -555,6 +578,9 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             modules=names("modules"),
             version=version if isinstance(version, int) and not isinstance(version, bool) else None,
         )
+        if multi is not None:
+            return admit_units(multi, catalog, controlnet_root=self._controlnet_root())
+        assert frozen is not None
         return admit_openpose(frozen, catalog, controlnet_root=self._controlnet_root())
 
     # ------------------------------------------------------------------ module baseline (D110)
@@ -675,9 +701,13 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             raise ForgeUnqualifiedModelError(readiness)
 
     def _before_dispatch(self, pipeline: Any, request: ImageExecutionRequest) -> None:
-        if request.stage_name == "txt2img" and openpose_declared(request.execution_config):
+        if request.stage_name == "txt2img" and (openpose_declared(request.execution_config) or request.execution_config.get("controlnet_units") is not None):
             # Read-only and first: a refusal here happens before any module write or generation POST.
-            self._openpose[request.job_id] = self._admit_openpose(pipeline, request)
+            admission = self._admit_openpose(pipeline, request)
+            if isinstance(admission, UnitsAdmission):
+                self._controlnet_units[request.job_id] = admission
+            else:
+                self._openpose[request.job_id] = admission
         profile = self._profile_for(request.backend_options)
         if profile is None:
             if request.stage_name in self.capabilities.stage_types:
@@ -772,6 +802,9 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     ) -> dict[str, Any]:
         profile = self._profile_for(request.backend_options)
         if profile is None:
+            units = self._controlnet_units.get(request.job_id)
+            if units is not None and request.stage_name == "txt2img":
+                return {**config, UNITS_RUNTIME_KEY: {"models": units.models, "record": units.record}}
             admitted = self._openpose.get(request.job_id)
             if admitted is not None and request.stage_name == "txt2img":
                 # The executor sends exactly the model name Forge advertised (never the operator's spelling).
@@ -836,11 +869,15 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 self._module_baseline,
                 self._lora_evidence,
                 self._openpose,
+                self._controlnet_units,
             ):
                 scratch.pop(request.job_id, None)
             raise
         profile = self._profile_for(request.backend_options)
         admitted = self._openpose.pop(request.job_id, None)
+        units = self._controlnet_units.pop(request.job_id, None)
+        if units is not None and result is not None:
+            result.backend_metadata["controlnet_conditioning"] = units.evidence
         if admitted is not None and result is not None:
             result.backend_metadata["openpose_conditioning"] = admitted.evidence
         baseline = self._module_baseline.pop(request.job_id, None)

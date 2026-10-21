@@ -97,6 +97,45 @@ Common to every stage method [V/A]: runtime admission, model/VAE sync, drift che
 
 Conditioning is refused, never silently dropped, on any other stage, model family or backend.
 
+#### Ordered OpenPose, Canny and Depth units
+
+`controlnet_units` is a separate optional slot declaration (`controlnet.v1`) containing an ordered list of at most two
+`controlnet-unit.v1` units. Each unit names its modality (`openpose`, `canny`, `depth`), library-relative `asset`, model,
+enabled flag, strength, guidance interval, control mode and resize mode. It cannot coexist with `controlnet_openpose`.
+The published `openpose.v1` declaration and its replay behavior retain their original meaning and admission rules.
+
+`src/conditioning/controlnet.py` owns the new declaration and frozen envelope. `src/pipeline/controlnet_compile.py` is an
+adapter called only by the existing PromptPack builder: it requires registry-verified SDXL on Forge, reuses the existing
+bounded image reader and content-addressed snapshot writer, and finishes all units before any NJR exists. Reference maps
+share the existing `models/OpenPose` library and snapshot home; the directory name does not imply automatic pose detection.
+Enabled units are frozen in authored order with independent settings, SHA-256, size, image facts and snapshot identity.
+Provenance records `conditioning.controlnet_units`; image bytes never enter the NJR. Disabled units are not executed.
+
+`src/image_backends/forge_controlnet_units.py` admits the complete list against Forge's advertised models and modules,
+requiring positive SDXL header evidence for every weight and a matching documented model identity. The initial identities
+are `thibaud_xl_openpose`, `xinsir_openpose_sdxl`, `diffusers_xl_canny_full`, and `diffusers_xl_depth_full`. The full Canny/Depth
+and Thibaud names are documented in the [upstream ControlNet release](https://github.com/Mikubill/sd-webui-controlnet/discussions/2039);
+the Xinsir alias is the existing OpenPose contract's documented example. Names are compatibility evidence, not weight
+integrity or physical quality qualification. Renamed/unknown weights, ambiguous resources and incompatible modalities
+are explicitly refused. No filename substring inference, runtime installation or model substitution occurs.
+
+Only pre-rendered maps with `preprocessor: "None"` are supported. Advertising an automatic module does not qualify its
+detector resources or behavior, so automatic preprocessing is refused even if the module appears in Forge's list.
+The Prompt tab's ordered-unit editor selects, edits and reorders units independently, displays each unit's local
+availability, and refreshes references/weight evidence off Tk without changing saved selections. Preview remains the
+compile authority; Add to Queue uses those frozen NJRs. Dispatch and replay re-verify every snapshot by hash.
+
+The executor delegates generic conditioning projection to the adapter: exactly the admitted ordered units join the
+existing ControlNet always-on script. Independently populated ControlNet scripts cause a refusal; unrelated scripts
+remain intact. Output classification uses metadata plus every input map's decoded identity to reject maps in generation
+slots and unknown trailing images before artifact writes. Unit evidence is recorded as `controlnet_units` and backend
+evidence as `image_backend_metadata.controlnet_conditioning`.
+
+Deterministic coverage: `tests/integration/test_pr_img_cnet_220.py`, `tests/gui_v2/test_controlnet_units_220.py` and the
+existing OpenPose suites. This establishes plumbing and refusals, not physical two-unit fidelity, VRAM fit or performance.
+The accepted Forge batch-directory override limitation in the OpenPose evidence record also applies to these units.
+Missing Canny/Depth weights remain an executable-capability refusal; the feature never downloads them.
+
 ### 3.2 Frozen masked img2img from Review
 
 Review's mask editor compiles one still image through the existing reprocess/image-edit builder and admission boundary.
