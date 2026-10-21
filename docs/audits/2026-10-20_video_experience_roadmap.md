@@ -298,6 +298,14 @@ Lane 5 (learn):    [UX-314] ── BEST-340 ── LEARN-341 ;  PERF-342 ;  CAM-
 Packages authorized on 2026-10-20: PR-VID-QUAL-300 (delivered together with PR-VID-ENC-301 as the first package),
 PR-VID-UX-310 and PR-VID-EVAL-320.
 
+### 6.2 Delivery status (as of 2026-10-21)
+
+Merged: QUAL-300, ENC-301, UX-310, EVAL-320, POST-304, GOV-316, ASM-332. Delivered as the Phase A closeout
+(branch `video/smooth-302-loop-303-post-305`): SMOOTH-302 (RIFE discovery, modern model flag, x2/x4 rule, default on when
+RIFE resolves, finished-clip smoothing for Comfy), LOOP-303 (SVD ping-pong and extend-to-N-seconds) and POST-305
+(secondary motion retired). Not started: Phase B UX-311 to UX-315; Phase C WAN-321 onward; Phase D SEQ-330 and SEQ-331;
+Phase E. Loop export for Comfy clips was left out of LOOP-303 (SVD only).
+
 ---
 
 ## 7. Risks and counter-hypotheses

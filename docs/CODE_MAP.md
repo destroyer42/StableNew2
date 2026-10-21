@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-440 of 597 modules have a docstring.
+445 of 597 modules have a docstring.
 
 ## src/
 
@@ -505,6 +505,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `run_config.py`: Run configuration model with prompt source tracking
 - `run_plan.py`: (no docstring)
 - `run_stage_handlers.py`: Per-stage execution handlers for ``PipelineRunner.run_njr`` (roadmap P4-1)
+- `secondary_motion_retirement.py`: Secondary-motion retirement policy: one predicate, one error, one stable message (owner decision D8)
 - `stage_models.py`: Stage models for the StableNew pipeline execution system
 - `stage_sequencer.py`: Stage sequencer for v2 pipeline
 - `training_njr_compiler.py`: Pure compiler for the supported train-LoRA NJR workload
@@ -675,6 +676,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
+- `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
 - `managed_comfy_runtime.py`: Read-only production view of the StableNew-managed ComfyUI runtime contract
 - `motion_source_plan.py`: Which driving-video frames a workflow consumes, as a pure plan (PR-VID-MOTION-210)
 - `motion_source_preparation.py`: Produce the exact driving-video frames a workflow will consume (PR-VID-MOTION-210)
@@ -683,6 +685,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `movie_assembly_engine.py`: Execution of a frozen Movie Clips assembly (PR-VID-ASM-332)
 - `movie_assembly_models.py`: The frozen Movie Clips assembly contract (PR-VID-ASM-332)
 - `review_preview.py`: Bounded, read-only review previews of existing video outputs (PR-VID-QUALITY-211)
+- `rife_runtime.py`: Locate the external ``rife-ncnn-vulkan`` runtime and choose its model and factor (PR-VID-SMOOTH-302)
 - `sequence_manifest.py`: Sequence manifest builder and writer for multi-segment video
 - `sequence_models.py`: Sequence and segment planning models for long-form video generation
 - `sequence_planner.py`: Sequence planner for multi-segment long-form video
@@ -708,6 +711,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_eval_suite.py`: Video eval suite: a fixed set of source images and prompts run against named arms (PR-VID-EVAL-320)
 - `video_execution_resolver.py`: Single canonical resolver for video execution: explicit backend, task and controls
 - `video_export.py`: Export helpers for native video generation outputs and assembled-video flows
+- `video_interpolation.py`: Backend-neutral RIFE smoothing of a finished video file (PR-VID-SMOOTH-302)
 - `video_review_group.py`: Reconstruct one Video Workflow experiment from canonical persisted jobs (PR-VID-QUALITY-211)
 - `video_workflow_batch.py`: Multi-source Video Workflow batch: assess, freeze and atomically admit (PR-VID-BATCH-200)
 - `video_workflow_experiment.py`: One-variable operator experiments for Video Workflow (PR-VID-194)
@@ -726,14 +730,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/video/motion/
 
-- `__init__.py`: (no docstring)
-- `secondary_motion_engine.py`: (no docstring)
+- `__init__.py`: Secondary-motion records (owner decision D8: execution is retired)
 - `secondary_motion_metrics.py`: (no docstring)
 - `secondary_motion_models.py`: (no docstring)
-- `secondary_motion_policy_service.py`: (no docstring)
 - `secondary_motion_provenance.py`: (no docstring)
-- `secondary_motion_video_reencode.py`: (no docstring)
-- `secondary_motion_worker.py`: (no docstring)
 
 ## src/video/restoration/
 
