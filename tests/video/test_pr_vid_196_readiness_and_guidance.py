@@ -586,12 +586,17 @@ def test_readiness_modules_do_not_import_gui_queue_or_nrj_layers():
 
 
 def test_registered_workflow_versions_and_graphs_are_unchanged():
-    """Digests recorded from the unmodified catalog at ``main`` (aed19b81)."""
+    """Digests recorded from the unmodified catalog at ``main`` (aed19b81).
+
+    TI2V-5B 1.2.0 was re-recorded by PR-VID-GOV-316 (promotion to ``approved``): only its governance
+    state, display name, description and notes changed; its graph digest is pinned separately in
+    ``test_pr_comfy_runtime_100_workflow_versions.py``.
+    """
 
     expected = {
         "wan22_ti2v_5b_i2v_v1@1.0.0": "42dac69b34130c4db06ea5dc0e91dd7b35bba2ff0c960ab24b406437adb58332",
         "wan22_ti2v_5b_i2v_v1@1.1.0": "e5821b1cf6eadf0d93e666f4a606d7540d53298cf3bfc51402393f80388fe731",
-        "wan22_ti2v_5b_i2v_v1@1.2.0": "cf09c6ea2a8e4c30558490ffbbe36dd86eddd3a840fd1aa6cb10b70b98fc6b56",
+        "wan22_ti2v_5b_i2v_v1@1.2.0": "5bce60b5e7d0b233a3ddbff2225546e41b7f4415af001a0da6de443757df0bec",
         "wan_animate2_drive_i2v_v1@1.0.0": "c610171704dc2aff829a1cc7e494f3b01cff0108eb9a64ed830fedaa63f0704e",
         "wan_animate2_drive_i2v_v1@1.1.0": "75da00b523e0762d2d42e67dca30a328e99ace1175d6d7fa23041394de68d9d3",
         "wan_animate2_drive_i2v_v1@1.2.0": "57ca14d77b305beca3626fbfa5dde75144c06bb49b065807ba88666ac8f979db",

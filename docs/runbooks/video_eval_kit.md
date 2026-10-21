@@ -40,8 +40,7 @@ graph revision gets one eval run, a contact sheet and the owner's rating.
     {"arm_id": "svd_more_motion", "label": "SVD XT bucket 160", "backend": "svd_native",
      "svd": {"inference": {"motion_bucket_id": 160, "noise_aug_strength": 0.04}}},
     {"arm_id": "wan_ti2v", "label": "Wan2.2 TI2V-5B", "backend": "video_workflow",
-     "form": {"workflow_id": "wan22_ti2v_5b_i2v_v1", "workflow_version": "1.2.0", "frame_count": 81,
-              "experimental_opt_in": true}}
+     "form": {"workflow_id": "wan22_ti2v_5b_i2v_v1", "workflow_version": "1.2.0", "frame_count": 81}}
   ]
 }
 ```
@@ -54,8 +53,9 @@ Rules the loader enforces (`src/video/video_eval_suite.py`):
 * `svd` is merged over the SVD tab's default configuration (`SVDController.build_default_config`). Without a
   `preprocess.target_width` the target follows each source's aspect, like the tab's Match Source Aspect.
 * `form` is merged over the Video Workflow tab's default form. The prompt, negative prompt and seed come from the
-  case and the suite, so an arm may not set them. An experimental workflow needs `"experimental_opt_in": true` in
-  the arm: the suite file is the per-job opt-in, and the queue confirmation names every arm that uses it.
+  case and the suite, so an arm may not set them. Wan2.2 TI2V-5B 1.2.0 is approved and needs no opt-in. A workflow
+  that is still experimental (Wan-Animate-2, TI2V-5B 1.0.0 and 1.1.0) needs `"experimental_opt_in": true` in the arm:
+  the suite file is the per-job opt-in, and the queue confirmation names every arm that sets it.
 * Admission refuses anything the normal submission would refuse (frame count, missing opt-in, an SVD preflight
   block such as a missing local model).
 

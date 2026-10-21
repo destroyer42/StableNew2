@@ -36,8 +36,11 @@ The canonical outer path is:
   payloads, mutate queue persistence, or call the runner. Controllers
   coordinate services; pipeline modules compile and execute typed work; backend
   details remain behind adapters.
-- MVP execution is same-process and single-node. Native SVD XT is the only MVP
-  video backend.
+- MVP execution is same-process and single-node. Production video backends
+  are native SVD XT and the Comfy workflows the catalog marks `approved`
+  (owner decision D2, 2026-10-20); an `experimental` workflow runs only with
+  the job's own recorded opt-in, never a global switch. The approved set is
+  stated in `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 1.1.
 - Do not add parallel job models, runner entrypoints, live legacy fallbacks, or
   compatibility layers without a named removal condition. Prefer deleting
   proven-obsolete compatibility code.

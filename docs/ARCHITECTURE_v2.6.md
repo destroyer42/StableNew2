@@ -371,8 +371,9 @@ The binding PR-IMG-100 acceptance contract is
 Video uses the same outer path and NJR lifecycle as image work. Video-specific
 intent and execution types are legitimate typed boundaries, not NJR substitutes.
 
-The MVP video backend is **native Stable Video Diffusion XT (SVD XT) only**.
-The model is not bundled. Setup must provide:
+The production video backends are **native Stable Video Diffusion XT (SVD XT)** and the
+Comfy workflows the catalog marks `approved` (owner decision D2, 2026-10-20; today only
+Wan2.2 TI2V-5B 1.2.0). The SVD model is not bundled. Setup must provide:
 
 - an explicit download/install path;
 - license and usage notice;
@@ -380,8 +381,8 @@ The model is not bundled. Setup must provide:
 - memory-conscious defaults, offload, and chunking appropriate for a 12 GB GPU;
 - a deterministic smoke workflow and actionable failure messages.
 
-ComfyUI, LTX, multi-shot sequencing, stitching, and secondary-motion
-systems are post-MVP. Existing code for them may remain quarantined during
+Comfy workflows that are not `approved`, LTX, multi-shot sequencing, stitching, and
+secondary-motion systems are post-MVP. Existing code for them may remain quarantined during
 recovery but must not be on the MVP execution path or presented as MVP-ready.
 
 Raw backend workflow JSON is private to its backend adapter. It must not leak

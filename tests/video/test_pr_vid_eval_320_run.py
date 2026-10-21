@@ -262,7 +262,15 @@ def test_controller_builds_real_svd_and_workflow_njrs_and_admits_them_once(
 
 
 def test_an_experimental_workflow_arm_without_opt_in_is_not_queueable(tmp_path) -> None:
-    arms = [{"arm_id": "ti2v", "backend": "video_workflow", "form": {"workflow_id": TI2V_ID}}]
+    # TI2V-5B 1.1.0 is still experimental (only 1.2.0 was promoted by PR-VID-GOV-316), so the
+    # arm needs its suite-declared opt-in; the form's default version would now be approved.
+    arms = [
+        {
+            "arm_id": "ti2v",
+            "backend": "video_workflow",
+            "form": {"workflow_id": TI2V_ID, "workflow_version": "1.1.0"},
+        }
+    ]
     controller, job_service = _controller(tmp_path)
 
     plan = controller.preview_eval_run(_suite(tmp_path, arms=arms))
@@ -270,3 +278,17 @@ def test_an_experimental_workflow_arm_without_opt_in_is_not_queueable(tmp_path) 
     assert not plan.eligible
     assert "ti2v" in plan.summary()
     assert job_service.calls == []
+
+
+def test_an_approved_workflow_arm_is_queueable_without_an_opt_in(tmp_path) -> None:
+    arms = [{"arm_id": "ti2v", "backend": "video_workflow", "form": {"workflow_id": TI2V_ID}}]
+    controller, job_service = _controller(tmp_path)
+
+    plan = controller.preview_eval_run(_suite(tmp_path, arms=arms))
+
+    assert plan.eligible, plan.summary()
+    assert plan.experimental_arms == ()
+    workflow = plan.jobs[0].njr.config["video_workflow"]
+    assert workflow["workflow_version"] == "1.2.0"
+    assert workflow["video_execution"]["experimental_opt_in"] is False
+    assert job_service.calls == []  # a preview admits nothing

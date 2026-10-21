@@ -300,16 +300,103 @@ def test_submissions_carry_the_explicit_per_job_authorisation(shown_root: tk.Tk,
         assert controller.submissions[-1]["experimental_opt_in"] is True
 
         _select(tab, "exp_b", shown_root)  # switching clears it: the next job is not authorised by default
+        # PR-VID-GOV-316: without the opt-in the click is not offered at all (it used to submit and
+        # fail afterwards), so nothing reaches the controller.
+        assert str(tab.queue_workflow_button.cget("state")) == "disabled"
         tab.queue_workflow_button.invoke()
-        assert controller.submissions[-1]["workflow_id"] == "exp_b"
-        assert controller.submissions[-1]["experimental_opt_in"] is False
+        assert len(controller.submissions) == 1
 
         tab.experimental_opt_in_var.set(True)
+        assert str(tab.queue_workflow_button.cget("state")) == "normal"
         tab.queue_workflow_button.invoke()
+        assert controller.submissions[-1]["workflow_id"] == "exp_b"
         assert controller.submissions[-1]["experimental_opt_in"] is True
 
         _select(tab, "plain", shown_root)
         tab.queue_workflow_button.invoke()
         assert controller.submissions[-1]["workflow_id"] == "plain"
         assert controller.submissions[-1]["experimental_opt_in"] is False
-    assert len(controller.submissions) == 4  # one deliberate click, one existing callback each
+    assert len(controller.submissions) == 3  # one deliberate click, one existing callback each
+
+
+# --- PR-VID-GOV-316: Queue waits for the opt-in of a still-experimental workflow --------------------------------------
+
+
+def _queue_state(tab: VideoWorkflowTabFrameV2) -> str:
+    return str(tab.queue_workflow_button.cget("state"))
+
+
+def test_queue_is_disabled_with_an_inline_reason_until_the_opt_in_is_ticked(
+    shown_root: tk.Tk, video_tab
+) -> None:
+    tab, _controller = video_tab
+    assert tab.workflow_var.get() == "exp_a"
+    assert _queue_state(tab) == "disabled"
+    assert "experimental opt-in" in tab.queue_block_reason_var.get()
+    assert tab.queue_block_label.winfo_ismapped()  # the reason is visible, not only a tooltip
+    assert tab.queue_block_label.master is tab.queue_workflow_button.master  # same row as the button
+
+    tab.experimental_opt_in_var.set(True)
+    _settle(shown_root, 60)
+    assert _queue_state(tab) == "normal"
+    assert tab.queue_block_reason_var.get() == "" and not tab.queue_block_label.winfo_ismapped()
+
+    tab.experimental_opt_in_var.set(False)  # taking the authorisation back closes the gate again
+    _settle(shown_root, 60)
+    assert _queue_state(tab) == "disabled" and tab.queue_block_label.winfo_ismapped()
+
+
+def test_an_approved_workflow_needs_no_opt_in_and_queue_stays_enabled(
+    shown_root: tk.Tk, video_tab
+) -> None:
+    tab, _controller = video_tab
+    _select(tab, "plain", shown_root)
+    assert not _opt_in_visible(tab)
+    assert _queue_state(tab) == "normal"
+    assert tab.queue_block_reason_var.get() == "" and not tab.queue_block_label.winfo_ismapped()
+
+    _select(tab, "exp_b", shown_root)  # back to a gated workflow: disabled again until ticked
+    assert _queue_state(tab) == "disabled" and tab.queue_block_label.winfo_ismapped()
+    _select(tab, "plain", shown_root)
+    assert _queue_state(tab) == "normal" and not tab.queue_block_label.winfo_ismapped()
+
+
+def test_the_gate_follows_a_switch_between_experimental_workflows_and_is_never_restored(
+    shown_root: tk.Tk, video_tab
+) -> None:
+    tab, _controller = video_tab
+    tab.experimental_opt_in_var.set(True)
+    _settle(shown_root, 60)
+    assert _queue_state(tab) == "normal"
+
+    _select(tab, "exp_b", shown_root)  # a different experimental workflow never inherits the opt-in
+    assert _queue_state(tab) == "disabled" and "experimental opt-in" in tab.queue_block_reason_var.get()
+
+    tab.experimental_opt_in_var.set(True)
+    _settle(shown_root, 60)
+    assert _queue_state(tab) == "normal"
+    # Saved state never carries the authorisation: a restore leaves the gate closed again.
+    tab.restore_video_workflow_state({"workflow_id": "exp_b", "experimental_opt_in": True})
+    _settle(shown_root, 60)
+    assert tab.experimental_opt_in_var.get() is False
+    assert _queue_state(tab) == "disabled"
+    assert "experimental_opt_in" not in tab.get_video_workflow_state()  # not part of saved state
+
+
+def test_batch_mode_still_disables_queue_independently_of_the_opt_in(
+    shown_root: tk.Tk, video_tab
+) -> None:
+    tab, _controller = video_tab
+    _select(tab, "plain", shown_root)
+    tab._on_batch_mode_change(True)
+    assert _queue_state(tab) == "disabled"
+    assert tab.queue_block_reason_var.get() == ""  # the batch panel explains this one
+    tab._on_batch_mode_change(False)
+    assert _queue_state(tab) == "normal"
+
+    _select(tab, "exp_a", shown_root)
+    tab.experimental_opt_in_var.set(True)
+    tab._on_batch_mode_change(True)
+    assert _queue_state(tab) == "disabled"  # an opt-in does not lift the batch-mode disable
+    tab._on_batch_mode_change(False)
+    assert _queue_state(tab) == "normal"

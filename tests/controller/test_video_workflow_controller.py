@@ -45,20 +45,26 @@ def _controller(tmp_path: Path) -> tuple[VideoWorkflowController, _JobServiceStu
     )
 
 
-def test_list_workflow_specs_offers_only_the_qualified_experimental_wan_workflow(tmp_path: Path) -> None:
+def test_list_workflow_specs_offers_the_approved_ti2v_and_the_experimental_animate2(tmp_path: Path) -> None:
     controller, _ = _controller(tmp_path)
 
     specs = controller.list_workflow_specs()
 
-    # Only experimental workflows are offered: TI2V-5B plus the two Wan-Animate-2 modes.
+    # TI2V-5B 1.2.0 is approved (PR-VID-GOV-316) and offered beside the two experimental
+    # Wan-Animate-2 modes.
     assert [spec["workflow_id"] for spec in specs] == [
         "wan22_ti2v_5b_i2v_v1",
         "wan_animate2_drive_i2v_v1",
         "wan_animate2_prompt_i2v_v1",
     ]
-    assert all(spec["experimental"] for spec in specs)
+    assert {spec["workflow_id"]: spec["experimental"] for spec in specs} == {
+        "wan22_ti2v_5b_i2v_v1": False,
+        "wan_animate2_drive_i2v_v1": True,
+        "wan_animate2_prompt_i2v_v1": True,
+    }
     spec = next(spec for spec in specs if spec["workflow_id"] == WAN_ID)
-    assert spec["governance_state"] == "experimental"
+    assert spec["governance_state"] == "approved"
+    assert spec["form_visibility"]["experimental"] is False
     assert spec["form_visibility"]["seed"] is True
     assert spec["form_visibility"]["motion_profile"] is False
     # Only the newest revision is offered; its length is a selectable, frozen-at-admission

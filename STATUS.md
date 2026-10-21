@@ -16,7 +16,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - Interpreter: CPython 3.14 standard-GIL only. Windows runtime pins: `constraints/windows-py314-cu130.txt`; dev/CI tools:
   `requirements-dev.txt`. Managed Forge Neo (`config/managed_forge_runtime.json`) and managed Comfy
   (`config/managed_comfy_runtime.json`) are pinned separately and never share the application environment.
-- Single-node, same-process execution. Native SVD XT is the only accepted production video backend.
+- Single-node, same-process execution. Production video backends: native SVD XT and the Comfy workflows the catalog marks
+  `approved` (today Wan2.2 TI2V-5B 1.2.0); every other workflow is experimental and needs the job's own opt-in.
 
 ## What `main` enforces (all PRs)
 
@@ -57,9 +58,10 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 
 **Video**
 
-- Native SVD XT queue-first path with source-aware targets, provenance and replay lineage. Comfy Video Workflow
-  (Wan2.2 TI2V-5B, Wan-Animate-2) is experimental; Wan2.2 TI2V-5B is the only conditionally qualified directed-motion
-  candidate. Motion source readiness: `docs/Subsystems/Video/PR-VID-196_Motion_Source_Readiness.md`; optional Prepare Motion Source
+- Native SVD XT queue-first path with source-aware targets, provenance and replay lineage. Comfy Video Workflow: Wan2.2 TI2V-5B
+  1.2.0 is `approved` (production, no per-job opt-in; 1.0.0 and 1.1.0 stay experimental so stored jobs replay unchanged) and
+  is the only conditionally qualified directed-motion candidate; Wan-Animate-2 stays experimental (Queue stays disabled until
+  the job's opt-in is ticked). Motion source readiness: `docs/Subsystems/Video/PR-VID-196_Motion_Source_Readiness.md`; optional Prepare Motion Source
   (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`. One-variable experiments can be reopened from History or the tab, compared side by side and rated (action outcome kept apart from quality) as Learning evidence that never feeds image recommendations: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`.
 
 **Runtime safety** (all on the production construction path)
@@ -106,9 +108,9 @@ of the roadmap; where they conflict with this file, this file and the repository
    once per experiment by hash, forward-only (an NJR contract change, its own PR). Open: backfilling existing rows, and whether to prune jobs
    whose images and manifests were deleted (archive then delete, or delete), both only after the owner reads the output of
    `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
-10. Decided 2026-10-20: Movie Clips assembly becomes a queued workload (implemented: a CPU `movie_assembly` job on the canonical
-   path, `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows become production video backends and
-   Wan2.2 TI2V-5B is promoted (implemented by their roadmap PRs; until then the Video lines above stay current).
+10. Decided 2026-10-20 and implemented: Movie Clips assembly is a queued CPU `movie_assembly` job on the canonical path
+   (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows are production video backends and Wan2.2
+   TI2V-5B 1.2.0 is promoted.
 11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a single
    composition root (P3-2, decision 11), a durable CANCELLING status (decision 12), and moving the executor into `image_backends` (decision 14).
 

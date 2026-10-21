@@ -36,6 +36,21 @@ from tests.video.test_wan22_experimental_workflow import (
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = json.loads((ROOT / "config" / "managed_comfy_runtime.json").read_text(encoding="utf-8"))
 WORKFLOW_IDS = (WAN_ID, WAN_ANIMATE2_PROMPT_ID, WAN_ANIMATE2_DRIVE_ID)
+# Governance per published version. PR-VID-GOV-316 (owner decision D1) promoted only TI2V-5B 1.2.0:
+# a published version's spec, governance included, is pinned by the digests below, so 1.0.0 and
+# 1.1.0 stay experimental. Wan-Animate-2 is not promoted.
+EXPECTED_GOVERNANCE = {
+    (WAN_ID, "1.0.0"): "experimental",
+    (WAN_ID, "1.1.0"): "experimental",
+    (WAN_ID, "1.2.0"): "approved",
+    **{
+        (workflow_id, version): "experimental"
+        for workflow_id in (WAN_ANIMATE2_PROMPT_ID, WAN_ANIMATE2_DRIVE_ID)
+        for version in ("1.0.0", "1.1.0", "1.2.0")
+    },
+}
+# What the 1.2.0 requalification may change beyond version identity and provenance.
+GOVERNANCE_FIELDS = {"governance_state", "governance_notes", "display_name", "description"}
 
 # sha256 of json.dumps(spec.to_dict(), sort_keys=True, ensure_ascii=False, default=str) and of the
 # prompt template alone, captured from the registry before PR-COMFY-RUNTIME-100 touched it.
@@ -107,7 +122,8 @@ def test_new_versions_are_registered_beside_the_old_ones(workflow_id: str) -> No
     assert WAN22_RUNTIME_VERSION == WAN_ANIMATE2_RUNTIME_VERSION == "1.2.0"
     newest = _spec(workflow_id, "1.2.0")
     assert newest.pinned_revision == f"catalog:{workflow_id}@1.2.0"
-    assert newest.governance_state == "experimental"  # no promotion beyond experimental
+    for version in registry.list_versions(workflow_id):
+        assert _spec(workflow_id, version).governance_state == EXPECTED_GOVERNANCE[(workflow_id, version)]
 
 
 @pytest.mark.parametrize("workflow_id", WORKFLOW_IDS)
@@ -115,13 +131,16 @@ def test_only_version_identity_and_qualification_provenance_differ_from_1_1_0(wo
     older = _spec(workflow_id, "1.1.0").to_dict()
     newest = _spec(workflow_id, "1.2.0").to_dict()
 
-    assert _differences(older, newest) == {
+    expected = {
         "workflow_version",
         "pinned_revision",
         "backend_defaults.provenance.qualification",
         "backend_defaults.provenance.comfyui_version",
         "backend_defaults.provenance.comfyui_revision",
     }
+    if workflow_id == WAN_ID:
+        expected |= GOVERNANCE_FIELDS  # the promoted version also drops "Experimental" from its text
+    assert _differences(older, newest) == expected
 
 
 @pytest.mark.parametrize("workflow_id", WORKFLOW_IDS)
