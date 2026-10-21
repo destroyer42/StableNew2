@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 386,
+    "total": 385,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -86,7 +86,6 @@
       "src/image_backends/openpose_capability.py",
       "src/image_backends/operation_compatibility.py",
       "src/learning/discovered_review_store.py",
-      "src/learning/execution_controller.py",
       "src/learning/experiment_conclusion.py",
       "src/learning/experiment_freeze.py",
       "src/learning/experiment_naming.py",
@@ -395,9 +394,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1338,
-      "S110": 530,
-      "S112": 38
+      "BLE001": 1337,
+      "S110": 529,
+      "S112": 37
     },
     "counts": {
       "src/api/client.py": {
@@ -522,7 +521,7 @@
       "src/gui/controllers/learning_controller.py": {
         "BLE001": 35,
         "S110": 8,
-        "S112": 5
+        "S112": 4
       },
       "src/gui/controllers/video_workspace_handoff.py": {
         "BLE001": 1,
@@ -707,8 +706,8 @@
         "S112": 2
       },
       "src/gui/views/learning_tab_frame_v2.py": {
-        "BLE001": 21,
-        "S110": 16
+        "BLE001": 20,
+        "S110": 15
       },
       "src/gui/views/movie_clips_tab_frame_v2.py": {
         "BLE001": 7,

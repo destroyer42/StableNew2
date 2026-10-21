@@ -325,7 +325,7 @@ def test_saved_pack_preapplication_refused_without_snapshot_rewrite(tmp_path, ne
     source["rendered_negative_prompt"] = snapshot["negative_prompt_text"] = negative
     exp.execution_snapshot_json = freeze_snapshot(snapshot)
     before = exp.execution_snapshot_json
-    submit = Mock()
+    submit = Mock(side_effect=lambda records, *_args: [record.job_id for record in records])
     controller.pipeline_controller = object()
     controller.execution_controller = SimpleNamespace(submit_experiment_jobs=submit)
     with pytest.raises(ValueError, match="Rebuild Preview"):
