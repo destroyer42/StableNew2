@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from src.gui.app_state_v2 import AppStateV2
@@ -83,6 +85,35 @@ def test_job_history_panel_labels_interrupted_recovery_distinctly() -> None:
 
     assert panel._get_display_status(interrupted) == "Interrupted"
     assert panel._get_display_status(ordinary_failure) == "Failed"
+
+
+@pytest.mark.parametrize(
+    "outcome, expected",
+    [
+        (True, "Replay queued as a new job"),
+        (False, "Replay was not queued"),
+        (RuntimeError("admission"), "Replay failed"),
+    ],
+)
+def test_replay_feedback_reports_admission_outcome(outcome, expected) -> None:
+    panel = JobHistoryPanelV2.__new__(JobHistoryPanelV2)
+    entry = _make_entry("replay", replayable=True)
+    panel._selected_entry = lambda: entry
+    panel._selected_job_id = entry.job_id
+    messages = []
+    panel.replay_status_var = SimpleNamespace(set=messages.append)
+    calls = []
+
+    def replay(job_id):
+        calls.append(job_id)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    panel.controller = SimpleNamespace(on_replay_history_job_v2=replay)
+    panel._on_replay_job()
+    assert calls == [entry.job_id]
+    assert messages[-1].startswith(expected)
 
 
 @pytest.mark.gui

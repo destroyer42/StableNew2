@@ -1780,7 +1780,7 @@ class AppController:
             if count > 0:
                 self._append_log(f"[controller] Replayed job {job_id} ({count} queued).")
                 return True
-            self._append_log(f"[controller] Replay job {job_id} had no snapshot or jobs to queue.")
+            self._append_log(f"[controller] Replay job {job_id} was not queued; snapshot unavailable or admission refused.")
         except Exception as exc:  # noqa: BLE001
             self._append_log(f"[controller] Replay job {job_id} failed: {exc!r}")
         return False

@@ -34,6 +34,7 @@ from src.pipeline.animatediff_retirement import AnimateDiffRetiredError
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.replay_input_verification import frozen_input_checks, verify_inputs
 from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
+from src.pipeline.secondary_motion_retirement import SecondaryMotionRetiredError
 from src.queue.batch_membership import BatchKey, build_selected_retry_descriptor
 from src.queue.batch_projection import (
     BatchCatalog,
@@ -382,7 +383,7 @@ class BatchOperationsService:
         problems = [issue.describe() for issue in verify_inputs(frozen_input_checks(record))]
         try:
             replay = compile_replay_intent(ReplayIntent(record))
-        except AnimateDiffRetiredError as exc:
+        except (AnimateDiffRetiredError, SecondaryMotionRetiredError) as exc:
             return [*problems, str(exc)]
         validator = getattr(self._job_service, "_validate_normalized_record", None)
         if callable(validator):

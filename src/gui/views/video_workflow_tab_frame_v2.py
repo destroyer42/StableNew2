@@ -145,6 +145,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # Per-job authorization for an experimental workflow: off by default, never restored
         # from saved state and never a global setting.
         self.experimental_opt_in_var = tk.BooleanVar(value=False)
+        # Optional RIFE smoothing of the finished clip (a saved preference, unlike the per-job opt-in).
+        self.smooth_var = tk.BooleanVar(value=False)
         # Why Queue is disabled for the selected workflow (empty when it is not). Batch mode also
         # disables the single-image Queue, but says so through its own panel.
         self.queue_block_reason_var = tk.StringVar(value="")
@@ -516,6 +518,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             values=_OUTPUT_ROUTES,
             help_key="output_route",
         )
+        self.smooth_check = ttk.Checkbutton(
+            body,
+            text="Smooth with RIFE",
+            variable=self.smooth_var,
+            style="Dark.TCheckbutton",
+        )
+        self.smooth_check.grid(row=5, column=2, columnspan=2, sticky="w", padx=(6, 0), pady=(0, 6))
+        self._attach_setting_help(
+            "rife_smooth", VIDEO_WORKFLOW_SETTING_HELP["rife_smooth"], self.smooth_check
+        )
         # PR-VID-196: exact prepared-source preview, bounded driving-video facts, geometry/timing
         # advisories and workflow-aware motion guidance.  Read-only; hidden until there is content.
         motion_container = ttk.Frame(body, style="Panel.TFrame")
@@ -862,6 +874,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state["seed"] = self.seed_var.get().strip()
         if self._frame_count_labels:
             state["frame_count"] = self._frame_count_labels.get(self.frame_count_var.get())
+        if self.smooth_var.get():
+            state["interpolation"] = {"enabled": True}
         if bool(visible.get("pose_video", False)):
             state["pose_video_path"] = self.pose_video_var.get().strip()
             if for_submission:
@@ -911,6 +925,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.experimental_opt_in_var.set(False)  # authorization is per job, never restored
         self._refresh_workspace_summary()
         self._select_frame_count(state.get("frame_count"))
+        interpolation = state.get("interpolation")
+        self.smooth_var.set(isinstance(interpolation, dict) and bool(interpolation.get("enabled")))
         if self.pose_video_frame.winfo_manager():
             self.pose_video_var.set(str(state.get("pose_video_path") or ""))
         self.workflow_controls_panel.set_values(state.get("operator_controls"))

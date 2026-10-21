@@ -10,6 +10,7 @@ from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.njr_core_v26 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
+from src.video.rife_runtime import default_rife_multiplier, find_rife_executable
 from src.video.svd_capabilities import get_svd_postprocess_capabilities, get_svd_preflight
 from src.video.svd_config import DEFAULT_FACE_RESTORE_FIDELITY, SVDConfig
 from src.video.svd_models import get_default_svd_cache_dir, resolve_svd_model_spec
@@ -44,6 +45,10 @@ class SVDController:
         return SVDConfig.from_dict(form_data)
 
     def build_default_config(self) -> SVDConfig:
+        # Smoothing is on by default when a RIFE runtime resolves, and off (unchanged) when it does not:
+        # a fresh clip should play at 24 fps or more without the operator hunting for a checkbox.
+        rife_executable = find_rife_executable()
+        default_fps = 7
         base_config = SVDConfig.from_dict(
             {
                 "preprocess": {
@@ -51,7 +56,7 @@ class SVDController:
                 },
                 "inference": {
                     "num_frames": 25,
-                    "fps": 7,
+                    "fps": default_fps,
                     "motion_bucket_id": 110,
                     "noise_aug_strength": 0.02,
                     "decode_chunk_size": 8,
@@ -71,7 +76,11 @@ class SVDController:
                         "temporal_smoothing": True,
                     },
                     "interpolation": {
-                        "multiplier": 2,
+                        "enabled": rife_executable is not None,
+                        "multiplier": default_rife_multiplier(default_fps),
+                        "executable_path": None
+                        if rife_executable is None
+                        else str(rife_executable),
                     },
                     "upscale": {
                         "scale": 2.0,

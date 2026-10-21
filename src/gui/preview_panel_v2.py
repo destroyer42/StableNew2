@@ -1257,7 +1257,8 @@ class PreviewPanelV2(ttk.Frame):
             return None
         if _depth >= 8:
             return None
-        if not ContentVisibilityResolver(self._content_visibility_mode).is_visible(summary):
+        mode = getattr(self, "_content_visibility_mode", "nsfw")
+        if not ContentVisibilityResolver(mode).is_visible(summary):
             return None
 
         def image_file(value: Any) -> Path | None:
