@@ -11,7 +11,7 @@ from src.assets import AssetRegistry
 from src.assets.controlnet_structure import ControlNetEvidence, ControlNetModelOption
 from src.conditioning.openpose_catalog import LibraryEntry, LibraryListing
 from src.promptpacks.storage import prompt_pack_rows
-from src.utils.thread_registry import get_thread_registry
+from src.utils.thread_registry import ThreadRegistry
 from tests.gui_v2 import test_prompt_tab_openpose_210 as legacy_ui
 from tests.integration.test_pr_img_cnet_220 import declaration
 
@@ -76,8 +76,10 @@ def test_refresh_runs_off_tk_and_never_rewrites_a_missing_selection(tab, tmp_pat
     tab._on_controlnet_changed()
     tab.workspace_state.dirty = False
     work = []
+    # Patch the class, not the singleton: undoing an instance patch re-installs the old bound method as an
+    # instance attribute, which then shadows every later class-level patch of ``spawn`` in the same process.
     monkeypatch.setattr(
-        get_thread_registry(), "spawn", lambda **kwargs: work.append(kwargs["target"])
+        ThreadRegistry, "spawn", lambda self, **kwargs: work.append(kwargs["target"])
     )
     picker._registry_factory = lambda: AssetRegistry(
         tmp_path / "webui", cache_path=tmp_path / "resource-cache.json"
