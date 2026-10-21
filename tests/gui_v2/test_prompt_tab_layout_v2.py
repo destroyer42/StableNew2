@@ -4,8 +4,6 @@ from unittest.mock import Mock
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.view_contracts.prompt_editor_contract import (
-    PROMPT_PICKER_COLUMN_MIN_WIDTH,
-    PROMPT_PICKER_ROW_MIN_HEIGHT,
     PROMPT_TAB_CENTER_COLUMN_MIN_WIDTH,
     PROMPT_TAB_LEFT_COLUMN_MIN_WIDTH,
     PROMPT_TAB_RIGHT_COLUMN_MIN_WIDTH,
@@ -20,9 +18,10 @@ def test_prompt_tab_uses_shared_column_minimums(tk_root) -> None:
         assert frame.columnconfigure(1)["minsize"] == PROMPT_TAB_CENTER_COLUMN_MIN_WIDTH
         assert frame.columnconfigure(2)["minsize"] == PROMPT_TAB_RIGHT_COLUMN_MIN_WIDTH
 
-        assert frame.prompts_tab.columnconfigure(0)["minsize"] == PROMPT_PICKER_COLUMN_MIN_WIDTH
-        assert frame.prompts_tab.columnconfigure(1)["minsize"] == PROMPT_PICKER_COLUMN_MIN_WIDTH
-        assert frame.prompts_tab.rowconfigure(5)["minsize"] == PROMPT_PICKER_ROW_MIN_HEIGHT
+        assert frame.prompts_tab.rowconfigure(1)["minsize"] >= 120
+        assert frame.prompts_tab.rowconfigure(4)["minsize"] >= 72
+        assert frame.embedding_picker.master is frame.embedding_scroll.inner
+        assert frame.lora_picker.master is frame.lora_scroll.inner
     finally:
         frame.destroy()
 

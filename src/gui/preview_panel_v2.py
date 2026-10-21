@@ -244,8 +244,9 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.clear_draft_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
-        self.preview_error_label = ttk.Label(self.actions_frame, text="", wraplength=440,
-                                             style=STATUS_LABEL_STYLE)
+        self.preview_error_label = ttk.Label(
+            self.actions_frame, text="", wraplength=440, style=STATUS_LABEL_STYLE
+        )
         self.preview_error_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         self._update_action_states(None)
@@ -942,7 +943,8 @@ class PreviewPanelV2(ttk.Frame):
         if not self.controller:
             return
         if self.app_state is not None and not self._can_add_to_queue(
-            self.app_state.job_draft, self.app_state.preview_jobs,
+            self.app_state.job_draft,
+            self.app_state.preview_jobs,
         ):
             return
         try:
@@ -1005,7 +1007,11 @@ class PreviewPanelV2(ttk.Frame):
         preview_jobs: list[NormalizedJobRecord] | None,
     ) -> bool:
         """Return whether the current draft has a fresh, queueable preview."""
-        if job_draft is None or not preview_jobs or not all(isinstance(job, NormalizedJobRecord) for job in preview_jobs):
+        if (
+            job_draft is None
+            or not preview_jobs
+            or not all(isinstance(job, NormalizedJobRecord) for job in preview_jobs)
+        ):
             return False
         packs = getattr(job_draft, "packs", [])
         part_summary = getattr(job_draft, "summary", None)
@@ -1076,6 +1082,7 @@ class PreviewPanelV2(ttk.Frame):
         lines = []
         lines.append(f"\nJob #{index}: {job.job_id}")
         from src.gui_v2.pack_lora_selection_projection import selection_detail_lines
+
         lines.extend(selection_detail_lines(job, visible=self._content_visibility_mode == "nsfw"))
 
         config = getattr(job, "config", {}) or {}
@@ -1250,23 +1257,34 @@ class PreviewPanelV2(ttk.Frame):
             return None
         if _depth >= 8:
             return None
+        if not ContentVisibilityResolver(self._content_visibility_mode).is_visible(summary):
+            return None
+
+        def image_file(value: Any) -> Path | None:
+            if not isinstance(value, (str, os.PathLike)):
+                return None
+            path = Path(value)
+            if (
+                path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+                and path.is_file()
+            ):
+                return path
+            return None
 
         source_job = getattr(summary, "source_job", None)
         if source_job is not None and source_job is not summary:
             source_image = self._find_immediate_output_image(source_job, _depth=_depth + 1)
-            if source_image and source_image.exists():
+            if source_image:
                 return source_image
 
         thumbnail_path = getattr(summary, "thumbnail_path", None)
-        if isinstance(thumbnail_path, (str, os.PathLike)):
-            thumbnail = Path(thumbnail_path)
-            if thumbnail.exists():
-                return thumbnail
+        if thumbnail := image_file(thumbnail_path):
+            return thumbnail
 
         for field_name in ("artifact_path", "primary_artifact_path"):
             candidate = getattr(summary, field_name, None)
-            if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
-                return Path(candidate)
+            if image := image_file(candidate):
+                return image
 
         artifact = getattr(summary, "artifact", None)
         if isinstance(artifact, dict):
@@ -1275,22 +1293,20 @@ class PreviewPanelV2(ttk.Frame):
                 artifact.get("primary_path"),
                 *(artifact.get("output_paths") or []),
             ):
-                if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
-                    return Path(candidate)
+                if image := image_file(candidate):
+                    return image
 
         artifact_references = getattr(summary, "artifact_references", None)
         if isinstance(artifact_references, (list, tuple)):
             for candidate in artifact_references:
-                if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
-                    return Path(candidate)
+                if image := image_file(candidate):
+                    return image
 
         output_paths = getattr(summary, "output_paths", None)
         if isinstance(output_paths, (list, tuple)):
             for candidate in reversed(output_paths):
-                if isinstance(candidate, (str, os.PathLike)):
-                    image_path = Path(candidate)
-                    if image_path.exists():
-                        return image_path
+                if image := image_file(candidate):
+                    return image
 
         result = getattr(summary, "result", None)
         if isinstance(result, dict):
@@ -1321,8 +1337,8 @@ class PreviewPanelV2(ttk.Frame):
                 return found
 
             for candidate in _paths(result):
-                if Path(candidate).exists():
-                    return Path(candidate)
+                if image := image_file(candidate):
+                    return image
 
         return None
 

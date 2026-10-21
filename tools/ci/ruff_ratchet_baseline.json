@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 394,
+    "total": 392,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -43,7 +43,6 @@
       "src/gui/main_window_v2.py",
       "src/gui/model_policy_panel_projection.py",
       "src/gui/model_readiness_presenter.py",
-      "src/gui/preview_panel_v2.py",
       "src/gui/prompt_adaptation_dialog.py",
       "src/gui/prompt_target_presenter.py",
       "src/gui/review_batch_dialog.py",
@@ -65,7 +64,6 @@
       "src/gui/views/svd_tab_frame_v2.py",
       "src/gui/views/video_workflow_motion_readiness_panel_v2.py",
       "src/gui/views/video_workflow_tab_frame_v2.py",
-      "src/gui/widgets/embedding_picker_panel.py",
       "src/gui/widgets/openpose_picker_panel.py",
       "src/gui/zimage_optional_control_projection.py",
       "src/gui_v2/adaptation_notice.py",
