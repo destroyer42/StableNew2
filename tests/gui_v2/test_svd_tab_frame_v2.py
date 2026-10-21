@@ -783,3 +783,54 @@ def test_a_saved_retired_face_method_turns_face_cleanup_off_instead_of_switching
         assert tab._build_form_data()["postprocess"]["face_restore"]["enabled"] is False
     finally:
         tab.destroy()
+
+
+def test_svd_tab_loop_controls_reach_the_form_and_round_trip(tk_root: tk.Tk) -> None:
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        assert tab.loop_mode_var.get() == "none"
+        assert tab._build_form_data()["output"]["loop_mode"] == "none"
+        assert tab._build_form_data()["output"]["extend_to_seconds"] == 0.0
+
+        tab.loop_mode_var.set("ping_pong")
+        tab.extend_seconds_var.set(8.0)
+        output = tab._build_form_data()["output"]
+        assert (output["loop_mode"], output["extend_to_seconds"]) == ("ping_pong", 8.0)
+
+        state = tab.get_svd_state()
+        assert (state["loop_mode"], state["extend_to_seconds"]) == ("ping_pong", 8.0)
+
+        tab.loop_mode_var.set("none")
+        tab.extend_seconds_var.set(0.0)
+        assert tab.restore_svd_state(state) is True
+        assert tab.loop_mode_var.get() == "ping_pong"
+        assert tab.extend_seconds_var.get() == 8.0
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_unreadable_extend_text_means_off_not_an_exception(tk_root: tk.Tk) -> None:
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        tab.extend_seconds_var.set("abc")  # type: ignore[arg-type]
+        assert tab._build_form_data()["output"]["extend_to_seconds"] == 0.0
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_applies_controller_default_loop_settings(tk_root: tk.Tk) -> None:
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.get_svd_postprocess_capabilities.return_value = {}
+    controller.build_svd_defaults.return_value = {
+        "output": {"output_format": "mp4", "loop_mode": "ping_pong", "extend_to_seconds": 6}
+    }
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        assert tab.loop_mode_var.get() == "ping_pong"
+        assert tab.extend_seconds_var.get() == 6.0
+    finally:
+        tab.destroy()

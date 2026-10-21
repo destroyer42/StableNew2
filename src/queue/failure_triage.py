@@ -59,6 +59,7 @@ _CONFIGURATION_TYPES = frozenset(
         "ConfigError",
         "OperationNotSupportedError",
         "AnimateDiffRetiredError",
+        "SecondaryMotionRetiredError",
     }
 )
 _IDENTITY_TYPES = frozenset({"WebUIRuntimeIdentityMismatch"})

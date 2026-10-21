@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import os
-import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from src.video.restoration.runtime import POSTPROCESS_INSTALL_HINT
 from src.video.restoration.upscale_models import SOURCE_MODEL_PATH, requests_two_times
+from src.video.rife_runtime import default_rife_multiplier, find_rife_executable
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import is_svd_model_cached, resolve_svd_cache_dir, resolve_svd_model_spec
 from src.video.svd_postprocess import (
@@ -211,6 +210,11 @@ def apply_recommended_svd_defaults(config: SVDConfig | None = None) -> SVDConfig
         "executable_path"
     ):
         payload["postprocess"]["interpolation"]["executable_path"] = str(rife_candidate)
+    if capabilities["rife"].available:
+        # Smooth to 24 fps or more: x2 for a fast source, x4 for a slow one (SVD generates at ~7 fps).
+        payload["postprocess"]["interpolation"]["multiplier"] = default_rife_multiplier(
+            active_config.inference.fps
+        )
 
     return SVDConfig.from_dict(payload)
 
@@ -287,7 +291,10 @@ def _detect_rife(config: SVDConfig) -> SVDCapability:
             name="RIFE",
             status="missing",
             available=False,
-            detail="No rife-ncnn-vulkan executable detected.",
+            detail=(
+                "No rife-ncnn-vulkan executable detected. Use Locate RIFE, set "
+                "STABLENEW_RIFE_EXE, or unpack a release into tools/rife."
+            ),
         )
     return SVDCapability(
         name="RIFE",
@@ -298,18 +305,4 @@ def _detect_rife(config: SVDConfig) -> SVDCapability:
 
 
 def _find_rife_candidate(config: SVDConfig) -> Path | None:
-    explicit = config.postprocess.interpolation.executable_path
-    if explicit:
-        path = Path(explicit)
-        if path.exists():
-            return path
-    env_path = os.getenv("STABLENEW_RIFE_EXE")
-    if env_path and Path(env_path).exists():
-        return Path(env_path)
-    which_path = shutil.which("rife-ncnn-vulkan")
-    if which_path:
-        return Path(which_path)
-    repo_candidate = Path(__file__).resolve().parents[2] / "tools" / "rife" / "rife-ncnn-vulkan.exe"
-    if repo_candidate.exists():
-        return repo_candidate
-    return None
+    return find_rife_executable(config.postprocess.interpolation.executable_path)

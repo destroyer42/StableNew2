@@ -12,6 +12,7 @@ from typing import Any
 
 from src.controller.runtime_state import CancellationError
 from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.pipeline.secondary_motion_retirement import require_secondary_motion_block_disabled
 from src.services.runtime_transition_service import (
     RUNTIME_COMFY,
     RuntimeTransitionCoordinator,
@@ -27,8 +28,6 @@ from src.video.comfy_process_manager import (
 )
 from src.video.container_metadata import write_video_container_metadata
 from src.video.depth_map_resolver import DepthMapResolver
-from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
-from src.video.motion.secondary_motion_video_reencode import apply_secondary_motion_to_video
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_backend_types import (
     CONTROL_CAMERA_INTENT,
@@ -44,6 +43,10 @@ from src.video.video_backend_types import (
     VideoBackendCapabilities,
     VideoExecutionRequest,
     VideoExecutionResult,
+)
+from src.video.video_interpolation import (
+    interpolate_video_file,
+    normalize_interpolation_request,
 )
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
@@ -156,6 +159,23 @@ def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
         "required_frontend_version": system.get("required_frontend_version"),
     }
     return {name: str(value) for name, value in fields.items() if value}
+
+
+def _interpolation_source_fps(spec: Any, stage_config: Mapping[str, Any]) -> int:
+    """The frame rate RIFE multiplies: the frozen stage fps, else the workflow's declared length policy."""
+
+    policy = frame_count_policy(spec)
+    raw = stage_config.get("fps") or (policy or {}).get("fps") or 0
+    try:
+        fps = int(raw)
+    except (TypeError, ValueError):
+        fps = 0
+    if fps < 1:
+        raise ValueError(
+            f"Workflow '{spec.workflow_id}' declares no frame rate, so RIFE smoothing cannot "
+            "choose an output rate. Nothing was generated."
+        )
+    return fps
 
 
 def _length_provenance(spec: Any, stage_config: Mapping[str, Any]) -> dict[str, Any]:
@@ -446,9 +466,15 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{spec.workflow_id}' is registered for backend '{spec.backend_id}', "
                 f"not '{self.backend_id}'"
             )
+        # Retired secondary motion (D8) is refused before any runtime is started or dispatched.
+        require_secondary_motion_block_disabled(stage_config.get("secondary_motion"))
         # An illegal frozen length fails before any runtime is started or dispatched.
         if frame_count_policy(spec) is not None:
             parse_frame_count(spec, stage_config.get("frame_count"))
+        # Requested RIFE smoothing is validated before anything starts: an unsupported factor, a missing
+        # runtime or an unknown frame rate fails here, not after the clip has been generated.
+        if normalize_interpolation_request(stage_config.get("interpolation")) is not None:
+            _interpolation_source_fps(spec, stage_config)
         # A declared launch requirement (e.g. the qualified pinned-memory-off policy) must be
         # provable from StableNew's own managed launch configuration before anything starts.
         self._verify_required_launch_flags(spec)
@@ -544,53 +570,34 @@ class ComfyWorkflowVideoBackend:
             history_entry=history_entry,
             compiled_outputs=compiled.compiled_outputs,
         )
-        secondary_motion_block = (
-            stage_config.get("secondary_motion")
-            if isinstance(stage_config.get("secondary_motion"), dict)
-            else None
-        )
-        if (
-            isinstance(secondary_motion_block, dict)
-            and secondary_motion_block.get("enabled")
-            and resolved_outputs.get("video_path")
-        ):
-            motion_result = apply_secondary_motion_to_video(
-                video_path=str(resolved_outputs["video_path"]),
-                output_dir=request.output_dir,
-                runtime_block=secondary_motion_block,
-                fps=int(stage_config.get("fps") or stage_config.get("video_fps") or 8),
-            )
-            motion_summary = motion_result.get(
-                "secondary_motion_summary"
-            ) or extract_secondary_motion_summary(motion_result)
-            resolved_outputs.update(
-                {
-                    "secondary_motion_source_video_path": str(
-                        motion_result.get("source_video_path")
-                        or resolved_outputs.get("video_path")
-                        or ""
-                    ),
-                    "secondary_motion": motion_result["secondary_motion"],
-                    "secondary_motion_summary": motion_summary,
-                }
-            )
-            if motion_summary.get("status") == "applied":
-                resolved_outputs.update(
-                    {
-                        "primary_path": motion_result["primary_path"],
-                        "output_paths": list(motion_result["output_paths"]),
-                        "video_path": motion_result["video_path"],
-                        "video_paths": list(motion_result["video_paths"]),
-                        "frame_paths": list(motion_result["frame_paths"]),
-                        "thumbnail_path": motion_result["thumbnail_path"],
-                    }
-                )
         primary_path = resolved_outputs["primary_path"]
         output_paths = resolved_outputs["output_paths"]
         if not primary_path or not output_paths:
             raise RuntimeError(
                 f"Workflow '{workflow_id}' completed without discoverable output artifacts"
             )
+
+        smoothing = normalize_interpolation_request(stage_config.get("interpolation"))
+        interpolation_record: dict[str, Any] | None = None
+        if smoothing is not None and resolved_outputs.get("video_path"):
+            smoothed = interpolate_video_file(
+                video_path=str(resolved_outputs["video_path"]),
+                output_dir=request.output_dir,
+                source_fps=_interpolation_source_fps(spec, stage_config),
+                request=smoothing,
+                cancel_token=request.cancel_token,
+            )
+            # The smoothed clip leads; Comfy's own file stays on disk and in the lists.
+            resolved_outputs = {
+                **resolved_outputs,
+                "primary_path": smoothed.video_path,
+                "output_paths": [smoothed.video_path, *resolved_outputs["output_paths"]],
+                "video_path": smoothed.video_path,
+                "video_paths": [smoothed.video_path, *resolved_outputs["video_paths"]],
+            }
+            primary_path = resolved_outputs["primary_path"]
+            output_paths = resolved_outputs["output_paths"]
+            interpolation_record = smoothed.to_dict()
 
         length_provenance = _length_provenance(spec, stage_config)
         runtime_policy = _mapping_dict(spec.backend_defaults.get("runtime_policy"))
@@ -599,6 +606,8 @@ class ComfyWorkflowVideoBackend:
             **_driving_video_provenance(stage_config),
             **_control_provenance(spec, request, stage_config),
         }
+        if interpolation_record is not None:
+            provenance_extra["interpolation"] = interpolation_record
         if runtime_policy:
             provenance_extra["runtime_policy"] = runtime_policy
         if actual_runtime:
@@ -660,14 +669,6 @@ class ComfyWorkflowVideoBackend:
         if source_preparation:
             metadata_payload["source_preparation"] = source_preparation
         metadata_payload.update(provenance_extra)
-        if resolved_outputs.get("secondary_motion"):
-            metadata_payload["secondary_motion"] = dict(resolved_outputs["secondary_motion"])
-            metadata_payload["secondary_motion_summary"] = dict(
-                resolved_outputs.get("secondary_motion_summary") or {}
-            )
-            metadata_payload["secondary_motion_source_video_path"] = resolved_outputs.get(
-                "secondary_motion_source_video_path"
-            )
         for candidate_path in [
             *resolved_outputs["video_paths"],
             *resolved_outputs["gif_paths"],
@@ -696,13 +697,6 @@ class ComfyWorkflowVideoBackend:
             "dependency_probe": dependency_result.to_dict(),
             "compiled_workflow": compiled.to_dict(),
             "conditioning": dict(conditioning),
-            "secondary_motion": dict(resolved_outputs.get("secondary_motion") or {}),
-            "secondary_motion_summary": dict(
-                resolved_outputs.get("secondary_motion_summary") or {}
-            ),
-            "secondary_motion_source_video_path": resolved_outputs.get(
-                "secondary_motion_source_video_path"
-            ),
             "artifact": artifact_manifest_payload(
                 stage=request.stage_name,
                 image_or_output_path=primary_path,
@@ -764,13 +758,6 @@ class ComfyWorkflowVideoBackend:
                 "dependency_snapshot": dict(compiled.dependency_snapshot),
                 "compiled_inputs": dict(compiled.compiled_inputs),
                 "conditioning": dict(conditioning),
-                "secondary_motion": dict(resolved_outputs.get("secondary_motion") or {}),
-                "secondary_motion_summary": dict(
-                    resolved_outputs.get("secondary_motion_summary") or {}
-                ),
-                "secondary_motion_source_video_path": resolved_outputs.get(
-                    "secondary_motion_source_video_path"
-                ),
                 **length_provenance,
             },
         )
@@ -1411,14 +1398,6 @@ class ComfyWorkflowVideoBackend:
                 artifact_type="video",
             ),
         }
-        if resolved_outputs.get("secondary_motion"):
-            payload["secondary_motion"] = dict(resolved_outputs["secondary_motion"])
-            payload["secondary_motion_summary"] = dict(
-                resolved_outputs.get("secondary_motion_summary") or {}
-            )
-            payload["secondary_motion_source_video_path"] = resolved_outputs.get(
-                "secondary_motion_source_video_path"
-            )
         payload.update(dict(provenance_extra or {}))
         manifest_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"

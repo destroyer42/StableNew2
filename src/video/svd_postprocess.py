@@ -6,20 +6,22 @@ import gc
 import json
 import logging
 import math
-import os
 import shutil
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from PIL import Image
 
 from src.controller.runtime_state import CancellationError, CancelToken
+from src.pipeline.secondary_motion_retirement import (
+    SECONDARY_MOTION_RETIRED_MESSAGE,
+    block_enables_secondary_motion,
+)
 from src.utils.managed_process import run_bounded
-from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
-from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
+from src.video.loop_export import build_loop_frames
 from src.video.restoration.runtime import (
     GFPGAN_UNSUPPORTED_ISSUE,
     POSTPROCESS_INSTALL_HINT,
@@ -32,6 +34,11 @@ from src.video.restoration.upscale_models import (
     requests_two_times,
     resolve_upscale_model,
 )
+from src.video.rife_runtime import (
+    find_rife_executable,
+    find_rife_model_dir,
+    get_rife_multiplier_validation_error,
+)
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
 from src.video.svd_errors import SVDPostprocessError
 from src.video.video_export import save_video_frames
@@ -43,23 +50,12 @@ _REQUIRED_FACELIB_FILES = (
     "parsing_parsenet.pth",
 )
 _RIFE_CUSTOM_FRAMECOUNT_UNSUPPORTED = "only rife-v4 model support custom numframe and timestep"
-_SUPPORTED_RIFE_MULTIPLIERS = frozenset((2, 4))
 # A hung worker would otherwise block the single queue runner forever and keep holding VRAM (audit B8).
 WORKER_STAGE_TIMEOUT_SECONDS = 1800.0
 RIFE_TIMEOUT_SECONDS = 1800.0
 _CHILD_MAX_STDOUT_BYTES = 4 * 1024 * 1024
 _CHILD_MAX_STDERR_BYTES = 256 * 1024
 _RIFE_DURATION_PRESERVING_SEMANTICS = "duration_preserving_temporal_smoothing"
-
-
-def get_rife_multiplier_validation_error(multiplier: int) -> str | None:
-    """Return the bounded MVP admission error for unsupported RIFE factors."""
-    if multiplier not in _SUPPORTED_RIFE_MULTIPLIERS:
-        return (
-            f"RIFE interpolation multiplier {multiplier} is unsupported. "
-            "StableNew supports only 2x or 4x duration-preserving interpolation."
-        )
-    return None
 
 
 def get_effective_svd_export_fps(
@@ -148,8 +144,35 @@ def _install_hint(issues: list[str]) -> str:
     return " " + POSTPROCESS_INSTALL_HINT if any(i.endswith(" package") for i in issues) else ""
 
 
+def _loop_export_error(config: SVDConfig) -> str | None:
+    """Dry-run the loop request on the clip this config would produce, so an impossible one fails before generation."""
+
+    frame_count = config.inference.num_frames
+    fps = config.inference.fps
+    interpolation = config.postprocess.interpolation
+    if interpolation.enabled:
+        frame_count *= int(interpolation.multiplier)
+        fps *= int(interpolation.multiplier)
+    try:
+        build_loop_frames(
+            range(frame_count),
+            mode=config.output.loop_mode,
+            extend_to_seconds=config.output.extend_to_seconds,
+            fps=fps,
+        )
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
 def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None]:
     postprocess = config.postprocess
+    loop_error = _loop_export_error(config)
+    if loop_error:
+        return False, loop_error
+    # Secondary motion is retired (D8): a stored config that names it still loads, an enabled one is refused here.
+    if block_enables_secondary_motion(postprocess.secondary_motion.to_dict()):
+        return False, SECONDARY_MOTION_RETIRED_MESSAGE
     if postprocess.face_restore.enabled:
         method = postprocess.face_restore.method
         if method == "CodeFormer":
@@ -188,33 +211,30 @@ def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None
         if executable is None:
             return (
                 False,
-                "RIFE interpolation is enabled but no rife-ncnn-vulkan executable was found.",
+                "RIFE interpolation is enabled but no rife-ncnn-vulkan executable was found. "
+                "Use Locate RIFE in the SVD tab, set STABLENEW_RIFE_EXE, or unpack a release "
+                "into tools/rife.",
             )
+        configured_model = postprocess.interpolation.model_dir
+        if configured_model:
+            model = find_rife_model_dir(executable, configured_model)
+            if model is None or not model.is_dir():
+                return (
+                    False,
+                    f"RIFE interpolation is enabled but the model folder '{configured_model}' "
+                    "does not exist.",
+                )
     return True, None
 
 
 def resolve_rife_executable(postprocess: SVDPostprocessConfig) -> Path | None:
-    explicit = postprocess.interpolation.executable_path
-    if explicit:
-        path = Path(explicit)
-        if path.exists():
-            return path
+    return find_rife_executable(postprocess.interpolation.executable_path)
 
-    env_candidate = os.getenv("STABLENEW_RIFE_EXE")
-    if env_candidate:
-        path = Path(env_candidate)
-        if path.exists():
-            return path
 
-    which_path = shutil.which("rife-ncnn-vulkan")
-    if which_path:
-        return Path(which_path)
+def resolve_rife_model(postprocess: SVDPostprocessConfig, executable: Path) -> Path | None:
+    """The ``-m`` model folder for this run: the configured one, else the newest ``rife-v4.x`` beside the exe."""
 
-    repo_root = Path(__file__).resolve().parents[2]
-    repo_candidate = repo_root / "tools" / "rife" / "rife-ncnn-vulkan.exe"
-    if repo_candidate.exists():
-        return repo_candidate
-    return None
+    return find_rife_model_dir(executable, postprocess.interpolation.model_dir)
 
 
 class SVDPostprocessRunner:
@@ -232,6 +252,9 @@ class SVDPostprocessRunner:
         self._cancel_token = cancel_token
         self._stage_warnings: list[str] = []
         self._stage_report: dict[str, Any] | None = None
+        # What the last interpolation stage ran, for the manifest: every command and the model it named.
+        self._rife_commands: list[list[str]] = []
+        self._rife_model: Path | None = None
 
     @staticmethod
     def _record_stage(
@@ -280,17 +303,15 @@ class SVDPostprocessRunner:
 
         postprocess = config.postprocess
         if not (
-            postprocess.secondary_motion.enabled
-            or postprocess.face_restore.enabled
+            postprocess.face_restore.enabled
             or postprocess.interpolation.enabled
             or postprocess.upscale.enabled
         ):
             return frames, None
 
         logger.info(
-            "[SVD][postprocess] start input_frames=%s secondary_motion=%s face_restore=%s interpolation=%s upscale=%s",
+            "[SVD][postprocess] start input_frames=%s face_restore=%s interpolation=%s upscale=%s",
             len(frames),
-            postprocess.secondary_motion.enabled,
             postprocess.face_restore.enabled,
             postprocess.interpolation.enabled,
             postprocess.upscale.enabled,
@@ -308,7 +329,6 @@ class SVDPostprocessRunner:
         enabled_stage_names = [
             stage_name
             for stage_name, enabled in (
-                ("secondary_motion", postprocess.secondary_motion.enabled),
                 ("face_restore", postprocess.face_restore.enabled),
                 ("upscale", postprocess.upscale.enabled),
                 ("interpolation", postprocess.interpolation.enabled),
@@ -317,45 +337,6 @@ class SVDPostprocessRunner:
         ]
         total_enabled_stages = len(enabled_stage_names)
         metadata["stages"] = []
-
-        if postprocess.secondary_motion.enabled:
-            frames_in = len(current_frames)
-            self._emit_status(
-                stage_detail="postprocess: secondary_motion",
-                progress=0.0
-                if total_enabled_stages == 0
-                else len(metadata["applied"]) / total_enabled_stages,
-                current_step=len(metadata["applied"]),
-                total_steps=total_enabled_stages,
-            )
-            current_frames, secondary_motion_block = self._run_secondary_motion_stage(
-                frames=current_frames,
-                postprocess=postprocess,
-                work_dir=root,
-            )
-            metadata["secondary_motion"] = secondary_motion_block
-            summary = (
-                dict(secondary_motion_block.get("summary") or {})
-                if isinstance(secondary_motion_block, dict)
-                else {}
-            )
-            if str(summary.get("status") or "") == "applied":
-                metadata["applied"].append("secondary_motion")
-            else:
-                metadata["skipped"].append(
-                    {
-                        "stage": "secondary_motion",
-                        "status": str(summary.get("status") or ""),
-                        "skip_reason": str(summary.get("skip_reason") or ""),
-                    }
-                )
-            self._record_stage(metadata, "secondary_motion", frames_in, len(current_frames))
-            self._emit_status(
-                stage_detail="postprocess: secondary_motion",
-                progress=len(metadata["applied"]) / total_enabled_stages,
-                current_step=len(metadata["applied"]),
-                total_steps=total_enabled_stages,
-            )
 
         if postprocess.face_restore.enabled:
             frames_in = len(current_frames)
@@ -367,15 +348,12 @@ class SVDPostprocessRunner:
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
-            current_frames = cast(
-                list[Image.Image],
-                self._run_worker_stage(
-                    stage_name="face_restore",
-                    action="face_restore",
-                    frames=current_frames,
-                    payload=postprocess.face_restore.to_dict(),
-                    work_dir=root,
-                ),
+            current_frames = self._run_worker_stage(
+                stage_name="face_restore",
+                action="face_restore",
+                frames=current_frames,
+                payload=postprocess.face_restore.to_dict(),
+                work_dir=root,
             )
             metadata["applied"].append("face_restore")
             face_restore_metadata = postprocess.face_restore.to_dict()
@@ -410,18 +388,15 @@ class SVDPostprocessRunner:
             selection = resolve_svd_upscale_model(postprocess)
             if selection is None:
                 raise SVDPostprocessError("RealESRGAN upscale has no usable model weights")
-            current_frames = cast(
-                list[Image.Image],
-                self._run_worker_stage(
-                    stage_name="upscale",
-                    action="upscale",
-                    frames=current_frames,
-                    payload={
-                        **postprocess.upscale.to_dict(),
-                        "selected_model_path": selection.model_path,
-                    },
-                    work_dir=root,
-                ),
+            current_frames = self._run_worker_stage(
+                stage_name="upscale",
+                action="upscale",
+                frames=current_frames,
+                payload={
+                    **postprocess.upscale.to_dict(),
+                    "selected_model_path": selection.model_path,
+                },
+                work_dir=root,
             )
             metadata["applied"].append("upscale")
             upscale_metadata = postprocess.upscale.to_dict()
@@ -455,6 +430,8 @@ class SVDPostprocessRunner:
                 total_steps=total_enabled_stages,
             )
             interpolation_input_frame_count = len(current_frames)
+            self._rife_commands = []
+            self._rife_model = None
             current_frames = self._run_rife_stage(
                 frames=current_frames,
                 postprocess=postprocess,
@@ -469,6 +446,8 @@ class SVDPostprocessRunner:
                     "input_fps": config.inference.fps,
                     "output_frame_count": len(current_frames),
                     "output_fps": config.inference.fps * int(postprocess.interpolation.multiplier),
+                    "model": None if self._rife_model is None else self._rife_model.name,
+                    "commands": [list(command) for command in self._rife_commands],
                 }
             )
             metadata["interpolation"] = interpolation_metadata
@@ -495,66 +474,6 @@ class SVDPostprocessRunner:
         )
         return current_frames, metadata
 
-    def _run_secondary_motion_stage(
-        self,
-        *,
-        frames: list[Image.Image],
-        postprocess: SVDPostprocessConfig,
-        work_dir: Path,
-    ) -> tuple[list[Image.Image], dict[str, Any]]:
-        motion_payload = postprocess.secondary_motion.to_dict()
-        fallback_frames = [frame.copy() for frame in frames]
-        try:
-            processed, apply_result = cast(
-                tuple[list[Image.Image], dict[str, Any]],
-                self._run_worker_stage(
-                    stage_name="secondary_motion",
-                    action="secondary_motion",
-                    frames=frames,
-                    payload=motion_payload,
-                    work_dir=work_dir,
-                    expect_result=True,
-                ),
-            )
-        except SVDPostprocessError as exc:
-            logger.warning(
-                "[SVD][postprocess] secondary motion unavailable; continuing without motion: %s",
-                exc,
-            )
-            apply_result = {
-                "schema": SECONDARY_MOTION_APPLY_SCHEMA_V1,
-                "status": "unavailable",
-                "policy_id": str(motion_payload.get("policy_id") or ""),
-                "application_path": "shared_postprocess_engine",
-                "backend_mode": str(motion_payload.get("backend_mode") or ""),
-                "frames_in": len(fallback_frames),
-                "frames_out": len(fallback_frames),
-                "seed": motion_payload.get("seed"),
-                "regions_applied": list(motion_payload.get("regions") or []),
-                "skip_reason": "worker_failed",
-                "metrics": {"applied_frame_count": 0},
-                "error": str(exc),
-            }
-            manifest_block = build_secondary_motion_manifest_block(
-                intent=motion_payload.get("intent"),
-                policy=motion_payload.get("policy"),
-                apply_result=apply_result,
-            )
-            return fallback_frames, manifest_block
-        for frame in fallback_frames:
-            close = getattr(frame, "close", None)
-            if callable(close):
-                try:
-                    close()
-                except Exception:
-                    pass
-        manifest_block = build_secondary_motion_manifest_block(
-            intent=motion_payload.get("intent"),
-            policy=motion_payload.get("policy"),
-            apply_result=apply_result,
-        )
-        return processed, manifest_block
-
     def _run_worker_stage(
         self,
         *,
@@ -563,8 +482,7 @@ class SVDPostprocessRunner:
         frames: list[Image.Image],
         payload: dict[str, Any],
         work_dir: Path,
-        expect_result: bool = False,
-    ) -> list[Image.Image] | tuple[list[Image.Image], dict[str, Any]]:
+    ) -> list[Image.Image]:
         input_dir = work_dir / f"{stage_name}_input"
         output_dir = work_dir / f"{stage_name}_output"
         self._reset_dir(input_dir)
@@ -574,7 +492,6 @@ class SVDPostprocessRunner:
             stage_name,
             len(frames),
         )
-        result_payload: dict[str, Any] = {}
         self._stage_report = None
         try:
             save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
@@ -611,15 +528,6 @@ class SVDPostprocessRunner:
             for warning in self._stage_warnings:
                 logger.warning("[SVD][postprocess] stage=%s warning: %s", stage_name, warning)
             self._stage_report = self._read_worker_report(output_dir / WORKER_REPORT_FILENAME)
-            if expect_result:
-                stdout = completed.stdout.strip()
-                if stdout:
-                    try:
-                        result_payload = json.loads(stdout)
-                    except json.JSONDecodeError as exc:
-                        raise SVDPostprocessError(
-                            f"{stage_name} worker returned invalid JSON: {stdout}"
-                        ) from exc
         finally:
             self._close_images(frames)
             frames.clear()
@@ -632,8 +540,6 @@ class SVDPostprocessRunner:
             stage_name,
             len(processed),
         )
-        if expect_result:
-            return processed, result_payload
         return processed
 
     def _run_rife_stage(
@@ -774,8 +680,8 @@ class SVDPostprocessRunner:
             f"expected {target_count}, got {actual_count}"
         )
 
-    @staticmethod
     def _build_rife_command(
+        self,
         *,
         executable: Path,
         input_dir: Path,
@@ -792,14 +698,18 @@ class SVDPostprocessRunner:
         ]
         if target_count is not None:
             cmd.extend(["-n", str(target_count)])
-        model_dir = postprocess.interpolation.model_dir
-        if model_dir:
-            cmd.extend(["-m", str(model_dir)])
+        # Always name the model when one is known: the executable's own default is an old one that rejects
+        # a custom frame target.
+        model = resolve_rife_model(postprocess, executable)
+        if model is not None:
+            cmd.extend(["-m", str(model)])
+        self._rife_model = model
         return cmd
 
     def _run_rife_command(
         self, *, cmd: list[str], executable: Path
     ) -> subprocess.CompletedProcess[str]:
+        self._rife_commands.append(list(cmd))
         return self._run_child(
             cmd,
             cwd=executable.parent,

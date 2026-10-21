@@ -32,7 +32,9 @@ from src.state.output_routing import (
 from src.video.continuity_models import normalize_continuity_link
 from src.video.motion_source_plan import motion_source_contract
 from src.video.motion_source_preparation import validate_prepared_record
+from src.video.rife_runtime import default_rife_multiplier, find_rife_executable
 from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
+from src.video.video_interpolation import normalize_interpolation_request
 from src.video.video_workflow_intent import (
     EXPERIMENTAL_OPT_IN_FIELD,
     build_video_execution_block,
@@ -605,6 +607,24 @@ class VideoWorkflowNjrBuilder:
         frozen_controls = resolve_operator_controls(spec, form_data)
         if frozen_controls is not None:
             workflow_config["operator_controls"] = frozen_controls
+        # Optional RIFE smoothing of the finished clip (PR-VID-SMOOTH-302). Validated here, so a missing
+        # runtime or an unsupported factor is refused at admission, and frozen as resolved values so the queued
+        # job and any replay smooth the same way.
+        smoothing = normalize_interpolation_request(form_data.get("interpolation"))
+        frozen_interpolation: dict[str, Any] | None = None
+        if smoothing is not None:
+            resolved_executable = find_rife_executable(smoothing.executable_path)
+            source_fps = (length_policy or {}).get("fps")
+            frozen_interpolation = {
+                "enabled": True,
+                "multiplier": smoothing.multiplier
+                or (default_rife_multiplier(source_fps) if source_fps else None),
+                "executable_path": None
+                if resolved_executable is None
+                else str(resolved_executable),
+                "model_dir": smoothing.model_dir,
+            }
+            workflow_config["interpolation"] = frozen_interpolation
         if continuity_link:
             config["metadata"] = {"continuity": dict(continuity_link)}
 
@@ -630,6 +650,8 @@ class VideoWorkflowNjrBuilder:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
+        if frozen_interpolation is not None:
+            extra_metadata["video_workflow"]["interpolation"] = dict(frozen_interpolation)
         if frozen_controls is not None:
             extra_metadata["video_workflow"]["operator_controls"] = dict(frozen_controls)
         if driving_provenance is not None:
