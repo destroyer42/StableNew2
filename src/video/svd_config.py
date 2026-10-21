@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from src.video.loop_export import LoopMode, loop_export_validation_error
 from src.video.svd_errors import SVDConfigError
 
 SVDResizeMode = Literal["letterbox", "center_crop", "contain_then_crop"]
@@ -173,12 +174,20 @@ class SVDOutputConfig:
     output_format: SVDOutputFormat = "mp4"
     save_frames: bool = False
     save_preview_image: bool = True
+    # Cheap perceived length (PR-VID-LOOP-303): ``ping_pong`` plays forward then backward, and
+    # ``extend_to_seconds`` repeats whole cycles until the clip fills that duration (0 = off).
+    loop_mode: LoopMode = "none"
+    extend_to_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         _require(
             self.output_format in _VALID_OUTPUT_FORMATS,
             f"Invalid output_format: {self.output_format}",
         )
+        loop_error = loop_export_validation_error(
+            mode=self.loop_mode, extend_to_seconds=float(self.extend_to_seconds)
+        )
+        _require(loop_error is None, loop_error or "")
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> SVDOutputConfig:
@@ -187,6 +196,8 @@ class SVDOutputConfig:
             output_format=str(payload.get("output_format", "mp4")),
             save_frames=bool(payload.get("save_frames", False)),
             save_preview_image=bool(payload.get("save_preview_image", True)),
+            loop_mode=cast(LoopMode, str(payload.get("loop_mode") or "none")),
+            extend_to_seconds=float(payload.get("extend_to_seconds") or 0.0),
         )
 
     def to_dict(self) -> dict[str, Any]:

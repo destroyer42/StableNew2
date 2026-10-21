@@ -214,3 +214,5 @@ class SVDResult:
     model_id: str
     preprocess: SVDPreprocessResult
     postprocess: dict[str, Any] | None = None
+    # How the exported frame sequence was made (loop / ping-pong); ``None`` for a run that predates it.
+    export: dict[str, Any] | None = None

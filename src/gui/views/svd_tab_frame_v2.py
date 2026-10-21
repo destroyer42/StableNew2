@@ -21,6 +21,8 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
+from src.video.loop_export import LOOP_MODES, MAX_EXTEND_SECONDS
+from src.video.rife_runtime import default_rife_multiplier
 from src.video.svd_config import (
     DEFAULT_FACE_RESTORE_FIDELITY,
     OFFERED_FACE_RESTORE_METHODS,
@@ -205,6 +207,8 @@ class SVDTabFrameV2(ttk.Frame):
         self.target_preset_var = tk.StringVar(value=_DEFAULT_TARGET_PRESET)
         self.resize_mode_var = tk.StringVar(value="center_crop")
         self.output_format_var = tk.StringVar(value="mp4")
+        self.loop_mode_var = tk.StringVar(value="none")
+        self.extend_seconds_var = tk.DoubleVar(value=0.0)
         self.output_route_var = tk.StringVar(value=OUTPUT_ROUTE_SVD)
         self.save_frames_var = tk.BooleanVar(value=False)
         self.cpu_offload_var = tk.BooleanVar(value=True)
@@ -216,7 +220,8 @@ class SVDTabFrameV2(ttk.Frame):
         self.face_restore_method_var = tk.StringVar(value="CodeFormer")
         self.face_restore_fidelity_var = tk.DoubleVar(value=DEFAULT_FACE_RESTORE_FIDELITY)
         self.interpolation_enabled_var = tk.BooleanVar(value=False)
-        self.interpolation_multiplier_var = tk.IntVar(value=2)
+        # x4 of the 7 fps default lands at 28 fps; the controller's defaults set it from the source fps.
+        self.interpolation_multiplier_var = tk.IntVar(value=default_rife_multiplier(7))
         self.rife_executable_var = tk.StringVar()
         self.frame_upscale_enabled_var = tk.BooleanVar(value=False)
         self.frame_upscale_factor_var = tk.DoubleVar(value=2.0)
@@ -494,6 +499,26 @@ class SVDTabFrameV2(ttk.Frame):
         self._add_combo(
             settings,
             row,
+            "Loop",
+            self.loop_mode_var,
+            list(LOOP_MODES),
+            help_key="loop_mode",
+        )
+        row += 1
+        self._add_spinbox(
+            settings,
+            row,
+            "Extend to (s)",
+            self.extend_seconds_var,
+            from_=0,
+            to=MAX_EXTEND_SECONDS,
+            increment=1,
+            help_key="extend_seconds",
+        )
+        row += 1
+        self._add_combo(
+            settings,
+            row,
             "Route",
             self.output_route_var,
             list(_SVD_OUTPUT_ROUTES),
@@ -641,8 +666,8 @@ class SVDTabFrameV2(ttk.Frame):
         self.rife_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         ttk.Button(
             rife_frame,
-            text="...",
-            width=3,
+            text="Locate RIFE",
+            width=11,
             style="Dark.TButton",
             command=self._on_browse_rife_executable,
         ).grid(row=0, column=1, sticky="e")
@@ -1079,6 +1104,8 @@ class SVDTabFrameV2(ttk.Frame):
                 "output_format": self.output_format_var.get(),
                 "save_frames": bool(self.save_frames_var.get()),
                 "save_preview_image": True,
+                "loop_mode": self.loop_mode_var.get(),
+                "extend_to_seconds": self._extend_seconds_value(),
             },
             "postprocess": {
                 "face_restore": {
@@ -1229,6 +1256,10 @@ class SVDTabFrameV2(ttk.Frame):
             if output_format in _OUTPUT_FORMATS:
                 self.output_format_var.set(output_format)
             self.save_frames_var.set(bool(output.get("save_frames", self.save_frames_var.get())))
+            loop_mode = str(output.get("loop_mode") or "none")
+            if loop_mode in LOOP_MODES:
+                self.loop_mode_var.set(loop_mode)
+            self.extend_seconds_var.set(float(output.get("extend_to_seconds") or 0.0))
 
         postprocess = defaults.get("postprocess")
         if not isinstance(postprocess, dict):
@@ -1477,6 +1508,14 @@ class SVDTabFrameV2(ttk.Frame):
             self._set_status(f"SVD cache directory set to {path}")
             self._refresh_capabilities()
 
+    def _extend_seconds_value(self) -> float:
+        """The spinbox text as seconds; unreadable text means off rather than an exception in the form."""
+
+        try:
+            return max(0.0, float(self.extend_seconds_var.get()))
+        except (tk.TclError, ValueError):
+            return 0.0
+
     def _on_browse_rife_executable(self) -> None:
         initial_dir = self._last_folder or None
         path = filedialog.askopenfilename(
@@ -1693,6 +1732,8 @@ class SVDTabFrameV2(ttk.Frame):
             "resize_mode": self.resize_mode_var.get(),
             "output_format": self.output_format_var.get(),
             "output_route": self.output_route_var.get(),
+            "loop_mode": self.loop_mode_var.get(),
+            "extend_to_seconds": self._extend_seconds_value(),
             "save_frames": bool(self.save_frames_var.get()),
             "cpu_offload": bool(self.cpu_offload_var.get()),
             "forward_chunking": bool(self.forward_chunking_var.get()),
@@ -1785,6 +1826,9 @@ class SVDTabFrameV2(ttk.Frame):
                 )
             )
             self.rife_executable_var.set(str(payload.get("rife_executable_path") or ""))
+            saved_loop_mode = str(payload.get("loop_mode") or "none")
+            self.loop_mode_var.set(saved_loop_mode if saved_loop_mode in LOOP_MODES else "none")
+            self.extend_seconds_var.set(float(payload.get("extend_to_seconds") or 0.0))
             self.frame_upscale_enabled_var.set(
                 bool(payload.get("frame_upscale_enabled", self.frame_upscale_enabled_var.get()))
             )

@@ -314,7 +314,6 @@ def test_driving_video_field_is_shown_only_for_workflows_that_accept_one(tk_root
     assert tab.get_video_workflow_state()["pose_video_path"] == "C:/clips/other.mp4"
 
 
-
 class _RealProjectionControllerStub:
     """Serves the real controller's workflow projection (what the operator actually sees)."""
 
@@ -388,3 +387,26 @@ def test_prompt_mode_shows_reference_strength_only_and_other_workflows_show_no_c
     tab.update_idletasks()
     assert panel.control_names == [] and not panel.winfo_manager()
     assert "operator_controls" not in tab.get_video_workflow_state()
+
+
+@pytest.mark.gui
+def test_video_workflow_tab_smooth_with_rife_round_trips_and_reaches_the_submission(
+    tk_root,
+) -> None:
+    controller = _ControllerStub()
+    tab = VideoWorkflowTabFrameV2(tk_root, app_controller=controller, app_state=SimpleNamespace())
+    tab.set_source_image_path("C:/tmp/source.png", status_message="loaded")
+
+    assert "interpolation" not in tab.get_video_workflow_state()
+
+    tab.smooth_var.set(True)
+    state = tab.get_video_workflow_state()
+    assert state["interpolation"] == {"enabled": True}
+    assert tab.get_video_workflow_state(for_submission=True)["interpolation"] == {"enabled": True}
+
+    tab.smooth_var.set(False)
+    tab.restore_video_workflow_state(state)
+    assert tab.smooth_var.get() is True
+
+    tab.restore_video_workflow_state({**state, "interpolation": None})
+    assert tab.smooth_var.get() is False
