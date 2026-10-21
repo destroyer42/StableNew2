@@ -588,6 +588,8 @@ def test_process_frames_logs_stage_summary(tmp_path: Path, monkeypatch, caplog) 
         "input_fps": 7,
         "output_frame_count": 4,
         "output_fps": 14,
+        "model": None,
+        "commands": [],
     }
     assert "[SVD][postprocess] start input_frames=2" in caplog.text
     assert (

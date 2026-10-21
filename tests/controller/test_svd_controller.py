@@ -127,7 +127,10 @@ def test_submit_svd_folder_batch_submits_once_in_discovery_order_and_resolves_ge
         "z_landscape.png",
     ]
     assert all(len(njr.input_image_paths) == 1 for njr in captured["njrs"])
-    assert all([stage.stage_type for stage in njr.stage_chain] == ["svd_native"] for njr in captured["njrs"])
+    assert all(
+        [stage.stage_type for stage in njr.stage_chain] == ["svd_native"]
+        for njr in captured["njrs"]
+    )
     preprocesses = [njr.config["svd_native"]["preprocess"] for njr in captured["njrs"]]
     assert [(item["target_width"], item["target_height"]) for item in preprocesses] == [
         (576, 1024),
@@ -136,11 +139,15 @@ def test_submit_svd_folder_batch_submits_once_in_discovery_order_and_resolves_ge
     assert [njr.config["svd_native"]["inference"]["seed"] for njr in captured["njrs"]] == [42, 42]
 
 
-def test_submit_svd_folder_batch_rejects_invalid_candidate_without_submission(tmp_path, monkeypatch) -> None:
+def test_submit_svd_folder_batch_rejects_invalid_candidate_without_submission(
+    tmp_path, monkeypatch
+) -> None:
     _write_image(tmp_path / "valid.png", (768, 768))
     (tmp_path / "broken.webp").write_bytes(b"not a webp")
     submit = Mock()
-    app_controller = SimpleNamespace(output_dir=str(tmp_path), job_service=SimpleNamespace(submit_njrs=submit))
+    app_controller = SimpleNamespace(
+        output_dir=str(tmp_path), job_service=SimpleNamespace(submit_njrs=submit)
+    )
     controller = SVDController(app_controller=app_controller, svd_service=Mock())
     monkeypatch.setattr(
         "src.controller.svd_controller.get_svd_preflight",
@@ -165,7 +172,9 @@ def test_submit_svd_folder_batch_rejects_zero_compatible_sources_without_submiss
     (tmp_path / "notes.txt").write_text("ignored")
     submit = Mock()
     controller = SVDController(
-        app_controller=SimpleNamespace(output_dir=str(tmp_path), job_service=SimpleNamespace(submit_njrs=submit)),
+        app_controller=SimpleNamespace(
+            output_dir=str(tmp_path), job_service=SimpleNamespace(submit_njrs=submit)
+        ),
         svd_service=Mock(),
     )
     monkeypatch.setattr(
@@ -174,7 +183,9 @@ def test_submit_svd_folder_batch_rejects_zero_compatible_sources_without_submiss
     )
 
     try:
-        controller.submit_svd_folder_batch(folder=tmp_path, config=SVDConfig(), match_source_aspect=False)
+        controller.submit_svd_folder_batch(
+            folder=tmp_path, config=SVDConfig(), match_source_aspect=False
+        )
         assert False, "expected zero compatible sources to block submission"
     except RuntimeError as exc:
         assert "no compatible image files" in str(exc)
@@ -225,7 +236,10 @@ def test_get_postprocess_capabilities_exposes_runtime_status() -> None:
     assert "gfpgan" in result
 
 
-def test_build_default_config_is_the_xt_operating_point_for_12gb() -> None:
+def test_build_default_config_is_the_xt_operating_point_for_12gb(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "src.controller.svd_controller.find_rife_executable", lambda *_a, **_k: None
+    )
     app_controller = SimpleNamespace(output_dir="output", job_service=Mock())
     controller = SVDController(app_controller=app_controller, svd_service=Mock())
     result = controller.build_default_config()

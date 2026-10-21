@@ -44,6 +44,10 @@ from src.video.video_backend_types import (
     VideoExecutionRequest,
     VideoExecutionResult,
 )
+from src.video.video_interpolation import (
+    interpolate_video_file,
+    normalize_interpolation_request,
+)
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
 from src.video.workflow_readiness import WorkflowResourceReadiness
@@ -155,6 +159,23 @@ def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
         "required_frontend_version": system.get("required_frontend_version"),
     }
     return {name: str(value) for name, value in fields.items() if value}
+
+
+def _interpolation_source_fps(spec: Any, stage_config: Mapping[str, Any]) -> int:
+    """The frame rate RIFE multiplies: the frozen stage fps, else the workflow's declared length policy."""
+
+    policy = frame_count_policy(spec)
+    raw = stage_config.get("fps") or (policy or {}).get("fps")
+    try:
+        fps = int(raw)
+    except (TypeError, ValueError):
+        fps = 0
+    if fps < 1:
+        raise ValueError(
+            f"Workflow '{spec.workflow_id}' declares no frame rate, so RIFE smoothing cannot "
+            "choose an output rate. Nothing was generated."
+        )
+    return fps
 
 
 def _length_provenance(spec: Any, stage_config: Mapping[str, Any]) -> dict[str, Any]:
@@ -450,6 +471,10 @@ class ComfyWorkflowVideoBackend:
         # An illegal frozen length fails before any runtime is started or dispatched.
         if frame_count_policy(spec) is not None:
             parse_frame_count(spec, stage_config.get("frame_count"))
+        # Requested RIFE smoothing is validated before anything starts: an unsupported factor, a missing
+        # runtime or an unknown frame rate fails here, not after the clip has been generated.
+        if normalize_interpolation_request(stage_config.get("interpolation")) is not None:
+            _interpolation_source_fps(spec, stage_config)
         # A declared launch requirement (e.g. the qualified pinned-memory-off policy) must be
         # provable from StableNew's own managed launch configuration before anything starts.
         self._verify_required_launch_flags(spec)
@@ -552,6 +577,28 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{workflow_id}' completed without discoverable output artifacts"
             )
 
+        smoothing = normalize_interpolation_request(stage_config.get("interpolation"))
+        interpolation_record: dict[str, Any] | None = None
+        if smoothing is not None and resolved_outputs.get("video_path"):
+            smoothed = interpolate_video_file(
+                video_path=str(resolved_outputs["video_path"]),
+                output_dir=request.output_dir,
+                source_fps=_interpolation_source_fps(spec, stage_config),
+                request=smoothing,
+                cancel_token=request.cancel_token,
+            )
+            # The smoothed clip leads; Comfy's own file stays on disk and in the lists.
+            resolved_outputs = {
+                **resolved_outputs,
+                "primary_path": smoothed.video_path,
+                "output_paths": [smoothed.video_path, *resolved_outputs["output_paths"]],
+                "video_path": smoothed.video_path,
+                "video_paths": [smoothed.video_path, *resolved_outputs["video_paths"]],
+            }
+            primary_path = resolved_outputs["primary_path"]
+            output_paths = resolved_outputs["output_paths"]
+            interpolation_record = smoothed.to_dict()
+
         length_provenance = _length_provenance(spec, stage_config)
         runtime_policy = _mapping_dict(spec.backend_defaults.get("runtime_policy"))
         provenance_extra: dict[str, Any] = {
@@ -559,6 +606,8 @@ class ComfyWorkflowVideoBackend:
             **_driving_video_provenance(stage_config),
             **_control_provenance(spec, request, stage_config),
         }
+        if interpolation_record is not None:
+            provenance_extra["interpolation"] = interpolation_record
         if runtime_policy:
             provenance_extra["runtime_policy"] = runtime_policy
         if actual_runtime:

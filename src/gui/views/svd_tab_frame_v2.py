@@ -21,6 +21,7 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
+from src.video.rife_runtime import default_rife_multiplier
 from src.video.svd_config import (
     DEFAULT_FACE_RESTORE_FIDELITY,
     OFFERED_FACE_RESTORE_METHODS,
@@ -216,7 +217,8 @@ class SVDTabFrameV2(ttk.Frame):
         self.face_restore_method_var = tk.StringVar(value="CodeFormer")
         self.face_restore_fidelity_var = tk.DoubleVar(value=DEFAULT_FACE_RESTORE_FIDELITY)
         self.interpolation_enabled_var = tk.BooleanVar(value=False)
-        self.interpolation_multiplier_var = tk.IntVar(value=2)
+        # x4 of the 7 fps default lands at 28 fps; the controller's defaults set it from the source fps.
+        self.interpolation_multiplier_var = tk.IntVar(value=default_rife_multiplier(7))
         self.rife_executable_var = tk.StringVar()
         self.frame_upscale_enabled_var = tk.BooleanVar(value=False)
         self.frame_upscale_factor_var = tk.DoubleVar(value=2.0)
@@ -641,8 +643,8 @@ class SVDTabFrameV2(ttk.Frame):
         self.rife_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         ttk.Button(
             rife_frame,
-            text="...",
-            width=3,
+            text="Locate RIFE",
+            width=11,
             style="Dark.TButton",
             command=self._on_browse_rife_executable,
         ).grid(row=0, column=1, sticky="e")

@@ -6,7 +6,6 @@ import gc
 import json
 import logging
 import math
-import os
 import shutil
 import subprocess
 import sys
@@ -34,6 +33,11 @@ from src.video.restoration.upscale_models import (
     requests_two_times,
     resolve_upscale_model,
 )
+from src.video.rife_runtime import (
+    find_rife_executable,
+    find_rife_model_dir,
+    get_rife_multiplier_validation_error,
+)
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
 from src.video.svd_errors import SVDPostprocessError
 from src.video.video_export import save_video_frames
@@ -45,23 +49,12 @@ _REQUIRED_FACELIB_FILES = (
     "parsing_parsenet.pth",
 )
 _RIFE_CUSTOM_FRAMECOUNT_UNSUPPORTED = "only rife-v4 model support custom numframe and timestep"
-_SUPPORTED_RIFE_MULTIPLIERS = frozenset((2, 4))
 # A hung worker would otherwise block the single queue runner forever and keep holding VRAM (audit B8).
 WORKER_STAGE_TIMEOUT_SECONDS = 1800.0
 RIFE_TIMEOUT_SECONDS = 1800.0
 _CHILD_MAX_STDOUT_BYTES = 4 * 1024 * 1024
 _CHILD_MAX_STDERR_BYTES = 256 * 1024
 _RIFE_DURATION_PRESERVING_SEMANTICS = "duration_preserving_temporal_smoothing"
-
-
-def get_rife_multiplier_validation_error(multiplier: int) -> str | None:
-    """Return the bounded MVP admission error for unsupported RIFE factors."""
-    if multiplier not in _SUPPORTED_RIFE_MULTIPLIERS:
-        return (
-            f"RIFE interpolation multiplier {multiplier} is unsupported. "
-            "StableNew supports only 2x or 4x duration-preserving interpolation."
-        )
-    return None
 
 
 def get_effective_svd_export_fps(
@@ -193,33 +186,30 @@ def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None
         if executable is None:
             return (
                 False,
-                "RIFE interpolation is enabled but no rife-ncnn-vulkan executable was found.",
+                "RIFE interpolation is enabled but no rife-ncnn-vulkan executable was found. "
+                "Use Locate RIFE in the SVD tab, set STABLENEW_RIFE_EXE, or unpack a release "
+                "into tools/rife.",
             )
+        configured_model = postprocess.interpolation.model_dir
+        if configured_model:
+            model = find_rife_model_dir(executable, configured_model)
+            if model is None or not model.is_dir():
+                return (
+                    False,
+                    f"RIFE interpolation is enabled but the model folder '{configured_model}' "
+                    "does not exist.",
+                )
     return True, None
 
 
 def resolve_rife_executable(postprocess: SVDPostprocessConfig) -> Path | None:
-    explicit = postprocess.interpolation.executable_path
-    if explicit:
-        path = Path(explicit)
-        if path.exists():
-            return path
+    return find_rife_executable(postprocess.interpolation.executable_path)
 
-    env_candidate = os.getenv("STABLENEW_RIFE_EXE")
-    if env_candidate:
-        path = Path(env_candidate)
-        if path.exists():
-            return path
 
-    which_path = shutil.which("rife-ncnn-vulkan")
-    if which_path:
-        return Path(which_path)
+def resolve_rife_model(postprocess: SVDPostprocessConfig, executable: Path) -> Path | None:
+    """The ``-m`` model folder for this run: the configured one, else the newest ``rife-v4.x`` beside the exe."""
 
-    repo_root = Path(__file__).resolve().parents[2]
-    repo_candidate = repo_root / "tools" / "rife" / "rife-ncnn-vulkan.exe"
-    if repo_candidate.exists():
-        return repo_candidate
-    return None
+    return find_rife_model_dir(executable, postprocess.interpolation.model_dir)
 
 
 class SVDPostprocessRunner:
@@ -237,6 +227,9 @@ class SVDPostprocessRunner:
         self._cancel_token = cancel_token
         self._stage_warnings: list[str] = []
         self._stage_report: dict[str, Any] | None = None
+        # What the last interpolation stage ran, for the manifest: every command and the model it named.
+        self._rife_commands: list[list[str]] = []
+        self._rife_model: Path | None = None
 
     @staticmethod
     def _record_stage(
@@ -418,6 +411,8 @@ class SVDPostprocessRunner:
                 total_steps=total_enabled_stages,
             )
             interpolation_input_frame_count = len(current_frames)
+            self._rife_commands = []
+            self._rife_model = None
             current_frames = self._run_rife_stage(
                 frames=current_frames,
                 postprocess=postprocess,
@@ -432,6 +427,8 @@ class SVDPostprocessRunner:
                     "input_fps": config.inference.fps,
                     "output_frame_count": len(current_frames),
                     "output_fps": config.inference.fps * int(postprocess.interpolation.multiplier),
+                    "model": None if self._rife_model is None else self._rife_model.name,
+                    "commands": [list(command) for command in self._rife_commands],
                 }
             )
             metadata["interpolation"] = interpolation_metadata
@@ -664,8 +661,8 @@ class SVDPostprocessRunner:
             f"expected {target_count}, got {actual_count}"
         )
 
-    @staticmethod
     def _build_rife_command(
+        self,
         *,
         executable: Path,
         input_dir: Path,
@@ -682,14 +679,18 @@ class SVDPostprocessRunner:
         ]
         if target_count is not None:
             cmd.extend(["-n", str(target_count)])
-        model_dir = postprocess.interpolation.model_dir
-        if model_dir:
-            cmd.extend(["-m", str(model_dir)])
+        # Always name the model when one is known: the executable's own default is an old one that rejects
+        # a custom frame target.
+        model = resolve_rife_model(postprocess, executable)
+        if model is not None:
+            cmd.extend(["-m", str(model)])
+        self._rife_model = model
         return cmd
 
     def _run_rife_command(
         self, *, cmd: list[str], executable: Path
     ) -> subprocess.CompletedProcess[str]:
+        self._rife_commands.append(list(cmd))
         return self._run_child(
             cmd,
             cwd=executable.parent,
