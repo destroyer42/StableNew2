@@ -11,7 +11,7 @@ from src.pipeline.njr_core_v26 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
 from src.video.svd_capabilities import get_svd_postprocess_capabilities, get_svd_preflight
-from src.video.svd_config import SVDConfig
+from src.video.svd_config import DEFAULT_FACE_RESTORE_FIDELITY, SVDConfig
 from src.video.svd_models import get_default_svd_cache_dir, resolve_svd_model_spec
 from src.video.svd_postprocess import validate_svd_postprocess_config
 from src.video.svd_preprocess import (
@@ -67,7 +67,8 @@ class SVDController:
                 "postprocess": {
                     "face_restore": {
                         "method": "CodeFormer",
-                        "fidelity_weight": 0.6,
+                        "fidelity_weight": DEFAULT_FACE_RESTORE_FIDELITY,
+                        "temporal_smoothing": True,
                     },
                     "interpolation": {
                         "multiplier": 2,

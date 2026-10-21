@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-429 of 586 modules have a docstring.
+431 of 588 modules have a docstring.
 
 ## src/
 
@@ -733,4 +733,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `legacy_face_helper.py`: Isolated legacy face helper for CodeFormer: the ``facelib`` fork shipped in the codeformer wheel
 - `model_loader.py`: Load restoration/upscale checkpoints through Spandrel (StableNew-owned seam)
 - `runtime.py`: Readiness for StableNew's optional local restoration/upscale runtime
+- `temporal.py`: Temporal stabilisation for per-frame face restoration (PR-VID-POST-304)
+- `upscale_models.py`: Choose the RealESRGAN weights for an upscale request (PR-VID-POST-304)
 - `upscaler.py`: RealESRGAN-style RRDB upscaling with StableNew-owned padding, tiling and resizing
