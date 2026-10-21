@@ -34,7 +34,9 @@ def read_thumbnail(path: Path | None, root: Path) -> Image.Image | None:
             return None
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(io.BytesIO(raw)) as image:
+            # Restrict content detection before decoding: EPS and other plugins can invoke
+            # external programs or create temporary files even under a raster filename.
+            with Image.open(io.BytesIO(raw), formats=("PNG", "JPEG", "WEBP")) as image:
                 if image.width * image.height > MAX_PREVIEW_PIXELS:
                     return None
                 image.thumbnail(THUMBNAIL_SIZE)

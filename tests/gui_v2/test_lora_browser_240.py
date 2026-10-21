@@ -504,3 +504,46 @@ def test_thumbnail_refreshes_coalesce_while_old_decode_is_active(monkeypatch):
     workers.run()
     invoker.drain()
     assert not browser._thumb_active
+
+
+def test_disguised_eps_preview_never_enters_external_decoder(tmp_path, monkeypatch):
+    from PIL import EpsImagePlugin
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("Raster preview entered EPS/Ghostscript decoder")
+
+    monkeypatch.setattr(EpsImagePlugin, "Ghostscript", forbidden)
+    monkeypatch.setattr(EpsImagePlugin.EpsImageFile, "load", forbidden)
+    path = tmp_path / "style.preview.png"
+    path.write_bytes(b"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 100 100\nshowpage\n")
+    assert read_thumbnail(path, tmp_path) is None
+
+
+def test_browser_selection_and_keyword_insertion_reuse_style_projection():
+    from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
+
+    updates, metadata = [], []
+    frame = SimpleNamespace(
+        _suppress_editor_change=False,
+        lora_picker=SimpleNamespace(get_loras=lambda: [("style", 1.23)]),
+        workspace_state=SimpleNamespace(
+            get_current_slot_index=lambda: 0,
+            set_slot_loras=lambda index, value: updates.append((index, value)),
+            set_slot_text=lambda index, value: updates.append((index, value)),
+        ),
+        _mark_pack_modified=lambda: None,
+        _highlight_matrix_tokens=lambda: None,
+        _validate_matrix_slots=lambda: None,
+        _refresh_template_preview=lambda: None,
+        _refresh_metadata=lambda *, scan_style=True: metadata.append(scan_style),
+        editor=SimpleNamespace(
+            insert=lambda *_: None,
+            edit_modified=lambda *args: not args,
+            get=lambda *_: "sunlight\n",
+        ),
+    )
+    frame._on_editor_modified = lambda: PromptTabFrame._on_editor_modified(frame)
+    PromptTabFrame._on_loras_changed(frame)
+    PromptTabFrame._insert_keywords_to_prompt(frame, "sunlight")
+    assert metadata == [False, False]
+    assert updates == [(0, [("style", 1.23)]), (0, "sunlight")]
