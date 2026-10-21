@@ -31,7 +31,17 @@ CENSUS_REASON = "the full census is the merge gate for every executable change"
 DOC_SUFFIXES = frozenset({".md", ".rst", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf"})
 DOC_EXACT_PATHS = frozenset({"LICENSE", ".github/CODEOWNERS", "CODEOWNERS"})
 #: Trees where a ``.md``/``.txt`` file may be data consumed by code, so it is never assumed to be documentation.
-NON_DOC_TREES = ("src/", "tests/", "config/", "presets/", "packs/", "data/", "tools/ci/", ".github/workflows/", ".github/actions/")
+NON_DOC_TREES = (
+    "src/",
+    "tests/",
+    "config/",
+    "presets/",
+    "packs/",
+    "data/",
+    "tools/ci/",
+    ".github/workflows/",
+    ".github/actions/",
+)
 
 
 @dataclass(frozen=True)
@@ -86,11 +96,17 @@ def classify(changed_files: list[str]) -> ValidationPlan:
     files = tuple(sorted({_norm(f) for f in changed_files if f}))
     executable = [path for path in files if not is_documentation(path)]
     if not executable:
-        return ValidationPlan(docs_only=True, full_census=False, full_census_reasons=(), changed_files=files)
-    return ValidationPlan(docs_only=False, full_census=True, full_census_reasons=(CENSUS_REASON,), changed_files=files)
+        return ValidationPlan(
+            docs_only=True, full_census=False, full_census_reasons=(), changed_files=files
+        )
+    return ValidationPlan(
+        docs_only=False, full_census=True, full_census_reasons=(CENSUS_REASON,), changed_files=files
+    )
 
 
-def apply_evidence_reuse(plan: ValidationPlan, delta_files: list[str], *, previous_green: bool) -> ValidationPlan:
+def apply_evidence_reuse(
+    plan: ValidationPlan, delta_files: list[str], *, previous_green: bool
+) -> ValidationPlan:
     """Reuse green evidence for a docs-only delta over an already-validated head (never over an unvalidated one).
 
     ``delta_files`` are the paths changed since the previous PR head. Reuse needs: the previous head's required gate and
@@ -110,7 +126,10 @@ def changed_files_between(base: str, head: str, root: Path = ROOT) -> list[str]:
 
     out = subprocess.run(
         ["git", "diff", "--name-status", "--no-renames", f"{base}...{head}"],
-        cwd=root, capture_output=True, text=True, check=True,
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     paths: list[str] = []
     for line in out.splitlines():
@@ -125,7 +144,10 @@ def changed_files_direct(before: str, after: str, root: Path = ROOT) -> list[str
 
     out = subprocess.run(
         ["git", "diff", "--name-status", "--no-renames", before, after],
-        cwd=root, capture_output=True, text=True, check=True,
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     return [line.split("\t", 1)[1].strip() for line in out.splitlines() if "\t" in line]
 
@@ -141,28 +163,58 @@ def _github_output(plan: ValidationPlan, handle) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--base")
     parser.add_argument("--head", default="HEAD")
-    parser.add_argument("--files", nargs="*", default=None, help="classify an explicit file list instead of a git diff")
+    parser.add_argument(
+        "--files",
+        nargs="*",
+        default=None,
+        help="classify an explicit file list instead of a git diff",
+    )
     parser.add_argument("--event", default="pull_request")
-    parser.add_argument("--before", default="", help="previous PR head SHA (synchronize events) for evidence reuse")
-    parser.add_argument("--previous-green", action="store_true", help="the --before head's required gate and census succeeded")
+    parser.add_argument(
+        "--before", default="", help="previous PR head SHA (synchronize events) for evidence reuse"
+    )
+    parser.add_argument(
+        "--previous-green",
+        action="store_true",
+        help="the --before head's required gate and census succeeded",
+    )
     parser.add_argument("--github-output", default="")
     args = parser.parse_args(argv)
 
     if args.files is not None:
         files = list(args.files)
+    elif args.event == "push":
+        try:
+            files = (
+                changed_files_direct(args.before, args.head)
+                if args.before
+                else ["tools/ci/validation_plan.py"]
+            )
+        except subprocess.CalledProcessError:
+            # An initial push or unavailable history must never look docs-only.
+            files = ["tools/ci/validation_plan.py"]
     elif args.base:
         files = changed_files_between(args.base, args.head)
     else:
         parser.error("give --base/--head or --files")
     plan = classify(files)
-    if args.event in {"schedule", "workflow_dispatch", "push"} and plan.docs_only:
-        # Periodic, manual and post-merge runs are always a full census, whatever the diff looks like.
-        plan = dataclasses.replace(plan, docs_only=False, full_census=True, full_census_reasons=(f"{args.event}: always a full census",))
-    if args.before and args.base and args.previous_green:
-        plan = apply_evidence_reuse(plan, changed_files_direct(args.before, args.head), previous_green=True)
+    if args.event in {"schedule", "workflow_dispatch"} and plan.docs_only:
+        # Explicit periodic/manual verification covers the entire executable tree.
+        plan = dataclasses.replace(
+            plan,
+            docs_only=False,
+            full_census=True,
+            full_census_reasons=(f"{args.event}: always a full census",),
+        )
+    if args.event == "pull_request" and args.before and args.base and args.previous_green:
+        plan = apply_evidence_reuse(
+            plan, changed_files_direct(args.before, args.head), previous_green=True
+        )
     print(json.dumps(plan.as_dict(), indent=2))
     if args.github_output:
         with open(args.github_output, "a", encoding="utf-8") as handle:

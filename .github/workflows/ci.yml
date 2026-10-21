@@ -9,7 +9,7 @@ name: StableNew CI
 #   executable change -> `required` (repository quality + cross-boundary contract gate), then ONE blocking full census
 #                        (three independent file-level shards plus the aggregate `full-suite` verdict)
 # There is no per-lane routing: every active test file runs for every executable change.
-# The census also runs on main three times a week (cron below), on every push to main and on manual dispatch.
+# Docs-only pushes to main use cheap checks; scheduled and manual runs always run the census.
 on:
   pull_request:
     branches: [ "**" ]
@@ -45,7 +45,7 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Previous-head evidence (docs-only follow-up commits may reuse green evidence)
+    - name: Previous-head evidence (docs-only follow-ups and base updates may reuse green evidence)
       id: prev
       if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
       env:
@@ -64,14 +64,17 @@ jobs:
         PREVIOUS_GREEN: ${{ steps.prev.outputs.green }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PUSH_SHA: ${{ github.sha }}
       run: |
         set -euo pipefail
         args=(--event "$EVENT" --github-output "$GITHUB_OUTPUT")
         if [ "$EVENT" = "pull_request" ]; then
           args+=(--base "$BASE_SHA" --head "$HEAD_SHA")
           if [ "$PREVIOUS_GREEN" = "true" ]; then args+=(--before "$BEFORE_SHA" --previous-green); fi
+        elif [ "$EVENT" = "push" ]; then
+          args+=(--before "$BEFORE_SHA" --head "$PUSH_SHA")
         else
-          args+=(--files tools/ci/validation_plan.py)  # periodic, manual and post-merge runs are always a full census
+          args+=(--files tools/ci/validation_plan.py)  # scheduled/manual runs always validate the full tree
         fi
         python3 tools/ci/validation_plan.py "${args[@]}" | tee "$RUNNER_TEMP/plan.json"  # outside the checkout: it must stay clean
 
@@ -82,8 +85,17 @@ jobs:
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         BEFORE_SHA: ${{ github.event.before }}
         REUSE: ${{ steps.plan.outputs.reuse_previous_evidence }}
+        EVENT: ${{ github.event_name }}
+        PUSH_SHA: ${{ github.sha }}
       run: |
-        if [ "$REUSE" = "true" ]; then git diff --check "$BEFORE_SHA" "$HEAD_SHA"; else git diff --check "$BASE_SHA...$HEAD_SHA"; fi
+        set -euo pipefail
+        if [ "$EVENT" = "push" ]; then
+          git diff --check "$BEFORE_SHA" "$PUSH_SHA"
+        elif [ "$REUSE" = "true" ]; then
+          git diff --check "$BEFORE_SHA" "$HEAD_SHA"
+        else
+          git diff --check "$BASE_SHA...$HEAD_SHA"
+        fi
         python3 tools/ci/check_repository_completeness.py
         python3 tools/ci/check_controller_surface.py
         python3 tools/ci/ci_truth.py
