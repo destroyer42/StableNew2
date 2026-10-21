@@ -179,8 +179,13 @@ def test_the_record_names_the_frames_the_clip_was_encoded_from(tmp_path: Path, m
     assert record.last_frame_path.endswith("w_00003_.png")
     assert record.last_frame_sha256 == _sha(tmp_path / "w_00003_.png")
     assert record.frame_sha256 == [_sha(tmp_path / f"w_{n:05d}_.png") for n in (1, 2, 3)]
+    assert record.frame_paths == [str(tmp_path / f"w_{n:05d}_.png") for n in (1, 2, 3)]
+    assert calls["require_all_frames"] is True
+    assert record.reconciliation["status"] == "missing"
+    assert record.reconciliation["difference"] == -46
     summary = record.summary()
-    assert "frame_sha256" not in summary
+    assert "frame_sha256" not in summary and "frame_paths" not in summary
+    assert summary["reconciliation"]["status"] == "missing"
     assert (
         summary["frame_sha256_digest"]
         == hashlib.sha256(",".join(record.frame_sha256).encode("ascii")).hexdigest()
@@ -335,6 +340,9 @@ def test_the_backend_encodes_the_saved_frames_and_records_them(tmp_path: Path, m
     assert payload["frames_out"]["last_frame_sha256"] == _sha(last)
     assert payload["frames_out"]["frame_count"] == 3
     assert payload["frames_out"]["expected_frame_count"] == 17  # recorded, not hidden
+    # Reconciled and recorded; the job still succeeds (failing it is an owner decision before 1.3.0 registers).
+    assert payload["frames_out"]["reconciliation"]["status"] == "missing"
+    assert payload["frames_out"]["reconciliation"]["difference"] == -14
     assert "frame_sha256" not in payload["frames_out"]
     manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
     assert manifest["video_path"] == str(clip)
@@ -342,6 +350,8 @@ def test_the_backend_encodes_the_saved_frames_and_records_them(tmp_path: Path, m
         _sha(run / f"wan22_job_{n:05d}_.png") for n in (1, 2, 3)
     ]
     assert manifest["frames_out"]["video_path"] == str(clip)
+    assert manifest["frames_out"]["frame_paths"] == manifest["frame_paths"]
+    assert manifest["frames_out"]["reconciliation"]["status"] == "missing"
 
 
 def test_rife_reads_the_frames_when_smoothing_is_requested(tmp_path: Path, monkeypatch) -> None:
