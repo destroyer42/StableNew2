@@ -147,6 +147,11 @@ class JobHistoryPanelV2(ttk.Frame):
         self.browse_btn.pack(side=tk.LEFT, padx=(4, 0))
         self._browser_window: tk.Toplevel | None = None
 
+        self.replay_status_var = tk.StringVar(value="")
+        ttk.Label(self, textvariable=self.replay_status_var, wraplength=560).pack(
+            fill=tk.X, pady=(0, 4)
+        )
+
         # D-GUI-003: Enhanced columns with row/variant/batch info
         columns = (
             "time",
@@ -419,9 +424,20 @@ class JobHistoryPanelV2(ttk.Frame):
         if not callable(handler):
             return
         try:
-            handler(self._selected_job_id)
+            accepted = handler(self._selected_job_id)
         except Exception:
-            pass
+            self.replay_status_var.set(
+                "Replay failed. Check the application log; no success was confirmed."
+            )
+            return
+        if accepted:
+            self.replay_status_var.set(
+                "Replay queued as a new job. Queue holds still apply. Pipeline Preview is unchanged."
+            )
+        else:
+            self.replay_status_var.set(
+                "Replay was not queued. Check the application log and queue admission state."
+            )
 
     def _on_browse_all(self) -> None:
         """Open (or raise) the searchable browser over the whole history in its own window."""

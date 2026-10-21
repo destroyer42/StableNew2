@@ -1694,9 +1694,7 @@ class PipelineController(CorePipelineController):
         count = self._get_history_handoff_service().replay_job_from_history(
             job_id=job_id,
             history_service=self.get_job_history_service(),
-            app_state=self._app_state,
             submit_normalized_jobs=self._submit_normalized_jobs,
-            set_last_run_config=lambda config: setattr(self, "_last_run_config", config),
         )
         if count:
             _logger.info("Replayed job %s with %d queued job(s)", job_id, count)

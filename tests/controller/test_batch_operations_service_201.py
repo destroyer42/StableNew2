@@ -130,9 +130,8 @@ def test_ordinary_single_replay_cannot_contaminate_the_original_batch(review):
     history = JobHistoryService(stack.queue, stack.repository)
     submitted = []
     count = HistoryHandoffService().replay_job_from_history(
-        job_id="rev-0", history_service=history, app_state=None,
+        job_id="rev-0", history_service=history,
         submit_normalized_jobs=lambda records, **_: submitted.extend(records) or len(stack.service.submit_njrs(records)),
-        set_last_run_config=lambda _: None,
     )
     assert count == 1
     catalog = stack.operations.refresh().catalog
@@ -203,8 +202,7 @@ def test_a_failure_replayed_elsewhere_before_the_click_is_not_duplicated(review)
     plan = stack.operations.preflight_retry(REVIEW, ["rev-0"])
     HistoryHandoffService().replay_job_from_history(
         job_id="rev-0", history_service=JobHistoryService(stack.queue, stack.repository),
-        app_state=None, submit_normalized_jobs=lambda records, **_: len(stack.service.submit_njrs(records)),
-        set_last_run_config=lambda _: None)
+        submit_normalized_jobs=lambda records, **_: len(stack.service.submit_njrs(records)))
     count = stack.repository.count()
     with pytest.raises(BatchOperationRefused, match="Already retried"):
         stack.operations.submit_retry(plan)

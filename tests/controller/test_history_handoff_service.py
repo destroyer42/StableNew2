@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from src.controller.pipeline_controller_services.history_handoff_service import (
     HistoryHandoffService,
 )
@@ -73,16 +75,13 @@ def test_history_handoff_service_replays_snapshot_to_submit_callback() -> None:
     )
     entry = _make_entry(record)
     history_service = _HistoryServiceStub(entry)
-    app_state = _AppStateStub()
     submissions: list[tuple[list[NormalizedJobRecord], dict[str, object], str, str]] = []
-    last_run_configs: list[dict[str, object]] = []
 
     service = HistoryHandoffService()
 
     queued = service.replay_job_from_history(
         job_id="history-job",
         history_service=history_service,
-        app_state=app_state,
         submit_normalized_jobs=lambda records,
         run_config=None,
         source="gui",
@@ -90,15 +89,13 @@ def test_history_handoff_service_replays_snapshot_to_submit_callback() -> None:
             submissions.append((list(records), dict(run_config or {}), source, prompt_source))
             or len(records)
         ),
-        set_last_run_config=lambda cfg: last_run_configs.append(dict(cfg)),
     )
 
     assert queued == 1
-    assert app_state.preview_jobs[0].job_id != "history-job"
-    assert app_state.preview_jobs[0].source.parent_job_id == "history-job"
-    assert submissions[0][0][0].job_id == app_state.preview_jobs[0].job_id
+    assert submissions[0][0][0].job_id != "history-job"
+    assert submissions[0][0][0].source.parent_job_id == "history-job"
     assert submissions[0][1]["run_mode"] == "queue"
-    assert last_run_configs[0]["source"] == "history"
+    assert submissions[0][2] == "history_replay"
 
 
 def test_interrupted_history_replay_creates_new_identity_with_parent_lineage() -> None:
@@ -121,17 +118,14 @@ def test_interrupted_history_replay_creates_new_identity_with_parent_lineage() -
         stage="txt2img",
     )
     history_service = _HistoryServiceStub(entry)
-    app_state = _AppStateStub()
     submissions: list[NormalizedJobRecord] = []
 
     queued = HistoryHandoffService().replay_job_from_history(
         job_id=entry.job_id,
         history_service=history_service,
-        app_state=app_state,
         submit_normalized_jobs=lambda records, **_kwargs: (
             submissions.extend(records) or len(records)
         ),
-        set_last_run_config=lambda _cfg: None,
     )
 
     assert queued == 1
@@ -139,3 +133,41 @@ def test_interrupted_history_replay_creates_new_identity_with_parent_lineage() -
     assert len(submissions) == 1
     assert submissions[0].job_id != entry.job_id
     assert submissions[0].source.parent_job_id == entry.job_id
+
+
+@pytest.mark.parametrize("outcome", [0, 1, RuntimeError("admission failed")])
+def test_replay_preserves_pipeline_state_for_every_admission_outcome(outcome) -> None:
+    from src.controller.pipeline_controller import PipelineController
+    from src.gui.app_state_v2 import AppStateV2
+
+    parent = make_test_njr(job_id="parent", prompt_source="manual", prompt_pack_id="")
+    draft = make_test_njr(job_id="current-preview")
+    state = AppStateV2()
+    state.set_preview_jobs([draft], error="existing diagnostic")
+    revision = state.preview_revision
+    controller = object.__new__(PipelineController)
+    controller._app_state = state
+    controller._last_run_config = {"source": "current-draft"}
+    controller.get_job_history_service = lambda: _HistoryServiceStub(_make_entry(parent))
+    submitted = []
+
+    def admit(records, **kwargs):
+        submitted.extend(records)
+        assert state.preview_jobs == [draft]
+        assert kwargs["source"] == "history_replay"
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    controller._submit_normalized_jobs = admit
+    if isinstance(outcome, Exception):
+        with pytest.raises(RuntimeError, match="admission failed"):
+            controller.replay_job_from_history(parent.job_id)
+    else:
+        assert controller.replay_job_from_history(parent.job_id) == outcome
+    assert len(submitted) == 1
+    assert submitted[0].job_id != parent.job_id
+    assert state.preview_jobs == [draft]
+    assert state.preview_error == "existing diagnostic"
+    assert state.preview_revision == revision
+    assert controller._last_run_config == {"source": "current-draft"}
