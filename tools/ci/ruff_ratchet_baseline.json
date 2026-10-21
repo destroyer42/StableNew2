@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 386,
+    "total": 385,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -300,7 +300,6 @@
       "tests/queue/test_webui_outage_containment_171.py",
       "tests/refinement/test_subject_scale_policy_service.py",
       "tests/services/test_operator_readiness_gpu_180.py",
-      "tests/services/test_operator_readiness_service.py",
       "tests/services/test_runtime_transition_service.py",
       "tests/services/test_watchdog_first_trigger_120.py",
       "tests/state/test_prompt_metadata_parsing.py",

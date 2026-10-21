@@ -385,6 +385,7 @@ def default_preflight_probes(
     )
     url = base_url or str(getattr(config, "base_url", "") or "http://127.0.0.1:8188")
     auto = bool(getattr(config, "autostart_enabled", False)) if autostart is None else autostart
+
     def _object_info(target: str) -> Mapping[str, Any] | None:
         try:
             return ComfyApiClient(base_url=target).get_object_info()
