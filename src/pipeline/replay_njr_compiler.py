@@ -8,8 +8,8 @@ from typing import Any
 from uuid import uuid4
 
 from src.pipeline.animatediff_retirement import require_animatediff_not_enabled
-from src.pipeline.secondary_motion_retirement import require_secondary_motion_not_enabled
 from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceDescriptor, SourceKind
+from src.pipeline.secondary_motion_retirement import require_secondary_motion_not_enabled
 from src.queue.batch_membership import (
     REPLAY_ORIGIN_KEY,
     VERSIONED_DESCRIPTOR_KEY,

@@ -31,10 +31,10 @@ from src.image_backends.operation_compatibility import (
     require_njr_operation,
 )
 from src.pipeline.animatediff_retirement import AnimateDiffRetiredError
-from src.pipeline.secondary_motion_retirement import SecondaryMotionRetiredError
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.replay_input_verification import frozen_input_checks, verify_inputs
 from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
+from src.pipeline.secondary_motion_retirement import SecondaryMotionRetiredError
 from src.queue.batch_membership import BatchKey, build_selected_retry_descriptor
 from src.queue.batch_projection import (
     BatchCatalog,
