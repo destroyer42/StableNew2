@@ -141,12 +141,12 @@ def build_movie_clips_guidance() -> ActionExplainerContent:
     return ActionExplainerContent(
         title="When To Use Movie Clips",
         summary=(
-            "Choose Movie Clips when you already have an ordered image sequence or a compatible workflow/SVD output bundle and want explicit clip assembly control. Use SVD or Video Workflow first when the system still needs to generate new motion."
+            "Choose Movie Clips when you already have images, frames or video clips and want to assemble them, in your order, into one movie. Use SVD or Video Workflow first when the system still needs to generate new motion."
         ),
         bullets=(
-            "FPS controls playback speed. Higher values make the clip play faster and smoother if enough frames exist.",
-            "Codec and Quality affect export compatibility and file size rather than generation semantics.",
-            "Mode controls how the clip is assembled for output, so confirm it before building if the destination matters.",
-            "Use Latest Video Output is the fastest handoff when another video tab already produced frames you want to package into a clip.",
+            "The list order is the movie order: use Move Up and Move Down; nothing is re-sorted by name.",
+            "Sequence mode turns every image into one frame. Slideshow mode plays clips and holds stills, with optional crossfades and a music track.",
+            "Mixed sizes and frame rates are fitted to one output size and FPS.",
+            "Building queues a job: it shows in the Queue, can be cancelled, and the movie lands in History.",
         ),
     )

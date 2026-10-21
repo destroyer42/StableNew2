@@ -137,6 +137,7 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
             "animatediff",
             "svd_native",
             "video_workflow",
+            "movie_assembly",
         ):
             section_present = stage_name in raw_config if isinstance(raw_config, dict) else False
             section_enabled = section_present and _extract_enabled(raw_config, stage_name, False)

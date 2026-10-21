@@ -1,13 +1,23 @@
 """Movie Clips tab UI normalization helpers.
 
 PR-GUI-VIDEO-001: View contract for Movie Clips tab source selection
-and clip settings display.
+and clip settings display. PR-VID-ASM-332: images and videos in the
+operator's order, reordering, per-still durations and assembly settings.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from src.video.movie_assembly_models import (
+    AUDIO_EXTENSIONS,
+    MODE_SLIDESHOW,
+    STILL_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+)
 
 # ---------------------------------------------------------------------------
 # Source mode labels
@@ -122,12 +132,80 @@ def sort_image_names(names: list[str]) -> list[str]:
 
 
 def format_image_list_summary(count: int) -> str:
-    """Return a short summary string for the image list count."""
+    """Return a short summary string for the clip list count."""
     if count == 0:
-        return "No images selected"
+        return "No items selected"
     if count == 1:
-        return "1 image selected"
-    return f"{count} images selected"
+        return "1 item selected"
+    return f"{count} items selected"
+
+
+# ---------------------------------------------------------------------------
+# Media, ordering and per-clip display (PR-VID-ASM-332)
+# ---------------------------------------------------------------------------
+
+
+def _patterns(extensions: frozenset[str]) -> str:
+    return " ".join(f"*{suffix}" for suffix in sorted(extensions))
+
+
+SOURCE_FILE_TYPES = [
+    ("Images and videos", _patterns(STILL_EXTENSIONS | VIDEO_EXTENSIONS)),
+    ("Images", _patterns(STILL_EXTENSIONS)),
+    ("Videos", _patterns(VIDEO_EXTENSIONS)),
+    ("All Files", "*.*"),
+]
+AUDIO_FILE_TYPES = [("Audio", _patterns(AUDIO_EXTENSIONS)), ("All Files", "*.*")]
+
+
+def is_video_path(path: str | Path) -> bool:
+    return Path(path).suffix.lower() in VIDEO_EXTENSIONS
+
+
+def is_media_path(path: str | Path) -> bool:
+    suffix = Path(path).suffix.lower()
+    return suffix in STILL_EXTENSIONS or suffix in VIDEO_EXTENSIONS
+
+
+def move_items[T](
+    items: Sequence[T], selected: Sequence[int], delta: int
+) -> tuple[list[T], list[int]]:
+    """Move the selected entries one step (``delta`` -1 up, +1 down); return the new list and selection.
+
+    Entries keep their relative order; an entry at the edge, or blocked by a selected entry that cannot move, stays.
+    """
+
+    result = list(items)
+    chosen = sorted({index for index in selected if 0 <= index < len(result)}, reverse=delta > 0)
+    blocked: set[int] = set()
+    positions: list[int] = []
+    for index in chosen:
+        target = index + delta
+        if delta == 0 or not 0 <= target < len(result) or target in blocked:
+            blocked.add(index)
+            positions.append(index)
+            continue
+        result[index], result[target] = result[target], result[index]
+        positions.append(target)
+    return result, sorted(positions)
+
+
+def format_clip_entry(
+    path: str | Path,
+    *,
+    mode: str,
+    duration_seconds: float | None,
+    default_seconds: float,
+) -> str:
+    """One list row: the file name, plus how long it plays in a slideshow."""
+
+    name = Path(path).name
+    if is_video_path(path):
+        return f"{name}  (video)"
+    if mode != MODE_SLIDESHOW:
+        return name
+    seconds = default_seconds if duration_seconds is None else duration_seconds
+    return f"{name}  ({seconds:g} s)"
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +247,22 @@ DEFAULT_FPS = 24
 DEFAULT_CODEC = "libx264"
 DEFAULT_QUALITY = "medium"
 DEFAULT_MODE = "sequence"
+RESOLUTION_MATCH_FIRST = "match_first"
+DEFAULT_RESOLUTION = RESOLUTION_MATCH_FIRST
+DEFAULT_STILL_SECONDS = 3.0
+DEFAULT_TRANSITION_SECONDS = 0.5
+DEFAULT_FADE_OUT_SECONDS = 1.0
+DEFAULT_CLIP_NAME = "movie"
+RESOLUTION_OPTIONS = [
+    RESOLUTION_MATCH_FIRST,
+    "1920x1080",
+    "1280x720",
+    "1080x1920",
+    "720x1280",
+    "1024x1024",
+    "768x768",
+    "512x512",
+]
 
 QUALITY_OPTIONS = [
     "ultrafast",

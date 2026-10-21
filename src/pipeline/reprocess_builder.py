@@ -135,6 +135,7 @@ class ReprocessJobBuilder:
         "upscale",
         "svd_native",
         "video_workflow",
+        "movie_assembly",
     }
     DEFAULT_STAGE_VALUES: dict[str, dict[str, Any]] = {
         "img2img": {
@@ -167,6 +168,12 @@ class ReprocessJobBuilder:
             "denoising_strength": 0.0,
             "sampler_name": "workflow",
         },
+        "movie_assembly": {
+            "steps": 1,
+            "cfg_scale": 1.0,
+            "denoising_strength": 0.0,
+            "sampler_name": "ffmpeg",
+        },
     }
 
     def __init__(
@@ -186,7 +193,11 @@ class ReprocessJobBuilder:
     def build_reprocess_job(
         self,
         input_image_paths: list[str | Path],
-        stages: list[Literal["img2img", "adetailer", "upscale", "svd_native", "video_workflow"]],
+        stages: list[
+            Literal[
+                "img2img", "adetailer", "upscale", "svd_native", "video_workflow", "movie_assembly"
+            ]
+        ],
         config: dict[str, Any] | None = None,
         output_dir: str = "output",
         prompt: str = "",
@@ -285,7 +296,7 @@ class ReprocessJobBuilder:
         }
 
         metadata = self._merge_nested_dicts(base_metadata, extra_metadata or {})
-        video_stage_names = {"svd_native", "video_workflow"}
+        video_stage_names = {"svd_native", "video_workflow", "movie_assembly"}
         is_video = bool(set(stages) & video_stage_names)
         source_aliases = {
             "image_edit": SourceKind.IMAGE_EDIT,
@@ -950,7 +961,11 @@ class ReprocessJobBuilder:
     def build_reprocess_jobs_batched(
         self,
         input_image_paths: list[str | Path],
-        stages: list[Literal["img2img", "adetailer", "upscale", "svd_native", "video_workflow"]],
+        stages: list[
+            Literal[
+                "img2img", "adetailer", "upscale", "svd_native", "video_workflow", "movie_assembly"
+            ]
+        ],
         batch_size: int = 10,
         **kwargs,
     ) -> list[NormalizedJobRecord]:
@@ -982,7 +997,11 @@ class ReprocessJobBuilder:
         self,
         *,
         items: list[ReprocessSourceItem],
-        stages: list[Literal["img2img", "adetailer", "upscale", "svd_native", "video_workflow"]],
+        stages: list[
+            Literal[
+                "img2img", "adetailer", "upscale", "svd_native", "video_workflow", "movie_assembly"
+            ]
+        ],
         fallback_config: dict[str, Any] | None = None,
         batch_size: int = 1,
         pack_name: str = "Reprocess",

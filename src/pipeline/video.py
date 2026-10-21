@@ -85,21 +85,39 @@ def resolve_encode_settings(
     return DEFAULT_ENCODE_SETTINGS
 
 
+def build_video_encode_filter() -> str:
+    """The colour/size filter every encode ends with (BT.709, even dimensions).
+
+    Even dimensions are required by 4:2:0; the matrix is pinned so the tags are true. setparams stamps the frames too:
+    FFmpeg lets frame colour properties override the output-level tags, which alone leave primaries and transfer
+    "unknown". A ``-filter_complex`` graph appends this to its last video chain instead of passing ``-vf``.
+    """
+
+    return (
+        "scale=trunc(iw/2)*2:trunc(ih/2)*2:out_color_matrix=bt709:out_range=tv,"
+        "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv"
+    )
+
+
 def build_video_encode_args(
-    *, codec: str, settings: VideoEncodeSettings, output_path: Path
+    *,
+    codec: str,
+    settings: VideoEncodeSettings,
+    output_path: Path,
+    include_filter: bool = True,
 ) -> list[str]:
-    """Encoder arguments shared by every frames-to-video path."""
+    """Encoder arguments shared by every frames-to-video path.
+
+    ``include_filter=False`` leaves out ``-vf`` for a caller whose ``-filter_complex`` graph already ends with
+    ``build_video_encode_filter()`` (FFmpeg refuses both on one output stream).
+    """
 
     args = ["-c:v", codec]
     if codec in _CRF_CODECS:
         args += ["-crf", str(int(settings.crf)), "-preset", settings.preset]
+    if include_filter:
+        args += ["-vf", build_video_encode_filter()]
     args += [
-        # Even dimensions are required by 4:2:0; the matrix is pinned so the tags are true.
-        # setparams stamps the frames too: FFmpeg lets frame colour properties override the
-        # output-level tags below, which alone leave primaries and transfer "unknown".
-        "-vf",
-        "scale=trunc(iw/2)*2:trunc(ih/2)*2:out_color_matrix=bt709:out_range=tv,"
-        "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv",
         "-pix_fmt",
         settings.pix_fmt,
         "-colorspace",
@@ -320,7 +338,7 @@ class VideoCreator:
         Create a video from an image sequence, one image per frame.
 
         Args:
-            image_paths: Images; they are ordered by file name
+            image_paths: Images, in the order they become frames (never re-sorted here)
             output_path: Path for output video
             fps: Frames per second (default: 24)
             codec: Video codec (default: libx264)
@@ -340,12 +358,11 @@ class VideoCreator:
             return False
 
         encode = resolve_encode_settings(quality, settings)
-        sorted_paths = sorted(image_paths, key=lambda x: x.name)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         # A private staging folder: never a shared "temp" folder that could hold other files.
         temp_dir = Path(tempfile.mkdtemp(prefix=".ffmpeg_frames_", dir=str(output_path.parent)))
         try:
-            frame_count = _stage_numbered_frames(sorted_paths, temp_dir)
+            frame_count = _stage_numbered_frames(list(image_paths), temp_dir)
             if not frame_count:
                 logger.error("No valid images for video creation")
                 return False

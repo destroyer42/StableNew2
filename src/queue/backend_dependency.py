@@ -27,10 +27,14 @@ _IMAGE_STAGES = frozenset({"txt2img", "img2img", "adetailer", "upscale"})
 _VIDEO_EXECUTION_KEY = "video_execution"
 SVD_NATIVE_BACKEND_ID = "svd_native"
 COMFY_BACKEND_ID = "comfy"
-#: Stage types proven to execute without the GPU (PR-QUEUE-GPU-180). Deliberately empty: every stage an NJR can
-#: carry today (image, video, training) uses the GPU, so a GPU device-loss quarantine holds all of it. An entry
-#: requires a frozen-identity proof of independence, never an inference from a missing field.
-_GPU_FREE_STAGES: frozenset[str] = frozenset()
+MOVIE_ASSEMBLY_STAGE = "movie_assembly"
+#: Stage types proven to execute without the GPU (PR-QUEUE-GPU-180). An entry requires a frozen-identity proof of
+#: independence, never an inference from a missing field. ``movie_assembly`` (PR-VID-ASM-332) is the stage type itself:
+#: its only handler runs FFmpeg on existing files with a software encoder (any other codec is refused by the frozen
+#: spec, ``SOFTWARE_VIDEO_CODECS``) and never loads a model or a GPU runtime.
+#: Every other stage an NJR can carry (image, generative video, training) uses the GPU, so a GPU device-loss
+#: quarantine holds it.
+_GPU_FREE_STAGES: frozenset[str] = frozenset({MOVIE_ASSEMBLY_STAGE})
 
 
 class BackendDependency(str, Enum):
@@ -109,6 +113,9 @@ def _classify_dependency(
                 else unresolved,
                 "animatediff_via_webui" if stages == {"animatediff"} else "mixed_video_stages",
             )
+        if stages == {MOVIE_ASSEMBLY_STAGE}:
+            # CPU-only FFmpeg assembly of existing outputs: needs neither the WebUI nor (above) the GPU.
+            return DependencyAssessment(BackendDependency.INDEPENDENT_VIDEO, "movie_assembly")
         if stages == {"svd_native"}:
             backend = str(_video_block(config, "svd_native").get("backend_id") or "").strip()
             if not backend or backend == SVD_NATIVE_BACKEND_ID:
