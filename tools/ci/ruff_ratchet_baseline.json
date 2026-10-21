@@ -403,8 +403,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1343,
-      "S110": 533,
+      "BLE001": 1342,
+      "S110": 531,
       "S112": 38
     },
     "counts": {
@@ -488,8 +488,8 @@
         "S110": 21
       },
       "src/controller/pipeline_controller_services/history_handoff_service.py": {
-        "BLE001": 2,
-        "S110": 2
+        "BLE001": 1,
+        "S110": 1
       },
       "src/controller/process_auto_scanner_service.py": {
         "BLE001": 13,
@@ -550,7 +550,7 @@
       },
       "src/gui/job_history_panel_v2.py": {
         "BLE001": 14,
-        "S110": 11
+        "S110": 10
       },
       "src/gui/learning_review_dialog_v2.py": {
         "BLE001": 3,
