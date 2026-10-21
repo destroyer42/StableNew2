@@ -103,6 +103,8 @@ SVD_SETTING_HELP = {
     "seed": BASE_GENERATION_SETTING_HELP["seed"],
     "target_size": "Target canvas preset for the animated output. Use it to match downstream clip needs and to avoid stretching the source unexpectedly.",
     "resize_mode": "How the source image is fit into the target size. Choose crop-oriented modes when composition matters most, and letterbox-like modes when preserving the entire source frame matters more.",
+    "loop_mode": "Ping-pong plays the clip forward and then backward, joining back onto its first frame, so a short ambient shot reads longer and loops cleanly. None exports the clip as generated.",
+    "extend_seconds": "Repeats the clip (whole cycles, so the loop point stays seamless) until it lasts at least this many seconds. 0 turns it off. The export is rounded up to a whole cycle and the manifest records the mode.",
     "output": "Selects whether SVD exports a video file, GIF, or raw frames. This changes packaging and downstream usability, not the core motion generation itself.",
     "route": "Controls where the produced artifacts are routed for follow-up work. Pick the route that matches whether you want reprocess-style follow-up, dedicated SVD output review, or test isolation.",
     "decode_chunk": "How many frames the temporal VAE decodes together. Frames decoded together stay consistent, so small chunks flicker at chunk boundaries; frames are split into even chunks no larger than this. 8 fits 12 GB GPUs; larger values need more memory.",

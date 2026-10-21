@@ -21,6 +21,7 @@ from src.pipeline.secondary_motion_retirement import (
     block_enables_secondary_motion,
 )
 from src.utils.managed_process import run_bounded
+from src.video.loop_export import build_loop_frames
 from src.video.restoration.runtime import (
     GFPGAN_UNSUPPORTED_ISSUE,
     POSTPROCESS_INSTALL_HINT,
@@ -143,8 +144,32 @@ def _install_hint(issues: list[str]) -> str:
     return " " + POSTPROCESS_INSTALL_HINT if any(i.endswith(" package") for i in issues) else ""
 
 
+def _loop_export_error(config: SVDConfig) -> str | None:
+    """Dry-run the loop request on the clip this config would produce, so an impossible one fails before generation."""
+
+    frame_count = config.inference.num_frames
+    fps = config.inference.fps
+    interpolation = config.postprocess.interpolation
+    if interpolation.enabled:
+        frame_count *= int(interpolation.multiplier)
+        fps *= int(interpolation.multiplier)
+    try:
+        build_loop_frames(
+            range(frame_count),
+            mode=config.output.loop_mode,
+            extend_to_seconds=config.output.extend_to_seconds,
+            fps=fps,
+        )
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
 def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None]:
     postprocess = config.postprocess
+    loop_error = _loop_export_error(config)
+    if loop_error:
+        return False, loop_error
     # Secondary motion is retired (D8): a stored config that names it still loads, an enabled one is refused here.
     if block_enables_secondary_motion(postprocess.secondary_motion.to_dict()):
         return False, SECONDARY_MOTION_RETIRED_MESSAGE

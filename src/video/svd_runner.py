@@ -10,6 +10,7 @@ from typing import Any
 
 from src.controller.runtime_state import CancellationError, CancelToken
 from src.video.container_metadata import write_video_container_metadata
+from src.video.loop_export import build_loop_frames
 from src.video.svd_config import SVDConfig
 from src.video.svd_errors import (
     SVDExportError,
@@ -185,6 +186,22 @@ class SVDRunner:
                 interpolation_multiplier=config.postprocess.interpolation.multiplier,
             )
 
+            # Loop / ping-pong (PR-VID-LOOP-303): the exported sequence, after postprocess, at the rate it plays.
+            frames, export_record = build_loop_frames(
+                frames,
+                mode=config.output.loop_mode,
+                extend_to_seconds=config.output.extend_to_seconds,
+                fps=effective_fps,
+            )
+            if export_record["mode"] != "none" or export_record["cycles"] > 1:
+                logger.info(
+                    "[SVD] loop export mode=%s cycles=%s frames=%s seconds=%s",
+                    export_record["mode"],
+                    export_record["cycles"],
+                    export_record["output_frame_count"],
+                    export_record["output_seconds"],
+                )
+
             stem = build_svd_artifact_stem(source_image_path=source_path, job_id=job_id)
             video_path = None
             gif_path = None
@@ -257,6 +274,7 @@ class SVDRunner:
                 model_id=config.inference.model_id,
                 preprocess=preprocess,
                 postprocess=postprocess_metadata,
+                export=export_record,
             )
             manifest_path_hint = self._output_root / "manifests" / f"{stem}.json"
             metadata_payload = {
@@ -340,6 +358,7 @@ class SVDRunner:
                 model_id=result.model_id,
                 preprocess=result.preprocess,
                 postprocess=result.postprocess,
+                export=result.export,
             )
         except Exception:
             self._remove_partial_outputs(owned_outputs)
