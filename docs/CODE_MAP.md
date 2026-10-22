@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-450 of 602 modules have a docstring.
+451 of 603 modules have a docstring.
 
 ## src/
 
@@ -403,12 +403,13 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `discovered_scan_service.py`: Scan -> group -> persist orchestration with truthful scan-index dispositions
 - `draft_commit.py`: Turn rated review drafts into saved ratings, without ever overriding a rating that is already saved
 - `evidence_progress.py`: How far an experiment is from the evidence a recommendation needs, in the engine's own thresholds
-- `execution_controller.py`: Learning job execution controller
+- `execution_controller.py`: Learning admission and reconciliation through the existing JobService callback owner
 - `experiment_conclusion.py`: Derived, read-only conclusion projection for one designed experiment
 - `experiment_execution.py`: Frozen experiment preview and one-boundary queue admission helpers
 - `experiment_freeze.py`: Immutable controlled-experiment seed policy helpers
 - `experiment_lifecycle.py`: Pure lifecycle rules for Working Draft and Experiment Library placement
 - `experiment_naming.py`: (no docstring)
+- `experiment_reconciliation.py`: Exact admitted Learning identity and repository evidence projections; never dispatches
 - `experiment_store.py`: (no docstring)
 - `feedback_manager.py`: Feedback capture helpers for pipeline runs
 - `learning_adapter.py`: Learning adapter helpers

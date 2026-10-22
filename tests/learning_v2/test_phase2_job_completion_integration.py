@@ -16,6 +16,7 @@ import pytest
 from src.controller.job_service import JobService
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
+from src.learning.execution_controller import LearningExecutionController
 from src.pipeline.job_models_v2 import LearningJobContext
 from src.queue.job_model import Job, JobStatus
 from tests.helpers.njr_factory import make_pipeline_njr
@@ -119,9 +120,10 @@ class TestPhase2JobCompletionIntegration:
         assert handler_calls[0]["result"]["success"] is True
 
     def test_learning_controller_receives_completion_callback(self):
-        """PR-LEARN-003: Verify LearningController.on_job_completed_callback routes correctly."""
+        """The canonical tracking owner delivers once; legacy routing adds nothing."""
         learning_state = LearningState()
-        controller = LearningController(learning_state)
+        execution = LearningExecutionController(learning_state)
+        controller = LearningController(learning_state, execution_controller=execution)
 
         # Set up experiment
         experiment = LearningExperiment(
@@ -152,10 +154,16 @@ class TestPhase2JobCompletionIntegration:
 
         mock_job = Mock()
         mock_job.snapshot = mock_njr
+        mock_job.job_id = "learning-completion"
 
         result = {"success": True, "images": ["output/image1.png", "output/image2.png"]}
+        mock_job.result = result
+        execution._track(
+            mock_job.job_id, learning_state.plan[1], experiment.name, experiment.variable_under_test
+        )
 
-        # Call the completion callback
+        # Canonical listener owns completion. Legacy delivery must not duplicate it.
+        execution._handle_job_finished(mock_job)
         controller.on_job_completed_callback(mock_job, result)
 
         # Verify variant was updated
@@ -330,7 +338,10 @@ class TestPhase2JobCompletionIntegration:
         # Set up learning controller
         learning_state = LearningState()
         mock_plan_table = Mock()
-        controller = LearningController(learning_state, plan_table=mock_plan_table)
+        execution = LearningExecutionController(learning_state, job_service)
+        controller = LearningController(
+            learning_state, plan_table=mock_plan_table, execution_controller=execution
+        )
 
         # Set up experiment
         experiment = LearningExperiment(
@@ -371,8 +382,16 @@ class TestPhase2JobCompletionIntegration:
             "status": JobStatus.COMPLETED,
             "images": ["output/cfg_7.0_img1.png", "output/cfg_7.0_img2.png"],
         }
+        mock_job.result = result
+        execution._track(
+            mock_job.job_id,
+            learning_state.plan[variant_index],
+            experiment.name,
+            experiment.variable_under_test,
+        )
 
         # Trigger completion notification (simulates what JobService does)
+        job_service._emit(JobService.EVENT_JOB_FINISHED, mock_job)
         job_service._notify_completion(mock_job, result)
 
         # Verify complete workflow:
