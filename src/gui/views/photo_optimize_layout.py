@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Sequence
 from tkinter import font as tkfont
 from tkinter import ttk
+from typing import cast
 
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
@@ -38,15 +40,21 @@ class PhotoOptimizeLayoutMixin:
     """Builds and re-grids the tab. Layout changes only call ``grid`` on existing widgets, so typed text,
     selections and baselines are never recreated or reparented by a resize."""
 
+    assets_frame: ttk.LabelFrame
+    preview_frame: ttk.LabelFrame
+    controls_frame: ttk.Frame
+    body_mode: str | None = None
+
     # -- header ----------------------------------------------------------------------------------------------------
 
     def _build_header(self) -> None:
-        header = ttk.Frame(self, style="Panel.TFrame", padding=8)
+        host = cast(tk.Misc, self)  # the mixin is only ever composed into a ttk.Frame
+        header = ttk.Frame(host, style="Panel.TFrame", padding=8)
         header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
         header.columnconfigure(0, weight=1)
         self.header_frame = header
-        self._flow_signatures: dict[str, tuple] = {}
-        self.header_more_var = tk.BooleanVar(master=self, value=False)
+        self._flow_signatures: dict[str, object] = {}
+        self.header_more_var = tk.BooleanVar(master=host, value=False)
 
         primary = ttk.Frame(header, style="Panel.TFrame")
         primary.grid(row=0, column=0, sticky="ew")
@@ -83,12 +91,17 @@ class PhotoOptimizeLayoutMixin:
         ]
 
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
+        migration_var = self.__dict__["migration_status_var"]
+        self._migration_status_var = migration_var
         self.submission_summary_label = ttk.Label(
-            header, textvariable=self.submission_summary_var, style="Dark.TLabel", justify="left"
+            header,
+            textvariable=self.__dict__["submission_summary_var"],
+            style="Dark.TLabel",
+            justify="left",
         )
         self.submission_summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
         self.migration_status_label = ttk.Label(
-            header, textvariable=self.migration_status_var, style="Dark.TLabel", justify="left"
+            header, textvariable=migration_var, style="Dark.TLabel", justify="left"
         )
         self.migration_status_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
         self.header_status_labels = (self.submission_summary_label, self.migration_status_label)
@@ -156,7 +169,7 @@ class PhotoOptimizeLayoutMixin:
         primary.bind("<Configure>", lambda _e: self._reflow_header(), add="+")
         flow.bind("<Configure>", lambda _e: self._reflow_header(), add="+")
         header.bind("<Configure>", lambda _e: self._update_header_wraps(), add="+")
-        self.migration_status_var.trace_add("write", lambda *_: self._on_migration_status_changed())
+        migration_var.trace_add("write", lambda *_: self._on_migration_status_changed())
         self._reflow_header()
 
     def _more_title(self) -> str:
@@ -177,14 +190,14 @@ class PhotoOptimizeLayoutMixin:
 
     def _on_migration_status_changed(self) -> None:
         # A failed legacy migration must keep Retry/Details one glance away, not behind a collapsed section.
-        if "incomplete" in str(self.migration_status_var.get()).lower() and not self.header_more_var.get():
+        if "incomplete" in str(self._migration_status_var.get()).lower() and not self.header_more_var.get():
             self._set_header_more(True)
 
     def _reflow_header(self) -> None:
         self._flow("primary", self.header_primary, self._primary_flow)
         self._flow("secondary", self.header_secondary_flow, self._secondary_flow)
 
-    def _flow(self, key: str, container: tk.Misc, children: list[tk.Misc]) -> None:
+    def _flow(self, key: str, container: ttk.Frame, children: Sequence[tk.Widget]) -> None:
         """Wrap ``children`` into rows that fit ``container``.
 
         Children are ``place``d (grid would tie one row's column widths to another row's items) and the container
@@ -214,7 +227,7 @@ class PhotoOptimizeLayoutMixin:
                 label.configure(wraplength=width)
         self._reflow_header()
 
-    def _bind_wrap(self, label: tk.Misc, container: tk.Misc, *, margin: int = 32) -> None:
+    def _bind_wrap(self, label: ttk.Label, container: tk.Misc, *, margin: int = 32) -> None:
         """Keep ``label``'s wraplength tied to the width its container was actually given."""
 
         def update(_event: tk.Event | None = None) -> None:
@@ -234,13 +247,13 @@ class PhotoOptimizeLayoutMixin:
             if name and len(name) > _ACTIVE_NAME_MAX:
                 name = name[: _ACTIVE_NAME_MAX - 1] + "…"
             text = selection_summary(
-                visible=len(self._asset_index_by_row),
-                selected=len(self.assets_list.curselection()),
+                visible=len(self.__dict__["_asset_index_by_row"]),
+                selected=len(self.__dict__["assets_list"].curselection()),
                 active_name=name,
             )
             self.selection_label.config(text=text)
             self._reflow_header()
-        except (AttributeError, tk.TclError):
+        except (AttributeError, KeyError, tk.TclError):
             return
 
     # -- body ------------------------------------------------------------------------------------------------------
@@ -249,11 +262,12 @@ class PhotoOptimizeLayoutMixin:
         """Width of "0" in the font the labels really use (follows Tk scaling), the unit of every region floor."""
 
         cached = self.__dict__.get("_char_width_cache")
-        if cached:
+        if isinstance(cached, int) and cached:
             return cached
         try:
-            spec = ttk.Style(self).lookup("Dark.TLabel", "font") or "TkDefaultFont"
-            width = int(tkfont.Font(root=self, font=spec).measure("0"))
+            host = cast(tk.Misc, self)
+            spec = ttk.Style(host).lookup("Dark.TLabel", "font") or "TkDefaultFont"
+            width = int(tkfont.Font(root=host, font=spec).measure("0"))
         except (tk.TclError, RuntimeError):
             width = 7
         self._char_width_cache = max(1, width)
@@ -300,10 +314,10 @@ class PhotoOptimizeLayoutMixin:
         self.body_mode = mode
 
     def _build_body(self) -> None:
-        self.body_scroll = ScrollableFrame(self, style="Panel.TFrame")
+        self.body_scroll = ScrollableFrame(cast(tk.Misc, self), style="Panel.TFrame")
         self.body_scroll.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 6))
         body = self.body_scroll.inner
-        self.body_mode: str | None = None
+        self.body_mode = None
 
         assets_frame = ttk.LabelFrame(body, text="Assets — batch selection", style="Dark.TLabelframe", padding=8)
         self.assets_frame = assets_frame

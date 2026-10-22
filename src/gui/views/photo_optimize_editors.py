@@ -48,7 +48,7 @@ class PhotoBatchEditor(ttk.Frame):
         self.mixed_labels = {}
         self.combos = {}
         self.summary = tk.StringVar(value="No photos selected")
-        self.wrapped_labels = []
+        self.wrapped_labels: list[ttk.Label] = []
         summary_label = ttk.Label(self, textvariable=self.summary, wraplength=600)
         summary_label.grid(row=0, column=0, columnspan=3, sticky="ew")
         hint_label = ttk.Label(
@@ -106,7 +106,7 @@ class PhotoBatchEditor(ttk.Frame):
         self.review_button.grid(row=row + 1, column=0, columnspan=3, sticky="ew")
         self.bind("<Configure>", self._fit_wraps, add="+")
 
-    def _fit_wraps(self, _event=None):
+    def _fit_wraps(self, _event: object = None) -> None:
         """Wrap the explanatory labels to the width this editor was given instead of a fixed 600 px."""
         width = wrap_width(self.winfo_width(), margin=16)
         for label in self.wrapped_labels:
