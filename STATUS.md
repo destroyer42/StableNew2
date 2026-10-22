@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-20
+Updated: 2026-10-21
 
 This file is **current state only**: baseline, supported capabilities, what is active and next, open owner
 decisions, holds and known debt. It is capped at 150 lines and checked by `tools/ci/ci_truth.py`. It does not narrate
@@ -51,6 +51,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - Review mask editing for registry-resolved SDXL base / Forge: original-pixel painting, frozen input previews and canonical queue admission (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`); outpainting and physical masked-output acceptance are deferred.
 - Learning: designed experiments, ratings, Model Comparison, staged curation. Recommendations are applied from the Learning tab's
   Recommendations selector (default Apply with confirm); rated review drafts are saved on navigation or with Save All Drafts.
+  Saved experiments reconcile exact admitted repository jobs after restart without resubmission; admission and resume-save uncertainty remain visible.
 - History browser: the Pipeline tab's Job History opens a searchable, paged view of every job (status, date, pack, prompt/model text;
   no schema change). Text search covers only the first 64 prompt characters and the model; full-text search and "replay with changes" are not built.
 - Batch operations: whole-selection Review preflight, multi-source Video Workflow batch, unified batch triage and retry

@@ -176,7 +176,8 @@ class LearningState:
             for item in (payload.get("plan") or [])
             if isinstance(item, dict)
         ]
-        selected_variant_index = int(payload.get("selected_variant_index", -1) or -1)
+        raw_selected_index = payload.get("selected_variant_index", -1)
+        selected_variant_index = int(raw_selected_index if raw_selected_index is not None else -1)
         if 0 <= selected_variant_index < len(state.plan):
             state.selected_variant = state.plan[selected_variant_index]
         state.selected_image_index = int(payload.get("selected_image_index", 0) or 0)

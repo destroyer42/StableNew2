@@ -23,6 +23,18 @@ def classify_experiment_lifecycle(
         return "Draft/Legacy Draft"
     plan = [item for item in list((payload or {}).get("plan") or []) if isinstance(item, Mapping)]
     statuses = {str(item.get("status") or "").strip().lower() for item in plan}
+    if (
+        "requires_attention" in statuses
+        or any(
+            (item.get("execution_metadata") or {}).get("action_required")
+            or (item.get("execution_metadata") or {}).get("admission_error")
+            for item in plan
+        )
+        or ((payload or {}).get("current_experiment") or {})
+        .get("metadata", {})
+        .get("resume_persistence_error")
+    ):
+        return "Requires Attention"
     if "running" in statuses:
         return "Running"
     if statuses & {"queued", "pending"}:

@@ -133,7 +133,7 @@ def test_preview_globals_source_and_atomic_run_remain_frozen(tmp_path, monkeypat
         monkeypatch.setattr(target, lambda *a, **kw: pytest.fail("Run reinterpreted source"))
     controller._get_baseline_config = lambda: pytest.fail("Run read mutable GUI")
     controller.pipeline_controller = object()
-    submit = Mock()
+    submit = Mock(side_effect=lambda records, *_args: [record.job_id for record in records])
     controller.execution_controller = SimpleNamespace(submit_experiment_jobs=submit)
     controller.run_plan()
     assert submit.call_count == 1
