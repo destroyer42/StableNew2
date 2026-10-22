@@ -29,7 +29,7 @@ before/after geometry for every tab (`tests/gui_v2/test_design_foundation_400.py
 | Where the label sits | Use |
 |---|---|
 | Card / Section / Panel / LabelFrame (almost everything) | `Heading.TLabel`, `Subheading.TLabel`, `Body.TLabel`, `Muted.TLabel` (all card surface), or `Dark.TLabel` |
-| Directly on the page-dark background | `Page.Body.TLabel`, `Page.Muted.TLabel`, plain `TLabel`, `Page.TRadiobutton` |
+| Directly on the page-dark background (a plain `TFrame`, a dialog root, `ScrollableFrame` content) | `Page.Body.TLabel`, `Page.Muted.TLabel`, plain `TLabel`, `Page.TRadiobutton` |
 
 A ttk label cannot be transparent: a style whose background differs from its parent draws a visible rectangle.
 Known gap: ~90 widgets (plain `TLabel`/`TCheckbutton` without a style, mostly inside label frames) still use the
@@ -71,11 +71,13 @@ is unchanged.
 ## 5. Inline notices (never a modal for an action result)
 
 `SubmissionNotice` shows `neutral`, `info`, `success`, `warning` and `error` (plus the existing `queued`). Each kind has a
-word (`Note`, `Info`, `Success`, `Warning`, `Error`, `Queued`), a tinted surface, an accent edge bar and an accessible role
-(`alert` for warning and error, `status` otherwise), all from `TOKENS.notices`. Status is never color alone: read
-`notice.accessible_text()` ("Error: Source image is missing") and `notice.role`. Errors and warnings stay until dismissed or
-replaced; `queued` and `success` dismiss themselves. State what failed and what to do in the message. An idle notice paints
-nothing and keeps the old reserved row height.
+word (`Note`, `Info`, `Success`, `Warning`, `Error`, `Queued`), a tinted surface, an accent edge bar and a semantic role
+(`alert` for warning and error, `status` otherwise), all from `TOKENS.notices`. The **visible word** is what keeps a status from
+being color-only, and text contrast is checked (section 7). `notice.role` and `notice.accessible_text()` ("Error: Source image
+is missing") are a programmatic contract for tests and a future UI Automation bridge. **They are not announced by a screen
+reader today**: Tk exposes no accessibility tree for ttk widgets, so this PR makes no screen-reader claim. Errors and warnings
+stay until dismissed or replaced; `queued` and `success` dismiss themselves. State what failed and what to do in the message. An
+idle notice paints nothing and keeps the old reserved row height.
 
 ## 6. Consuming this from another tab
 

@@ -53,7 +53,7 @@ class Colors:
     TEXT_DISABLED: Color = "#777777"
     # PR-GUI-400: white on the former #FF4D4F fill was 3.3:1; this deeper red keeps the identity at 4.6:1.
     DANGER_BG: Color = "#D9363E"
-    DANGER_BG_HOVER: Color = "#E5484F"
+    DANGER_BG_HOVER: Color = "#C62F36"
     DANGER_FG: Color = "#FFFFFF"
     SEPARATOR: Color = "#2A2A2A"
     # PR-GUI-400: interactive-state surfaces and the focus edge (gold on dark surfaces, white on gold/red fills).

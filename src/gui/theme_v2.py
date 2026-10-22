@@ -19,6 +19,7 @@ ACCENT_GOLD_HOVER = TOKENS.colors.accent_primary_hover
 SURFACE_HOVER = TOKENS.colors.surface_hover
 SURFACE_SELECTED = TOKENS.colors.surface_selected
 SURFACE_TERTIARY = TOKENS.colors.surface_tertiary
+SELECTED_HOVER = design_system.Colors.SECONDARY_HOVER  # hovering an already-selected header or toggle
 FOCUS_RING = TOKENS.colors.focus_ring
 PADDING_SM = TOKENS.spacing.sm
 PADDING_MD = TOKENS.spacing.md
@@ -339,7 +340,12 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
     style.map(
         "Dark.TButton",
-        background=[("pressed", SURFACE_SELECTED), ("active", SURFACE_HOVER)],
+        background=[
+            ("pressed", SURFACE_SELECTED),
+            ("selected active", SELECTED_HOVER),
+            ("selected", SURFACE_SELECTED),
+            ("active", SURFACE_HOVER),
+        ],
         foreground=[("disabled", TEXT_DISABLED)],
         bordercolor=[("focus", ACCENT_GOLD)],  # PR-GUI-110: keyboard focus is visible, not a 1 px grey ring
         embossed=[("disabled", 0)],
@@ -361,7 +367,11 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         )
         style.map(
             disclosure_style,
-            background=[("selected", SURFACE_SELECTED), ("active", SURFACE_HOVER)],
+            background=[
+                ("selected active", SELECTED_HOVER),
+                ("selected", SURFACE_SELECTED),
+                ("active", SURFACE_HOVER),
+            ],
             foreground=[("disabled", TEXT_DISABLED)],
             bordercolor=[("focus", ACCENT_GOLD)],
             embossed=[("disabled", 0)],

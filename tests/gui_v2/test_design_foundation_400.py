@@ -625,3 +625,130 @@ def test_disclosure_state_changes_keep_the_active_accent_orthogonal(
         assert "2 changed" in section.header_text()
     finally:
         section.destroy()
+
+
+# ---------------------------------------------------------------------------- review follow-ups (repair pass)
+
+
+@pytest.mark.parametrize("name", ACTION_BUTTONS)
+def test_action_buttons_stay_readable_while_hovered_or_pressed(style: ttk.Style, name: str) -> None:
+    for state in (["active"], ["pressed"]):
+        assert contrast(_fg(style, name, state), _bg(style, name, state)) >= 4.5, (name, state)
+
+
+@pytest.mark.parametrize("name", ["Dark.TButton", "Disclosure.TButton", "DisclosureActive.TButton"])
+def test_a_selected_header_still_answers_hover(style: ttk.Style, name: str) -> None:
+    selected = _bg(style, name, ["selected"])
+    both = _bg(style, name, ["selected", "active"])
+    assert selected == TOKENS.colors.surface_selected.lower()
+    assert both not in {selected, _bg(style, name, ["active"])}
+    assert contrast(_fg(style, name, ["selected", "active"]), both) >= 4.5
+
+
+def test_overview_toggle_expanded_state_changes_how_it_looks(
+    tk_root: tk.Tk, style: ttk.Style
+) -> None:
+    panel = TabOverviewPanel(tk_root, content=get_tab_overview_content("pipeline"))
+    panel.pack(fill="x")
+    try:
+        name = str(panel.toggle_button.cget("style"))
+        assert _bg(style, name, ["selected"]) != _bg(style, name), (
+            "the selected flag must be visible, not dead"
+        )
+    finally:
+        panel.destroy()
+
+
+def test_notice_roles_reuse_the_shared_palette() -> None:
+    assert TOKENS.notices.error.accent == TOKENS.colors.status_error
+    assert TOKENS.notices.warning.accent == TOKENS.colors.status_warning
+    assert TOKENS.notices.success.accent == TOKENS.colors.status_success
+    assert TOKENS.notices.info.accent == TOKENS.colors.status_info
+    assert TOKENS.notices.neutral.background == TOKENS.colors.surface_secondary
+    assert {TOKENS.notices.role(kind).foreground for kind in NOTICE_KINDS} == {
+        TOKENS.colors.text_primary
+    }
+
+
+_SEMANTIC_STYLES = {
+    ds.HEADING_LABEL,
+    ds.SUBHEADING_LABEL,
+    ds.BODY_LABEL,
+    ds.MUTED_LABEL,
+    ds.PAGE_BODY_LABEL,
+    ds.PAGE_MUTED_LABEL,
+    ds.PAGE_RADIOBUTTON,
+    "TRadiobutton",
+    "Dark.TRadiobutton",
+}
+
+
+def _surface(style: ttk.Style, widget: tk.Misc) -> str:
+    node = widget.master
+    while node is not None:
+        if isinstance(node, ttk.Widget):
+            name = str(node.cget("style")) or node.winfo_class()
+            value = style.lookup(name, "background") or style.lookup(
+                node.winfo_class(), "background"
+            )
+        else:
+            value = str(node.cget("bg"))
+        if value:
+            return str(value).lower()
+        node = node.master
+    return ""
+
+
+def _surface_mismatches(root_widget: tk.Misc, style: ttk.Style) -> list[str]:
+    found: list[str] = []
+    stack = list(root_widget.winfo_children())
+    while stack:
+        widget = stack.pop()
+        stack.extend(widget.winfo_children())
+        if not isinstance(widget, ttk.Widget):
+            continue
+        name = str(widget.cget("style")) or widget.winfo_class()
+        if name in _SEMANTIC_STYLES and _bg(style, name) != _surface(style, widget):
+            found.append(f"{name} on {_surface(style, widget)}: {widget.cget('text')!r}")
+    return found
+
+
+def test_engine_settings_dialog_text_sits_on_its_surfaces(
+    tk_root: tk.Tk, style: ttk.Style, tmp_path
+) -> None:
+    from src.gui.engine_settings_dialog import EngineSettingsDialog
+    from src.utils.config import ConfigManager
+
+    window = tk.Toplevel(tk_root)
+    dialog = EngineSettingsDialog(
+        window, config_manager=ConfigManager(str(tmp_path)), status_text="disconnected"
+    )
+    dialog.pack(fill="both", expand=True)
+    try:
+        assert _surface_mismatches(dialog, style) == []
+    finally:
+        window.destroy()
+
+
+def test_mask_editor_radios_sit_on_the_page_surface(
+    tk_root: tk.Tk, style: ttk.Style, tmp_path
+) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from src.gui.mask_editor_dialog import MaskEditorDialog
+    from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
+    from tests.pipeline.test_inpaint300 import png
+
+    source = tmp_path / "source.png"
+    source.write_bytes(png())
+    runner = BackgroundWorkRunner(
+        spawn=lambda _, target: target(), dispatch=lambda callback: callback()
+    )
+    controller = SimpleNamespace(job_service=SimpleNamespace(submit_njrs=Mock()))
+    editor = MaskEditorDialog(tk_root, source_path=source, controller=controller, runner=runner)
+    try:
+        editor.update_idletasks()
+        assert _surface_mismatches(editor, style) == []
+    finally:
+        editor.destroy()

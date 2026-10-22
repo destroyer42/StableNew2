@@ -67,7 +67,7 @@ class NoticeRole:
 
     kind: str
     label: str
-    a11y_role: str  # "alert" interrupts a screen reader, "status" is announced politely
+    a11y_role: str  # semantic role ("alert" or "status") for tests and a future UI Automation bridge; Tk announces nothing
     foreground: str  # message text
     label_foreground: str  # the bold role word
     background: str  # tint behind the notice
@@ -77,19 +77,49 @@ class NoticeRole:
 @dataclass(frozen=True)
 class NoticeTokens:
     neutral: NoticeRole = NoticeRole(
-        "neutral", "Note", "status", "#FFFFFF", "#CCCCCC", "#1E1E1E", "#8A8A8A"
+        "neutral",
+        "Note",
+        "status",
+        design_system.Colors.TEXT_PRIMARY,
+        design_system.Colors.TEXT_MUTED,
+        design_system.Colors.ELEVATED_SURFACE,
+        "#8A8A8A",
     )
     info: NoticeRole = NoticeRole(
-        "info", "Info", "status", "#FFFFFF", "#7DB4F0", "#16222E", "#4A90D9"
+        "info",
+        "Info",
+        "status",
+        design_system.Colors.TEXT_PRIMARY,
+        "#7DB4F0",
+        "#16222E",
+        ColorTokens.status_info,
     )
     success: NoticeRole = NoticeRole(
-        "success", "Success", "status", "#FFFFFF", "#7FDB4F", "#17261A", "#52C41A"
+        "success",
+        "Success",
+        "status",
+        design_system.Colors.TEXT_PRIMARY,
+        "#7FDB4F",
+        "#17261A",
+        ColorTokens.status_success,
     )
     warning: NoticeRole = NoticeRole(
-        "warning", "Warning", "alert", "#FFFFFF", "#F0B964", "#2B2416", "#D9A04A"
+        "warning",
+        "Warning",
+        "alert",
+        design_system.Colors.TEXT_PRIMARY,
+        "#F0B964",
+        "#2B2416",
+        ColorTokens.status_warning,
     )
     error: NoticeRole = NoticeRole(
-        "error", "Error", "alert", "#FFFFFF", "#FF7875", "#2E1A1B", "#FF4D4F"
+        "error",
+        "Error",
+        "alert",
+        design_system.Colors.TEXT_PRIMARY,
+        "#FF7875",
+        "#2E1A1B",
+        ColorTokens.status_error,
     )
 
     def role(self, kind: str) -> NoticeRole:

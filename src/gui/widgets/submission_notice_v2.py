@@ -7,9 +7,11 @@ Replaces blocking ``messagebox`` pop-ups after a Queue click:
 * ``show_queued`` acknowledges an accepted job with an optional "View in queue" action and dismisses itself
   after a short delay.  The pending dismissal is cancelled when the widget is destroyed or replaced.
 
-PR-GUI-400 adds the neutral / info / success / warning kinds and gives every kind a word, an accent edge bar and
-an accessible role, so a status is never conveyed by color alone (``accessible_text`` is the text a screen reader
-or a test reads).  Colors and words come from ``TOKENS.notices``.
+PR-GUI-400 adds the neutral / info / success / warning kinds and gives every kind a word and an accent edge bar,
+so a status is never conveyed by color alone: the visible word is what makes it non-color-only.  ``role`` and
+``accessible_text()`` are a programmatic contract for tests and a future UI Automation bridge; Tk exposes no
+accessibility tree for ttk widgets, so nothing here is announced by a screen reader today.  Colors and words come
+from ``TOKENS.notices``.
 
 It never submits, builds or reads anything; callers pass the message and the action.
 """
@@ -100,7 +102,7 @@ class SubmissionNotice(ttk.Frame):
         self._schedule_dismiss()
 
     def accessible_text(self) -> str:
-        """What assistive technology (or a test) should read: the kind's word, then the message."""
+        """The kind's word, then the message: the text a test (or a future accessibility bridge) reads."""
 
         if not self.kind:
             return ""

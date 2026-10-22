@@ -128,7 +128,7 @@ class EngineSettingsDialog(ttk.Frame):
             ttk.Label(
                 self,
                 text=f"WebUI status: {status_text}",
-                style="Muted.TLabel",
+                style="Page.Muted.TLabel",
             ).grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
 
         self._build_sections()
@@ -168,6 +168,7 @@ class EngineSettingsDialog(ttk.Frame):
                 text=_RUNTIME_LABEL[choice],
                 value=choice,
                 variable=self._runtime_var,
+                style="Page.TRadiobutton",
             ).grid(row=index, column=0, sticky="w")
         ttk.Label(
             webui_frame, textvariable=self._runtime_notice_var, style="Muted.TLabel", wraplength=420
