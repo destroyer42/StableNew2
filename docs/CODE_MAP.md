@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-470 of 624 modules have a docstring.
+471 of 625 modules have a docstring.
 
 ## src/
 
@@ -112,6 +112,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_recent_outputs_controller.py`: Make Video support on the Video Workflow controller (PR-VID-UX-313/314)
 - `video_sequence_controller.py`: Admit, resume and replay multi-segment video jobs on the Video Workflow controller (PR-VID-SEQ-330-CORE)
 - `video_workflow_controller.py`: (no docstring)
+- `video_workflow_mixins.py`: The controller surfaces ``VideoWorkflowController`` is composed of (kept apart so the controller module stays…
 - `webui_connection_controller.py`: (no docstring)
 - `webui_outage_coordinator.py`: Contain a WebUI outage inside the existing queue/worker/manager boundaries
 
