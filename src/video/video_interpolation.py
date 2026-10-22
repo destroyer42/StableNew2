@@ -117,8 +117,8 @@ def _decode_frames(
         "error",
         "-i",
         str(video_path),
-        "-vsync",
-        "0",
+        "-fps_mode",
+        "passthrough",
         "-y",
         str(frame_dir / "frame_%06d.png"),
     ]

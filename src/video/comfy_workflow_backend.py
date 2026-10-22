@@ -5,7 +5,7 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -494,7 +494,9 @@ class ComfyWorkflowVideoBackend:
         # provable from StableNew's own managed launch configuration before anything starts.
         self._verify_required_launch_flags(spec)
 
-        if not _release_owned_runtime_after_job(spec):
+        if request.hold_runtime or not _release_owned_runtime_after_job(spec):
+            # A sequence segment (hold_runtime) leaves the owned runtime warm for the next segment;
+            # the sequence's own end-of-job release (release_for_sequence) is the only one.
             return self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
 
         # Declared runtime policy: once this job has touched the managed runtime, release the
@@ -886,31 +888,21 @@ class ComfyWorkflowVideoBackend:
             "Install the required ControlNet model, refresh ComfyUI model inventory, and restart ComfyUI before running the conditioned video_workflow stage."
         )
 
-    def execute_segment(
-        self,
-        pipeline: Any,
-        request: VideoExecutionRequest,
-        *,
-        segment_index: int,
-        segment_id: str,
-        carry_forward_policy: str,
-    ) -> VideoExecutionResult | None:
-        """Execute one segment of a multi-segment sequence.
+    def release_for_sequence(self, workflows: Sequence[tuple[str, str]]) -> dict[str, Any]:
+        """The one sequence-end release: stop the StableNew-owned runtime if any segment's workflow declares
+        ``release_owned_runtime_after_job``, exactly as a single clip would have after each job.
 
-        Delegates to ``execute`` and stamps segment provenance into the
-        result's ``raw_result`` and ``backend_metadata`` dicts so that
-        callers can identify which segment produced each artifact.
-        """
-        result = self.execute(pipeline, request)
-        if result is None:
-            return None
-        result.raw_result["segment_index"] = segment_index
-        result.raw_result["segment_id"] = segment_id
-        result.raw_result["carry_forward_policy"] = carry_forward_policy
-        result.backend_metadata["segment_index"] = segment_index
-        result.backend_metadata["segment_id"] = segment_id
-        result.backend_metadata["carry_forward_policy"] = carry_forward_policy
-        return result
+        Goes through the existing ownership interface only (``_release_owned_runtime``): a runtime StableNew
+        did not launch and still own is never stopped, and a workflow with no such policy leaves it running."""
+
+        for workflow_id, version in dict.fromkeys(workflows):
+            try:
+                spec = self._workflow_registry.get(workflow_id, version, allow_experimental=True)
+            except KeyError:
+                continue
+            if _release_owned_runtime_after_job(spec):
+                return self._release_owned_runtime()
+        return {"policy": "none_declared", "released": False}
 
     def _resolve_process_manager(self) -> ComfyProcessManager | None:
         return (

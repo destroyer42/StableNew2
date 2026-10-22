@@ -216,3 +216,6 @@ class SVDResult:
     postprocess: dict[str, Any] | None = None
     # How the exported frame sequence was made (loop / ping-pong); ``None`` for a run that predates it.
     export: dict[str, Any] | None = None
+    # The last generated frame, saved losslessly before any RIFE, loop export or upscale, when a sequence asked
+    # for it (PR-VID-SEQ-330-CORE): ``{path, sha256, frame_index, width, height}``; ``None`` otherwise.
+    native_final_frame: dict[str, Any] | None = None

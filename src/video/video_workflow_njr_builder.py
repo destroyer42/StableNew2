@@ -514,6 +514,7 @@ class VideoWorkflowNjrBuilder:
         learning_context: LearningJobContext | None = None,
         batch: Mapping[str, Any] | None = None,
         lineage: Mapping[str, Any] | None = None,
+        sequence_plan: Mapping[str, Any] | None = None,
     ) -> VideoWorkflowBuild:
         """Build one immutable NJR.
 
@@ -625,6 +626,10 @@ class VideoWorkflowNjrBuilder:
                 "model_dir": smoothing.model_dir,
             }
             workflow_config["interpolation"] = frozen_interpolation
+        if sequence_plan is not None:
+            # One NJR, N sequential segments (PR-VID-SEQ-330-CORE): the plan was frozen at admission and the
+            # runner executes it inside this single job.
+            workflow_config["sequence_metadata"] = dict(sequence_plan)
         if continuity_link:
             config["metadata"] = {"continuity": dict(continuity_link)}
 
@@ -667,6 +672,11 @@ class VideoWorkflowNjrBuilder:
                 fps=length_policy["fps"],
                 approximate_seconds=approximate_seconds(frozen_frame_count, length_policy["fps"]),
             )
+        if sequence_plan is not None:
+            extra_metadata["video_workflow"]["sequence"] = {
+                "sequence_id": sequence_plan.get("sequence_id"),
+                "segments": len(sequence_plan.get("segments") or ()),
+            }
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
         if batch is not None:

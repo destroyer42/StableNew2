@@ -342,9 +342,11 @@ class VideoStageHandler(StageHandler):
         stage_cfg = runner._stage_config_dict_for_video(njr, stage.stage_name)
         sequence_config = stage_cfg.get("sequence_metadata") or {}
         if (
-            stage.stage_name == "video_workflow"
+            stage.stage_name in ("video_workflow", "svd_native")
             and isinstance(sequence_config, dict)
-            and int(sequence_config.get("total_segments", 1)) > 1
+            and (
+                sequence_config.get("segments") or int(sequence_config.get("total_segments", 1)) > 1
+            )
         ):
             next_paths = runner._execute_sequence(
                 stage_name=stage.stage_name,

@@ -93,7 +93,7 @@ Cancellation is checked between every phase and per denoising step (`_build_step
 
 ### 3.3 Encoding
 
-Every MP4 written from frames goes through `VideoCreator.create_video_from_images` (`src/pipeline/video.py`) [V]: frames are staged, in the order given (never re-sorted by name), as `frame_%06d.png` in a private folder next to the output and read by the image2 demuxer at an integer `-framerate` (exact frame timing). `build_video_encode_args` applies `VideoEncodeSettings`: libx264/libx265 CRF (default 16, profiles `draft` 20, `balanced` 16, `archival` 12; a legacy `quality` value that names an x264 preset still selects the preset), even dimensions, a BT.709 RGB->YUV matrix with BT.709 primaries, transfer and matrix tags stamped on the frames (`setparams`, since FFmpeg lets frame properties override output-level tags) and `+faststart`. The encoder runs through `run_ffmpeg` -> `run_bounded()` (900 s bound, contained, capped output); a cancel raises `VideoEncodeCancelled` (surfaced as `CancellationError` by `src/video/video_export.py`) and removes the partial file. GIFs use one palette for the whole clip (`palettegen`/`paletteuse`) when FFmpeg is available, Pillow otherwise. Movie Clips assembly uses the same settings: its `-filter_complex` graph ends with `build_video_encode_filter()` and it takes `build_video_encode_args(include_filter=False)` (FFmpeg refuses `-vf` on a filtergraph output). The dormant sequence runner's segment stitching (`stitch_video_segments`) is still a `-c copy` concat.
+Every MP4 written from frames goes through `VideoCreator.create_video_from_images` (`src/pipeline/video.py`) [V]: frames are staged, in the order given (never re-sorted by name), as `frame_%06d.png` in a private folder next to the output and read by the image2 demuxer at an integer `-framerate` (exact frame timing). `build_video_encode_args` applies `VideoEncodeSettings`: libx264/libx265 CRF (default 16, profiles `draft` 20, `balanced` 16, `archival` 12; a legacy `quality` value that names an x264 preset still selects the preset), even dimensions, a BT.709 RGB->YUV matrix with BT.709 primaries, transfer and matrix tags stamped on the frames (`setparams`, since FFmpeg lets frame properties override output-level tags) and `+faststart`. The encoder runs through `run_ffmpeg` -> `run_bounded()` (900 s bound, contained, capped output); a cancel raises `VideoEncodeCancelled` (surfaced as `CancellationError` by `src/video/video_export.py`) and removes the partial file. GIFs use one palette for the whole clip (`palettegen`/`paletteuse`) when FFmpeg is available, Pillow otherwise. Movie Clips assembly uses the same settings: its `-filter_complex` graph ends with `build_video_encode_filter()` and it takes `build_video_encode_args(include_filter=False)` (FFmpeg refuses `-vf` on a filtergraph output). A multi-segment sequence assembles through the same engine (section 7.1).
 
 ## 4. Comfy Video Workflow
 
@@ -195,7 +195,75 @@ Two modes. **Sequence:** every image is one frame at the FPS (images only; a lis
 
 Cancel reaches FFmpeg through the job's cancel token (the partial file is removed). `frozen_input_checks` lists every clip and the audio track with its digest, so a retry is refused up front when an input changed. Not built: interpolation of the assembled movie, per-video trims, clip audio passthrough.
 
-The dormant sequence runner (`PipelineRunner._execute_sequence`, section 9) still assembles through `AssemblyService` (`src/video/assembly_service.py`) and `stitch_video_segments`; PR-VID-SEQ-330/331 are to move it onto the assembly engine. `send_history_job_to_movie_clips` and `video_workspace_handoff.py` only route an existing output into the tab.
+A multi-segment sequence assembles inside its own job through this same engine (section 7.1). `send_history_job_to_movie_clips` and `video_workspace_handoff.py` only route an existing output into the tab.
+
+### 7.1 Multi-segment sequences (PR-VID-SEQ-330-CORE)
+
+A sequence is **one NJR, one queue row and one `PipelineRunner.run_njr` call** that runs N sequential internal segments (1-12, at most 972
+requested frames in total). It is not a second queue, runner, lifecycle or process authority: SQLite keeps every job fact, and the ledger below is
+only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approved Comfy workflows; one job uses one backend.
+
+- **Admission** (`src/video/sequence_admission.py`, `svd_sequence_admission.py`; `VideoSequenceControllerMixin.submit_sequence_job`,
+  `SVDController.submit_sequence_job`): the intent is frozen as a typed `SequencePlan` (`src/video/sequence_plan.py`) under the stage config's
+  `sequence_metadata`. The plan is versioned (`schema`, `policy_version`) and carries its own canonical `plan_digest`; a plan whose content no longer
+  matches its digest cannot be loaded. Per segment it holds a concrete seed (a blank or `random` seed is drawn once, at admission), the exact native frame
+  count, workflow id and exact version, prompt and negative prompt, anchor policy (`carry_last_frame` or `provided`, with the image's path and SHA-256),
+  and `overlap_frames` (default **1** for a carried anchor, **0** for an authored one). The plan also freezes the backend, the SVD model, the job's own
+  experimental opt-in, segment 0's source image and hash, continuity and plan-origin provenance, the assembly settings and the colour-match setting.
+  Refused before an NJR exists, never clipped or defaulted: an illegal frame count (Wan 4n+1, the SVD model's maximum), an unknown field anywhere, a
+  missing, unreadable or non-image (a video file) anchor, an authored anchor that is not exactly the sequence's frame size, an unapproved workflow
+  (an `experimental` one only with this job's recorded opt-in), a workflow needing inputs a sequence cannot supply (end anchor, driving video, operator
+  controls), mixed frame rates or source preparation, RIFE smoothing in a Comfy sequence (native SVD segments may smooth; the plan then plays at the multiplied rate), a loop or ping-pong export, a transition, too many segments or frames.
+- **Carry-forward** is the exact last frame as a lossless PNG with a recorded SHA-256, never an MP4 path (`src/video/sequence_frames.py`). Basis
+  `native`: the last PNG a frames-out Comfy workflow saved (byte-identical, cross-checked against the backend's own per-frame hashes) or, for native SVD,
+  the last generated frame saved before RIFE, loop export or upscaling (`SVDResult.native_final_frame`, written under the run's `sequence/native`
+  folder). Basis `decoded`: only for a workflow that ends in an encoded clip (TI2V-5B 1.2.0); the frames are decoded back out of the clip by the bounded,
+  cancellable FFmpeg path, the ledger says so, and the decode is refused unless it yields exactly the segment's admitted frame count. A frames-out or
+  native-SVD segment whose generated count differs from the admitted count stops the sequence (the standalone frames-out policy is unchanged: there it is
+  still recorded, not fatal). A missing, corrupt, non-PNG or hash-mismatched anchor is never handed to a segment.
+- **Per-segment overrides** go through one allow-listed seam (`ALLOWED_OVERRIDES` in `src/pipeline/video_sequence_executor.py`;
+  `_execute_video_stage(stage_config_overrides=...)`): a copy of the frozen stage config gets the segment's seed, frame count, workflow identity and
+  prompts (SVD: `inference.seed`, `inference.num_frames`, `output.save_frames`). The NJR is never mutated; each segment's request carries
+  `<job_id>_segNN`, so its files and manifest never collide with another segment's.
+- **Warm runtime**: every segment is dispatched with `hold_runtime=True` (`VideoExecutionRequest`, default false), so a StableNew-owned ComfyUI is neither
+  released after a segment nor on its failure. The executor makes **one** release attempt in `finally`, on success, failure, cancellation and any
+  `BaseException`, through `ComfyWorkflowVideoBackend.release_for_sequence` and the existing ownership interface (`_release_owned_runtime`): only a process
+  StableNew launched and still owns is stopped, only when a segment's workflow declares `release_owned_runtime_after_job`, and an external runtime is never
+  adopted or stopped. A failed release is recorded in the ledger and never replaces the error that ended the sequence. The single-clip path is unchanged.
+- **Ledger** (`src/video/sequence_ledger.py`): `<run>/sequence_state.json`, written atomically (`atomic_write_json`) after every completed segment and
+  before the next dispatches; a write failure stops the sequence before another segment starts. It records the plan hash, `completed_prefix`,
+  `next_segment` and the state (`running`, `completed`, `failed`, `cancelled`, `interrupted`), and per segment: seed, counts, workflow, overlap, the image it
+  was conditioned on (path, hash, basis), the hashed clip, frames and backend manifest, the final frame with its basis, how the segment was processed and
+  whether it was `generated` or `reused`. A failed or cancelled run leaves the valid completed prefix and a pointer in the run metadata
+  (`sequence_artifact.ledger_path`, `ledger_sha256`, `ledger_state`, `completed_segments`, `next_segment`). Only the failing operation's own uncommitted
+  staging is removed; completed segments' files are kept.
+- **Resume** (`src/video/sequence_resume.py`; `VideoSequenceControllerMixin.resume_sequence(parent_job_id, from_segment)`): a NEW NJR (new job id, replay
+  parent lineage) with a frozen `sequence_resume` block (parent job, ledger path and SHA-256, plan digest, `from_segment`), admitted through
+  `JobService.submit_njrs`. The checkpoint, the plan digest, the job identity, that every recorded path stays inside the checkpoint's own run folder, each
+  prefix segment, and every reused file's hash (and PNG validity) are verified at admission and again before the runner dispatches anything; the prefix is
+  *copied* into the new run directory (each copy re-hashed), so the child does not depend on the parent folder, and only the unfinished suffix runs. A
+  tampered, missing, conflicting or unsafe file refuses the resume; it never falls back to a full rerun, never restarts the original job and is never
+  automatic after a device loss. A segment that was in flight is simply the first segment of the suffix; no generation request is replayed. A job that recorded
+  no result (a cancelled one) can be resumed from its `sequence_state.json` (`ledger_path=`).
+- **Full replay** (`replay_sequence`, and any History replay) is different: it recomputes every segment from the frozen plan and never inherits a resume. When
+  the original ledger is available it is pinned, and the replay's ledger records per segment whether the recomputed final frame equals the original's
+  (`replay.diverged_segments`); a GPU re-run is not guaranteed to be byte-identical, so divergence is recorded and never a failure.
+- **Assembly** is inside the same job: the segments' frames in segment order, each later segment's `overlap_frames` dropped, are frozen as an ASM-332
+  *frame sequence* (`MODE_SEQUENCE`, hard cuts at the plan's frame rate) and encoded by `run_movie_assembly` (`src/video/sequence_assembly.py`), the same
+  engine and software-encoder contract as Movie Clips. Frames of mixed sizes are refused; the engine re-hashes every frame and honours the job's cancel
+  token; the assembled timeline must equal the frames handed to it. No `movie_assembly` job is queued. A requested assembly that fails fails the sequence
+  (the segments stay in the ledger); the assembled movie leads the job's outputs and carries the engine's manifest and hash.
+- **Colour matching** is opt-in and **off by default** (`SequencePlan.color_match`): one integer lookup table per channel per later segment, built from the
+  segment's pooled histogram and segment 0's first frame, applied to derived assembly copies only; the carried anchors, the ledger's original frames and
+  segment 0 are never altered, and the ledger records the algorithm, the reference hash and which segments were transformed. It does not address
+  subject-identity drift.
+- **Retired**: the pre-SEQ-330 sequence layer (`sequence_planner`, `sequence_models`, `sequence_manifest`, `ComfyWorkflowVideoBackend.execute_segment`,
+  `AssemblyService` and the `-c copy` `stitch_video_segments`) had no remaining caller and was deleted. A stored `sequence_artifact`, assembled-video record or
+  `AssembledSequenceInput` (and the `AssemblyRequest` type that names the retired service) still reads and loads; they stay until no stored record can name
+  them. A job carrying a block in the old `total_segments` shape is refused with a readable reason instead of running.
+- **Not here**: the Storyboard UI (SEQ-331), first-last-frame anchors (FLF-322), crossfades between segments, new Wan models. No physical sequence run has
+  been made; `PR-VID-SEQ-330_Acceptance.md` is the procedure for one and `tools/acceptance/seq330_sequence_verification.py` re-verifies a finished
+  run's ledger and artifacts.
 
 ## 8. Provenance, artifacts and replay lineage
 
@@ -218,7 +286,7 @@ Provenance can be lost on the image side (audit B9) and `gzip.decompress` of emb
 |---|---|
 | Depth and camera conditioning | No catalog workflow declares `depth_map`, `camera_preset` or `controlnet_model`, so `src/video/depth_map_resolver.py`, `_resolve_conditioning_inputs`, `_normalize_camera_intent` and the matching Video Workflow tab fields are reachable only through a spec that declares them, today the synthetic test fixture [V]. They are kept deliberately as generic infrastructure (the retired LTX specs were their only catalog users). |
 | `animatediff` | **Execution retired** (owner decision; the backend adapter, `Pipeline.run_animatediff_stage`, the extension capability probe and payload construction are gone). Compatibility policy, from `src/pipeline/animatediff_retirement.py`: every PromptPack job carries a *disabled* `animatediff` placeholder stage plus an `animatediff` settings dict, and both stay valid, loadable and inert; only an **enabled** stage is refused, with `AnimateDiffRetiredError` ("AnimateDiff execution is retired ... Disable the AnimateDiff stage ... or use native SVD or the Comfy Video Workflow"), before any WebUI request or probe. Refusal points: fresh PromptPack and generic compilation (`animatediff_enabled`), `JobService.submit_njrs`, replay (`compile_replay_intent`), reprocess requests, and `build_run_plan_from_njr` / `PipelineRunner.run_njr` for jobs queued earlier (they fail through the normal failure path, classified as an invalid configuration, never retried). The stage is never dropped or replaced by SVD or Wan. Old NJRs, the `animatediff` config key and `animatediff_artifact` history results still deserialize and render. |
-| Multi-segment sequences | `PipelineRunner._execute_sequence` runs when a `video_workflow` stage config has `sequence_metadata.total_segments > 1`, but nothing in `src` writes `sequence_metadata` [V]. `src/video/sequence_planner.py`, `sequence_models.py`, `sequence_manifest.py` and `ComfyWorkflowVideoBackend.execute_segment` (no callers) are reachable only through that path or tests. |
+| Multi-segment sequences | Live (section 7.1). The pre-SEQ-330 layer is deleted; a stored block in its `total_segments` shape is refused with a readable reason. |
 | Story plan and continuity authoring | Retired: `StoryPlanCompiler`, the story-plan models and store, and `ContinuityStore` had no production caller and were removed. Live and kept: `continuity_models` (`normalize_continuity_link` and the pack/link/summary models), the NJR `continuity_link` field and its runner propagation, and PromptPack `story_plan`/`plan_origin` actor metadata. Existing files under `data/story_plans` and `data/continuity` are user data, are never read, migrated or deleted by the app, and nothing writes them any more. |
 | GFPGAN face method | **Retired** (D8): not offered; stored configs load and an enabled one is refused (3.2). Kept as compatibility until no stored record can name it. |
 | Startup dependency probe | `build_optional_dependency_snapshot` (`src/app/optional_dependency_probes.py`) iterates `registry.list_specs_for_backend("comfy")`, which returns only approved specs, so it reports `workflow:wan22_ti2v_5b_i2v_v1@1.2.0` and no other. Bootstrap passes no object info and no client, so that entry is `unknown`: the snapshot starts no Comfy, makes no request and downloads nothing, and only the diagnostics bundle reads it [V]. |
@@ -254,8 +322,8 @@ Configuration is `pyproject.toml` only. Run `python tools/ci/run_pr_gate.py` for
 | Experiment review | `tests/video/test_pr_vid_quality_211_group.py`, `..._preview.py`, `tests/learning/test_video_quality_review_211.py`, `test_video_review_service_211.py`, `tests/gui_v2/test_video_review_contract_211.py`, `test_video_experiment_review_window_211.py`, `tests/integration/test_video_quality_211_acceptance.py`, `tests/safety/test_video_review_211_architecture.py` | Real temporary `JobRepository`, real FFmpeg on KB-sized synthetic clips (skipped without FFmpeg), real Tk window with a synchronous or deferring runner |
 | Managed runtime contract | `tests/system/test_managed_comfy_runtime.py` | Reads `config/managed_comfy_runtime.json` and constraints only |
 | Native SVD | `tests/video/test_svd_runner.py`, `test_svd_service.py`, `test_svd_postprocess.py`, `test_svd_postprocess_worker.py`, `test_svd_portable_provenance.py`, `test_svd_target.py`, `test_svd_folder_discovery.py`, `test_svd_runtime_hardening.py`, `test_svd_integration.py`, `test_svd_restoration_adapters.py`, `test_pr_vid_post_304_temporal.py` (landmark and residual smoothing on synthetic data), `..._stage_order.py` (stage order, model selection, manifest), `..._upscale_models.py`, `..._worker.py`, `..._retirement.py` (GFPGAN and shared defaults), `test_pr_vid_smooth_302*.py` (RIFE discovery, model choice, factor, defaults, finished-clip smoothing, builder freeze), `test_pr_vid_loop_303.py` (loop arithmetic, config, run), `tests/pipeline/test_secondary_motion_retirement.py` (refusal and readable history) | Fake diffusers pipeline and stub services under `tests/video/`; a fake `run_bounded` seam for the post-process workers |
-| Assembly and Movie Clips | `tests/video/test_movie_assembly_332_contract.py`, `test_movie_assembly_332_engine.py`, `tests/pipeline/test_movie_assembly_332_canonical.py`, `tests/controller/test_movie_clips_submission_332.py`, `tests/gui_v2/test_movie_clips_tab_v2.py`, `tests/video/test_assembly_service.py` (sequence runner) | Pure plan and command; real FFmpeg on KB-sized generated clips (skipped without FFmpeg); real temporary `JobRepository` through `run_njr_via_queue`; recording JobService |
-| Runner video branch, replay, queue | `tests/pipeline/test_pipeline_runner.py` (including the `sequence_metadata` cases), `tests/pipeline/test_replay_*`, `tests/queue/` | `tests/helpers/fake_pipeline_runner.py`, `tests/helpers/njr_factory.py` |
+| Assembly and Movie Clips | `tests/video/test_movie_assembly_332_contract.py`, `test_movie_assembly_332_engine.py`, `tests/pipeline/test_movie_assembly_332_canonical.py`, `tests/controller/test_movie_clips_submission_332.py`, `tests/gui_v2/test_movie_clips_tab_v2.py`, `tests/video/test_pr_vid_seq_330_*.py` (sequence assembly) | Pure plan and command; real FFmpeg on KB-sized generated clips (skipped without FFmpeg); real temporary `JobRepository` through `run_njr_via_queue`; recording JobService |
+| Runner video branch, replay, queue | `tests/pipeline/test_pipeline_runner.py`, `tests/pipeline/test_pr_vid_seq_330_runner.py`, `tests/video/test_pr_vid_seq_330_*.py` (plan, admission, executor, ledger, checkpoint and resume refusals, replay comparison, backend hold/release), `tests/pipeline/test_pr_vid_seq_330_canonical.py` (real JobService, SQLite queue and repository: failure, resume as a new job, full replay), `tests/video/test_pr_vid_seq_330_acceptance_tool.py` (the evidence verifier), `tests/pipeline/test_replay_*`, `tests/queue/` | `tests/helpers/fake_pipeline_runner.py`, `tests/helpers/njr_factory.py` |
 
 For a new refusal, assert both the error and that no `queue_prompt` call was recorded. Qualification code in `tools/qualification/` and `tools/acceptance/` is never run in CI. `real_backend` is the opt-in marker for anything that contacts an external backend.
 

@@ -399,8 +399,20 @@ class PipelineRunner:
         variants: list[dict[str, Any]],
         metadata: dict[str, Any],
         survivor_telemetry: GpuSurvivorTelemetry | None = None,
+        stage_config_overrides: Mapping[str, Any] | None = None,
+        request_job_id: str | None = None,
+        hold_runtime: bool = False,
+        context_extra: Mapping[str, Any] | None = None,
+        result_sink: list[VideoExecutionResult] | None = None,
     ) -> list[str]:
         config_dict = self._stage_config_dict_for_video(njr, stage_name)
+        if stage_config_overrides:
+            # A sequence segment's typed, allow-listed overrides, applied to a copy: the NJR is never mutated.
+            from src.pipeline.video_sequence_executor import apply_stage_overrides
+
+            config_dict = apply_stage_overrides(
+                config_dict, stage_config_overrides, stage=stage_name
+            )
         # Explicit backend/task/controls are validated before any backend is called; stage-owned
         # routing survives only as the resolver's bounded legacy bridge.
         video_intent = self._video_resolver.build_intent(
@@ -452,6 +464,8 @@ class PipelineRunner:
                     source_descriptor = source_to_dict()
                     if isinstance(source_descriptor, Mapping):
                         request_context_metadata["source_descriptor"] = dict(source_descriptor)
+            if context_extra:
+                request_context_metadata.update(context_extra)
             request = VideoExecutionRequest(
                 backend_id=backend.backend_id,
                 stage_name=stage_name,
@@ -465,12 +479,13 @@ class PipelineRunner:
                 prompt=prompt,
                 negative_prompt=negative_prompt,
                 motion_profile=str(config_dict.get("motion_profile") or ""),
-                job_id=njr.job_id,
+                job_id=request_job_id or njr.job_id,
                 workflow_id=str(config_dict.get("workflow_id") or "") or None,
                 workflow_version=str(config_dict.get("workflow_version") or "") or None,
                 backend_options=dict(config_dict.get("backend_options") or {}),
                 cancel_token=cancel_token,
                 context_metadata=request_context_metadata,
+                hold_runtime=hold_runtime,
             )
             self._video_resolver.apply(request, video_intent)
             if survivor_telemetry is not None:
@@ -479,6 +494,8 @@ class PipelineRunner:
             if execution_result is None:
                 continue
             backend_results.append(execution_result)
+            if result_sink is not None:
+                result_sink.append(execution_result)
             variant_payload = execution_result.to_variant_payload()
             variants.append(variant_payload)
             if execution_result.artifact:
@@ -584,180 +601,26 @@ class PipelineRunner:
         metadata: dict[str, Any],
         survivor_telemetry: GpuSurvivorTelemetry | None = None,
     ) -> list[str]:
-        """Execute a multi-segment video_workflow sequence.
+        """Run a multi-segment sequence inside this one job (PR-VID-SEQ-330-CORE).
 
-        Builds a VideoSequenceJob from the stage config, runs
-        VideoSequencePlanner to produce deterministic per-segment plans, then
-        executes each segment via _execute_video_stage, carrying the last frame
-        forward as needed. Writes a sequence manifest and stamps
-        ``metadata["sequence_artifact"]``.
+        The typed plan, the ledger, warm-runtime ownership, resume and assembly live in
+        ``src/pipeline/video_sequence_executor.py``; this stays the single public path in and out.
         """
-        from src.video.sequence_manifest import write_sequence_manifest
-        from src.video.sequence_models import (
-            SegmentProvenanceRecord,
-            VideoSequenceJob,
-            VideoSequenceResult,
-        )
-        from src.video.sequence_planner import VideoSequencePlanner
 
-        config_dict = self._stage_config_dict_for_video(njr, stage_name)
-        continuity_link = self._resolve_continuity_link(
-            njr,
-            metadata=metadata,
+        from src.pipeline.video_sequence_executor import run_sequence_stage
+
+        return run_sequence_stage(
+            runner=self,
+            stage_name=stage_name,
+            njr=njr,
+            current_stage_paths=current_stage_paths,
             sequence_config=sequence_config,
-        )
-        plan_origin = self._resolve_plan_origin(
-            njr,
+            run_dir=run_dir,
+            cancel_token=cancel_token,
+            variants=variants,
             metadata=metadata,
-            sequence_config=sequence_config,
+            survivor_telemetry=survivor_telemetry,
         )
-        if continuity_link:
-            metadata["continuity"] = dict(continuity_link)
-        if plan_origin:
-            metadata["plan_origin"] = dict(plan_origin)
-
-        seq_job = VideoSequenceJob(
-            sequence_id=str(sequence_config.get("sequence_id") or njr.job_id),
-            job_id=str(njr.job_id),
-            workflow_id=str(config_dict.get("workflow_id") or ""),
-            total_segments=int(sequence_config.get("total_segments", 1)),
-            segment_length_frames=int(sequence_config.get("segment_length_frames", 0)),
-            overlap_frames=int(sequence_config.get("overlap_frames", 0)),
-            carry_forward_policy=sequence_config.get("carry_forward_policy", "none"),
-            base_source_image_path=(current_stage_paths[0] if current_stage_paths else None),
-            base_prompt=str(getattr(njr, "prompt", "") or ""),
-            base_negative_prompt=str(getattr(njr, "negative_prompt", "") or ""),
-            per_segment_overrides=list(sequence_config.get("per_segment_overrides") or []),
-            continuity_link=dict(continuity_link) if continuity_link else None,
-            plan_origin=dict(plan_origin) if plan_origin else None,
-        )
-
-        planner = VideoSequencePlanner()
-        segment_plans = planner.plan(seq_job)
-
-        seq_result = VideoSequenceResult(
-            sequence_id=seq_job.sequence_id,
-            job_id=seq_job.job_id,
-            total_segments=seq_job.total_segments,
-            continuity_link=dict(continuity_link) if continuity_link else None,
-            plan_origin=dict(plan_origin) if plan_origin else None,
-        )
-
-        prior_output_path: str | None = current_stage_paths[0] if current_stage_paths else None
-        all_output_paths: list[str] = []
-
-        for seg_plan in segment_plans:
-            resolved_plan = planner.apply_carry_forward(
-                seg_plan, prior_output_path=prior_output_path or ""
-            )
-            seg_input_paths = (
-                [resolved_plan.source_image_path]
-                if resolved_plan.source_image_path
-                else list(current_stage_paths)
-            )
-
-            seg_output_paths = self._execute_video_stage(
-                stage_name=stage_name,
-                njr=njr,
-                current_stage_paths=seg_input_paths,
-                prompt=resolved_plan.prompt,
-                negative_prompt=resolved_plan.negative_prompt,
-                run_dir=run_dir,
-                cancel_token=cancel_token,
-                variants=variants,
-                metadata=metadata,
-                survivor_telemetry=survivor_telemetry,
-            )
-
-            primary_output = seg_output_paths[0] if seg_output_paths else None
-            provenance = SegmentProvenanceRecord(
-                sequence_id=seq_job.sequence_id,
-                job_id=seq_job.job_id,
-                segment_index=resolved_plan.segment_index,
-                segment_id=resolved_plan.segment_id,
-                source_image_path=resolved_plan.source_image_path,
-                primary_output_path=primary_output,
-                manifest_path=None,
-                output_paths=list(seg_output_paths),
-                carry_forward_policy=resolved_plan.carry_forward_policy,
-            )
-            seq_result.segment_provenance.append(provenance)
-            seq_result.completed_segments += 1
-            seq_result.all_output_paths.extend(seg_output_paths)
-            all_output_paths.extend(seg_output_paths)
-
-            if primary_output:
-                prior_output_path = primary_output
-
-            logger.info(
-                "[SEQUENCE] segment %d/%d complete — %d output(s)",
-                resolved_plan.segment_index + 1,
-                seq_job.total_segments,
-                len(seg_output_paths),
-            )
-
-        manifest_path = write_sequence_manifest(
-            seq_result,
-            run_dir,
-            sequence_job_dict=seq_job.to_dict(),
-        )
-        seq_result.sequence_manifest_path = str(manifest_path)
-
-        sequence_artifact = seq_result.to_dict()
-        metadata["sequence_artifact"] = sequence_artifact
-
-        assembly_config = sequence_config.get("assembly") or {}
-        if isinstance(assembly_config, dict) and assembly_config.get("enabled"):
-            from src.video.assembly_models import AssembledSequenceInput, AssemblyRequest
-            from src.video.assembly_service import AssemblyService
-
-            assembly_service = AssemblyService()
-            assembly_result = assembly_service.assemble(
-                AssemblyRequest(
-                    source=AssembledSequenceInput.from_sequence_artifact(sequence_artifact),
-                    output_dir=run_dir,
-                    clip_name=str(
-                        assembly_config.get("clip_name") or f"{seq_job.sequence_id}_assembled"
-                    ),
-                    fps=int(assembly_config.get("fps", 24)),
-                    codec=str(assembly_config.get("codec") or "libx264"),
-                    quality=str(assembly_config.get("quality") or "medium"),
-                    mode=str(assembly_config.get("mode") or "sequence"),
-                    interpolation_enabled=bool(assembly_config.get("interpolation_enabled", False)),
-                    interpolation_factor=int(assembly_config.get("interpolation_factor", 2)),
-                )
-            )
-            metadata["assembled_video_result"] = assembly_result.to_dict()
-            sequence_artifact["assembled_video"] = assembly_result.to_dict()
-            if assembly_result.success and assembly_result.export_output:
-                artifact_bundle = dict(assembly_result.export_output.artifact_bundle)
-                metadata["assembled_video_artifact"] = artifact_bundle
-                metadata.setdefault("video_artifacts", {})["assembled_video"] = dict(
-                    artifact_bundle
-                )
-                assembled_paths = list(assembly_result.export_output.output_paths)
-                if not assembled_paths and assembly_result.export_output.primary_path:
-                    assembled_paths = [str(assembly_result.export_output.primary_path)]
-                if assembled_paths:
-                    all_output_paths = assembled_paths
-                logger.info(
-                    "[SEQUENCE] assembled video emitted primary=%s",
-                    assembly_result.primary_path,
-                )
-            else:
-                logger.warning(
-                    "[SEQUENCE] assembled video requested but failed: %s",
-                    assembly_result.error,
-                )
-
-        logger.info(
-            "[SEQUENCE] sequence %s complete — %d total outputs, manifest: %s",
-            seq_job.sequence_id,
-            len(all_output_paths),
-            manifest_path,
-        )
-
-        return all_output_paths
 
     def _check_job_deadline(
         self,

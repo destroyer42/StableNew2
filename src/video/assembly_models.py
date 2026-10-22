@@ -256,7 +256,7 @@ class ExportReadyOutputBundle:
 
 @dataclass
 class AssemblyRequest:
-    """Typed assembly request consumed by ``AssemblyService``."""
+    """Typed request of the retired ``AssemblyService``; kept so a stored record that names it still loads."""
 
     source: AssembledSequenceInput
     output_dir: str | Path

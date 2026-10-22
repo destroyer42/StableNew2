@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-455 of 609 modules have a docstring.
+461 of 615 modules have a docstring.
 
 ## src/
 
@@ -109,6 +109,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_submission_service.py`: Thin form-data bridge for SVD submissions owned by AppController
 - `video_eval_controller.py`: Video eval suites on the Video Workflow controller (PR-VID-EVAL-320)
 - `video_preflight_controller.py`: Read-only workflow readiness on the Video Workflow controller (PR-VID-UX-311)
+- `video_sequence_controller.py`: Admit, resume and replay multi-segment video jobs on the Video Workflow controller (PR-VID-SEQ-330-CORE)
 - `video_workflow_controller.py`: (no docstring)
 - `webui_connection_controller.py`: (no docstring)
 - `webui_outage_coordinator.py`: Contain a WebUI outage inside the existing queue/worker/manager boundaries
@@ -522,6 +523,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `training_njr_compiler.py`: Pure compiler for the supported train-LoRA NJR workload
 - `variant_planner.py`: Helpers for building model/hypernetwork variant runs
 - `video.py`: Video creation utilities using FFmpeg
+- `video_sequence_executor.py`: Runs the segments of one sequence job (PR-VID-SEQ-330-CORE)
 
 ## src/prompting/
 
@@ -675,7 +677,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Video utilities package for StableNew v2.6
 - `assembly_models.py`: Typed models for stitched and interpolated assembled-video outputs
-- `assembly_service.py`: StableNew-owned post-video assembly orchestration
 - `comfy_api_client.py`: (no docstring)
 - `comfy_dependency_probe.py`: (no docstring)
 - `comfy_healthcheck.py`: (no docstring)
@@ -698,9 +699,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `movie_assembly_models.py`: The frozen Movie Clips assembly contract (PR-VID-ASM-332)
 - `review_preview.py`: Bounded, read-only review previews of existing video outputs (PR-VID-QUALITY-211)
 - `rife_runtime.py`: Locate the external ``rife-ncnn-vulkan`` runtime and choose its model and factor (PR-VID-SMOOTH-302)
-- `sequence_manifest.py`: Sequence manifest builder and writer for multi-segment video
-- `sequence_models.py`: Sequence and segment planning models for long-form video generation
-- `sequence_planner.py`: Sequence planner for multi-segment long-form video
+- `sequence_admission.py`: Admission of a multi-segment video job: intent in, frozen ``SequencePlan`` out (PR-VID-SEQ-330-CORE)
+- `sequence_assembly.py`: Assemble a sequence's frames into one movie with the ASM-332 engine, inside the sequence job (PR-VID-SEQ-330-…
+- `sequence_frames.py`: Frame-level helpers of a sequence job: the exact final frame, overlap trimming, opt-in colour matching and th…
+- `sequence_ledger.py`: The durable, per-segment ledger of a sequence job (PR-VID-SEQ-330-CORE)
+- `sequence_plan.py`: The typed, frozen plan of a multi-segment video job (PR-VID-SEQ-330-CORE)
+- `sequence_resume.py`: Resume a failed or interrupted sequence job as a NEW job (PR-VID-SEQ-330-CORE)
 - `svd_capabilities.py`: Capability discovery for native SVD postprocess helpers
 - `svd_config.py`: Typed configuration models for native SVD image-to-video
 - `svd_errors.py`: Typed error surface for native SVD runtime
@@ -712,6 +716,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_preprocess.py`: Input image validation and resize policy for native SVD
 - `svd_registry.py`: Manifest and history helpers for native SVD runs
 - `svd_runner.py`: Orchestration layer for native SVD runs
+- `svd_sequence_admission.py`: Freeze a native-SVD sequence plan (PR-VID-SEQ-330-CORE)
 - `svd_service.py`: Native Diffusers-backed Stable Video Diffusion service
 - `svd_target.py`: Source-aware target geometry policy for the native SVD XT path
 - `video_artifact_helpers.py`: Generic helpers for normalizing workflow-video output bundles

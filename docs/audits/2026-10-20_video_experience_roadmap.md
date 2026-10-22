@@ -303,7 +303,7 @@ PR-VID-UX-310 and PR-VID-EVAL-320.
 Merged: QUAL-300, ENC-301, UX-310, EVAL-320, POST-304, GOV-316, ASM-332. Delivered as the Phase A closeout
 (branch `video/smooth-302-loop-303-post-305`): SMOOTH-302 (RIFE discovery, modern model flag, x2/x4 rule, default on when
 RIFE resolves, finished-clip smoothing for Comfy), LOOP-303 (SVD ping-pong and extend-to-N-seconds) and POST-305
-(secondary motion retired). UX-311 (readiness strip and Queue gate) is merged. WAN-324 (frames out): delivered and approved on 2026-10-21 (the `SaveImage` TI2V-5B graph is the registered, approved 1.3.0; per-frame hashes and the exact last frame; mismatches are recorded, not failures). Not started: Phase B UX-312 to UX-315; Phase C WAN-321 onward (WAN-321 and FLF-322 need the model download and a spike); Phase D SEQ-330 and SEQ-331; Phase E. Loop export for Comfy clips was left out of LOOP-303 (SVD only).
+(secondary motion retired). UX-311 (readiness strip and Queue gate) is merged. WAN-324 (frames out): delivered and approved on 2026-10-21 (the `SaveImage` TI2V-5B graph is the registered, approved 1.3.0; per-frame hashes and the exact last frame; mismatches are recorded, not failures). SEQ-330-CORE is built on branch `video/seq-330-core-r2`: the sequence layer is live - typed plan, exact-frame carry-forward, warm runtime with one release, durable ledger, strict resume as a new job, full replay, in-job ASM-332 assembly; colour matching opt-in and off; the physical acceptance run (`docs/Subsystems/Video/PR-VID-SEQ-330_Acceptance.md`) has not been made. Not started: Phase B UX-312 to UX-315; Phase C WAN-321 onward (WAN-321 and FLF-322 need the model download and a spike); Phase D SEQ-331; Phase E. Loop export for Comfy clips was left out of LOOP-303 (SVD only).
 
 ---
 

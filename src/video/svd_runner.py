@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import shutil
 from collections.abc import Callable, Mapping
@@ -61,6 +62,29 @@ class SVDRunner:
         valid, reason = validate_svd_postprocess_config(config)
         if not valid:
             raise SVDPostprocessError(reason or "SVD postprocess configuration is invalid")
+
+    @staticmethod
+    def _capture_native_final_frame(
+        frames: list[Any], provenance_context: Mapping[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Save the last generated frame (pre-postprocess) when a sequence segment asked for it."""
+
+        request = (provenance_context or {}).get("sequence_capture")
+        target = request.get("native_final_frame_path") if isinstance(request, Mapping) else None
+        if not target or not frames:
+            return None
+        path = Path(str(target))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        last = frames[-1]
+        last.convert("RGB").save(path, format="PNG")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        return {
+            "path": str(path),
+            "sha256": digest,
+            "frame_index": len(frames) - 1,
+            "width": last.size[0],
+            "height": last.size[1],
+        }
 
     def run(
         self,
@@ -136,6 +160,15 @@ class SVDRunner:
             )
             self._ensure_not_cancelled(cancel_token, "native SVD inference")
             logger.info("[SVD] inference completed frame_count=%s", len(frames))
+            capture_request = (provenance_context or {}).get("sequence_capture")
+            if isinstance(capture_request, Mapping) and capture_request.get(
+                "native_final_frame_path"
+            ):
+                # Owned like every other output, so a failure later in this run removes the file it wrote.
+                self._track_output(
+                    capture_request["native_final_frame_path"], owned_outputs, output_existence
+                )
+            native_final_frame = self._capture_native_final_frame(frames, provenance_context)
             postprocess_enabled = any(
                 (
                     config.postprocess.face_restore.enabled,
@@ -275,6 +308,7 @@ class SVDRunner:
                 preprocess=preprocess,
                 postprocess=postprocess_metadata,
                 export=export_record,
+                native_final_frame=native_final_frame,
             )
             manifest_path_hint = self._output_root / "manifests" / f"{stem}.json"
             metadata_payload = {
@@ -359,6 +393,7 @@ class SVDRunner:
                 preprocess=result.preprocess,
                 postprocess=result.postprocess,
                 export=result.export,
+                native_final_frame=result.native_final_frame,
             )
         except Exception:
             self._remove_partial_outputs(owned_outputs)

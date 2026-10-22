@@ -9,6 +9,7 @@ from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.video_eval_controller import VideoEvalControllerMixin
 from src.controller.video_preflight_controller import VideoPreflightControllerMixin
+from src.controller.video_sequence_controller import VideoSequenceControllerMixin
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
 from src.video.driving_video_inspection import inspect_driving_video as _inspect_video
 from src.video.motion_source_preparation import prepare_for_form
@@ -39,7 +40,9 @@ from src.video.workflow_registry import latest_spec_per_workflow
 from src.video.workflow_source_preparation import preview_declared_workflow_source
 
 
-class VideoWorkflowController(VideoEvalControllerMixin, VideoPreflightControllerMixin):
+class VideoWorkflowController(
+    VideoEvalControllerMixin, VideoPreflightControllerMixin, VideoSequenceControllerMixin
+):
     """Queue-backed controller surface for workflow-driven video jobs."""
 
     def __init__(
