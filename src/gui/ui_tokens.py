@@ -22,6 +22,14 @@ class ColorTokens:
     status_warning: str = "#d9a04a"
     status_error: str = "#FF4D4F"
     status_info: str = "#4a90d9"
+    # PR-GUI-400 interactive roles. Gold is reserved for the primary action, selection/active hints and focus.
+    surface_hover: str = design_system.Colors.SURFACE_HOVER
+    surface_selected: str = design_system.Colors.SURFACE_SELECTED
+    text_on_accent: str = design_system.Colors.TEXT_ON_ACCENT
+    focus_ring: str = design_system.Colors.FOCUS_RING
+    focus_ring_on_accent: str = design_system.Colors.FOCUS_RING_ON_FILL
+    action_danger: str = design_system.Colors.DANGER_BG
+    text_on_danger: str = design_system.Colors.DANGER_FG
 
 
 @dataclass(frozen=True)
@@ -50,12 +58,53 @@ class MotionTokens:
     slow_ms: int = 320
 
 
+NOTICE_KINDS = design_system.NOTICE_KINDS
+
+
+@dataclass(frozen=True)
+class NoticeRole:
+    """One inline-notice kind. ``label`` is the word that carries the meaning; color only reinforces it."""
+
+    kind: str
+    label: str
+    a11y_role: str  # "alert" interrupts a screen reader, "status" is announced politely
+    foreground: str  # message text
+    label_foreground: str  # the bold role word
+    background: str  # tint behind the notice
+    accent: str  # the edge bar
+
+
+@dataclass(frozen=True)
+class NoticeTokens:
+    neutral: NoticeRole = NoticeRole(
+        "neutral", "Note", "status", "#FFFFFF", "#CCCCCC", "#1E1E1E", "#8A8A8A"
+    )
+    info: NoticeRole = NoticeRole(
+        "info", "Info", "status", "#FFFFFF", "#7DB4F0", "#16222E", "#4A90D9"
+    )
+    success: NoticeRole = NoticeRole(
+        "success", "Success", "status", "#FFFFFF", "#7FDB4F", "#17261A", "#52C41A"
+    )
+    warning: NoticeRole = NoticeRole(
+        "warning", "Warning", "alert", "#FFFFFF", "#F0B964", "#2B2416", "#D9A04A"
+    )
+    error: NoticeRole = NoticeRole(
+        "error", "Error", "alert", "#FFFFFF", "#FF7875", "#2E1A1B", "#FF4D4F"
+    )
+
+    def role(self, kind: str) -> NoticeRole:
+        """The role for ``kind``; an unknown kind is neutral rather than an error."""
+
+        return getattr(self, kind, self.neutral) if kind in NOTICE_KINDS else self.neutral
+
+
 @dataclass(frozen=True)
 class UITokens:
     colors: ColorTokens = ColorTokens()
     spacing: SpacingTokens = SpacingTokens()
     typography: TypeTokens = TypeTokens()
     motion: MotionTokens = MotionTokens()
+    notices: NoticeTokens = NoticeTokens()
 
 
 TOKENS = UITokens()
@@ -66,6 +115,9 @@ __all__ = [
     "SpacingTokens",
     "TypeTokens",
     "MotionTokens",
+    "NOTICE_KINDS",
+    "NoticeRole",
+    "NoticeTokens",
     "UITokens",
     "TOKENS",
 ]

@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
+from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.workspace_density_contract import disclosure_title
 
 
@@ -22,7 +23,7 @@ class DisclosureSection(ttk.Frame):
         title: str,
         expanded: bool = False,
         body_style: str = "Panel.TFrame",
-        body_padding: Any = 8,
+        body_padding: Any = TOKENS.spacing.md,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style="Panel.TFrame", **kwargs)
@@ -78,6 +79,8 @@ class DisclosureSection(ttk.Frame):
             text=disclosure_title(self._title, expanded=self._expanded, status=self._status),
             style="DisclosureActive.TButton" if self._status_active else "Disclosure.TButton",
         )
+        # Expanded is a ttk state so the header can be styled (fill) beyond the arrow glyph.
+        self.toggle_button.state(["selected" if self._expanded else "!selected"])
         if self._expanded:
             self.body.grid(row=1, column=0, sticky="nsew")
         else:

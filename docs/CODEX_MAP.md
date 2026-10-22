@@ -30,7 +30,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Review, reprocess and batch operations | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/queue/batch_projection.py`; masked edit and outpaint `src/controller/masked_edit_service.py`, `src/controller/outpaint_edit_service.py`, `src/pipeline/outpaint_canvas.py` |
 | Photo Optimize | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/photo_optimize/`, `src/controller/photo_optimize_submission.py` |
 | Adaptive refinement and ADetailer | `src/refinement/`, `src/pipeline/adetailer_contract.py` |
-| GUI views and state | `src/gui/views/`, `src/gui/app_state_v2.py`, `src/gui/main_window_v2.py` |
+| GUI views and state | `src/gui/views/`, `src/gui/app_state_v2.py`, `src/gui/main_window_v2.py`; styles and tokens: `docs/Subsystems/GUI/GUI_STYLE_GUIDE.md` |
 | Crash-safe state files | `src/utils/atomic_io.py` (every persisted JSON/text store goes through it) |
 | Tests, CI and ratchets | `docs/Subsystems/Testing/TESTING_AND_CI.md`; `python tools/ci/run_pr_gate.py`, `.github/workflows/ci.yml`, `tools/ci/`, `docs/StableNew_Coding_and_Testing_v2.6.md` |
 | Offline qualification evidence | `tools/qualification/`, `tools/acceptance/` (operator-only; never part of the production path) |
