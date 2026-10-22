@@ -169,7 +169,11 @@ def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
 
 
 def _interpolation_source_fps(spec: Any, stage_config: Mapping[str, Any]) -> int:
-    """The frame rate RIFE multiplies: the frozen stage fps, else the workflow's declared length policy."""
+    """The encoded frame rate RIFE multiplies, from the output policy for saved frames."""
+
+    output_fps = frames_output_fps(spec)
+    if output_fps is not None:
+        return output_fps
 
     policy = frame_count_policy(spec)
     raw = stage_config.get("fps") or (policy or {}).get("fps") or 0

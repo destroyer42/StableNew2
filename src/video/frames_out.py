@@ -91,9 +91,14 @@ def reconcile_frame_count(
     numbered = sorted(number for number in numbers if number is not None)
     repeated = sorted({number for number in numbered if numbered.count(number) > 1})
     gaps: list[int] = []
+    gap_count = 0
     if numbered and len(numbered) == len(paths):
-        present = set(numbered)
-        gaps = [number for number in range(numbered[0], numbered[-1] + 1) if number not in present]
+        present = sorted(set(numbered))
+        for left, right in zip(present, present[1:], strict=False):
+            missing_count = right - left - 1
+            gap_count += missing_count
+            sample_count = min(missing_count, _LISTED_GAPS - len(gaps))
+            gaps.extend(range(left + 1, left + 1 + sample_count))
     actual = len(paths)
     missing = bool(gaps) or (expected_frame_count is not None and actual < expected_frame_count)
     extra = bool(repeated) or (expected_frame_count is not None and actual > expected_frame_count)
@@ -112,8 +117,8 @@ def reconcile_frame_count(
         "expected_frame_count": expected_frame_count,
         "actual_frame_count": actual,
         "difference": None if expected_frame_count is None else actual - expected_frame_count,
-        "sequence_gap_count": len(gaps),
-        "sequence_gaps": gaps[:_LISTED_GAPS],
+        "sequence_gap_count": gap_count,
+        "sequence_gaps": gaps,
         "repeated_numbers": repeated[:_LISTED_GAPS],
         "unnumbered_frames": sum(1 for number in numbers if number is None),
     }

@@ -354,7 +354,10 @@ def test_the_backend_encodes_the_saved_frames_and_records_them(tmp_path: Path, m
     assert manifest["frames_out"]["reconciliation"]["status"] == "missing"
 
 
-def test_rife_reads_the_frames_when_smoothing_is_requested(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("stage_fps", [None, 12])
+def test_rife_reads_the_frames_when_smoothing_is_requested(
+    tmp_path: Path, monkeypatch, stage_fps: int | None
+) -> None:
     monkeypatch.setattr("src.video.frames_out.export_image_sequence_video", _fake_export)
     executable = _rife(tmp_path / "rife")
     smooth = tmp_path / "run" / "smooth.mp4"
@@ -388,6 +391,7 @@ def test_rife_reads_the_frames_when_smoothing_is_requested(tmp_path: Path, monke
         None,
         _frames_request(
             tmp_path,
+            fps=stage_fps,
             interpolation={"enabled": True, "multiplier": 2, "executable_path": str(executable)},
         ),
     )

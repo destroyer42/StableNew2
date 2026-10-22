@@ -10,6 +10,7 @@ Fake Comfy client and injected FFprobe, no GPU.
 from __future__ import annotations
 
 import json
+from builtins import range as builtin_range
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPo
 from src.controller.video_workflow_controller import VideoWorkflowController
 from src.pipeline import video as pipeline_video
 from src.pipeline.video import VideoCreator
+from src.video import frames_out
 from src.video.frames_out import encode_frames_out, reconcile_frame_count
 from src.video.svd_errors import SVDExportError
 from src.video.video_export import export_image_sequence_video
@@ -85,6 +87,20 @@ def test_a_gap_listing_stays_bounded() -> None:
     assert result["status"] == "missing"
     assert result["sequence_gap_count"] == 998
     assert len(result["sequence_gaps"]) == 64
+
+
+def test_sparse_remote_counters_do_not_expand_the_counter_span(monkeypatch) -> None:
+    def bounded_range(*args):
+        values = builtin_range(*args)
+        assert len(values) <= 64, "remote frame counters must not drive an unbounded scan"
+        return values
+
+    monkeypatch.setattr(frames_out, "range", bounded_range, raising=False)
+    result = reconcile_frame_count(_names(1, 10**12), 2)
+
+    assert result["status"] == "missing"
+    assert result["sequence_gap_count"] == 10**12 - 2
+    assert result["sequence_gaps"] == list(builtin_range(2, 66))
 
 
 # ---------------------------------------------------------------------------
