@@ -51,6 +51,7 @@ from src.video.video_interpolation import (
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
 from src.video.workflow_readiness import WorkflowResourceReadiness
+from src.video.workflow_readiness import required_launch_flags as _required_launch_flags
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 logger = logging.getLogger(__name__)
@@ -67,13 +68,6 @@ def _is_generated_output(descriptor: Mapping[str, Any]) -> bool:
     neither is a generated result."""
 
     return str(descriptor.get("type") or "output") == "output"
-
-
-def _required_launch_flags(spec: Any) -> tuple[str, ...]:
-    policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
-    if not isinstance(policy, Mapping):
-        return ()
-    return tuple(str(flag) for flag in policy.get("required_launch_flags") or () if str(flag))
 
 
 # (node class, input) pairs whose value is a local file the Comfy server must hold in its input

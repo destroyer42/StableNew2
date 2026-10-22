@@ -182,10 +182,12 @@ class OperatorReadinessService:
         jit_enabled_provider: Callable[[], bool] | None = None,
         webui_outage_provider: Callable[[], dict[str, Any] | None] | None = None,
         gpu_loss_provider: Callable[[], dict[str, Any] | None] | None = None,
+        comfy_command_provider: Callable[[], tuple[str, ...]] | None = None,
     ) -> None:
         self._repository = repository
         self._webui_outage_provider = webui_outage_provider
         self._gpu_loss_provider = gpu_loss_provider
+        self._comfy_command_provider = comfy_command_provider or configured_comfy_command
         self._webui_connection = webui_connection
         self._prompt_pack_dir_provider = prompt_pack_dir_provider
         self._output_dir_provider = output_dir_provider or (lambda: Path("output"))
@@ -227,6 +229,7 @@ class OperatorReadinessService:
                 self._svd_runtime_record(preflight),
                 self._svd_source_record(preflight),
                 self._ffmpeg_record(),
+                self._comfy_video_record(),
                 self._recovery_record(),
             ),
         )
@@ -523,6 +526,37 @@ class OperatorReadinessService:
             "resolve_ffmpeg_executable",
         )
 
+    def _comfy_video_record(self) -> OperatorReadinessRecord:
+        """Static view of the ComfyUI launch command; the per-workflow gates are on the Video Workflow tab.
+
+        Never probes the endpoint, starts ComfyUI or reads a model: it only classifies the configured command."""
+
+        command = self._comfy_command_provider()
+        if not command:
+            return OperatorReadinessRecord(
+                id="comfy_video_runtime",
+                display_name="ComfyUI video workflows",
+                state=OperatorReadinessState.OPTIONAL,
+                summary="No ComfyUI launch command is configured; Video Workflow jobs need one.",
+                blocking_reasons=(),
+                operator_actions=(
+                    "Open Engine Settings > Video runtime (ComfyUI) and choose the managed install.",
+                ),
+                source="comfy launch configuration",
+            )
+        return OperatorReadinessRecord(
+            id="comfy_video_runtime",
+            display_name="ComfyUI video workflows",
+            state=OperatorReadinessState.READY,
+            summary=(
+                "A ComfyUI launch command is configured. The launch flags, nodes, model files and "
+                "resources each workflow needs are checked on the Video Workflow tab before you queue."
+            ),
+            blocking_reasons=(),
+            operator_actions=(),
+            source="comfy launch configuration",
+        )
+
     def _recovery_record(self) -> OperatorReadinessRecord:
         if self._repository is None:
             return _unknown_record(
@@ -650,6 +684,15 @@ def _svd_runtime_blockers(preflight: SVDPreflight) -> tuple[str, ...]:
 def _state_value(state: Any) -> str:
     value = getattr(state, "value", state)
     return str(value or "").strip().lower()
+
+
+def configured_comfy_command(config_manager: Any = None) -> tuple[str, ...]:
+    """The ComfyUI launch command in the given (or the default) settings; read-only."""
+
+    from src.video.comfy_process_manager import build_default_comfy_process_config
+
+    config = build_default_comfy_process_config(config_manager)
+    return tuple(getattr(config, "command", None) or ())
 
 
 def _action_record(

@@ -95,6 +95,7 @@ def _service(
     python_version: tuple[int, int, int] = (3, 14, 0),
     free_threaded: bool = False,
     jit_enabled: bool = False,
+    comfy_command_provider=lambda: (),
 ) -> OperatorReadinessService:
     packs = tmp_path / "packs"
     output = tmp_path / "output"
@@ -114,7 +115,27 @@ def _service(
         python_version_provider=lambda: python_version,
         free_threaded_provider=lambda: free_threaded,
         jit_enabled_provider=lambda: jit_enabled,
+        comfy_command_provider=comfy_command_provider,
     )
+
+
+def test_comfy_video_row_follows_the_injected_launch_command(tmp_path: Path) -> None:
+    (tmp_path / "none").mkdir()
+    (tmp_path / "set").mkdir()
+    none = (
+        _service(tmp_path / "none", comfy_command_provider=lambda: ())
+        .collect()
+        .record_for("comfy_video_runtime")
+    )
+    assert none is not None and none.state is OperatorReadinessState.OPTIONAL
+    assert any("Engine Settings" in action for action in none.operator_actions)
+    configured = (
+        _service(tmp_path / "set", comfy_command_provider=lambda: ("python", "main.py"))
+        .collect()
+        .record_for("comfy_video_runtime")
+    )
+    assert configured is not None and configured.state is OperatorReadinessState.READY
+    assert configured.blocking_reasons == () and configured.operator_actions == ()
 
 
 def test_support_policy_is_deterministic_and_only_accepted_journeys_are_supported(
@@ -278,7 +299,10 @@ def test_recovery_projection_preserves_count_state_and_text(tmp_path: Path, coun
         assert "Replay Job intentionally" in record.operator_actions[0]
     else:
         assert record.state is OperatorReadinessState.OPTIONAL
-        assert record.summary == "No interrupted-restart action-required records are currently present."
+        assert (
+            record.summary
+            == "No interrupted-restart action-required records are currently present."
+        )
         assert record.blocking_reasons == ()
 
 
