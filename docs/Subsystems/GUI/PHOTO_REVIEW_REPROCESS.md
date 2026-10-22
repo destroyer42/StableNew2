@@ -108,8 +108,29 @@ Loading, hashing, snapshot writes, compilation and admission run off Tk; widget 
 
 This first slice supports registry-resolved SDXL base checkpoints on Forge only. `masked_inpaint` projects the existing
 ModelPolicy at preparation, admission and backend validation; unknown families and unsupported backends fail before
-admission. Physical output quality is not qualified by these CPU contracts. Outpainting is deferred. See
+admission. Physical output quality is not qualified by these CPU contracts. See
 `IMAGE_PIPELINE.md` section 3.2 for the persisted input contract and dispatch integrity.
+
+### 3.3.1 Review canvas extension (outpainting)
+
+**Extend Canvas…** sits beside Edit Mask and opens `OutpaintDialog` (`src/gui/outpaint_dialog.py`) for exactly one PNG, JPEG
+or WebP still image. The operator sets independent nonnegative left/right/top/bottom extensions, an outpainting prompt,
+denoising strength and mask blur, and sees the proposed canvas with the original's boundary kept at (left, top)
+(`src/gui_v2/outpaint_canvas_view.py`; **Show mask** draws the generation mask) plus the exact new size, the target's support
+status and, after Preview, a bounded Details projection (`outpaint_preview_summary`): original and expanded geometry, mask
+policy and hashes, model/backend, prompt, denoising, preservation policy, snapshot hashes, parent lineage, resource pressure
+and the notice that physical quality is unqualified.
+
+Rules: both expanded sides must be multiples of 8 and at most 4096; geometry is refused with its reason, never adjusted.
+**Align to 8** is the one inspectable rule (it grows the right and bottom extensions to the next multiple and shows the
+result). An `unsafe` resource-pressure band (the executor's effective-load bands, a parity test pins them) refuses Preview;
+`high_pressure` is reported. Any change to a margin, the prompt or a setting discards the approved Preview; late worker
+results are discarded; Preview and Add to Queue follow the mask editor's worker, single-admission and close-during-work
+behavior. Preview creates no job; Add to Queue submits the same frozen NJR through `submit_reprocess_njrs` ->
+`JobService.submit_njrs`. `src/controller/outpaint_edit_service.py` shares the mask editor's builder
+(`build_frozen_edit_preview`); first release is one img2img stage, SDXL base on Forge. A1111, Comfy, other families and
+exact profiles are refused. Canvas preparation, the frozen contract and the original-pixel guarantee are in
+`IMAGE_PIPELINE.md` section 3.3.
 
 ### 3.4 Thumbnails and compare
 

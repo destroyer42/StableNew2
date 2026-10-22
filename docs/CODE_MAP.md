@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-456 of 610 modules have a docstring.
+460 of 614 modules have a docstring.
 
 ## src/
 
@@ -97,6 +97,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_execution_controller.py`: Controller wrapper for learning execution (non-GUI)
 - `masked_edit_service.py`: Prepare one masked Review edit with the existing builder and reprocess admission boundary
 - `movie_clips_submission_service.py`: Movie Clips admission (PR-VID-ASM-332): the tab's request becomes one queued assembly job
+- `outpaint_edit_service.py`: Prepare one frozen Review outpainting job with the existing masked-edit builder and reprocess admission bound…
 - `photo_optimize_submission.py`: Extracted Photo Optimize preparation/admission from AppController; existing authorities only
 - `pipeline_controller.py`: Compatibility wrapper that exposes the GUI pipeline controller at src.controller
 - `process_auto_scanner_service.py`: Background scanner and cleaner for stray Python processes
@@ -179,6 +180,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `model_list_adapter_v2.py`: Thin adapter to fetch available models/VAEs for GUI V2 without GUI/toolkit deps
 - `model_policy_panel_projection.py`: Tk glue that shows the selected model's policy on the Base Generation panel (PR-IMG-130A; generalizes PR-IMG-…
 - `model_readiness_presenter.py`: Read-only model readiness line for the Base Generation panel (PR-IMG-MODELS-150)
+- `outpaint_dialog.py`: Review's Extend Canvas dialog
 - `output_settings_panel_v2.py`: Output settings panel for GUI V2
 - `pipeline_panel_v2.py`: Pipeline panel composed of modular stage cards and prompt pack summary
 - `preview_panel_v2.py`: Preview panel for GUI v2 (PR-CORE1-A3: NJR-only display)
@@ -352,6 +354,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `mask_editor_state.py`: Original-pixel mask editing and viewport transforms; no Tk, files or backend state
 - `model_policy_projection.py`: Toolkit-neutral projection of a model policy onto the Base Generation controls (PR-IMG-130A)
 - `openpose_conditioning_view.py`: Toolkit-neutral presentation of a slot's OpenPose conditioning (PR-IMG-CNET-210)
+- `outpaint_canvas_view.py`: Toolkit-neutral view of an outpaint canvas: where the original sits as the margins change
 - `pack_lora_selection_projection.py`: Read-only, visibility-aware reporting of frozen explicit selection evidence
 - `prompt_adaptation_preview.py`: Toolkit-neutral preview model for the explicit Prompt-tab "Adapt for Target" action (PR-IMG-130C)
 - `recommendation_targets.py`: Toolkit-neutral mapping from Learning parameters to executable operator controls
@@ -501,6 +504,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `model_synchronizer.py`: Deterministic A1111 checkpoint synchronization for pipeline execution
 - `njr_core_v26.py`: Immutable eight-part Normalized Job Record contract for StableNew v2.6
 - `openpose_compile.py`: PromptPack OpenPose conditioning compilation (PR-IMG-CNET-210)
+- `outpaint_canvas.py`: Toolkit-neutral outpainting canvas preparation and original-pixel preservation
 - `payload_builder.py`: Canonical payload builder for SDXL pipeline stages
 - `pipeline_runner.py`: Production pipeline runner integration
 - `prompt_pack_job_builder.py`: Builder pipeline that converts PromptPack entries into NormalizedJobRecords

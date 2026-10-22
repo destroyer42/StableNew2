@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -11,7 +12,7 @@ from src.image_backends.image_backend_types import normalize_image_backend_optio
 from src.image_backends.masked_inpaint import require_mask_target
 from src.image_backends.model_policy import FamilyLookup
 from src.image_backends.operation_compatibility import require_njr_operation
-from src.pipeline.image_edit_inputs import KEY, freeze_inputs, verified_inputs
+from src.pipeline.image_edit_inputs import EDIT_OPERATION_KEY, KEY, freeze_inputs, verified_inputs
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ImageEditSpec, ReprocessJobBuilder, ReprocessSourceItem
 
@@ -63,6 +64,40 @@ def prepare_mask_edit(
 ) -> MaskEditPreview:
     """Worker-side preparation. No queue or GUI mutation; snapshots contain the exact inspected bytes."""
     settings.validate()
+    return build_frozen_edit_preview(
+        source_path=source_path,
+        prompt=settings.prompt,
+        denoise=settings.denoise,
+        fallback_config=fallback_config,
+        baseline=baseline,
+        family_lookup=family_lookup,
+        pack_name="ReviewMaskedEdit",
+        freeze=lambda _steps: freeze_inputs(source_path, mask_data, source_sha256),
+        edit_spec=lambda mask: ImageEditSpec(
+            mask["path"],
+            mask_blur=settings.mask_blur,
+            inpaint_full_res=settings.only_masked,
+            inpaint_full_res_padding=settings.padding,
+        ),
+        lineage_sha=lambda frozen: frozen["source"]["sha256"],
+    )
+
+
+def build_frozen_edit_preview(
+    *,
+    source_path: str,
+    prompt: str,
+    denoise: float,
+    fallback_config: dict[str, Any],
+    baseline: dict[str, Any],
+    family_lookup: FamilyLookup | None,
+    pack_name: str,
+    freeze: Callable[[int], dict[str, Any]],
+    edit_spec: Callable[[dict[str, Any]], ImageEditSpec],
+    lineage_sha: Callable[[dict[str, Any]], str],
+    operation: str | None = None,
+) -> MaskEditPreview:
+    """Shared builder for frozen Review image edits: one img2img NJR through the existing reprocess builder."""
     builder = ReprocessJobBuilder()  # type: ignore[no-untyped-call]  # existing unannotated constructor
     config = builder._merge_nested_dicts(fallback_config, dict(baseline.get("config") or {}))
     model = str(
@@ -74,7 +109,8 @@ def prepare_mask_edit(
     )
     options = normalize_image_backend_options(config.get("backend_options"), model_name=model)
     require_mask_target(model, options, family_lookup=family_lookup)
-    frozen = freeze_inputs(source_path, mask_data, source_sha256)
+    steps = config.get("img2img", {}).get("steps")
+    frozen = freeze(steps if type(steps) is int and steps > 0 else 20)
     source, mask = frozen["source"], frozen["mask"]
     config["backend_options"] = options
     config["prompt_optimizer"] = {"enabled": False}
@@ -86,43 +122,43 @@ def prepare_mask_edit(
     stage.update(
         {
             KEY: frozen,
-            "denoising_strength": settings.denoise,
+            "denoising_strength": denoise,
             "width": source["width"],
             "height": source["height"],
         }
     )
-    config["img2img_denoising_strength"] = settings.denoise
+    if (
+        operation
+    ):  # the frozen contract must carry the record this operation requires (verified_inputs)
+        stage[EDIT_OPERATION_KEY] = operation
+    config["img2img_denoising_strength"] = denoise
     config["width"], config["height"] = source["width"], source["height"]
     # The runner's seed fallbacks inspect txt2img/global keys even for reprocess work.
     seed = stage.get("seed", config.get("seed", config.get("txt2img", {}).get("seed", -1)))
     seed = -1 if seed is None else seed
     stage["seed"] = config["seed"] = seed
     config.setdefault("txt2img", {})["seed"] = seed
+    artifact_id = f"sha256:{lineage_sha(frozen)}"
     source_item = ReprocessSourceItem(
         input_image_path=source["path"],
-        prompt=settings.prompt.strip(),
+        prompt=prompt.strip(),
         negative_prompt=str(baseline.get("negative_prompt") or ""),
         model=model,
         vae=baseline.get("vae"),
         config=config,
-        metadata={"source_path": source_path, "source_artifact_id": f"sha256:{source['sha256']}"},
-        image_edit=ImageEditSpec(
-            mask["path"],
-            mask_blur=settings.mask_blur,
-            inpaint_full_res=settings.only_masked,
-            inpaint_full_res_padding=settings.padding,
-        ),
+        metadata={"source_path": source_path, "source_artifact_id": artifact_id},
+        image_edit=edit_spec(mask),
     )
     plan = builder.build_grouped_reprocess_jobs(
         items=[source_item],
         stages=["img2img"],
         fallback_config={},
         batch_size=1,
-        pack_name="ReviewMaskedEdit",
+        pack_name=pack_name,
         source="image_edit",
         extra_metadata_builder=lambda _items, _output: {
             "parent_job_id": baseline.get("job_id"),
-            "parent_artifact_id": f"sha256:{source['sha256']}",
+            "parent_artifact_id": artifact_id,
             KEY: deepcopy(frozen),
         },
     )
