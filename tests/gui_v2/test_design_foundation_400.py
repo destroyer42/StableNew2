@@ -752,3 +752,37 @@ def test_mask_editor_radios_sit_on_the_page_surface(
         assert _surface_mismatches(editor, style) == []
     finally:
         editor.destroy()
+
+
+# ----------------------------------------------------- keyboard focus found missing by a real-Tab inspection
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "TCheckbutton",
+        "Dark.TCheckbutton",
+        "TRadiobutton",
+        "Dark.TRadiobutton",
+        ds.PAGE_RADIOBUTTON,
+        "TScale",
+        "Dark.Horizontal.TScale",
+        "Dark.Vertical.TScale",
+    ],
+)
+def test_checks_radios_and_sliders_draw_a_visible_focus_line(style: ttk.Style, name: str) -> None:
+    ring = str(style.lookup(name, "focuscolor")).lower()
+    assert ring == TOKENS.colors.focus_ring.lower(), (
+        "the default focus line is black and invisible on dark surfaces"
+    )
+    for surface in (TOKENS.colors.surface_primary, TOKENS.colors.surface_secondary):
+        assert contrast(ring, surface) >= 3.0
+
+
+@pytest.mark.parametrize("name", ["Dark.Horizontal.TScale", "Dark.Vertical.TScale"])
+def test_a_focused_slider_thumb_changes_color(style: ttk.Style, name: str) -> None:
+    resting = _bg(style, name)
+    focused = _bg(style, name, ["focus"])
+    assert focused == TOKENS.colors.accent_primary.lower()
+    assert focused != resting
+    assert contrast(focused, TOKENS.colors.surface_secondary) >= 3.0, "visible against the trough"

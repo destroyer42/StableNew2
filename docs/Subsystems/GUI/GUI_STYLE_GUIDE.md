@@ -61,7 +61,12 @@ Every interactive style defines the same states, and tests assert them:
   Primary keeps a dim gold edge so it still reads as the primary action.
 - **Hover** (`active`): a lighter surface or fill. **Pressed**: the same.
 - **Keyboard focus** (`focus`): a visible edge, gold on dark surfaces and white on gold/red fills, at least 3:1 against the
-  surface. Never remove the native focus behavior.
+  surface. Never remove the native focus behavior. Checkbuttons, radiobuttons and sliders set `focuscolor` explicitly: the theme's
+  default focus line is black and disappears on these surfaces (found with real Tab key events). The slider thumb also turns gold
+  while focused. Known gap: a `Treeview` draws no focus border (one would add 2 px to every tree); its cue is the selected row.
+- **Focus is scrolled into view**: `ScrollableFrame` reveals a control that takes focus, in every containing frame, through the
+  router's single `<FocusIn>` binding. Do not build a second scrolling container that lacks this (`scrolling.make_scrollable`
+  does not have it yet).
 - **Selected** (`selected` state flag): expanded `DisclosureSection` and `TabOverviewPanel` headers and the selected
   notebook tab. Set it with `widget.state(["selected"])`; it is also the signal tests read.
 
@@ -106,3 +111,9 @@ display scale, and tab through the controls. DPI facts to record with any screen
 
 Check that nothing is clipped, focus is visible on every control, and a disabled control is distinguishable from an enabled
 one without relying on color.
+
+Keyboard focus is best checked with real key events, not by forcing the ttk `focus` flag: send Tab to the foreground window
+(`keybd_event`; Windows may refuse `SetForegroundWindow` until the process has had input, and a synthetic Alt tap lets it
+succeed), and for each control compare its pixels while focused with the same region after focus moves on. A process that is
+not DPI-aware gets virtualized coordinates at 150%, so screen grabs for such a check must come from a DPI-aware process
+(`SetProcessDpiAwareness(2)`), which also gives Tk the real 144 DPI scaling.

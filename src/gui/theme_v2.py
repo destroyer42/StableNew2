@@ -330,6 +330,22 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         background=BACKGROUND_DARK,
         bordercolor=BORDER_SUBTLE,
     )
+    # PR-GUI-400: the theme's default focus line is black, which vanishes on these surfaces (checked with real Tab
+    # key events: checkbuttons and sliders showed no focus at all). Use the focus ring color; the slider thumb also
+    # turns gold while focused so the cue does not rest on a one-pixel dotted line.
+    for focusable in (
+        "TCheckbutton",
+        "Dark.TCheckbutton",
+        "TRadiobutton",
+        "Dark.TRadiobutton",
+        design_system.PAGE_RADIOBUTTON,
+        "TScale",
+        "Dark.Horizontal.TScale",
+        "Dark.Vertical.TScale",
+    ):
+        style.configure(focusable, focuscolor=FOCUS_RING)
+    for scale_style in ("Dark.Horizontal.TScale", "Dark.Vertical.TScale"):
+        style.map(scale_style, background=[("focus", ACCENT_GOLD)])
 
     style.configure(
         "Dark.TButton",

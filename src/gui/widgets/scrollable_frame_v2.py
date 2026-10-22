@@ -9,6 +9,8 @@ from src.gui import theme_v2
 # Widgets that scroll themselves (or must not be hijacked): the wheel acts on them, not on the page behind.
 _SELF_SCROLLING_CLASSES = ("combobox", "listbox", "spinbox", "text", "treeview")
 _WHEEL_SEQUENCES = ("<MouseWheel>", "<Button-4>", "<Button-5>")
+_FOCUS_SEQUENCE = "<FocusIn>"
+_REVEAL_MARGIN = 8  # px of context kept around a control scrolled into view
 
 
 class _WheelRouter:
@@ -20,6 +22,10 @@ class _WheelRouter:
     frame is destroyed. Each wheel event is routed to the nearest overflowing frame that contains the widget under
     the pointer, so only the region under the pointer scrolls, hidden tabs never receive events, and combobox /
     listbox / spinbox / text / treeview widgets keep their own wheel behavior.
+
+    The same router reveals a control that takes keyboard focus (PR-GUI-400): Tab used to move focus into controls
+    scrolled out of view (42 of 76 tab stops on the Pipeline tab), so a keyboard user typed into something invisible.
+    ``<FocusIn>`` scrolls every containing frame just enough to show the focused widget.
     """
 
     _routers: dict[int, _WheelRouter] = {}
@@ -62,8 +68,13 @@ class _WheelRouter:
 
     def _install(self, anchor: tk.Misc) -> None:
         self._owner = anchor._root()
-        for sequence in _WHEEL_SEQUENCES:
-            handler = self._on_wheel if sequence == "<MouseWheel>" else self._on_button_wheel
+        handlers = {
+            "<MouseWheel>": self._on_wheel,
+            "<Button-4>": self._on_button_wheel,
+            "<Button-5>": self._on_button_wheel,
+            _FOCUS_SEQUENCE: self._on_focus_in,
+        }
+        for sequence, handler in handlers.items():
             self._funcids[sequence] = self._owner.bind_all(sequence, handler, add="+")
 
     def _uninstall(self) -> None:
@@ -125,6 +136,17 @@ class _WheelRouter:
         """Linux X11 wheel buttons."""
         return self._dispatch(event, -1 if getattr(event, "num", 0) == 4 else 1)
 
+    def _on_focus_in(self, event: tk.Event) -> None:
+        """Scroll every ``ScrollableFrame`` around the focused widget so the widget is visible (never consumes)."""
+        widget = getattr(event, "widget", None)
+        if not isinstance(widget, tk.Misc):
+            return
+        node: tk.Misc | None = widget
+        while node is not None:
+            if isinstance(node, ScrollableFrame) and node in self._frames:
+                node.reveal(widget)
+            node = getattr(node, "master", None)
+
 
 class ScrollableFrame(ttk.Frame):
     """Reusable vertically scrollable frame for V2 panels."""
@@ -181,6 +203,38 @@ class ScrollableFrame(ttk.Frame):
 
     def scroll_units(self, units: int) -> None:
         self._canvas.yview_scroll(int(units), "units")
+
+    def reveal(self, widget: tk.Misc) -> None:
+        """Scroll just enough that ``widget`` (a descendant of ``inner``) is inside the viewport.
+
+        A control taller than the viewport is aligned to its top. Nothing happens when the content fits or the
+        widget is not inside this frame.
+        """
+        try:
+            if not self.has_scroll_overflow():
+                return
+            top = 0
+            node: tk.Misc | None = widget
+            while node is not None and node is not self.inner:
+                top += int(node.winfo_y())
+                node = getattr(node, "master", None)
+            if node is not self.inner:
+                return
+            bottom = top + int(widget.winfo_height())
+            total = max(int(self.inner.winfo_height()), 1)
+            view = int(self._canvas.winfo_height())
+            first, _last = self._canvas.yview()
+            visible_top = first * total
+            visible_bottom = visible_top + view
+            if top >= visible_top and bottom <= visible_bottom:
+                return
+            if top < visible_top or bottom - top > view:
+                target = top - _REVEAL_MARGIN
+            else:
+                target = bottom + _REVEAL_MARGIN - view
+            self._canvas.yview_moveto(max(target, 0) / total)
+        except tk.TclError:
+            return
 
 
 __all__ = ["ScrollableFrame"]
