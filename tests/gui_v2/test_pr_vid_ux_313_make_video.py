@@ -368,7 +368,9 @@ def test_queue_submits_one_frozen_njr_through_the_job_service_boundary(env) -> N
     [njr] = njrs
     assert isinstance(njr, NormalizedJobRecord) and njr.source.kind is SourceKind.VIDEO_WORKFLOW
     block = njr.config["video_workflow"]
-    assert block["workflow_id"] == TI2V_ID and block["workflow_version"] == "1.2.0"
+    assert (
+        block["workflow_id"] == TI2V_ID and block["workflow_version"] == "1.3.0"
+    )  # the offered approved revision
     assert block["seed"] == 77 and block["frame_count"] == 49
     assert block["source_preparation"]["original_source_path"] == str(Path(path))
     assert block["video_execution"]["experimental_opt_in"] is False  # approved: no per-job opt-in
