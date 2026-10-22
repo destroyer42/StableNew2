@@ -393,7 +393,7 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1335,
+      "BLE001": 1334,
       "S110": 526,
       "S112": 37
     },
@@ -1016,9 +1016,6 @@
         "BLE001": 2
       },
       "src/utils/webui_resource_names.py": {
-        "BLE001": 1
-      },
-      "src/video/assembly_service.py": {
         "BLE001": 1
       },
       "src/video/comfy_healthcheck.py": {

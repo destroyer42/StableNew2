@@ -138,6 +138,9 @@ class VideoExecutionRequest:
     task: str = VIDEO_TASK_IMAGE_TO_VIDEO
     requested_controls: tuple[str, ...] = ()
     experimental_opt_in: bool = False
+    #: A multi-segment sequence owns the end-of-job runtime release (PR-VID-SEQ-330-CORE): the backend
+    #: neither releases a StableNew-owned runtime after this segment nor on its failure.
+    hold_runtime: bool = False
 
 
 @dataclass(slots=True)

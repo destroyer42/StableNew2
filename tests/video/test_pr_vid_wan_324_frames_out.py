@@ -119,9 +119,14 @@ def test_the_published_versions_keep_a_video_file_output() -> None:
         assert spec.backend_defaults["prompt_template"]["12"]["class_type"] == "SaveVideo"
 
 
-def test_the_frames_out_version_waits_for_requalification_before_it_is_offered() -> None:
-    assert WAN22_FRAMES_VERSION not in build_default_workflow_registry().list_versions(WAN_ID)
-    assert _build_wan22_ti2v_5b_i2v_v1_3().is_experimental
+def test_the_frames_out_version_is_registered_approved_and_offered() -> None:
+    registry = build_default_workflow_registry()
+    assert registry.list_versions(WAN_ID)[-1] == WAN22_FRAMES_VERSION
+    spec = registry.get(WAN_ID, WAN22_FRAMES_VERSION)  # runnable with no opt-in
+    assert spec.governance_state == "approved" and not spec.is_experimental
+    assert spec.governance_notes.startswith("APPROVED")
+    assert "experimental" not in spec.display_name.lower()
+    assert _build_wan22_ti2v_5b_i2v_v1_2().governance_state == "approved"  # 1.2.0 stays approved
 
 
 def test_a_frames_policy_without_a_frame_rate_is_refused() -> None:

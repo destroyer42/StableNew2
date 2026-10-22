@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.njr_core_v26 import NormalizedJobRecord
@@ -20,6 +22,7 @@ from src.video.svd_preprocess import (
     discover_svd_folder_sources,
     validate_svd_source_image,
 )
+from src.video.svd_sequence_admission import freeze_svd_sequence_plan
 from src.video.svd_service import SVDService
 from src.video.svd_target import select_svd_target_size
 
@@ -243,12 +246,73 @@ class SVDController:
             raise RuntimeError("Failed to enqueue complete SVD folder batch")
         return list(job_ids)
 
+    def build_sequence_njr(
+        self,
+        *,
+        source_image_path: str | Path,
+        config: SVDConfig,
+        intent: Mapping[str, Any],
+        output_route: str | None = None,
+    ) -> NormalizedJobRecord:
+        """Validate, freeze and preflight a native-SVD sequence and return its ONE NJR (nothing is queued).
+
+        Each segment's seed and frame count are concrete in the frozen plan; the plan is refused before an NJR
+        exists when any of it is illegal."""
+
+        segments = intent.get("segments")
+        first = segments[0] if isinstance(segments, (list, tuple)) and segments else {}
+        if isinstance(first, Mapping) and first.get("frame_count") not in (None, ""):
+            config = replace(
+                config,
+                inference=replace(config.inference, num_frames=int(first["frame_count"])),
+            )
+        valid, reason = self.validate_config(config)
+        if not valid:
+            raise RuntimeError(reason or "SVD configuration is invalid")
+        prepared = self.prepare_for_admission(config)
+        preflight = get_svd_preflight(prepared, source_image_path=source_image_path)
+        if not preflight.available:
+            raise RuntimeError("SVD admission blocked: " + "; ".join(preflight.blocking_reasons))
+        plan = freeze_svd_sequence_plan(
+            intent, config=prepared, source_image_path=source_image_path
+        )
+        njr: NormalizedJobRecord = self._build_svd_njr(
+            source_image_path=source_image_path,
+            config=prepared,
+            output_route=output_route,
+            sequence_plan=plan.to_dict(),
+        )
+        return njr
+
+    def submit_sequence_job(
+        self,
+        *,
+        source_image_path: str | Path,
+        config: SVDConfig,
+        intent: Mapping[str, Any],
+        output_route: str | None = None,
+    ) -> str:
+        njr = self.build_sequence_njr(
+            source_image_path=source_image_path,
+            config=config,
+            intent=intent,
+            output_route=output_route,
+        )
+        job_service = getattr(self._app_controller, "job_service", None)
+        if job_service is None:
+            raise RuntimeError("App controller is missing job_service")
+        job_ids = job_service.submit_njrs([njr], SubmissionPolicy())
+        if not job_ids:
+            raise RuntimeError("Failed to enqueue the SVD sequence job")
+        return str(job_ids[0])
+
     def _build_svd_njr(
         self,
         *,
         source_image_path: str | Path,
         config: SVDConfig,
         output_route: str | None,
+        sequence_plan: Mapping[str, Any] | None = None,
     ):
         builder = ReprocessJobBuilder()
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
@@ -258,7 +322,10 @@ class SVDController:
             input_image_paths=[str(source_image_path)],
             stages=["svd_native"],
             config={
-                "svd_native": config.to_dict(),
+                "svd_native": {
+                    **config.to_dict(),
+                    **({"sequence_metadata": dict(sequence_plan)} if sequence_plan else {}),
+                },
                 "pipeline": {"output_route": route_name},
             },
             output_dir=str(output_dir),

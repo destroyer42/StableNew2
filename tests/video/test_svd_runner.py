@@ -511,3 +511,60 @@ def test_svd_job_b_cancellation_after_manifest_preserves_job_a_artifacts(
 
     assert all(path.exists() and path.read_bytes() == data for path, data in snapshot.items())
     assert all(not path.exists() for path in _expected_job_paths(tmp_path, source_path, "job-b"))
+
+
+def _sequence_capture(tmp_path: Path) -> tuple[Path, dict[str, object]]:
+    target = tmp_path / "run" / "sequence" / "native" / "seg_00_native_last.png"
+    return target, {"sequence_capture": {"native_final_frame_path": str(target)}}
+
+
+def test_a_sequence_segment_saves_its_native_last_frame_and_keeps_it_on_success(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _source, active, _run = _patch_fake_svd_run(tmp_path, monkeypatch)
+    target, context = _sequence_capture(tmp_path)
+    active["job_id"] = "seq-ok"
+
+    result = SVDRunner(service=_patched_service(), output_root=tmp_path).run(
+        source_image_path=_source,
+        config=SVDConfig(),
+        job_id="seq-ok",
+        provenance_context=context,
+    )
+
+    assert (
+        result.native_final_frame is not None and Path(result.native_final_frame["path"]) == target
+    )
+    assert target.is_file()
+
+
+def test_the_native_last_frame_is_removed_with_the_other_outputs_when_the_run_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source, active, _run = _patch_fake_svd_run(tmp_path, monkeypatch)
+    target, context = _sequence_capture(tmp_path)
+    active["job_id"] = "seq-fail"
+    active["fail_export"] = True  # fails after the native frame was written
+
+    with pytest.raises(SVDExportError, match="job export failed"):
+        SVDRunner(service=_patched_service(), output_root=tmp_path).run(
+            source_image_path=source,
+            config=SVDConfig(),
+            job_id="seq-fail",
+            provenance_context=context,
+        )
+
+    assert (
+        not target.exists()
+    )  # SVD's own cleanup owns it, so no half-finished segment leaves an anchor behind
+
+
+def _patched_service():
+    class FakeService:
+        def generate_frames(self, **_kwargs):
+            return [Image.new("RGB", (8, 8), "yellow"), Image.new("RGB", (8, 8), "green")]
+
+        def _release_runtime_memory(self) -> None:
+            return None
+
+    return FakeService()

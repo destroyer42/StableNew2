@@ -17,7 +17,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   `requirements-dev.txt`. Managed Forge Neo (`config/managed_forge_runtime.json`) and managed Comfy
   (`config/managed_comfy_runtime.json`) are pinned separately and never share the application environment.
 - Single-node, same-process execution. Production video backends: native SVD XT and the Comfy workflows the catalog marks
-  `approved` (today Wan2.2 TI2V-5B 1.2.0); every other workflow is experimental and needs the job's own opt-in.
+  `approved` (today Wan2.2 TI2V-5B 1.2.0 and the frames-out 1.3.0); every other workflow is experimental and needs the job's own opt-in.
 
 ## What `main` enforces (all PRs)
 
@@ -62,10 +62,11 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 **Video**
 
 - Native SVD XT queue-first path with source-aware targets, provenance and replay lineage. Comfy Video Workflow: Wan2.2 TI2V-5B
-  1.2.0 is `approved` (production, no per-job opt-in; 1.0.0 and 1.1.0 stay experimental so stored jobs replay unchanged) and
+  1.3.0 (frames out: StableNew encodes the saved PNG frames, PR-VID-WAN-324) and 1.2.0 are `approved` (production, no per-job
+  opt-in; 1.0.0 and 1.1.0 stay experimental so stored jobs replay unchanged; the picker offers 1.3.0) and
   is the only conditionally qualified directed-motion candidate; Wan-Animate-2 stays experimental (Queue stays disabled until
   the job's opt-in is ticked). Motion source readiness: `docs/Subsystems/Video/PR-VID-196_Motion_Source_Readiness.md`; optional Prepare Motion Source
-  (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`. One-variable experiments can be reopened from History or the tab, compared side by side and rated (action outcome kept apart from quality) as Learning evidence that never feeds image recommendations: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`. A single **Make Video** action on Review, Job History and the Pipeline preview loads the selected image into the Video Workflow tab with the recommended approved workflow preselected; the form is Basic (workflow, motion, length, prompt) plus collapsed Advanced options, Queue feedback is inline and non-modal, and finished clips play in-app under Recent outputs with Open, Reveal and Send to Movie Clips (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 4). A new SVD config smooths with RIFE by default when it resolves (x2 at 14 fps or more, else x4), the SVD export can ping-pong or loop to N seconds, a finished Comfy clip can be smoothed from the Video Workflow form, and secondary motion is retired (stored records still load; an enabled request is refused): `docs/Subsystems/Video/VIDEO_PIPELINE.md` sections 3.2 and 5.
+  (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`. A multi-segment video sequence is one job with N internal segments (exact-frame carry-forward, one warm-runtime release, a durable ledger, strict resume as a new job, in-job assembly); there is no Storyboard UI yet; physical runs of two- and three-segment TI2V-5B 1.3.0 chains, a cancel-and-resume and an authored anchor passed on 2026-10-22 (native SVD not run): `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.1. One-variable experiments can be reopened from History or the tab, compared side by side and rated (action outcome kept apart from quality) as Learning evidence that never feeds image recommendations: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`. A single **Make Video** action on Review, Job History and the Pipeline preview loads the selected image into the Video Workflow tab with the recommended approved workflow preselected; the form is Basic (workflow, motion, length, prompt) plus collapsed Advanced options, Queue feedback is inline and non-modal, and finished clips play in-app under Recent outputs with Open, Reveal and Send to Movie Clips (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 4). A new SVD config smooths with RIFE by default when it resolves (x2 at 14 fps or more, else x4), the SVD export can ping-pong or loop to N seconds, a finished Comfy clip can be smoothed from the Video Workflow form, and secondary motion is retired (stored records still load; an enabled request is refused): `docs/Subsystems/Video/VIDEO_PIPELINE.md` sections 3.2 and 5.
 
 **Runtime safety** (all on the production construction path)
 
@@ -113,7 +114,7 @@ of the roadmap; where they conflict with this file, this file and the repository
    `python tools/job_repository_report.py` (read-only; see `docs/Subsystems/Learning/LEARNING.md` section 9).
 10. Decided 2026-10-20 and implemented: Movie Clips assembly is a queued CPU `movie_assembly` job on the canonical path
    (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows are production video backends and Wan2.2
-   TI2V-5B 1.2.0 is promoted.
+   TI2V-5B 1.2.0 is promoted; the frames-out 1.3.0 was promoted on 2026-10-21 after real acceptance runs.
 11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a single
    composition root (P3-2, decision 11), a durable CANCELLING status (decision 12), and moving the executor into `image_backends` (decision 14).
 

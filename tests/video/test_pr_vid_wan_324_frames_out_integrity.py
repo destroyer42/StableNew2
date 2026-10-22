@@ -26,12 +26,10 @@ from src.video.svd_errors import SVDExportError
 from src.video.video_export import export_image_sequence_video
 from src.video.workflow_catalog import (
     WAN22_FRAMES_VERSION,
-    _build_wan22_ti2v_5b_i2v_v1_3,
     build_builtin_workflow_specs,
 )
 from src.video.workflow_contracts import (
     WORKFLOW_GOVERNANCE_APPROVED,
-    WORKFLOW_GOVERNANCE_EXPERIMENTAL,
 )
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 from tests.video.test_pr_vid_wan_324_frames_out import (
@@ -548,7 +546,7 @@ def test_a_dry_run_or_failed_harness_is_not_verified(tmp_path: Path, monkeypatch
 
 
 # ---------------------------------------------------------------------------
-# catalog policy: 1.3.0 unregistered, approved 1.2.0 offered
+# catalog policy: approved 1.3.0 offered, approved 1.2.0 still resolvable for replay
 # ---------------------------------------------------------------------------
 
 
@@ -561,33 +559,20 @@ def _offered(registry: WorkflowRegistry) -> dict[str, dict[str, Any]]:
     return {record["workflow_id"]: record for record in controller.list_workflow_specs()}
 
 
-def test_1_3_0_stays_unregistered_and_approved_1_2_0_stays_the_offered_version() -> None:
-    assert (WAN_ID, WAN22_FRAMES_VERSION) not in {
+def test_approved_1_3_0_is_the_offered_version_and_approved_1_2_0_still_resolves() -> None:
+    assert (WAN_ID, WAN22_FRAMES_VERSION) in {
         (spec.workflow_id, spec.workflow_version) for spec in build_builtin_workflow_specs()
     }
     registry = build_default_workflow_registry()
-    assert WAN22_FRAMES_VERSION not in registry.list_versions(WAN_ID)
-    assert "1.2.0" in registry.list_versions(WAN_ID)
-
-    offered = _offered(registry)[WAN_ID]
-    assert (offered["workflow_version"], offered["governance_state"]) == (
-        "1.2.0",
-        WORKFLOW_GOVERNANCE_APPROVED,
-    )
-    approved = registry.get(WAN_ID, "1.2.0")  # runnable without any opt-in
-    assert approved.backend_defaults["prompt_template"]["12"]["class_type"] == "SaveVideo"
-
-
-def test_registering_1_3_0_would_change_the_offered_version() -> None:
-    """Why 1.3.0 must stay out until requalified: the picker offers the newest registered version."""
-
-    registry = WorkflowRegistry()
-    for spec in build_builtin_workflow_specs():
-        registry.register(spec)
-    registry.register(_build_wan22_ti2v_5b_i2v_v1_3())
+    assert registry.list_versions(WAN_ID)[-2:] == ["1.2.0", WAN22_FRAMES_VERSION]
 
     offered = _offered(registry)[WAN_ID]
     assert (offered["workflow_version"], offered["governance_state"]) == (
         WAN22_FRAMES_VERSION,
-        WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+        WORKFLOW_GOVERNANCE_APPROVED,
     )
+    # both run without any opt-in; the older one keeps Comfy's own SaveVideo output for replay
+    frames = registry.get(WAN_ID, WAN22_FRAMES_VERSION)
+    assert frames.backend_defaults["prompt_template"]["11"]["class_type"] == "SaveImage"
+    approved = registry.get(WAN_ID, "1.2.0")
+    assert approved.backend_defaults["prompt_template"]["12"]["class_type"] == "SaveVideo"

@@ -19,9 +19,7 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_wan22_ti2v_5b_i2v_v1(),
         _build_wan22_ti2v_5b_i2v_v1_1(),
         _build_wan22_ti2v_5b_i2v_v1_2(),
-        # 1.3.0 (frames out, PR-VID-WAN-324) is registered by the requalification run that proves
-        # StableNew's encode of the saved frames on the managed runtime; until then the picker keeps
-        # offering the approved 1.2.0.  Condition: one real run recorded, then add the entry here.
+        _build_wan22_ti2v_5b_i2v_v1_3(),
         *build_wan_animate2_specs(),
     )
 
@@ -161,13 +159,15 @@ def _build_wan22_ti2v_5b_i2v_v1_2() -> WorkflowSpec:
 
 def _build_wan22_ti2v_5b_i2v_v1_3() -> WorkflowSpec:
     """The 1.2.0 graph, files and policies, but frames out: Comfy saves PNG frames and StableNew
-    encodes the clip (PR-VID-WAN-324).  Experimental until a physical run requalifies the output."""
+    encodes the clip (PR-VID-WAN-324).  APPROVED by the owner on 2026-10-21 after real acceptance
+    runs; it is the version the Video Workflow picker offers, and 1.2.0 stays approved for replay."""
 
     return _build_wan22_ti2v_5b_i2v(
         workflow_version=WAN22_FRAMES_VERSION,
         frame_count_policy=WAN22_FRAME_COUNT_POLICY,
         runtime_policy=WAN22_RUNTIME_POLICY,
         provenance_overrides=WAN22_RUNTIME_PROVENANCE,
+        governance_state=WORKFLOW_GOVERNANCE_APPROVED,
         frames_out=True,
     )
 
@@ -216,6 +216,13 @@ def _build_wan22_ti2v_5b_i2v(
         governance_notes = (
             "EXPERIMENTAL: runs only with an explicit per-job opt-in. Qualified in PR-VID-110 "
             "(CONDITIONAL); qualification-derived resource readiness applies before dispatch."
+        )
+    if frames_out and approved:
+        governance_notes = (
+            "APPROVED for production by owner decision (2026-10-21) after real acceptance runs of the "
+            "frames-out output (PR-VID-WAN-324); 1.2.0 stays approved so stored jobs replay on their "
+            "exact graph, and 1.0.0 and 1.1.0 stay experimental. Qualification-derived resource "
+            "readiness applies before dispatch."
         )
     if frames_out:
         fixed_settings["output"] = (

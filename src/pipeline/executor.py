@@ -5851,6 +5851,7 @@ class Pipeline:
                 "seed": result.seed,
                 "source_image_path": str(result.source_image_path),
                 "postprocess": result.postprocess,
+                "native_final_frame": getattr(result, "native_final_frame", None),
                 "preprocess": {
                     "source_path": str(result.preprocess.source_path),
                     "prepared_path": str(result.preprocess.prepared_path),

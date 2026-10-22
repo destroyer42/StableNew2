@@ -475,7 +475,7 @@ def test_every_selectable_workflow_names_its_output_by_job_id(tmp_path):
             str(node["inputs"]["filename_prefix"])
             for node in template.values()
             if isinstance(node, dict)
-            and node.get("class_type") in {"SaveVideo", "StableNewSaveVideo"}
+            and node.get("class_type") in {"SaveVideo", "StableNewSaveVideo", "SaveImage"}
         ]
         assert prefixes, spec.workflow_id
         assert all("{{request.job_id}}" in prefix for prefix in prefixes), spec.workflow_id

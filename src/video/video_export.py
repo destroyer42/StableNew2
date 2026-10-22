@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -214,54 +212,3 @@ def save_video_frames(
         frame.convert("RGB").save(frame_path, format="PNG")
         frame_paths.append(frame_path)
     return frame_paths
-
-
-def stitch_video_segments(
-    *,
-    segment_paths: list[Path],
-    output_path: str | Path,
-) -> Path:
-    if not segment_paths:
-        raise SVDExportError("No segment paths provided for stitched export")
-
-    output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-
-    if len(segment_paths) == 1:
-        source = Path(segment_paths[0])
-        if source.resolve() != output.resolve():
-            shutil.copy2(source, output)
-        return output
-
-    ffmpeg_executable = resolve_ffmpeg_executable()
-    if ffmpeg_executable is None:
-        raise SVDExportError("FFmpeg is not available for stitched export")
-
-    list_file = output.parent / f"{output.stem}_concat.txt"
-    try:
-        with list_file.open("w", encoding="utf-8") as handle:
-            for segment_path in segment_paths:
-                escaped = str(Path(segment_path).absolute()).replace("'", r"'\''")
-                handle.write(f"file '{escaped}'\n")
-
-        cmd = [
-            str(ffmpeg_executable),
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(list_file),
-            "-c",
-            "copy",
-            "-y",
-            str(output),
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            raise SVDExportError(f"FFmpeg failed to stitch video segments: {result.stderr}")
-        return output
-    except subprocess.TimeoutExpired as exc:
-        raise SVDExportError("FFmpeg timed out while stitching video segments") from exc
-    finally:
-        list_file.unlink(missing_ok=True)

@@ -192,7 +192,8 @@ def test_only_the_owner_promoted_qualification_candidate_is_an_approved_workflow
     PR-VID-130/190 registered the qualified Wan2.2 / Wan-Animate-2 graphs as ``experimental``
     (per-job opt-in, never default-runnable); the original "appears nowhere in src" invariant is
     superseded by tests/video/test_wan22_experimental_workflow.py.  Owner decision D1
-    (2026-10-20, PR-VID-GOV-316) promoted exactly one candidate, Wan2.2 TI2V-5B 1.2.0.  What must
+    (2026-10-20, PR-VID-GOV-316) promoted Wan2.2 TI2V-5B 1.2.0, and the frames-out 1.3.0 was approved on
+    2026-10-21 (PR-VID-WAN-324): exactly those two candidates are promoted.  What must
     still hold: the throwaway qualification harness is not imported by production code, every
     other candidate (older TI2V versions, both Wan-Animate-2 modes) stays experimental and
     non-default-runnable, and no candidate is a registered backend.
@@ -220,7 +221,7 @@ def test_only_the_owner_promoted_qualification_candidate_is_an_approved_workflow
         for version in registry.list_versions(workflow_id)
     ]
     assert candidate_specs, "expected the experimental Wan workflows to be registered"
-    promoted = {("wan22_ti2v_5b_i2v_v1", "1.2.0")}
+    promoted = {("wan22_ti2v_5b_i2v_v1", "1.2.0"), ("wan22_ti2v_5b_i2v_v1", "1.3.0")}
     approved = {
         (spec.workflow_id, spec.workflow_version)
         for spec in candidate_specs

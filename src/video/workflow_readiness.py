@@ -111,7 +111,20 @@ class WorkflowResourceReadiness:
         policy = (getattr(spec, "backend_defaults", None) or {}).get("resource_readiness")
         return policy if isinstance(policy, Mapping) and policy else None
 
-    def evaluate(self, spec: Any, *, system_stats: Mapping[str, Any]) -> ResourceReadinessResult:
+    def evaluate(
+        self,
+        spec: Any,
+        *,
+        system_stats: Mapping[str, Any],
+        warm_sequence: bool = False,
+    ) -> ResourceReadinessResult:
+        """Observe-only readiness.
+
+        ``warm_sequence`` is set only by the backend for a later segment of a sequence, when the very StableNew-owned
+        process that served the earlier segment is still the one running. The host-RAM floor guards a *cold* model
+        load; a resident model is what makes free RAM low, so the floor is not applied then. A single clip, an
+        unowned runtime and a restarted process never set it."""
+
         policy = self.policy_for(spec)
         if policy is None:
             return ResourceReadinessResult(ready=True, observations={"policy": None})
@@ -161,7 +174,11 @@ class WorkflowResourceReadiness:
                     )
 
         ram_floor = float(policy.get("min_available_ram_gb") or 0)
-        if ram_floor:
+        if ram_floor and warm_sequence:
+            observations["ram_floor_skipped"] = (
+                "warm sequence runtime: the model is already resident"
+            )
+        elif ram_floor:
             available_ram = float(self._ram_probe())
             observations.update(
                 ram_available_gb=round(available_ram, 1), ram_floor_gb=round(ram_floor, 1)

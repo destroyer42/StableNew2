@@ -10,7 +10,11 @@ frame list and its reconciliation with the frozen count, every PNG's SHA-256, th
 MP4's decoded frame count and frame rate (FFprobe), and that the job's artifact, manifest and clip are one
 identity. Any failed check fails the run; the checks land in ``<reports>/frames_out_verification.json``.
 
-    python -m tools.acceptance.vid324_frames_out_acceptance <source.png> [--dry]
+    python -m tools.acceptance.vid324_frames_out_acceptance <source.png> [--dry] [--label A|B|C]
+        [--reports-dir DIR] [--smooth]
+
+``--label`` picks the harness job (A: 49 frames, B: 81 frames, C: 49 frames, each with its own frozen seed),
+``--reports-dir`` keeps each run's evidence apart, and ``--smooth`` asks for RIFE x2 of the saved frames.
 """
 
 from __future__ import annotations
@@ -37,10 +41,21 @@ VideoProbe = Callable[[Path], tuple[int, float]]
 
 
 def _register_frames_out_version() -> None:
+    """Offer 1.3.0 in this process only when the catalog does not already register it.
+
+    The version is approved and built in (owner decision 2026-10-21), so this is a no-op on a current checkout;
+    it keeps the harness usable against a catalog from before the promotion.
+    """
+
     from src.video import workflow_registry
     from src.video.workflow_catalog import _build_wan22_ti2v_5b_i2v_v1_3
 
     builtin = workflow_registry.build_builtin_workflow_specs
+    if any(
+        (spec.workflow_id, spec.workflow_version) == (WORKFLOW_ID, FRAMES_VERSION)
+        for spec in builtin()
+    ):
+        return
 
     def with_frames_out() -> tuple:
         return (*builtin(), _build_wan22_ti2v_5b_i2v_v1_3())
@@ -265,16 +280,18 @@ def verify_frames_out_evidence(
     return verdict()
 
 
-def verify_reports(reports_dir: Path, *, probe: VideoProbe = probe_encoded_video) -> int:
+def verify_reports(
+    reports_dir: Path, *, probe: VideoProbe = probe_encoded_video, label: str = JOB_LABEL
+) -> int:
     """Verify the harness evidence in ``reports_dir``, write the verdict beside it, return the exit code."""
 
     evidence_path = reports_dir / "acceptance.json"
     if evidence_path.is_file():
         evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-        result = verify_frames_out_evidence(evidence, probe=probe)
+        result = verify_frames_out_evidence(evidence, label=label, probe=probe)
     else:
         result = {
-            "label": JOB_LABEL,
+            "label": label,
             "passed": False,
             "checks": [
                 {"check": "harness evidence exists", "ok": False, "detail": str(evidence_path)}
@@ -287,24 +304,54 @@ def verify_reports(reports_dir: Path, *, probe: VideoProbe = probe_encoded_video
     return 0 if result["passed"] else 1
 
 
+def _option(args: list[str], name: str, default: str) -> str:
+    return (
+        args[args.index(name) + 1] if name in args and args.index(name) + 1 < len(args) else default
+    )
+
+
+def _smooth_submissions() -> None:
+    """Ask RIFE x2 for every job this process submits (the harness form has no smoothing field)."""
+
+    from src.controller.video_workflow_controller import VideoWorkflowController
+
+    original = VideoWorkflowController.submit_video_workflow_job
+
+    def with_smoothing(self: Any, *, source_image_path: Any, form_data: Any, **kwargs: Any) -> Any:
+        form = {**form_data, "interpolation": {"enabled": True, "multiplier": 2}}
+        return original(self, source_image_path=source_image_path, form_data=form, **kwargs)
+
+    VideoWorkflowController.submit_video_workflow_job = with_smoothing  # type: ignore[method-assign]
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    source = next((arg for arg in args if not arg.startswith("-")), None)
+    flag_values = {
+        args[index + 1]
+        for index, arg in enumerate(args[:-1])
+        if arg in {"--label", "--reports-dir"}
+    }
+    source = next((arg for arg in args if not arg.startswith("-") and arg not in flag_values), None)
     if source is None:
         raise SystemExit(
-            "usage: python -m tools.acceptance.vid324_frames_out_acceptance <source.png> [--dry]"
+            "usage: python -m tools.acceptance.vid324_frames_out_acceptance <source.png> "
+            "[--dry] [--label A|B|C] [--reports-dir DIR] [--smooth]"
         )
+    label = _option(args, "--label", JOB_LABEL)
+    reports_dir = _option(args, "--reports-dir", REPORTS_DIR)
     _register_frames_out_version()
+    if "--smooth" in args:
+        _smooth_submissions()
     passthrough = [
         source,
         "--suite",
         "ti2v",
         "--only",
-        JOB_LABEL,
+        label,
         "--workflow-version",
         FRAMES_VERSION,
         "--reports-dir",
-        REPORTS_DIR,
+        reports_dir,
     ]
     dry = "--dry" in args
     if dry:
@@ -312,7 +359,7 @@ def main(argv: list[str] | None = None) -> int:
     code = harness.main(passthrough)
     if dry or code != 0:
         return code
-    return verify_reports(Path(REPORTS_DIR))
+    return verify_reports(Path(reports_dir), label=label)
 
 
 if __name__ == "__main__":

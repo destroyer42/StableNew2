@@ -43,6 +43,7 @@ EXPECTED_GOVERNANCE = {
     (WAN_ID, "1.0.0"): "experimental",
     (WAN_ID, "1.1.0"): "experimental",
     (WAN_ID, "1.2.0"): "approved",
+    (WAN_ID, "1.3.0"): "approved",  # frames out (PR-VID-WAN-324), approved by the owner 2026-10-21
     **{
         (workflow_id, version): "experimental"
         for workflow_id in (WAN_ANIMATE2_PROMPT_ID, WAN_ANIMATE2_DRIVE_ID)
@@ -61,6 +62,7 @@ HISTORICAL_SPEC_SHA256 = {
     (WAN_ANIMATE2_DRIVE_ID, "1.1.0"): "c5a8ab613ea8e130f27250596be0aac17cb8d96399386ef36456b6fb37608fa0",
     (WAN_ANIMATE2_PROMPT_ID, "1.0.0"): "fa3eed00ba5ce134f2f7fab4ce9c94abbc60f7de05efecb6bd3fc8b1206fceac",
     (WAN_ANIMATE2_PROMPT_ID, "1.1.0"): "75d1778e665015f4da4507d34ea165b3d9881eef3fcdab197d12f7c6bc12ed1c",
+    (WAN_ID, "1.3.0"): "02eff4ac288f41b0630e7fbccc2c10b7ec7f4d2460cbf345ccda9a4f23f4d7be",
 }
 HISTORICAL_TEMPLATE_SHA256 = {
     (WAN_ID, "1.0.0"): "116e980387bc763c5a598641b81ead80201a2615ad19cdc625b4eb4da1484154",
@@ -69,6 +71,7 @@ HISTORICAL_TEMPLATE_SHA256 = {
     (WAN_ANIMATE2_DRIVE_ID, "1.1.0"): "a371227170de97e5a83c154822735a937a3e7ec271bd02ed627c797c442f3065",
     (WAN_ANIMATE2_PROMPT_ID, "1.0.0"): "12d0d1777aeaaf5d7e5867de9f82bb2a5b7b171f3a6d1fd6c0f97a152ba9ff87",
     (WAN_ANIMATE2_PROMPT_ID, "1.1.0"): "9706fcb823a29ba5e0b0d40c48a3fdc3bde46a1f26b3b5a79ca1abbc6def87f1",
+    (WAN_ID, "1.3.0"): "5a62e121bde438e3e0613aec45473dffbf58105300ef82210ac0a5e5b8d9e352",
 }
 
 
@@ -118,7 +121,8 @@ def test_historical_provenance_is_not_rewritten_to_the_new_runtime() -> None:
 def test_new_versions_are_registered_beside_the_old_ones(workflow_id: str) -> None:
     registry = build_default_workflow_registry()
 
-    assert registry.list_versions(workflow_id) == ["1.0.0", "1.1.0", "1.2.0"]
+    expected_versions = ["1.0.0", "1.1.0", "1.2.0"] + (["1.3.0"] if workflow_id == WAN_ID else [])
+    assert registry.list_versions(workflow_id) == expected_versions
     assert WAN22_RUNTIME_VERSION == WAN_ANIMATE2_RUNTIME_VERSION == "1.2.0"
     newest = _spec(workflow_id, "1.2.0")
     assert newest.pinned_revision == f"catalog:{workflow_id}@1.2.0"

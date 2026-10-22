@@ -29,6 +29,8 @@ from tests.video.test_pr_vid_190_comfy_lifecycle_frame_count import _backend, _F
 from tests.video.test_wan22_experimental_workflow import WAN_ID, _FakeComfy
 
 APPROVED = (WAN_ID, WAN22_RUNTIME_VERSION)
+# PR-VID-WAN-324: the frames-out revision, approved by the owner on 2026-10-21 after real acceptance runs.
+APPROVED_FRAMES_OUT = (WAN_ID, "1.3.0")
 OLDER_TI2V = ((WAN_ID, "1.0.0"), (WAN_ID, "1.1.0"))
 PROMPT_FORM = {"prompt": "the person turns slowly toward the camera"}
 
@@ -40,14 +42,17 @@ def _spec(workflow_id: str, version: str):
 # ---------------------------------------------------------------------------- catalog governance
 
 
-def test_exactly_one_catalog_version_is_approved_and_it_is_ti2v_1_2_0() -> None:
+def test_exactly_two_catalog_versions_are_approved_and_both_are_ti2v() -> None:
     states = {
         (spec.workflow_id, spec.workflow_version): spec.governance_state
         for spec in build_builtin_workflow_specs()
     }
 
     assert WAN22_RUNTIME_VERSION == "1.2.0"
-    assert [key for key, state in states.items() if state == "approved"] == [APPROVED]
+    assert [key for key, state in states.items() if state == "approved"] == [
+        APPROVED,
+        APPROVED_FRAMES_OUT,
+    ]
     assert {key for key, state in states.items() if state == "experimental"} == {
         *OLDER_TI2V,
         *(
@@ -56,7 +61,7 @@ def test_exactly_one_catalog_version_is_approved_and_it_is_ti2v_1_2_0() -> None:
             for ver in ("1.0.0", "1.1.0", "1.2.0")
         ),
     }
-    assert len(states) == 9  # no workflow was added or removed
+    assert len(states) == 10  # the frames-out TI2V-5B revision is the only addition
 
 
 def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_is_unchanged() -> (
@@ -66,8 +71,8 @@ def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_
 
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
-    ] == [APPROVED]
-    assert len(registry.list_offerable_specs("comfy")) == 9
+    ] == [APPROVED, APPROVED_FRAMES_OUT]
+    assert len(registry.list_offerable_specs("comfy")) == 10
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:
