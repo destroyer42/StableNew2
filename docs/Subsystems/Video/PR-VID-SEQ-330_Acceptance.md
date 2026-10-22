@@ -104,4 +104,3 @@ What the real runs found (each is fixed on the branch and covered by a regressio
 
 Not judged here: visual quality of the join over a longer chain, identity or tone drift, colour matching (off), native SVD and a failure injected by a real GPU
 fault.
-
