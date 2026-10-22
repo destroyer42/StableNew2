@@ -16,7 +16,7 @@ import tkinter as tk
 from collections.abc import Callable
 from functools import partial
 from tkinter import ttk
-from typing import Any
+from typing import Any, cast
 
 from src.gui import theme_v2 as theme
 from src.gui.view_contracts.task_navigation_contract import (
@@ -100,6 +100,18 @@ def hide_notebook_tab_strip(notebook: ttk.Notebook) -> bool:
     return True
 
 
+def select_notebook_tab(notebook: ttk.Notebook, tab: tk.Widget) -> None:
+    """Select ``tab`` in ``notebook`` (raises ``tk.TclError`` when it is not one of its tabs)."""
+
+    cast(Any, notebook).select(tab)
+
+
+def selected_notebook_path(notebook: ttk.Notebook) -> str:
+    """Tk path of the notebook's selected tab ('' when it has none)."""
+
+    return str(cast(Any, notebook).select())
+
+
 class TaskNavigationBar(ttk.Frame):
     """Group buttons plus the active group's destination buttons."""
 
@@ -107,7 +119,7 @@ class TaskNavigationBar(ttk.Frame):
         self,
         master: tk.Misc,
         *,
-        on_select: Callable[[str], None],
+        on_select: Callable[[str], object],
         is_available: Callable[[str], bool],
         **kwargs: object,
     ) -> None:
@@ -269,4 +281,6 @@ __all__ = [
     "TaskNavigationBar",
     "configure_task_navigation_styles",
     "hide_notebook_tab_strip",
+    "select_notebook_tab",
+    "selected_notebook_path",
 ]

@@ -46,7 +46,12 @@ from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
-from src.gui.widgets.task_navigation_bar_v2 import TaskNavigationBar, hide_notebook_tab_strip
+from src.gui.widgets.task_navigation_bar_v2 import (
+    TaskNavigationBar,
+    hide_notebook_tab_strip,
+    select_notebook_tab,
+    selected_notebook_path,
+)
 from src.gui.zone_map_v2 import get_root_zone_config
 from src.services.operator_readiness_service import (
     OperatorReadinessService,
@@ -847,7 +852,7 @@ class MainWindowV2:
         if widget is None:
             return False
         try:
-            self.center_notebook.select(widget)
+            select_notebook_tab(self.center_notebook, widget)
         except tk.TclError:
             logger.warning("Tab %r could not be selected", tab_id)
             return False
@@ -857,7 +862,7 @@ class MainWindowV2:
 
     def _current_tab_id(self) -> str | None:
         try:
-            current = str(self.center_notebook.select())
+            current = selected_notebook_path(self.center_notebook)
         except tk.TclError:
             return None
         for tab_id, widget in getattr(self, "_tab_registry", {}).items():
