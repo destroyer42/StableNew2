@@ -9,6 +9,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.learning_state import LearningVariant
+from src.learning.experiment_reconciliation import variant_status_detail
 
 
 class LearningPlanTable(ttk.Frame):
@@ -34,7 +35,7 @@ class LearningPlanTable(ttk.Frame):
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
 
-        columns = ("variant", "param_value", "stage", "status", "images", "rating")
+        columns = ("variant", "param_value", "stage", "status", "images", "rating", "detail")
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=10)
 
         self.tree.heading("variant", text="Variant #")
@@ -43,6 +44,8 @@ class LearningPlanTable(ttk.Frame):
         self.tree.heading("status", text="Status")
         self.tree.heading("images", text="Images")
         self.tree.heading("rating", text="Avg Rating")
+        self.tree.heading("detail", text="Status detail / required action")
+        self.tree.column("detail", width=300, anchor="w")
 
         self.tree.column("variant", width=80, anchor="center")
         self.tree.column("param_value", width=120, anchor="center")
@@ -85,9 +88,10 @@ class LearningPlanTable(ttk.Frame):
                     f"#{i + 1}",
                     str(variant.param_value),
                     self._stage_name,
-                    variant.status.title(),
+                    variant.status.replace("_", " ").title(),
                     f"{variant.completed_images}/{variant.planned_images}",
                     "-",
+                    variant_status_detail(variant),
                 ),
             )
             self._row_index_by_item[item] = i
@@ -112,7 +116,16 @@ class LearningPlanTable(ttk.Frame):
         try:
             item = self.tree.get_children()[index]
             current_values = list(self.tree.item(item, "values"))
-            current_values[3] = status.title()
+            current_values[3] = status.replace("_", " ").title()
+            self.tree.item(item, values=current_values)
+        except (IndexError, TypeError):
+            pass
+
+    def update_row_detail(self, index: int, detail: str) -> None:
+        try:
+            item = self.tree.get_children()[index]
+            current_values = list(self.tree.item(item, "values"))
+            current_values[6] = detail
             self.tree.item(item, values=current_values)
         except (IndexError, TypeError):
             pass

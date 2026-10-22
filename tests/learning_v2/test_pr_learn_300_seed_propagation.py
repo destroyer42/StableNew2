@@ -160,6 +160,7 @@ def test_pipeline_runner_variant_result_keeps_seed_vector(tmp_path: Path) -> Non
 def test_learning_completion_controller_exposes_variant_seed_vector() -> None:
     controller = LearningExecutionController(LearningState())
     variant = LearningVariant(param_value="model-a")
+    controller.learning_state.plan = [variant]
     controller._job_to_variant["job-1"] = variant
     captured = []
     controller.set_completion_callback(lambda _variant, result: captured.append(result))

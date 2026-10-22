@@ -248,7 +248,7 @@ def test_preview_run_equivalence_after_live_inputs_change(tmp_path, monkeypatch)
     resumed._get_baseline_config = lambda: pytest.fail("Run read mutable GUI/global settings")
     resumed._learning_policy_resolver = lambda _: pytest.fail("Run resolved a live target")
     resumed.pipeline_controller = object()
-    submit = Mock()
+    submit = Mock(side_effect=lambda records, *_args: [record.job_id for record in records])
     resumed.execution_controller = SimpleNamespace(submit_experiment_jobs=submit)
     resumed.run_plan()
 

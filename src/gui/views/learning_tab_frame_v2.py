@@ -93,6 +93,8 @@ class LearningTabFrame(ttk.Frame):
             if app_controller
             else None
         )
+        if execution_controller is not None and getattr(execution_controller, "_closed", False) is True:
+            execution_controller = None
 
         # PR-LEARN-012: If execution controller doesn't exist on app_controller, create it
         if not execution_controller and app_controller:
@@ -121,6 +123,7 @@ class LearningTabFrame(ttk.Frame):
             learning_record_writer=self.learning_record_writer,
             execution_controller=execution_controller,  # PR-LEARN-002: Pass execution controller
         )
+        self.bind("<Destroy>", self._on_learning_destroy, add=True)
 
         # Configure main layout
         self.columnconfigure(0, weight=1)
@@ -835,7 +838,17 @@ class LearningTabFrame(ttk.Frame):
 
     def _schedule_summary_refresh(self) -> None:
         self._refresh_summary()
-        self.after(1000, self._schedule_summary_refresh)
+        self._summary_refresh_after_id = self.after(1000, self._schedule_summary_refresh)
+
+    def _on_learning_destroy(self, event: tk.Event[Any]) -> None:
+        if event.widget is self:
+            after_id = getattr(self, "_summary_refresh_after_id", None)
+            if after_id is not None:
+                self.after_cancel(after_id)
+            execution = self.learning_controller.execution_controller
+            close = getattr(execution, "close", None)
+            if callable(close):
+                close()
 
     def _refresh_summary(self) -> None:
         getter = getattr(self.learning_controller, "get_learning_run_summary", None)
@@ -865,6 +878,15 @@ class LearningTabFrame(ttk.Frame):
             f"Pending: {pending} Queued: {queued} Running: {running} Failed: {failed} | "
             f"{queue_text}"
         )
+        from src.learning.experiment_reconciliation import reconciliation_summary
+
+        recovered = reconciliation_summary(self.learning_controller.learning_state.plan)
+        experiment = self.learning_controller.learning_state.current_experiment
+        persistence_error = (getattr(experiment, "metadata", {}) or {}).get("resume_persistence_error")
+        if recovered:
+            self._summary_var.set(f"{self._summary_var.get()} | {recovered}")
+        if persistence_error:
+            self._summary_var.set(f"{self._summary_var.get()} | Resume save failed: {persistence_error}; do not retry jobs")
         conclusion = dict(summary.get("conclusion") or {})
         if conclusion.get("values"):
             self._summary_var.set(
@@ -901,25 +923,21 @@ class LearningTabFrame(ttk.Frame):
 
     def _persist_learning_session_state(self) -> None:
         """Persist learning session state immediately for resume-after-restart flows."""
-        try:
-            payload = self._build_store_payload()
-            if isinstance(payload, dict) and self._payload_has_admission(payload):
-                experiment = self.learning_controller.learning_state.current_experiment
-                display_name = str(getattr(experiment, "name", "") or "Learning Experiment")
-                durable_id = str(getattr(experiment, "experiment_id", "") or "") or None
-                handle = self.experiment_store.save_session(
-                    display_name=display_name,
-                    payload=payload,
-                    experiment_id=durable_id,
-                )
-                self._active_experiment_id = handle.experiment_id
-            ui_store = get_ui_state_store()
-            state = ui_store.load_state() or {}
-            learning_state = self.get_learning_session_state()
-            state["learning"] = learning_state if isinstance(learning_state, dict) else {}
-            ui_store.save_state(state)
-        except Exception:
-            pass
+        payload = self._build_store_payload()
+        if isinstance(payload, dict) and self._payload_has_admission(payload):
+            experiment = self.learning_controller.learning_state.current_experiment
+            display_name = str(getattr(experiment, "name", "") or "Learning Experiment")
+            durable_id = str(getattr(experiment, "experiment_id", "") or "") or None
+            handle = self.experiment_store.save_session(
+                display_name=display_name, payload=payload, experiment_id=durable_id,
+            )
+            self._active_experiment_id = handle.experiment_id
+        ui_store = get_ui_state_store()
+        state = ui_store.load_state() or {}
+        learning_state = self.get_learning_session_state()
+        state["learning"] = learning_state if isinstance(learning_state, dict) else {}
+        if not ui_store.save_state(state):
+            raise RuntimeError("Learning resume UI state could not be saved")
 
     def _restore_from_store_payload(
         self,

@@ -57,8 +57,6 @@ from src.learning.experiment_execution import (
 from src.learning.experiment_freeze import (
     apply_frozen_seed_policy,
     freeze_seed_policy,
-    normalize_actual_seed_vector,
-    seed_vector_matches,
 )
 from src.learning.learning_controller_services.experiment_persistence import (
     build_resume_payload,
@@ -68,7 +66,6 @@ from src.learning.learning_controller_services.experiment_persistence import (
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.lora_variant import (
     apply_lora_variant,
-    validate_executed_lora,
     validate_lora_variant,
 )
 from src.learning.model_policy_service import (
@@ -154,6 +151,8 @@ class LearningController:
         self.execution_controller = (
             execution_controller or self._build_execution_controller()
         )  # PR-LEARN-073
+        if self.execution_controller is not None:
+            self.execution_controller.learning_state = learning_state
         self._plan_table = plan_table
         self._review_panel = review_panel
         self._learning_record_writer = learning_record_writer
@@ -180,8 +179,11 @@ class LearningController:
 
         # PR-LEARN-012: Set up execution controller callbacks
         if self.execution_controller:
-            self.execution_controller.set_completion_callback(self._on_variant_job_completed)
+            self.execution_controller.set_completion_callback(self._apply_variant_completion_evidence)
             self.execution_controller.set_failure_callback(self._on_variant_job_failed)
+            present = getattr(self.execution_controller, "set_presentation_callback", None)
+            if callable(present):
+                present(self._on_variant_completion_published)
 
     def _build_execution_controller(self) -> Any | None:
         """Create the canonical learning execution controller when JobService is available."""
@@ -892,6 +894,10 @@ class LearningController:
         """Update the status of a specific variant in the table."""
         if self._plan_table and hasattr(self._plan_table, "update_row_status"):
             self._plan_table.update_row_status(variant_index, status)
+            detail_update = getattr(self._plan_table, "update_row_detail", None)
+            if callable(detail_update) and 0 <= variant_index < len(self.learning_state.plan):
+                from src.learning.experiment_reconciliation import variant_status_detail
+                detail_update(variant_index, variant_status_detail(self.learning_state.plan[variant_index]))
 
     def _update_variant_images(self, variant_index: int, completed: int, planned: int) -> None:
         """Update the image count of a specific variant in the table."""
@@ -912,80 +918,50 @@ class LearningController:
 
     def run_plan(self) -> None:
         """Execute the current learning plan."""
-        import logging
-
-        logger = logging.getLogger(__name__)
-
-        logger.info("[LearningController] run_plan() called")
-        logger.info(f"[LearningController]   Plan exists: {bool(self.learning_state.plan)}")
-        logger.info(
-            f"[LearningController]   Plan length: {len(self.learning_state.plan) if self.learning_state.plan else 0}"
-        )
-        logger.info(
-            f"[LearningController]   Pipeline controller: {self.pipeline_controller is not None}"
-        )
-
         if not self.learning_state.plan:
-            logger.warning("[LearningController] No plan exists, exiting run_plan()")
             self._set_workflow_state("idle")
             return
-
         if not self.pipeline_controller:
-            logger.error("[LearningController] No pipeline controller, exiting run_plan()")
             self._set_workflow_state("planned")
             return
-
-        logger.info(
-            f"[LearningController] Starting to submit {len(self.learning_state.plan)} variants"
-        )
-
-        # Clear all highlights before starting
         if self._plan_table and hasattr(self._plan_table, "clear_highlights"):
             self._plan_table.clear_highlights()
-
-        pending = [variant for variant in self.learning_state.plan if variant.status == "pending"]
+        pending = [variant for variant in self.learning_state.plan if variant.status == "pending" and not variant.job_id]
         if not pending:
             self._recompute_workflow_state_from_plan()
             return
-
-        # Compile every NJR before crossing the queue boundary.  Any compile
-        # error leaves all variants pending, so an experiment cannot partially
-        # enter the queue.
         experiment = self.learning_state.current_experiment
         if experiment is None:
             raise RuntimeError("Learning experiment is unavailable")
         if not self.execution_controller:
             raise RuntimeError("Learning execution controller unavailable")
+        admission = self._experiment_admission.compile_all(
+            pending, lambda variant: self._build_variant_njr(variant, experiment)
+        )
+        submit_experiment = getattr(self.execution_controller, "submit_experiment_jobs", None)
+        if not callable(submit_experiment):
+            raise RuntimeError("Learning batch admission is unavailable")
+        for record, variant in zip(admission.records, pending, strict=True):
+            self._log_seed_dispatch(record, variant, experiment)
         try:
-            admission = self._experiment_admission.compile_all(
-                pending,
-                lambda variant: self._build_variant_njr(variant, experiment),
+            returned = submit_experiment(
+                admission.records, pending, experiment.name, experiment.variable_under_test
             )
-            submit_experiment = getattr(self.execution_controller, "submit_experiment_jobs", None)
-            if not callable(submit_experiment):
-                raise RuntimeError("Learning batch admission is unavailable")
-            for record, variant in zip(admission.records, pending, strict=True):
-                self._log_seed_dispatch(record, variant, experiment)
-            submit_experiment(
-                admission.records,
-                pending,
-                experiment.name,
-                experiment.variable_under_test,
-            )
+            expected = [record.job_id for record in admission.records]
+            if not isinstance(returned, (list, tuple)) or len(returned) != len(expected) or set(returned) != set(expected):
+                raise RuntimeError("Learning admission did not confirm the compiled NJR identities")
         except Exception:
+            self._update_plan_table()
+            self._recompute_workflow_state_from_plan()
+            self._notify_resume_state_changed(required=True)
             raise
-
         for variant, record in zip(pending, admission.records, strict=True):
             variant.job_id = record.job_id
-            variant.status = "queued"
-            variant_index = self._get_variant_index(variant)
-            if variant_index >= 0:
-                self._update_variant_status(variant_index, "queued")
-                self._highlight_variant(variant_index, True)
-
-        # Update table (fallback for any variants that didn't get live updates)
+            if variant.status == "pending":
+                variant.status = "queued"
         self._update_plan_table()
         self._recompute_workflow_state_from_plan()
+        self._notify_resume_state_changed(required=True)
 
     def _submit_variant_job(self, variant: LearningVariant) -> None:
         """Submit a learning job via LearningExecutionController.
@@ -1053,10 +1029,29 @@ class LearningController:
 
         except Exception as exc:
             logger.exception(f"[LearningController] Error submitting variant job: {exc}")
-            variant.status = "failed"
             variant_index = self._get_variant_index(variant)
+            if self._admission_unresolved(variant):
+                # The admission response was lost but the job may exist: keep the status the
+                # execution controller recorded (requires_attention, or what reconciliation found)
+                # and its job identity.  "failed" here would invite a retry and a duplicate job.
+                if variant_index >= 0:
+                    self._update_variant_status(variant_index, variant.status)
+                return
+            variant.status = "failed"
             if variant_index >= 0:
                 self._update_variant_status(variant_index, "failed")
+
+    @staticmethod
+    def _admission_unresolved(variant: LearningVariant) -> bool:
+        """True when a failed submit may still have admitted the job (it kept an identity or evidence).
+
+        A definite rejection clears the variant's job id and records no admission error."""
+
+        return bool(
+            variant.job_id
+            or variant.status == "requires_attention"
+            or variant.execution_metadata.get("admission_error")
+        )
 
     @staticmethod
     def _log_seed_dispatch(
@@ -1832,6 +1827,11 @@ class LearningController:
         logger.info(f"[LearningController] Applied override: {meta.config_path} = {value}")
 
     def _on_variant_job_completed(self, variant: LearningVariant, result: dict[str, Any]) -> None:
+        """Direct completion seam: stage evidence, then render its final projection."""
+        self._apply_variant_completion_evidence(variant, result)
+        self._on_variant_completion_published(variant, result)
+
+    def _apply_variant_completion_evidence(self, variant: LearningVariant, result: dict[str, Any]) -> None:
         """Handle completion of a variant job.
 
         PR-LEARN-004: Updates variant status and refreshes UI table.
@@ -1842,118 +1842,17 @@ class LearningController:
         logger = logging.getLogger(__name__)
         logger.debug(f"Variant {variant.param_value} completed")
 
-        variant.status = "completed"
+        from src.learning.experiment_reconciliation import completion_evidence
 
-        snapshot_json = str(
-            getattr(self.learning_state.current_experiment, "execution_snapshot_json", "") or ""
-        )
-        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
-        policy = snapshot.get("seed_policy") if isinstance(snapshot, dict) else None
-        metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
-        metadata = metadata if isinstance(metadata, dict) else {}
-        variant_payloads = result.get("variants") if isinstance(result, dict) else None
-        variant_payload = (
-            next((item for item in variant_payloads if isinstance(item, dict)), {})
-            if isinstance(variant_payloads, list)
-            else {}
-        )
-        actual_seeds = (
-            result.get("all_seeds") if isinstance(result, dict) else None
-        ) or metadata.get("all_seeds") or metadata.get("actual_seed_vector") or variant_payload.get("all_seeds")
-        actual_subseeds = (
-            result.get("all_subseeds") if isinstance(result, dict) else None
-        ) or metadata.get("all_subseeds") or metadata.get("actual_subseed_vector") or variant_payload.get("all_subseeds")
-        actual_vector = normalize_actual_seed_vector(actual_seeds)
-        actual_subseed_vector = normalize_actual_seed_vector(actual_subseeds)
-        sample_count = int((policy or {}).get("requested_sample_count", 0) or 0)
-        observed = dict(getattr(self.learning_state.current_experiment, "metadata", {}) or {})
-        observed_vector = normalize_actual_seed_vector(observed.get("observed_seed_vector"))
-        controlled = False
-        reason = "seed_readback_unavailable"
-        subseed_strength = float((policy or {}).get("subseed_strength", 0.0) or 0.0)
-        has_seed_policy = isinstance(policy, dict) and bool(policy)
-        if has_seed_policy and actual_vector:
-            if len(actual_vector) != sample_count:
-                reason = "seed_vector_mismatch"
-            elif subseed_strength > 0 and not actual_subseed_vector:
-                reason = "seed_readback_unavailable"
-            elif not observed_vector:
-                observed["observed_seed_vector"] = actual_vector
-                if subseed_strength > 0:
-                    observed["observed_subseed_vector"] = actual_subseed_vector
-                self.learning_state.current_experiment.metadata = observed
-                controlled = True
-                reason = ""
-            else:
-                comparable = {
-                    **policy,
-                    "observed_seed_vector": observed_vector,
-                    "observed_subseed_vector": observed.get("observed_subseed_vector", []),
-                }
-                controlled = seed_vector_matches(comparable, actual_vector, actual_subseed_vector)
-                reason = "" if controlled else "seed_vector_mismatch"
-        # The tested variable must also have executed as requested, and every
-        # comparable variant must have run in the same backend launch profile.
-        from src.learning.model_comparison import runtime_prompt_readback
+        experiment = self.learning_state.current_experiment
+        evidence = completion_evidence(experiment, variant, result)
+        variant.status = evidence.status
+        variant.execution_metadata = evidence.execution_metadata
+        if experiment is not None and evidence.experiment_metadata is not None:
+            experiment.metadata = evidence.experiment_metadata
 
-        prompt_readback = runtime_prompt_readback(variant_payload, metadata)
-        final_prompt = variant_payload.get("final_prompt") or metadata.get("final_prompt")
-        variable_reason = validate_executed_lora(
-            getattr(variant, "executed_config", None), final_prompt
-        )
-        launch_profile = str(
-            (variant_payload.get("runtime_admission") or {}).get("launch_profile") or ""
-        )
-        observed_profile = str(observed.get("observed_launch_profile") or "")
-        if launch_profile and not observed_profile:
-            observed["observed_launch_profile"] = launch_profile
-            self.learning_state.current_experiment.metadata = observed
-        elif launch_profile and launch_profile != observed_profile:
-            variable_reason = variable_reason or "backend_restart_boundary"
-        if variable_reason:
-            reason = reason if not controlled else variable_reason
-            controlled = False
-        variant.execution_metadata = {
-            **dict(getattr(variant, "execution_metadata", {}) or {}),
-            "variable_validation_reason": variable_reason or "valid",
-            "executed_final_prompt": str(final_prompt or ""),
-            "runtime_prompt_readback": prompt_readback,
-            "runtime_launch_profile": launch_profile,
-            "requested_seed_policy": dict(policy or {}),
-            "actual_all_seeds": actual_vector,
-            "actual_all_subseeds": actual_subseed_vector,
-            "controlled_evidence_valid": controlled,
-            "seed_validation_reason": reason or "valid",
-            "requested_seed": (policy or {}).get("requested_base_seed"),
-            "requested_sample_count": sample_count,
-            "observed_seed_vector": observed_vector or (actual_vector if controlled else []),
-        }
-        if not has_seed_policy and not variable_reason:
-            logger.debug(
-                "Learning seed validation skipped: no frozen policy for experiment=%s",
-                getattr(self.learning_state.current_experiment, "experiment_id", ""),
-            )
-        elif not controlled:
-            variant.status = "uncontrolled"
-            logger.error(
-                "Learning seed validation: experiment=%s variant=%s requested=%s actual=%s observed=%s controlled=False reason=%s",
-                getattr(self.learning_state.current_experiment, "experiment_id", ""),
-                variant.variant_id,
-                (policy or {}).get("requested_base_seed"),
-                actual_vector,
-                observed_vector,
-                reason,
-            )
-        else:
-            logger.info(
-                "Learning seed validation: experiment=%s variant=%s requested=%s actual=%s observed=%s controlled=True",
-                getattr(self.learning_state.current_experiment, "experiment_id", ""),
-                variant.variant_id,
-                (policy or {}).get("requested_base_seed"),
-                actual_vector,
-                observed_vector or actual_vector,
-            )
-
+    def _on_variant_completion_published(self, variant: LearningVariant, result: dict[str, Any]) -> None:
+        """Render and checkpoint only after the execution owner publishes safe evidence."""
         # PR-LEARN-005: Extract image references from result
         image_paths = []
         if isinstance(result, dict):
@@ -1995,12 +1894,12 @@ class LearningController:
 
     def _on_variant_job_failed(self, variant: LearningVariant, error: Exception) -> None:
         """Handle failure of a variant job."""
-        variant.status = "failed"
+        variant.status = "cancelled" if variant.status == "cancelled" else "failed"
 
         # Update UI with live updates
         variant_index = self._get_variant_index(variant)
         if variant_index >= 0:
-            self._update_variant_status(variant_index, "failed")
+            self._update_variant_status(variant_index, variant.status)
             self._highlight_variant(variant_index, False)  # Remove highlight
         self._recompute_workflow_state_from_plan()
         self._notify_resume_state_changed()
@@ -2013,12 +1912,23 @@ class LearningController:
         if listener not in self._resume_state_listeners:
             self._resume_state_listeners.append(listener)
 
-    def _notify_resume_state_changed(self) -> None:
+    def _notify_resume_state_changed(self, *, required: bool = False) -> None:
+        failure = ""
         for listener in list(self._resume_state_listeners):
             try:
-                listener()
-            except Exception:
-                continue
+                if listener() is False:
+                    raise RuntimeError("resume state store rejected the checkpoint")
+            except Exception as exc:
+                failure = str(exc)
+        experiment = self.learning_state.current_experiment
+        if experiment is not None:
+            if failure:
+                experiment.metadata["resume_persistence_error"] = failure
+                self._set_workflow_state("action_required")
+            else:
+                experiment.metadata.pop("resume_persistence_error", None)
+        if required and failure:
+            raise RuntimeError(f"Jobs may already be admitted; resume checkpoint failed: {failure}. Do not retry.")
 
     def get_workflow_state(self) -> str:
         return self._workflow_state
@@ -2036,10 +1946,16 @@ class LearningController:
 
     def _recompute_workflow_state_from_plan(self) -> None:
         plan = list(self.learning_state.plan or [])
+        if (getattr(self.learning_state.current_experiment, "metadata", {}) or {}).get("resume_persistence_error"):
+            self._set_workflow_state("action_required")
+            return
         if not plan:
             self._set_workflow_state("idle")
             return
         statuses = {str(v.status or "").lower() for v in plan}
+        if "requires_attention" in statuses or any(v.execution_metadata.get("action_required") or v.execution_metadata.get("admission_error") for v in plan):
+            self._set_workflow_state("action_required")
+            return
         if statuses.issubset({"pending"}):
             self._set_workflow_state("planned")
             return
@@ -2047,7 +1963,7 @@ class LearningController:
             self._set_workflow_state("running")
             return
         if "completed" in statuses:
-            if statuses.issubset({"completed", "failed", "uncontrolled"}):
+            if statuses.issubset({"completed", "failed", "uncontrolled", "cancelled"}):
                 self._set_workflow_state("reviewing")
             else:
                 self._set_workflow_state("running")
@@ -2055,7 +1971,7 @@ class LearningController:
         if "uncontrolled" in statuses:
             self._set_workflow_state("uncontrolled")
             return
-        if statuses.issubset({"failed"}):
+        if statuses.issubset({"failed", "cancelled"}):
             self._set_workflow_state("failed")
             return
         self._set_workflow_state("planned")
@@ -2067,7 +1983,7 @@ class LearningController:
             return False
         for variant in plan:
             status = str(getattr(variant, "status", "") or "").lower()
-            if status in {"pending", "queued", "running"}:
+            if status in {"pending", "queued", "running", "requires_attention"} or variant.execution_metadata.get("action_required") or variant.execution_metadata.get("admission_error"):
                 return False
             if status == "completed":
                 refs = list(getattr(variant, "image_refs", []) or [])
@@ -2100,6 +2016,9 @@ class LearningController:
         except Exception:
             return False
 
+        from src.learning.experiment_reconciliation import preserve_observed_state
+
+        preserve_observed_state(self.learning_state.current_experiment, restored.current_experiment)
         self.learning_state.current_experiment = restored.current_experiment
         self.learning_state.plan = list(restored.plan or [])
         self.learning_state.selected_variant = restored.selected_variant
@@ -2107,11 +2026,14 @@ class LearningController:
         # Drafts are part of the saved session; dropping them here lost them at the next save.
         self.learning_state.review_drafts = dict(restored.review_drafts or {})
         self.load_existing_ratings()
+        reconcile = getattr(self.execution_controller, "reconcile", None)
+        if callable(reconcile):
+            reconcile()
         self._update_plan_table()
 
         # Delegate workflow-state extraction to experiment_persistence (PR-047).
         desired_state = extract_workflow_state(payload)
-        if desired_state:
+        if desired_state and not callable(reconcile):
             self._set_workflow_state(desired_state)
         else:
             self._recompute_workflow_state_from_plan()
@@ -2145,6 +2067,9 @@ class LearningController:
             "running": 0,
             "completed": 0,
             "failed": 0,
+            "uncontrolled": 0,
+            "cancelled": 0,
+            "requires_attention": 0,
         }
         total_planned_images = 0
         total_completed_images = 0
@@ -2303,7 +2228,7 @@ class LearningController:
                     "executed_config": executed_config,
                     "controlled_evidence_valid": bool(
                         dict(getattr(target_variant, "execution_metadata", {}) or {}).get(
-                            "controlled_evidence_valid", True
+                            "controlled_evidence_valid", False
                         )
                     ),
                     "variable_validation_reason": dict(
@@ -2415,55 +2340,10 @@ class LearningController:
                 self._review_panel.update_recommendations(recommendations)
 
     def on_job_completed_callback(self, job: Any, result: Any) -> None:
-        """Handle job completion events from the pipeline.
-
-        PR-LEARN-003: This is registered as a callback with JobService to receive
-        notifications when learning-related jobs complete.
-
-        Args:
-            job: Job object (contains snapshot with NJR)
-            result: Result dict with 'success', 'status', 'error' fields
-        """
-        # Extract NJR from job snapshot
-        njr = getattr(job, "snapshot", None)
-        if not njr:
-            return
-
-        # Check if this is a learning job
-        learning_ctx = getattr(njr, "learning_context", None)
-        if not learning_ctx:
-            return
-
-        # Check if it belongs to our current experiment
-        if not self.learning_state.current_experiment:
-            return
-
-        if learning_ctx.experiment_id != self.learning_state.current_experiment.name:
-            return
-
-        # Find the variant by index
-        variant_index = learning_ctx.variant_index
-        if variant_index < 0 or variant_index >= len(self.learning_state.plan):
-            return
-
-        variant = self.learning_state.plan[variant_index]
-
-        # Update variant based on result
-        success = (
-            result.get("success", False)
-            if isinstance(result, dict)
-            else getattr(result, "success", False)
-        )
-        if success:
-            self._on_variant_job_completed(variant, result)
-        else:
-            error_msg = (
-                result.get("error", "Unknown error")
-                if isinstance(result, dict)
-                else getattr(result, "error", "Unknown error")
-            )
-            error = Exception(str(error_msg))
-            self._on_variant_job_failed(variant, error)
+        """Legacy application notification cannot bypass the sole tracking owner."""
+        # JobService's normal job_finished/job_failed listeners own completion.
+        # This older router remains callable by AppController, but does no work.
+        return
 
     def get_recommendations_for_current_prompt(self) -> Any | None:
         """Get recommendations for the current prompt and stage."""
