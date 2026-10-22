@@ -179,7 +179,7 @@ class TwoAxisDesignFrame(ttk.LabelFrame):
         if uses_lora and self._lora_provider is not None:
             try:
                 self.lora_combo.configure(values=list(self._lora_provider()))
-            except Exception:
+            except (OSError, RuntimeError, ValueError, KeyError, AttributeError, TypeError):
                 self.lora_combo.configure(values=())
         self.refresh_summary()
         if self._on_change_callback is not None:
