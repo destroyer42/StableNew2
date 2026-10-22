@@ -19,11 +19,19 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_wan22_ti2v_5b_i2v_v1(),
         _build_wan22_ti2v_5b_i2v_v1_1(),
         _build_wan22_ti2v_5b_i2v_v1_2(),
+        # 1.3.0 (frames out, PR-VID-WAN-324) is registered by the requalification run that proves
+        # StableNew's encode of the saved frames on the managed runtime; until then the picker keeps
+        # offering the approved 1.2.0.  Condition: one real run recorded, then add the entry here.
         *build_wan_animate2_specs(),
     )
 
 
-__all__ = ["WAN22_RUNTIME_PROVENANCE", "WAN22_RUNTIME_VERSION", "build_builtin_workflow_specs"]
+__all__ = [
+    "WAN22_FRAMES_VERSION",
+    "WAN22_RUNTIME_PROVENANCE",
+    "WAN22_RUNTIME_VERSION",
+    "build_builtin_workflow_specs",
+]
 
 
 # --- Wan2.2 TI2V-5B prompt-directed image-to-video (PR-VID-130; 1.2.0 APPROVED, PR-VID-GOV-316) --
@@ -71,6 +79,12 @@ WAN22_STOCK_NODES = (
     "CreateVideo",
     "SaveVideo",
 )
+# The frames-out revision ends in SaveImage: Comfy writes lossless PNG frames and StableNew encodes
+# them (PR-VID-WAN-324), so CreateVideo and SaveVideo are not part of its dependency set.
+WAN22_FRAMES_STOCK_NODES = (
+    *(node for node in WAN22_STOCK_NODES if node not in ("CreateVideo", "SaveVideo")),
+    "SaveImage",
+)
 WAN22_DEFAULT_NEGATIVE = (
     "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, "
     "deformed hands, distorted body, cropped, watermark, subtitles"
@@ -107,6 +121,12 @@ WAN22_RUNTIME_PROVENANCE = {
 }
 
 
+# PR-VID-WAN-324: the 1.2.0 graph with the output end replaced.  Comfy saves the decoded frames as
+# PNG (``SaveImage``) and StableNew encodes them with its one encoder, so every clip gets the CRF,
+# colour tags, cancellation and optional RIFE smoothing, and the last frame exists exactly.
+WAN22_FRAMES_VERSION = "1.3.0"
+
+
 def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
     """The PR-VID-110 qualified revision, unchanged: fixed 49 frames, runtime left resident.
     Kept registered so existing jobs replay against their exact pinned graph."""
@@ -139,6 +159,19 @@ def _build_wan22_ti2v_5b_i2v_v1_2() -> WorkflowSpec:
     )
 
 
+def _build_wan22_ti2v_5b_i2v_v1_3() -> WorkflowSpec:
+    """The 1.2.0 graph, files and policies, but frames out: Comfy saves PNG frames and StableNew
+    encodes the clip (PR-VID-WAN-324).  Experimental until a physical run requalifies the output."""
+
+    return _build_wan22_ti2v_5b_i2v(
+        workflow_version=WAN22_FRAMES_VERSION,
+        frame_count_policy=WAN22_FRAME_COUNT_POLICY,
+        runtime_policy=WAN22_RUNTIME_POLICY,
+        provenance_overrides=WAN22_RUNTIME_PROVENANCE,
+        frames_out=True,
+    )
+
+
 def _build_wan22_ti2v_5b_i2v(
     *,
     workflow_version: str,
@@ -146,6 +179,7 @@ def _build_wan22_ti2v_5b_i2v(
     runtime_policy: dict[str, Any] | None = None,
     provenance_overrides: dict[str, str] | None = None,
     governance_state: str = WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+    frames_out: bool = False,
 ) -> WorkflowSpec:
     approved = governance_state == WORKFLOW_GOVERNANCE_APPROVED
     variable_length = frame_count_policy is not None
@@ -183,6 +217,17 @@ def _build_wan22_ti2v_5b_i2v(
             "EXPERIMENTAL: runs only with an explicit per-job opt-in. Qualified in PR-VID-110 "
             "(CONDITIONAL); qualification-derived resource readiness applies before dispatch."
         )
+    if frames_out:
+        fixed_settings["output"] = (
+            "lossless PNG frames from Comfy; StableNew encodes the clip (CRF 16, BT.709) and can smooth it"
+        )
+        governance_notes += (
+            " Frames out (PR-VID-WAN-324): Comfy saves PNG frames and StableNew encodes the clip."
+        )
+        extra_defaults["output_policy"] = {
+            "mode": "frames",
+            "fps": int((frame_count_policy or WAN22_FRAME_COUNT_POLICY)["fps"]),
+        }
     if frame_count_policy is not None:
         fixed_settings.pop("frames")
         extra_defaults["frame_count_policy"] = dict(frame_count_policy)
@@ -282,7 +327,7 @@ def _build_wan22_ti2v_5b_i2v(
                     locator=node,
                     description=f"Stock ComfyUI node {node}",
                 )
-                for node in WAN22_STOCK_NODES
+                for node in (WAN22_FRAMES_STOCK_NODES if frames_out else WAN22_STOCK_NODES)
             ),
         ),
         governance_state=governance_state,
@@ -377,19 +422,33 @@ def _build_wan22_ti2v_5b_i2v(
                     "class_type": "VAEDecode",
                     "inputs": {"samples": ["9", 0], "vae": ["3", 0]},
                 },
-                "11": {
-                    "class_type": "CreateVideo",
-                    "inputs": {"images": ["10", 0], "fps": 24.0},
-                },
-                "12": {
-                    "class_type": "SaveVideo",
-                    "inputs": {
-                        "video": ["11", 0],
-                        "filename_prefix": "stablenew/wan22_{{request.job_id}}",
-                        "format": "auto",
-                        "codec": "auto",
-                    },
-                },
+                **(
+                    {
+                        "11": {
+                            "class_type": "SaveImage",
+                            "inputs": {
+                                "images": ["10", 0],
+                                "filename_prefix": "stablenew/wan22_{{request.job_id}}",
+                            },
+                        },
+                    }
+                    if frames_out
+                    else {
+                        "11": {
+                            "class_type": "CreateVideo",
+                            "inputs": {"images": ["10", 0], "fps": 24.0},
+                        },
+                        "12": {
+                            "class_type": "SaveVideo",
+                            "inputs": {
+                                "video": ["11", 0],
+                                "filename_prefix": "stablenew/wan22_{{request.job_id}}",
+                                "format": "auto",
+                                "codec": "auto",
+                            },
+                        },
+                    }
+                ),
             },
         },
     )

@@ -333,6 +333,7 @@ class VideoCreator:
         *,
         settings: VideoEncodeSettings | None = None,
         cancel: Callable[[], bool] | None = None,
+        require_all_frames: bool = False,
     ) -> bool:
         """
         Create a video from an image sequence, one image per frame.
@@ -345,6 +346,8 @@ class VideoCreator:
             quality: An encode profile (fast/balanced/archival) or an x264 speed preset
             settings: Explicit encode settings (overrides ``quality``)
             cancel: Cooperative cancel probe; a cancel raises ``VideoEncodeCancelled``
+            require_all_frames: Fail instead of encoding when staging skipped any image
+                (a frames-out clip must hold every frame it records a hash for)
 
         Returns:
             True if video created successfully
@@ -365,6 +368,11 @@ class VideoCreator:
             frame_count = _stage_numbered_frames(list(image_paths), temp_dir)
             if not frame_count:
                 logger.error("No valid images for video creation")
+                return False
+            if require_all_frames and frame_count != len(image_paths):
+                logger.error(
+                    f"Staged {frame_count} of {len(image_paths)} images; every frame is required"
+                )
                 return False
 
             # image2 at an integer frame rate: exact frame timing, no per-frame float durations.
