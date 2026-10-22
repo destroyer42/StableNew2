@@ -190,7 +190,8 @@ class PhotoOptimizeLayoutMixin:
 
     def _on_migration_status_changed(self) -> None:
         # A failed legacy migration must keep Retry/Details one glance away, not behind a collapsed section.
-        if "incomplete" in str(self._migration_status_var.get()).lower() and not self.header_more_var.get():
+        report = getattr(self.__dict__.get("store"), "migration_report", None)
+        if getattr(report, "failures", None) and not self.header_more_var.get():
             self._set_header_more(True)
 
     def _reflow_header(self) -> None:
@@ -246,10 +247,14 @@ class PhotoOptimizeLayoutMixin:
             name = getattr(current, "source_filename", None)
             if name and len(name) > _ACTIVE_NAME_MAX:
                 name = name[: _ACTIVE_NAME_MAX - 1] + "…"
+            listbox = self.__dict__["assets_list"]
+            rows = len(self.__dict__["_asset_index_by_row"])
+            archived = sum(1 for label in listbox.get(0, tk.END) if str(label).startswith("[Archived]"))
             text = selection_summary(
-                visible=len(self.__dict__["_asset_index_by_row"]),
-                selected=len(self.__dict__["assets_list"].curselection()),
+                visible=rows - archived,
+                selected=len(listbox.curselection()),
                 active_name=name,
+                archived=archived,
             )
             self.selection_label.config(text=text)
             self._reflow_header()
@@ -266,12 +271,14 @@ class PhotoOptimizeLayoutMixin:
             return cached
         try:
             host = cast(tk.Misc, self)
-            spec = ttk.Style(host).lookup("Dark.TLabel", "font") or "TkDefaultFont"
-            width = int(tkfont.Font(root=host, font=spec).measure("0"))
+            spec = ttk.Style(host).lookup("Dark.TLabel", "font")
+            width = int(tkfont.Font(root=host, font=spec or "TkDefaultFont").measure("0"))
         except (tk.TclError, RuntimeError):
-            width = 7
-        self._char_width_cache = max(1, width)
-        return self._char_width_cache
+            return 7  # not measurable yet: do not cache the fallback
+        width = max(1, width)
+        if spec:  # the theme font is known; a pre-theme default measurement must not stick
+            self._char_width_cache = width
+        return width
 
     def _on_body_configure(self, _event: tk.Event | None = None) -> None:
         width = self.body_scroll.viewport_width()

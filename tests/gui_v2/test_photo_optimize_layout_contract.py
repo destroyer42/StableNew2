@@ -108,3 +108,5 @@ def test_selection_summary_distinguishes_single_from_batch() -> None:
     assert "Single Photo: a.png" in text and "Batch: 3 selected" in text and "12 visible" in text
     assert "Single Photo: none" in selection_summary(visible=2, selected=0, active_name=None)
     assert selection_summary(visible=0, selected=0, active_name=None) == "No assets loaded"
+    archived = selection_summary(visible=2, selected=1, active_name="a.png", archived=1)
+    assert "2 visible (+1 archived)" in archived

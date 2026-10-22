@@ -133,13 +133,20 @@ def flow_rows(
     return rows
 
 
-def selection_summary(*, visible: int, selected: int, active_name: str | None) -> str:
-    """One truthful line saying which photo the Single Photo editor targets and how many form the batch."""
+def selection_summary(
+    *, visible: int, selected: int, active_name: str | None, archived: int = 0
+) -> str:
+    """One truthful line saying which photo the Single Photo editor targets and how many form the batch.
 
-    if visible <= 0:
+    ``visible`` counts unarchived photos (what Review All Visible acts on); archived rows shown by
+    "Show Archived" are reported separately.
+    """
+
+    if visible <= 0 and archived <= 0:
         return "No assets loaded"
     active = f"Single Photo: {active_name}" if active_name else "Single Photo: none"
-    return f"{active}  |  Batch: {selected} selected  |  {visible} visible"
+    extra = f" (+{archived} archived)" if archived > 0 else ""
+    return f"{active}  |  Batch: {selected} selected  |  {visible} visible{extra}"
 
 
 __all__ = [

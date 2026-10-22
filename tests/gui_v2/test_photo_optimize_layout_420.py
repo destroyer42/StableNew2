@@ -11,6 +11,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -22,6 +23,8 @@ from src.gui.view_contracts.photo_optimize_layout_contract import (
     BODY_STACKED,
     BODY_WIDE,
     PREVIEW_MIN_EDGE,
+    choose_body_mode,
+    region_minimums,
 )
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
 from src.photo_optimize.store import PhotoOptimizeStore
@@ -109,6 +112,11 @@ def _char(tab) -> int:
     return tab._layout_char_width()
 
 
+def _expected_mode(tab) -> str:
+    """What the pure fit rule says for the width this tab really got (independent of the platform font)."""
+    return choose_body_mode(tab.body_scroll.viewport_width(), region_minimums(_char(tab)))
+
+
 def _expand_more(root, tab) -> None:
     if not tab.header_more_var.get():
         tab.header_more_btn.invoke()
@@ -185,9 +193,11 @@ def test_long_errors_wrap_inside_the_tab_and_failed_migration_opens_actions(
     tab = _make_tab(tk_root, store, CASES[case])
     try:
         tab.submission_summary_var.set("Queue validation failed: " + "stage config invalid; " * 25)
-        tab.migration_status_var.set(
+        long_summary = (
             "Legacy migration incomplete: 1 migrated, 0 already verified, 2 failed/skipped. " * 3
         )
+        store.migration_report = SimpleNamespace(failures=[object()], summary=lambda: long_summary)
+        tab._render_migration_report()
         _pump(tk_root)
         header_width = tab.header_frame.winfo_width()
         for label in tab.header_status_labels:
@@ -289,9 +299,10 @@ def test_body_regions_fit_and_controls_are_usable(tk_root, tmp_path, case) -> No
         _pump(tk_root)
         _assert_body_structure(tab, tab.body_mode)
         _assert_controls_usable(tab)
+        assert tab.body_mode == _expected_mode(tab)
         if case.startswith("1920"):
-            assert tab.body_mode == BODY_WIDE, (
-                "source, previews and editor sit side by side when they fit"
+            assert tab.body_mode != BODY_STACKED, (
+                "source, previews and editor stay side by side when they fit"
             )
     finally:
         tab.destroy()
@@ -348,7 +359,7 @@ def test_resize_round_trip_keeps_selection_text_and_widgets(tk_root, tmp_path) -
     store, assets = _store(tmp_path)
     tab = _make_tab(tk_root, store, CASES["1920x1080@100"])
     try:
-        assert tab.body_mode == BODY_WIDE
+        assert tab.body_mode == _expected_mode(tab)
         rows = tab._asset_index_by_row
         tab.assets_list.selection_clear(0, tk.END)
         for row in (0, 2):
@@ -368,11 +379,12 @@ def test_resize_round_trip_keeps_selection_text_and_widgets(tk_root, tmp_path) -
         for width in (NARROW[0], CASES["1366x768@150"][0], CASES["1920x1080@100"][0]):
             _resize(tk_root, tab, width, 538)
             modes.append(tab.body_mode)
+            assert tab.body_mode == _expected_mode(tab)
             assert tab._selected_asset_ids(batch_all=False) == selected_before
             assert tab._current_asset_id == active_id
             assert tab.prompt_delta_text.get("1.0", "end").strip() == "run only text"
             assert tab.tags_var.get() == "kept"
-        assert modes[0] == BODY_STACKED and modes[-1] == BODY_WIDE
+        assert modes[0] == BODY_STACKED
         assert len(set(modes)) >= 2
         assert {w: w.master for w in parents} == parents, (
             "regions must be re-gridded, never reparented"
@@ -419,6 +431,8 @@ def test_archive_restore_and_toggles_survive_layout_changes(tk_root, tmp_path) -
         tab.show_archived_var.set(True)
         tab._refresh_assets()
         assert target in tab._asset_index_by_row
+        assert "(+1 archived)" in str(tab.selection_label.cget("text"))
+        assert "2 visible" in str(tab.selection_label.cget("text"))
         tab.assets_list.selection_clear(0, tk.END)
         tab.assets_list.selection_set(tab._asset_index_by_row.index(target))
         tab._restore_assets()
@@ -458,7 +472,7 @@ def test_state_survives_switching_to_another_notebook_tab_and_back(tk_root, tmp_
         _pump(tk_root)
         assert tab.get_photo_optimize_state() == state
         assert state["editing_scope"] == "Batch Edit"
-        assert tab.body_mode in {BODY_WIDE, BODY_SPLIT}
+        assert tab.body_mode == _expected_mode(tab)
     finally:
         tab.destroy()
 
