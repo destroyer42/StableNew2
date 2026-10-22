@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-21
+Updated: 2026-10-22
 
 This file is **current state only**: baseline, supported capabilities, what is active and next, open owner
 decisions, holds and known debt. It is capped at 150 lines and checked by `tools/ci/ci_truth.py`. It does not narrate
@@ -26,9 +26,9 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - `required` runs: repository completeness, controller-surface ratchet, `ruff check .`, mypy smoke, **ratchets** (below),
   isolated collection and the required smoke. Run locally with `python tools/ci/run_pr_gate.py` (`--full` adds the sharded census) after
   `pip install -r requirements.txt -r requirements-dev.txt`.
-- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,681 errors in
-  194 files), unformatted files (398), blind/silent excepts in `src` (BLE001 1,405, S110 565, S112 42), thread and layering
-  rules (daemon threads 18, raw threads 12, utils importing upward 19, controller importing the GUI 17), and the four
+- Ratchets only allow recorded debt to shrink (baselines under `tools/ci/`): whole-`src` strict mypy (1,514 errors in
+  176 files), unformatted files (384), blind/silent excepts in `src` (BLE001 1,334, S110 526, S112 37), thread and layering
+  rules (daemon threads 14, raw threads 9, utils importing upward 18, controller importing the GUI 17), and the four
   controller line ceilings.
 - Workflows are SHA-pinned, the default token is read-only, and no workflow runs fork code with secrets.
   Flaky tests are repaired or quarantined with an owner and expiry (`tests/quarantine/README.md`).
@@ -66,7 +66,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   opt-in; 1.0.0 and 1.1.0 stay experimental so stored jobs replay unchanged; the picker offers 1.3.0) and
   is the only conditionally qualified directed-motion candidate; Wan-Animate-2 stays experimental (Queue stays disabled until
   the job's opt-in is ticked). Motion source readiness: `docs/Subsystems/Video/PR-VID-196_Motion_Source_Readiness.md`; optional Prepare Motion Source
-  (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`. A multi-segment video sequence is one job with N internal segments (exact-frame carry-forward, one warm-runtime release, a durable ledger, strict resume as a new job, in-job assembly); there is no Storyboard UI yet; physical runs of two- and three-segment TI2V-5B 1.3.0 chains, a cancel-and-resume and an authored anchor passed on 2026-10-22 (native SVD not run): `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.1. One-variable experiments can be reopened from History or the tab, compared side by side and rated (action outcome kept apart from quality) as Learning evidence that never feeds image recommendations: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`. A single **Make Video** action on Review, Job History and the Pipeline preview loads the selected image into the Video Workflow tab with the recommended approved workflow preselected; the form is Basic (workflow, motion, length, prompt) plus collapsed Advanced options, Queue feedback is inline and non-modal, and finished clips play in-app under Recent outputs with Open, Reveal and Send to Movie Clips (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 4). A new SVD config smooths with RIFE by default when it resolves (x2 at 14 fps or more, else x4), the SVD export can ping-pong or loop to N seconds, a finished Comfy clip can be smoothed from the Video Workflow form, and secondary motion is retired (stored records still load; an enabled request is refused): `docs/Subsystems/Video/VIDEO_PIPELINE.md` sections 3.2 and 5.
+  (the exact driving-clip frames a verified workflow consumes, lossless and content-addressed): `docs/Subsystems/Video/PR-VID-MOTION-210_Prepare_Motion_Source.md`. A multi-segment video sequence is one job with N internal segments (exact-frame carry-forward, one warm-runtime release, a durable ledger, strict resume as a new job, in-job assembly); the Video Workflow tab's Multi-shot sequence section queues one, and Job History shows its segment progress and offers Resume and Replay (no persistent Storyboard library yet); physical runs of two- and three-segment TI2V-5B 1.3.0 chains, a cancel-and-resume and an authored anchor passed on 2026-10-22 (native SVD not run): `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7.1. One-variable experiments can be reopened from History or the tab, compared side by side and rated (action outcome kept apart from quality) as Learning evidence that never feeds image recommendations: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`. A single **Make Video** action on Review, Job History and the Pipeline preview loads the selected image into the Video Workflow tab with the recommended approved workflow preselected; the form is Basic (workflow, motion, length, prompt) plus collapsed Advanced options, Queue feedback is inline and non-modal, and finished clips play in-app under Recent outputs with Open, Reveal and Send to Movie Clips (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 4). A new SVD config smooths with RIFE by default when it resolves (x2 at 14 fps or more, else x4), the SVD export can ping-pong or loop to N seconds, a finished Comfy clip can be smoothed from the Video Workflow form, and secondary motion is retired (stored records still load; an enabled request is refused): `docs/Subsystems/Video/VIDEO_PIPELINE.md` sections 3.2 and 5.
 
 **Runtime safety** (all on the production construction path)
 

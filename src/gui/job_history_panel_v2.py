@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from tkinter import ttk
+from tkinter import filedialog, ttk
 from typing import Any
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
@@ -19,6 +19,11 @@ from src.controller.pipeline_controller_services.history_handoff_service import 
     HistoryHandoffService,
 )
 from src.gui import theme_v2 as theme_mod
+from src.gui.view_contracts.history_sequence_contract import (
+    ACTION_REPLAY,
+    ACTION_RESUME,
+    run_sequence_action,
+)
 from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.artifact_contract import extract_artifact_paths
@@ -26,6 +31,7 @@ from src.queue.job_history_store import (
     INTERRUPTED_RESTART_ACTION_REQUIRED,
     JobHistoryEntry,
 )
+from src.video.sequence_history import SequenceHistoryInfo, sequence_history_info
 from src.video.video_artifact_helpers import extract_source_image_for_handoff
 from src.video.video_review_group import snapshot_is_experiment_arm
 
@@ -58,6 +64,8 @@ class HistoryActionState:
     movie_clips: bool
     explain: bool
     video_review: bool = False
+    sequence_resume: bool = False
+    sequence_replay: bool = False
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -147,6 +155,19 @@ class JobHistoryPanelV2(ttk.Frame):
         self.review_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.browse_btn = ttk.Button(action_bar, text="Browse All...", command=self._on_browse_all)
         self.browse_btn.pack(side=tk.LEFT, padx=(4, 0))
+        # PR-VID-SEQ-331A: shown only while a multi-segment sequence job is selected.
+        self.resume_sequence_btn = ttk.Button(
+            action_bar,
+            text="Resume Sequence",
+            command=lambda: self._on_sequence_action(ACTION_RESUME),
+            state=tk.DISABLED,
+        )
+        self.replay_sequence_btn = ttk.Button(
+            action_bar,
+            text="Replay Sequence",
+            command=lambda: self._on_sequence_action(ACTION_REPLAY),
+            state=tk.DISABLED,
+        )
         self._browser_window: tk.Toplevel | None = None
 
         self.show_artifact_var = tk.BooleanVar(value=False)
@@ -160,6 +181,10 @@ class JobHistoryPanelV2(ttk.Frame):
         # The shared action status line: replay outcomes and handoff failures (never swallowed) appear here.
         self.replay_status_var = tk.StringVar(value="")
         ttk.Label(self, textvariable=self.replay_status_var, wraplength=560).pack(
+            fill=tk.X, pady=(0, 4)
+        )
+        self.sequence_status_var = tk.StringVar(value="")
+        ttk.Label(self, textvariable=self.sequence_status_var, wraplength=560).pack(
             fill=tk.X, pady=(0, 4)
         )
 
@@ -242,6 +267,12 @@ class JobHistoryPanelV2(ttk.Frame):
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self._history_menu.add_command(
             label="Review Video Experiment", command=self._on_review_video_experiment
+        )
+        self._history_menu.add_command(
+            label="Resume Sequence", command=lambda: self._on_sequence_action(ACTION_RESUME)
+        )
+        self._history_menu.add_command(
+            label="Replay Sequence", command=lambda: self._on_sequence_action(ACTION_REPLAY)
         )
         self.history_tree.bind("<Button-3>", self._on_context_menu)
         self.empty_state_var = tk.StringVar(
@@ -566,8 +597,15 @@ class JobHistoryPanelV2(ttk.Frame):
         self.movie_clips_btn.configure(state=tk.NORMAL if actions.movie_clips else tk.DISABLED)
         self.explain_btn.configure(state=tk.NORMAL if actions.explain else tk.DISABLED)
         self.review_btn.configure(state=tk.NORMAL if actions.video_review else tk.DISABLED)
+        self._update_sequence_controls(entry, actions)
         self._history_menu.entryconfigure(
             "Review Video Experiment", state=tk.NORMAL if actions.video_review else tk.DISABLED
+        )
+        self._history_menu.entryconfigure(
+            "Resume Sequence", state=tk.NORMAL if actions.sequence_resume else tk.DISABLED
+        )
+        self._history_menu.entryconfigure(
+            "Replay Sequence", state=tk.NORMAL if actions.sequence_replay else tk.DISABLED
         )
         self._history_menu.entryconfigure(
             "Animate with SVD", state=tk.NORMAL if actions.svd else tk.DISABLED
@@ -580,6 +618,48 @@ class JobHistoryPanelV2(ttk.Frame):
         )
         self._history_menu.entryconfigure(
             "Explain This Job", state=tk.NORMAL if actions.explain else tk.DISABLED
+        )
+
+    @staticmethod
+    def _sequence_info(entry: JobHistoryEntry | None) -> SequenceHistoryInfo | None:
+        if entry is None:
+            return None
+        return sequence_history_info(entry.snapshot, entry.result, entry.status)
+
+    def _update_sequence_controls(
+        self, entry: JobHistoryEntry | None, actions: HistoryActionState
+    ) -> None:
+        info = self._sequence_info(entry)
+        self.sequence_status_var.set(info.label if info is not None else "")
+        for button, allowed in (
+            (self.resume_sequence_btn, actions.sequence_resume),
+            (self.replay_sequence_btn, actions.sequence_replay),
+        ):
+            button.pack_forget()
+            if info is None:
+                continue
+            button.pack(side=tk.LEFT, padx=(4, 0))  # re-packed in order: Resume, then Replay
+            button.configure(state=tk.NORMAL if allowed else tk.DISABLED)
+
+    def _pick_sequence_ledger(self) -> str | None:
+        chosen = filedialog.askopenfilename(
+            parent=self,
+            title="Choose the job's sequence_state.json",
+            filetypes=[("Sequence checkpoint", "sequence_state.json"), ("JSON", "*.json")],
+        )
+        return chosen or None
+
+    def _on_sequence_action(self, action: str) -> None:
+        entry = self._selected_entry()
+        actions = self._history_action_state(entry)
+        if entry is None or not (
+            actions.sequence_resume if action == ACTION_RESUME else actions.sequence_replay
+        ):
+            return
+        self.replay_status_var.set(
+            run_sequence_action(
+                self.controller, entry.job_id, action, pick_ledger=self._pick_sequence_ledger
+            )
         )
 
     def _selected_entry(self) -> JobHistoryEntry | None:
@@ -697,6 +777,10 @@ class JobHistoryPanelV2(ttk.Frame):
     def _history_action_state(self, entry: JobHistoryEntry | None) -> HistoryActionState:
         if entry is None:
             return HistoryActionState(False, False, False, False, False, False)
+        sequence = self._sequence_info(entry)
+        sequence_ready = sequence is not None and self._controller_supports(
+            "get_video_workflow_controller"
+        )
         return HistoryActionState(
             open_folder=(
                 self._usable_output_folder(entry) is not None
@@ -722,6 +806,8 @@ class JobHistoryPanelV2(ttk.Frame):
             video_review=(
                 self._review_repository_available() and snapshot_is_experiment_arm(entry.snapshot)
             ),
+            sequence_resume=bool(sequence_ready and sequence is not None and sequence.can_resume),
+            sequence_replay=bool(sequence_ready and sequence is not None and sequence.can_replay),
         )
 
     def _review_repository_available(self) -> bool:

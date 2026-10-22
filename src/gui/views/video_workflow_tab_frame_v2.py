@@ -16,6 +16,7 @@ from src.gui.view_contracts.video_experiment_contract import VideoExperimentSess
 from src.gui.view_contracts.video_motion_prep_contract import MotionPreparationSession
 from src.gui.view_contracts.video_motion_readiness_contract import MotionReadinessSession
 from src.gui.view_contracts.video_runtime_readiness_contract import RuntimeReadinessSession
+from src.gui.view_contracts.video_sequence_contract import SequenceSession
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
@@ -29,6 +30,7 @@ from src.gui.views.video_workflow_motion_prep_panel_v2 import WorkflowMotionPrep
 from src.gui.views.video_workflow_motion_readiness_panel_v2 import WorkflowMotionReadinessPanel
 from src.gui.views.video_workflow_recent_outputs_panel_v2 import WorkflowRecentOutputsPanel
 from src.gui.views.video_workflow_runtime_strip_v2 import WorkflowRuntimeReadinessStrip
+from src.gui.views.video_workflow_sequence_panel_v2 import WorkflowSequencePanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
@@ -756,6 +758,21 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.eval_panel.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(0, 6))
 
+        # PR-VID-SEQ-331A: an ordered list of shots becomes one multi-segment job.
+        self.sequence_panel = WorkflowSequencePanel(
+            adv,
+            session=SequenceSession(get_controller=self._experiment_controller),
+            read_form=lambda: (
+                self.source_image_var.get().strip(),
+                self.get_video_workflow_state(for_submission=True),
+            ),
+            frame_counts=lambda: dict(self._frame_count_labels),
+            block_reason=self._queue_block_reason,
+            on_queued=self._on_sequence_queued,
+        )
+        self.sequence_panel.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.sequence_panel.refresh_lengths()
+
         # PR-VID-UX-314: the newest finished clips with an in-app looping preview.
         self.recent_outputs_panel = WorkflowRecentOutputsPanel(
             body,
@@ -1149,6 +1166,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.frame_count_combo["values"] = []
             self.frame_count_var.set("")
             self.frame_count_frame.grid_remove()
+            self._refresh_sequence_lengths()
             return
         self._frame_count_labels = {
             _frame_count_label(choice): int(choice["frames"]) for choice in choices
@@ -1156,6 +1174,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.frame_count_combo["values"] = list(self._frame_count_labels)
         self.frame_count_frame.grid()
         self._select_frame_count(projection.get("default"))
+        self._refresh_sequence_lengths()
+
+    def _refresh_sequence_lengths(self) -> None:
+        panel = getattr(self, "sequence_panel", None)
+        if panel is not None:
+            panel.refresh_lengths()
 
     def _select_frame_count(self, frame_count: Any) -> None:
         for label, count in self._frame_count_labels.items():
@@ -1473,6 +1497,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if accepted and status_message:
             self.status_var.set(status_message)
         return accepted
+
+    def _on_sequence_queued(self, job_id: str) -> None:
+        sync = getattr(self.app_controller, "sync_queue_state_after_direct_submission", None)
+        if callable(sync):
+            sync()
+        message = f"Queued multi-shot sequence job {job_id}"
+        self.status_var.set(message)
+        self.submission_notice.show_queued(message + ".", on_view_queue=self._on_view_queue)
 
     def _on_experiment_queued(self, job_ids: list[str]) -> None:
         # Admission ran on a worker; refreshing GUI-visible queue state happens here, on Tk.
