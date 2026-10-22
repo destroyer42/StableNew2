@@ -699,7 +699,14 @@ def _surface(style: ttk.Style, widget: tk.Misc) -> str:
     return ""
 
 
-def _surface_mismatches(root_widget: tk.Misc, style: ttk.Style) -> list[str]:
+def _surface_mismatches(
+    root_widget: tk.Misc, style: ttk.Style, *, include_plain: bool = False
+) -> list[str]:
+    """Labels/checks/radios whose background differs from their parent's (a visible dark or light box).
+
+    ``include_plain`` also covers widgets using the class-default style (plain ``TLabel`` / ``TCheckbutton``).
+    """
+
     found: list[str] = []
     stack = list(root_widget.winfo_children())
     while stack:
@@ -708,7 +715,8 @@ def _surface_mismatches(root_widget: tk.Misc, style: ttk.Style) -> list[str]:
         if not isinstance(widget, ttk.Widget):
             continue
         name = str(widget.cget("style")) or widget.winfo_class()
-        if name in _SEMANTIC_STYLES and _bg(style, name) != _surface(style, widget):
+        plain = include_plain and isinstance(widget, (ttk.Label, ttk.Checkbutton, ttk.Radiobutton))
+        if (name in _SEMANTIC_STYLES or plain) and _bg(style, name) != _surface(style, widget):
             found.append(f"{name} on {_surface(style, widget)}: {widget.cget('text')!r}")
     return found
 
@@ -786,3 +794,30 @@ def test_a_focused_slider_thumb_changes_color(style: ttk.Style, name: str) -> No
     assert focused == TOKENS.colors.accent_primary.lower()
     assert focused != resting
     assert contrast(focused, TOKENS.colors.surface_secondary) >= 3.0, "visible against the trough"
+
+
+def _priority_tabs(root: tk.Tk):
+    from src.gui.app_state_v2 import AppStateV2
+    from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
+    from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
+    from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
+
+    return {
+        "pipeline": PipelineTabFrame(root, app_state=AppStateV2()),
+        "review": ReviewTabFrame(root),
+        "video workflow": VideoWorkflowTabFrameV2(root),
+    }
+
+
+def test_pipeline_review_and_video_have_no_label_boxes(tk_root: tk.Tk, style: ttk.Style) -> None:
+    """Every label, check and radio on the three headline tabs matches the surface it sits on (plain styles too)."""
+
+    tabs = _priority_tabs(tk_root)
+    try:
+        for name, tab in tabs.items():
+            tab.pack(fill="both", expand=True)
+            tk_root.update_idletasks()
+            assert _surface_mismatches(tab, style, include_plain=True) == [], name
+    finally:
+        for tab in tabs.values():
+            tab.destroy()

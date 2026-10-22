@@ -62,6 +62,7 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
         ttk.Checkbutton(
             self,
             text="Compare one control (baseline + up to 3 values, one admission)",
+            style="Dark.TCheckbutton",
             variable=self.enabled_var,
             command=self._on_toggle,
         ).grid(row=0, column=0, columnspan=3, sticky="w")

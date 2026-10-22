@@ -174,19 +174,20 @@ class JobHistoryPanelV2(ttk.Frame):
         ttk.Checkbutton(
             self,
             text="Show selected artifact",
+            style="Dark.TCheckbutton",
             variable=self.show_artifact_var,
             command=self._refresh_selected_artifact,
         ).pack(anchor=tk.W)
 
         # The shared action status line: replay outcomes and handoff failures (never swallowed) appear here.
         self.replay_status_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.replay_status_var, wraplength=560).pack(
-            fill=tk.X, pady=(0, 4)
-        )
+        ttk.Label(
+            self, textvariable=self.replay_status_var, wraplength=560, style="Dark.TLabel"
+        ).pack(fill=tk.X, pady=(0, 4))
         self.sequence_status_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.sequence_status_var, wraplength=560).pack(
-            fill=tk.X, pady=(0, 4)
-        )
+        ttk.Label(
+            self, textvariable=self.sequence_status_var, wraplength=560, style="Dark.TLabel"
+        ).pack(fill=tk.X, pady=(0, 4))
 
         # D-GUI-003: Enhanced columns with row/variant/batch info
         columns = (
