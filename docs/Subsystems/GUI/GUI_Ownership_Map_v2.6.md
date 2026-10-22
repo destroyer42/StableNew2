@@ -38,6 +38,7 @@ All new Tk widgets, panels, dialogs, and views go here.
 | `controllers/` | Tk-side controller wrappers (learning, pipeline, etc.) |
 | `views/` | Tab frames and panel renders; render + event wiring only |
 | `view_contracts/` | Toolkit-agnostic interaction contracts (no Tk imports) |
+| `view_contracts/task_navigation_contract.py`, `widgets/task_navigation_bar_v2.py` | Task-first navigation (see below) |
 | `panels_v2/` | Named panel composites |
 | `stage_cards_v2/` | Stage card widgets |
 | `dialogs/` | Modal and non-modal dialogs |
@@ -58,6 +59,12 @@ All new Tk widgets, panels, dialogs, and views go here.
 7. Controllers must not mutate Tk widgets directly. GUI-visible operator logs, queue/history/preview surfaces, and status indicators must flow through `AppStateV2` plus GUI-owned projection code.
 8. Hot runtime surfaces in the pipeline shell are owned by `PipelineTabFrameV2`; child panels may render standalone, but when mounted in the pipeline shell they must not independently subscribe to hot runtime state.
 9. Hidden or unmapped hot surfaces must defer expensive reconciliation until visible again, and filesystem/artifact lookup work must run through background query services with latest-request-wins semantics rather than on the Tk thread.
+
+### Task navigation (PR-GUI-410)
+
+The nine workspaces stay nine tabs of the one `MainWindowV2.center_notebook`; `_tab_registry` and the `*_tab` attributes remain the tab-identity authority and the notebook the selection authority. `view_contracts/task_navigation_contract.py` maps the stable tab ids to presentation groups only (Create: prompt, pipeline; Edit: review, photo_optimize; Motion: video_workflow, svd, movie_clips; Learn: learning; Advanced: character_training, shown as HOLD). A group is not a tab, job or queue authority, and Job History stays inside Pipeline. `widgets/task_navigation_bar_v2.py` is the single visible navigation surface: it calls `MainWindowV2.select_tab` and mirrors the notebook through `<<NotebookTabChanged>>` without calling back, so controller handoffs that call `center_notebook.select(frame)` keep working and update the highlight.
+
+The notebook's own tab strip is hidden only after the bar is built (`hide_notebook_tab_strip`); if the bar cannot be built, or the theme refuses the empty tab layout, the native strip stays (documented fallback), and Ctrl+Tab / Ctrl+PageUp/PageDown cycle the notebook either way. `tabs.selected_tab_id` is the persisted selection; the historic numeric `tabs.selected_index` is still written for older builds and is read only when no valid id is stored, translated through `LEGACY_TAB_ORDER` (the notebook creation order, which must not be reordered). The stored tab is restored after the panels attach, because `LayoutManagerV2.attach_panels` raises Pipeline. A tab that fails to build shows a placeholder and is listed by `MainWindowV2.tab_failures()`; a tab that cannot be added to the notebook is not registered and its navigation button is disabled.
 
 ---
 

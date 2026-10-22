@@ -25,6 +25,12 @@ from src.gui.panels_v2.operator_readiness_panel_v2 import (
 )
 from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
+from src.gui.view_contracts.task_navigation_contract import (
+    DEFAULT_TAB_ID,
+    all_tab_ids,
+    merge_tabs_state,
+    resolve_startup_tab_id,
+)
 from src.gui.view_contracts.window_layout_contract import (
     WINDOW_SENTINEL_OFFSCREEN,
     WindowLayout,
@@ -40,6 +46,12 @@ from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
+from src.gui.widgets.task_navigation_bar_v2 import (
+    TaskNavigationBar,
+    hide_notebook_tab_strip,
+    select_notebook_tab,
+    selected_notebook_path,
+)
 from src.gui.zone_map_v2 import get_root_zone_config
 from src.services.operator_readiness_service import (
     OperatorReadinessService,
@@ -233,7 +245,7 @@ class MainWindowV2:
         self._invoker = GuiInvoker(self.root)
         self.app_state.set_invoker(self._invoker)
 
-        self.root.title("StableNew V2 (Spine)")
+        self.root.title("StableNew")
         self._window_layout = self._current_window_layout()
         self._ensure_window_geometry()
 
@@ -248,6 +260,9 @@ class MainWindowV2:
         self.center_notebook.grid(**get_root_zone_config("main"))
         # Registry to ensure a single authoritative tab instance per id
         self._tab_registry: dict[str, tk.Widget] = {}
+        # Tabs that failed to build or to be added to the notebook, by tab id (see tab_failures()).
+        self._tab_failures: dict[str, str] = {}
+        self.task_navigation: TaskNavigationBar | None = None
 
         # Prompt tab (compatibility for journey tests / prompt workspace access)
         self.prompt_tab = PromptTabFrame(
@@ -344,7 +359,7 @@ class MainWindowV2:
 
         self.photo_optimize_tab = self.add_tab(
             "photo_optimize",
-            self._support_tab_title("photo_optimize", "Photo Optomize"),
+            self._support_tab_title("photo_optimize", "Photo Optimize"),
             _make_photo_optimize,
         )
         self._restore_photo_optimize_tab_state()
@@ -370,7 +385,7 @@ class MainWindowV2:
 
         self.character_training_tab = self.add_tab(
             "character_training",
-            self._support_tab_title("character_training", "Character Training"),
+            "Character Training - HOLD",
             _make_character_training,
         )
 
@@ -398,8 +413,8 @@ class MainWindowV2:
         )
         self._restore_video_workflow_tab_state()
 
-        # PR-PERSIST-001: Restore selected tab
-        self._restore_tab_selection()
+        # PR-GUI-410: task-first navigation over the one notebook (the stored tab is restored after the panels attach)
+        self._install_task_navigation()
 
         self.left_zone = None
         self.right_zone = None
@@ -439,6 +454,9 @@ class MainWindowV2:
         except Exception:
             # Protect tests from attachment errors
             pass
+
+        # PR-PERSIST-001: Restore selected tab (attach_panels raises Pipeline, so this must follow it)
+        self._restore_tab_selection()
 
         self.left_zone = getattr(self.pipeline_tab, "pack_loader_compat", None)
         self.right_zone = getattr(self.pipeline_tab, "preview_panel", None)
@@ -773,6 +791,7 @@ class MainWindowV2:
             # A failed tab must be visible: log the traceback and show a placeholder that names the tab and the error
             # (a silently empty tab looks like dead buttons and leaves nothing in the log).
             logger.exception("Tab %r failed to build", tab_id)
+            self._record_tab_failure(tab_id, exc)
             try:
                 frame = ttk.Frame(self.center_notebook)
                 ttk.Label(
@@ -785,13 +804,81 @@ class MainWindowV2:
                 frame = tk.Frame(self.center_notebook)
         try:
             self.center_notebook.add(frame, text=title)
-        except Exception:
-            pass
+        except tk.TclError as exc:
+            # Not in the notebook, so not registered: get_tab() must not report a tab the operator cannot reach.
+            logger.exception("Tab %r could not be added to the notebook", tab_id)
+            self._record_tab_failure(tab_id, exc)
+            return frame
         self._tab_registry[tab_id] = frame
         return frame
 
     def get_tab(self, tab_id: str) -> Any:
         return self._tab_registry.get(tab_id)
+
+    def _record_tab_failure(self, tab_id: str, exc: BaseException) -> None:
+        failures = getattr(self, "_tab_failures", None)
+        if failures is None:
+            failures = self._tab_failures = {}
+        failures[tab_id] = f"{type(exc).__name__}: {exc}"
+
+    def tab_failures(self) -> dict[str, str]:
+        """Tabs that failed to build (a placeholder is shown) or to be added (unreachable), keyed by tab id."""
+
+        return dict(getattr(self, "_tab_failures", {}))
+
+    # PR-GUI-410: task-first navigation. The notebook stays the selection authority; the bar only drives and mirrors it.
+    def _install_task_navigation(self) -> None:
+        try:
+            bar = TaskNavigationBar(
+                self.root,
+                on_select=self.select_tab,
+                is_available=self._tab_registry.__contains__,
+            )
+        except tk.TclError:
+            logger.exception("Task navigation could not be built; the notebook's own tabs stay visible")
+            return
+        bar.grid(**get_root_zone_config("nav"))
+        self.task_navigation = bar
+        self.center_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed, add="+")
+        # Ctrl+Tab / Ctrl+Shift+Tab / Ctrl+PageUp/Down cycle the notebook even with its tab strip hidden.
+        self.center_notebook.enable_traversal()
+        if not hide_notebook_tab_strip(self.center_notebook):
+            logger.warning("Native notebook tabs could not be hidden; both navigation surfaces are visible")
+
+    def select_tab(self, tab_id: str) -> bool:
+        """Show the registered tab ``tab_id`` in the notebook; False when it is unknown or cannot be selected."""
+
+        widget = self._tab_registry.get(tab_id)
+        if widget is None:
+            return False
+        try:
+            select_notebook_tab(self.center_notebook, widget)
+        except tk.TclError:
+            logger.warning("Tab %r could not be selected", tab_id)
+            return False
+        finally:
+            self._sync_task_navigation()
+        return True
+
+    def _current_tab_id(self) -> str | None:
+        try:
+            current = selected_notebook_path(self.center_notebook)
+        except tk.TclError:
+            return None
+        for tab_id, widget in getattr(self, "_tab_registry", {}).items():
+            if str(widget) == current:
+                return tab_id
+        return None
+
+    def _on_notebook_tab_changed(self, event: tk.Event) -> None:
+        if event.widget is self.center_notebook:
+            self._sync_task_navigation()
+
+    def _sync_task_navigation(self) -> None:
+        bar = getattr(self, "task_navigation", None)
+        tab_id = self._current_tab_id()
+        if bar is not None and tab_id is not None:
+            bar.show_selected(tab_id)
 
     def _install_ui_heartbeat(self):
         """Install UI heartbeat ticker that runs every 250ms.
@@ -1617,7 +1704,11 @@ class MainWindowV2:
             state = {
                 **existing_state,
                 "window": {"geometry": geometry, "state": window_state},
-                "tabs": {"selected_index": selected_tab_index},
+                "tabs": merge_tabs_state(
+                    existing_state.get("tabs"),
+                    selected_tab_id=self._current_tab_id(),
+                    selected_index=selected_tab_index,
+                ),
                 "content_visibility": ContentVisibilitySettings.from_payload(
                     {"mode": getattr(self.app_state, "content_visibility_mode", "nsfw")}
                 ).to_payload(),
@@ -1689,22 +1780,15 @@ class MainWindowV2:
             logger.warning(f"Failed to save UI state: {e}")
 
     def _restore_tab_selection(self) -> None:
-        """Restore previously selected tab."""
-        try:
-            ui_store = get_ui_state_store()
-            state = ui_store.load_state()
+        """Show the stored tab: by stable id, else by the historic index; an unusable choice falls back to Pipeline."""
 
-            if state:
-                tabs_state = state.get("tabs", {})
-                selected_index = tabs_state.get("selected_index", 0)
-
-                # Validate index is in range
-                tab_count = self.center_notebook.index("end")
-                if 0 <= selected_index < tab_count:
-                    self.center_notebook.select(selected_index)
-                    logger.debug(f"Restored tab selection: index {selected_index}")
-        except Exception as e:
-            logger.warning(f"Failed to restore tab selection: {e}")
+        state = get_ui_state_store().load_state() or {}
+        stored = resolve_startup_tab_id(state.get("tabs"), self._tab_registry.keys())
+        for tab_id in (stored, DEFAULT_TAB_ID, *all_tab_ids()):
+            if tab_id and self.select_tab(tab_id):
+                logger.debug("Restored tab selection: %s", tab_id)
+                return
+        logger.warning("No tab could be selected at startup")
 
     def _restore_learning_tab_state(self) -> None:
         """Restore persisted learning tab state."""
@@ -1720,7 +1804,7 @@ class MainWindowV2:
             logger.warning(f"Failed to restore learning tab state: {e}")
 
     def _restore_photo_optimize_tab_state(self) -> None:
-        """Restore persisted Photo Optomize tab state."""
+        """Restore persisted Photo Optimize tab state."""
         try:
             ui_store = get_ui_state_store()
             state = ui_store.load_state() or {}
@@ -1730,7 +1814,7 @@ class MainWindowV2:
             if callable(restore):
                 restore(photo_state)
         except Exception as e:
-            logger.warning(f"Failed to restore Photo Optomize tab state: {e}")
+            logger.warning(f"Failed to restore Photo Optimize tab state: {e}")
 
     def _restore_movie_clips_tab_state(self) -> None:
         """Restore persisted Movie Clips tab state."""

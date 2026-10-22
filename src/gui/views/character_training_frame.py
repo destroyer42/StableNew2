@@ -70,7 +70,12 @@ class CharacterTrainingFrame(ttk.Frame):
 
         ttk.Label(
             container,
-            text="Queue a character LoRA training job through the normal StableNew queue and runner path.",
+            text=(
+                "ON HOLD pending a trainer decision. No trainer is bundled with StableNew: queueing needs your own "
+                "Trainer Command, cancellation reaches only the immediate process, and weight discovery can fall back "
+                "to an older file.\n"
+                "A job queued here goes through the normal StableNew queue and runner path."
+            ),
             justify="left",
             wraplength=720,
         ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))

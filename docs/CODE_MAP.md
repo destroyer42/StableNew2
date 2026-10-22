@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-481 of 635 modules have a docstring.
+483 of 637 modules have a docstring.
 
 ## src/
 
@@ -282,6 +282,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `queue_status_contract.py`: Queue status display contract independent of toolkit
 - `selection_list_contract.py`: Selection list contract for deterministic list + selection behavior
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
+- `task_navigation_contract.py`: Task-first navigation contract (PR-GUI-410)
 - `video_batch_contract.py`: Toolkit-neutral state for the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_experiment_contract.py`: Toolkit-neutral state for the Video Workflow "Compare one control" section (PR-VID-194)
 - `video_motion_prep_contract.py`: Toolkit-neutral state for the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
@@ -354,6 +355,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `scrollable_frame_v2.py`: (no docstring)
 - `submission_notice_v2.py`: Inline, non-modal submission feedback (PR-VID-UX-313)
 - `tab_overview_panel_v2.py`: (no docstring)
+- `task_navigation_bar_v2.py`: Task-first navigation bar for the main window (PR-GUI-410)
 - `thumbnail_widget_v2.py`: Thumbnail display widget for GUI V2
 - `video_preview_widget_v2.py`: Looping in-app video preview (PR-VID-UX-314)
 

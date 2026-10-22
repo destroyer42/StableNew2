@@ -8,8 +8,9 @@ ZONE_MAP: dict[str, Any] = {
         "grid": {
             "rows": [
                 {"index": 0, "weight": 0, "minsize": 48},
-                {"index": 1, "weight": 1, "minsize": 400},
-                {"index": 2, "weight": 0, "minsize": 60},
+                {"index": 1, "weight": 0, "minsize": 0},
+                {"index": 2, "weight": 1, "minsize": 400},
+                {"index": 3, "weight": 0, "minsize": 60},
             ],
             "columns": [
                 {"index": 0, "weight": 0, "minsize": 260},
@@ -19,8 +20,9 @@ ZONE_MAP: dict[str, Any] = {
         },
         "zones": {
             "header": {"row": 0, "column": 0, "columnspan": 3, "sticky": "nsew"},
-            "main": {"row": 1, "column": 0, "columnspan": 3, "sticky": "nsew"},
-            "status": {"row": 2, "column": 0, "columnspan": 3, "sticky": "nsew"},
+            "nav": {"row": 1, "column": 0, "columnspan": 3, "sticky": "ew"},
+            "main": {"row": 2, "column": 0, "columnspan": 3, "sticky": "nsew"},
+            "status": {"row": 3, "column": 0, "columnspan": 3, "sticky": "nsew"},
         },
     },
     "pipeline_tab": {
