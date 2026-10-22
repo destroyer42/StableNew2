@@ -516,7 +516,10 @@ def test_finalized_artifact_keeps_original_pixels_and_backend_exterior(prepared,
     evidence = result["outpaint"]
     assert evidence["preservation_applied"] is True
     assert evidence["original_bbox"] == frozen_of(job)["outpaint"]["original_bbox"]
-    manifest = json.loads(next((output / "manifests").glob("*.json")).read_text(encoding="utf-8"))
+    manifest_path = (
+        output / "manifests" / f"{Path(result['path']).stem}.json"
+    )  # beside it sits an optimizer sidecar
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["outpaint"]["preservation_applied"] is True
     after = [
         hashlib.sha256(p.read_bytes()).hexdigest()
