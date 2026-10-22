@@ -303,7 +303,7 @@ PR-VID-UX-310 and PR-VID-EVAL-320.
 Merged: QUAL-300, ENC-301, UX-310, EVAL-320, POST-304, GOV-316, ASM-332. Delivered as the Phase A closeout
 (branch `video/smooth-302-loop-303-post-305`): SMOOTH-302 (RIFE discovery, modern model flag, x2/x4 rule, default on when
 RIFE resolves, finished-clip smoothing for Comfy), LOOP-303 (SVD ping-pong and extend-to-N-seconds) and POST-305
-(secondary motion retired). UX-311 (readiness strip and Queue gate) is built on branch `video/ux-311-readiness`. Not started: Phase B UX-312 to UX-315; Phase C WAN-321 onward; Phase D SEQ-330 and SEQ-331;
+(secondary motion retired). UX-311 (readiness strip and Queue gate) is built on branch `video/ux-311-readiness`. WAN-324 (branch `video/wan-324-frames-out`) is a code-only merge: the frames-out backend path, the `SaveImage` TI2V-5B graph as an unregistered 1.3.0 spec, per-frame hashes and the exact last frame; registration waits for one physical requalification run. Not started: Phase B UX-312 to UX-315; Phase C WAN-321 onward (WAN-321 and FLF-322 need the model download and a spike); Phase D SEQ-330 and SEQ-331;
 Phase E. Loop export for Comfy clips was left out of LOOP-303 (SVD only).
 
 ---

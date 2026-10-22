@@ -686,6 +686,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `depth_map_resolver.py`: (no docstring)
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
+- `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
 - `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
 - `managed_comfy_runtime.py`: Read-only production view of the StableNew-managed ComfyUI runtime contract

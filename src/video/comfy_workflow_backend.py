@@ -28,6 +28,12 @@ from src.video.comfy_process_manager import (
 )
 from src.video.container_metadata import write_video_container_metadata
 from src.video.depth_map_resolver import DepthMapResolver
+from src.video.frames_out import (
+    FramesOutRecord,
+    encode_frames_out,
+    frames_output_fps,
+    natural_frame_order,
+)
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_backend_types import (
     CONTROL_CAMERA_INTENT,
@@ -45,6 +51,7 @@ from src.video.video_backend_types import (
     VideoExecutionResult,
 )
 from src.video.video_interpolation import (
+    interpolate_frame_files,
     interpolate_video_file,
     normalize_interpolation_request,
 )
@@ -156,7 +163,11 @@ def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
 
 
 def _interpolation_source_fps(spec: Any, stage_config: Mapping[str, Any]) -> int:
-    """The frame rate RIFE multiplies: the frozen stage fps, else the workflow's declared length policy."""
+    """The encoded frame rate RIFE multiplies, from the output policy for saved frames."""
+
+    output_fps = frames_output_fps(spec)
+    if output_fps is not None:
+        return output_fps
 
     policy = frame_count_policy(spec)
     raw = stage_config.get("fps") or (policy or {}).get("fps") or 0
@@ -170,6 +181,16 @@ def _interpolation_source_fps(spec: Any, stage_config: Mapping[str, Any]) -> int
             "choose an output rate. Nothing was generated."
         )
     return fps
+
+
+def _expected_frame_count(stage_config: Mapping[str, Any]) -> int | None:
+    """The frame count frozen at admission, when the job has one."""
+
+    try:
+        count = int(stage_config.get("frame_count") or 0)
+    except (TypeError, ValueError):
+        return None
+    return count or None
 
 
 def _length_provenance(spec: Any, stage_config: Mapping[str, Any]) -> dict[str, Any]:
@@ -571,16 +592,54 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{workflow_id}' completed without discoverable output artifacts"
             )
 
+        frames_out_record: FramesOutRecord | None = None
+        frames_fps = frames_output_fps(spec)
+        if frames_fps is not None:
+            # Comfy saved PNG frames; StableNew encodes the clip (PR-VID-WAN-324).
+            _raise_if_cancelled(request.cancel_token, "before the frames were encoded")
+            playback_frames = [
+                str(path) for path in natural_frame_order(resolved_outputs["frame_paths"])
+            ]
+            frames_out_record = encode_frames_out(
+                frame_paths=playback_frames,
+                output_dir=request.output_dir,
+                stem=f"{spec.workflow_id}_{request.job_id or 'clip'}",
+                fps=frames_fps,
+                expected_frame_count=_expected_frame_count(stage_config),
+                cancel_token=request.cancel_token,
+            )
+            resolved_outputs = {
+                **resolved_outputs,
+                "frame_paths": playback_frames,
+                "thumbnail_path": playback_frames[0],
+                "primary_path": frames_out_record.video_path,
+                "output_paths": [frames_out_record.video_path],
+                "video_path": frames_out_record.video_path,
+                "video_paths": [frames_out_record.video_path],
+            }
+            primary_path = resolved_outputs["primary_path"]
+            output_paths = resolved_outputs["output_paths"]
+
         smoothing = normalize_interpolation_request(stage_config.get("interpolation"))
         interpolation_record: dict[str, Any] | None = None
         if smoothing is not None and resolved_outputs.get("video_path"):
-            smoothed = interpolate_video_file(
-                video_path=str(resolved_outputs["video_path"]),
-                output_dir=request.output_dir,
-                source_fps=_interpolation_source_fps(spec, stage_config),
-                request=smoothing,
-                cancel_token=request.cancel_token,
-            )
+            if frames_out_record is not None:
+                smoothed = interpolate_frame_files(
+                    frame_paths=resolved_outputs["frame_paths"],
+                    output_dir=request.output_dir,
+                    stem=Path(frames_out_record.video_path).stem,
+                    source_fps=_interpolation_source_fps(spec, stage_config),
+                    request=smoothing,
+                    cancel_token=request.cancel_token,
+                )
+            else:
+                smoothed = interpolate_video_file(
+                    video_path=str(resolved_outputs["video_path"]),
+                    output_dir=request.output_dir,
+                    source_fps=_interpolation_source_fps(spec, stage_config),
+                    request=smoothing,
+                    cancel_token=request.cancel_token,
+                )
             # The smoothed clip leads; Comfy's own file stays on disk and in the lists.
             resolved_outputs = {
                 **resolved_outputs,
@@ -602,6 +661,8 @@ class ComfyWorkflowVideoBackend:
         }
         if interpolation_record is not None:
             provenance_extra["interpolation"] = interpolation_record
+        if frames_out_record is not None:
+            provenance_extra["frames_out"] = frames_out_record.summary()
         if runtime_policy:
             provenance_extra["runtime_policy"] = runtime_policy
         if actual_runtime:
@@ -617,6 +678,11 @@ class ComfyWorkflowVideoBackend:
             resolved_outputs=resolved_outputs,
             conditioning=conditioning,
             provenance_extra=provenance_extra,
+            manifest_extra=(
+                {"frames_out": frames_out_record.to_dict()}
+                if frames_out_record is not None
+                else None
+            ),
         )
         metadata_payload = {
             "stage": request.stage_name,
@@ -1344,6 +1410,7 @@ class ComfyWorkflowVideoBackend:
         resolved_outputs: Mapping[str, Any],
         conditioning: Mapping[str, Any],
         provenance_extra: Mapping[str, Any] | None = None,
+        manifest_extra: Mapping[str, Any] | None = None,
     ) -> Path:
         output_dir = Path(request.output_dir)
         manifest_dir = output_dir / "manifests"
@@ -1393,6 +1460,7 @@ class ComfyWorkflowVideoBackend:
             ),
         }
         payload.update(dict(provenance_extra or {}))
+        payload.update(dict(manifest_extra or {}))
         manifest_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
         )

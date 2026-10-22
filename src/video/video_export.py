@@ -33,6 +33,7 @@ def export_image_sequence_video(
     creator: VideoCreator | None = None,
     settings: VideoEncodeSettings | None = None,
     cancel_token: CancelToken | None = None,
+    require_all_frames: bool = False,
 ) -> Path:
     if not image_paths:
         raise SVDExportError("No image paths provided for export")
@@ -55,6 +56,8 @@ def export_image_sequence_video(
             quality=quality,
         )
     else:
+        # Passed only when set, so a creator without the strict mode keeps working unchanged.
+        strict = {"require_all_frames": True} if require_all_frames else {}
         try:
             ok = resolved_creator.create_video_from_images(
                 image_paths=image_paths,
@@ -64,11 +67,16 @@ def export_image_sequence_video(
                 quality=quality,
                 settings=settings,
                 cancel=None if cancel_token is None else cancel_token.is_cancelled,
+                **strict,
             )
         except VideoEncodeCancelled as exc:
             raise CancellationError("video export cancelled") from exc
 
     if not ok:
+        if require_all_frames:
+            raise SVDExportError(
+                f"VideoCreator failed to export all {len(image_paths)} frames of the image sequence"
+            )
         raise SVDExportError("VideoCreator failed to export image-sequence video")
     return output
 
