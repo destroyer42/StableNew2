@@ -2,111 +2,318 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.view_contracts.photo_optimize_layout_contract import (
+    BODY_SPLIT,
+    BODY_STACKED,
+    BODY_WIDE,
+    HEADER_GAP,
+    HEADER_ROW_GAP,
+    PREVIEW_MAX_EDGE,
+    PREVIEW_MIN_EDGE,
+    REGION_GUTTER,
+    body_column_minsizes,
+    body_column_weights,
+    body_placements,
+    choose_body_mode,
+    flow_rows,
+    region_minimums,
+    selection_summary,
+)
+from src.gui.view_contracts.workspace_density_contract import disclosure_title, wrap_width
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 
 from .photo_optimize_editors import PhotoBatchEditor
 
+_ACTIVE_NAME_MAX = 32
+ROW_GAP = HEADER_ROW_GAP
+
 
 class PhotoOptimizeLayoutMixin:
+    """Builds and re-grids the tab. Layout changes only call ``grid`` on existing widgets, so typed text,
+    selections and baselines are never recreated or reparented by a resize."""
+
+    # -- header ----------------------------------------------------------------------------------------------------
+
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
         header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
-        header.columnconfigure(8, weight=1)
+        header.columnconfigure(0, weight=1)
+        self.header_frame = header
+        self._flow_signatures: dict[str, tuple] = {}
+        self.header_more_var = tk.BooleanVar(master=self, value=False)
 
-        ttk.Button(
-            header,
-            text="Import Photos",
+        primary = ttk.Frame(header, style="Panel.TFrame")
+        primary.grid(row=0, column=0, sticky="ew")
+        self.header_primary = primary
+        self.import_photos_btn = ttk.Button(
+            primary, text="Import Photos", style="Dark.TButton", command=self._on_import_photos
+        )
+        self.optimize_selected_header_btn = ttk.Button(
+            primary,
+            text="Review Selected…",
+            style="Primary.TButton",
+            command=lambda: self._optimize(batch_all=False),
+        )
+        self.optimize_all_header_btn = ttk.Button(
+            primary,
+            text="Review All Visible (unarchived)…",
             style="Dark.TButton",
-            command=self._on_import_photos,
-        ).grid(row=0, column=0, sticky="w", padx=(0, 6))
-        ttk.Button(
-            header,
-            text="Refresh",
-            style="Dark.TButton",
-            command=self._refresh_assets,
-        ).grid(row=0, column=1, sticky="w", padx=(0, 6))
-        ttk.Button(
-            header,
+            command=lambda: self._optimize(batch_all=True),
+        )
+        self.header_more_btn = ttk.Button(
+            primary, text=self._more_title(), style="Dark.TButton", command=self._toggle_header_more
+        )
+        attach_tooltip(
+            self.header_more_btn,
+            "Refresh, Review Pipeline Copy, Interrogate, batch size and legacy-migration actions.",
+        )
+        self.selection_label = ttk.Label(primary, text="No assets loaded", style="Dark.TLabel")
+        self._primary_flow = [
+            self.import_photos_btn,
+            self.optimize_selected_header_btn,
+            self.optimize_all_header_btn,
+            self.header_more_btn,
+            self.selection_label,
+        ]
+
+        self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
+        self.submission_summary_label = ttk.Label(
+            header, textvariable=self.submission_summary_var, style="Dark.TLabel", justify="left"
+        )
+        self.submission_summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self.migration_status_label = ttk.Label(
+            header, textvariable=self.migration_status_var, style="Dark.TLabel", justify="left"
+        )
+        self.migration_status_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        self.header_status_labels = (self.submission_summary_label, self.migration_status_label)
+
+        secondary = ttk.LabelFrame(header, text="More actions", style="Dark.TLabelframe", padding=6)
+        self.header_secondary = secondary  # gridded into row 3 only while expanded
+        secondary.columnconfigure(0, weight=1)
+        flow = ttk.Frame(secondary, style="Panel.TFrame")
+        flow.grid(row=0, column=0, sticky="ew")
+        self.header_secondary_flow = flow
+        self.refresh_btn = ttk.Button(
+            flow, text="Refresh", style="Dark.TButton", command=self._refresh_assets
+        )
+        self.pipeline_copy_btn = ttk.Button(
+            flow,
             text="Review Pipeline Copy (editing scope)…",
             style="Dark.TButton",
             command=self._use_current_pipeline_settings,
-        ).grid(row=0, column=2, sticky="w", padx=(0, 6))
-        interrogate_btn = ttk.Button(
-            header,
+        )
+        self.interrogate_btn = ttk.Button(
+            flow,
             text="Interrogate",
             style="Dark.TButton",
             command=self._interrogate_current_asset,
         )
-        interrogate_btn.grid(row=0, column=3, sticky="w")
         attach_tooltip(
-            interrogate_btn,
+            self.interrogate_btn,
             "Analyze the current working image and write the returned caption into the baseline prompt.",
         )
-        self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
-        ttk.Label(header, text="Max photos / compatible job", style="Dark.TLabel").grid(
-            row=0, column=4, sticky="w", padx=(10, 4)
+        batch_box = ttk.Frame(flow, style="Panel.TFrame")
+        ttk.Label(batch_box, text="Max photos / compatible job", style="Dark.TLabel").pack(
+            side="left", padx=(0, 4)
         )
-        ttk.Spinbox(
-            header,
+        self.batch_size_spin = ttk.Spinbox(
+            batch_box,
             from_=1,
             to=64,
             increment=1,
             textvariable=self.batch_size_var,
             width=5,
             style="Dark.TSpinbox",
-        ).grid(row=0, column=5, sticky="w", padx=(0, 8))
-        self.optimize_selected_header_btn = ttk.Button(
-            header,
-            text="Review Selected…",
-            style="Primary.TButton",
-            command=lambda: self._optimize(batch_all=False),
         )
-        self.optimize_selected_header_btn.grid(row=0, column=6, sticky="w", padx=(0, 6))
-        self.optimize_all_header_btn = ttk.Button(
-            header,
-            text="Review All Visible (unarchived)…",
+        self.batch_size_spin.pack(side="left")
+        self.migration_details_btn = ttk.Button(
+            flow,
+            text="Migration Details",
             style="Dark.TButton",
-            command=lambda: self._optimize(batch_all=True),
+            command=self._show_migration_details,
         )
-        self.optimize_all_header_btn.grid(row=0, column=7, sticky="w")
-
-        self.selection_label = ttk.Label(
-            header,
-            text="No assets loaded",
-            style="Dark.TLabel",
+        self.retry_migration_btn = ttk.Button(
+            flow,
+            text="Retry Legacy Migration",
+            style="Dark.TButton",
+            command=self._retry_legacy_migration,
         )
-        self.selection_label.grid(row=0, column=8, sticky="e")
-        ttk.Label(header, textvariable=self.submission_summary_var, style="Dark.TLabel",
-                  wraplength=1000).grid(row=1, column=0, columnspan=9, sticky="ew", pady=(6, 0))
-        ttk.Label(header, textvariable=self.migration_status_var, style="Dark.TLabel",
-                  wraplength=750).grid(row=2, column=0, columnspan=7, sticky="ew", pady=(4, 0))
-        ttk.Button(header, text="Migration Details", style="Dark.TButton",
-                   command=self._show_migration_details).grid(row=2, column=7, padx=(4, 0))
-        ttk.Button(header, text="Retry Legacy Migration", style="Dark.TButton",
-                   command=self._retry_legacy_migration).grid(row=2, column=8, padx=(4, 0))
+        self._secondary_flow = [
+            self.refresh_btn,
+            self.pipeline_copy_btn,
+            self.interrogate_btn,
+            batch_box,
+            self.migration_details_btn,
+            self.retry_migration_btn,
+        ]
 
+        primary.bind("<Configure>", lambda _e: self._reflow_header(), add="+")
+        flow.bind("<Configure>", lambda _e: self._reflow_header(), add="+")
+        header.bind("<Configure>", lambda _e: self._update_header_wraps(), add="+")
+        self.migration_status_var.trace_add("write", lambda *_: self._on_migration_status_changed())
+        self._reflow_header()
+
+    def _more_title(self) -> str:
+        expanded = bool(self.header_more_var.get())
+        return disclosure_title("More actions", expanded=expanded)
+
+    def _toggle_header_more(self) -> None:
+        self._set_header_more(not self.header_more_var.get())
+
+    def _set_header_more(self, expanded: bool) -> None:
+        self.header_more_var.set(bool(expanded))
+        self.header_more_btn.configure(text=self._more_title())
+        if expanded:
+            self.header_secondary.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        else:
+            self.header_secondary.grid_remove()
+        self._reflow_header()
+
+    def _on_migration_status_changed(self) -> None:
+        # A failed legacy migration must keep Retry/Details one glance away, not behind a collapsed section.
+        if "incomplete" in str(self.migration_status_var.get()).lower() and not self.header_more_var.get():
+            self._set_header_more(True)
+
+    def _reflow_header(self) -> None:
+        self._flow("primary", self.header_primary, self._primary_flow)
+        self._flow("secondary", self.header_secondary_flow, self._secondary_flow)
+
+    def _flow(self, key: str, container: tk.Misc, children: list[tk.Misc]) -> None:
+        """Wrap ``children`` into rows that fit ``container``.
+
+        Children are ``place``d (grid would tie one row's column widths to another row's items) and the container
+        is given the resulting height. Re-placed only when the rows or any item width changed.
+        """
+
+        widths = [child.winfo_reqwidth() for child in children]
+        rows = flow_rows(widths, container.winfo_width(), gap=HEADER_GAP)
+        signature = (tuple(tuple(row) for row in rows), tuple(widths))
+        if self._flow_signatures.get(key) == signature:
+            return
+        self._flow_signatures[key] = signature
+        y = 0
+        for items in rows:
+            x = 0
+            row_height = max(children[index].winfo_reqheight() for index in items)
+            for index in items:
+                children[index].place(x=x, y=y)
+                x += widths[index] + HEADER_GAP
+            y += row_height + ROW_GAP
+        container.configure(height=max(1, y - ROW_GAP))
+
+    def _update_header_wraps(self) -> None:
+        width = wrap_width(self.header_frame.winfo_width(), margin=32)
+        for label in self.header_status_labels:
+            if int(label.cget("wraplength") or 0) != width:
+                label.configure(wraplength=width)
+        self._reflow_header()
+
+    def _bind_wrap(self, label: tk.Misc, container: tk.Misc, *, margin: int = 32) -> None:
+        """Keep ``label``'s wraplength tied to the width its container was actually given."""
+
+        def update(_event: tk.Event | None = None) -> None:
+            width = wrap_width(container.winfo_width(), margin=margin)
+            if int(label.cget("wraplength") or 0) != width:
+                label.configure(wraplength=width)
+
+        container.bind("<Configure>", update, add="+")
+        update()
+
+    def _update_selection_summary(self) -> None:
+        """Header text saying which photo Single Photo edits and how many photos form the batch."""
+
+        try:
+            current = self.__dict__.get("_current_asset")
+            name = getattr(current, "source_filename", None)
+            if name and len(name) > _ACTIVE_NAME_MAX:
+                name = name[: _ACTIVE_NAME_MAX - 1] + "…"
+            text = selection_summary(
+                visible=len(self._asset_index_by_row),
+                selected=len(self.assets_list.curselection()),
+                active_name=name,
+            )
+            self.selection_label.config(text=text)
+            self._reflow_header()
+        except (AttributeError, tk.TclError):
+            return
+
+    # -- body ------------------------------------------------------------------------------------------------------
+
+    def _layout_char_width(self) -> int:
+        """Width of "0" in the font the labels really use (follows Tk scaling), the unit of every region floor."""
+
+        cached = self.__dict__.get("_char_width_cache")
+        if cached:
+            return cached
+        try:
+            spec = ttk.Style(self).lookup("Dark.TLabel", "font") or "TkDefaultFont"
+            width = int(tkfont.Font(root=self, font=spec).measure("0"))
+        except (tk.TclError, RuntimeError):
+            width = 7
+        self._char_width_cache = max(1, width)
+        return self._char_width_cache
+
+    def _on_body_configure(self, _event: tk.Event | None = None) -> None:
+        width = self.body_scroll.viewport_width()
+        if width <= 1:
+            return
+        mode = choose_body_mode(width, region_minimums(self._layout_char_width()))
+        if mode != self.body_mode:
+            self._apply_body_layout(mode)
+
+    def _apply_body_layout(self, mode: str) -> None:
+        """Re-grid the three existing regions for ``mode``; nothing is created, destroyed or reparented."""
+
+        body = self.body_scroll.inner
+        minimums = region_minimums(self._layout_char_width())
+        for index in range(3):
+            body.columnconfigure(index, weight=0, minsize=0)
+            body.rowconfigure(index, weight=0, minsize=0)
+        weights = body_column_weights(mode)
+        minsizes = body_column_minsizes(mode, minimums)
+        for index, (weight, minsize) in enumerate(zip(weights, minsizes, strict=True)):
+            body.columnconfigure(index, weight=weight, minsize=minsize)
+        if mode == BODY_SPLIT:
+            body.rowconfigure(2, weight=1)
+        placements = body_placements(mode)
+        regions = {"assets": self.assets_frame, "preview": self.preview_frame, "editor": self.controls_frame}
+        last_column = len(weights) - 1
+        for name, region in regions.items():
+            placement = placements[name]
+            right = 0 if placement.column + placement.columnspan - 1 >= last_column else REGION_GUTTER
+            stacked_above = (mode == BODY_STACKED and name != "editor") or (mode == BODY_SPLIT and name == "assets")
+            region.grid(
+                row=placement.row,
+                column=placement.column,
+                rowspan=placement.rowspan,
+                columnspan=placement.columnspan,
+                sticky="new",
+                padx=(0, right),
+                pady=(0, 6 if stacked_above else 0),
+            )
+        self.body_mode = mode
 
     def _build_body(self) -> None:
         self.body_scroll = ScrollableFrame(self, style="Panel.TFrame")
         self.body_scroll.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 6))
         body = self.body_scroll.inner
-        body.columnconfigure(0, weight=1, uniform="photo_optimize")
-        body.columnconfigure(1, weight=2, uniform="photo_optimize")
-        body.columnconfigure(2, weight=2, uniform="photo_optimize")
-        body.rowconfigure(0, weight=1)
+        self.body_mode: str | None = None
 
         assets_frame = ttk.LabelFrame(body, text="Assets — batch selection", style="Dark.TLabelframe", padding=8)
-        assets_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        self.assets_frame = assets_frame
         assets_frame.columnconfigure(0, weight=1)
         assets_frame.rowconfigure(0, weight=1)
 
         self.assets_list = tk.Listbox(
             assets_frame,
+            height=12,
+            width=24,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
             selectbackground=TOKENS.colors.accent_primary,
@@ -125,13 +332,16 @@ class PhotoOptimizeLayoutMixin:
         assets_scroll.grid(row=0, column=1, sticky="ns")
         self.assets_list.configure(yscrollcommand=assets_scroll.set)
         list_controls = ttk.Frame(assets_frame, style="Panel.TFrame")
+        self.assets_actions_frame = list_controls
         list_controls.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         ttk.Label(list_controls, text="Active Single Photo", style="Dark.TLabel").pack(anchor="w")
         self.active_photo_combo = ttk.Combobox(list_controls, state="readonly", style="Dark.TCombobox")
         self.active_photo_combo.pack(fill="x")
         self.active_photo_combo.bind("<<ComboboxSelected>>", self._on_active_photo_choice)
-        ttk.Label(list_controls, text="Changes editor only; batch highlights stay.",
-                  style="Dark.TLabel", wraplength=240).pack(anchor="w", pady=(0, 6))
+        active_note = ttk.Label(list_controls, text="Changes editor only; batch highlights stay.",
+                                style="Dark.TLabel", wraplength=240)
+        active_note.pack(anchor="w", pady=(0, 6))
+        self._bind_wrap(active_note, assets_frame, margin=40)
         for text, action in (
             ("Remove Selected", lambda: self._archive_assets(clear_all=False)),
             ("Clear List", lambda: self._archive_assets(clear_all=True)),
@@ -148,16 +358,12 @@ class PhotoOptimizeLayoutMixin:
             padding=8,
         )
         self.preview_frame = preview_frame
-        preview_frame.grid(row=0, column=1, sticky="nsew", padx=(0, 6))
         preview_frame.columnconfigure(0, weight=1)
-        preview_frame.columnconfigure(1, weight=1)
-        preview_frame.rowconfigure(0, weight=1)
 
         self.image_previews_frame = ttk.Frame(preview_frame, style="Panel.TFrame")
-        self.image_previews_frame.grid(row=0, column=0, columnspan=2, sticky="nsew")
-        self.image_previews_frame.columnconfigure(0, weight=1)
-        self.image_previews_frame.columnconfigure(1, weight=1)
-        self.image_previews_frame.rowconfigure(1, weight=1)
+        self.image_previews_frame.grid(row=0, column=0, sticky="new")
+        self.image_previews_frame.columnconfigure(0, weight=1, uniform="photo_thumbs")
+        self.image_previews_frame.columnconfigure(1, weight=1, uniform="photo_thumbs")
 
         ttk.Label(self.image_previews_frame, text="Original", style="Dark.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 4)
@@ -167,18 +373,22 @@ class PhotoOptimizeLayoutMixin:
         )
         self.original_preview = ThumbnailWidget(
             self.image_previews_frame,
-            width=220,
-            height=220,
+            width=PREVIEW_MAX_EDGE,
+            height=PREVIEW_MAX_EDGE,
             placeholder_text="Import a photo",
+            responsive=True,
+            min_edge=PREVIEW_MIN_EDGE,
         )
-        self.original_preview.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
+        self.original_preview.grid(row=1, column=0, sticky="new", padx=(0, 6))
         self.latest_preview = ThumbnailWidget(
             self.image_previews_frame,
-            width=220,
-            height=220,
+            width=PREVIEW_MAX_EDGE,
+            height=PREVIEW_MAX_EDGE,
             placeholder_text="No optimize output yet",
+            responsive=True,
+            min_edge=PREVIEW_MIN_EDGE,
         )
-        self.latest_preview.grid(row=1, column=1, sticky="nsew")
+        self.latest_preview.grid(row=1, column=1, sticky="new")
 
         self.meta_label = ttk.Label(
             preview_frame,
@@ -187,14 +397,12 @@ class PhotoOptimizeLayoutMixin:
             justify="left",
             wraplength=460,
         )
-        self.meta_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.meta_label.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        self._bind_wrap(self.meta_label, preview_frame)
 
         controls = ttk.Frame(body, style="Panel.TFrame")
-        controls.grid(row=0, column=2, sticky="nsew")
+        self.controls_frame = controls
         controls.columnconfigure(0, weight=1)
-        controls.rowconfigure(0, weight=1)
-        controls.rowconfigure(1, weight=1)
-        controls.rowconfigure(2, weight=1)
 
         self.edit_workspaces = ttk.Notebook(controls)
         self.edit_workspaces.grid(row=0, column=0, sticky="nsew")
@@ -224,6 +432,7 @@ class PhotoOptimizeLayoutMixin:
         )
         self.baseline_prompt_text = tk.Text(
             baseline_box,
+            width=24,
             height=4,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -239,6 +448,7 @@ class PhotoOptimizeLayoutMixin:
         )
         self.baseline_negative_text = tk.Text(
             baseline_box,
+            width=24,
             height=3,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -303,8 +513,10 @@ class PhotoOptimizeLayoutMixin:
                      state="readonly", width=8, style="Dark.TCombobox").pack(side="left", padx=6)
         ttk.Label(geometry_row, text="Auto = working image; Custom = width/height above",
                   style="Dark.TLabel").pack(side="left")
-        ttk.Label(baseline_box, textvariable=self.settings_error_var, style="Dark.TLabel",
-                  wraplength=420).grid(row=12, column=0, sticky="ew")
+        settings_error = ttk.Label(baseline_box, textvariable=self.settings_error_var, style="Dark.TLabel",
+                                   wraplength=420)
+        settings_error.grid(row=12, column=0, sticky="ew")
+        self._bind_wrap(settings_error, baseline_box, margin=24)
 
         ttk.Label(baseline_box, text="Tags (comma-separated)", style="Dark.TLabel").grid(
             row=7, column=0, sticky="w", pady=(0, 4)
@@ -318,6 +530,7 @@ class PhotoOptimizeLayoutMixin:
         )
         self.notes_text = tk.Text(
             baseline_box,
+            width=24,
             height=4,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -334,7 +547,7 @@ class PhotoOptimizeLayoutMixin:
             style="Dark.TLabelframe",
             padding=8,
         )
-        optimize_box.grid(row=1, column=0, sticky="nsew", pady=(0, 6))
+        optimize_box.grid(row=1, column=0, sticky="new", pady=(0, 6))
         optimize_box.columnconfigure(1, weight=1)
 
         ttk.Label(optimize_box, text="Saved positive prompt for active photo", style="Dark.TLabel").grid(
@@ -342,6 +555,7 @@ class PhotoOptimizeLayoutMixin:
         )
         self.current_prompt_text = tk.Text(
             optimize_box,
+            width=24,
             height=3,
             bg=TOKENS.colors.surface_tertiary,
             fg=TOKENS.colors.text_muted,
@@ -366,6 +580,7 @@ class PhotoOptimizeLayoutMixin:
 
         self.prompt_delta_text = tk.Text(
             optimize_box,
+            width=24,
             height=4,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -381,6 +596,7 @@ class PhotoOptimizeLayoutMixin:
         )
         self.current_negative_text = tk.Text(
             optimize_box,
+            width=24,
             height=3,
             bg=TOKENS.colors.surface_tertiary,
             fg=TOKENS.colors.text_muted,
@@ -405,6 +621,7 @@ class PhotoOptimizeLayoutMixin:
 
         self.negative_delta_text = tk.Text(
             optimize_box,
+            width=24,
             height=4,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -432,6 +649,7 @@ class PhotoOptimizeLayoutMixin:
             wraplength=460,
         )
         self.diff_before_label.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        self._bind_wrap(self.diff_before_label, diff_box, margin=24)
         self.diff_before_label.grid_remove()  # saved prompts are shown directly above; avoid a third copy
         self.diff_after_label = ttk.Label(
             diff_box,
@@ -441,6 +659,7 @@ class PhotoOptimizeLayoutMixin:
             wraplength=460,
         )
         self.diff_after_label.grid(row=1, column=0, sticky="ew")
+        self._bind_wrap(self.diff_after_label, diff_box, margin=24)
 
         run_row = ttk.Frame(optimize_box, style="Panel.TFrame")
         run_row.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(0, 8))
@@ -527,8 +746,13 @@ class PhotoOptimizeLayoutMixin:
                         value="recorded").grid(row=2, column=0, sticky="w")
         ttk.Radiobutton(history_box, text="Image only + retain current prompt/settings", variable=self.promotion_mode_var,
                         value="image_only").grid(row=3, column=0, sticky="w")
-        ttk.Label(history_box, textvariable=self.result_status_var, wraplength=460,
-                  style="Dark.TLabel").grid(row=4, column=0, columnspan=2, sticky="ew")
+        result_status = ttk.Label(history_box, textvariable=self.result_status_var, wraplength=460,
+                                  style="Dark.TLabel")
+        result_status.grid(row=4, column=0, columnspan=2, sticky="ew")
+        self._bind_wrap(result_status, history_box, margin=24)
+
+        body.bind("<Configure>", self._on_body_configure, add="+")
+        self._apply_body_layout(BODY_WIDE)
 
 
     def _build_stage_config_editor(self, parent: ttk.LabelFrame, *, row: int) -> None:

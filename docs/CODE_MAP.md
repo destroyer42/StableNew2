@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-475 of 629 modules have a docstring.
+476 of 630 modules have a docstring.
 
 ## src/
 
@@ -276,6 +276,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
 - `form_section_contract.py`: Form section contract independent of widget framework
 - `movie_clips_contract.py`: Movie Clips tab UI normalization helpers
+- `photo_optimize_layout_contract.py`: Pure fit/placement rules for the Photo Optimize tab (PR-GUI-420)
 - `pipeline_layout_contract.py`: Toolkit-agnostic layout contracts for Pipeline tab behavior
 - `prompt_editor_contract.py`: Prompt editor contracts independent of UI toolkit
 - `queue_status_contract.py`: Queue status display contract independent of toolkit

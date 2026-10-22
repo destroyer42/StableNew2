@@ -24,6 +24,7 @@ class PhotoOptimizeScopeMixin:
             assets = [self.store.get_asset(i) for i in self._selected_asset_ids(batch_all=False)]
             assets = [asset for asset in assets if asset is not None]
             editor.project_selection(selection_values(assets), len(assets))
+        self._update_selection_summary()
 
     def _on_workspace_changed(self, _event=None):
         self.edit_scope_var.set(self.edit_workspaces.tab(self.edit_workspaces.select(), "text"))

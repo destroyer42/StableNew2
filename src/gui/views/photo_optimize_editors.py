@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from src.gui.view_contracts.workspace_density_contract import wrap_width
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.photo_optimize.editing import PromptEdit, field_defaults, pipeline_mask
 
@@ -47,14 +48,16 @@ class PhotoBatchEditor(ttk.Frame):
         self.mixed_labels = {}
         self.combos = {}
         self.summary = tk.StringVar(value="No photos selected")
-        ttk.Label(self, textvariable=self.summary, wraplength=600).grid(
-            row=0, column=0, columnspan=3, sticky="w"
-        )
-        ttk.Label(
+        self.wrapped_labels = []
+        summary_label = ttk.Label(self, textvariable=self.summary, wraplength=600)
+        summary_label.grid(row=0, column=0, columnspan=3, sticky="ew")
+        hint_label = ttk.Label(
             self,
             text="Checked = Apply; unchecked = Leave Unchanged. Editing here never autosaves.",
             wraplength=600,
-        ).grid(row=1, column=0, columnspan=3, sticky="w")
+        )
+        hint_label.grid(row=1, column=0, columnspan=3, sticky="ew")
+        self.wrapped_labels.extend([summary_label, hint_label])
         self.columnconfigure(1, weight=1)
         for row, (key, default) in enumerate(field_defaults().items(), start=2):
             mask = self.masks[key] = tk.BooleanVar(value=False)
@@ -88,17 +91,27 @@ class PhotoBatchEditor(ttk.Frame):
                 state="readonly",
             ).grid(row=row, column=1, sticky="ew")
             row += 1
-            self.prompt_text[key] = tk.Text(self, height=3, wrap="word")
+            self.prompt_text[key] = tk.Text(self, height=3, width=24, wrap="word")
             self.prompt_text[key].grid(row=row, column=0, columnspan=3, sticky="ew")
             row += 1
-        ttk.Label(
+        semantics_label = ttk.Label(
             self,
             text="Saved transformations use Review semantics. Empty text leaves prompts unchanged. "
             "Dimensions require Apply Custom + width + height for Auto photos.",
             wraplength=600,
-        ).grid(row=row, column=0, columnspan=3, sticky="w")
+        )
+        semantics_label.grid(row=row, column=0, columnspan=3, sticky="ew")
+        self.wrapped_labels.append(semantics_label)
         self.review_button = ttk.Button(self, text="Review selected-photo changes…", command=review)
         self.review_button.grid(row=row + 1, column=0, columnspan=3, sticky="ew")
+        self.bind("<Configure>", self._fit_wraps, add="+")
+
+    def _fit_wraps(self, _event=None):
+        """Wrap the explanatory labels to the width this editor was given instead of a fixed 600 px."""
+        width = wrap_width(self.winfo_width(), margin=16)
+        for label in self.wrapped_labels:
+            if int(label.cget("wraplength") or 0) != width:
+                label.configure(wraplength=width)
 
     def project_selection(self, values, count):
         self.summary.set(
