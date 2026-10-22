@@ -97,7 +97,8 @@ def resume_problems(
     if ledger.sequence_id != plan.sequence_id or ledger.total_segments != len(plan.segments):
         problems.append("the checkpoint describes a different sequence")
     count = len(plan.segments)
-    if not 1 <= from_segment < count:
+    # ``from_segment == count`` is legal: every segment finished and only the assembly was left (nothing is regenerated).
+    if not 1 <= from_segment <= count:
         problems.append(f"cannot resume from segment {from_segment} of a {count}-segment sequence")
         return problems
     if len(ledger.segments) < from_segment:

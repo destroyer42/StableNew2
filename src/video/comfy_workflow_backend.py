@@ -429,6 +429,8 @@ class ComfyWorkflowVideoBackend:
         self._transition = transition or RuntimeTransitionCoordinator()
         self._process_manager = process_manager
         self._managed_process_manager: ComfyProcessManager | None = None
+        #: Pid of the owned Comfy process that served the previous segment of a sequence (``None`` outside one).
+        self._sequence_warm_pid: int | None = None
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
         self._history_poll_interval = max(history_poll_interval, 0.1)
         self._history_timeout = max(history_timeout, 5.0)
@@ -497,7 +499,12 @@ class ComfyWorkflowVideoBackend:
         if request.hold_runtime or not _release_owned_runtime_after_job(spec):
             # A sequence segment (hold_runtime) leaves the owned runtime warm for the next segment;
             # the sequence's own end-of-job release (release_for_sequence) is the only one.
-            return self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+            result = self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+            if request.hold_runtime:
+                # Remember which owned process now holds the model, so the next segment is judged warm only if
+                # it is still that very process.
+                self._sequence_warm_pid = self._owned_running_pid()
+            return result
 
         # Declared runtime policy: once this job has touched the managed runtime, release the
         # process StableNew owns on every exit path (success, failure, or interruption) so the
@@ -545,7 +552,16 @@ class ComfyWorkflowVideoBackend:
         if self._readiness.policy_for(spec) is not None:
             system_stats = client.get_system_stats()
             actual_runtime = _actual_runtime_identity(system_stats)
-            readiness = self._readiness.evaluate(spec, system_stats=system_stats)
+            warm_pid = self._sequence_warm_pid
+            readiness = self._readiness.evaluate(
+                spec,
+                system_stats=system_stats,
+                warm_sequence=bool(
+                    request.hold_runtime
+                    and warm_pid is not None
+                    and self._owned_running_pid() == warm_pid
+                ),
+            )
             if not readiness.ready:
                 raise RuntimeError(
                     f"Workflow '{spec.workflow_id}' is not resource-ready: {readiness.message}"
@@ -895,6 +911,7 @@ class ComfyWorkflowVideoBackend:
         Goes through the existing ownership interface only (``_release_owned_runtime``): a runtime StableNew
         did not launch and still own is never stopped, and a workflow with no such policy leaves it running."""
 
+        self._sequence_warm_pid = None  # the sequence is over: nothing is warm any more
         for workflow_id, version in dict.fromkeys(workflows):
             try:
                 spec = self._workflow_registry.get(workflow_id, version, allow_experimental=True)
@@ -903,6 +920,17 @@ class ComfyWorkflowVideoBackend:
             if _release_owned_runtime_after_job(spec):
                 return self._release_owned_runtime()
         return {"policy": "none_declared", "released": False}
+
+    def _owned_running_pid(self) -> int | None:
+        """The pid of the Comfy process StableNew launched and still owns, or ``None`` (external, stopped, unknown)."""
+
+        manager = self._resolve_process_manager()
+        try:
+            if manager is not None and manager.owns_process and manager.is_running() and manager.pid:
+                return int(manager.pid)
+        except Exception:  # noqa: BLE001 - an unreadable manager means "not provably warm"
+            return None
+        return None
 
     def _resolve_process_manager(self) -> ComfyProcessManager | None:
         return (

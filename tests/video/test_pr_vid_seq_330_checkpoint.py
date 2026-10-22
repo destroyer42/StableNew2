@@ -673,3 +673,53 @@ def test_a_native_svd_plan_freezes_its_model_and_its_source_hash(tmp_path: Path)
         "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
     }
     assert plan.to_dict()["plan_digest"] == plan.plan_sha256()
+
+
+def test_a_relative_run_folder_still_hands_backends_and_records_absolute_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The first physical run: ComfyUI refused a carried anchor that was passed as a relative path.
+    monkeypatch.chdir(tmp_path)
+    segments = Segments(Path("relative_run"))
+
+    outcome = _executor(Path("relative_run"), _plan(2), segments).execute(
+        source_image_path=_source(tmp_path)
+    )
+
+    assert all(Path(call[1]).is_absolute() for call in segments.calls)
+    ledger = read_ledger(outcome.ledger_path)
+    assert Path(outcome.ledger_path).is_absolute()
+    assert all(
+        Path(record.path).is_absolute()
+        for segment in ledger.segments
+        for record in segment.artifact_files()
+    )
+
+
+def test_a_sequence_whose_only_missing_step_is_the_assembly_resumes_without_regenerating(
+    tmp_path: Path,
+) -> None:
+    plan = _plan(2)
+
+    def broken(frames, plan_, *, run_dir, job_id, cancel_token=None):
+        raise SequenceAssemblyError("FFmpeg exited with 1")
+
+    parent_dir = tmp_path / "parent"
+    with pytest.raises(SequenceAssemblyError):
+        _executor(parent_dir, plan, Segments(parent_dir), assemble=broken).execute(
+            source_image_path=_source(tmp_path)
+        )
+    ledger_path = parent_dir / LEDGER_FILE_NAME
+    parent = read_ledger(ledger_path)
+    assert (parent.completed_prefix, parent.next_segment, parent.assembly) == (2, None, None)
+
+    child_dir = tmp_path / "child"
+    segments = Segments(child_dir)
+    outcome = _executor(child_dir, plan, segments).execute(
+        source_image_path=_source(tmp_path),
+        resume=_resume_block(plan, ledger_path, sha256_of(ledger_path), 2),
+    )
+
+    assert segments.calls == []  # nothing was regenerated
+    assert outcome.assembled_path is not None
+    assert [s.origin for s in outcome.ledger.segments] == ["reused", "reused"]

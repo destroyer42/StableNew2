@@ -73,7 +73,9 @@ class FileRecord:
 
     @classmethod
     def of(cls, path: str | Path, *, hash_file: FileHasher = sha256_of) -> FileRecord:
-        target = Path(path)
+        # Absolute, so a record means the same file from any working directory (a backend is handed these paths, and a
+        # resume may run from another one).
+        target = Path(path).resolve()
         return cls(path=str(target), sha256=hash_file(target), bytes=target.stat().st_size)
 
     def to_dict(self) -> dict[str, Any]:

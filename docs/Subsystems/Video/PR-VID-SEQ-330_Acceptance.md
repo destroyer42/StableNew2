@@ -1,11 +1,11 @@
-# PR-VID-SEQ-330 - Physical sequence acceptance procedure (not yet run)
+# PR-VID-SEQ-330 - Physical sequence acceptance procedure
 
 ## Status
 
-**Procedure only.** `PR-VID-SEQ-330-CORE` is verified entirely on fake backends, a temporary SQLite queue and synthetic
-frames. Nothing in this repository has run a sequence on a GPU. This document is what a later package follows once the owner
-explicitly authorises a physical run (AGENTS.md section 5: it changes shared hardware state and uses the operator's managed
-runtime). Running it is not part of the SEQ-330-CORE package, and nothing here registers a workflow or changes governance.
+`PR-VID-SEQ-330-CORE` is verified on fake backends, a temporary SQLite queue and synthetic frames, and runs A, B and C below were
+made on the real managed Comfy on 2026-10-22 under the owner's explicit authorisation (section 8 has the result). A physical run
+changes shared hardware state and uses the operator's managed runtime (AGENTS.md section 5), so it needs a fresh authorisation each
+time. Nothing here registers a workflow or changes governance.
 
 ## 1. Authorisation and limits
 
@@ -27,9 +27,13 @@ runtime). Running it is not part of the SEQ-330-CORE package, and nothing here r
 ## 3. Runs
 
 Drive each run through the production chain only: `VideoWorkflowController.submit_sequence_job(...)` -> `JobService.submit_njrs` ->
-SQLite queue -> `PipelineRunner.run_njr`. The existing isolated-workspace pattern of `tools/acceptance/vid190_queue_recycling_acceptance.py`
-(`_Stack`, `_build_stack`, `preflight`) provides the scratch queue and observation; the sequence wrapper only replaces its job submission. The wrapper
-is the one small piece of code the physical package adds. It must not stop or kill any process itself.
+SQLite queue -> `PipelineRunner.run_njr`. `tools/acceptance/seq330_sequence_acceptance.py` does this: it reuses the isolated-workspace pattern of
+`tools/acceptance/vid190_queue_recycling_acceptance.py` (`_Stack`, `_build_stack`, `preflight`) for the scratch queue and observation and
+replaces only the job submission. It stops or kills nothing itself (a live external Comfy or A1111 refuses the run).
+
+```bash
+python -m tools.acceptance.seq330_sequence_acceptance <source.png> --run A|B|C [--dry] --reports-dir reports/seq330/<run>
+```
 
 | Run | Sequence | What it proves |
 |---|---|---|
@@ -77,3 +81,27 @@ or the carry-forward fixes it.
 Stop and report, without retrying, on: GPU device loss, a verifier failure, an unexpected release of an external runtime, a frame-count mismatch, or a
 resume that is refused for a reason other than the one the run injected. A failed physical run changes nothing in the catalog or governance; the evidence
 goes in `reports/seq330/` and the next decision is the owner's.
+
+## 8. Result of the 2026-10-22 run (RTX 4070 Ti 12 GB, managed ComfyUI, `wan22_ti2v_5b_i2v_v1` 1.3.0, 17 frames per segment)
+
+Runs A, B and C passed and every verdict from `seq330_sequence_verification` was `passed` (evidence kept locally under `reports/seq330/`, not committed).
+D (native SVD) was not run.
+
+| Run | Outcome |
+|---|---|
+| A | Completed in about 95 s with **one** Comfy process for both segments; the runtime was released once after segment 1; 33 assembled frames (17 + 16). Segment 1's input anchor is segment 0's exact final frame; that anchor differs from the dropped overlap frame by 0.6/255 mean absolute difference, against about 4.7 between consecutive content frames. Peak VRAM 11.2 GiB (the single-clip envelope), minimum free host RAM 1.9 GB. |
+| B | The operator cancel (`JobService.cancel_current`) arrived while segment 1 was running: the job ended `cancelled`, the ledger kept segment 0 and the runtime was released once. `resume_sequence` queued a new job that reused segment 0 (`origin: reused`), generated only the remaining two segments on a new Comfy process, and assembled; the parent ledger was byte-identical afterwards. |
+| C | An authored 480x832 anchor for segment 1 with overlap 0 completed; the ledger recorded its basis `provided` and hash; 34 assembled frames. |
+
+What the real runs found (each is fixed on the branch and covered by a regression test):
+
+1. A held (warm) Comfy holds the model in host RAM, so the cold-load floor of 16 GB free RAM refused every later segment ("only 7.3 GB of system RAM is
+   available"). The backend now skips that floor only for a later segment served by the very owned process that ran the previous one (a single clip, an unowned
+   runtime or a restarted process still gets it); the GPU-memory floor still applies.
+2. A relative run folder produced a relative carried-anchor path, which ComfyUI rejected ("Invalid image file"). The executor and ledger now use absolute paths.
+3. A cancel can arrive after the last segment but before assembly, leaving only the assembly to do; `resume_sequence` accepts `from_segment` equal to the
+   segment count and re-assembles without regenerating anything.
+
+Not judged here: visual quality of the join over a longer chain, identity or tone drift, colour matching (off), native SVD and a failure injected by a real GPU
+fault.
+

@@ -229,7 +229,9 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   released after a segment nor on its failure. The executor makes **one** release attempt in `finally`, on success, failure, cancellation and any
   `BaseException`, through `ComfyWorkflowVideoBackend.release_for_sequence` and the existing ownership interface (`_release_owned_runtime`): only a process
   StableNew launched and still owns is stopped, only when a segment's workflow declares `release_owned_runtime_after_job`, and an external runtime is never
-  adopted or stopped. A failed release is recorded in the ledger and never replaces the error that ended the sequence. The single-clip path is unchanged.
+  adopted or stopped. A failed release is recorded in the ledger and never replaces the error that ended the sequence. The single-clip path is unchanged. Because a held
+  runtime keeps its model in host RAM, the cold-load RAM floor of the resource-readiness check is skipped only for a later segment served by the same
+  StableNew-owned process that ran the previous one (`ComfyWorkflowVideoBackend._sequence_warm_pid`); the GPU-memory floor always applies.
 - **Ledger** (`src/video/sequence_ledger.py`): `<run>/sequence_state.json`, written atomically (`atomic_write_json`) after every completed segment and
   before the next dispatches; a write failure stops the sequence before another segment starts. It records the plan hash, `completed_prefix`,
   `next_segment` and the state (`running`, `completed`, `failed`, `cancelled`, `interrupted`), and per segment: seed, counts, workflow, overlap, the image it
@@ -244,7 +246,8 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   *copied* into the new run directory (each copy re-hashed), so the child does not depend on the parent folder, and only the unfinished suffix runs. A
   tampered, missing, conflicting or unsafe file refuses the resume; it never falls back to a full rerun, never restarts the original job and is never
   automatic after a device loss. A segment that was in flight is simply the first segment of the suffix; no generation request is replayed. A job that recorded
-  no result (a cancelled one) can be resumed from its `sequence_state.json` (`ledger_path=`).
+  no result (a cancelled one) can be resumed from its `sequence_state.json` (`ledger_path=`). `from_segment` may equal the segment count when only the
+  assembly was left.
 - **Full replay** (`replay_sequence`, and any History replay) is different: it recomputes every segment from the frozen plan and never inherits a resume. When
   the original ledger is available it is pinned, and the replay's ledger records per segment whether the recomputed final frame equals the original's
   (`replay.diverged_segments`); a GPU re-run is not guaranteed to be byte-identical, so divergence is recorded and never a failure.
@@ -261,9 +264,9 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   `AssemblyService` and the `-c copy` `stitch_video_segments`) had no remaining caller and was deleted. A stored `sequence_artifact`, assembled-video record or
   `AssembledSequenceInput` (and the `AssemblyRequest` type that names the retired service) still reads and loads; they stay until no stored record can name
   them. A job carrying a block in the old `total_segments` shape is refused with a readable reason instead of running.
-- **Not here**: the Storyboard UI (SEQ-331), first-last-frame anchors (FLF-322), crossfades between segments, new Wan models. No physical sequence run has
-  been made; `PR-VID-SEQ-330_Acceptance.md` is the procedure for one and `tools/acceptance/seq330_sequence_verification.py` re-verifies a finished
-  run's ledger and artifacts.
+- **Not here**: the Storyboard UI (SEQ-331), first-last-frame anchors (FLF-322), crossfades between segments, new Wan models. `PR-VID-SEQ-330_Acceptance.md` is the physical procedure (runs A-C passed on the RTX 4070 Ti on 2026-10-22; native SVD was not run),
+  `tools/acceptance/seq330_sequence_acceptance.py` drives it and `tools/acceptance/seq330_sequence_verification.py` re-verifies a finished run's ledger and
+  artifacts.
 
 ## 8. Provenance, artifacts and replay lineage
 

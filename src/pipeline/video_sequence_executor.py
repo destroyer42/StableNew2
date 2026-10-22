@@ -215,7 +215,9 @@ class VideoSequenceExecutor:
     ) -> None:
         self._plan = plan
         self._job_id = job_id
-        self._run_dir = run_dir
+        self._run_dir = Path(
+            run_dir
+        ).resolve()  # absolute: every path handed to a backend or recorded derives from it
         self._run_segment = run_segment
         self._release_runtime = release_runtime
         self._cancel_token = cancel_token
@@ -223,7 +225,7 @@ class VideoSequenceExecutor:
         self._decode_clip = decode_clip or decode_clip_to_frames
         self._assemble = assemble or assemble_sequence_frames
         self._on_persist = on_persist
-        self._ledger_path = run_dir / LEDGER_FILE_NAME
+        self._ledger_path = self._run_dir / LEDGER_FILE_NAME
         self._ledger = SequenceLedger(
             sequence_id=plan.sequence_id,
             job_id=job_id,
@@ -369,7 +371,7 @@ class VideoSequenceExecutor:
         """The image this segment is conditioned on (verified again here) and how it is recorded."""
 
         if segment.index == 0:
-            source = Path(source_image_path)
+            source = Path(source_image_path).resolve()
             return str(source), InputAnchor(
                 policy=ANCHOR_SOURCE,
                 basis="source",
@@ -686,6 +688,7 @@ def run_sequence_stage(
 
     from src.video.video_artifact_helpers import build_video_artifact_bundle
 
+    run_dir = Path(run_dir).resolve()
     plan = parse_sequence_plan(sequence_config, stage_name=stage_name)
     config_dict = runner._stage_config_dict_for_video(njr, stage_name)
     # Continuity and plan-origin provenance: the NJR's own, else what the plan froze at admission.
