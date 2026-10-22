@@ -324,7 +324,7 @@ def build_manifest(
 
 
 def _key(path: str | os.PathLike[str]) -> str:
-    return os.path.normcase(os.path.abspath(path))
+    return os.path.normcase(os.path.realpath(path))
 
 
 def export_contact_sheet(
@@ -354,7 +354,7 @@ def export_contact_sheet(
         if _key(output) in protected:
             raise ContactSheetError("The destination is a recorded artifact; choose another file")
         if output.exists() and not overwrite:
-            raise FileExistsError(str(output))
+            raise FileExistsError(f"{output.name} already exists")
     sheet, problems = render_contact_sheet(model, thumbnail=thumbnail)
     buffer = io.BytesIO()
     sheet.save(buffer, format="PNG")
@@ -362,10 +362,15 @@ def export_contact_sheet(
     sheet.close()
     atomic_write_bytes(target, buffer.getvalue())
     if manifest_path is not None:
-        atomic_write_json(
-            manifest_path,
-            build_manifest(model, target.name, size, problems),
-            indent=2,
-            sort_keys=True,
-        )
+        try:
+            atomic_write_json(
+                manifest_path,
+                build_manifest(model, target.name, size, problems),
+                indent=2,
+                sort_keys=True,
+            )
+        except OSError as exc:
+            # Never leave an older manifest describing a sheet that was just replaced.
+            manifest_path.unlink(missing_ok=True)
+            raise OSError(f"Sheet saved but its manifest could not be written: {exc}") from exc
     return ExportResult(target, manifest_path, size[0], size[1], problems)

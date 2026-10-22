@@ -296,3 +296,30 @@ def test_failed_replace_leaves_previous_sheet_and_no_temp_file(tmp_path, monkeyp
     with pytest.raises(PermissionError):
         export_contact_sheet(model, out, overwrite=True, thumbnail=THUMB, manifest=False)
     assert out.read_bytes() == before and not [p for p in tmp_path.iterdir() if p.suffix == ".tmp"]
+
+
+def test_failed_manifest_write_removes_the_stale_manifest_and_alias_to_artifact_is_protected(
+    tmp_path, monkeypatch
+):
+    controller = completed_grid(tmp_path)
+    model = model_for(controller)
+    out = tmp_path / "sheet.png"
+    export_contact_sheet(model, out, thumbnail=THUMB)
+    monkeypatch.setattr(
+        sheet_module,
+        "atomic_write_json",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    with pytest.raises(OSError, match="manifest"):
+        export_contact_sheet(model, out, overwrite=True, thumbnail=THUMB)
+    assert not out.with_suffix(".json").exists()
+    monkeypatch.undo()
+    with pytest.raises(FileExistsError, match="sheet.png already exists"):
+        export_contact_sheet(model, out, thumbnail=THUMB)
+    monkeypatch.setattr(
+        sheet_module.os.path,
+        "realpath",
+        lambda p: str(controller.learning_state.plan[0].image_refs[0]),
+    )
+    with pytest.raises(ContactSheetError):
+        export_contact_sheet(model, tmp_path / "alias.png", overwrite=True, manifest=False)

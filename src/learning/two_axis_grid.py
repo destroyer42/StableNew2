@@ -388,6 +388,7 @@ def build_grid_snapshot(
     snapshot = cast(dict[str, Any], json.loads(json.dumps(snapshot, allow_nan=False)))
     for cell in snapshot["two_axis_grid"]["cells"]:
         cell["effective"] = _compile_cell(snapshot, _coordinate(snapshot, cell)).effective
+    snapshot["two_axis_grid"]["baseline_sha256"] = digest(snapshot["baseline_config"])
     snapshot["two_axis_grid"]["grid_sha256"] = _grid_digest(snapshot["two_axis_grid"])
     experiment.metadata["frozen_seed_policy"] = seed_policy
     experiment.variable_under_test = variable
@@ -426,6 +427,8 @@ def frozen_cell(snapshot: Mapping[str, Any], value: Any) -> dict[str, Any]:
             "Two-Axis Grid must retain its exploratory interpretation; rebuild preview"
         )
     if _grid_digest(grid) != grid.get("grid_sha256"):
+        raise ValueError("Frozen Two-Axis Grid integrity mismatch; rebuild preview")
+    if grid.get("baseline_sha256") != digest(snapshot.get("baseline_config")):
         raise ValueError("Frozen Two-Axis Grid integrity mismatch; rebuild preview")
     if len(grid["cells"]) != len(snapshot.get("variant_values") or ()):
         raise ValueError("Frozen Two-Axis Grid cells differ from its variants; rebuild preview")
@@ -475,6 +478,7 @@ def _compile_cell(snapshot: Mapping[str, Any], coordinate: Mapping[str, Any]) ->
     )
 
     validate_ordinary_prompt_snapshot(snapshot)
+    require_plain_txt2img(snapshot["baseline_config"])
     grid = snapshot["two_axis_grid"]
     lora_name = str(grid.get("lora_name") or "")
     config = copy.deepcopy(snapshot["baseline_config"])

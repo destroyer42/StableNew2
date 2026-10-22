@@ -599,3 +599,21 @@ def test_reopen_from_the_real_store_keeps_cells_ratings_drafts_and_selection_wit
     model = reopened.get_grid_results_model()
     assert [(c.row, c.col) for c in model.cells] == [(r, c) for r in range(3) for c in range(3)]
     assert model.cells[4].images[0].rating == 4 and model.exportable
+
+
+def test_baseline_edited_after_preview_is_refused_at_run():
+    controller = grid_controller(grid_experiment())
+    exp = controller.learning_state.current_experiment
+    for edit in (
+        lambda b: b["pipeline"].update(upscale_enabled=True),
+        lambda b: b["txt2img"].update(sampler_name="Euler"),
+    ):
+        snapshot = thaw_snapshot(exp.execution_snapshot_json)
+        edit(snapshot["baseline_config"])
+        tampered = LearningExperiment(
+            name=exp.name,
+            experiment_id=exp.experiment_id,
+            execution_snapshot_json=json.dumps(snapshot, sort_keys=True, separators=(",", ":")),
+        )
+        with pytest.raises(ValueError, match="plain txt2img|txt2img-only|integrity|rebuild"):
+            controller._build_variant_njr(controller.learning_state.plan[0], tampered)

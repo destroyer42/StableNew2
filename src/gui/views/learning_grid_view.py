@@ -13,7 +13,7 @@ from typing import Any
 from PIL import ImageTk
 
 from src.gui.ui_tokens import TOKENS
-from src.learning.grid_contact_sheet import ContactSheetError, load_thumbnail
+from src.learning.grid_contact_sheet import ContactSheetError, export_contact_sheet, load_thumbnail
 from src.learning.grid_results import GridCellModel, GridModel
 from src.utils.thread_registry import get_thread_registry
 
@@ -54,6 +54,7 @@ class LearningGridView(ttk.Frame):
         self._on_cell_selected = on_cell_selected
         self._on_presence_changed = on_presence_changed
         self._present = False
+        self._model_error = ""
         self._pending: set[tuple[str, int]] = set()
         self._save_dialog = save_dialog or filedialog.asksaveasfilename
         self._confirm = confirm or (
@@ -125,10 +126,16 @@ class LearningGridView(ttk.Frame):
 
     # ---- rendering ---------------------------------------------------------------------------------------------
     def _current_model(self) -> GridModel | None:
+        self._model_error = ""
         try:
             model: GridModel = self.learning_controller.get_grid_results_model(self.visibility_mode)
             return model
-        except (ValueError, TypeError, KeyError, AttributeError):
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            experiment = getattr(
+                self.learning_controller.learning_state, "current_experiment", None
+            )
+            if "two_axis_grid" in str(getattr(experiment, "execution_snapshot_json", "") or ""):
+                self._model_error = f"The saved grid cannot be shown: {exc}"
             return None
 
     def _render(self) -> None:
@@ -137,8 +144,9 @@ class LearningGridView(ttk.Frame):
             return
         model = self._current_model()
         selected = self._selected_from_state(model)
-        if (model is not None) != self._present:
-            self._present = model is not None
+        present = model is not None or bool(self._model_error)
+        if present != self._present:
+            self._present = present
             if callable(self._on_presence_changed):
                 self._on_presence_changed(self._present)
         if model is not None and model == self.model and selected == self.selected_index:
@@ -152,7 +160,7 @@ class LearningGridView(ttk.Frame):
         self._requested.clear()
         self._pending.clear()
         if model is None:
-            self.summary_var.set("No Two-Axis Grid experiment.")
+            self.summary_var.set(self._model_error or "No Two-Axis Grid experiment.")
             self.export_button.configure(state="disabled")
             return
         self.summary_var.set(
@@ -437,32 +445,43 @@ class LearningGridView(ttk.Frame):
         from pathlib import Path
 
         overwrite = False
-        if Path(path).exists():
+        if Path(path).exists() or Path(path).with_suffix(".json").exists():
             if not self._confirm(
                 "Replace contact sheet?",
-                f"{Path(path).name} already exists. Replace it and its manifest?",
+                f"{Path(path).name} or its manifest already exists. Replace them?",
             ):
                 return
             overwrite = True
         self._export_busy = True
         self.export_button.configure(state="disabled")
-        mode = self.visibility_mode
+        # The model and protected paths are read here, on the Tk thread; the worker only renders and writes.
+        model = self.model
+        protected = [
+            ref
+            for variant in self.learning_controller.learning_state.plan
+            for ref in variant.image_refs
+        ]
         get_thread_registry().spawn(
             self._export_worker,
-            args=(path, mode, overwrite),
+            args=(path, model, protected, overwrite),
             name="learning-grid-export",
             purpose="Render Learning grid contact sheet",
         )
         self._export_after = self.after(60, self._poll_export)
 
-    def _export_worker(self, path: str, mode: str, overwrite: bool) -> None:
+    def _export_worker(
+        self, path: str, model: GridModel, protected: list[str], overwrite: bool
+    ) -> None:
+        outcome: tuple[str, Any] = ("error", "Export failed unexpectedly; see the log.")
         try:
-            result = self.learning_controller.export_grid_contact_sheet(
-                path, visibility_mode=mode, overwrite=overwrite
+            outcome = (
+                "ok",
+                export_contact_sheet(model, path, overwrite=overwrite, protected_paths=protected),
             )
-            self._export_results.put(("ok", result))
-        except (OSError, ValueError, FileExistsError) as exc:
-            self._export_results.put(("error", str(exc) or type(exc).__name__))
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError, MemoryError) as exc:
+            outcome = ("error", str(exc) or type(exc).__name__)
+        finally:
+            self._export_results.put(outcome)
 
     def _poll_export(self) -> None:
         self._export_after = None

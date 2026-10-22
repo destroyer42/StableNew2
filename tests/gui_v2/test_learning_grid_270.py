@@ -303,3 +303,37 @@ def test_design_panel_restores_a_saved_grid_with_a_range_axis_as_a_fresh_preview
     assert str(reopened.run_button.cget("state")) == "normal"
     reopened.grid_frame.y_axis.end_var.set("30")
     assert str(reopened.run_button.cget("state")) == "disabled"
+
+
+def test_export_worker_failure_always_reports_and_corrupt_grid_is_explained(
+    tk_root, tmp_path, errors
+):
+    controller = grid_controller(grid_experiment())
+    finish_cells(controller, tmp_path)
+    messages = []
+    shell = tk.Toplevel(tk_root)
+    view = LearningGridView(
+        shell,
+        learning_controller=controller,
+        save_dialog=lambda **_kw: str(tmp_path / "x.png"),
+        notify=lambda title, text: messages.append((title, text)),
+    )
+    view.pack()
+    view.refresh()
+    assert pump(tk_root, lambda: len(view.tiles) == 9)
+    with patch(
+        "src.gui.views.learning_grid_view.export_contact_sheet", side_effect=KeyError("boom")
+    ):
+        view.export_button.invoke()
+        assert pump(tk_root, lambda: bool(messages))
+    assert (
+        messages[0][0] == "Contact sheet not exported"
+        and str(view.export_button.cget("state")) == "normal"
+    )
+    controller.learning_state.plan[1].param_value = dict(
+        controller.learning_state.plan[1].param_value, y_value=99
+    )
+    view.model = None
+    view._render()
+    assert "cannot be shown" in view.summary_var.get()
+    shell.destroy()
