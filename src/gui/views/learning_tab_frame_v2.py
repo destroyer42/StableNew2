@@ -34,6 +34,7 @@ from src.gui.view_contracts.status_banner_contract import update_status_banner
 from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
 from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
+from src.gui.views.learning_grid_view import LearningGridView
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
@@ -267,6 +268,8 @@ class LearningTabFrame(ttk.Frame):
         design_host.columnconfigure(0, weight=1)
         design_host.rowconfigure(0, weight=1)
         workspace_host = ttk.Panedwindow(self.designed_horizontal_panes, orient=tk.VERTICAL)
+        self.workspace_panes = workspace_host
+        self._grid_pane_shown = False
 
         # Left panel: scrollable Experiment Design
         self.experiment_scroll = ScrollableFrame(design_host, style=SURFACE_FRAME_STYLE)
@@ -291,6 +294,15 @@ class LearningTabFrame(ttk.Frame):
         plan_host.rowconfigure(0, weight=1)
         self.plan_table = LearningPlanTable(plan_host, style=CARD_FRAME_STYLE)
         self.plan_table.grid(row=0, column=0, sticky="nsew", padx=2, pady=(4, 2))
+        # The comparison grid is a further pane over the same plan, shown only for a Two-Axis Grid experiment.
+        self.grid_view = LearningGridView(
+            workspace_host,
+            learning_controller=self.learning_controller,
+            visibility_mode=self._content_visibility_mode,
+            on_cell_selected=self.learning_controller.on_variant_selected,
+            on_presence_changed=self._on_grid_presence_changed,
+        )
+        self.learning_controller._grid_view = self.grid_view
 
         # Connect controller to plan table
         self.learning_controller._plan_table = self.plan_table
@@ -1716,6 +1728,9 @@ class LearningTabFrame(ttk.Frame):
         )
         self._pending_visibility_refresh = False
         self._visibility_banner.configure(text="")
+        grid_view = getattr(self, "grid_view", None)
+        if grid_view is not None:
+            grid_view.set_visibility_mode(self._content_visibility_mode)
         review_panel = getattr(self, "review_panel", None)
         if review_panel is not None:
             callback = getattr(review_panel, "on_content_visibility_mode_changed", None)
@@ -1731,6 +1746,14 @@ class LearningTabFrame(ttk.Frame):
             if getattr(self.learning_state, "selected_staged_curation_item_id", None)
             else None
         )
+
+    def _on_grid_presence_changed(self, present: bool) -> None:
+        if present and not self._grid_pane_shown:
+            self.workspace_panes.insert(1, self.grid_view, weight=3)
+            self._grid_pane_shown = True
+        elif not present and self._grid_pane_shown:
+            self.workspace_panes.forget(self.grid_view)
+            self._grid_pane_shown = False
 
     def _on_content_visibility_mode_changed(self) -> None:
         if not bool(self.winfo_ismapped()):

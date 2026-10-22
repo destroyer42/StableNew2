@@ -175,7 +175,7 @@ def _require_candidate(policy: Any) -> None:
         raise ValueError(reason)
 
 
-def _require_envelope(policy: Any, config: dict, backend: str, geometry: dict) -> None:
+def require_envelope(policy: Any, config: dict, backend: str, geometry: dict) -> None:
     from src.image_backends.model_policy import Support
 
     if (policy.required_backend and backend != policy.required_backend) or (
@@ -309,7 +309,7 @@ def build_comparison_snapshot(
     for index, model in enumerate(models):
         policy = policy_resolver(model) if policy_resolver else evidence.policy_for(model)
         _require_candidate(policy)
-        _require_envelope(policy, baseline, backend, geometry)
+        require_envelope(policy, baseline, backend, geometry)
         config = copy.deepcopy(baseline)
         for container in (config, config.setdefault("txt2img", {})):
             for key in ("model", "model_name", "sd_model_checkpoint", "base_model"):
@@ -616,7 +616,7 @@ def frozen_arm(snapshot: dict, value: Any) -> dict:
                 raise ValueError("Frozen exact profile is unknown or incompatible; rebuild preview")
         elif options["image"].get("model_profile") is not None:
             raise ValueError("Unexpected frozen model profile")
-        _require_envelope(policy, config, options["image"]["backend_id"], study["shared_geometry"])
+        require_envelope(policy, config, options["image"]["backend_id"], study["shared_geometry"])
         for container in (config, section):
             if container.get("model") != models[index]:
                 raise ValueError("Frozen model identity mismatch")
@@ -728,22 +728,9 @@ def materialize_njr(
     snapshot: dict, variant: Any, *, metadata_factory, output_dir: str, filename_template: str
 ):
     """Materialize one Learning NJR from its preview blueprint, with no adaptation."""
-    from src.image_backends.exact_model_profile import validate_profile_njr
     from src.learning.experiment_freeze import apply_frozen_seed_policy
-    from src.pipeline.job_models_v2 import (
-        CURRENT_NJR_SCHEMA_VERSION,
-        ImageWorkloadSpec,
-        LearningJobContext,
-        LoRATag,
-        NJRProvenance,
-        NormalizedJobRecord,
-        OutputPlan,
-        SourceDescriptor,
-        SourceKind,
-        StageConfig,
-        WorkloadKind,
-    )
-    from src.utils.embedding_prompt_utils import render_embedding_reference
+    from src.learning.learning_njr import assemble_txt2img_njr
+    from src.pipeline.job_models_v2 import LearningJobContext
 
     arm = frozen_arm(snapshot, variant.param_value)
     config = copy.deepcopy(arm["effective_config"])
@@ -780,61 +767,25 @@ def materialize_njr(
         variable_under_test="Model Comparison",
         variant_value=variant.param_value,
     )
-    record = NormalizedJobRecord(
-        schema_version=CURRENT_NJR_SCHEMA_VERSION,
+    return assemble_txt2img_njr(
         job_id=f"learning_{snapshot['experiment_id']}_{uuid.uuid4().hex}",
-        workload_kind=WorkloadKind.IMAGE,
-        source=SourceDescriptor(kind=SourceKind.LEARNING, display_name=snapshot["display_name"]),
-        workload=ImageWorkloadSpec(
-            positive_prompt=arm["executor_base_positive_prompt"],
-            negative_prompt=arm["executor_base_negative_prompt"],
-            config=config,
-            images_per_prompt=snapshot["images_per_value"],
-            metadata=metadata,
-            backend_options=arm["effective_backend_options"],
-        ),
-        stages=(
-            StageConfig(
-                stage_type="txt2img",
-                enabled=True,
-                model=section["model"],
-                vae=section.get("vae", ""),
-                steps=int(section["steps"]),
-                cfg_scale=float(section["cfg_scale"]),
-                sampler_name=section["sampler_name"],
-                scheduler=section["scheduler"],
-                extra={},
-            ),
-        ),
-        output_plan=OutputPlan(
-            base_output_dir=output_dir or "output", filename_template=filename_template
-        ),
-        provenance=NJRProvenance(
-            seed=section["seed"],
-            variant_index=arm["candidate_index"],
-            variant_total=len(snapshot["variant_values"]),
-            learning_context=context,
-            positive_embeddings=tuple(
-                render_embedding_reference(*item) for item in arm["effective_positive_embeddings"]
-            ),
-            negative_embeddings=tuple(
-                render_embedding_reference(*item) for item in arm["effective_negative_embeddings"]
-            ),
-            lora_tags=tuple(
-                LoRATag(name=name, weight=weight) for name, weight in arm["effective_lora_tags"]
-            ),
-            metadata=metadata,
-        ),
+        display_name=snapshot["display_name"],
+        positive=arm["executor_base_positive_prompt"],
+        negative=arm["executor_base_negative_prompt"],
+        config=config,
+        metadata=metadata,
+        backend_options=arm["effective_backend_options"],
+        images_per_prompt=snapshot["images_per_value"],
+        output_dir=output_dir,
+        filename_template=filename_template,
+        variant_index=arm["candidate_index"],
+        variant_total=len(snapshot["variant_values"]),
+        context=context,
+        positive_embeddings=arm["effective_positive_embeddings"],
+        negative_embeddings=arm["effective_negative_embeddings"],
+        lora_tags=arm["effective_lora_tags"],
+        mismatch_message="Model Comparison NJR does not match frozen execution",
     )
-    if (
-        record.positive_prompt != config["prompt"]
-        or record.negative_prompt != config["negative_prompt"]
-        or record.workload.backend_options != config["backend_options"]
-    ):
-        raise ValueError("Model Comparison NJR does not match frozen execution")
-    # The same exact-profile admission check the NJR builders apply (a no-op for every other model).
-    validate_profile_njr(record)
-    return record
 
 
 def rating_classification(

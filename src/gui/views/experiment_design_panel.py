@@ -9,6 +9,7 @@ from src.gui.controllers.learning_controller import LearningController
 from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.models.prompt_pack_model import PromptPackModel, PromptSlot
 from src.gui.ui_tokens import TOKENS
+from src.gui.views.grid_design_frame import TwoAxisDesignFrame
 from src.learning.experiment_naming import build_experiment_identity
 from src.learning.model_capabilities import (
     compatible_context,
@@ -54,6 +55,8 @@ class ExperimentDesignPanel(ttk.Frame):
         self._comparison_poll_id = None
         self._prompt_pack_paths: dict[str, Path] = {}
         self._prompt_option_payloads: dict[str, dict[str, Any]] = {}
+        self._study_mode = "controlled"
+        self._grid_preview_signature: Any = None
         self._resource_state = resolve_app_state(self.learning_controller)
         if self._resource_state is not None and hasattr(self._resource_state, "add_resource_listener"):
             self._resource_state.add_resource_listener(self._on_resources_updated)
@@ -110,7 +113,7 @@ class ExperimentDesignPanel(ttk.Frame):
         ttk.Label(study_frame, text="Study Type:").grid(row=0, column=0, sticky="w")
         self.study_type_var = tk.StringVar(value="Controlled Variable")
         self.study_type_combo = ttk.Combobox(study_frame, textvariable=self.study_type_var,
-                                             values=("Controlled Variable", "Model Comparison"), state="readonly")
+                                             values=("Controlled Variable", "Model Comparison", "Two-Axis Grid"), state="readonly")
         self.study_type_combo.grid(row=0, column=1, sticky="ew", pady=(0, 6))
         self.study_type_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_study_type_changed())
         ttk.Label(study_frame, text="Target Stage:").grid(row=1, column=0, sticky="w")
@@ -231,6 +234,15 @@ class ExperimentDesignPanel(ttk.Frame):
             images_row, from_=1, to=10, textvariable=self.images_var, width=8
         )
         self.images_spin.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.grid_frame = TwoAxisDesignFrame(
+            self,
+            on_change=self._on_grid_design_changed,
+            lora_provider=self._grid_lora_choices,
+            images_provider=lambda: int(self.images_var.get()),
+        )
+        self.grid_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
+        self.grid_frame.grid_remove()
+        self.images_var.trace_add("write", lambda *_: self._on_grid_design_changed())
 
         identity_actions = ttk.Frame(self)
         identity_actions.grid(row=12, column=0, sticky="e", pady=(0, 10))
@@ -367,16 +379,83 @@ class ExperimentDesignPanel(ttk.Frame):
             if variable_name == "LoRA Strength" and self.lora_frame.winfo_manager() == "grid":
                 self._build_lora_mode_content()
         self._refresh_identity_preview()
+        self._on_grid_design_changed()
 
     def _is_model_comparison(self) -> bool:
         return self.study_type_var.get() == "Model Comparison"
+
+    def _is_grid(self) -> bool:
+        return self.study_type_var.get() == "Two-Axis Grid"
+
+    def _grid_lora_choices(self) -> list[str]:
+        known = getattr(self.learning_controller, "known_loras", None)
+        return list(known()) if callable(known) else []
+
+    def _grid_signature(self) -> tuple[Any, ...]:
+        try:
+            images = int(self.images_var.get())
+        except (tk.TclError, ValueError):
+            images = -1
+        custom = self.custom_prompt_text.get("1.0", tk.END).strip() if self.prompt_source_var.get() == "custom" else ""
+        return (
+            self.grid_frame.signature(), images, self.prompt_source_var.get(), self.prompt_pack_var.get(),
+            self.prompt_item_var.get(), custom, getattr(self, "_target_model", None),
+        )
+
+    def _current_experiment(self) -> Any:
+        return getattr(getattr(self.learning_controller, "learning_state", None), "current_experiment", None)
+
+    def _grid_preview_fresh(self) -> bool:
+        experiment = self._current_experiment()
+        return bool(
+            getattr(experiment, "execution_snapshot_json", "")
+            and self._grid_preview_signature is not None
+            and self._grid_preview_signature == self._grid_signature()
+        )
+
+    def _on_grid_design_changed(self) -> None:
+        if not hasattr(self, "run_button") or not self._is_grid():
+            return
+        had_preview = self._grid_preview_signature is not None
+        self.grid_frame.refresh_summary()
+        self._update_policy_buttons()
+        if had_preview and not self._grid_preview_fresh():
+            self.feedback_var.set("The grid design changed after Preview; Build Preview again before Run.")
+
+    def _enter_grid_mode(self) -> None:
+        self.stage_var.set("txt2img")
+        self.stage_combo.configure(values=("txt2img",), state="disabled")
+        self.input_image_frame.grid_remove()
+        self.variable_label.grid_remove()
+        self.variable_combo.grid_remove()
+        self.variable_var.set("Two-Axis Grid")
+        self.value_frame.grid_remove()
+        self.checklist_frame.grid_remove()
+        self.lora_frame.grid_remove()
+        self.prompt_source_combo.configure(state="readonly")
+        if self.prompt_source_var.get() not in ("pack", "custom"):
+            self.prompt_source_var.set("pack")
+        self._on_prompt_source_changed()
+        self.grid_frame.grid()
+        self.grid_frame.refresh_summary()
+        self.model_target_var.set(
+            "Two-Axis Grid: two settings vary together on one frozen prompt, model and seed set. Results are an "
+            "exploratory comparison, not one-variable causal evidence."
+        )
 
     def _on_study_type_changed(self) -> None:
         self._cancel_comparison_evidence()
         from src.learning.variable_metadata import get_variable_metadata
 
-        if self._is_model_comparison():
+        previous = self._study_mode
+        self._study_mode = "grid" if self._is_grid() else "comparison" if self._is_model_comparison() else "controlled"
+        if self._study_mode != "grid":
+            self.grid_frame.grid_remove()
+        if previous == "controlled" and self._study_mode != "controlled":
             self._controlled_design = (self.stage_var.get(), self.variable_var.get(), self.prompt_source_var.get())
+        if self._study_mode == "grid":
+            self._enter_grid_mode()
+        elif self._is_model_comparison():
             self.stage_var.set("txt2img")
             self.stage_combo.configure(values=("txt2img",), state="disabled")
             self.input_image_frame.grid_remove()
@@ -576,7 +655,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """Handle build preview button click."""
         if getattr(self, "_comparison_readiness_busy", False):
             return
-        if not self._is_model_comparison() and self._learning_capabilities is not None:
+        if not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -588,13 +667,14 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Collect form data
         experiment_data = {
-            "study_type": "model_comparison" if self._is_model_comparison() else "controlled_variable",
+            "study_type": "model_comparison" if self._is_model_comparison() else "two_axis_grid" if self._is_grid() else "controlled_variable",
+            "grid": self.grid_frame.spec() if self._is_grid() else None,
             "selected_models": [choice for choice, var in self.choice_vars.items() if var.get()] if self._is_model_comparison() else [],
             "name": self.name_var.get().strip(),
             "description": self.desc_var.get().strip(),
             "stage": self.stage_var.get(),
             "input_image_path": self.input_image_var.get().strip(),
-            "variable_under_test": self.variable_var.get(),
+            "variable_under_test": "" if self._is_grid() else self.variable_var.get(),
             "start_value": self.start_var.get(),
             "end_value": self.end_var.get(),
             "step_value": self.step_var.get(),
@@ -694,10 +774,22 @@ class ExperimentDesignPanel(ttk.Frame):
                         self.learning_controller.learning_state.current_experiment.execution_snapshot_json),
                         show_names=self._comparison_show_names()))
                     self._update_policy_buttons()
+                if self._is_grid():
+                    from src.learning.experiment_execution import thaw_snapshot
+                    from src.learning.two_axis_grid import preview_summary as grid_summary
+
+                    self.feedback_var.set("Two-Axis Grid preview ready; Run queues every cell once.")
+                    self.summary_var.set(grid_summary(thaw_snapshot(
+                        self._current_experiment().execution_snapshot_json)))
+                    self._grid_preview_signature = self._grid_signature()
+                    self._update_policy_buttons()
             else:
                 self.feedback_var.set("Experiment definition updated successfully")
         except Exception as e:
             self.feedback_var.set(f"Error updating experiment: {str(e)}")
+            if self._is_grid():
+                self._grid_preview_signature = None
+                self._update_policy_buttons()
 
     def _comparison_selection(self):
         from src.learning.resource_access import get_projected_resources
@@ -794,7 +886,11 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_run_experiment(self) -> None:
         """Handle run experiment button click."""
-        if not self._is_model_comparison() and self._learning_capabilities is not None:
+        if self._is_grid() and not self._grid_preview_fresh():
+            self.feedback_var.set("The grid design changed after Preview; Build Preview again before Run.")
+            self._update_policy_buttons()
+            return
+        if not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -832,6 +928,19 @@ class ExperimentDesignPanel(ttk.Frame):
             try:
                 candidate_models(data.get("selected_models"))
             except ValueError as exc:
+                return str(exc)
+            return None
+
+        if data.get("study_type") == "two_axis_grid":
+            from src.learning.two_axis_grid import plan_summary
+
+            if data.get("prompt_source") == "pack" and not data.get("selected_prompt_pack_path"):
+                return "Select a PromptPack row for the grid"
+            if data.get("prompt_source") == "custom" and not data.get("custom_prompt"):
+                return "Custom prompt text is required when using custom prompt source"
+            try:
+                plan_summary({"grid": data.get("grid")}, int(data.get("images_per_value", 0)))
+            except (ValueError, TypeError) as exc:
                 return str(exc)
             return None
 
@@ -907,7 +1016,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """
         from src.learning.variable_metadata import get_variable_metadata
 
-        if self._is_model_comparison():
+        if self._is_model_comparison() or self._is_grid():
             return
 
         variable_name = self.variable_var.get()
@@ -963,6 +1072,9 @@ class ExperimentDesignPanel(ttk.Frame):
         self._refresh_model_capabilities()
 
     def _refresh_model_capabilities(self) -> None:
+        if self._is_grid():
+            self._on_grid_design_changed()
+            return
         if self._is_model_comparison():
             self._update_policy_buttons()
             return
@@ -1000,6 +1112,10 @@ class ExperimentDesignPanel(ttk.Frame):
         if getattr(self, "_comparison_readiness_busy", False):
             self.build_button.configure(state="disabled")
             self.run_button.configure(state="disabled")
+            return
+        if self._is_grid():
+            self.build_button.configure(state="normal" if self.grid_frame.validation_error() is None else "disabled")
+            self.run_button.configure(state="normal" if self._grid_preview_fresh() else "disabled")
             return
         if self._is_model_comparison():
             valid = sum(bool(var.get()) for var in self.choice_vars.values()) >= 2
@@ -1208,6 +1324,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_prompt_text_edited(self) -> None:
         self._refresh_identity_preview()
+        self._on_grid_design_changed()
 
     def _get_prompt_preview_text(self) -> str:
         if self.prompt_source_var.get() == "custom":
@@ -1585,7 +1702,11 @@ class ExperimentDesignPanel(ttk.Frame):
     def restore_state(self, experiment: Any) -> None:
         from src.learning.model_comparison import study_type
 
-        self.study_type_var.set("Model Comparison" if study_type(experiment) == "model_comparison" else "Controlled Variable")
+        self.study_type_var.set(
+            {"model_comparison": "Model Comparison", "two_axis_grid": "Two-Axis Grid"}.get(
+                study_type(experiment), "Controlled Variable"
+            )
+        )
         self.name_var.set(str(getattr(experiment, "name", "") or ""))
         self.desc_var.set(str(getattr(experiment, "description", "") or ""))
         self.stage_var.set(str(getattr(experiment, "stage", "txt2img") or "txt2img"))
@@ -1619,8 +1740,14 @@ class ExperimentDesignPanel(ttk.Frame):
         if self.prompt_source_var.get() == "pack":
             self._on_prompt_source_changed()
         self._on_variable_changed()
-        if self._is_model_comparison():
+        if self._is_model_comparison() or self._is_grid():
             self._on_study_type_changed()
+        if self._is_grid():
+            self.grid_frame.load(metadata.get("grid"))
+            self._grid_preview_signature = (
+                self._grid_signature() if getattr(experiment, "execution_snapshot_json", "") else None
+            )
+            self._update_policy_buttons()
         selected_items = {str(item) for item in metadata.get("selected_models" if self._is_model_comparison() else "selected_items", [])}
         for item, var in self.choice_vars.items():
             var.set(item in selected_items)

@@ -111,7 +111,9 @@ class TestLearningControllerNJR:
 
         # Mock job service
         job_service = Mock()
-        job_service.submit_njrs = Mock(return_value=["learning-job-1"])
+        job_service.submit_njrs = Mock(
+            side_effect=lambda records, _policy: [record.job_id for record in records]
+        )
         job_service.register_callback = Mock()
         pipeline_controller._job_service = job_service
         return pipeline_controller
@@ -252,6 +254,8 @@ class TestLearningControllerNJR:
 
         # Verify variant status updated
         assert variant.status == "queued"
+        assert variant.job_id == record.job_id
+        assert controller.execution_controller._job_to_variant[record.job_id] is variant
 
     def test_learning_job_full_config_propagation(
         self, controller, learning_state, mock_pipeline_controller

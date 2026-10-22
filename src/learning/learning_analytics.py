@@ -89,6 +89,9 @@ class LearningAnalytics:
         parameter_name = ""
         for record in records:
             metadata = record.get("metadata", {}) or {}
+            if metadata.get("study_type") == "two_axis_grid":
+                # Two varying settings cannot yield a best/worst single value; grid ratings stay descriptive.
+                continue
             parameter_name = parameter_name or str(
                 metadata.get("variable_under_test") or metadata.get("advancement_decision") or ""
             )
