@@ -111,8 +111,9 @@ class TestLearningControllerNJR:
 
         # Mock job service
         job_service = Mock()
+        # JobService answers with the IDs of the records it was given (the admission contract).
         job_service.submit_njrs = Mock(
-            side_effect=lambda records, _policy: [record.job_id for record in records]
+            side_effect=lambda records, _policy: [r.job_id for r in records]
         )
         job_service.register_callback = Mock()
         pipeline_controller._job_service = job_service
@@ -252,10 +253,88 @@ class TestLearningControllerNJR:
         assert record.vae == "test_vae.safetensors"
         assert policy.start_when_idle is False
 
-        # Verify variant status updated
+        # Verify variant status updated, with the exact compiled identity recorded
         assert variant.status == "queued"
         assert variant.job_id == record.job_id
         assert controller.execution_controller._job_to_variant[record.job_id] is variant
+
+    def _plan_table(self, controller):
+        controller._plan_table = Mock()
+        return controller._plan_table
+
+    @staticmethod
+    def _statuses(table):
+        return [call.args[1] for call in table.update_row_status.call_args_list]
+
+    def test_definite_rejection_is_failed_and_retryable(
+        self, controller, learning_state, mock_pipeline_controller
+    ):
+        """The repository proves nothing was admitted: failed, no identity kept."""
+        job_service = mock_pipeline_controller._job_service
+        job_service.submit_njrs = Mock(side_effect=RuntimeError("queue rejected"))
+        job_service.history_store = Mock(get_job_model=Mock(return_value=None))
+        variant = LearningVariant(param_value=7.0, planned_images=1)
+        learning_state.plan.append(variant)
+        table = self._plan_table(controller)
+
+        controller._submit_variant_job(variant)
+
+        assert variant.status == "failed"
+        assert variant.job_id == ""
+        assert self._statuses(table) == ["failed"]
+
+    @pytest.mark.parametrize("response", ["raises", "wrong_ids"])
+    def test_ambiguous_admission_stays_unresolved_and_is_not_resubmitted(
+        self, controller, learning_state, mock_pipeline_controller, response
+    ):
+        """The job may exist: keep its identity and the requires_attention status, never 'failed'."""
+        job_service = mock_pipeline_controller._job_service
+        if response == "raises":
+            job_service.submit_njrs = Mock(side_effect=TimeoutError("response lost"))
+        else:
+            job_service.submit_njrs = Mock(return_value=["some-other-job"])
+        # A record exists under the compiled ID but is not provably this variant's.
+        job_service.history_store = Mock(get_job_model=Mock(return_value=Mock()))
+        variant = LearningVariant(param_value=7.0, planned_images=1)
+        learning_state.plan.append(variant)
+        table = self._plan_table(controller)
+
+        controller._submit_variant_job(variant)
+
+        record = job_service.submit_njrs.call_args[0][0][0]
+        assert variant.status == "requires_attention"
+        assert variant.job_id == record.job_id
+        assert variant.execution_metadata["action_required"] is True
+        assert "Do not retry" in variant.execution_metadata["admission_error"]
+        assert self._statuses(table) == ["requires_attention"]
+        assert job_service.submit_njrs.call_count == 1
+
+    def test_partial_persistence_of_a_batch_is_unresolved_for_every_variant(
+        self, controller, learning_state, mock_pipeline_controller
+    ):
+        from src.learning.execution_controller import LearningAdmissionError
+
+        job_service = mock_pipeline_controller._job_service
+        job_service.submit_njrs = Mock(side_effect=TimeoutError("response lost"))
+        experiment = learning_state.current_experiment
+        experiment.values = [6.0, 7.0]
+        variants = [LearningVariant(param_value=v, planned_images=1) for v in (6.0, 7.0)]
+        learning_state.plan.extend(variants)
+        records = [controller._build_variant_njr(v, experiment) for v in variants]
+        # Only the first record reached the repository.
+        present = {records[0].job_id}
+        job_service.history_store = Mock(
+            get_job_model=Mock(side_effect=lambda job_id: Mock() if job_id in present else None)
+        )
+
+        with pytest.raises(LearningAdmissionError, match="Do not retry"):
+            controller.execution_controller.submit_experiment_jobs(
+                records, variants, experiment.name, experiment.variable_under_test
+            )
+
+        assert [v.status for v in variants] == ["requires_attention"] * 2
+        assert [v.job_id for v in variants] == [r.job_id for r in records]
+        assert job_service.submit_njrs.call_count == 1
 
     def test_learning_job_full_config_propagation(
         self, controller, learning_state, mock_pipeline_controller

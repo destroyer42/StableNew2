@@ -1118,10 +1118,29 @@ class LearningController:
 
         except Exception as exc:
             logger.exception(f"[LearningController] Error submitting variant job: {exc}")
-            variant.status = "failed"
             variant_index = self._get_variant_index(variant)
+            if self._admission_unresolved(variant):
+                # The admission response was lost but the job may exist: keep the status the
+                # execution controller recorded (requires_attention, or what reconciliation found)
+                # and its job identity.  "failed" here would invite a retry and a duplicate job.
+                if variant_index >= 0:
+                    self._update_variant_status(variant_index, variant.status)
+                return
+            variant.status = "failed"
             if variant_index >= 0:
                 self._update_variant_status(variant_index, "failed")
+
+    @staticmethod
+    def _admission_unresolved(variant: LearningVariant) -> bool:
+        """True when a failed submit may still have admitted the job (it kept an identity or evidence).
+
+        A definite rejection clears the variant's job id and records no admission error."""
+
+        return bool(
+            variant.job_id
+            or variant.status == "requires_attention"
+            or variant.execution_metadata.get("admission_error")
+        )
 
     @staticmethod
     def _log_seed_dispatch(
