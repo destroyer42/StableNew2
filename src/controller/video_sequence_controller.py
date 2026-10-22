@@ -17,6 +17,8 @@ from typing import Any
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.video.sequence_admission import freeze_sequence_plan
+from src.video.sequence_history import read_ledger_progress
+from src.video.sequence_locator import locate_ledger
 from src.video.sequence_plan import STAGE_VIDEO_WORKFLOW, SequencePlanError
 from src.video.sequence_resume import (
     SequenceResumeError,
@@ -123,8 +125,26 @@ class VideoSequenceControllerMixin:
         njr = getattr(job, "_normalized_record", None)
         if job is None or njr is None:
             raise SequenceResumeError(f"job {parent_job_id} is not a known sequence job")
-        found = ledger_path or find_ledger_path(getattr(job, "result", None))
+        found = (
+            ledger_path
+            or find_ledger_path(getattr(job, "result", None))
+            # A cancelled job records no result; its run folder, named after the job, still holds the checkpoint.
+            or locate_ledger(parent_job_id, [getattr(njr, "path_output_dir", None) or "output"])
+        )
         return njr, sequence_stage_name(njr), found
+
+    def sequence_job_progress(
+        self, parent_job_id: str, *, ledger_path: str | None = None
+    ) -> tuple[int, int, str] | None:
+        """``(segments done, segments planned, ledger state)`` for a sequence job, or ``None`` when no checkpoint is found.
+
+        Read-only evidence from the ledger file; the repository still owns the job's lifecycle."""
+
+        try:
+            _njr, _stage, found = self._sequence_parent(parent_job_id, ledger_path)
+        except SequenceResumeError:
+            return None
+        return read_ledger_progress(found) if found else None
 
     def resume_sequence(
         self, parent_job_id: str, from_segment: int | None = None, *, ledger_path: str | None = None

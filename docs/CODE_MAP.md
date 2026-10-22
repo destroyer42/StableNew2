@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-477 of 631 modules have a docstring.
+483 of 637 modules have a docstring.
 
 ## src/
 
@@ -275,6 +275,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `batch_operations_contract.py`: Toolkit-neutral session for the Queue/History "Batches" view (PR-BATCH-OPS-201)
 - `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
 - `form_section_contract.py`: Form section contract independent of widget framework
+- `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
 - `movie_clips_contract.py`: Movie Clips tab UI normalization helpers
 - `pipeline_layout_contract.py`: Toolkit-agnostic layout contracts for Pipeline tab behavior
 - `prompt_editor_contract.py`: Prompt editor contracts independent of UI toolkit
@@ -290,6 +291,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_recent_outputs_contract.py`: Toolkit-neutral state of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
 - `video_review_contract.py`: Toolkit-neutral state for the Video Experiment Review window (PR-VID-QUALITY-211)
 - `video_runtime_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
+- `video_sequence_contract.py`: Toolkit-neutral state of the Video Workflow "Multi-shot sequence" section (PR-VID-SEQ-331A)
 - `video_workspace_contract.py`: (no docstring)
 - `window_layout_contract.py`: Screen-aware main-window geometry policy (PR-GUI-100)
 - `workspace_density_contract.py`: Pure sizing/disclosure rules for the focused operator workspace (PR-GUI-110)
@@ -330,6 +332,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_workflow_recent_outputs_panel_v2.py`: Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
 - `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
+- `video_workflow_sequence_panel_v2.py`: Tk rendering of the Video Workflow "Multi-shot sequence" section (PR-VID-SEQ-331A)
 - `video_workflow_tab_frame_v2.py`: (no docstring)
 
 ## src/gui/widgets/
@@ -717,9 +720,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `sequence_admission.py`: Admission of a multi-segment video job: intent in, frozen ``SequencePlan`` out (PR-VID-SEQ-330-CORE)
 - `sequence_assembly.py`: Assemble a sequence's frames into one movie with the ASM-332 engine, inside the sequence job (PR-VID-SEQ-330-…
 - `sequence_frames.py`: Frame-level helpers of a sequence job: the exact final frame, overlap trimming, opt-in colour matching and th…
+- `sequence_history.py`: What Job History needs to know about a sequence job, read from its stored snapshot and result (PR-VID-SEQ-331…
 - `sequence_ledger.py`: The durable, per-segment ledger of a sequence job (PR-VID-SEQ-330-CORE)
+- `sequence_locator.py`: Find a sequence job's checkpoint ledger when its result did not record one (PR-VID-SEQ-331A)
 - `sequence_plan.py`: The typed, frozen plan of a multi-segment video job (PR-VID-SEQ-330-CORE)
 - `sequence_resume.py`: Resume a failed or interrupted sequence job as a NEW job (PR-VID-SEQ-330-CORE)
+- `sequence_shots.py`: Operator shots in, ``sequence_intent`` out (PR-VID-SEQ-331A)
 - `svd_capabilities.py`: Capability discovery for native SVD postprocess helpers
 - `svd_config.py`: Typed configuration models for native SVD image-to-video
 - `svd_errors.py`: Typed error surface for native SVD runtime
