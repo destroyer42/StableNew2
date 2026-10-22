@@ -14,6 +14,7 @@ from src.gui.widgets.image_thumbnail import ImageThumbnail
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.learning.rating_schema import blend_rating, get_active_categories
 from src.learning.review_workspace import build_review_projection
+from src.learning.two_axis_grid import variant_label
 
 try:
     from PIL import Image, ImageTk
@@ -485,7 +486,7 @@ class LearningReviewPanel(ttk.Frame):
         if experiment:
             metadata = f"Experiment: {experiment.name}\n"
             metadata += f"Variable: {experiment.variable_under_test}\n"
-            metadata += f"Value: {variant.param_value}\n"
+            metadata += f"Value: {variant_label(variant.param_value)}\n"
             metadata += f"Stage: {getattr(experiment, 'stage', 'txt2img')}\n"
             metadata += f"Images: {variant.completed_images}/{variant.planned_images}\n"
             self.metadata_text.insert(tk.END, metadata)

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-452 of 604 modules have a docstring.
+455 of 609 modules have a docstring.
 
 ## src/
 
@@ -295,7 +295,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `discovered_review_table.py`: DiscoveredReviewTable — shows all items in a discovered group for comparison
 - `error_modal_v2.py`: Modal that presents structured error envelopes to the user
 - `experiment_design_panel.py`: (no docstring)
+- `grid_design_frame.py`: (no docstring)
 - `learning_analytics_panel.py`: Analytics display panel for learning system
+- `learning_grid_view.py`: (no docstring)
 - `learning_plan_table.py`: (no docstring)
 - `learning_review_panel.py`: (no docstring)
 - `learning_tab_frame_v2.py`: (no docstring)
@@ -412,11 +414,14 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `experiment_reconciliation.py`: Exact admitted Learning identity and repository evidence projections; never dispatches
 - `experiment_store.py`: (no docstring)
 - `feedback_manager.py`: Feedback capture helpers for pipeline runs
+- `grid_contact_sheet.py`: Labeled PNG contact sheet for a Two-Axis Grid, rendered only from recorded artifacts
+- `grid_results.py`: Toolkit-neutral projection of a Two-Axis Grid experiment: cell coordinates, exact artifacts, placeholders
 - `learning_adapter.py`: Learning adapter helpers
 - `learning_analytics.py`: Analytics engine for learning experiments
 - `learning_contract.py`: Stable stub contract for future learning consumers
 - `learning_execution.py`: Learning execution orchestrator (GUI/Tk free)
 - `learning_feedback.py`: Feedback models for learning runs
+- `learning_njr.py`: The one assembly of an immutable Learning txt2img NJR from an already frozen, validated configuration
 - `learning_paths.py`: Canonical paths for learning data artifacts
 - `learning_plan.py`: Learning-mode plan data structures
 - `learning_profile_sidecar.py`: Model & LoRA Profile Sidecar support for learning runs
@@ -441,6 +446,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `run_metadata.py`: Helpers for run metadata capture
 - `stage_capabilities.py`: (no docstring)
 - `staged_recommendations.py`: Non-mutating recommendation patches for staged-curation derived jobs
+- `two_axis_grid.py`: Two-axis (CFG Scale / Steps / LoRA Strength) exploratory comparison: plan once, materialize frozen cells
 - `value_identity.py`: Deterministic grouping identity for JSON-like Learning variant values
 - `variable_metadata.py`: Variable metadata registry for learning experiments
 - `variable_selection_contract.py`: (no docstring)

@@ -10,6 +10,7 @@ from typing import Any
 
 from src.gui.learning_state import LearningVariant
 from src.learning.experiment_reconciliation import variant_status_detail
+from src.learning.two_axis_grid import variant_label
 
 
 class LearningPlanTable(ttk.Frame):
@@ -48,7 +49,7 @@ class LearningPlanTable(ttk.Frame):
         self.tree.column("detail", width=300, anchor="w")
 
         self.tree.column("variant", width=80, anchor="center")
-        self.tree.column("param_value", width=120, anchor="center")
+        self.tree.column("param_value", width=160, anchor="center")
         self.tree.column("stage", width=80, anchor="center")
         self.tree.column("status", width=80, anchor="center")
         self.tree.column("images", width=80, anchor="center")
@@ -86,7 +87,7 @@ class LearningPlanTable(ttk.Frame):
                 "end",
                 values=(
                     f"#{i + 1}",
-                    str(variant.param_value),
+                    variant_label(variant.param_value),
                     self._stage_name,
                     variant.status.replace("_", " ").title(),
                     f"{variant.completed_images}/{variant.planned_images}",

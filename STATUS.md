@@ -49,7 +49,9 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - PromptPacks (versioned JSON), Review and reprocess, Photo Optimize with scope-aware editing and historical baselines
   (`docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md`), cross-workflow model compatibility preflight.
 - Review mask editing for registry-resolved SDXL base / Forge: original-pixel painting, frozen input previews and canonical queue admission (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`); outpainting and physical masked-output acceptance are deferred.
-- Learning: designed experiments, ratings, Model Comparison, staged curation. Recommendations are applied from the Learning tab's
+- Learning: designed experiments, ratings, Model Comparison, the exploratory Two-Axis Grid (CFG Scale / Steps / one LoRA's strength on registry-verified
+  SDXL txt2img: frozen cells, common seeds, a Comparison Grid pane and a labeled contact-sheet export; its ratings never feed recommendations;
+  `docs/Subsystems/Learning/LEARNING.md` section 3.7), staged curation. Recommendations are applied from the Learning tab's
   Recommendations selector (default Apply with confirm); rated review drafts are saved on navigation or with Save All Drafts.
   Saved experiments reconcile exact admitted repository jobs after restart without resubmission; admission and resume-save uncertainty remain visible.
 - History browser: the Pipeline tab's Job History opens a searchable, paged view of every job (status, date, pack, prompt/model text;

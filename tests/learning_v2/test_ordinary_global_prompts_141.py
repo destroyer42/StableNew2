@@ -52,7 +52,7 @@ def selected_ui_plan(tmp_path, *, negative="bad", embeddings=(), enabled=True):
         setattr(panel, f"{name}_var", SimpleNamespace(get=lambda value=value: value))
     for name in (
         "_load_prompt_payloads_for_pack", "_get_selected_prompt_payload",
-        "_on_build_preview", "_validate_experiment_data", "_is_model_comparison",
+        "_on_build_preview", "_validate_experiment_data", "_is_model_comparison", "_is_grid",
         "_apply_experiment_preview",
     ):
         setattr(panel, name, MethodType(getattr(ExperimentDesignPanel, name), panel))

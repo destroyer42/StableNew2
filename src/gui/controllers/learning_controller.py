@@ -154,6 +154,7 @@ class LearningController:
         if self.execution_controller is not None:
             self.execution_controller.learning_state = learning_state
         self._plan_table = plan_table
+        self._grid_view: Any = None  # LearningGridView, attached by the Learning tab
         self._review_panel = review_panel
         self._learning_record_writer = learning_record_writer
         self._learning_enabled = False
@@ -262,6 +263,7 @@ class LearningController:
             "selected_prompt_label": experiment_data.get("selected_prompt_label", ""),
             "selected_prompt_negative_text": negative_prompt_text,
             "selected_prompt_loras": list(experiment_data.get("selected_prompt_loras", []) or []),
+            "grid": experiment_data.get("grid"),
         }
 
         # Create LearningExperiment from form data
@@ -594,6 +596,9 @@ class LearningController:
         if study_type(experiment) == "model_comparison":
             self._build_model_comparison_plan(experiment, evidence=comparison_evidence)
             return
+        if study_type(experiment) == "two_axis_grid":
+            self._build_two_axis_grid_plan(experiment)
+            return
 
         from src.gui.learning_state import LearningVariant
 
@@ -719,6 +724,87 @@ class LearningController:
         self._set_workflow_state("planned")
         self._notify_resume_state_changed()
 
+    def _build_two_axis_grid_plan(self, experiment: LearningExperiment) -> None:
+        """Freeze the grid through the toolkit-neutral planner; nothing is queued."""
+        from src.learning.two_axis_grid import build_grid_snapshot
+
+        if not experiment.experiment_id:
+            experiment.experiment_id = uuid.uuid4().hex
+        baseline = self._get_baseline_config() or dict(experiment.baseline_config or {})
+        getter = getattr(self.app_controller, "get_current_global_prompt_policy", None)
+        policy = getter() if callable(getter) else None
+        if isinstance(policy, dict):
+            baseline = apply_global_prompt_policy(baseline, **policy)
+        baseline = freeze_preview_global_policy(baseline)
+        snapshot = build_grid_snapshot(
+            experiment,
+            baseline,
+            validate_axis=lambda variable, values: self._validate_grid_axis(
+                experiment, baseline, variable, values
+            ),
+            known_loras=self.known_loras,
+        )
+        experiment.execution_snapshot_json = freeze_snapshot(snapshot)
+        self.learning_state.current_experiment = experiment
+        self.load_existing_ratings()
+        self.learning_state.plan = [
+            LearningVariant(
+                experiment_id=experiment.experiment_id,
+                variant_id=f"{experiment.experiment_id}:{index}",
+                param_value=value,
+                planned_images=snapshot["images_per_value"],
+            )
+            for index, value in enumerate(snapshot["variant_values"])
+        ]
+        self.learning_state.selected_variant = None
+        self._update_plan_table()
+        self._set_workflow_state("planned")
+        self._notify_resume_state_changed()
+
+    def _validate_grid_axis(
+        self, experiment: LearningExperiment, baseline: dict[str, Any], variable: str, values: list[Any]
+    ) -> dict[str, Any]:
+        # The same policy seam ordinary previews use, asked once per axis variable.
+        context: dict[str, Any] = validate_experiment(  # type: ignore[no-untyped-call]  # existing unannotated seam
+            self, replace(experiment, variable_under_test=variable), baseline, values
+        )
+        return context
+
+    def known_loras(self) -> list[str]:
+        """LoRA names resolved from the current runtime/prompt/baseline evidence (never a filename guess)."""
+        names = [str(entry["name"]) for entry in self._get_current_loras() if entry.get("name")]
+        available = get_projected_resources(self).get("loras", [])
+        _, mapping = normalize_resource_entries(list(available or []))
+        names.extend(mapping.values() if mapping else [str(item) for item in available or []])
+        return list(dict.fromkeys(names))
+
+    def get_grid_results_model(self, visibility_mode: Any = "nsfw") -> Any:
+        """The exact-association projection both the grid view and the contact sheet render."""
+        from src.learning.grid_results import build_grid_model
+
+        return build_grid_model(
+            self.learning_state.current_experiment,
+            self.learning_state.plan,
+            self._rating_details_cache,
+            visibility_mode=visibility_mode,
+        )
+
+    def export_grid_contact_sheet(
+        self, destination: str | Path, *, visibility_mode: Any = "nsfw", overwrite: bool = False
+    ) -> Any:
+        from src.learning.grid_contact_sheet import export_contact_sheet
+
+        return export_contact_sheet(
+            self.get_grid_results_model(visibility_mode),
+            destination,
+            overwrite=overwrite,
+            protected_paths=[ref for variant in self.learning_state.plan for ref in variant.image_refs],
+        )
+
+    def _refresh_grid_view(self) -> None:
+        if self._grid_view is not None:
+            self._grid_view.refresh()
+
     def _update_plan_table(self) -> None:
         """Update the learning plan table with current plan data."""
         if self._plan_table and hasattr(self._plan_table, "update_plan"):
@@ -730,6 +816,7 @@ class LearningController:
             except TypeError:
                 # Backward compatibility for older test doubles.
                 self._plan_table.update_plan(self.learning_state.plan)
+        self._refresh_grid_view()
 
     def load_existing_ratings(self) -> None:
         """Load existing ratings for the current experiment."""
@@ -898,11 +985,13 @@ class LearningController:
             if callable(detail_update) and 0 <= variant_index < len(self.learning_state.plan):
                 from src.learning.experiment_reconciliation import variant_status_detail
                 detail_update(variant_index, variant_status_detail(self.learning_state.plan[variant_index]))
+        self._refresh_grid_view()
 
     def _update_variant_images(self, variant_index: int, completed: int, planned: int) -> None:
         """Update the image count of a specific variant in the table."""
         if self._plan_table and hasattr(self._plan_table, "update_row_images"):
             self._plan_table.update_row_images(variant_index, completed, planned)
+        self._refresh_grid_view()
 
     def _highlight_variant(self, variant_index: int, highlight: bool = True) -> None:
         """Highlight or unhighlight a specific variant in the table."""
@@ -1105,6 +1194,16 @@ class LearningController:
         experiment = frozen_definition(experiment)
         from src.learning.model_comparison import materialize_njr, study_type
 
+        if study_type(experiment) == "two_axis_grid":
+            from src.learning.two_axis_grid import materialize_njr as materialize_grid_njr
+
+            return materialize_grid_njr(
+                snapshot, variant,
+                metadata_factory=lambda config: self._build_learning_metadata(
+                    experiment=experiment, variant=variant, stage_name="txt2img", final_config=config),
+                output_dir=self._resolve_learning_output_dir(snapshot.get("baseline_config") or {}),
+                filename_template=self._resolve_learning_filename_template(snapshot.get("baseline_config") or {}),
+            )
         if study_type(experiment) == "model_comparison":
             return materialize_njr(
                 snapshot, variant,
@@ -2168,9 +2267,17 @@ class LearningController:
         base_config = dict(executed_config or snapshot.get("baseline_config") or {})
         from src.learning.model_comparison import rating_classification
 
-        classification = rating_classification(
-            snapshot, target_variant.param_value, target_variant.execution_metadata
-        )
+        if snapshot.get("study_type") == "two_axis_grid":
+            from src.learning.two_axis_grid import rating_classification as grid_classification
+
+            classification = grid_classification(
+                snapshot, target_variant.param_value, target_variant.execution_metadata,
+                image_ref=image_ref, image_refs=list(target_variant.image_refs),
+            )
+        else:
+            classification = rating_classification(
+                snapshot, target_variant.param_value, target_variant.execution_metadata
+            )
         base_config.update(
             {
                 "prompt": str(executed_config.get("prompt", snapshot.get("prompt_text") or experiment.prompt_text)),
@@ -2293,6 +2400,7 @@ class LearningController:
 
         # Update plan table with new average rating
         self._update_variant_ratings()
+        self._refresh_grid_view()
         if self._is_review_complete():
             self._set_workflow_state("completed")
         else:

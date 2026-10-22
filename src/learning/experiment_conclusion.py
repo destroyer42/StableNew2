@@ -56,11 +56,18 @@ def build_experiment_conclusion(
     eligible = controlled and len(rows) >= 2 and all(row["saved_count"] > 0 for row in rows)
     winner = max(rows, key=lambda row: row["average_overall"] or 0)["value"] if eligible else None
     comparison = study_type == "model_comparison"
+    grid = study_type == "two_axis_grid"
+    if grid:
+        # Two varying settings: ratings are described per cell, never ranked or called a causal winner.
+        eligible, winner = False, None
     return {
-        "controlled_valid": controlled and not comparison,
+        "controlled_valid": controlled and not comparison and not grid,
         "study_type": study_type,
-        "comparison_claim": "target_envelope_preference" if comparison else "controlled_variable",
-        "causal_one_variable": not comparison,
+        "comparison_claim": (
+            "target_envelope_preference" if comparison
+            else "exploratory_two_variable_observation" if grid else "controlled_variable"
+        ),
+        "causal_one_variable": not (comparison or grid),
         "saved": saved_total,
         "draft": draft_total,
         "unrated": max(0, sample_total - saved_total - draft_total),
@@ -68,6 +75,8 @@ def build_experiment_conclusion(
         "best_value": winner,
         "sufficient_evidence": eligible,
         "message": (
+            "Exploratory two-variable grid: observed ratings are descriptive per cell; no winner is chosen."
+            if grid else
             (f"{winner} was preferred under its frozen target envelope; model-specific settings and prompt adaptation may differ."
              if eligible else "Insufficient saved evidence for a target-envelope preference.")
             if comparison else

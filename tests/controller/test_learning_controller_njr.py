@@ -256,6 +256,7 @@ class TestLearningControllerNJR:
         # Verify variant status updated, with the exact compiled identity recorded
         assert variant.status == "queued"
         assert variant.job_id == record.job_id
+        assert controller.execution_controller._job_to_variant[record.job_id] is variant
 
     def _plan_table(self, controller):
         controller._plan_table = Mock()

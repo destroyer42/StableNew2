@@ -53,6 +53,29 @@ def atomic_write_text(path: str | os.PathLike[str], text: str, *, encoding: str 
     return target
 
 
+def atomic_write_bytes(path: str | os.PathLike[str], data: bytes) -> Path:
+    """Binary twin of :func:`atomic_write_text` (the target is never left truncated). Raises ``OSError`` on failure."""
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temp_name = tempfile.mkstemp(
+        prefix=f"{target.name}.", suffix=".tmp", dir=target.parent
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _replace_with_retry(temp_name, target)
+    except BaseException:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+    return target
+
+
 def atomic_write_json(path: str | os.PathLike[str], payload: Any, **dumps_kwargs: Any) -> Path:
     """Serialize first (a non-serializable payload never touches the file), then publish atomically."""
 
