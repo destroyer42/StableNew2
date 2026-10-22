@@ -97,7 +97,10 @@ class WorkflowBatchPanel(ttk.Frame):
         )
         self.select_folder_button.pack(side="left", padx=(6, 0))
         self.recursive_check = ttk.Checkbutton(
-            buttons, text="Include subfolders", variable=self.recursive_var
+            buttons,
+            text="Include subfolders",
+            variable=self.recursive_var,
+            style="Dark.TCheckbutton",
         )
         self.recursive_check.pack(side="left", padx=(6, 0))
         self.clear_button = ttk.Button(

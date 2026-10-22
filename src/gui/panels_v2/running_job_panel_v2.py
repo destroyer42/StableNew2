@@ -144,14 +144,14 @@ class RunningJobPanelV2(ttk.Frame):
         status_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         status_frame.pack(fill="x", pady=(4, 8))
 
-        self.status_label = ttk.Label(status_frame, text="Status: Idle")
+        self.status_label = ttk.Label(status_frame, text="Status: Idle", style="Dark.TLabel")
         self.status_label.pack(side="left")
 
         # Elapsed time (new)
-        self.elapsed_label = ttk.Label(status_frame, text="")
+        self.elapsed_label = ttk.Label(status_frame, text="", style="Dark.TLabel")
         self.elapsed_label.pack(side="right", padx=(8, 0))
 
-        self.eta_label = ttk.Label(status_frame, text="")
+        self.eta_label = ttk.Label(status_frame, text="", style="Dark.TLabel")
         self.eta_label.pack(side="right")
 
         # Control buttons (D-GUI-002: Improved button labels)

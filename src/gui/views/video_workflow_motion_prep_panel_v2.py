@@ -83,7 +83,10 @@ class WorkflowMotionPreparationPanel(ttk.LabelFrame):
         self.end_entry = ttk.Entry(options, textvariable=self.end_var, style="Dark.TEntry", width=8)
         self.end_entry.pack(side="left", padx=(0, 12))
         self.convert_check = ttk.Checkbutton(
-            options, text="Convert to the workflow's frame rate", variable=self.convert_var
+            options,
+            text="Convert to the workflow's frame rate",
+            variable=self.convert_var,
+            style="Dark.TCheckbutton",
         )
         self.convert_check.pack(side="left")
         for variable in (self.start_var, self.end_var, self.convert_var):

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from tkinter import ttk
 from typing import Any
 
-from src.gui.theme_v2 import BODY_LABEL_STYLE, HEADING_LABEL_STYLE, MUTED_LABEL_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, MUTED_LABEL_STYLE, SUBHEADING_LABEL_STYLE
+from src.gui.ui_tokens import TOKENS
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 
 
@@ -176,7 +177,12 @@ class TabOverviewPanel(ttk.Frame):
         wraplength: int = 920,
         **kwargs: object,
     ) -> None:
-        super().__init__(master, style="Panel.TFrame", padding=(8, 4), **kwargs)
+        super().__init__(
+            master,
+            style="Panel.TFrame",
+            padding=(TOKENS.spacing.md, TOKENS.spacing.sm),
+            **kwargs,
+        )
         self.content = content
         self._app_state = app_state
         self._manual_expanded = bool(expanded)
@@ -189,10 +195,11 @@ class TabOverviewPanel(ttk.Frame):
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
 
+        # The overview is help, not a page heading: white keeps the gold accent for actions and state.
         self.title_label = ttk.Label(
             header,
             text=f"About This Tab: {content.tab_name}",
-            style=HEADING_LABEL_STYLE,
+            style=SUBHEADING_LABEL_STYLE,
         )
         self.title_label.grid(row=0, column=0, sticky="w")
 
@@ -203,7 +210,7 @@ class TabOverviewPanel(ttk.Frame):
             command=self.toggle_details,
             width=14,
         )
-        self.toggle_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        self.toggle_button.grid(row=0, column=1, sticky="e", padx=(TOKENS.spacing.md, 0))
 
         self.summary_label = ttk.Label(
             self,
@@ -212,7 +219,7 @@ class TabOverviewPanel(ttk.Frame):
             justify="left",
             wraplength=wraplength,
         )
-        self.summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self.summary_label.grid(row=1, column=0, sticky="ew", pady=(TOKENS.spacing.sm, 0))
         self.toggle_button.bind("<Return>", self._on_return_key, add="+")
 
         self.details_frame = ttk.Frame(self, style="Panel.TFrame")
@@ -263,8 +270,10 @@ class TabOverviewPanel(ttk.Frame):
     def _sync_details(self) -> None:
         # PR-GUI-110: collapsed is one header row; the summary and details are the disclosed content.
         if self.is_expanded():
-            self.summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
-            self.details_frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+            self.summary_label.grid(row=1, column=0, sticky="ew", pady=(TOKENS.spacing.sm, 0))
+            self.details_frame.grid(row=2, column=0, sticky="ew", pady=(TOKENS.spacing.md, 0))
+            # Expanded is a style state, not only the button's words.
+            self.toggle_button.state(["selected"])
             if self._help_mode_enabled:
                 self.toggle_button.configure(text="Help Mode On", state="disabled")
             else:
@@ -272,4 +281,5 @@ class TabOverviewPanel(ttk.Frame):
         else:
             self.summary_label.grid_remove()
             self.details_frame.grid_remove()
+            self.toggle_button.state(["!selected"])
             self.toggle_button.configure(text="Show Guidance", state="normal")

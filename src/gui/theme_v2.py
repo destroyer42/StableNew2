@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from src.gui import design_system_v2 as design_system
-from src.gui.ui_tokens import TOKENS
+from src.gui.ui_tokens import NOTICE_KINDS, TOKENS
 
 BACKGROUND_DARK = TOKENS.colors.surface_primary
 BACKGROUND_ELEVATED = TOKENS.colors.surface_secondary
@@ -16,6 +16,11 @@ TEXT_DISABLED = TOKENS.colors.text_disabled
 BORDER_SUBTLE = TOKENS.colors.border_subtle
 ACCENT_GOLD = TOKENS.colors.accent_primary
 ACCENT_GOLD_HOVER = TOKENS.colors.accent_primary_hover
+SURFACE_HOVER = TOKENS.colors.surface_hover
+SURFACE_SELECTED = TOKENS.colors.surface_selected
+SURFACE_TERTIARY = TOKENS.colors.surface_tertiary
+SELECTED_HOVER = design_system.Colors.SECONDARY_HOVER  # hovering an already-selected header or toggle
+FOCUS_RING = TOKENS.colors.focus_ring
 PADDING_SM = TOKENS.spacing.sm
 PADDING_MD = TOKENS.spacing.md
 ASWF_BLACK = BACKGROUND_DARK
@@ -45,6 +50,11 @@ SURFACE_FRAME_STYLE = design_system.SECTION_FRAME
 BODY_LABEL_STYLE = design_system.BODY_LABEL
 MUTED_LABEL_STYLE = design_system.MUTED_LABEL
 HEADING_LABEL_STYLE = design_system.HEADING_LABEL
+SUBHEADING_LABEL_STYLE = design_system.SUBHEADING_LABEL
+PAGE_BODY_LABEL_STYLE = design_system.PAGE_BODY_LABEL
+PAGE_MUTED_LABEL_STYLE = design_system.PAGE_MUTED_LABEL
+PAGE_RADIOBUTTON_STYLE = design_system.PAGE_RADIOBUTTON
+DANGER_BUTTON_STYLE = design_system.DANGER_BUTTON
 PRIMARY_BUTTON_STYLE = design_system.PRIMARY_BUTTON
 SECONDARY_BUTTON_STYLE = design_system.SECONDARY_BUTTON
 GHOST_BUTTON_STYLE = design_system.GHOST_BUTTON
@@ -57,6 +67,7 @@ def _configure_base_widget_styles(style: ttk.Style) -> None:
         background=BACKGROUND_DARK,
         foreground=design_system.Colors.TEXT_PRIMARY,
     )
+    style.map("TLabel", foreground=[("disabled", TEXT_DISABLED)], embossed=[("disabled", 0)])
     style.configure(
         "TButton",
         background=BACKGROUND_ELEVATED,
@@ -66,8 +77,10 @@ def _configure_base_widget_styles(style: ttk.Style) -> None:
     )
     style.map(
         "TButton",
-        background=[("active", BACKGROUND_DARK), ("disabled", BACKGROUND_ELEVATED)],
-        foreground=[("disabled", TEXT_MUTED)],
+        background=[("disabled", BACKGROUND_ELEVATED), ("pressed", SURFACE_SELECTED), ("active", SURFACE_HOVER)],
+        foreground=[("disabled", TEXT_DISABLED)],
+        bordercolor=[("focus", FOCUS_RING)],
+        embossed=[("disabled", 0)],
     )
     style.configure(
         "TLabelframe",
@@ -86,13 +99,17 @@ def _configure_base_widget_styles(style: ttk.Style) -> None:
     style.configure("TNotebook", background=BACKGROUND_DARK, borderwidth=0)
     style.configure(
         "TNotebook.Tab",
-        background=BACKGROUND_ELEVATED,
-        foreground=design_system.Colors.TEXT_PRIMARY,
+        background=SURFACE_TERTIARY,
+        foreground=TEXT_MUTED,
+        bordercolor=BORDER_SUBTLE,
     )
+    # PR-GUI-400: selected differs by fill, text color and edge, so it never rests on one subtle cue.
     style.map(
         "TNotebook.Tab",
-        background=[("selected", BACKGROUND_ELEVATED), ("active", BACKGROUND_ELEVATED)],
-        foreground=[("disabled", TEXT_MUTED)],
+        background=[("selected", SURFACE_SELECTED), ("active", SURFACE_HOVER)],
+        foreground=[("disabled", TEXT_DISABLED), ("selected", ACCENT_GOLD), ("active", TEXT_PRIMARY)],
+        bordercolor=[("selected", ACCENT_GOLD)],
+        embossed=[("disabled", 0)],
     )
 
 
@@ -129,7 +146,13 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         borderwidth=1,
         relief="solid",
     )
-    style.map("TEntry", fieldbackground=[("disabled", BACKGROUND_ELEVATED)])
+    style.map(
+        "TEntry",
+        fieldbackground=[("disabled", BACKGROUND_DARK)],
+        foreground=[("disabled", TEXT_DISABLED)],
+        bordercolor=[("focus", FOCUS_RING)],
+        lightcolor=[("focus", FOCUS_RING)],
+    )
 
     # Explicit Dark.TEntry style for consistent dark-mode entries
     style.configure(
@@ -142,7 +165,9 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     style.map(
         "Dark.TEntry",
         fieldbackground=[("disabled", BACKGROUND_DARK), ("readonly", BACKGROUND_ELEVATED)],
-        foreground=[("disabled", TEXT_MUTED)],
+        foreground=[("disabled", TEXT_DISABLED)],
+        bordercolor=[("focus", FOCUS_RING)],
+        lightcolor=[("focus", FOCUS_RING)],
     )
 
     style.configure(
@@ -155,9 +180,12 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
     style.map(
         "TCombobox",
-        fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
+        fieldbackground=[("disabled", BACKGROUND_DARK), ("readonly", BACKGROUND_ELEVATED)],
         background=[("readonly", BACKGROUND_ELEVATED)],
-        foreground=[("disabled", TEXT_MUTED)],
+        foreground=[("disabled", TEXT_DISABLED)],
+        bordercolor=[("focus", FOCUS_RING)],
+        lightcolor=[("focus", FOCUS_RING)],
+        arrowcolor=[("disabled", TEXT_DISABLED)],
     )
 
     style.configure(
@@ -170,9 +198,12 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
     style.map(
         "Dark.TCombobox",
-        fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
+        fieldbackground=[("disabled", BACKGROUND_DARK), ("readonly", BACKGROUND_ELEVATED)],
         background=[("readonly", BACKGROUND_ELEVATED)],
-        foreground=[("disabled", TEXT_MUTED)],
+        foreground=[("disabled", TEXT_DISABLED)],
+        bordercolor=[("focus", FOCUS_RING)],
+        lightcolor=[("focus", FOCUS_RING)],
+        arrowcolor=[("disabled", TEXT_DISABLED)],
     )
     # Combobox popup listbox styling (note: actual popup styling requires tk option_add)
     style.configure(
@@ -191,8 +222,10 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
     style.map(
         "TSpinbox",
-        fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
-        foreground=[("disabled", TEXT_MUTED)],
+        fieldbackground=[("disabled", BACKGROUND_DARK), ("readonly", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_DISABLED)],
+        bordercolor=[("focus", FOCUS_RING)],
+        lightcolor=[("focus", FOCUS_RING)],
     )
 
     style.configure(
@@ -203,7 +236,10 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
     style.map(
         "Dark.TSpinbox",
-        fieldbackground=[("readonly", BACKGROUND_ELEVATED)],
+        fieldbackground=[("disabled", BACKGROUND_DARK), ("readonly", BACKGROUND_ELEVATED)],
+        foreground=[("disabled", TEXT_DISABLED)],
+        bordercolor=[("focus", FOCUS_RING)],
+        lightcolor=[("focus", FOCUS_RING)],
     )
 
     style.configure(
@@ -215,7 +251,7 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     style.map(
         "TCheckbutton",
         background=[("active", BACKGROUND_DARK)],
-        foreground=[("disabled", TEXT_MUTED)],
+        foreground=[("disabled", TEXT_DISABLED)],
         indicatorcolor=[
             ("selected", ACCENT_GOLD),
             ("alternate", ACCENT_GOLD),
@@ -225,6 +261,7 @@ def _configure_entry_styles(style: ttk.Style) -> None:
             ("selected", BACKGROUND_DARK),
             ("!selected", BACKGROUND_DARK),
         ],
+        embossed=[("disabled", 0)],
     )
 
     style.configure(
@@ -236,7 +273,7 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     style.map(
         "Dark.TCheckbutton",
         background=[("active", BACKGROUND_ELEVATED)],
-        foreground=[("disabled", TEXT_MUTED)],
+        foreground=[("disabled", TEXT_DISABLED)],
         indicatorcolor=[
             ("selected", ACCENT_GOLD),
             ("alternate", ACCENT_GOLD),
@@ -246,13 +283,40 @@ def _configure_entry_styles(style: ttk.Style) -> None:
             ("selected", BACKGROUND_ELEVATED),
             ("!selected", BACKGROUND_ELEVATED),
         ],
+        embossed=[("disabled", 0)],
     )
+
+    # PR-GUI-400: radiobuttons were never themed and fell back to Tk's light-gray default behind their labels.
+    for radio_style, radio_surface in (
+        ("TRadiobutton", BACKGROUND_ELEVATED),
+        ("Dark.TRadiobutton", BACKGROUND_ELEVATED),
+        (design_system.PAGE_RADIOBUTTON, BACKGROUND_DARK),
+    ):
+        style.configure(
+            radio_style,
+            background=radio_surface,
+            foreground=design_system.Colors.TEXT_PRIMARY,
+            bordercolor=BORDER_SUBTLE,
+        )
+        style.map(
+            radio_style,
+            background=[("active", radio_surface)],
+            foreground=[("disabled", TEXT_DISABLED)],
+            indicatorcolor=[
+                ("selected", ACCENT_GOLD),
+                ("alternate", ACCENT_GOLD),
+                ("!selected", TEXT_MUTED),
+            ],
+            indicatorbackground=[("selected", radio_surface), ("!selected", radio_surface)],
+            embossed=[("disabled", 0)],
+        )
 
     style.configure(
         "Dark.TLabel",
         background=BACKGROUND_ELEVATED,
         foreground=design_system.Colors.TEXT_PRIMARY,
     )
+    style.map("Dark.TLabel", foreground=[("disabled", TEXT_DISABLED)], embossed=[("disabled", 0)])
 
     style.configure(
         "Dark.Horizontal.TScale",
@@ -266,6 +330,22 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         background=BACKGROUND_DARK,
         bordercolor=BORDER_SUBTLE,
     )
+    # PR-GUI-400: the theme's default focus line is black, which vanishes on these surfaces (checked with real Tab
+    # key events: checkbuttons and sliders showed no focus at all). Use the focus ring color; the slider thumb also
+    # turns gold while focused so the cue does not rest on a one-pixel dotted line.
+    for focusable in (
+        "TCheckbutton",
+        "Dark.TCheckbutton",
+        "TRadiobutton",
+        "Dark.TRadiobutton",
+        design_system.PAGE_RADIOBUTTON,
+        "TScale",
+        "Dark.Horizontal.TScale",
+        "Dark.Vertical.TScale",
+    ):
+        style.configure(focusable, focuscolor=FOCUS_RING)
+    for scale_style in ("Dark.Horizontal.TScale", "Dark.Vertical.TScale"):
+        style.map(scale_style, background=[("focus", ACCENT_GOLD)])
 
     style.configure(
         "Dark.TButton",
@@ -276,9 +356,15 @@ def _configure_entry_styles(style: ttk.Style) -> None:
     )
     style.map(
         "Dark.TButton",
-        background=[("active", BACKGROUND_DARK)],
-        foreground=[("disabled", TEXT_MUTED)],
+        background=[
+            ("pressed", SURFACE_SELECTED),
+            ("selected active", SELECTED_HOVER),
+            ("selected", SURFACE_SELECTED),
+            ("active", SURFACE_HOVER),
+        ],
+        foreground=[("disabled", TEXT_DISABLED)],
         bordercolor=[("focus", ACCENT_GOLD)],  # PR-GUI-110: keyboard focus is visible, not a 1 px grey ring
+        embossed=[("disabled", 0)],
     )
 
     # PR-GUI-110: collapsible-section headers (left aligned; the accent variant marks non-default hidden content).
@@ -297,9 +383,14 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         )
         style.map(
             disclosure_style,
-            background=[("active", BACKGROUND_DARK)],
-            foreground=[("disabled", TEXT_MUTED)],
+            background=[
+                ("selected active", SELECTED_HOVER),
+                ("selected", SURFACE_SELECTED),
+                ("active", SURFACE_HOVER),
+            ],
+            foreground=[("disabled", TEXT_DISABLED)],
             bordercolor=[("focus", ACCENT_GOLD)],
+            embossed=[("disabled", 0)],
         )
 
     # PR-GUI-DARKMODE-002: LabelFrame styles for dark mode
@@ -370,6 +461,23 @@ def _configure_statusbar_styles(style: ttk.Style) -> None:
         foreground=ASWF_ERROR_RED,
         font=(design_system.Typography.FAMILY, design_system.Typography.MD, "bold"),
     )
+
+
+def _configure_notice_styles(style: ttk.Style) -> None:
+    """Inline notices: a tinted frame, an accent edge bar, a bold role word and the message (never color alone)."""
+
+    for kind in NOTICE_KINDS:
+        role = TOKENS.notices.role(kind)
+        names = design_system.notice_style_names(kind)
+        style.configure(names.frame, background=role.background)
+        style.configure(names.bar, background=role.accent)
+        style.configure(names.message, background=role.background, foreground=role.foreground)
+        style.configure(
+            names.prefix,
+            background=role.background,
+            foreground=role.label_foreground,
+            font=(design_system.Typography.FAMILY, design_system.Typography.SM, design_system.Typography.BOLD),
+        )
 
 
 def _configure_progress_styles(style: ttk.Style) -> None:
@@ -480,6 +588,7 @@ def init_theme(root: tk.Tk | tk.Toplevel) -> ttk.Style:
     _configure_entry_styles(style)
     _configure_treeview_styles(style)
     _configure_statusbar_styles(style)
+    _configure_notice_styles(style)
     _configure_progress_styles(style)
     return style
 
@@ -524,6 +633,14 @@ __all__ = [
     "BODY_LABEL_STYLE",
     "MUTED_LABEL_STYLE",
     "HEADING_LABEL_STYLE",
+    "SUBHEADING_LABEL_STYLE",
+    "PAGE_BODY_LABEL_STYLE",
+    "PAGE_MUTED_LABEL_STYLE",
+    "PAGE_RADIOBUTTON_STYLE",
+    "DANGER_BUTTON_STYLE",
+    "SURFACE_HOVER",
+    "SURFACE_SELECTED",
+    "FOCUS_RING",
     "PRIMARY_BUTTON_STYLE",
     "SECONDARY_BUTTON_STYLE",
     "GHOST_BUTTON_STYLE",

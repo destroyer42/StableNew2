@@ -574,7 +574,8 @@ class ReviewTabFrame(ttk.Frame):
             side="left", padx=(8, 0)
         )
         ttk.Checkbutton(batch_row, text="Order new batch by checkpoint/profile",
-                        variable=self.group_by_model_var).pack(side="left", padx=8)
+                        variable=self.group_by_model_var,
+                        style="Dark.TCheckbutton").pack(side="left", padx=8)
         batch_help_btn = ttk.Button(
             batch_row,
             text="?",
