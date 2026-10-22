@@ -191,6 +191,7 @@ Behavior that must hold:
 | `src/photo_optimize/migration.py` | Verified copy-only migration from the legacy `data/photo_optimize` workspace |
 | `src/photo_optimize/paths.py` | `io_path` (Windows extended paths), `canonical_path`, `rename_without_replace` |
 | `src/gui/views/photo_optimize_tab_frame_v2.py` plus mixins `photo_optimize_layout.py`, `photo_optimize_scope.py`, `photo_optimize_results.py`, `photo_optimize_editors.py` | Tk tab; the mixins are presentation only |
+| `src/gui/view_contracts/photo_optimize_layout_contract.py` | Pure fit rules: `choose_body_mode`, `body_placements`, `flow_rows`, `selection_summary` (no Tk) |
 
 ### 6.2 Submission
 
@@ -198,6 +199,13 @@ Behavior that must hold:
 2. A worker (`_run_photo_operation`) runs `prepare_photo_optimize_plan` -> `prepare_photo_plan`. Per asset it normalizes aliases, resolves geometry from the decoded working image (Auto = image size, Custom = validated width/height), validates numbers, applies prompt deltas, and partitions assets by stage plan. Each partition is compiled by `build_grouped_reprocess_jobs` with `source="photo_optimize_tab"` and `extra_metadata["photo_optimize"]` (run id, per-asset effective prompts, frozen `config_snapshot`, `geometry_policy`).
 3. The operator reviews the frozen per-photo targets (`review_dialog`). Confirmation submits that exact plan with no recompilation (`submit_prepared_photo_plan` -> `submit_reprocess_njrs`), so exact-profile refusal is the shared one.
 4. On completion, `AppController._handle_photo_optimize_completion` (registered through `_create_photo_optimize_completion_handler`) maps `extract_reprocess_output_paths` to assets by index and calls `PhotoOptimizeStore.record_optimize_history`, which copies outputs and manifests into the asset directory, records SHA-256 per output, and is idempotent per (run id, job ids).
+
+### 6.2a Layout
+
+- Header: a primary row (Import Photos, Review Selected, Review All Visible, a **More actions** disclosure, and the selection line `Single Photo: <name> | Batch: N selected | M visible`) plus always-visible submission and migration status text. Refresh, Review Pipeline Copy, Interrogate, the batch-size spinbox and Migration Details/Retry sit in the collapsible "More actions" section. A migration summary containing "incomplete" expands it automatically. Header items wrap into rows with `flow_rows` (placed, never clipped); status labels wrap to the header width.
+- Body: assets, previews and the editor are three existing regions that `_apply_body_layout` re-grids into `wide` (side by side), `split` (assets over previews, editor beside them) or `stacked` (one column with section headings) by `choose_body_mode`. The decision compares each region's minimum width (character widths of the real label font, so it follows Tk scaling, plus the 2 x 200 px preview floor) with the width the body actually has; there is no screen-size breakpoint. The body scrolls vertically through `ScrollableFrame`; regions keep their natural height instead of stretching to the editor.
+- Resizing only calls `grid`/`place` on existing widgets. It never recreates or reparents a region, so selection, typed text, baselines and the sidecars are untouched.
+- Review Selected / Review All Visible still call `_optimize` (prepare -> `review_dialog` -> `submit_prepared_photo_plan`); layout owns no execution path.
 
 Do not give Photo Optimize its own compiler, queue, runner or job history. Its history is a per-asset sidecar projection; job truth stays in `JobRepository`.
 

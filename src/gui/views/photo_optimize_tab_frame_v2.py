@@ -313,7 +313,6 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
                 label = f"{label} ({len(asset.history)})"
             self.assets_list.insert(tk.END, label)
             self._asset_index_by_row.append(asset.asset_id)
-        self.selection_label.config(text=f"{len(assets)} asset(s)")
         self.active_photo_combo.configure(values=[
             f"{asset.source_filename} [{asset.asset_id}]" for asset in assets
         ])
