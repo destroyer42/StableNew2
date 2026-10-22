@@ -573,17 +573,22 @@ def test_the_bar_fits_the_smallest_supported_window_at_100_and_150_percent(
     from src.gui.view_contracts.window_layout_contract import PREFERRED_MIN_WIDTH
 
     apply_theme(tk_root)
+    # On X11 the scaling lives in the shared Screen record, so it would leak into every later Tk root in this process.
+    original_scaling = float(tk_root.tk.call("tk", "scaling"))
     tk_root.tk.call("tk", "scaling", scaling)
-    parent = ttk.Frame(tk_root)
-    bar = TaskNavigationBar(parent, on_select=lambda _t: None, is_available=lambda _t: True)
-    bar.pack(fill="x")
-    widest = 0
-    for group in nav.TASK_GROUPS:
-        bar.show_selected(group.tab_ids[0])
-        tk_root.update_idletasks()
-        widest = max(widest, bar.winfo_reqwidth())
-    assert widest < PREFERRED_MIN_WIDTH, f"navigation needs {widest}px at scaling {scaling}"
-    assert bar.winfo_reqheight() < 80
+    try:
+        parent = ttk.Frame(tk_root)
+        bar = TaskNavigationBar(parent, on_select=lambda _t: None, is_available=lambda _t: True)
+        bar.pack(fill="x")
+        widest = 0
+        for group in nav.TASK_GROUPS:
+            bar.show_selected(group.tab_ids[0])
+            tk_root.update_idletasks()
+            widest = max(widest, bar.winfo_reqwidth())
+        assert widest < PREFERRED_MIN_WIDTH, f"navigation needs {widest}px at scaling {scaling}"
+        assert bar.winfo_reqheight() < 80
+    finally:
+        tk_root.tk.call("tk", "scaling", original_scaling)
 
 
 def test_the_window_is_not_taller_than_before_the_native_strip_was_hidden(build) -> None:
