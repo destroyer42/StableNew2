@@ -533,8 +533,7 @@ def test_video_workflow_action_and_experimental_opt_in_are_always_visible_and_as
         assert tab.queue_workflow_button.winfo_ismapped() and tab.experimental_opt_in_check.winfo_ismapped()
 
         tab.experimental_opt_in_var.set(True)
-        with patch("src.gui.views.video_workflow_tab_frame_v2.messagebox"):
-            tab.queue_workflow_button.invoke()
+        tab.queue_workflow_button.invoke()
         assert len(controller.submissions) == 1  # one click, one existing submission callback
         assert controller.submissions[0]["experimental_opt_in"] is True
     finally:
@@ -581,6 +580,8 @@ def test_advanced_conditioning_collapses_without_losing_values_and_flags_active_
     tab.pack(fill="both", expand=True)
     try:
         _settle(laptop_root, 200)
+        tab.advanced_section.set_expanded(True)  # Advanced Conditioning lives inside the Advanced options
+        _settle(laptop_root, 60)
         section = tab.conditioning_section
         assert section.is_expanded() is False and not tab.conditioning_frame.winfo_ismapped()
         assert "active" not in section.header_text() and "edited" not in section.header_text()

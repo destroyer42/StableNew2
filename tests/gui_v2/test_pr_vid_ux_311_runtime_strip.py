@@ -22,7 +22,6 @@ from src.gui.view_contracts.video_runtime_readiness_contract import (
     STATE_READY,
     RuntimeReadinessSession,
 )
-from src.gui.views import video_workflow_tab_frame_v2 as tab_module
 from src.gui.views.video_workflow_runtime_strip_v2 import WorkflowRuntimeReadinessStrip
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.video.workflow_preflight import (
@@ -33,7 +32,7 @@ from src.video.workflow_preflight import (
     PreflightProbes,
     WorkflowPreflight,
 )
-from tests.gui_v2.test_video_workflow_motion_prep_ui import _JobService, _ManualRunner, _Messages
+from tests.gui_v2.test_video_workflow_motion_prep_ui import _JobService, _ManualRunner
 
 TI2V_ID = "wan22_ti2v_5b_i2v_v1"
 
@@ -184,7 +183,6 @@ def _tab(tk_root, tmp_path: Path, monkeypatch, probes: _Probes, *, shown: bool =
     app.get_video_workflow_specs = controller.list_workflow_specs
     app.build_video_workflow_defaults = controller.build_default_form_state
     app.submit_video_workflow_job = controller.submit_video_workflow_job
-    monkeypatch.setattr(tab_module, "messagebox", _Messages())
     runner = _ManualRunner()
     # Installed before the tab exists: building the tab selects the default workflow and starts a probe.
     monkeypatch.setattr(WorkflowRuntimeReadinessStrip, "_work_runner", lambda _self: runner)

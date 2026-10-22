@@ -184,7 +184,7 @@ def test_video_workflow_tab_set_source_bundle_empty_bundle_no_crash(tk_root) -> 
 
 
 @pytest.mark.gui
-def test_video_workflow_tab_submit_serializes_conditioning_payload(tk_root, monkeypatch) -> None:
+def test_video_workflow_tab_submit_serializes_conditioning_payload(tk_root) -> None:
     controller = _ControllerStub()
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=controller)
     tab.source_image_var.set("C:/tmp/source.png")
@@ -197,14 +197,13 @@ def test_video_workflow_tab_submit_serializes_conditioning_payload(tk_root, monk
     tab.controlnet_weight_var.set("0.8")
     tab.controlnet_guidance_start_var.set("0.1")
     tab.controlnet_guidance_end_var.set("0.9")
-    monkeypatch.setattr(
-        "src.gui.views.video_workflow_tab_frame_v2.messagebox.showinfo",
-        lambda *_args, **_kwargs: None,
-    )
 
     tab._on_submit()
 
     assert controller.submissions
+    # The acknowledgement is an inline notice with a queue action, not a blocking dialog.
+    assert tab.submission_notice.kind == "queued"
+    assert "job-video-1" in tab.submission_notice.message_var.get()
     _, form_data = controller.submissions[0]
     assert form_data["workflow_id"] == "synthetic_anchor_video_v1_conditioned"
     assert form_data["depth_input"]["mode"] == "auto"

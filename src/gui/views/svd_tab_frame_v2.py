@@ -18,6 +18,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
+from src.gui.widgets.submission_notice_v2 import SubmissionNotice
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
@@ -333,6 +334,9 @@ class SVDTabFrameV2(ttk.Frame):
         self.admission_label.grid(row=3, column=0, columnspan=6, sticky="ew", pady=(4, 0))
         self.admission_label.grid_remove()
         bind_wraplength(self.admission_label)
+        # PR-VID-UX-313: inline, non-modal Queue feedback instead of blocking "Submitted" / failure dialogs.
+        self.submission_notice = SubmissionNotice(header)
+        self.submission_notice.grid(row=4, column=0, columnspan=6, sticky="ew", pady=(4, 0))
 
     def _build_body(self, model_options: list[str]) -> None:
         # PR-GUI-100: the settings workspace is taller than many viewports; it scrolls instead of growing the window.
@@ -1023,6 +1027,7 @@ class SVDTabFrameV2(ttk.Frame):
 
     def _on_submit(self) -> None:
         controller = self.app_controller
+        self.submission_notice.clear()
         if self._is_folder_mode():
             handler = getattr(controller, "submit_svd_folder_batch", None)
             folder = self.source_folder_var.get().strip()
@@ -1049,9 +1054,11 @@ class SVDTabFrameV2(ttk.Frame):
                 self._set_status(f"Queued {len(job_ids)} SVD jobs from {Path(folder).name}")
                 self._refresh_folder_batch_preview()
                 self._refresh_summary()
-                messagebox.showinfo("Submitted", f"Queued {len(job_ids)} SVD jobs.")
+                self.submission_notice.show_queued(
+                    f"Queued {len(job_ids)} SVD jobs.", on_view_queue=self._on_view_queue
+                )
             except Exception as exc:
-                messagebox.showerror("SVD folder batch failed", str(exc))
+                self._fail(f"SVD folder batch failed: {exc}")
             return
         handler = getattr(controller, "submit_svd_job", None)
         if not callable(handler):
@@ -1059,7 +1066,7 @@ class SVDTabFrameV2(ttk.Frame):
             return
         source = self.source_image_var.get().strip()
         if not source:
-            messagebox.showwarning("No source image", "Select a PNG or image file first.")
+            self._fail("Select a PNG or image file first.")
             return
         try:
             job_id = handler(
@@ -1068,9 +1075,23 @@ class SVDTabFrameV2(ttk.Frame):
             )
             self._set_status(f"Queued SVD job {job_id} for {Path(source).name}")
             self._refresh_summary(source)
-            messagebox.showinfo("Submitted", f"Queued SVD job {job_id}.")
+            self.submission_notice.show_queued(
+                f"Queued SVD job {job_id}.", on_view_queue=self._on_view_queue
+            )
         except Exception as exc:
-            messagebox.showerror("SVD submit failed", str(exc))
+            self._fail(f"SVD submit failed: {exc}")
+
+    def _fail(self, message: str) -> None:
+        """Show a Queue failure beside the form; it stays until dismissed or the next attempt."""
+
+        self._set_status(message)
+        self.submission_notice.show_error(message)
+
+    def _on_view_queue(self) -> None:
+        from src.gui.controllers.video_workspace_handoff import show_queue_view
+
+        if not show_queue_view(getattr(self.app_controller, "main_window", None)):
+            self._set_status("The queue view is not available from here; open the Pipeline tab.")
 
     def _build_form_data(self) -> dict[str, Any]:
         target_width, target_height = self._effective_target_size()
