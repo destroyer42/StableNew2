@@ -243,7 +243,7 @@ def test_history_actions_require_evidence_capability_and_context_parity(tk_root,
         assert button.instate(["!disabled"])
     for label in (
         "Animate with SVD",
-        "Send to Video Workflow",
+        "Make Video",
         "Send to Movie Clips",
         "Explain This Job",
     ):

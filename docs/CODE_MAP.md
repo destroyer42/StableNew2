@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-460 of 614 modules have a docstring.
+469 of 623 modules have a docstring.
 
 ## src/
 
@@ -110,6 +110,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_submission_service.py`: Thin form-data bridge for SVD submissions owned by AppController
 - `video_eval_controller.py`: Video eval suites on the Video Workflow controller (PR-VID-EVAL-320)
 - `video_preflight_controller.py`: Read-only workflow readiness on the Video Workflow controller (PR-VID-UX-311)
+- `video_recent_outputs_controller.py`: Make Video support on the Video Workflow controller (PR-VID-UX-313/314)
 - `video_workflow_controller.py`: (no docstring)
 - `webui_connection_controller.py`: (no docstring)
 - `webui_outage_coordinator.py`: Contain a WebUI outage inside the existing queue/worker/manager boundaries
@@ -282,6 +283,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_experiment_contract.py`: Toolkit-neutral state for the Video Workflow "Compare one control" section (PR-VID-194)
 - `video_motion_prep_contract.py`: Toolkit-neutral state for the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_motion_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Motion source readiness" panel (PR-VID-196)
+- `video_preview_contract.py`: Toolkit-neutral state of the in-app looping video preview (PR-VID-UX-314)
+- `video_recent_outputs_contract.py`: Toolkit-neutral state of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
 - `video_review_contract.py`: Toolkit-neutral state for the Video Experiment Review window (PR-VID-QUALITY-211)
 - `video_runtime_readiness_contract.py`: Toolkit-neutral state for the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workspace_contract.py`: (no docstring)
@@ -322,6 +325,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
+- `video_workflow_recent_outputs_panel_v2.py`: Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
 - `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workflow_tab_frame_v2.py`: (no docstring)
 
@@ -343,8 +347,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `openpose_picker_panel.py`: PromptPack OpenPose reference picker (PR-IMG-CNET-210)
 - `responsive_wrap_v2.py`: Width-following label wrapping for responsive workspaces (PR-GUI-110)
 - `scrollable_frame_v2.py`: (no docstring)
+- `submission_notice_v2.py`: Inline, non-modal submission feedback (PR-VID-UX-313)
 - `tab_overview_panel_v2.py`: (no docstring)
 - `thumbnail_widget_v2.py`: Thumbnail display widget for GUI V2
+- `video_preview_widget_v2.py`: Looping in-app video preview (PR-VID-UX-314)
 
 ## src/gui_v2/
 
@@ -657,6 +663,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `managed_process.py`: Contained, bounded child processes (audit P3-3, findings B7/B8/E6; fail-closed containment)
 - `negative_helpers_v2.py`: Helper utilities for global prompt merging
 - `njr_identity.py`: The one identity of a stored NJR snapshot
+- `os_shell.py`: Open a file in the system viewer or reveal it in the file manager (PR-VID-UX-314)
 - `preferences.py`: Persistence helpers for GUI preferences and last-used settings
 - `process_container_v2.py`: OS-level process container helpers (job objects / cgroup v2) for StableNew
 - `process_inspector_v2.py`: Utilities for inspecting and describing Python processes
@@ -700,6 +707,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `movie_assembly_compiler.py`: Admission for Movie Clips assembly (PR-VID-ASM-332): intent -> frozen spec -> NJR
 - `movie_assembly_engine.py`: Execution of a frozen Movie Clips assembly (PR-VID-ASM-332)
 - `movie_assembly_models.py`: The frozen Movie Clips assembly contract (PR-VID-ASM-332)
+- `recent_video_outputs.py`: Recent video outputs recovered from canonical persisted jobs (PR-VID-UX-314)
 - `review_preview.py`: Bounded, read-only review previews of existing video outputs (PR-VID-QUALITY-211)
 - `rife_runtime.py`: Locate the external ``rife-ncnn-vulkan`` runtime and choose its model and factor (PR-VID-SMOOTH-302)
 - `sequence_manifest.py`: Sequence manifest builder and writer for multi-segment video
@@ -740,6 +748,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_controls.py`: Neutral, spec-declared operator controls for workflow-owned generation inputs (PR-VID-192)
 - `workflow_frame_count.py`: Neutral, spec-declared generation-length contract (PR-VID-190)
 - `workflow_motion_guidance.py`: Display-only, evidence-grounded motion guidance for a Video Workflow (PR-VID-196)
+- `workflow_picker.py`: Operator-facing workflow choices for the Video Workflow tab (PR-VID-UX-313)
 - `workflow_preflight.py`: Read-only readiness gates for a Comfy video workflow, answered before the job is queued (PR-VID-UX-311)
 - `workflow_readiness.py`: Bounded, workflow-specific resource-readiness check (PR-VID-130)
 - `workflow_registry.py`: (no docstring)

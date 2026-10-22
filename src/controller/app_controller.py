@@ -6737,9 +6737,7 @@ class AppController:
         path = Path(image_path)
         if not path.exists():
             raise FileNotFoundError(f"SVD source image does not exist: {path}")
-        main_window = getattr(self, "main_window", None)
-        if main_window is None:
-            raise RuntimeError("Main window is not available")
+        main_window = self._require_main_window()
         svd_tab = getattr(main_window, "svd_tab", None)
         if svd_tab is None:
             raise RuntimeError("SVD tab is not available")
@@ -6789,19 +6787,20 @@ class AppController:
         )
         return job_id
 
-    def send_image_to_video_workflow(self, image_path: str | Path) -> str:
+    def send_image_to_video_workflow(
+        self, image_path: str | Path, lineage: dict[str, str] | None = None
+    ) -> str:
         path = Path(image_path)
         if not path.exists():
             raise FileNotFoundError(f"Video workflow source image does not exist: {path}")
-        main_window = getattr(self, "main_window", None)
-        if main_window is None:
-            raise RuntimeError("Main window is not available")
+        main_window = self._require_main_window()
         from src.gui.controllers.video_workspace_handoff import route_image_to_video_workflow
 
         route_image_to_video_workflow(
             main_window=main_window,
             image_path=str(path),
             status_message=f"Loaded into Video Workflow tab: {path.name}",
+            lineage=lineage,
         )
         self._append_log(f"[video_workflow] Routed image to Video Workflow tab: {path.name}")
         return str(path)
@@ -6815,19 +6814,22 @@ class AppController:
             raise ValueError(f"History job {job_id} has no image output available for SVD")
         return self.send_image_to_svd(image_path)
 
+    def _require_main_window(self) -> Any:
+        main_window = getattr(self, "main_window", None)
+        if main_window is None:
+            raise RuntimeError("Main window is not available")
+        return main_window
+
     def send_history_job_image_to_video_workflow(self, job_id: str) -> str:
         entry = self._get_history_entry_by_job_id(job_id)
         if entry is None:
             raise ValueError(f"History job not found: {job_id}")
         bundle = self._get_history_video_bundle(entry)
         if bundle:
-            main_window = getattr(self, "main_window", None)
-            if main_window is None:
-                raise RuntimeError("Main window is not available")
             from src.gui.controllers.video_workspace_handoff import route_bundle_to_video_workflow
 
             best_path = route_bundle_to_video_workflow(
-                main_window=main_window,
+                main_window=self._require_main_window(),
                 bundle=dict(bundle),
                 status_message="Loaded video output into Video Workflow tab.",
             )
@@ -6842,15 +6844,14 @@ class AppController:
             raise ValueError(
                 f"History job {job_id} has no usable image or video output available for Video Workflow"
             )
-        return self.send_image_to_video_workflow(image_path)
+        # The image is this job's own artifact, so the job is its trustworthy parent.
+        return self.send_image_to_video_workflow(image_path, {"source_job_id": str(job_id)})
 
     def send_history_job_to_movie_clips(self, job_id: str) -> str:
         entry = self._get_history_entry_by_job_id(job_id)
         if entry is None:
             raise ValueError(f"History job not found: {job_id}")
-        main_window = getattr(self, "main_window", None)
-        if main_window is None:
-            raise RuntimeError("Main window is not available")
+        main_window = self._require_main_window()
 
         bundle = self._get_history_video_bundle(entry)
         if bundle:
@@ -6862,12 +6863,8 @@ class AppController:
                 status_message="Loaded history output into Movie Clips.",
             )
             primary_path = str(bundle.get("primary_path") or "")
-            if primary_path:
-                self._append_log(
-                    f"[movie_clips] Routed history output to Movie Clips: {Path(primary_path).name}"
-                )
-            else:
-                self._append_log("[movie_clips] Routed history output to Movie Clips")
+            suffix = f": {Path(primary_path).name}" if primary_path else ""
+            self._append_log(f"[movie_clips] Routed history output to Movie Clips{suffix}")
             return primary_path
 
         image_path = self._get_history_image_path(entry)

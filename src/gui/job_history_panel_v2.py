@@ -119,7 +119,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.svd_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.video_workflow_btn = ttk.Button(
             action_bar,
-            text="Video Workflow",
+            text="Make Video",
             command=self._on_send_to_video_workflow,
             state=tk.DISABLED,
         )
@@ -157,6 +157,7 @@ class JobHistoryPanelV2(ttk.Frame):
             command=self._refresh_selected_artifact,
         ).pack(anchor=tk.W)
 
+        # The shared action status line: replay outcomes and handoff failures (never swallowed) appear here.
         self.replay_status_var = tk.StringVar(value="")
         ttk.Label(self, textvariable=self.replay_status_var, wraplength=560).pack(
             fill=tk.X, pady=(0, 4)
@@ -234,9 +235,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.history_tree.bind("<Leave>", self._hide_tooltip)
         self._history_menu = tk.Menu(self, tearoff=0)
         self._history_menu.add_command(label="Animate with SVD", command=self._on_send_to_svd)
-        self._history_menu.add_command(
-            label="Send to Video Workflow", command=self._on_send_to_video_workflow
-        )
+        self._history_menu.add_command(label="Make Video", command=self._on_send_to_video_workflow)
         self._history_menu.add_command(
             label="Send to Movie Clips", command=self._on_send_to_movie_clips
         )
@@ -511,38 +510,34 @@ class JobHistoryPanelV2(ttk.Frame):
 
         open_video_experiment_review(self, self.controller, entry.job_id)
 
+    def _run_handoff(self, method: str, label: str) -> None:
+        """Run one controller handoff for the selected job; a failure is shown, never swallowed."""
+
+        handler = getattr(self.controller, method, None)
+        if not callable(handler):
+            self.replay_status_var.set(f"{label} is not available.")
+            return
+        try:
+            handler(self._selected_job_id)
+        except Exception as exc:
+            self.replay_status_var.set(f"{label} failed: {exc}")
+            return
+        self.replay_status_var.set("")
+
     def _on_send_to_svd(self) -> None:
         entry = self._selected_entry()
-        if not entry or not self._history_action_state(entry).svd:
-            return
-        handler = getattr(self.controller, "send_history_job_image_to_svd", None)
-        if callable(handler):
-            try:
-                handler(self._selected_job_id)
-            except Exception:
-                pass
+        if entry and self._history_action_state(entry).svd:
+            self._run_handoff("send_history_job_image_to_svd", "Animate with SVD")
 
     def _on_send_to_video_workflow(self) -> None:
         entry = self._selected_entry()
-        if not entry or not self._history_action_state(entry).video_workflow:
-            return
-        handler = getattr(self.controller, "send_history_job_image_to_video_workflow", None)
-        if callable(handler):
-            try:
-                handler(self._selected_job_id)
-            except Exception:
-                pass
+        if entry and self._history_action_state(entry).video_workflow:
+            self._run_handoff("send_history_job_image_to_video_workflow", "Make Video")
 
     def _on_send_to_movie_clips(self) -> None:
         entry = self._selected_entry()
-        if not entry or not self._history_action_state(entry).movie_clips:
-            return
-        handler = getattr(self.controller, "send_history_job_to_movie_clips", None)
-        if callable(handler):
-            try:
-                handler(self._selected_job_id)
-            except Exception:
-                pass
+        if entry and self._history_action_state(entry).movie_clips:
+            self._run_handoff("send_history_job_to_movie_clips", "Send to Movie Clips")
 
     def _on_context_menu(self, event: tk.Event) -> None:
         item = self.history_tree.identify_row(event.y)
@@ -578,8 +573,7 @@ class JobHistoryPanelV2(ttk.Frame):
             "Animate with SVD", state=tk.NORMAL if actions.svd else tk.DISABLED
         )
         self._history_menu.entryconfigure(
-            "Send to Video Workflow",
-            state=tk.NORMAL if actions.video_workflow else tk.DISABLED,
+            "Make Video", state=tk.NORMAL if actions.video_workflow else tk.DISABLED
         )
         self._history_menu.entryconfigure(
             "Send to Movie Clips", state=tk.NORMAL if actions.movie_clips else tk.DISABLED

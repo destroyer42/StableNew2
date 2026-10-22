@@ -194,7 +194,7 @@ def snapshot_is_experiment_arm(snapshot: Mapping[str, Any] | None) -> bool:
     )
 
 
-def _bundle_video_path(bundle: Mapping[str, Any]) -> tuple[str | None, str]:
+def bundle_video_path(bundle: Mapping[str, Any]) -> tuple[str | None, str]:
     """``(path, reason)``: the bundle's primary video, or why there is none."""
 
     candidates: list[str] = []
@@ -241,7 +241,7 @@ def classify_entry(
     bundle = video_bundle_from_result(result)
     if bundle is None:
         return ArmState.NO_OUTPUT, "Completed, but no video output was recorded.", None
-    path, reason = _bundle_video_path(bundle)
+    path, reason = bundle_video_path(bundle)
     if path is None:
         return ArmState.UNSUPPORTED, reason, None
     try:
@@ -412,6 +412,7 @@ __all__ = [
     "ReviewGroupError",
     "ReviewOverview",
     "build_review_group",
+    "bundle_video_path",
     "classify_entry",
     "snapshot_is_experiment_arm",
 ]

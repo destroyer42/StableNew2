@@ -211,7 +211,7 @@ class ReviewTabFrame(ttk.Frame):
 
         self.send_video_button = ttk.Button(
             header,
-            text="Send Selected to Video Workflow",
+            text="Make Video",
             style="Dark.TButton",
             command=self._on_send_selected_to_video_workflow,
         )
@@ -245,8 +245,9 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.send_video_tooltip = attach_tooltip(
             self.send_video_button,
-            "Send the images highlighted in the Images list to the Video Workflow tab as batch sources. "
-            "This only transfers the selection; nothing is queued until you preview and queue there.",
+            "Make a video from the image highlighted in the Images list: it opens the Video Workflow tab with that "
+            "image loaded and the recommended workflow selected. Several highlighted images become batch sources. "
+            "This only transfers the selection; nothing is queued until you press Queue there.",
         )
         self.import_recent_tooltip = attach_tooltip(
             self.import_recent_button,
