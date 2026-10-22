@@ -5477,10 +5477,12 @@ class Pipeline:
             # Frozen edits load and hash each snapshot once; the same verified bytes reach the wire.
             from src.pipeline.image_edit_inputs import KEY as IMAGE_EDIT_INPUTS
             from src.pipeline.image_edit_inputs import verified_inputs as verified_edit_inputs
+            from src.pipeline.image_edit_inputs import verified_outpaint
 
-            frozen_edit = None
+            frozen_edit = frozen_outpaint = None
             if IMAGE_EDIT_INPUTS in config:
                 frozen_edit = verified_edit_inputs(config, input_image_path)
+                frozen_outpaint = verified_outpaint(config)
             input_image_b64 = (
                 base64.b64encode(frozen_edit[0]).decode("ascii")
                 if frozen_edit is not None else self._load_image_base64(input_image_path)
@@ -5637,6 +5639,22 @@ class Pipeline:
                 logger.error("img2img request failed or returned no images")
                 return None
 
+            # Outpainting: restore the protected original at the one finalization boundary, or publish nothing.
+            outpaint_evidence = None
+            if frozen_outpaint is not None:
+                from src.pipeline.outpaint_canvas import preserve_original
+
+                try:
+                    preserved, outpaint_evidence = preserve_original(
+                        response["images"][0], frozen_outpaint.original_bytes, frozen_outpaint.record
+                    )
+                except ValueError as exc:
+                    logger.error(f"Outpaint finalization refused; no artifact was published: {exc}")
+                    self._record_stage_event("img2img", "exit", 1, 1, False)
+                    return None
+                outpaint_evidence["original_path"] = frozen_outpaint.original_path
+                response["images"][0] = base64.b64encode(preserved).decode("ascii")
+
             # Save image
             image_path = output_dir / f"{image_name}.png"
             # PR-FILENAME-001: Apply collision failsafe
@@ -5681,6 +5699,8 @@ class Pipeline:
                 "requested_subseed": payload.get("subseed", -1),
                 "all_subseeds": gen_info.get("all_subseeds"),
             }
+            if outpaint_evidence is not None:
+                metadata["outpaint"] = outpaint_evidence
             if adaptive_refinement:
                 metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(
                     adaptive_refinement,

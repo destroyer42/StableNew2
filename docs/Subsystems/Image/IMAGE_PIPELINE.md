@@ -153,7 +153,33 @@ The img2img executor re-verifies snapshots and base64-encodes those same inspect
 read before the generation payload. Original working files may subsequently change without changing an admitted job's
 inputs. Persisted replay/retry input checks include the mask digest. Queue, cancellation, backend identity, NJR schema,
 repository ownership and output/history contracts are unchanged. CPU tests establish input/payload contracts; physical
-masked-output acceptance remains a separate owner-authorized run. Outpainting is not implemented.
+masked-output acceptance remains a separate owner-authorized run.
+
+### 3.3 Frozen outpainting from Review
+
+Outpainting reuses section 3.2: one img2img NJR (`ImageEditSpec.operation="outpaint"`, `inpaint_full_res=False`) whose source
+is the original on an extended canvas and whose mask marks only the new area. `src/pipeline/outpaint_canvas.py` (pure Pillow)
+derives, deterministically, an expanded size of (W+left+right, H+top+bottom), the original at (left, top) unscaled, the empty
+area filled by replicating the nearest boundary pixel (`edge_replicate.v1`, corners included) and a binary mask (black over the
+original, white elsewhere). The original is first normalized (`exif_transpose_rgb_flatten_white.v1`: EXIF orientation applied,
+alpha flattened over white, RGB; other color modes refused). Feathering is the backend's `mask_blur` only.
+
+`config.img2img.image_edit_inputs` gains `original` (a third content-addressed snapshot of the original bytes) and `outpaint`
+(`stablenew.image_edit.outpaint.v1`: extents, original SHA-256, original/expanded size, original bounding box, padding, mask and
+normalization policies, the preservation policy). Both are required together, and the stage config's `edit_operation: "outpaint"` binds them (deleting the record cannot downgrade
+the job to an unpreserved masked edit). `verified_inputs` (admission and the executor's pre-dispatch check) re-derives the canvas
+from the original snapshot and compares pixels, so a forged record or substituted snapshot refuses before queueing or dispatch;
+admission also re-reads the live original file and refuses if it changed after Preview (after admission the job runs from the
+frozen snapshot, so later edits to the working file cannot change it); replay checks include the original snapshot. No NJR schema
+change and no image bytes in the NJR; lineage `parent_artifact_id` is the original's digest.
+
+Original-pixel preservation is enforced at the existing img2img artifact-finalization boundary (`Pipeline.run_img2img_stage`),
+not by backend behavior: the result must decode as a still image of exactly the approved expanded size, then the canonical
+decoded original is pasted at its bounding box and the PNG is published through the one existing writer. A wrong-sized,
+corrupt or uncompositable result publishes nothing (the stage fails; the generation POST is never replayed). The finalized
+manifest carries `outpaint` evidence (`preservation_applied`, original digest, protected-region digest, bounding box,
+extents, sizes). The backend can still blend the seam inside the exterior; only the original pixels are guaranteed. Physical
+output quality is not qualified.
 
 ## 4. Model profiles, policy and adaptation
 

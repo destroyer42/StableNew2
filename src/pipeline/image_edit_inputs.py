@@ -6,6 +6,7 @@ import hashlib
 import io
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -19,9 +20,18 @@ from src.conditioning.openpose_library import (
     validate_image_bytes,
 )
 from src.conditioning.openpose_snapshot import snapshot_path, write_snapshot
+from src.pipeline.outpaint_canvas import (
+    Extents,
+    plain_record,
+    prepare_outpaint_canvas,
+    verify_derivation,
+)
 
 KEY = "image_edit_inputs"
 SCHEMA = "stablenew.image_edit.inputs.v1"
+OUTPAINT_KEY = "outpaint"
+EDIT_OPERATION_KEY = "edit_operation"
+ORIGINAL_KEY = "original"
 
 
 def default_snapshot_root() -> Path:
@@ -116,6 +126,25 @@ def freeze_inputs(source_path: str, mask_data: bytes, source_sha256: str) -> dic
     }
 
 
+def freeze_outpaint_inputs(
+    source_path: str, source_sha256: str, extents: Extents, *, steps: int | None = None
+) -> dict[str, Any]:
+    """Freeze the original, the derived expanded source and the derived mask; geometry is refused before any write."""
+    original = read_source(source_path)
+    if original.sha256 != source_sha256:
+        raise ValueError("Source changed since the editor opened; reopen the image")
+    canvas = prepare_outpaint_canvas(original.data, extents, steps=steps)
+    expanded, mask = inspect_bytes(canvas.expanded_png), inspect_bytes(canvas.mask_png)
+    return {
+        "schema": SCHEMA,
+        "original_path": str(Path(source_path).resolve()),
+        "source": _snapshot(expanded),
+        "mask": _snapshot(mask),
+        ORIGINAL_KEY: _snapshot(original),
+        OUTPAINT_KEY: canvas.record,
+    }
+
+
 def verified_snapshot(raw: Any) -> bytes:
     if not isinstance(raw, Mapping) or not re.fullmatch(
         r"[0-9a-f]{64}", str(raw.get("sha256", ""))
@@ -153,8 +182,38 @@ def verified_inputs(
             raise ValueError("Frozen edit mask must be a nonempty grayscale PNG")
     if (source.get("width"), source.get("height")) != (mask.get("width"), mask.get("height")):
         raise ValueError("Frozen mask and source dimensions differ")
-    if check_original and read_source(str(raw.get("original_path", ""))).sha256 != source.get(
+    identity = source
+    if (ORIGINAL_KEY in raw) != (OUTPAINT_KEY in raw) or (
+        config.get(EDIT_OPERATION_KEY) == OUTPAINT_KEY
+    ) != (OUTPAINT_KEY in raw):
+        raise ValueError("Incomplete frozen outpaint contract; preview again")
+    if OUTPAINT_KEY in raw:
+        original = raw[ORIGINAL_KEY]
+        if not isinstance(original, Mapping) or not isinstance(raw[OUTPAINT_KEY], Mapping):
+            raise ValueError("Invalid frozen outpaint contract")
+        verify_derivation(raw[OUTPAINT_KEY], verified_snapshot(original), source_data, mask_data)
+        identity = original
+    if check_original and read_source(str(raw.get("original_path", ""))).sha256 != identity.get(
         "sha256"
     ):
         raise ValueError("Source changed after Preview; preview again before queueing")
     return source_data, mask_data
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenOutpaint:
+    original_bytes: bytes
+    record: dict[str, Any]
+    original_path: str
+
+
+def verified_outpaint(config: Mapping[str, Any]) -> FrozenOutpaint | None:
+    """The verified original and record of a frozen outpaint; ``None`` for any other edit. Call after ``verified_inputs``."""
+    raw = config.get(KEY)
+    if not isinstance(raw, Mapping) or OUTPAINT_KEY not in raw:
+        return None
+    return FrozenOutpaint(
+        verified_snapshot(raw[ORIGINAL_KEY]),
+        plain_record(raw[OUTPAINT_KEY]),
+        str(raw.get("original_path", "")),
+    )
