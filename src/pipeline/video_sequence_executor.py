@@ -815,10 +815,13 @@ def run_sequence_stage(
         metadata["assembled_video_artifact"] = dict(bundle)
         metadata.setdefault("video_artifacts", {})["assembled_video"] = dict(bundle)
         primary = dict(metadata.get("video_primary_artifact") or {})
+        # The bundle a consumer plays or hands to Movie Clips is the assembled movie and nothing else: the runner's
+        # aggregate carried the last segment's frames, and every segment clip stays listed in ``sequence_artifact``.
         primary.update(
             primary_path=outcome.assembled_path,
-            output_paths=outcome.output_paths,
+            output_paths=[outcome.assembled_path],
             video_paths=[outcome.assembled_path],
+            frame_paths=[],
         )
         metadata["video_primary_artifact"] = primary
     return outcome.output_paths
