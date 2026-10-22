@@ -91,10 +91,16 @@ def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
         metadata.get("parent_artifact_id")
     )
     checks: list[InputCheck] = []
+    edit = _mapping(_mapping(_mapping(record.config).get("img2img")).get("image_edit_inputs"))
+    edit_source = _mapping(edit.get("source"))
     for path in inputs:
         expected = None
         if prepared_sha and path == prepared_path:
             expected = prepared_sha
+        elif edit_source.get("path") == path and _recorded_sha(edit_source.get("sha256")):
+            # A frozen image edit records the digest of the exact snapshot it sends; an outpaint's lineage digest is
+            # the (different) original, so the snapshot's own digest is the one that identifies this input.
+            expected = _recorded_sha(edit_source.get("sha256"))
         elif parent_sha and len(inputs) == 1:
             expected = parent_sha
         checks.append(InputCheck("source image", path, expected))
@@ -121,7 +127,6 @@ def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
                 _recorded_sha(conditioning.get("asset_sha256")),
             )
         )
-    edit = _mapping(_mapping(_mapping(record.config).get("img2img")).get("image_edit_inputs"))
     from src.conditioning.controlnet import SLOT_FIELD, FrozenControlNet
 
     raw_units = _mapping(record.config).get(SLOT_FIELD)
@@ -131,6 +136,11 @@ def frozen_input_checks(record: NormalizedJobRecord) -> list[InputCheck]:
     mask = _mapping(edit.get("mask"))
     if mask.get("path"):
         checks.append(InputCheck("inpainting mask", str(mask["path"]), _recorded_sha(mask.get("sha256"))))
+    original = _mapping(edit.get("original"))
+    if original.get("path"):
+        checks.append(
+            InputCheck("outpaint original image", str(original["path"]), _recorded_sha(original.get("sha256")))
+        )
     return checks
 
 

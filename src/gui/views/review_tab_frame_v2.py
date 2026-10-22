@@ -589,10 +589,17 @@ class ReviewTabFrame(ttk.Frame):
             "Different settings are split into separate jobs.",
         )
 
+        edit_row = ttk.Frame(run_box)
+        edit_row.grid(row=5, column=0, sticky="ew", pady=(0, 6))
+        edit_row.columnconfigure((0, 1), weight=1, uniform="image_edit")
         self.edit_mask_button = ttk.Button(
-            run_box, text="Edit Mask…", command=self._open_mask_editor,
+            edit_row, text="Edit Mask…", command=self._open_mask_editor,
         )
-        self.edit_mask_button.grid(row=5, column=0, sticky="ew", pady=(0, 6))
+        self.edit_mask_button.grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        self.extend_canvas_button = ttk.Button(
+            edit_row, text="Extend Canvas…", command=self._open_outpaint_editor,
+        )
+        self.extend_canvas_button.grid(row=0, column=1, sticky="ew", padx=(3, 0))
         self.reprocess_selected_button = ttk.Button(
             run_box,
             text="Reprocess Selected",
@@ -1458,6 +1465,18 @@ class ReviewTabFrame(ttk.Frame):
             messagebox.showwarning("Edit Mask", "The application controller is unavailable.", parent=self)
             return
         MaskEditorDialog(self, source_path=paths[0], controller=self.app_controller)
+
+    def _open_outpaint_editor(self) -> None:
+        from src.gui.outpaint_dialog import OutpaintDialog
+
+        paths = self._get_selected_review_paths()
+        if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            messagebox.showwarning("Extend Canvas", "Select exactly one PNG, JPEG or WebP still image.", parent=self)
+            return
+        if self.app_controller is None:
+            messagebox.showwarning("Extend Canvas", "The application controller is unavailable.", parent=self)
+            return
+        OutpaintDialog(self, source_path=paths[0], controller=self.app_controller)
 
     def _get_selected_review_paths(self) -> list[Path]:
         idxs = list(self.images_list.curselection())

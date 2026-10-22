@@ -26,7 +26,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Movie Clips assembly (queued) | `docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7; `src/controller/movie_clips_submission_service.py` -> `src/video/movie_assembly_compiler.py` -> `src/pipeline/run_stage_handlers.py` -> `src/video/movie_assembly_engine.py` |
 | Artifacts, replay and history | `src/pipeline/artifact_contract.py`, `src/pipeline/result_contract_v26.py`, `src/pipeline/replay_engine.py`, `src/history/` |
 | Learning and experiments | `docs/Subsystems/Learning/LEARNING.md`; `src/learning/`, `src/gui/controllers/learning_controller.py` |
-| Review, reprocess and batch operations | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/queue/batch_projection.py` |
+| Review, reprocess and batch operations | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/queue/batch_projection.py`; masked edit and outpaint `src/controller/masked_edit_service.py`, `src/controller/outpaint_edit_service.py`, `src/pipeline/outpaint_canvas.py` |
 | Photo Optimize | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/photo_optimize/`, `src/controller/photo_optimize_submission.py` |
 | Adaptive refinement and ADetailer | `src/refinement/`, `src/pipeline/adetailer_contract.py` |
 | GUI views and state | `src/gui/views/`, `src/gui/app_state_v2.py`, `src/gui/main_window_v2.py` |
