@@ -226,7 +226,7 @@ def _hermetic_video_preflight_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     except Exception:  # pragma: no cover - isolation must never break collection
         return
 
-    def _ready_probes() -> PreflightProbes:
+    def _ready_probes(**_settings: object) -> PreflightProbes:  # accepts the app's config_manager
         return PreflightProbes(
             command=("comfy-test-command",),
             base_url="http://127.0.0.1:1",
