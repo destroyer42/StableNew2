@@ -7,6 +7,7 @@ import os
 import subprocess
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import ttk
 from typing import TYPE_CHECKING, Any
@@ -44,10 +45,12 @@ class ThumbnailWidget(ttk.Frame):
         background: str = BACKGROUND_ELEVATED,
         responsive: bool = False,
         min_edge: int = PREVIEW_MIN_EDGE,
+        on_source_changed: Callable[[str | None], None] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
 
+        self._on_source_changed = on_source_changed
         self._responsive = bool(responsive)
         self._max_edge = max(int(width), int(height))
         self._min_edge = min(int(min_edge), self._max_edge)
@@ -143,6 +146,7 @@ class ThumbnailWidget(ttk.Frame):
         self._current_path = key
         self._open_path = key
         self._update_clickability()
+        self._notify_source_changed()
         if self._inflight_path == key:
             return  # the same decode is already running; its result is still the current request
         self._request_id += 1
@@ -292,6 +296,7 @@ class ThumbnailWidget(ttk.Frame):
             self._current_path = None
             self._open_path = None
             self._update_clickability()
+            self._notify_source_changed()
             from PIL import Image as PILImage
 
             from src.utils.image_utils import generate_thumbnail
@@ -316,6 +321,7 @@ class ThumbnailWidget(ttk.Frame):
         self._open_path = None
         self._show_placeholder()
         self._update_clickability()
+        self._notify_source_changed()
 
     def set_placeholder(self, text: str) -> None:
         """Show an explicit neutral state without implying an image exists."""
@@ -325,6 +331,20 @@ class ThumbnailWidget(ttk.Frame):
         self._open_path = None
         self._show_placeholder(text)
         self._update_clickability()
+        self._notify_source_changed()
+
+    def current_path(self) -> str | None:
+        """The file the thumbnail was last asked to show, or ``None`` when it shows no file."""
+
+        return self._current_path
+
+    def _notify_source_changed(self) -> None:
+        callback = self._on_source_changed
+        if callback is not None:
+            try:
+                callback(self._current_path)
+            except tk.TclError:
+                pass  # the owner is being destroyed
 
     def _invalidate_pending_load(self) -> None:
         """A newer explicit state supersedes any decode still in flight."""

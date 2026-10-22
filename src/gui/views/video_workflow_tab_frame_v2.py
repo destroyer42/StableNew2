@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
 from typing import Any, cast
 
 from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
@@ -27,17 +27,20 @@ from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
 from src.gui.views.video_workflow_motion_prep_panel_v2 import WorkflowMotionPreparationPanel
 from src.gui.views.video_workflow_motion_readiness_panel_v2 import WorkflowMotionReadinessPanel
+from src.gui.views.video_workflow_recent_outputs_panel_v2 import WorkflowRecentOutputsPanel
 from src.gui.views.video_workflow_runtime_strip_v2 import WorkflowRuntimeReadinessStrip
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
+from src.gui.widgets.submission_notice_v2 import SubmissionNotice
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.state.output_routing import (
     OUTPUT_ROUTE_MOVIE_CLIPS,
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_TESTING,
 )
+from src.video.workflow_picker import workflow_choices
 
 _IMAGE_FILETYPES = [
     ("PNG files", "*.png"),
@@ -94,7 +97,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         camera_intent_defaults = dict(defaults.get("camera_intent") or {})
         controlnet_defaults = dict(defaults.get("controlnet") or {})
         depth_input_defaults = dict(defaults.get("depth_input") or {})
+        # ``workflow_var`` holds the workflow ID (what is submitted and persisted); the picker shows the
+        # friendly label held in ``workflow_label_var`` and the two are kept in step.
         self.workflow_var = tk.StringVar(value=str(defaults.get("workflow_id") or ""))
+        self.workflow_label_var = tk.StringVar(value="")
+        self._workflow_label_to_id: dict[str, str] = {}
+        self._workflow_id_to_label: dict[str, str] = {}
+        # Trusted parent ids from a Make Video handoff, valid only for the source path they were given for.
+        self._source_lineage: dict[str, str] = {}
+        self._source_lineage_path = ""
+        self._recent_controller: Any = None
         self.source_image_var = tk.StringVar(value=str(defaults.get("source_image_path") or ""))
         self.end_anchor_var = tk.StringVar(value=str(defaults.get("end_anchor_path") or ""))
         self.mid_anchors_var = tk.StringVar(value="; ".join(defaults.get("mid_anchor_paths") or []))
@@ -232,6 +244,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 )
             except Exception:
                 pass
+        self.workflow_label_var.trace_add("write", lambda *_args: self._on_workflow_label_changed())
+        self.workflow_var.trace_add("write", lambda *_args: self._on_workflow_id_changed())
         for variable in (
             self.workflow_var,
             self.source_image_var,
@@ -258,6 +272,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             "write", lambda *_args: self._invalidate_experiment_preview()
         )
         self.experimental_opt_in_var.trace_add("write", lambda *_args: self._refresh_queue_gate())
+        self.smooth_var.trace_add("write", lambda *_args: self._refresh_advanced_status())
+        self.negative_prompt_text.bind(
+            "<KeyRelease>", lambda _e: self._refresh_advanced_status(), add="+"
+        )
         for prompt_widget in (self.prompt_text, self.negative_prompt_text):
             for sequence in ("<KeyRelease>", "<<Paste>>", "<<Cut>>"):
                 prompt_widget.bind(
@@ -361,12 +379,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.source_summary_label = ttk.Label(
             header, textvariable=self.source_summary_var, style="Muted.TLabel", justify="left"
         )
-        self.source_summary_label.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        # Inline, non-modal feedback for Queue: a failure stays visible until dismissed or the next attempt;
+        # an accepted job is acknowledged with a "View in queue" action instead of a blocking dialog.
+        self.submission_notice = SubmissionNotice(header)
+        self.submission_notice.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        self.source_summary_label.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(4, 0))
         bind_wraplength(self.source_summary_label)
         # The effective-settings string repeats what the form below shows, so it is disclosed on demand.
         self.effective_settings_section = DisclosureSection(header, title="Effective settings")
         self.effective_settings_section.grid(
-            row=3, column=0, columnspan=4, sticky="ew", pady=(2, 0)
+            row=4, column=0, columnspan=4, sticky="ew", pady=(2, 0)
         )
         self.effective_settings_section.body.columnconfigure(0, weight=1)
         self.effective_settings_label = ttk.Label(
@@ -399,22 +421,20 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_mode_change=self._on_batch_mode_change,
             on_status=self.status_var.set,
         )
-        self.batch_panel.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        self.batch_panel.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(4, 0))
         self.batch_panel.place_details(row=0, column=0, sticky="ew", padx=8, pady=(8, 0))
-        configure_grid_columns(
-            body,
-            build_form_column_specs(
-                label_columns=(0,),
-                primary_columns=(1,),
-                secondary_columns=(2, 3),
-                secondary_min_width=140,
-                secondary_weight=1,
-            ),
+        form_columns = build_form_column_specs(
+            label_columns=(0,),
+            primary_columns=(1,),
+            secondary_columns=(2, 3),
+            secondary_min_width=140,
+            secondary_weight=1,
         )
-        body.rowconfigure(9, weight=1)
-        body.rowconfigure(10, weight=1)
+        configure_grid_columns(body, form_columns)
+        body.rowconfigure(2, weight=1)
         self._body_frame = body
 
+        # ---- Basic: workflow preset, motion amount, length and the prompt -------------------------------
         self.workflow_combo: ttk.Combobox = cast(
             ttk.Combobox,
             self._add_labeled_entry(
@@ -422,7 +442,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 0,
                 "Workflow",
                 combo=True,
-                variable=self.workflow_var,
+                variable=self.workflow_label_var,
                 help_key="workflow",
             ),
         )
@@ -433,21 +453,96 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             wraplength=640,
             justify="left",
         ).grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
-        self.end_anchor_entry = self._add_labeled_entry(
+        self.motion_combo = self._add_labeled_entry(
             body,
             1,
+            "Motion",
+            combo=True,
+            variable=self.motion_profile_var,
+            values=_MOTION_PROFILES,
+            help_key="motion",
+        )
+        self.motion_label = self.motion_combo.master.grid_slaves(row=1, column=0)[0]
+        # Generation length, shown only for workflows that declare a frame-count policy.
+        self.frame_count_frame = ttk.Frame(body, style="Panel.TFrame")
+        self.frame_count_frame.grid(row=1, column=2, columnspan=2, sticky="w", padx=(6, 0))
+        frame_count_label = ttk.Label(self.frame_count_frame, text="Length", style="Dark.TLabel")
+        frame_count_label.pack(side="left", padx=(0, 6))
+        self.frame_count_combo = ttk.Combobox(
+            self.frame_count_frame,
+            textvariable=self.frame_count_var,
+            values=[],
+            state="readonly",
+            style="Dark.TCombobox",
+            width=22,
+        )
+        self.frame_count_combo.pack(side="left")
+        self._attach_setting_help(
+            "frame_count",
+            VIDEO_WORKFLOW_SETTING_HELP["frame_count"],
+            frame_count_label,
+            self.frame_count_combo,
+        )
+        prompt_label = ttk.Label(body, text="Prompt", style="Dark.TLabel")
+        self.prompt_label = prompt_label  # relabelled from the workflow's operator projection
+        prompt_label.grid(row=2, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
+        self.prompt_text = tk.Text(
+            body,
+            height=5,
+            wrap="word",
+        )
+        style_text_widget(self.prompt_text, elevated=True)
+        self.prompt_text.grid(row=2, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
+        self._attach_setting_help(
+            "prompt",
+            VIDEO_WORKFLOW_SETTING_HELP["prompt"],
+            prompt_label,
+            self.prompt_text,
+        )
+        # PR-VID-UX-311: runtime readiness stays in the Basic area, because it is what keeps Queue disabled.
+        self.runtime_readiness_strip = WorkflowRuntimeReadinessStrip(
+            body,
+            session=self._runtime_readiness_session,
+            read_selection=self._read_runtime_readiness_selection,
+            on_change=self._refresh_queue_gate,
+        )
+        self.runtime_readiness_strip.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.runtime_readiness_strip.grid_remove()
+        self.bind("<Map>", self._on_tab_shown, add="+")
+        svd_row = ttk.Frame(body, style="Panel.TFrame")
+        svd_row.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.use_svd_button = ttk.Button(
+            svd_row, text="Use native SVD instead", style="Dark.TButton", command=self._on_use_svd
+        )
+        self.use_svd_button.pack(side="left")
+        ttk.Label(
+            svd_row,
+            text="Opens the Stable Video Diffusion tab with this source image.",
+            style="Muted.TLabel",
+        ).pack(side="left", padx=(8, 0))
+
+        # ---- Advanced: everything else, reachable and collapsed by default ------------------------------
+        self.advanced_section = DisclosureSection(body, title="Advanced options")
+        self.advanced_section.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        adv = self.advanced_section.body
+        self._advanced_frame = adv
+        configure_grid_columns(adv, form_columns)
+
+        self.end_anchor_entry = self._add_labeled_entry(
+            adv,
+            0,
             "End Anchor",
             variable=self.end_anchor_var,
             help_key="end_anchor",
         )
         self.end_anchor_browse = ttk.Button(
-            body, text="Browse...", style="Dark.TButton", command=self._on_browse_end_anchor
+            adv, text="Browse...", style="Dark.TButton", command=self._on_browse_end_anchor
         )
-        self.end_anchor_browse.grid(row=1, column=2, sticky="ew", padx=(6, 0))
+        self.end_anchor_browse.grid(row=0, column=2, sticky="ew", padx=(6, 0))
 
         self.mid_anchors_entry = self._add_labeled_entry(
-            body,
-            2,
+            adv,
+            1,
             "Mid Anchors",
             variable=self.mid_anchors_var,
             width=60,
@@ -455,23 +550,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             help_key="mid_anchors",
         )
         self.mid_anchors_browse = ttk.Button(
-            body, text="Browse...", style="Dark.TButton", command=self._on_browse_mid_anchors
+            adv, text="Browse...", style="Dark.TButton", command=self._on_browse_mid_anchors
         )
-        self.mid_anchors_browse.grid(row=2, column=2, sticky="ew", padx=(6, 0))
+        self.mid_anchors_browse.grid(row=1, column=2, sticky="ew", padx=(6, 0))
 
-        self.motion_combo = self._add_labeled_entry(
-            body,
-            3,
-            "Motion",
-            combo=True,
-            variable=self.motion_profile_var,
-            values=_MOTION_PROFILES,
-            help_key="motion",
-        )
-        self.motion_label = self.motion_combo.master.grid_slaves(row=3, column=0)[0]
         # Driving video (only for workflows that accept one).
-        self.pose_video_frame = ttk.Frame(body, style="Panel.TFrame")
-        self.pose_video_frame.grid(row=3, column=2, columnspan=2, sticky="ew", padx=(6, 0))
+        self.pose_video_frame = ttk.Frame(adv, style="Panel.TFrame")
+        self.pose_video_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         pose_video_label = ttk.Label(
             self.pose_video_frame, text="Driving Video", style="Dark.TLabel"
         )
@@ -492,55 +577,50 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             pose_video_label,
             self.pose_video_entry,
         )
-        self.seed_label = ttk.Label(body, text="Seed", style="Dark.TLabel")
-        self.seed_label.grid(row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
-        self.seed_entry = ttk.Entry(body, textvariable=self.seed_var, style="Dark.TEntry", width=40)
-        self.seed_entry.grid(row=4, column=1, sticky="ew", pady=(0, 6))
+        self.seed_label = ttk.Label(adv, text="Seed", style="Dark.TLabel")
+        self.seed_label.grid(row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.seed_entry = ttk.Entry(adv, textvariable=self.seed_var, style="Dark.TEntry", width=40)
+        self.seed_entry.grid(row=3, column=1, sticky="ew", pady=(0, 6))
         self._attach_setting_help(
             "seed", VIDEO_WORKFLOW_SETTING_HELP["seed"], self.seed_label, self.seed_entry
         )
-        # Generation length, shown only for workflows that declare a frame-count policy.
-        self.frame_count_frame = ttk.Frame(body, style="Panel.TFrame")
-        self.frame_count_frame.grid(row=4, column=2, columnspan=2, sticky="w", padx=(6, 0))
-        frame_count_label = ttk.Label(self.frame_count_frame, text="Frames", style="Dark.TLabel")
-        frame_count_label.pack(side="left", padx=(0, 6))
-        self.frame_count_combo = ttk.Combobox(
-            self.frame_count_frame,
-            textvariable=self.frame_count_var,
-            values=[],
-            state="readonly",
-            style="Dark.TCombobox",
-            width=22,
+        self.smooth_check = ttk.Checkbutton(
+            adv,
+            text="Smooth with RIFE",
+            variable=self.smooth_var,
+            style="Dark.TCheckbutton",
         )
-        self.frame_count_combo.pack(side="left")
+        self.smooth_check.grid(row=3, column=2, columnspan=2, sticky="w", padx=(6, 0), pady=(0, 6))
         self._attach_setting_help(
-            "frame_count",
-            VIDEO_WORKFLOW_SETTING_HELP["frame_count"],
-            frame_count_label,
-            self.frame_count_combo,
+            "rife_smooth", VIDEO_WORKFLOW_SETTING_HELP["rife_smooth"], self.smooth_check
         )
         self._add_labeled_entry(
-            body,
-            5,
+            adv,
+            4,
             "Output Route",
             combo=True,
             variable=self.output_route_var,
             values=_OUTPUT_ROUTES,
             help_key="output_route",
         )
-        self.smooth_check = ttk.Checkbutton(
-            body,
-            text="Smooth with RIFE",
-            variable=self.smooth_var,
-            style="Dark.TCheckbutton",
+        negative_label = ttk.Label(adv, text="Negative", style="Dark.TLabel")
+        negative_label.grid(row=5, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
+        self.negative_prompt_text = tk.Text(
+            adv,
+            height=4,
+            wrap="word",
         )
-        self.smooth_check.grid(row=5, column=2, columnspan=2, sticky="w", padx=(6, 0), pady=(0, 6))
+        style_text_widget(self.negative_prompt_text, elevated=True)
+        self.negative_prompt_text.grid(row=5, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
         self._attach_setting_help(
-            "rife_smooth", VIDEO_WORKFLOW_SETTING_HELP["rife_smooth"], self.smooth_check
+            "negative",
+            VIDEO_WORKFLOW_SETTING_HELP["negative"],
+            negative_label,
+            self.negative_prompt_text,
         )
         # PR-VID-196: exact prepared-source preview, bounded driving-video facts, geometry/timing
         # advisories and workflow-aware motion guidance.  Read-only; hidden until there is content.
-        motion_container = ttk.Frame(body, style="Panel.TFrame")
+        motion_container = ttk.Frame(adv, style="Panel.TFrame")
         motion_container.grid(row=6, column=0, columnspan=4, sticky="ew")
         motion_container.columnconfigure(0, weight=1)
         self.motion_readiness_panel = WorkflowMotionReadinessPanel(
@@ -548,15 +628,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             session=self._motion_readiness_session,
             read_inputs=self._read_motion_readiness_inputs,
         )
-        self.runtime_readiness_strip = WorkflowRuntimeReadinessStrip(
-            motion_container,
-            session=self._runtime_readiness_session,
-            read_selection=self._read_runtime_readiness_selection,
-            on_change=self._refresh_queue_gate,
-        )
-        self.runtime_readiness_strip.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        self.runtime_readiness_strip.grid_remove()
-        self.bind("<Map>", self._on_tab_shown, add="+")
         self.motion_readiness_panel.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         self.motion_readiness_panel.grid_remove()
         # PR-VID-MOTION-210: optional exact preparation of the driving clip for this workflow.
@@ -569,21 +640,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.motion_prep_panel.grid(row=2, column=0, sticky="ew", pady=(0, 6))
         self.motion_prep_panel.grid_remove()
         # PR-GUI-110: collapsible; every control and value stays alive while collapsed, and a collapsed header
-        # that hides non-default values says so (see _refresh_conditioning_status).
-        self.conditioning_section = DisclosureSection(body, title="Advanced Conditioning")
+        # that hides non-default values says so (see _refresh_conditioning_status).  PR-VID-UX-313: the whole
+        # section is hidden for a workflow that declares neither camera nor depth conditioning.
+        self.conditioning_section = DisclosureSection(adv, title="Advanced Conditioning")
         self.conditioning_section.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(6, 6))
         conditioning_frame = self.conditioning_section.body
         self.conditioning_frame = conditioning_frame
-        configure_grid_columns(
-            conditioning_frame,
-            build_form_column_specs(
-                label_columns=(0,),
-                primary_columns=(1,),
-                secondary_columns=(2, 3),
-                secondary_min_width=140,
-                secondary_weight=1,
-            ),
-        )
+        configure_grid_columns(conditioning_frame, form_columns)
         self._add_labeled_entry(
             conditioning_frame,
             0,
@@ -654,56 +717,23 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             variable=self.controlnet_guidance_end_var,
             help_key="controlnet_guidance_end",
         )
+        # Controls the selected workflow declares (e.g. Animate-2 motion prompt / pose strength).
+        self.workflow_controls_panel = WorkflowControlsPanel(
+            adv, on_change=self._refresh_workspace_summary
+        )
+        self.workflow_controls_panel.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.workflow_controls_panel.grid_remove()
+
         self.workflow_help_panel = ActionExplainerPanel(
-            body,
+            adv,
             content=build_video_workflow_guidance(),
             app_state=self.app_state,
             wraplength=900,
         )
-        self.workflow_help_panel.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(8, 6))
-
-        prompt_label = ttk.Label(body, text="Prompt", style="Dark.TLabel")
-        self.prompt_label = prompt_label  # relabelled from the workflow's operator projection
-        prompt_label.grid(row=9, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
-        self.prompt_text = tk.Text(
-            body,
-            height=5,
-            wrap="word",
-        )
-        style_text_widget(self.prompt_text, elevated=True)
-        self.prompt_text.grid(row=9, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
-        self._attach_setting_help(
-            "prompt",
-            VIDEO_WORKFLOW_SETTING_HELP["prompt"],
-            prompt_label,
-            self.prompt_text,
-        )
-
-        negative_label = ttk.Label(body, text="Negative", style="Dark.TLabel")
-        negative_label.grid(row=10, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
-        self.negative_prompt_text = tk.Text(
-            body,
-            height=4,
-            wrap="word",
-        )
-        style_text_widget(self.negative_prompt_text, elevated=True)
-        self.negative_prompt_text.grid(row=10, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
-        self._attach_setting_help(
-            "negative",
-            VIDEO_WORKFLOW_SETTING_HELP["negative"],
-            negative_label,
-            self.negative_prompt_text,
-        )
-
-        # Controls the selected workflow declares (e.g. Animate-2 motion prompt / pose strength).
-        self.workflow_controls_panel = WorkflowControlsPanel(
-            body, on_change=self._refresh_workspace_summary
-        )
-        self.workflow_controls_panel.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(0, 6))
-        self.workflow_controls_panel.grid_remove()
+        self.workflow_help_panel.grid(row=9, column=0, columnspan=4, sticky="ew", pady=(8, 6))
 
         self.experiment_panel = WorkflowExperimentPanel(
-            body,
+            adv,
             session=self._experiment_session,
             read_form=lambda: (
                 self.source_image_var.get().strip(),
@@ -712,11 +742,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_queued=self._on_experiment_queued,
             on_review=self._on_open_experiment_review,
         )
-        self.experiment_panel.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.experiment_panel.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.experiment_panel.grid_remove()
 
         self.eval_panel = VideoEvalPanel(
-            body,
+            adv,
             get_controller=self._experiment_controller,
             output_dir=lambda: str(getattr(self.app_controller, "output_dir", "") or "output"),
             show_prompts=lambda: (
@@ -724,7 +754,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             ),
             on_queued=self._on_batch_queued_refresh_only,
         )
-        self.eval_panel.grid(row=13, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.eval_panel.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+
+        # PR-VID-UX-314: the newest finished clips with an in-app looping preview.
+        self.recent_outputs_panel = WorkflowRecentOutputsPanel(
+            body,
+            list_outputs=self._list_recent_outputs,
+            send_to_movie=self._send_output_to_movie,
+        )
+        self.recent_outputs_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
 
     def _add_labeled_entry(
         self,
@@ -787,11 +825,49 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             for item in specs
             if item.get("workflow_id")
         }
-        values = list(self._workflow_map.keys())
-        self.workflow_combo["values"] = values
-        if not self.workflow_var.get() and values:
-            self.workflow_var.set(values[0])
+        choices = workflow_choices(specs)
+        self._workflow_label_to_id = {choice.label: choice.workflow_id for choice in choices}
+        self._workflow_id_to_label = {choice.workflow_id: choice.label for choice in choices}
+        self.workflow_combo["values"] = list(self._workflow_label_to_id)
+        if not self.workflow_var.get() and choices:
+            self.workflow_var.set(choices[0].workflow_id)
+        self._sync_workflow_label()
         self._refresh_workspace_summary()
+
+    def _sync_workflow_label(self) -> None:
+        """Show the friendly label of the selected workflow id (the id itself when it is unknown)."""
+
+        workflow_id = self.workflow_var.get().strip()
+        label = self._workflow_id_to_label.get(workflow_id) or workflow_id
+        if label != self.workflow_label_var.get():
+            self.workflow_label_var.set(label)
+
+    def _on_workflow_label_changed(self) -> None:
+        workflow_id = self._workflow_label_to_id.get(self.workflow_label_var.get())
+        if workflow_id and workflow_id != self.workflow_var.get():
+            self.workflow_var.set(workflow_id)
+
+    def _on_workflow_id_changed(self) -> None:
+        self._sync_workflow_label()
+
+    def apply_make_video_defaults(self) -> str:
+        """Preselect the recommended approved workflow for a Make Video handoff.
+
+        An approved workflow the user already chose is kept; an experimental or missing selection is
+        replaced by the recommended one. Nothing is queued, and the per-job experimental opt-in is never
+        carried over (a changed selection resets it). Returns the selected workflow id."""
+
+        controller = self._experiment_controller()
+        getter = getattr(controller, "recommended_workflow_id", None)
+        recommended = str(getter() or "") if callable(getter) else ""
+        current = self._workflow_map.get(self.workflow_var.get().strip(), {})
+        keeps_choice = current.get("governance_state") == "approved" and not current.get(
+            "experimental"
+        )
+        if recommended and recommended in self._workflow_map and not keeps_choice:
+            self.workflow_var.set(recommended)
+        self.submission_notice.clear()
+        return self.workflow_var.get().strip()
 
     def _leave_batch_mode(self) -> bool:
         """A single-image choice makes single-image mode authoritative again.
@@ -814,11 +890,21 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             panel.refresh()
         return True
 
-    def set_source_image_path(self, image_path: str, *, status_message: str | None = None) -> None:
+    def set_source_image_path(
+        self,
+        image_path: str,
+        *,
+        status_message: str | None = None,
+        lineage: dict[str, str] | None = None,
+    ) -> None:
         if not self._leave_batch_mode():
             return
         self.source_image_var.set(str(image_path))
         self._source_bundle = None
+        # Trusted parent ids from the entry point (History job, Review metadata); valid only for this exact path.
+        self._source_lineage = {key: str(value) for key, value in (lineage or {}).items() if value}
+        self._source_lineage_path = str(image_path) if self._source_lineage else ""
+        self.submission_notice.clear()
         if status_message:
             self.status_var.set(status_message)
         self._refresh_workspace_summary()
@@ -1005,7 +1091,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         for child in self.conditioning_frame.winfo_children():
             set_state(child, conditioning_on)
         if conditioning_on:
+            self.conditioning_section.grid()
             self._refresh_conditioning_controls_state()
+        else:
+            # Camera, depth and ControlNet fields a workflow does not declare are not shown at all.
+            self.conditioning_section.grid_remove()
+        if bool(visible.get("pose_video", False)) or workflow_meta.get("operator_controls"):
+            self.advanced_section.set_expanded(True)  # required inputs must not hide behind a header
         experimental = bool(workflow_meta.get("experimental"))
         if experimental:
             self.experimental_opt_in_check.pack(
@@ -1190,6 +1282,32 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         prep_panel = getattr(self, "motion_prep_panel", None)
         if prep_panel is not None:
             prep_panel.refresh()
+        self._refresh_advanced_status()
+
+    def _refresh_advanced_status(self) -> None:
+        """Collapsed-header hint: name the hidden Advanced values that are set, so nothing hides silently."""
+
+        section = getattr(self, "advanced_section", None)
+        if section is None or not hasattr(self, "negative_prompt_text"):
+            return
+        set_values: list[str] = []
+        if self.end_anchor_var.get().strip():
+            set_values.append("end anchor")
+        if self.mid_anchors_var.get().strip():
+            set_values.append("mid anchors")
+        if self.pose_video_frame.winfo_manager() and self.pose_video_var.get().strip():
+            set_values.append("driving video")
+        if self.seed_var.get().strip():
+            set_values.append("seed")
+        if self.smooth_var.get():
+            set_values.append("smoothing")
+        if self.output_route_var.get().strip() != str(
+            self._defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS
+        ):
+            set_values.append("output route")
+        if self.negative_prompt_text.get("1.0", "end").strip():
+            set_values.append("negative prompt")
+        section.set_status(("set: " + ", ".join(set_values)) if set_values else "", active=bool(set_values))
 
     def _refresh_conditioning_status(self, workflow_meta: dict[str, Any]) -> None:
         """Collapsed-header hint: say so when hidden conditioning is active or edited from its default."""
@@ -1233,6 +1351,29 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         strip = getattr(self, "runtime_readiness_strip", None)
         if strip is not None:
             strip.request_refresh(force=True)
+        recent = getattr(self, "recent_outputs_panel", None)
+        if recent is not None:
+            # Resolved on the Tk thread; the worker only calls the already-built controller.
+            self._recent_controller = self._experiment_controller()
+            recent.request_refresh()
+
+    def _list_recent_outputs(self) -> list[Any]:
+        getter = getattr(self._recent_controller, "list_recent_video_outputs", None)
+        return list(getter()) if callable(getter) else []
+
+    def _send_output_to_movie(self, output: Any) -> None:
+        """Hand a recent clip's recorded bundle to Movie Clips (intent only; nothing is queued)."""
+
+        from src.gui.controllers.video_workspace_handoff import route_bundle_to_movie_clips
+
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            raise RuntimeError("The main window is not available.")
+        route_bundle_to_movie_clips(
+            main_window=main_window,
+            bundle=dict(output.bundle),
+            status_message=f"Loaded {output.file_name} into Movie Clips.",
+        )
 
     def _read_runtime_readiness_selection(self) -> tuple[str, str]:
         """The selected workflow for the runtime strip; empty (strip hidden) when there is no controller."""
@@ -1350,6 +1491,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def _set_text_value(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", "end")
         widget.insert("1.0", value)
+        self._refresh_advanced_status()
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._pending_visibility_refresh = False
@@ -1439,25 +1581,65 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             self.status_var.set("No recent image output available to route into Video Workflow.")
 
+    def _fail(self, message: str) -> None:
+        """Show a failure beside the form (and in the status line); it stays until dismissed or retried."""
+
+        self.status_var.set(message)
+        self.submission_notice.show_error(message)
+
+    def _current_lineage(self) -> dict[str, str]:
+        if self._source_lineage and self.source_image_var.get().strip() == self._source_lineage_path:
+            return dict(self._source_lineage)
+        return {}
+
+    def _on_view_queue(self) -> None:
+        from src.gui.controllers.video_workspace_handoff import show_queue_view
+
+        if not show_queue_view(getattr(self.app_controller, "main_window", None)):
+            self.status_var.set("The queue view is not available from here; open the Pipeline tab.")
+
+    def _on_use_svd(self) -> None:
+        source = self.source_image_var.get().strip()
+        sender = getattr(self.app_controller, "send_image_to_svd", None)
+        if not source:
+            self._fail("Choose a source image first.")
+        elif not callable(sender):
+            self._fail("The native SVD tab is not available.")
+        else:
+            try:
+                sender(source)
+            except (OSError, RuntimeError, ValueError) as exc:
+                self._fail(f"Could not open the SVD tab: {exc}")
+
     def _on_submit(self) -> None:
+        self.submission_notice.clear()
         controller = getattr(self, "app_controller", None)
         handler = getattr(controller, "submit_video_workflow_job", None)
         if not callable(handler):
-            messagebox.showerror("Video Workflow", "Video workflow submission is not available.")
+            self._fail("Video workflow submission is not available.")
             return
         source_image_path = self.source_image_var.get().strip()
+        if not source_image_path:
+            self._fail(
+                "Choose a source image first: Browse..., Use Latest Output, or Make Video from "
+                "Review, History or the Pipeline preview."
+            )
+            return
         form_data = self.get_video_workflow_state(for_submission=True)
+        lineage = self._current_lineage()
+        if lineage:
+            form_data["source_lineage"] = lineage
         try:
             job_id = handler(source_image_path=source_image_path, form_data=form_data)
         except Exception as exc:
-            messagebox.showerror("Video Workflow", str(exc))
-            self.status_var.set(f"Video workflow queue failed: {exc}")
+            self._fail(f"Not queued: {exc}")
             return
         self._submitted_effective_settings = dict(
             form_data.get("_stable_new_submission_projection") or {}
         )
         submitted_seed = self._submitted_effective_settings.get("seed")
         status_suffix = f" (seed {submitted_seed})" if submitted_seed is not None else ""
-        self.status_var.set(f"Queued video workflow job {job_id}{status_suffix}")
+        message = f"Queued video workflow job {job_id}{status_suffix}"
+        self.status_var.set(message)
         self._refresh_workspace_summary()
-        messagebox.showinfo("Video Workflow", f"Queued video workflow job {job_id}")
+        self.submission_notice.show_queued(message + ".", on_view_queue=self._on_view_queue)
