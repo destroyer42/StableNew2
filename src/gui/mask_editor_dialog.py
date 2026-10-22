@@ -81,8 +81,12 @@ class MaskEditorDialog(tk.Toplevel):
         self.rowconfigure(1, weight=1)
         tools = ttk.Frame(self, padding=8)
         tools.grid(row=0, column=0, columnspan=2, sticky="ew")
-        ttk.Radiobutton(tools, text="Paint", variable=self.erase, value=False).pack(side="left")
-        ttk.Radiobutton(tools, text="Erase", variable=self.erase, value=True).pack(side="left")
+        ttk.Radiobutton(
+            tools, text="Paint", variable=self.erase, value=False, style="Page.TRadiobutton"
+        ).pack(side="left")
+        ttk.Radiobutton(
+            tools, text="Erase", variable=self.erase, value=True, style="Page.TRadiobutton"
+        ).pack(side="left")
         ttk.Label(tools, text="Brush (source pixels)").pack(side="left", padx=6)
         ttk.Spinbox(tools, from_=1, to=512, width=5, textvariable=self.brush_size).pack(side="left")
         for label, action in (

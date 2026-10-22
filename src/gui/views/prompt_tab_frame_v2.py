@@ -30,7 +30,7 @@ from src.gui.prompt_adaptation_dialog import PromptAdaptationDialog
 from src.gui.prompt_target_presenter import NO_TARGET_LABEL, PromptTargetPresenter
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.scrolling import enable_mousewheel
-from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, PAGE_BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.prompt_editor_contract import (
@@ -346,10 +346,10 @@ class PromptTabFrame(ttk.Frame):
         # Header frame
         header_frame = ttk.Frame(self.center_frame)
         header_frame.pack(fill="x", pady=(0, 4))
-        self.pack_name_label = ttk.Label(header_frame, text="Editor", style=BODY_LABEL_STYLE)
+        self.pack_name_label = ttk.Label(header_frame, text="Editor", style=PAGE_BODY_LABEL_STYLE)
         self.pack_name_label.pack(side="left")
         self.target_banner_label = ttk.Label(
-            header_frame, textvariable=self.target_banner_var, style=BODY_LABEL_STYLE
+            header_frame, textvariable=self.target_banner_var, style=PAGE_BODY_LABEL_STYLE
         )
         self.target_banner_label.pack(side="right")
         self.adapt_button = ttk.Button(
@@ -392,7 +392,7 @@ class PromptTabFrame(ttk.Frame):
         # Positive prompt header (row 0)
         positive_header = ttk.Frame(self.prompts_tab)
         positive_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 2))
-        ttk.Label(positive_header, text="Prompt Details", style=BODY_LABEL_STYLE).pack(side="left")
+        ttk.Label(positive_header, text="Prompt Details", style=PAGE_BODY_LABEL_STYLE).pack(side="left")
 
         # Quick insert buttons frame (updated dynamically)
         self.positive_quick_insert_frame = ttk.Frame(positive_header)
@@ -444,7 +444,7 @@ class PromptTabFrame(ttk.Frame):
         # Negative prompt header (row 3)
         negative_header = ttk.Frame(self.prompts_tab)
         negative_header.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 2))
-        ttk.Label(negative_header, text="Negative Prompt", style=BODY_LABEL_STYLE).pack(side="left")
+        ttk.Label(negative_header, text="Negative Prompt", style=PAGE_BODY_LABEL_STYLE).pack(side="left")
         ttk.Label(
             negative_header, textvariable=self.negative_note_var, wraplength=520, justify="left"
         ).pack(side="left", padx=(8, 0))

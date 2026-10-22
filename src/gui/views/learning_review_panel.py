@@ -217,7 +217,13 @@ class LearningReviewPanel(ttk.Frame):
         self.rating_var = tk.IntVar(value=0)
         self.rating_buttons = []
         for i in range(1, 6):
-            btn = ttk.Radiobutton(rating_frame, text=str(i), variable=self.rating_var, value=i)
+            btn = ttk.Radiobutton(
+                rating_frame,
+                text=str(i),
+                variable=self.rating_var,
+                value=i,
+                style="Page.TRadiobutton",
+            )
             btn.pack(side="left")
             self.rating_buttons.append(btn)
 

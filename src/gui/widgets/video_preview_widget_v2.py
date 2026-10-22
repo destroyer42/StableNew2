@@ -58,7 +58,7 @@ class VideoPreviewWidget(ttk.Frame):
         self.caption = ttk.Label(
             self,
             textvariable=self.caption_var,
-            style="Muted.TLabel",
+            style="Page.Muted.TLabel",
             justify="left",
             wraplength=side,
         )

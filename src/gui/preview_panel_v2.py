@@ -130,7 +130,11 @@ class PreviewPanelV2(ttk.Frame):
         self.make_video_button.pack(anchor="ne", pady=(4, 0))
         self.make_video_status_var = tk.StringVar(value="")
         self.make_video_status = ttk.Label(
-            right_frame, textvariable=self.make_video_status_var, wraplength=300, justify="left"
+            right_frame,
+            textvariable=self.make_video_status_var,
+            wraplength=300,
+            justify="left",
+            style="Dark.TLabel",
         )
         self.make_video_status.pack(anchor="ne")
 

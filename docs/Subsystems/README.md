@@ -25,6 +25,7 @@ folders are historical evidence; where they disagree with the code or a living d
 - Image pipeline: [`Image/IMAGE_PIPELINE.md`](Image/IMAGE_PIPELINE.md)
 - Model profiles and policy: [`Image/MODEL_PROFILES.md`](Image/MODEL_PROFILES.md)
 - Photo Optimize, Review and reprocess: [`GUI/PHOTO_REVIEW_REPROCESS.md`](GUI/PHOTO_REVIEW_REPROCESS.md)
+- GUI tokens, styles and shared components: [`GUI/GUI_STYLE_GUIDE.md`](GUI/GUI_STYLE_GUIDE.md)
 - Video: [`Video/VIDEO_PIPELINE.md`](Video/VIDEO_PIPELINE.md)
 - Queue, runtime and WebUI: [`Runtime/QUEUE_AND_RUNTIME.md`](Runtime/QUEUE_AND_RUNTIME.md)
 - Learning: [`Learning/LEARNING.md`](Learning/LEARNING.md)

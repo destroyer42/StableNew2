@@ -368,6 +368,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.experimental_opt_in_check = ttk.Checkbutton(
             action_bar,
             text="Enable experimental workflow for this job",
+            style="Dark.TCheckbutton",
             variable=self.experimental_opt_in_var,
         )
         # Packed next to the button only while an experimental workflow is selected
