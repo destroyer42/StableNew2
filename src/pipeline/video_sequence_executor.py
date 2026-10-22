@@ -439,7 +439,9 @@ class VideoSequenceExecutor:
             processing={
                 **dict(artifacts.processing),
                 "fps": self._plan.fps,
-                "frame_count_matches_plan": len(frames) == segment.frame_count,
+                # Native SVD may export more frames than it generated (RIFE), so compare with what was expected.
+                "frame_count_matches_plan": len(frames)
+                == int(artifacts.processing.get("expected_exported_frames", segment.frame_count)),
             },
         )
 
@@ -726,9 +728,14 @@ def run_sequence_stage(
             stage_name=stage_name,
             njr=njr,
             current_stage_paths=[input_path],
-            prompt=segment.prompt or str(getattr(njr, "positive_prompt", "") or ""),
+            # Exactly the frozen segment values - an explicitly empty prompt is dispatched empty, never replaced by
+            # the job's. Native SVD takes no prompts, so it keeps the job's (unused) ones.
+            prompt=segment.prompt
+            if plan.stage == STAGE_VIDEO_WORKFLOW
+            else str(getattr(njr, "positive_prompt", "") or ""),
             negative_prompt=segment.negative_prompt
-            or str(getattr(njr, "negative_prompt", "") or ""),
+            if plan.stage == STAGE_VIDEO_WORKFLOW
+            else str(getattr(njr, "negative_prompt", "") or ""),
             run_dir=run_dir,
             cancel_token=cancel_token,
             variants=variants,

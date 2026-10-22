@@ -73,6 +73,9 @@ class FakeComfy:
                 "config_workflow_version": config.get("workflow_version"),
                 "execution_version": (config.get("video_execution") or {}).get("workflow_version"),
                 "prompt": request.prompt,
+                "negative_prompt": request.negative_prompt,
+                "config_prompt": config.get("prompt"),
+                "config_negative_prompt": config.get("negative_prompt"),
                 "has_sequence_block": "sequence_metadata" in config,
             }
         )
@@ -509,13 +512,17 @@ class FakeSvdPipeline:
             }
         )
         out = Path(output_dir)
+        smoothing = config.postprocess.interpolation
+        multiplier = (
+            int(smoothing.multiplier) if smoothing.enabled else 1
+        )  # duration-preserving RIFE
         frames = [
             _png(
                 out / f"{job_id}_frame_{n:03d}.png",
                 config.inference.seed % 100 + n * 5,
                 (1024, 576),
             )
-            for n in range(config.inference.num_frames)
+            for n in range(config.inference.num_frames * multiplier)
         ]
         native = None
         capture = (context_metadata or {}).get("sequence_capture")
@@ -539,7 +546,11 @@ class FakeSvdPipeline:
             "frame_count": len(frames),
             "fps": config.inference.fps,
             "native_final_frame": native,
-            "postprocess": {"applied": ["interpolation"]},
+            "postprocess": {
+                "applied": ["interpolation"] if multiplier > 1 else [],
+                "interpolation": {"multiplier": multiplier} if multiplier > 1 else None,
+                "output_frame_count": len(frames),
+            },
             "manifest_path": None,
             "artifact": {
                 "schema": "stablenew.artifact.v2.6",
@@ -553,9 +564,16 @@ class FakeSvdPipeline:
         }
 
 
+def _svd_config(smoothed: bool) -> SVDConfig:
+    base = SVDConfig()
+    smoothing = replace(base.postprocess.interpolation, enabled=smoothed, multiplier=2)
+    return replace(base, postprocess=replace(base.postprocess, interpolation=smoothing))
+
+
 @needs_ffmpeg
+@pytest.mark.parametrize("smoothed", [False, True])
 def test_native_svd_runs_as_a_sequence_with_the_pre_postprocess_final_frame(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, smoothed: bool
 ) -> None:
     monkeypatch.setattr(
         "src.controller.svd_controller.get_svd_preflight",
@@ -569,7 +587,7 @@ def test_native_svd_runs_as_a_sequence_with_the_pre_postprocess_final_frame(
 
     job_id = controller.submit_sequence_job(
         source_image_path=source,
-        config=SVDConfig(),
+        config=_svd_config(smoothed),
         intent={
             "segments": [{"frame_count": 4, "seed": 5}, {"frame_count": 6, "seed": 6}],
             "assembly": {"clip_name": "svd_seq", "quality": "draft"},
@@ -615,9 +633,13 @@ def test_native_svd_runs_as_a_sequence_with_the_pre_postprocess_final_frame(
         pipeline.calls[1]["input_sha"] == first.file.sha256
     )  # segment 1 started from the NATIVE frame
     assert first.file.sha256 != ledger.segments[0].frames[-1].sha256
+    factor = 2 if smoothed else 1  # duration-preserving RIFE doubles every segment's saved frames
     assert (
-        result.metadata["sequence_artifact"]["assembled_video"]["total_frames"] == 4 + 5
+        result.metadata["sequence_artifact"]["assembled_video"]["total_frames"]
+        == factor * (4 + 6) - 1
     )  # segment 1 drops its anchor-repeating first frame
+    assert [s.frame_count for s in ledger.segments] == [factor * 4, factor * 6]
+    assert [s.processing["frame_count_matches_plan"] for s in ledger.segments] == [True, True]
     assert sha256_of(Path(result.metadata["sequence_artifact"]["assembled_video"]["output_path"]))
 
 

@@ -193,6 +193,29 @@ def decode_clip_to_frames(
     return [Path(frame) for frame in frames]
 
 
+def _expected_svd_exported_frames(
+    raw_result: Mapping[str, Any], generated: int, segment_index: int
+) -> int:
+    """How many frames native SVD must have saved for ``generated`` frames, from what its postprocess says it did.
+
+    Face restoration and upscaling keep the count; duration-preserving RIFE multiplies it. Loop and extended exports
+    are refused at admission, so nothing else changes the count. Interpolation that does not say its multiplier cannot
+    be checked and is refused rather than trusted."""
+
+    postprocess = raw_result.get("postprocess")
+    applied = list(postprocess.get("applied") or ()) if isinstance(postprocess, Mapping) else []
+    if "interpolation" not in applied:
+        return generated
+    interpolation = postprocess.get("interpolation") if isinstance(postprocess, Mapping) else None
+    multiplier = interpolation.get("multiplier") if isinstance(interpolation, Mapping) else None
+    if not isinstance(multiplier, int) or isinstance(multiplier, bool) or multiplier < 2:
+        raise SequenceFrameError(
+            f"segment {segment_index}: interpolation was applied but its record does not say how many frames "
+            "it produces, so the saved frames cannot be checked"
+        )
+    return generated * multiplier
+
+
 def collect_segment_artifacts(
     raw_result: Mapping[str, Any],
     *,
@@ -231,6 +254,12 @@ def collect_segment_artifacts(
                 f"segment {segment_index}: native SVD generated {generated} frames but the segment was "
                 f"admitted with {expected_frame_count}; the sequence does not continue from a different length"
             )
+        exported = _expected_svd_exported_frames(raw_result, generated, segment_index)
+        if len(frame_paths) != exported:
+            raise SequenceFrameError(
+                f"segment {segment_index}: native SVD saved {len(frame_paths)} frames but its {generated} generated "
+                f"frames and postprocess give {exported}; the sequence does not continue from an incomplete set"
+            )
         final = _final_from_native_png(
             Path(str(native["path"])),
             target,
@@ -244,7 +273,12 @@ def collect_segment_artifacts(
             tuple(natural_frame_order(frame_paths)),
             final,
             clip_path,
-            {"backend": "svd_native", "postprocess": raw_result.get("postprocess")},
+            {
+                "backend": "svd_native",
+                "postprocess": raw_result.get("postprocess"),
+                "native_frame_count": generated,
+                "expected_exported_frames": exported,
+            },
             manifest,
         )
 

@@ -316,6 +316,11 @@ def freeze_sequence_plan(
                 if raw.get("negative_prompt") is not None
                 else base_negative_prompt
             ).strip()
+            if "prompt" in set(getattr(spec, "required_input_names", ())) and not prompt:
+                errors.append(
+                    f"{label}: {spec.workflow_id} {spec.workflow_version} needs a prompt describing the "
+                    "motion; an explicitly empty prompt is refused, not replaced by another"
+                )
         else:
             for forbidden in ("workflow_id", "workflow_version", "prompt", "negative_prompt"):
                 if str(raw.get(forbidden) or "").strip():

@@ -723,3 +723,80 @@ def test_a_sequence_whose_only_missing_step_is_the_assembly_resumes_without_rege
     assert segments.calls == []  # nothing was regenerated
     assert outcome.assembled_path is not None
     assert [s.origin for s in outcome.ledger.segments] == ["reused", "reused"]
+
+
+# ---------------------------------------------------------------------------------------- native SVD frame counts
+
+
+def _svd_raw(
+    tmp_path: Path, *, generated: int, saved: int, multiplier: int | None
+) -> dict[str, Any]:
+    native = _png(tmp_path / "native.png", 5)
+    frames = [_png(tmp_path / f"e_{n:03d}.png", n) for n in range(saved)]
+    applied = ["interpolation"] if multiplier else []
+    postprocess: dict[str, Any] = {"applied": applied, "output_frame_count": saved}
+    if multiplier:
+        postprocess["interpolation"] = {
+            "multiplier": multiplier,
+            "input_frame_count": generated,
+            "output_frame_count": generated * multiplier,
+        }
+    return {
+        "frame_paths": [str(f) for f in frames],
+        "frame_count": saved,
+        "postprocess": postprocess,
+        "native_final_frame": {
+            "path": str(native),
+            "sha256": _sha(native),
+            "frame_index": generated - 1,
+        },
+    }
+
+
+@pytest.mark.parametrize(("generated", "multiplier"), [(3, None), (3, 2), (4, 4)])
+def test_the_saved_svd_frames_are_exactly_what_the_postprocess_says_it_produced(
+    tmp_path: Path, generated: int, multiplier: int | None
+) -> None:
+    saved = generated * (multiplier or 1)
+    raw = _svd_raw(tmp_path, generated=generated, saved=saved, multiplier=multiplier)
+
+    artifacts = collect_segment_artifacts(
+        raw, segment_index=0, expected_frame_count=generated, run_dir=tmp_path
+    )
+
+    assert len(artifacts.frames) == saved
+    assert artifacts.processing["expected_exported_frames"] == saved
+
+
+@pytest.mark.parametrize(
+    ("generated", "saved", "multiplier", "needle"),
+    [
+        (3, 5, 2, "saved 5 frames but"),  # one interpolated frame is missing from disk
+        (3, 7, 2, "saved 7 frames but"),  # or an extra one is there
+        (
+            3,
+            2,
+            None,
+            "saved 2 frames but",
+        ),  # without interpolation the count is the generated count
+    ],
+)
+def test_a_native_svd_segment_with_the_wrong_number_of_saved_frames_never_continues(
+    tmp_path: Path, generated: int, saved: int, multiplier: int | None, needle: str
+) -> None:
+    raw = _svd_raw(tmp_path, generated=generated, saved=saved, multiplier=multiplier)
+
+    with pytest.raises(SequenceFrameError, match=needle):
+        collect_segment_artifacts(
+            raw, segment_index=0, expected_frame_count=generated, run_dir=tmp_path
+        )
+
+
+def test_interpolation_that_cannot_be_checked_is_refused_rather_than_trusted(
+    tmp_path: Path,
+) -> None:
+    raw = _svd_raw(tmp_path, generated=3, saved=6, multiplier=2)
+    del raw["postprocess"]["interpolation"]  # applied, but says nothing about its multiplier
+
+    with pytest.raises(SequenceFrameError, match="does not say how many frames"):
+        collect_segment_artifacts(raw, segment_index=0, expected_frame_count=3, run_dir=tmp_path)

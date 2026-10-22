@@ -81,7 +81,9 @@ class VideoSequenceControllerMixin:
             stage=STAGE_VIDEO_WORKFLOW,
             fps=int(policy["fps"]),
             base_prompt=str(form.get("prompt") or "").strip(),
-            base_negative_prompt=str(form.get("negative_prompt") or "").strip(),
+            # The value the job really carries (a blank form negative becomes the workflow's default), so the plan
+            # freezes what will be dispatched.
+            base_negative_prompt=self._njr_builder.resolved_negative_prompt(spec, form),
             base_workflow=(spec.workflow_id, spec.workflow_version),
             registry=self._workflow_registry,
             target_size=target,

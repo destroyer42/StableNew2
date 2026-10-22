@@ -266,6 +266,14 @@ class VideoWorkflowNjrBuilder:
 
         return self._output_dir()
 
+    @staticmethod
+    def resolved_negative_prompt(spec: Any, form_data: Mapping[str, Any]) -> str:
+        """The negative prompt a job built from ``form_data`` really carries: the form's, else the workflow's default."""
+
+        return str(form_data.get("negative_prompt") or "").strip() or (
+            default_negative_prompt(spec) if "negative_prompt" in spec.declared_input_names else ""
+        )
+
     def spec_for(self, form_data: Mapping[str, Any]) -> Any:
         workflow_id = str(form_data.get("workflow_id") or "").strip()
         workflow_version = str(form_data.get("workflow_version") or "").strip() or None
@@ -537,9 +545,7 @@ class VideoWorkflowNjrBuilder:
             output_route = OUTPUT_ROUTE_REPROCESS
 
         prompt = str(form_data.get("prompt") or "").strip()
-        negative_prompt = str(form_data.get("negative_prompt") or "").strip() or (
-            default_negative_prompt(spec) if "negative_prompt" in spec.declared_input_names else ""
-        )
+        negative_prompt = self.resolved_negative_prompt(spec, form_data)
         form_with_defaults = {**form_data, "negative_prompt": negative_prompt}
         motion_profile = str(form_data.get("motion_profile") or "").strip()
         camera_intent = _normalize_camera_intent(form_data)

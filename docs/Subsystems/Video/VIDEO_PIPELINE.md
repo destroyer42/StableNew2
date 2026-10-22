@@ -207,7 +207,9 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   `SVDController.submit_sequence_job`): the intent is frozen as a typed `SequencePlan` (`src/video/sequence_plan.py`) under the stage config's
   `sequence_metadata`. The plan is versioned (`schema`, `policy_version`) and carries its own canonical `plan_digest`; a plan whose content no longer
   matches its digest cannot be loaded. Per segment it holds a concrete seed (a blank or `random` seed is drawn once, at admission), the exact native frame
-  count, workflow id and exact version, prompt and negative prompt, anchor policy (`carry_last_frame` or `provided`, with the image's path and SHA-256),
+  count, workflow id and exact version, prompt and negative prompt (the values the job really carries: a blank negative becomes the workflow's default,
+  an unset segment value inherits the job's, an explicitly empty negative stays empty and an explicitly empty prompt is refused for a workflow that needs one;
+  the dispatched prompt is always the frozen one), anchor policy (`carry_last_frame` or `provided`, with the image's path and SHA-256),
   and `overlap_frames` (default **1** for a carried anchor, **0** for an authored one). The plan also freezes the backend, the SVD model, the job's own
   experimental opt-in, segment 0's source image and hash, continuity and plan-origin provenance, the assembly settings and the colour-match setting.
   Refused before an NJR exists, never clipped or defaulted: an illegal frame count (Wan 4n+1, the SVD model's maximum), an unknown field anywhere, a
@@ -219,7 +221,8 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   the last generated frame saved before RIFE, loop export or upscaling (`SVDResult.native_final_frame`, written under the run's `sequence/native`
   folder). Basis `decoded`: only for a workflow that ends in an encoded clip (TI2V-5B 1.2.0); the frames are decoded back out of the clip by the bounded,
   cancellable FFmpeg path, the ledger says so, and the decode is refused unless it yields exactly the segment's admitted frame count. A frames-out or
-  native-SVD segment whose generated count differs from the admitted count stops the sequence (the standalone frames-out policy is unchanged: there it is
+  native-SVD segment whose generated count differs from the admitted count stops the sequence, and so does a native-SVD segment whose saved frame count is not
+  what its postprocess record gives (the generated count, times the multiplier when RIFE ran; interpolation that does not say its multiplier is refused) (the standalone frames-out policy is unchanged: there it is
   still recorded, not fatal). A missing, corrupt, non-PNG or hash-mismatched anchor is never handed to a segment.
 - **Per-segment overrides** go through one allow-listed seam (`ALLOWED_OVERRIDES` in `src/pipeline/video_sequence_executor.py`;
   `_execute_video_stage(stage_config_overrides=...)`): a copy of the frozen stage config gets the segment's seed, frame count, workflow identity and
