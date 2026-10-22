@@ -16,7 +16,7 @@ def test_main_window_v2_smoke(tk_root: tk.Tk) -> None:
         assert "Prompt" in tab_texts
         assert "Pipeline" in tab_texts
         assert "Learning - Adv" in tab_texts
-        assert "Photo Optomize - Adv" in tab_texts
+        assert "Photo Optimize - Adv" in tab_texts
         assert "SVD Img2Vid" in tab_texts
         assert all(not text.endswith("(disabled)") for text in tab_texts)
         assert harness.window.header_zone.help_button.cget("text") == "Help Mode: Off"
