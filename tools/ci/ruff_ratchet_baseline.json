@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 385,
+    "total": 384,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
