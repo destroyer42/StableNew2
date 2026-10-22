@@ -108,10 +108,14 @@ def test_the_startup_snapshot_lists_the_approved_ti2v_workflow_without_starting_
 
     capabilities = build_optional_dependency_snapshot().to_dict()["capabilities"]
 
-    assert sorted(capabilities) == ["workflow:wan22_ti2v_5b_i2v_v1@1.2.0"]
-    entry = capabilities["workflow:wan22_ti2v_5b_i2v_v1@1.2.0"]
-    assert entry["status"] == "unknown" and entry["available"] is False
-    assert entry["source"] == "comfy"
+    assert sorted(capabilities) == [
+        "workflow:wan22_ti2v_5b_i2v_v1@1.2.0",
+        "workflow:wan22_ti2v_5b_i2v_v1@1.3.0",
+    ]
+    for key in capabilities:  # both approved revisions (1.2.0 and the frames-out 1.3.0)
+        entry = capabilities[key]
+        assert entry["status"] == "unknown" and entry["available"] is False
+        assert entry["source"] == "comfy"
 
 
 def test_a_snapshot_with_comfy_object_info_probes_only_the_approved_workflow_version() -> None:
@@ -124,12 +128,18 @@ def test_a_snapshot_with_comfy_object_info_probes_only_the_approved_workflow_ver
     ]
     workflows = {key for key in capabilities if key.startswith("workflow:")}
 
-    assert workflows == {"workflow:wan22_ti2v_5b_i2v_v1@1.2.0"}
+    assert workflows == {
+        "workflow:wan22_ti2v_5b_i2v_v1@1.2.0",
+        "workflow:wan22_ti2v_5b_i2v_v1@1.3.0",
+    }
     # The stock nodes are present but this object_info offers no model files: reported as missing
     # (the probe reads the payload it was given; nothing is looked up or downloaded).
-    entry = capabilities["workflow:wan22_ti2v_5b_i2v_v1@1.2.0"]
-    assert entry["status"] == "missing"
-    assert (
-        entry["detail"]
-        == "Missing required dependencies: wan22_text_encoder, wan22_unet, wan22_vae"
-    )
+    # 1.3.0 saves frames with SaveImage, which WAN22_STOCK_NODES (the video-clip graph's nodes) does not list.
+    expected = {
+        "workflow:wan22_ti2v_5b_i2v_v1@1.2.0": "wan22_text_encoder, wan22_unet, wan22_vae",
+        "workflow:wan22_ti2v_5b_i2v_v1@1.3.0": "node_saveimage, wan22_text_encoder, wan22_unet, wan22_vae",
+    }
+    for key, missing in expected.items():
+        entry = capabilities[key]
+        assert entry["status"] == "missing"
+        assert entry["detail"] == f"Missing required dependencies: {missing}"
