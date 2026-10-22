@@ -9,6 +9,7 @@ from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.video_eval_controller import VideoEvalControllerMixin
 from src.controller.video_preflight_controller import VideoPreflightControllerMixin
+from src.controller.video_recent_outputs_controller import VideoRecentOutputsControllerMixin
 from src.controller.video_sequence_controller import VideoSequenceControllerMixin
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
 from src.video.driving_video_inspection import inspect_driving_video as _inspect_video
@@ -35,13 +36,17 @@ from src.video.video_workflow_njr_builder import VideoWorkflowNjrBuilder
 from src.video.workflow_controls import operator_controls_projection
 from src.video.workflow_frame_count import frame_count_projection
 from src.video.workflow_motion_guidance import motion_readiness_projection
+from src.video.workflow_picker import recommended_workflow_id
 from src.video.workflow_preflight import PreflightProbes
 from src.video.workflow_registry import latest_spec_per_workflow
 from src.video.workflow_source_preparation import preview_declared_workflow_source
 
 
 class VideoWorkflowController(
-    VideoEvalControllerMixin, VideoPreflightControllerMixin, VideoSequenceControllerMixin
+    VideoEvalControllerMixin,
+    VideoPreflightControllerMixin,
+    VideoRecentOutputsControllerMixin,
+    VideoSequenceControllerMixin,
 ):
     """Queue-backed controller surface for workflow-driven video jobs."""
 
@@ -98,7 +103,12 @@ class VideoWorkflowController(
 
     def build_default_form_state(self) -> dict[str, Any]:
         specs = self.list_workflow_specs()
-        default_workflow = specs[0] if specs else {}
+        # An approved workflow, never an experimental one.
+        recommended = recommended_workflow_id(specs)
+        default_workflow = next(
+            (spec for spec in specs if spec["workflow_id"] == recommended),
+            specs[0] if specs else {},
+        )
         return {
             "workflow_id": str(default_workflow.get("workflow_id") or ""),
             "workflow_version": str(default_workflow.get("workflow_version") or ""),
@@ -149,8 +159,12 @@ class VideoWorkflowController(
         source_image_path: str | Path,
         form_data: dict[str, Any],
     ) -> str:
+        # Trusted parent ids a handoff (Make Video from History or Review) supplied; never part of the form.
+        lineage = form_data.pop("source_lineage", None)
         frozen = self._njr_builder.freeze_inputs(source_image_path, form_data)
-        built = self._njr_builder.build_job(form_data, frozen)
+        built = self._njr_builder.build_job(
+            form_data, frozen, lineage=lineage if isinstance(lineage, Mapping) else None
+        )
         job_ids = self._job_service().submit_njrs([built.njr], SubmissionPolicy())
         if not job_ids:
             raise RuntimeError("Failed to enqueue video workflow job")

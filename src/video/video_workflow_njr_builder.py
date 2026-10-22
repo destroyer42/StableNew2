@@ -685,8 +685,15 @@ class VideoWorkflowNjrBuilder:
             }
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
+        trusted_lineage = {
+            key: str((lineage or {}).get(key) or "").strip()
+            for key in ("source_job_id", "source_artifact_id")
+        }
         if batch is not None:
             extra_metadata["batch"] = dict(batch)
+        if batch is not None or any(trusted_lineage.values()):
+            # A batch always records the source identity; a single-image job records it only when a
+            # handoff (Make Video from History or Review) supplied a trustworthy parent.
             identity: dict[str, Any] = {
                 "original_path": frozen.source_image_path,
                 "original_sha256": frozen.source_sha256,
@@ -694,8 +701,8 @@ class VideoWorkflowNjrBuilder:
                 "prepared_sha256": frozen.prepared_source_sha256,
                 "preparation_policy": str((source_preparation or {}).get("policy") or "none"),
             }
-            parent_job = str((lineage or {}).get("source_job_id") or "").strip()
-            parent_artifact = str((lineage or {}).get("source_artifact_id") or "").strip()
+            parent_job = trusted_lineage["source_job_id"]
+            parent_artifact = trusted_lineage["source_artifact_id"]
             if parent_job:
                 identity["source_job_id"] = parent_job
                 extra_metadata["parent_job_id"] = parent_job

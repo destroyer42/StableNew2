@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tkinter import TclError
 from typing import Any
 
 from src.video.video_artifact_helpers import extract_source_image_for_handoff
@@ -15,11 +16,34 @@ def _select_tab(main_window: Any, tab: Any) -> None:
             pass
 
 
+def _apply_make_video_defaults(workflow_tab: Any) -> None:
+    """Make Video preselects the recommended approved workflow (the tab keeps an approved choice)."""
+
+    apply_defaults = getattr(workflow_tab, "apply_make_video_defaults", None)
+    if callable(apply_defaults):
+        apply_defaults()
+
+
+def show_queue_view(main_window: Any) -> bool:
+    """Bring the Pipeline tab (queue, running job and history) to the front; False when unavailable."""
+
+    pipeline_tab = getattr(main_window, "pipeline_tab", None)
+    notebook = getattr(main_window, "center_notebook", None)
+    if pipeline_tab is None or notebook is None:
+        return False
+    try:
+        notebook.select(pipeline_tab)
+    except (TclError, AttributeError):
+        return False
+    return True
+
+
 def route_image_to_video_workflow(
     *,
     main_window: Any,
     image_path: str | Path,
     status_message: str | None = None,
+    lineage: dict[str, str] | None = None,
 ) -> str:
     workflow_tab = getattr(main_window, "video_workflow_tab", None)
     if workflow_tab is None:
@@ -28,7 +52,11 @@ def route_image_to_video_workflow(
     if not callable(setter):
         raise RuntimeError("Video Workflow tab does not support source handoff")
     _select_tab(main_window, workflow_tab)
-    setter(str(image_path), status_message=status_message)
+    if lineage:
+        setter(str(image_path), status_message=status_message, lineage=dict(lineage))
+    else:
+        setter(str(image_path), status_message=status_message)
+    _apply_make_video_defaults(workflow_tab)
     return str(image_path)
 
 
@@ -49,7 +77,10 @@ def route_images_to_video_workflow(
         raise ValueError("No images were provided for the Video Workflow handoff")
     if len(paths) == 1:
         route_image_to_video_workflow(
-            main_window=main_window, image_path=paths[0], status_message=status_message
+            main_window=main_window,
+            image_path=paths[0],
+            status_message=status_message,
+            lineage=dict((lineage_by_path or {}).get(paths[0]) or {}),
         )
         return paths
     workflow_tab = getattr(main_window, "video_workflow_tab", None)
@@ -60,6 +91,7 @@ def route_images_to_video_workflow(
         raise RuntimeError("Video Workflow tab does not support multi-source handoff")
     _select_tab(main_window, workflow_tab)
     setter(paths, lineage_by_path=dict(lineage_by_path or {}), status_message=status_message)
+    _apply_make_video_defaults(workflow_tab)
     return paths
 
 
@@ -99,6 +131,7 @@ def route_bundle_to_video_workflow(
         raise RuntimeError("Video Workflow tab does not support bundle handoff")
     _select_tab(main_window, workflow_tab)
     setter(dict(bundle), status_message=status_message)
+    _apply_make_video_defaults(workflow_tab)
     return extract_source_image_for_handoff(bundle)
 
 
@@ -142,4 +175,5 @@ __all__ = [
     "route_image_to_video_workflow",
     "route_images_to_review",
     "route_images_to_video_workflow",
+    "show_queue_view",
 ]

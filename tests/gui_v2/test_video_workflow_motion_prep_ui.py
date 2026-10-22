@@ -33,7 +33,6 @@ from src.gui.view_contracts.video_motion_prep_contract import (
     MotionPreparationSession,
     PrepInputs,
 )
-from src.gui.views import video_workflow_tab_frame_v2 as tab_module
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.pipeline.video import resolve_ffmpeg_executable
 from src.video import video_workflow_njr_builder as builder
@@ -351,15 +350,25 @@ class _ManualRunner:
 
 
 class _Messages:
+    """Records what the tab's inline submission notice shows (the tab opens no modal dialog)."""
+
     def __init__(self) -> None:
         self.errors: list[str] = []
         self.infos: list[str] = []
 
-    def showerror(self, _title, message, **_kw):
-        self.errors.append(str(message))
+    def attach(self, tab) -> None:
+        notice = tab.submission_notice
+        show_error, show_queued = notice.show_error, notice.show_queued
 
-    def showinfo(self, _title, message, **_kw):
-        self.infos.append(str(message))
+        def error(message):
+            self.errors.append(str(message))
+            show_error(message)
+
+        def queued(message, **kwargs):
+            self.infos.append(str(message))
+            show_queued(message, **kwargs)
+
+        notice.show_error, notice.show_queued = error, queued
 
 
 def _make_clip(path: Path, frames: int = 90) -> Path:
@@ -381,8 +390,8 @@ def _tab(
 ):
     app, controller, service = _app(tmp_path)
     messages = _Messages()
-    monkeypatch.setattr(tab_module, "messagebox", messages)
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=app, app_state=SimpleNamespace())
+    messages.attach(tab)
     source = tmp_path / "portrait.png"
     Image.new("RGB", (600, 900), (20, 120, 200)).save(source)
     clip = tmp_path / "drive.mp4"

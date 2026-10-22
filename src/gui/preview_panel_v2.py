@@ -115,8 +115,24 @@ class PreviewPanelV2(ttk.Frame):
             width=300,
             height=300,
             placeholder_text="No Preview",
+            on_source_changed=self._on_thumbnail_source_changed,
         )
         self.thumbnail.pack(anchor="ne")
+        # PR-VID-UX-313: turn the previewed output into a video. Enabled only while the thumbnail shows a file;
+        # the handoff only loads the Video Workflow tab, nothing is queued here.
+        self.make_video_button = ttk.Button(
+            right_frame,
+            text="Make Video",
+            style=SECONDARY_BUTTON_STYLE,
+            command=self._on_make_video,
+            state=tk.DISABLED,
+        )
+        self.make_video_button.pack(anchor="ne", pady=(4, 0))
+        self.make_video_status_var = tk.StringVar(value="")
+        self.make_video_status = ttk.Label(
+            right_frame, textvariable=self.make_video_status_var, wraplength=300, justify="left"
+        )
+        self.make_video_status.pack(anchor="ne")
 
         # Checkbox to enable/disable preview thumbnails (in the header so it never costs a column)
         # PR-PREVIEW-001: Default to False
@@ -957,6 +973,29 @@ class PreviewPanelV2(ttk.Frame):
             logger.debug(f"[PreviewPanel] _on_add_to_queue validation error: {exc}")
         except Exception as exc:
             logger.debug(f"[PreviewPanel] _on_add_to_queue unexpected error: {exc}")
+
+    def _on_thumbnail_source_changed(self, path: str | None) -> None:
+        button = getattr(self, "make_video_button", None)
+        if button is None:
+            return  # the thumbnail exists before the button while the panel is being built
+        sender = getattr(self.controller, "send_image_to_video_workflow", None)
+        button.configure(state=tk.NORMAL if path and callable(sender) else tk.DISABLED)
+        self.make_video_status_var.set("")
+
+    def _on_make_video(self) -> None:
+        """Hand the previewed output to the Video Workflow tab; a failure is shown beside the button."""
+
+        path = self.thumbnail.current_path()
+        sender = getattr(self.controller, "send_image_to_video_workflow", None)
+        if not path or not callable(sender):
+            self.make_video_status_var.set("There is no output image to make a video from.")
+            return
+        try:
+            sender(path)
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.make_video_status_var.set(f"Make Video failed: {exc}")
+            return
+        self.make_video_status_var.set("")
 
     def _on_clear_draft(self) -> None:
         """Clear the current draft job metadata."""

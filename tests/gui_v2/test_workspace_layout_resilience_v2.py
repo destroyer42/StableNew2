@@ -148,9 +148,10 @@ def test_saved_geometry_is_normalized_for_the_current_screen(saved, expected) ->
     [
         (ReviewTabFrame, "_workspace_scroll", "reprocess_all_button"),
         # PR-GUI-110: the primary submit actions left the scroll region; the lowest scrolled control is now the
-        # Recent SVD Outputs action / the Video Workflow negative prompt.
+        # Recent SVD Outputs action / the Video Workflow Recent outputs section (PR-VID-UX-313/314: the negative
+        # prompt moved into the collapsed Advanced options).
         (SVDTabFrameV2, "_body_scroll", "open_manifest_btn"),
-        (VideoWorkflowTabFrameV2, "_body_scroll", "negative_prompt_text"),
+        (VideoWorkflowTabFrameV2, "_body_scroll", "recent_outputs_panel"),
     ],
     ids=["review", "svd", "video_workflow"],
 )

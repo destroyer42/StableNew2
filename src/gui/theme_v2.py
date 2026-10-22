@@ -364,6 +364,12 @@ def _configure_statusbar_styles(style: ttk.Style) -> None:
         foreground=ACCENT_GOLD,
         font=(design_system.Typography.FAMILY, design_system.Typography.MD, "bold"),
     )
+    style.configure(
+        "SubmissionError.TLabel",
+        background=BACKGROUND_ELEVATED,
+        foreground=ASWF_ERROR_RED,
+        font=(design_system.Typography.FAMILY, design_system.Typography.MD, "bold"),
+    )
 
 
 def _configure_progress_styles(style: ttk.Style) -> None:
@@ -523,6 +529,7 @@ __all__ = [
     "GHOST_BUTTON_STYLE",
     "STATUS_LABEL_STYLE",
     "STATUS_STRONG_LABEL_STYLE",
+    "SUBMISSION_ERROR_LABEL_STYLE",
     "SLIDER_VALUE_LABEL_STYLE",
     "DARK_ENTRY_STYLE",
     "DARK_COMBOBOX_STYLE",
@@ -557,6 +564,7 @@ __all__ = [
 ]
 STATUS_LABEL_STYLE = "Status.TLabel"
 STATUS_STRONG_LABEL_STYLE = "StatusStrong.TLabel"
+SUBMISSION_ERROR_LABEL_STYLE = "SubmissionError.TLabel"
 SLIDER_VALUE_LABEL_STYLE = "SliderValue.TLabel"
 DARK_ENTRY_STYLE = "Dark.TEntry"
 DARK_COMBOBOX_STYLE = "Dark.TCombobox"

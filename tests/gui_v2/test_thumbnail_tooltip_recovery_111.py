@@ -293,29 +293,28 @@ def test_ordinary_edits_do_not_revoke_a_deliberate_opt_in(shown_root: tk.Tk, vid
 
 def test_submissions_carry_the_explicit_per_job_authorisation(shown_root: tk.Tk, video_tab) -> None:
     tab, controller = video_tab
-    with patch("src.gui.views.video_workflow_tab_frame_v2.messagebox"):
-        tab.experimental_opt_in_var.set(True)
-        tab.queue_workflow_button.invoke()
-        assert controller.submissions[-1]["workflow_id"] == "exp_a"
-        assert controller.submissions[-1]["experimental_opt_in"] is True
+    tab.experimental_opt_in_var.set(True)
+    tab.queue_workflow_button.invoke()
+    assert controller.submissions[-1]["workflow_id"] == "exp_a"
+    assert controller.submissions[-1]["experimental_opt_in"] is True
 
-        _select(tab, "exp_b", shown_root)  # switching clears it: the next job is not authorised by default
-        # PR-VID-GOV-316: without the opt-in the click is not offered at all (it used to submit and
-        # fail afterwards), so nothing reaches the controller.
-        assert str(tab.queue_workflow_button.cget("state")) == "disabled"
-        tab.queue_workflow_button.invoke()
-        assert len(controller.submissions) == 1
+    _select(tab, "exp_b", shown_root)  # switching clears it: the next job is not authorised by default
+    # PR-VID-GOV-316: without the opt-in the click is not offered at all (it used to submit and
+    # fail afterwards), so nothing reaches the controller.
+    assert str(tab.queue_workflow_button.cget("state")) == "disabled"
+    tab.queue_workflow_button.invoke()
+    assert len(controller.submissions) == 1
 
-        tab.experimental_opt_in_var.set(True)
-        assert str(tab.queue_workflow_button.cget("state")) == "normal"
-        tab.queue_workflow_button.invoke()
-        assert controller.submissions[-1]["workflow_id"] == "exp_b"
-        assert controller.submissions[-1]["experimental_opt_in"] is True
+    tab.experimental_opt_in_var.set(True)
+    assert str(tab.queue_workflow_button.cget("state")) == "normal"
+    tab.queue_workflow_button.invoke()
+    assert controller.submissions[-1]["workflow_id"] == "exp_b"
+    assert controller.submissions[-1]["experimental_opt_in"] is True
 
-        _select(tab, "plain", shown_root)
-        tab.queue_workflow_button.invoke()
-        assert controller.submissions[-1]["workflow_id"] == "plain"
-        assert controller.submissions[-1]["experimental_opt_in"] is False
+    _select(tab, "plain", shown_root)
+    tab.queue_workflow_button.invoke()
+    assert controller.submissions[-1]["workflow_id"] == "plain"
+    assert controller.submissions[-1]["experimental_opt_in"] is False
     assert len(controller.submissions) == 3  # one deliberate click, one existing callback each
 
 
