@@ -40,6 +40,15 @@ from typing import Any
 _MIB = 1024 * 1024
 
 
+def required_launch_flags(spec: Any) -> tuple[str, ...]:
+    """Launch flags a workflow's declared runtime policy requires of the ComfyUI process."""
+
+    policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
+    if not isinstance(policy, Mapping):
+        return ()
+    return tuple(str(flag) for flag in policy.get("required_launch_flags") or () if str(flag))
+
+
 def _host_available_ram_gb() -> float:
     import psutil
 
@@ -168,4 +177,4 @@ class WorkflowResourceReadiness:
         )
 
 
-__all__ = ["ResourceReadinessResult", "WorkflowResourceReadiness"]
+__all__ = ["ResourceReadinessResult", "WorkflowResourceReadiness", "required_launch_flags"]
