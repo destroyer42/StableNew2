@@ -100,6 +100,8 @@ def verify_resource(
     entry = next((item for item in report["resources"] if item["id"] == resource_id), None)
     if entry is None:
         raise _unavailable(modality, ("not_in_catalog",))
+    declared = next((item for item in catalog.resources if item.id == resource_id), None)
+    own_prefix = f"{_ROOT_PREFIX}{declared.placement_directory}/" if declared is not None else ""
     reasons: list[str] = []
     files: list[AuxiliaryFileIdentity] = []
     warnings: list[str] = []
@@ -111,7 +113,8 @@ def verify_resource(
         if status == VERIFIED or (status == PRESENT_UNVERIFIED and not pinnable):
             installed = item["installed"][0]
             location = str(installed["locations"][0])
-            if not location.startswith(_ROOT_PREFIX) or not installed["sha256"]:
+            # Defense in depth: the readiness projection already matches inside the resource directory only.
+            if not own_prefix or not location.startswith(own_prefix) or not installed["sha256"]:
                 reasons.append(f"unusable:{role}")
                 continue
             files.append(

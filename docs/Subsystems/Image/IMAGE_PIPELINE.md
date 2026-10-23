@@ -161,9 +161,20 @@ Forge receives the same `preprocessor: "None"` unit as for a hand-supplied map. 
   link, never over an existing file, refused if the folder is a link or leaves the library, read back through the library
   reader; an adjacent `<name>.stablenew-map.json` records method, version, config, source and result hashes, auxiliary file
   hashes, runtime versions and warnings (no path, source bytes, landmarks or prompt).
-- Not qualified: real-model output quality and agreement with the upstream DWPose preprocessing (its code revision is not pinned
-  by the catalog). OpenPose needs `onnxruntime`, pinned in `constraints/windows-py314-cu130.txt` and `requirements.txt`; in an
-  environment that has not been re-bootstrapped it is unavailable (`runtime_missing:onnxruntime`) (STATUS.md, decision 12).
+- Readiness is five separate claims, and only the first three have deterministic evidence: (1) the dependency is available
+  (cheap probe, `runtime_missing:<module>` otherwise); (2) the weight files are byte-verified inside the resource's own
+  `models/StableNewAux/<resource-id>/` directory and staged (identical bytes in another resource's folder never count); (3) the
+  contained CPU inference is callable (fake-module tests of the worker glue only); (4) the output is correct against an upstream
+  reference, and (5) the physical map quality is qualified - neither of which is established. DWPose decoding and BGR
+  preprocessing follow the reference implementation from memory and its code revision is not pinned by the catalog, so installing
+  `onnxruntime` (pinned in `constraints/windows-py314-cu130.txt` and `requirements.txt`; absent from an environment that has not
+  been re-bootstrapped, where OpenPose reports `runtime_missing:onnxruntime`) is not evidence of correct pose output. Depth
+  quality is likewise unqualified.
+- ControlNet weight readiness (`src/assets/resource_readiness.py`) keeps integrity (digest), architecture (SDXL header) and
+  identity (the documented model name for the modality, defined once in `src/assets/controlnet_identity.py` and used by
+  production admission) apart; only all three together give `ready_for_use`. The catalog also lists fp16 Canny/Depth files that
+  production admission does not accept (`diffusers_xl_canny_fp16`, `diffusers_xl_depth_fp16`): they verify as bytes but are
+  reported `unsupported` (`controlnet_identity_not_admitted`), not runnable.
 
 Deterministic coverage: `tests/integration/test_pr_img_cnet_220.py`, `tests/gui_v2/test_controlnet_units_220.py` and the
 existing OpenPose suites. This establishes plumbing and refusals, not physical two-unit fidelity, VRAM fit or performance.

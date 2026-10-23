@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-512 of 666 modules have a docstring.
+513 of 667 modules have a docstring.
 
 ## src/
 
@@ -47,6 +47,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `checkpoint_structure.py`: Bounded safetensors header evidence for AssetRegistry, never tensor loading
 - `compatibility.py`: Conservative, observational model-family compatibility evidence
 - `component_evidence.py`: Bounded structural evidence for multi-component image models (PR-IMG-MODELS-150)
+- `controlnet_identity.py`: Documented ControlNet model identities and their modality (PR-IMG-CNET-210/220), below both its consumers
 - `controlnet_structure.py`: Bounded safetensors-header evidence for ControlNet weights (PR-IMG-CNET-210)
 - `gguf.py`: Bounded GGUF container inspection for the observational inventory (PR-IMG-MODELS-152)
 - `inventory_report.py`: Deterministic, bounded, redacted operator report over the observational inventory (PR-IMG-MODELS-152)

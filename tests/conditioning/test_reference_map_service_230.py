@@ -41,6 +41,7 @@ from tests.assets.readiness_fixtures_130 import (
     write_safetensors,
     write_text,
 )
+from tests.conditioning.reference_map_fixtures_230 import PureCannyProvider, pure_service
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -398,15 +399,21 @@ def test_unavailable_provider_is_reported_and_never_falls_back_to_canny(tmp_path
 
 
 def test_real_runtime_probes_name_exact_missing_modules(monkeypatch) -> None:
+    import importlib.machinery as machinery
     import importlib.util as util
 
-    real = util.find_spec
+    # Only onnxruntime is absent: OpenCV is treated as present so the answer does not depend on the host (hosted runners lack it).
     monkeypatch.setattr(
         util,
         "find_spec",
-        lambda name, *a, **k: None if name == "onnxruntime" else real(name, *a, **k),
+        lambda name, *a, **k: None if name == "onnxruntime" else machinery.ModuleSpec(name, None),
     )
     assert providers.PoseProvider().availability() == ("runtime_missing:onnxruntime",)
+    monkeypatch.setattr(util, "find_spec", lambda name, *a, **k: None)
+    assert providers.PoseProvider().availability() == (
+        "runtime_missing:onnxruntime",
+        "runtime_missing:cv2",
+    )
 
 
 @pytest.mark.parametrize(
@@ -503,7 +510,7 @@ def test_the_real_worker_script_bootstraps_in_isolated_mode(tmp_path) -> None:
 
 
 def _prepared(registry, source, modality: str = "canny"):
-    return ReferenceMapService(lambda: registry).prepare(MapRequest(source, modality))
+    return pure_service(registry).prepare(MapRequest(source, modality))
 
 
 def test_save_publishes_an_atomic_library_map_with_sanitized_deterministic_provenance(
@@ -749,6 +756,9 @@ def test_preparation_and_save_never_submit_run_or_touch_the_network(
     service = _service(
         registry, InProcessRunner({"depth": _fake_depth}), catalog=_depth_catalog(files)
     )
+    service._providers["canny"] = (
+        PureCannyProvider()
+    )  # the real Canny needs OpenCV, absent on hosted runners
     for modality in ("canny", "depth"):
         service.save(service.prepare(MapRequest(source, modality)))
 

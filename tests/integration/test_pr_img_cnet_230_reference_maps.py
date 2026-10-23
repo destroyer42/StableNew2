@@ -18,11 +18,11 @@ from src.assets import AssetRegistry
 from src.conditioning.controlnet import CONTRACT, UNIT_CONTRACT, FrozenControlNet
 from src.conditioning.openpose_snapshot import verify_frozen
 from src.conditioning.reference_map.contracts import MapRequest
-from src.conditioning.reference_map.service import ReferenceMapService
 from src.pipeline.njr_core_v26 import thaw_json
 from src.pipeline.replay_input_verification import frozen_input_checks, verify_inputs
 from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
 from src.queue.job_model import JobStatus
+from tests.conditioning.reference_map_fixtures_230 import pure_service
 from tests.integration import test_pr_img_cnet_220 as base
 from tests.integration.test_pr_img_cnet_210_canonical_path import _run
 from tests.integration.test_pr_img_cnet_220 import MODELS, build, transport
@@ -52,7 +52,7 @@ def created(harness, tmp_path):
     """Two real Canny maps saved into the harness library through the service (the production publication path)."""
 
     registry = AssetRegistry(tmp_path / "webui", cache_path=tmp_path / "state" / "registry.json")
-    service = ReferenceMapService(lambda: registry)
+    service = pure_service(registry)
     maps = []
     for index, size in enumerate(((128, 96), (160, 120))):
         prepared = service.prepare(

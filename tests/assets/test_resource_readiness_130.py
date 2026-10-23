@@ -65,11 +65,17 @@ def _report(tmp_path: Path, catalog, *, refresh: bool = True, **kwargs):
 
 def test_genuine_sha256_verifies_and_capability_comes_from_product_policy(tmp_path: Path) -> None:
     registry = make_registry(tmp_path)
-    weights = write_controlnet_weights(controlnet_dir(registry) / "canny_xl.safetensors", "sdxl")
+    weights = write_controlnet_weights(
+        controlnet_dir(registry) / "diffusers_xl_canny_full.safetensors", "sdxl"
+    )
     catalog = make_catalog(
         resource(
             "cn-canny",
-            [file_spec("weights", [variant("canny_xl.safetensors", sha256_of(weights))])],
+            [
+                file_spec(
+                    "weights", [variant("diffusers_xl_canny_full.safetensors", sha256_of(weights))]
+                )
+            ],
             root="controlnet",
             capability=controlnet_capability("canny"),
         )
@@ -82,17 +88,23 @@ def test_genuine_sha256_verifies_and_capability_comes_from_product_policy(tmp_pa
     assert entry["ready_for_use"] is True
     assert entry["capability"]["policy"] == "supported_now"
     assert _file(report, "cn-canny", "weights")["installed"][0]["locations"] == [
-        "models/ControlNet/canny_xl.safetensors"
+        "models/ControlNet/diffusers_xl_canny_full.safetensors"
     ]
 
 
 def test_verified_bytes_that_the_header_says_are_not_sdxl_are_unsupported(tmp_path: Path) -> None:
     registry = make_registry(tmp_path)
-    weights = write_controlnet_weights(controlnet_dir(registry) / "canny_xl.safetensors", "sd15")
+    weights = write_controlnet_weights(
+        controlnet_dir(registry) / "diffusers_xl_canny_full.safetensors", "sd15"
+    )
     catalog = make_catalog(
         resource(
             "cn-canny",
-            [file_spec("weights", [variant("canny_xl.safetensors", sha256_of(weights))])],
+            [
+                file_spec(
+                    "weights", [variant("diffusers_xl_canny_full.safetensors", sha256_of(weights))]
+                )
+            ],
             root="controlnet",
             capability=controlnet_capability("canny"),
         )
@@ -131,11 +143,17 @@ def test_a_catalog_claim_cannot_grant_a_capability_the_product_lacks(tmp_path: P
 def test_correct_filename_with_wrong_bytes_is_a_mismatch(tmp_path: Path) -> None:
     registry = make_registry(tmp_path)
     expected = write_controlnet_weights(tmp_path / "expected.safetensors", "sdxl")
-    write_safetensors(controlnet_dir(registry) / "canny_xl.safetensors", b"\x01\x02\x03\x04")
+    write_safetensors(
+        controlnet_dir(registry) / "diffusers_xl_canny_full.safetensors", b"\x01\x02\x03\x04"
+    )
     catalog = make_catalog(
         resource(
             "cn-canny",
-            [file_spec("weights", [variant("canny_xl.safetensors", sha256_of(expected))])],
+            [
+                file_spec(
+                    "weights", [variant("diffusers_xl_canny_full.safetensors", sha256_of(expected))]
+                )
+            ],
             root="controlnet",
             capability=controlnet_capability("canny"),
         )
@@ -183,13 +201,21 @@ def test_the_same_bytes_in_two_locations_are_one_identity_with_both_locations(
     tmp_path: Path,
 ) -> None:
     registry = make_registry(tmp_path)
-    weights = write_controlnet_weights(controlnet_dir(registry) / "canny_xl.safetensors", "sdxl")
+    weights = write_controlnet_weights(
+        controlnet_dir(registry) / "diffusers_xl_canny_full.safetensors", "sdxl"
+    )
     (controlnet_dir(registry) / "backup").mkdir()
-    (controlnet_dir(registry) / "backup" / "canny_xl.safetensors").write_bytes(weights.read_bytes())
+    (controlnet_dir(registry) / "backup" / "diffusers_xl_canny_full.safetensors").write_bytes(
+        weights.read_bytes()
+    )
     catalog = make_catalog(
         resource(
             "cn-canny",
-            [file_spec("weights", [variant("canny_xl.safetensors", sha256_of(weights))])],
+            [
+                file_spec(
+                    "weights", [variant("diffusers_xl_canny_full.safetensors", sha256_of(weights))]
+                )
+            ],
             root="controlnet",
             capability=controlnet_capability("canny"),
         )
@@ -200,8 +226,8 @@ def test_the_same_bytes_in_two_locations_are_one_identity_with_both_locations(
     installed = _file(report, "cn-canny", "weights")["installed"]
     assert len(installed) == 1
     assert installed[0]["locations"] == [
-        "models/ControlNet/backup/canny_xl.safetensors",
-        "models/ControlNet/canny_xl.safetensors",
+        "models/ControlNet/backup/diffusers_xl_canny_full.safetensors",
+        "models/ControlNet/diffusers_xl_canny_full.safetensors",
     ]
     assert _entry(report, "cn-canny")["status"] == VERIFIED
     assert "duplicate_locations" in _file(report, "cn-canny", "weights")["reason_codes"]
@@ -211,14 +237,21 @@ def test_same_filename_with_different_bytes_is_ambiguous_even_if_one_copy_is_rig
     tmp_path: Path,
 ) -> None:
     registry = make_registry(tmp_path)
-    right = write_controlnet_weights(controlnet_dir(registry) / "canny_xl.safetensors", "sdxl")
+    right = write_controlnet_weights(
+        controlnet_dir(registry) / "diffusers_xl_canny_full.safetensors", "sdxl"
+    )
     write_safetensors(
-        controlnet_dir(registry) / "old" / "canny_xl.safetensors", b"\x09\x09\x09\x09"
+        controlnet_dir(registry) / "old" / "diffusers_xl_canny_full.safetensors",
+        b"\x09\x09\x09\x09",
     )
     catalog = make_catalog(
         resource(
             "cn-canny",
-            [file_spec("weights", [variant("canny_xl.safetensors", sha256_of(right))])],
+            [
+                file_spec(
+                    "weights", [variant("diffusers_xl_canny_full.safetensors", sha256_of(right))]
+                )
+            ],
             root="controlnet",
             capability=controlnet_capability("canny"),
         )
@@ -302,11 +335,17 @@ def test_report_generation_is_offline_and_never_loads_a_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     registry = make_registry(tmp_path)
-    weights = write_controlnet_weights(controlnet_dir(registry) / "canny_xl.safetensors", "sdxl")
+    weights = write_controlnet_weights(
+        controlnet_dir(registry) / "diffusers_xl_canny_full.safetensors", "sdxl"
+    )
     catalog = make_catalog(
         resource(
             "cn-canny",
-            [file_spec("weights", [variant("canny_xl.safetensors", sha256_of(weights))])],
+            [
+                file_spec(
+                    "weights", [variant("diffusers_xl_canny_full.safetensors", sha256_of(weights))]
+                )
+            ],
             root="controlnet",
             capability=controlnet_capability("canny"),
         )
@@ -583,11 +622,17 @@ def test_report_is_byte_stable_and_independent_of_directory_order(tmp_path: Path
 
 def test_report_has_no_absolute_path_username_or_prompt_text(tmp_path: Path) -> None:
     registry = make_registry(tmp_path)
-    weights = write_controlnet_weights(controlnet_dir(registry) / "canny_xl.safetensors", "sdxl")
+    weights = write_controlnet_weights(
+        controlnet_dir(registry) / "diffusers_xl_canny_full.safetensors", "sdxl"
+    )
     catalog = make_catalog(
         resource(
             "cn-canny",
-            [file_spec("weights", [variant("canny_xl.safetensors", sha256_of(weights))])],
+            [
+                file_spec(
+                    "weights", [variant("diffusers_xl_canny_full.safetensors", sha256_of(weights))]
+                )
+            ],
             root="controlnet",
             capability=controlnet_capability("canny"),
         )

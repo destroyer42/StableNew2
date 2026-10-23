@@ -186,11 +186,12 @@ def test_pose_backend_runs_detector_then_estimator_on_cpu_only(tmp_path, monkeyp
 def test_pose_backend_reports_missing_onnxruntime(tmp_path, monkeypatch) -> None:
     import importlib.util as util
 
-    real = util.find_spec
     monkeypatch.setattr(
         util,
         "find_spec",
-        lambda name, *a, **k: None if name == "onnxruntime" else real(name, *a, **k),
+        lambda name, *a, **k: None
+        if name == "onnxruntime"
+        else importlib.machinery.ModuleSpec(name, None),
     )
     with pytest.raises(worker.ProviderUnavailable) as caught:
         worker.pose_backend({"staged": {}}, np.zeros((64, 64, 3), dtype=np.uint8), tmp_path)
