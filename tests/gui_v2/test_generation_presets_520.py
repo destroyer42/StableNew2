@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 from typing import Any
 
@@ -173,6 +173,29 @@ def test_overwriting_an_existing_preset_is_confirmed_but_a_new_one_is_not() -> N
         "old", exists=True, invoke=lambda n: saved.append(n) or True, confirm_overwrite=True
     )
     assert saved == ["new"] and len(asked) == 1 and "kept" in said[-1][1]
+
+
+def test_windows_case_alias_requires_overwrite_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.gui import sidebar_panel_v2
+
+    presenter, _ctl, asked, said = _presenter(answer=False)
+    saved: list[str] = []
+    panel = SimpleNamespace(
+        controller=SimpleNamespace(
+            save_current_pipeline_saved_recipe=lambda name: saved.append(name) or True
+        ),
+        _actions=presenter,
+        _list_recipe_names=lambda: ["Look"],
+    )
+    # Exercise Windows filename identity on every CI host without creating a Tk window.
+    monkeypatch.setattr(sidebar_panel_v2, "Path", PureWindowsPath)
+
+    assert not sidebar_panel_v2.SidebarPanelV2._save_preset(panel, "look")
+    assert saved == []
+    assert asked[-1][0] == "Overwrite Generation Preset?"
+    assert "kept" in said[-1][1]
 
 
 def test_failed_preset_save_is_reported() -> None:

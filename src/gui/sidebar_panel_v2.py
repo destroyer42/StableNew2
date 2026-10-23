@@ -530,7 +530,7 @@ class SidebarPanelV2(ttk.Frame):
             return False
         return self._actions.save_preset(
             recipe_name,
-            exists=recipe_name in self._list_recipe_names(),
+            exists=any(Path(recipe_name) == Path(name) for name in self._list_recipe_names()),
             invoke=lambda name: bool(saver(name)),
             confirm_overwrite=True,
         )

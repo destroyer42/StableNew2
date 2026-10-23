@@ -90,7 +90,7 @@ def override_description(enabled: bool) -> str:
 def recipe_names_for_display(names: list[str]) -> list[str]:
     """Generation Preset names without the application's own settings files, order preserved."""
 
-    return [name for name in names if name not in NON_RECIPE_PRESET_STEMS]
+    return [name for name in names if name.casefold() not in NON_RECIPE_PRESET_STEMS]
 
 
 @dataclass(frozen=True)

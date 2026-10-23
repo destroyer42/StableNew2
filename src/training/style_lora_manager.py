@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -51,6 +51,30 @@ def _infer_model_family(model_name: str | None) -> str | None:
     if "1.5" in text or "sd15" in text or "v1-5" in text:
         return "sd15"
     return None
+
+
+STYLE_AVAILABLE = "available"
+STYLE_NOT_INSTALLED = "not_installed"
+STYLE_FILE_MISSING = "file_missing"
+STYLE_UNVERIFIED = "unverified"
+
+
+def classify_style_availability(
+    definition: StyleLoRADefinition, installed_lora_names: Collection[str] | None
+) -> str:
+    """Catalog availability from already-gathered evidence; it never scans.
+
+    ``installed_lora_names`` is the exact-name inventory a tracked discovery worker returned (``None`` while that
+    inventory is unknown). It is the same evidence ``StyleLoRAManager`` consults at resolution time; this is only a
+    non-blocking projection of it for the selector.
+    """
+
+    if definition.file_path:
+        file_path = Path(definition.file_path).expanduser()
+        return STYLE_AVAILABLE if file_path.is_file() else STYLE_FILE_MISSING
+    if installed_lora_names is None:
+        return STYLE_UNVERIFIED
+    return STYLE_AVAILABLE if definition.lora_name in installed_lora_names else STYLE_NOT_INSTALLED
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,4 +252,12 @@ class StyleLoRAManager:
         return self._scanner
 
 
-__all__ = ["ResolvedStyleLoRA", "StyleLoRAManager"]
+__all__ = [
+    "STYLE_AVAILABLE",
+    "STYLE_FILE_MISSING",
+    "STYLE_NOT_INSTALLED",
+    "STYLE_UNVERIFIED",
+    "ResolvedStyleLoRA",
+    "StyleLoRAManager",
+    "classify_style_availability",
+]

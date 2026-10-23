@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import tkinter as tk
 import tkinter.simpledialog
+from collections.abc import Sequence
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -45,7 +46,23 @@ from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.gui.widgets.openpose_picker_panel import OpenPosePickerPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
+from src.gui_v2.lora_authoring_view import plan_trigger_insertion, split_keywords
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
+from src.gui_v2.prompt_template_view import (
+    EXAMPLE_NOTE,
+    NO_TEMPLATE_LABEL,
+    build_template_preview,
+    preview_breakdown,
+    seed_template_values,
+    template_choices,
+    template_guidance,
+)
+from src.gui_v2.style_consistency_view import (
+    SHOW_UNAVAILABLE_LABEL,
+    build_style_choices,
+    describe_style,
+    selector_empty_state,
+)
 from src.image_backends.image_backend_types import configured_image_backend_id
 from src.image_backends.model_policy import resolve_model_policy
 from src.prompting.pack_target_readiness import assess_pack_readiness
@@ -63,7 +80,7 @@ from src.utils.config import ConfigManager
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
-from src.utils.prompt_templates import compose_prompt_text, list_prompt_templates
+from src.utils.prompt_templates import list_prompt_templates
 from src.utils.prompt_txt_parser import parse_multi_slot_txt
 
 logger = logging.getLogger(__name__)
@@ -134,6 +151,11 @@ class PromptTabFrame(ttk.Frame):
         self._undefined_slots: set[str] = set()
         self._template_guard = False
         self._template_field_vars: dict[str, tk.StringVar] = {}
+        #: placeholder -> catalog example it was pre-filled with (still unchanged); cleared on load/slot change.
+        self._template_seeded: dict[str, str] = {}
+        self._template_example_tags: dict[str, ttk.Label] = {}
+        self._template_choice_to_id: dict[str, str] = {}
+        self._template_id_to_choice: dict[str, str] = {}
         self._prompt_templates = list_prompt_templates()
         self._prompt_template_lookup = {
             definition.id: definition for definition in self._prompt_templates
@@ -141,12 +163,9 @@ class PromptTabFrame(ttk.Frame):
         self._style_lora_manager = StyleLoRAManager()
         self._style_lora_guard = False
         self._style_lora_none_label = "(None)"
+        self._style_definitions = self._style_lora_manager.list_styles()
         self._style_choice_to_id: dict[str, str] = {self._style_lora_none_label: ""}
         self._style_id_to_choice: dict[str, str] = {"": self._style_lora_none_label}
-        for definition in self._style_lora_manager.list_styles():
-            choice = f"{definition.display_name} [{definition.style_id}]"
-            self._style_choice_to_id[choice] = definition.style_id
-            self._style_id_to_choice[definition.style_id] = choice
 
         configure_grid_columns(self, get_prompt_tab_column_specs())
         self.rowconfigure(0, weight=1)
@@ -502,6 +521,8 @@ class PromptTabFrame(ttk.Frame):
 
         # Override keyword insertion to insert into prompt editor
         self.lora_picker._insert_keywords_to_prompt = self._insert_keywords_to_prompt
+        # Style availability follows the picker's tracked discovery; a finished scan never edits the pack.
+        self.lora_picker.inventory_listener = self._sync_style_lora_controls_cached
 
         self.embedding_scroll = ScrollableFrame(self.editor_notebook)
         self.editor_notebook.add(self.embedding_scroll, text="Embeddings")
@@ -530,15 +551,18 @@ class PromptTabFrame(ttk.Frame):
         ttk.Label(self.template_panel, text="Template", style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=(0, 4)
         )
+        #: The stable template id (what the PromptPack stores). The combobox shows the friendly label for it.
         self.template_selector_var = tk.StringVar(value="")
+        self.template_choice_var = tk.StringVar(value=NO_TEMPLATE_LABEL)
         self.template_selector = ttk.Combobox(
             self.template_panel,
-            textvariable=self.template_selector_var,
-            values=[""] + [definition.id for definition in self._prompt_templates],
+            textvariable=self.template_choice_var,
+            values=[],
             state="readonly",
         )
         self.template_selector.grid(row=0, column=1, sticky="ew", padx=(6, 6), pady=(0, 4))
-        self.template_selector.bind("<<ComboboxSelected>>", self._on_template_selection_changed)
+        self.template_selector.bind("<<ComboboxSelected>>", self._on_template_choice_selected)
+        self._rebuild_template_choices("")
         attach_tooltip(
             self.template_selector,
             "Choose a cinematic template. The rendered template is combined with the prompt details editor above.",
@@ -550,9 +574,7 @@ class PromptTabFrame(ttk.Frame):
             command=self._clear_template_selection,
         ).grid(row=0, column=2, sticky="e", pady=(0, 4))
 
-        self.template_description_var = tk.StringVar(
-            value="No template selected. Use the editor above for full freeform prompts."
-        )
+        self.template_description_var = tk.StringVar(value=template_guidance(None, ""))
         ttk.Label(
             self.template_panel,
             textvariable=self.template_description_var,
@@ -560,13 +582,30 @@ class PromptTabFrame(ttk.Frame):
             justify="left",
         ).grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, 6))
 
+        self.template_example_note_var = tk.StringVar(value="")
+        ttk.Label(
+            self.template_panel,
+            textvariable=self.template_example_note_var,
+            wraplength=460,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 4))
+
         self.template_fields_frame = ttk.Frame(self.template_panel)
-        self.template_fields_frame.grid(row=2, column=0, columnspan=3, sticky="ew")
+        self.template_fields_frame.grid(row=3, column=0, columnspan=3, sticky="ew")
         self.template_fields_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(self.template_panel, text="Rendered Preview", style=BODY_LABEL_STYLE).grid(
-            row=3, column=0, columnspan=3, sticky="w", pady=(6, 2)
-        )
+        self.template_breakdown_var = tk.StringVar(value="")
+        ttk.Label(
+            self.template_panel,
+            textvariable=self.template_breakdown_var,
+            wraplength=460,
+            justify="left",
+        ).grid(row=4, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Label(
+            self.template_panel,
+            text="Authored prompt (before model adaptation)",
+            style=BODY_LABEL_STYLE,
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(6, 2))
         self.template_preview = tk.Text(
             self.template_panel,
             height=3,
@@ -578,7 +617,16 @@ class PromptTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
-        self.template_preview.grid(row=4, column=0, columnspan=3, sticky="ew")
+        self.template_preview.grid(row=6, column=0, columnspan=3, sticky="ew")
+        ttk.Label(
+            self.template_panel,
+            text=(
+                "This is what you wrote, not the final text sent to a model. Use Adapt for Target to see the "
+                "model-adapted prompt; Pipeline Preview decides execution readiness."
+            ),
+            wraplength=460,
+            justify="left",
+        ).grid(row=7, column=0, columnspan=3, sticky="ew", pady=(2, 0))
 
     def _mark_pack_modified(self) -> None:
         pack_name = (
@@ -586,25 +634,36 @@ class PromptTabFrame(ttk.Frame):
         )
         self.pack_name_label.config(text=f"Editor - {pack_name} (modified)")
 
-    def _template_preview_text(self) -> str:
-        template_id = self.template_selector_var.get().strip()
-        if not template_id:
-            return self.workspace_state.get_current_raw_prompt_text() or "(freeform prompt only)"
-        return (
-            compose_prompt_text(
-                template_id,
-                self._current_template_values_from_controls(),
-                self.workspace_state.get_current_raw_prompt_text(),
-            )
-            or "(template selected, fill variables to preview)"
-        )
+    def _rebuild_template_choices(self, saved_template_id: str) -> None:
+        choices = template_choices(self._prompt_templates, saved_template_id)
+        self._template_choice_to_id = {choice.label: choice.template_id for choice in choices}
+        self._template_id_to_choice = {choice.template_id: choice.label for choice in choices}
+        self.template_selector.configure(values=list(self._template_choice_to_id))
+
+    def _set_template_selection(self, template_id: str) -> None:
+        self.template_selector_var.set(template_id)
+        self.template_choice_var.set(self._template_id_to_choice.get(template_id, NO_TEMPLATE_LABEL))
 
     def _refresh_template_preview(self) -> None:
-        self._set_editor_widget_text(
-            self.template_preview,
-            self._template_preview_text(),
-            readonly=True,
+        template_id = self.template_selector_var.get().strip()
+        preview = build_template_preview(
+            template_id,
+            self._current_template_values_from_controls(),
+            self.workspace_state.get_current_raw_prompt_text(),
+            self._prompt_template_lookup,
         )
+        authored = self._visibility_resolver().redact_text(
+            preview.authored_text, item=self._current_slot_visibility_subject()
+        )
+        hidden = authored == REDACTED_TEXT
+        if not authored:
+            authored = (
+                "(template selected, fill variables to preview)" if template_id else "(freeform prompt only)"
+            )
+        self.template_breakdown_var.set(
+            REDACTED_TEXT if hidden else preview_breakdown(preview, template_id)
+        )
+        self._set_editor_widget_text(self.template_preview, authored, readonly=True)
 
     def _current_template_values_from_controls(self) -> dict[str, str]:
         return {
@@ -613,6 +672,17 @@ class PromptTabFrame(ttk.Frame):
             if name
         }
 
+    def _refresh_template_example_tags(self) -> None:
+        """Label only the fields that still hold a catalog example; an edited field is the operator's own text."""
+
+        for placeholder, example in list(self._template_seeded.items()):
+            variable = self._template_field_vars.get(placeholder)
+            if variable is None or variable.get().strip() != example:
+                self._template_seeded.pop(placeholder, None)
+        for placeholder, tag in self._template_example_tags.items():
+            tag.configure(text="example" if placeholder in self._template_seeded else "")
+        self.template_example_note_var.set(EXAMPLE_NOTE if self._template_seeded else "")
+
     def _render_template_variable_fields(
         self, template_id: str, template_values: dict[str, str] | None = None
     ) -> None:
@@ -620,30 +690,23 @@ class PromptTabFrame(ttk.Frame):
             child.destroy()
         self.template_fields_frame.columnconfigure(1, weight=1)
         self._template_field_vars = {}
+        self._template_example_tags = {}
 
+        definition = self._prompt_template_lookup.get(template_id) if template_id else None
+        self.template_description_var.set(template_guidance(definition, template_id))
         if not template_id:
-            self.template_description_var.set(
-                "No template selected. Use the editor above for full freeform prompts."
-            )
             ttk.Label(
                 self.template_fields_frame,
                 text="Template variables will appear here when you pick a cinematic template.",
             ).grid(row=0, column=0, sticky="w")
             return
 
-        definition = self._prompt_template_lookup.get(template_id)
         if definition is None:
-            self.template_description_var.set(f"Unknown template '{template_id}'.")
             ttk.Label(
                 self.template_fields_frame,
-                text="The selected template was not found in the template catalog.",
+                text="The saved template was not found in the template catalog; its saved values are kept.",
             ).grid(row=0, column=0, sticky="w")
             return
-
-        description = f"{definition.label} [{definition.category}]"
-        if definition.description:
-            description += f". {definition.description}"
-        self.template_description_var.set(description)
 
         values = dict(template_values or {})
         placeholders = definition.placeholders
@@ -666,29 +729,46 @@ class PromptTabFrame(ttk.Frame):
                 self.template_fields_frame,
                 textvariable=variable,
             ).grid(row=row_index, column=1, sticky="ew", pady=2)
+            tag = ttk.Label(self.template_fields_frame, text="")
+            tag.grid(row=row_index, column=2, sticky="w", padx=(6, 0))
+            self._template_example_tags[placeholder] = tag
+        self._refresh_template_example_tags()
 
     def _sync_template_controls(self) -> None:
+        """Show the slot's saved template exactly as stored; examples are never applied on load or slot change."""
+
         slot = self.workspace_state.get_current_slot()
         template_id = str(getattr(slot, "template_id", "") or "") if slot else ""
         template_values = dict(getattr(slot, "template_variables", {}) or {}) if slot else {}
         self._template_guard = True
         try:
-            self.template_selector_var.set(template_id)
+            self._template_seeded = {}
+            self._rebuild_template_choices(template_id)
+            self._set_template_selection(template_id)
             self._render_template_variable_fields(template_id, template_values)
             self._refresh_template_preview()
         finally:
             self._template_guard = False
+
+    def _on_template_choice_selected(self, _event: object | None = None) -> None:
+        if self._template_guard:
+            return
+        self.template_selector_var.set(self._template_choice_to_id.get(self.template_choice_var.get(), ""))
+        self._on_template_selection_changed()
 
     def _on_template_selection_changed(self, _event=None) -> None:
         if self._template_guard:
             return
         template_id = self.template_selector_var.get().strip()
         definition = self._prompt_template_lookup.get(template_id)
-        current_values = self._current_template_values_from_controls()
-        template_values = {
-            placeholder: current_values.get(placeholder, "")
-            for placeholder in (definition.placeholders if definition is not None else ())
-        }
+        if template_id and definition is None:
+            # A saved template the catalog no longer has: keep it and its stored values untouched.
+            self._sync_template_controls()
+            return
+        # A deliberate template choice: keep what the operator already typed, offer examples only for empty fields.
+        template_values, seeded = seed_template_values(
+            definition, self._current_template_values_from_controls()
+        )
         self.workspace_state.set_slot_template(
             self.workspace_state.get_current_slot_index(),
             template_id,
@@ -696,6 +776,8 @@ class PromptTabFrame(ttk.Frame):
         )
         self._template_guard = True
         try:
+            self._template_seeded = seeded
+            self._set_template_selection(template_id)
             self._render_template_variable_fields(template_id, template_values)
             self._refresh_template_preview()
         finally:
@@ -712,6 +794,7 @@ class PromptTabFrame(ttk.Frame):
             template_id,
             self._current_template_values_from_controls(),
         )
+        self._refresh_template_example_tags()
         self._refresh_template_preview()
         self._mark_pack_modified()
         self._refresh_metadata()
@@ -724,7 +807,8 @@ class PromptTabFrame(ttk.Frame):
         )
         self._template_guard = True
         try:
-            self.template_selector_var.set("")
+            self._template_seeded = {}
+            self._set_template_selection("")
             self._render_template_variable_fields("", {})
             self._refresh_template_preview()
         finally:
@@ -747,6 +831,7 @@ class PromptTabFrame(ttk.Frame):
         style_selector_row.pack(fill="x", pady=(0, 4))
         style_selector_row.columnconfigure(0, weight=1)
 
+        self.style_show_all_var = tk.BooleanVar(value=False)
         self.style_lora_var = tk.StringVar(value=self._style_lora_none_label)
         self.style_lora_combo = ttk.Combobox(
             style_selector_row,
@@ -768,6 +853,13 @@ class PromptTabFrame(ttk.Frame):
             width=6,
         ).grid(row=0, column=1, sticky="e")
 
+        ttk.Checkbutton(
+            style_frame,
+            text=SHOW_UNAVAILABLE_LABEL,
+            variable=self.style_show_all_var,
+            command=self._sync_style_lora_controls_cached,
+        ).pack(anchor="w", pady=(0, 4))
+
         self.style_lora_status_var = tk.StringVar(value="No pack-level style LoRA selected.")
         ttk.Label(
             style_frame,
@@ -775,6 +867,8 @@ class PromptTabFrame(ttk.Frame):
             justify="left",
             wraplength=320,
         ).pack(fill="x")
+        self._rebuild_style_choices()
+        self._refresh_style_lora_status(resolve=False)
 
         optimizer_frame = ttk.LabelFrame(self.right_frame, text="Prompt Optimizer", padding=6)
         optimizer_frame.pack(fill="x", pady=(0, 6))
@@ -835,43 +929,84 @@ class PromptTabFrame(ttk.Frame):
             return cached[1], False  # type: ignore[return-value]
         return None, True
 
-    def _sync_style_lora_controls(self) -> None:
-        style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
-        style_id = str(style_config.get("style_id") or "").strip()
-        combo_value = self._style_id_to_choice.get(style_id)
-        if combo_value is None:
-            combo_value = (
-                f"{style_id} [missing from catalog]" if style_id else self._style_lora_none_label
-            )
+    def _style_inventory(self) -> frozenset[str] | None:
+        picker = getattr(self, "lora_picker", None)
+        return picker.discovered_lora_names() if picker is not None else None
+
+    def _saved_style_id(self) -> str:
+        return str(self.workspace_state.get_pack_style_lora_config().get("style_id") or "").strip()
+
+    def _rebuild_style_choices(self) -> None:
+        """Available styles, the saved style whatever its state, and the catalog examples only when asked for."""
+
+        choices = build_style_choices(
+            self._style_definitions,
+            self._style_inventory(),
+            self._saved_style_id(),
+            bool(self.style_show_all_var.get()),
+        )
+        self._style_choice_to_id = {choice.label: choice.style_id for choice in choices}
+        self._style_id_to_choice = {}
+        for choice in choices:
+            self._style_id_to_choice.setdefault(choice.style_id.lower(), choice.label)
+        self.style_lora_combo.configure(values=list(self._style_choice_to_id))
+
+    def _show_saved_style_choice(self) -> None:
         self._style_lora_guard = True
         try:
-            self.style_lora_var.set(combo_value)
+            self.style_lora_var.set(
+                self._style_id_to_choice.get(self._saved_style_id().lower(), self._style_lora_none_label)
+            )
         finally:
             self._style_lora_guard = False
+
+    def _sync_style_lora_controls(self) -> None:
+        self._rebuild_style_choices()
+        self._show_saved_style_choice()
         self._refresh_style_lora_status()
 
-    def _refresh_style_lora_status(self) -> None:
-        style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
-        if not style_config:
-            if len(self._style_choice_to_id) <= 1:
-                self.style_lora_status_var.set(
-                    "No style LoRAs are cataloged yet. Add entries to data/style_loras.json to enable pack-level styles."
-                )
-            else:
-                self.style_lora_status_var.set("No pack-level style LoRA selected.")
-            return
+    def _sync_style_lora_controls_cached(self) -> None:
+        self._rebuild_style_choices()
+        self._show_saved_style_choice()
+        self._refresh_style_lora_status(resolve=False)
 
-        resolved = self._resolve_selected_style_lora()
-        if resolved is None:
-            self.style_lora_status_var.set("No pack-level style LoRA selected.")
-            return
-        if resolved.applied:
+    def _refresh_style_lora_status(self, *, resolve: bool = True) -> None:
+        """``resolve=False`` (inventory, model-target and view refreshes) reads only the recorded resolution."""
+
+        style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
+        style_id = self._saved_style_id()
+        inventory = self._style_inventory()
+        if not style_config:
             self.style_lora_status_var.set(
-                f"{resolved.display_name}: adds '{resolved.trigger_phrase}' and <lora:{resolved.lora_name}:{resolved.weight:g}> to every generated prompt."
+                selector_empty_state(
+                    self._style_definitions, inventory, bool(self.style_show_all_var.get())
+                )
+                or "No pack-level style LoRA selected."
             )
             return
+
+        if resolve:
+            resolved, pending = self._resolve_selected_style_lora(), False
+            if resolved is None:
+                self.style_lora_status_var.set("No pack-level style LoRA selected.")
+                return
+        else:
+            resolved, pending = self._cached_style_selection()
+        definition = next(
+            (item for item in self._style_definitions if item.style_id.lower() == style_id.lower()), None
+        )
+        phrase_visible = definition is None or self._visibility_resolver().is_visible(
+            {"name": definition.display_name, "keywords": [definition.trigger_phrase]}
+        )
         self.style_lora_status_var.set(
-            resolved.warning or f"{resolved.display_name} is selected but currently inactive."
+            describe_style(
+                style_id,
+                self._style_definitions,
+                inventory,
+                resolved,
+                pending=pending,
+                phrase_visible=phrase_visible,
+            )
         )
 
     def _on_style_lora_selection_changed(self, _event: object | None = None) -> None:
@@ -887,17 +1022,16 @@ class PromptTabFrame(ttk.Frame):
             )
         else:
             self.workspace_state.set_pack_style_lora_config(None)
+        self._rebuild_style_choices()
+        self._show_saved_style_choice()
         self._mark_pack_modified()
         self._refresh_style_lora_status()
         self._refresh_metadata()
 
     def _clear_style_lora_selection(self) -> None:
-        self._style_lora_guard = True
-        try:
-            self.style_lora_var.set(self._style_lora_none_label)
-        finally:
-            self._style_lora_guard = False
         self.workspace_state.set_pack_style_lora_config(None)
+        self._rebuild_style_choices()
+        self._show_saved_style_choice()
         self._mark_pack_modified()
         self._refresh_style_lora_status()
         self._refresh_metadata()
@@ -1277,13 +1411,28 @@ class PromptTabFrame(ttk.Frame):
             pass
         self._refresh_metadata()
 
-    def _insert_keywords_to_prompt(self, keywords: str) -> None:
-        """Insert LoRA keywords into the positive prompt editor at cursor position."""
-        try:
-            self.editor.insert("insert", keywords)
+    def _insert_keywords_to_prompt(self, keywords: str | Sequence[str]) -> str:
+        """Append evidence-backed trigger words to the current slot's positive prompt (an explicit operator action).
+
+        Existing text is never rewritten; words already present, or supplied automatically by the applied Style
+        Consistency trigger, are skipped. This edits the working pack (dirty) and nothing else: no save, no job.
+        """
+
+        if str(self.editor.cget("state")) == "disabled":
+            return "The positive prompt is hidden by the content-visibility setting; nothing was inserted."
+        existing = self.editor.get("1.0", "end").rstrip("\n")
+        style, _pending = self._cached_style_selection()
+        auto_applied = (
+            [str(style.trigger_phrase)] if style is not None and style.applied and style.trigger_phrase else []
+        )
+        plan = plan_trigger_insertion(
+            self.workspace_state.get_current_prompt_text(), split_keywords(keywords), auto_applied
+        )
+        if plan.inserted:
+            self.editor.insert("end-1c", plan.new_text(existing)[len(existing) :])
             self._on_editor_modified()
-        except Exception:
-            pass
+        slot_number = self.workspace_state.get_current_slot_index() + 1
+        return f"Slot {slot_number}: {plan.summary()}"
 
     def _refresh_metadata(self, *, scan_style: bool = True) -> None:
         """Refresh metadata/preview panel with full prompt preview.
@@ -1341,7 +1490,10 @@ class PromptTabFrame(ttk.Frame):
 
         template_id = str(getattr(current_slot, "template_id", "") or "")
         if template_id:
-            preview_lines.append(f"Template: {template_id}")
+            known_template = self._prompt_template_lookup.get(template_id)
+            preview_lines.append(
+                f"Template: {known_template.label} ({template_id})" if known_template else f"Template: {template_id}"
+            )
             template_values = dict(getattr(current_slot, "template_variables", {}) or {})
             if template_values:
                 for key, value in sorted(template_values.items()):
@@ -1491,6 +1643,7 @@ class PromptTabFrame(ttk.Frame):
             self.openpose_picker.set_target(getattr(projection, "openpose", None))
         if hasattr(self, "controlnet_picker"):
             self.controlnet_picker.set_target(getattr(projection, "openpose", None))
+        self._refresh_style_lora_status(resolve=False)
         self._refresh_metadata(scan_style=False)
 
     def _snapshot_prompt_state(self) -> PromptStateSnapshot:

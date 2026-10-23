@@ -5,37 +5,75 @@
       "label": "Establishing Wide Shot",
       "category": "shot",
       "template": "cinematic wide establishing shot of {scene}, {environment}, {lighting}, {style}",
-      "description": "Use for scene-setting openers and location reveals."
+      "description": "Use for scene-setting openers and location reveals.",
+      "examples": {
+        "scene": "a lone knight arriving at an ancient fortress",
+        "environment": "mist-covered stone walls and a mountain valley",
+        "lighting": "warm golden-hour backlighting",
+        "style": "cinematic realism"
+      }
     },
     "character_close_up": {
       "label": "Character Close-Up",
       "category": "portrait",
       "template": "intimate close-up of {subject}, {expression}, {lighting}, {style}",
-      "description": "Use for emotional beats and performance-driven framing."
+      "description": "Use for emotional beats and performance-driven framing.",
+      "examples": {
+        "subject": "a weathered sea captain",
+        "expression": "quiet determination",
+        "lighting": "soft window light",
+        "style": "cinematic realism"
+      }
     },
     "over_the_shoulder": {
       "label": "Over-The-Shoulder",
       "category": "coverage",
       "template": "over-the-shoulder shot of {subject} facing {focus}, {environment}, {lighting}",
-      "description": "Use for dialogue, reveals, and guided audience focus."
+      "description": "Use for dialogue, reveals, and guided audience focus.",
+      "examples": {
+        "subject": "a detective",
+        "focus": "a rain-streaked apartment window",
+        "environment": "a dim city apartment at night",
+        "lighting": "cool neon spill"
+      }
     },
     "tracking_action": {
       "label": "Tracking Action Shot",
       "category": "action",
       "template": "tracking shot of {subject} {action}, {environment}, {camera}, {style}",
-      "description": "Use for motion-heavy beats with cinematic camera language."
+      "description": "Use for motion-heavy beats with cinematic camera language.",
+      "examples": {
+        "subject": "a courier",
+        "action": "sprinting across rooftops",
+        "environment": "a dense city skyline at dusk",
+        "camera": "low tracking angle, shallow depth of field",
+        "style": "cinematic realism"
+      }
     },
     "moody_portrait": {
       "label": "Moody Portrait",
       "category": "portrait",
       "template": "moody portrait of {subject}, {environment}, {lighting}, {mood}, {style}",
-      "description": "Use for stylized character portraiture with strong atmosphere."
+      "description": "Use for stylized character portraiture with strong atmosphere.",
+      "examples": {
+        "subject": "a young violinist",
+        "environment": "an empty concert hall",
+        "lighting": "a single warm spotlight",
+        "mood": "melancholic and reflective",
+        "style": "painterly realism"
+      }
     },
     "aerial_reveal": {
       "label": "Aerial Reveal",
       "category": "shot",
       "template": "dramatic aerial reveal of {scene}, {environment}, {lighting}, {mood}",
-      "description": "Use for scale, geography, and cinematic reveal moments."
+      "description": "Use for scale, geography, and cinematic reveal moments.",
+      "examples": {
+        "scene": "a hidden valley city",
+        "environment": "terraced cliffs and winding rivers",
+        "lighting": "early morning haze",
+        "mood": "awe and discovery"
+      }
     }
   }
 }

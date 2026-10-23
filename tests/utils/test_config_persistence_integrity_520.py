@@ -216,7 +216,18 @@ def test_save_preset_roundtrips_and_fails_atomically(
     _no_temp_files(manager.presets_dir)
 
 
-@pytest.mark.parametrize("reserved", ["settings", "last_settings", "pack_overrides"])
+@pytest.mark.parametrize(
+    "reserved",
+    [
+        "settings",
+        "Settings",
+        "SETTINGS",
+        "last_settings",
+        "LAST_SETTINGS",
+        "pack_overrides",
+        "Pack_Overrides",
+    ],
+)
 def test_application_files_cannot_be_saved_or_deleted_as_presets(
     manager: ConfigManager, reserved: str
 ) -> None:
@@ -225,9 +236,19 @@ def test_application_files_cannot_be_saved_or_deleted_as_presets(
 
     assert manager.save_preset(reserved, {"txt2img": {"steps": 1}}) is False
     assert manager.delete_preset(reserved) is False
+    assert manager.load_preset(reserved) is None
 
     assert json.loads(target.read_text(encoding="utf-8")) == {"keep": True}
     assert reserved not in manager.list_presets()
+
+
+@pytest.mark.parametrize("name", ["default", "Default", "DEFAULT"])
+def test_default_preset_case_alias_cannot_be_deleted(manager: ConfigManager, name: str) -> None:
+    target = manager.presets_dir / f"{name}.json"
+    target.write_text('{"keep": true}', encoding="utf-8")
+
+    assert manager.delete_preset(name) is False
+    assert json.loads(target.read_text(encoding="utf-8")) == {"keep": True}
 
 
 @pytest.mark.parametrize("bad_name", ["", "  ", "../escape", "a/b", "a\\b", "x\x00y"])

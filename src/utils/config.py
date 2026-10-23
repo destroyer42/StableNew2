@@ -34,7 +34,7 @@ def preset_name_problem(name: str) -> str | None:
         return "A preset needs a name."
     if name != name.strip() or ".." in name or any(ch in _INVALID_PRESET_CHARS for ch in name):
         return "A preset name cannot start or end with a space, contain '..', or contain / \\ : * ? \" < > |."
-    if name in RESERVED_PRESET_STEMS:
+    if name.casefold() in RESERVED_PRESET_STEMS:
         return f"'{name}' is an application file in the presets folder, not a preset."
     return None
 
@@ -284,7 +284,9 @@ class ConfigManager:
             List of preset names (the application's own settings files are not presets)
         """
         presets = [
-            p.stem for p in self.presets_dir.glob("*.json") if p.stem not in RESERVED_PRESET_STEMS
+            p.stem
+            for p in self.presets_dir.glob("*.json")
+            if p.stem.casefold() not in RESERVED_PRESET_STEMS
         ]
         logger.debug(f"Found {len(presets)} presets")
         return sorted(presets)
@@ -299,7 +301,7 @@ class ConfigManager:
         Returns:
             True if deleted successfully
         """
-        if name == "default":
+        if isinstance(name, str) and name.casefold() == "default":
             logger.warning("Cannot delete the default preset")
             return False
         if preset_name_problem(name):
