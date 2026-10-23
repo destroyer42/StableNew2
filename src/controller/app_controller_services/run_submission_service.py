@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from src.controller.pipeline_controller_services.preview_admission import accepted_preview_records
 from src.pipeline.config_contract_v26 import attach_config_layers
 
 
@@ -17,6 +18,11 @@ class QueueRunSubmissionService:
     ) -> None:
         self._append_log = append_log
         self._capture_stage_plan_for_tests = capture_stage_plan_for_tests
+
+    @staticmethod
+    def accepted_preview_jobs(app_state: Any, pipeline_controller: Any) -> list[Any]:
+        """Run / Run Now admit the accepted Preview's frozen records, not a fresh (re-sampled) compile."""
+        return accepted_preview_records(app_state, pipeline_controller.get_preview_jobs)
 
     def ensure_queue_run_mode(self, app_state: Any, button_source: str) -> None:
         pipeline_state = getattr(app_state, "pipeline_state", None)

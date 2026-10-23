@@ -393,7 +393,7 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1319,
+      "BLE001": 1316,
       "S110": 516,
       "S112": 37
     },
@@ -868,7 +868,7 @@
         "S110": 7
       },
       "src/pipeline/prompt_pack_job_builder.py": {
-        "BLE001": 8
+        "BLE001": 5
       },
       "src/pipeline/replay_engine.py": {
         "BLE001": 1,

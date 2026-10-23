@@ -1521,7 +1521,7 @@ class AppController:
             else:
                 ready = True
             if ready:
-                preview_jobs = list(controller.get_preview_jobs() or [])
+                preview_jobs = self._get_run_submission_service().accepted_preview_jobs(self.app_state, controller)
                 had_preview_jobs = bool(preview_jobs)
                 if preview_jobs:
                     submitted = int(

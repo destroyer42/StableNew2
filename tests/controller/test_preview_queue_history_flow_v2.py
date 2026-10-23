@@ -90,6 +90,8 @@ class TestPipelineControllerPreviewQueueFlow:
     ):
         record = _make_normalized_record()
         pipeline_controller.get_preview_jobs = Mock(return_value=[record])
+        # With no accepted Preview the draft is compiled once; an accepted Preview is covered in the 560 tests.
+        pipeline_controller._app_state.set_preview_jobs([])
         submitted = pipeline_controller.submit_preview_jobs_to_queue()
         assert submitted == 1
         mock_job_service.submit_njrs.assert_called_once()

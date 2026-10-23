@@ -276,6 +276,8 @@ class UnifiedJobSummary:
     status: str
     created_at: datetime
     completed_at: datetime | None
+    #: Which frozen Matrix selection this job is ("" without a Matrix); see ``NormalizedJobRecord.matrix_expansion_label``.
+    matrix_expansion_label: str = ""
 
     @staticmethod
     def _truncate(value: str) -> str:
@@ -313,6 +315,7 @@ class UnifiedJobSummary:
             randomization_enabled=record.randomization_enabled,
             matrix_mode=record.matrix_mode,
             matrix_slot_values_preview=record.matrix_slot_values_preview(),
+            matrix_expansion_label=record.matrix_expansion_label(),
             variant_index=record.variant_index,
             batch_index=record.batch_index,
             config_variant_label=record.config_variant_label,

@@ -4,6 +4,7 @@ import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
@@ -531,6 +532,21 @@ class AppStateV2:
         self.job_draft.packs.clear()
         self.invalidate_preview()
         self._notify("job_draft")
+
+    def pack_file_saved(self, pack_path: str | Path) -> bool:
+        """A PromptPack file was saved. A Preview compiled from its previous contents (Matrix included) is stale.
+
+        Invalidates only when the job draft uses that pack, and announces the draft so the Pipeline tab rebuilds
+        the Preview; returns whether it did.
+        """
+        saved = Path(str(pack_path))
+        for entry in self.job_draft.packs:
+            used = Path(str(entry.pack_id))
+            if used.stem == saved.stem or used == saved:
+                self.invalidate_preview()
+                self._notify("job_draft")
+                return True
+        return False
 
     def invalidate_preview(self) -> None:
         """Invalidate only transient preview work, including results awaiting UI delivery."""

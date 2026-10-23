@@ -28,6 +28,7 @@ from src.controller.job_service import JobService
 from src.controller.pipeline_controller_services.history_handoff_service import (
     HistoryHandoffService,
 )
+from src.controller.pipeline_controller_services.preview_admission import accepted_preview_records
 from src.controller.pipeline_controller_services.queue_submission_service import (
     QueueSubmissionService,
 )
@@ -523,7 +524,7 @@ class PipelineController(CorePipelineController):
         on_error: Callable[[Exception], None] | None = None,
     ) -> bool:
         try:
-            normalized_jobs = self.get_preview_jobs()
+            normalized_jobs = accepted_preview_records(getattr(self, "_app_state", None), self.get_preview_jobs)
         except Exception as exc:
             _logger.error("Failed to build preview jobs: %s", exc)
             if on_error:
@@ -1060,7 +1061,6 @@ class PipelineController(CorePipelineController):
         self._active_job_id = None
         self._safe_gui_transition(GUIState.STOPPING)
         return True
-        return False
 
     def _execute_job(self, job: Any) -> dict[Any, Any]:
         if hasattr(job, "payload") and callable(job.payload):
@@ -1591,7 +1591,7 @@ class PipelineController(CorePipelineController):
         Returns:
             Number of jobs successfully submitted to queue.
         """
-        normalized_jobs = list(records or ()) if records else self.get_preview_jobs()
+        normalized_jobs = list(records or ()) or accepted_preview_records(getattr(self, "_app_state", None), self.get_preview_jobs)
         if not normalized_jobs:
             return 0
         queueable, non_queueable = self._split_queueable_records(normalized_jobs)
