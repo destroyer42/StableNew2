@@ -135,9 +135,10 @@ class AppStateProjectionSink:
         app_state = self._app_state
         if app_state is None:
             return
-        if projection.preview_revision is not None and projection.preview_revision != app_state.preview_revision:
-            return
-        app_state.set_preview_jobs(list(projection.preview_jobs), error=projection.error)
+        # Revision check and assignment are one atomic step in AppStateV2 (a queue admission may be claiming it).
+        app_state.accept_preview_result(
+            list(projection.preview_jobs), revision=projection.preview_revision, error=projection.error
+        )
 
     def _apply_webui(self, projection: WebUIProjection) -> None:
         app_state = self._app_state

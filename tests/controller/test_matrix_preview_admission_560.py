@@ -247,7 +247,10 @@ def test_saving_a_pack_the_draft_uses_invalidates_the_preview_and_announces_the_
     harness.app_state.subscribe("job_draft", lambda: notified.append("job_draft"))
     revision = harness.app_state.preview_revision
 
-    assert harness.app_state.pack_file_saved(harness.pack) is True
+    assert (
+        harness.app_state.pack_file_saved(harness.pack, packs_dir=harness.config_manager.packs_dir)
+        is True
+    )
 
     assert harness.app_state.preview_jobs == []
     assert harness.app_state.preview_revision == revision + 1
@@ -260,7 +263,11 @@ def test_saving_an_unrelated_pack_leaves_the_preview_alone(
     preview = harness.accept_preview()
     revision = harness.app_state.preview_revision
 
-    assert harness.app_state.pack_file_saved(tmp_path / "some-other-pack.json") is False
+    other = tmp_path / "some-other-pack.json"
+    assert (
+        harness.app_state.pack_file_saved(other, packs_dir=harness.config_manager.packs_dir)
+        is False
+    )
 
     assert harness.app_state.preview_jobs == preview
     assert harness.app_state.preview_revision == revision
@@ -270,7 +277,7 @@ def test_saving_with_an_empty_draft_does_not_touch_anything(tmp_path: Path) -> N
     state = AppStateV2()
     revision = state.preview_revision
 
-    assert state.pack_file_saved(tmp_path / "x.json") is False
+    assert state.pack_file_saved(tmp_path / "x.json", packs_dir=tmp_path) is False
     assert state.preview_revision == revision
 
 
@@ -324,18 +331,29 @@ def test_changing_the_pack_after_queueing_never_alters_queued_records(harness: H
 
 
 def test_accepted_preview_helper_contract() -> None:
-    state = Mock()
-    state.preview_jobs = [make_test_njr(job_id="a", prompt_source="manual", prompt_pack_id="")]
+    from types import SimpleNamespace
+
+    accepted = [make_test_njr(job_id="a", prompt_source="manual", prompt_pack_id="")]
+    fresh = [make_test_njr(job_id="b", prompt_source="manual", prompt_pack_id="")]
     compile_fresh = Mock(side_effect=AssertionError("must not recompile"))
 
-    assert accepted_preview_records(state, compile_fresh) == state.preview_jobs
+    # A real state: an accepted Preview is returned as-is; none means one compile, presented as the Preview.
+    state = AppStateV2()
+    state.set_preview_jobs(accepted)
+    assert accepted_preview_records(state, compile_fresh) == accepted
     compile_fresh.assert_not_called()
 
-    state.preview_jobs = []
-    fresh = [make_test_njr(job_id="b", prompt_source="manual", prompt_pack_id="")]
+    state.invalidate_preview()
     assert accepted_preview_records(state, lambda: fresh) == fresh
+    assert state.preview_jobs == fresh
+
+    # A state double without the Preview lifecycle keeps the plain read.
+    double = SimpleNamespace(preview_jobs=list(accepted))
+    assert accepted_preview_records(double, compile_fresh) == accepted
+    double.preview_jobs = []
+    assert accepted_preview_records(double, lambda: fresh) == fresh
     assert accepted_preview_records(None, lambda: fresh) == fresh
-    assert accepted_preview_records(state, lambda: None) == []  # type: ignore[arg-type,return-value]
+    assert accepted_preview_records(AppStateV2(), lambda: None) == []  # type: ignore[arg-type,return-value]
 
 
 def test_app_controller_run_path_submits_the_accepted_preview_records() -> None:

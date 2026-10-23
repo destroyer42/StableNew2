@@ -81,6 +81,7 @@ from src.controller.app_controller_services.learning_completion_router import (
 from src.controller.app_controller_services.pack_settings_apply_service import (
     PackApplyReport,
     apply_settings_to_packs,
+    bind_preview_invalidation,
 )
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
@@ -470,6 +471,7 @@ class AppController:
         self.state = AppState()
         self.threaded = threaded
         self._config_manager = config_manager or ConfigManager()
+        bind_preview_invalidation(self._config_manager, lambda: self.app_state)
         self._dropdown_loader = DropdownLoader(self._config_manager)
         self._warned_missing_pipeline_apply = False
         self._last_executor_config: dict[str, Any] | None = None
@@ -1607,7 +1609,6 @@ class AppController:
                     return result
         except Exception as exc:  # noqa: BLE001
             self._append_log(f"[controller] on_run_job_now_v2 error: {exc!r}")
-        self._ensure_run_mode_default("run_now")
         start_run_v2_fn = getattr(self, "start_run_v2", None)
         if start_run_v2_fn is not None:
             underlying = getattr(start_run_v2_fn, "__func__", None)
@@ -4651,7 +4652,6 @@ class AppController:
             close_all_structured_loggers()
         except Exception:
             pass
-
 
     def _cancel_active_jobs(self, reason: str) -> None:
         if self._cancel_token is not None:

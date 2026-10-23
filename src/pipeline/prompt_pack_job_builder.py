@@ -89,6 +89,7 @@ from src.training.lora_manager import LoRAManager
 from src.training.style_lora_manager import StyleLoRAManager
 from src.utils.config import ConfigManager
 from src.utils.embedding_prompt_utils import render_embedding_reference
+from src.utils.prompt_pack_utils import pack_json_path
 
 _logger = logging.getLogger(__name__)
 
@@ -1102,14 +1103,7 @@ class PromptPackNormalizedJobBuilder:
         )
 
     def _resolve_pack_json_path(self, pack_id: str) -> Path | None:
-        candidate = Path(pack_id)
-        if candidate.is_absolute():
-            json_candidate = (
-                candidate if candidate.suffix.lower() == ".json" else candidate.with_suffix(".json")
-            )
-            return json_candidate if json_candidate.exists() else None
-        stem = candidate.stem
-        path = self._packs_dir / f"{stem}.json"
+        path = pack_json_path(pack_id, self._packs_dir)
         return path if path.exists() else None
 
     @staticmethod

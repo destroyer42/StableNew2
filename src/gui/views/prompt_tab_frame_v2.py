@@ -125,7 +125,7 @@ class PromptTabFrame(ttk.Frame):
             except Exception:
                 pass
             # A saved pack changes what the compiler reads, so a Preview built from it must not stay current.
-            self.workspace_state.pack_saved_listener = getattr(self.app_state, "pack_file_saved", None)
+            self.workspace_state.pack_saved_listener = self.app_state.pack_save_listener(self._packs_dir)
         self.workspace_state.set_current_slot_index(0)
         self._suppress_editor_change = False
         self._prompt_optimizer_guard = False
