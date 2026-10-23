@@ -12,6 +12,9 @@ must have none, and an improvement must be locked in with ``--update``.
   stay at the bottom of the dependency order.
 * **controller_gui_imports** - ``src/controller`` importing ``src.gui``: controllers coordinate services and must not depend
   on Tk presentation.
+* **ai_assist_forbidden_imports** - ``src/ai_assist`` importing anything under ``src`` except ``ai_assist``, ``utils`` and
+  ``prompting`` (PR-AI-110): AI suggestions are advisory data, so the package may not reach the queue, repository, job
+  service, runner, NJR core, backends or any GUI module. Unlike the others its baseline is zero and must stay zero.
 
 Pure ``ast`` (no imports of application code), so it is instant and identical on every platform.
 
@@ -48,7 +51,14 @@ UTILS_UPWARD_PACKAGES = frozenset(
         "promptpacks",
     }
 )
-RULES = ("daemon_threads", "raw_threads", "utils_upward_imports", "controller_gui_imports")
+AI_ASSIST_ALLOWED_PACKAGES = frozenset({"ai_assist", "utils", "prompting"})
+RULES = (
+    "daemon_threads",
+    "raw_threads",
+    "utils_upward_imports",
+    "controller_gui_imports",
+    "ai_assist_forbidden_imports",
+)
 
 
 def _relative(path: Path) -> str:
@@ -95,6 +105,7 @@ def scan_source(relative: str, source: str) -> dict[str, int]:
     counts = dict.fromkeys(RULES, 0)
     in_utils = relative.startswith("src/utils/")
     in_controller = relative.startswith("src/controller/")
+    in_ai_assist = relative.startswith("src/ai_assist/")
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             if _has_daemon_true(node):
@@ -107,6 +118,12 @@ def scan_source(relative: str, source: str) -> dict[str, int]:
                 counts["utils_upward_imports"] += 1
             if in_controller and "gui" in packages:
                 counts["controller_gui_imports"] += 1
+            if in_ai_assist:
+                if any(p not in AI_ASSIST_ALLOWED_PACKAGES for p in packages):
+                    counts["ai_assist_forbidden_imports"] += 1
+                elif isinstance(node, ast.ImportFrom) and node.level > 1:
+                    # A relative import that climbs out of the package cannot be proven to stay inside the allow-list.
+                    counts["ai_assist_forbidden_imports"] += 1
     return {rule: n for rule, n in counts.items() if n}
 
 

@@ -30,4 +30,5 @@ folders are historical evidence; where they disagree with the code or a living d
 - Queue, runtime and WebUI: [`Runtime/QUEUE_AND_RUNTIME.md`](Runtime/QUEUE_AND_RUNTIME.md)
 - Learning: [`Learning/LEARNING.md`](Learning/LEARNING.md)
 - PromptPacks and prompting: [`PromptPacks/PROMPTPACKS_AND_PROMPTING.md`](PromptPacks/PROMPTPACKS_AND_PROMPTING.md)
+- Offline AI Assist: [`AiAssist/AI_ASSIST.md`](AiAssist/AI_ASSIST.md)
 - Testing and CI: [`Testing/TESTING_AND_CI.md`](Testing/TESTING_AND_CI.md)

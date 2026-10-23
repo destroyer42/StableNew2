@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "description": "Pinned offline llama.cpp runtime builds for Offline AI Assist. A build is usable only when listed here with its archive SHA-256 and the SHA-256 of every loadable file. This file ships with no builds: PR-AI-111 adds one after the operator imports and qualifies it. Nothing is downloaded by the application.",
+  "builds": []
+}

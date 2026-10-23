@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-493 of 647 modules have a docstring.
+506 of 660 modules have a docstring.
 
 ## src/
 
@@ -14,6 +14,22 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `app_factory.py`: (no docstring)
 - `cli.py`: Command-line interface for StableNew
 - `main.py`: (no docstring)
+
+## src/ai_assist/
+
+- `__init__.py`: Offline AI Assist (PR-AI-110): typed, validated, advisory suggestions from a locally stored model
+- `argv.py`: The only way a command line or child environment for the offline runtime is made
+- `attestation.py`: Operator attestation that an outbound firewall restriction exists for the runtime (owner decision D8)
+- `contracts.py`: Typed, versioned contracts for Offline AI Assist
+- `events.py`: Content-free event record (owner decision D7: no training-data capture)
+- `framing.py`: The fixed instruction frame and the JSON Schema for one request
+- `host.py`: Read-only host seams: memory and generation activity
+- `manifests.py`: Pinned runtime manifest, provenance-gated model registry, local import and integrity verification
+- `paths.py`: Where the offline AI runtime, weights and records live
+- `runtime.py`: One bounded, contained, CPU-only inference as a short-lived child (owner decision D2)
+- `service.py`: Single-flight admission, yielding and outcome mapping for one AI request at a time
+- `status.py`: Read-only installation status for the Operator Readiness window
+- `validators.py`: Pure, deterministic validation of model output
 
 ## src/api/
 
