@@ -540,7 +540,11 @@ class PromptTabFrame(ttk.Frame):
             on_change_callback=self._on_openpose_changed,
         )
         self.openpose_picker.pack(fill="x", pady=(6, 0))
-        self.controlnet_picker = ControlNetUnitsPanel(self.conditioning_scroll.inner, on_change_callback=self._on_controlnet_changed)
+        self.controlnet_picker = ControlNetUnitsPanel(
+            self.conditioning_scroll.inner,
+            on_change_callback=self._on_controlnet_changed,
+            on_replace_legacy=self._on_replace_legacy_openpose,
+        )
         self.controlnet_picker.pack(fill="x", pady=(6, 0))
 
     def _build_template_panel(self) -> None:
@@ -1304,7 +1308,9 @@ class PromptTabFrame(ttk.Frame):
             if hasattr(self, "openpose_picker"):
                 self.openpose_picker.set_declaration(getattr(slot, "openpose", None))
             if hasattr(self, "controlnet_picker"):
+                self.controlnet_picker.set_legacy_declaration(getattr(slot, "openpose", None))
                 self.controlnet_picker.set_declaration(getattr(slot, "controlnet_units", None))
+                self._sync_conditioning_exclusion()
 
             # Refresh matrix tab if it exists
             if hasattr(self, "matrix_tab_panel"):
@@ -1386,6 +1392,7 @@ class PromptTabFrame(ttk.Frame):
             self._mark_pack_modified()
         except Exception:
             logger.debug("Could not store the slot's OpenPose declaration", exc_info=True)
+        self.controlnet_picker.set_legacy_declaration(self.openpose_picker.get_declaration())
         self._refresh_metadata()
 
     def _on_controlnet_changed(self) -> None:
@@ -1393,7 +1400,21 @@ class PromptTabFrame(ttk.Frame):
             return
         self.workspace_state.set_slot_controlnet_units(self.workspace_state.get_current_slot_index(), self.controlnet_picker.get_declaration())
         self._mark_pack_modified()
+        self._sync_conditioning_exclusion()
         self._refresh_metadata()
+
+    def _on_replace_legacy_openpose(self) -> None:
+        """The operator confirmed switching this slot from legacy OpenPose to ordered units (never automatic)."""
+        self.openpose_picker.set_declaration(None)
+        self._on_openpose_changed()
+
+    def _sync_conditioning_exclusion(self) -> None:
+        """Legacy OpenPose and ordered units cannot coexist: tell the legacy picker not to start a second declaration."""
+        self.openpose_picker.set_exclusion(
+            "This slot uses ordered ControlNet units. Remove them first to use the legacy OpenPose reference."
+            if self.controlnet_picker.get_declaration() is not None
+            else ""
+        )
 
     def _on_embeddings_changed(self) -> None:
         """Handle changes to embedding picker."""
