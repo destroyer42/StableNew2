@@ -393,8 +393,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1332,
-      "S110": 525,
+      "BLE001": 1331,
+      "S110": 524,
       "S112": 37
     },
     "counts": {
@@ -722,8 +722,8 @@
         "S112": 1
       },
       "src/gui/views/prompt_tab_frame_v2.py": {
-        "BLE001": 35,
-        "S110": 16
+        "BLE001": 34,
+        "S110": 15
       },
       "src/gui/views/review_tab_frame_v2.py": {
         "BLE001": 10,

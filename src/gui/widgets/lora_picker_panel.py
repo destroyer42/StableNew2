@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from tkinter import ttk
 from typing import TYPE_CHECKING, Any, cast
 
@@ -14,7 +14,8 @@ from src.gui.enhanced_slider import EnhancedSlider
 from src.gui.gui_invoker import GuiInvoker
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.lora_keyword_dialog import LoRAKeywordDialog
-from src.gui_v2.lora_browser import visible_resource
+from src.gui_v2.lora_authoring_view import project_selected_lora
+from src.gui_v2.lora_browser import target_profile, visible_resource
 from src.image_backends.model_policy import ModelPolicy
 from src.utils.lora_keyword_detector import LoRAMetadata
 from src.utils.lora_scanner import LoRAResource, LoRAScanner, get_lora_scanner
@@ -32,6 +33,7 @@ class LoRAPickerPanel(ttk.Frame):
     CONTROL_ROW_MIN_WIDTH = 220
     SLIDER_MAX = 1.5
     SLIDER_RESOLUTION = 0.01
+    LIST_HEIGHT = 320  # room for one selected LoRA's evidence rows without scrolling
 
     def __init__(
         self,
@@ -51,6 +53,11 @@ class LoRAPickerPanel(ttk.Frame):
         self._annotations: dict[str, str] = {}
         #: Called whenever the selection changes (add/remove/strength/set/clear), after ``on_change_callback``.
         self.selection_listener: Callable[[], None] | None = None
+        #: Called on the Tk thread after each discovery finishes (success or failure), for views that depend on the
+        #: local inventory (the Style Consistency selector). Never called from the worker.
+        self.inventory_listener: Callable[[], None] | None = None
+        #: Exact LoRA names the last successful discovery returned; ``None`` while unknown or after a failed refresh.
+        self._inventory_names: frozenset[str] | None = None
         self.scanner: LoRAScanner | None = None  # constructed by the discovery worker, never on Tk
         self._content_visibility_mode = self._discover_content_visibility_mode()
         self._available_loras: list[str] = []
@@ -100,6 +107,10 @@ class LoRAPickerPanel(ttk.Frame):
         ttk.Label(header_frame, textvariable=self.discovery_status, wraplength=360).grid(
             row=1, column=0, columnspan=3, sticky="ew"
         )
+        self.insertion_status = tk.StringVar(value="")
+        ttk.Label(header_frame, textvariable=self.insertion_status, wraplength=360).grid(
+            row=2, column=0, columnspan=3, sticky="ew"
+        )
 
         # Add button frame
         add_frame = ttk.Frame(self)
@@ -123,7 +134,7 @@ class LoRAPickerPanel(ttk.Frame):
         list_frame.rowconfigure(0, weight=1)
         list_frame.columnconfigure(0, weight=1)
 
-        canvas = tk.Canvas(list_frame, height=150, bg="#2b2b2b", highlightthickness=0)
+        canvas = tk.Canvas(list_frame, height=self.LIST_HEIGHT, bg="#2b2b2b", highlightthickness=0)
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
 
         self.lora_list_frame = ttk.Frame(canvas)
@@ -157,6 +168,7 @@ class LoRAPickerPanel(ttk.Frame):
 
     def set_content_visibility_mode(self, mode: str) -> None:
         self._content_visibility_mode = str(mode or "nsfw")
+        self.insertion_status.set("")  # the last message may name trigger words the new mode hides
         self._close_keywords()
         self._refresh_visible_lora_names()
         self._refresh_selected_projection()
@@ -280,6 +292,22 @@ class LoRAPickerPanel(ttk.Frame):
             wraplength=self.NAME_WRAP_LENGTH,
         )
         inventory_label.grid(row=3, column=0, sticky="ew")
+        compatibility_label = ttk.Label(entry_frame, text="", wraplength=self.NAME_WRAP_LENGTH)
+        compatibility_label.grid(row=4, column=0, sticky="ew")
+        trigger_label = ttk.Label(entry_frame, text="", wraplength=self.NAME_WRAP_LENGTH)
+        trigger_label.grid(row=5, column=0, sticky="ew")
+        insert_button = ttk.Button(
+            entry_frame,
+            text="Insert Trigger Words",
+            command=lambda: self._insert_trigger_words(name),
+        )
+        insert_button.grid(row=6, column=0, sticky="w", pady=(2, 0))
+        insert_button.state(["disabled"])
+        attach_tooltip(
+            insert_button,
+            "Append this LoRA's metadata-backed trigger words to the current slot's positive prompt. "
+            "Nothing is saved or queued.",
+        )
 
         self._lora_entries.append((name, strength_var, entry_frame))
         self._entry_widgets[name] = {
@@ -293,6 +321,9 @@ class LoRAPickerPanel(ttk.Frame):
             "keywords_button": keywords_button,
             "remove_button": remove_button,
             "inventory_label": inventory_label,
+            "compatibility_label": compatibility_label,
+            "trigger_label": trigger_label,
+            "insert_button": insert_button,
         }
         self._refresh_selected_projection()
 
@@ -381,7 +412,9 @@ class LoRAPickerPanel(ttk.Frame):
         dialog = self._keyword_dialog = LoRAKeywordDialog(
             self,
             metadata=metadata,
-            on_copy=lambda keywords: self._insert_keywords_to_prompt(keywords),
+            on_copy=lambda keywords: self._report_insertion(
+                self._insert_keywords_to_prompt(keywords)
+            ),
         )
         dialog.grab_set()
 
@@ -391,14 +424,28 @@ class LoRAPickerPanel(ttk.Frame):
         if dialog is not None and dialog.winfo_exists():
             dialog.destroy()
 
-    def _insert_keywords_to_prompt(self, keywords: str) -> None:
-        """Callback to insert keywords into prompt editor.
+    def _insert_trigger_words(self, lora_name: str) -> None:
+        """Offer this LoRA's evidence-backed words to the prompt; nothing is inserted without this explicit action."""
+        resource = self._resources.get(lora_name)
+        if resource is None or self._hidden_selection(lora_name) or not resource.keywords:
+            self.insertion_status.set("No trigger words are available to insert.")
+            return
+        self._report_insertion(self._insert_keywords_to_prompt(tuple(resource.keywords)))
+
+    def _report_insertion(self, message: object) -> None:
+        if isinstance(message, str):
+            self.insertion_status.set(message)
+
+    def _insert_keywords_to_prompt(self, keywords: str | Sequence[str]) -> str | None:
+        """Insert keywords into the prompt editor and return a status message.
 
         This is a placeholder - will be overridden by parent frame.
         """
+        text = keywords if isinstance(keywords, str) else ", ".join(keywords)
         # Just copy to clipboard for now
         self.clipboard_clear()
-        self.clipboard_append(keywords)
+        self.clipboard_append(text)
+        return None
 
     def _scan_loras(self) -> None:
         self._initial_scan = None
@@ -457,12 +504,14 @@ class LoRAPickerPanel(ttk.Frame):
             self._launch_refresh()
             return
         if failed:
+            self._inventory_names = None
             self.discovery_status.set(
                 "Local discovery failed. Retained choices/inventory are unverified. Retry Refresh."
             )
         else:
             self._close_keywords()
             self._resources = resources
+            self._inventory_names = frozenset(resources)
             self._asset_snapshot = snapshot or AssetRegistrySnapshot(())
             self._available_loras = list(resources)
             self._verified = True
@@ -472,8 +521,16 @@ class LoRAPickerPanel(ttk.Frame):
         self._refresh_visible_lora_names()
         self._refresh_selected_projection()
         self._render_browser()
+        listener = self.inventory_listener
+        if listener is not None:
+            listener()
+
+    def discovered_lora_names(self) -> frozenset[str] | None:
+        """The last successful discovery's exact names, or ``None`` when no inventory is currently known."""
+        return self._inventory_names
 
     def _refresh_selected_projection(self) -> None:
+        target = target_profile(self._asset_snapshot, self._model_name)
         for name, widgets in self._entry_widgets.items():
             hidden = self._hidden_selection(name)
             label = cast(Any, widgets["name_label"])
@@ -483,20 +540,26 @@ class LoRAPickerPanel(ttk.Frame):
                 tooltip._hide()
                 tooltip.text = REDACTED_TEXT if hidden else name
             cast(Any, widgets["keywords_button"]).state(["disabled"] if hidden else ["!disabled"])
-            available = name in self._resources
-            note = "Inventory not verified; selection retained"
-            if self._verified:
-                note = (
-                    "Discovered locally; pairing unqualified"
-                    if available
-                    else "Unavailable locally; selection retained"
-                )
-            cast(Any, widgets["inventory_label"]).configure(text=note)
+            view = project_selected_lora(
+                self._resources.get(name),
+                verified=self._verified,
+                hidden=hidden,
+                policy=self._policy,
+                target=target,
+            )
+            cast(Any, widgets["inventory_label"]).configure(text=view.availability)
+            cast(Any, widgets["compatibility_label"]).configure(text=view.compatibility)
+            trigger_text = " ".join((view.trigger_line, *view.warnings))
+            cast(Any, widgets["trigger_label"]).configure(text=trigger_text)
+            cast(Any, widgets["insert_button"]).state(
+                ["!disabled"] if view.can_insert else ["disabled"]
+            )
         self.set_annotations(self._annotations)
 
     def set_model_policy(self, policy: ModelPolicy | None, model_name: str = "") -> None:
         self._policy = policy
         self._model_name = model_name
+        self._refresh_selected_projection()
         self._render_browser()
 
     def open_browser(self) -> None:
