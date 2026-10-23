@@ -19,6 +19,7 @@ will be wired in later via a PipelineRunner abstraction.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -76,6 +77,10 @@ from src.controller.app_controller_services.dispatch_hold_status import describe
 from src.controller.app_controller_services.gui_config_service import GuiConfigService
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
+)
+from src.controller.app_controller_services.pack_settings_apply_service import (
+    PackApplyReport,
+    apply_settings_to_packs,
 )
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
@@ -5652,15 +5657,15 @@ class AppController:
             updated.append(LoraRuntimeConfig(name=lora_name, enabled=normalized))
         self.app_state.set_lora_strengths(updated)
 
-    def on_pipeline_pack_load_config(self, pack_id: str) -> None:
-        """Load a pack's config into the stage cards."""
+    def on_pipeline_pack_load_config(self, pack_id: str) -> bool:
+        """Load a pack's saved settings into the working stage cards (writes nothing). Returns whether any were found."""
         self._append_log(f"[controller] Loading config for pack: {pack_id}")
 
         # Try to load pack config via ConfigManager
         pack_config = self._config_manager.load_pack_config(pack_id)
         if pack_config is None:
             self._append_log(f"[controller] No config found for pack: {pack_id}")
-            return
+            return False
         pipeline_section = pack_config.get("pipeline") or {}
         self._apply_pipeline_stage_flags(pipeline_section)
 
@@ -5688,7 +5693,8 @@ class AppController:
             output_overrides = {
                 "batch_size": pipeline_section.get("images_per_prompt", 1),
                 "n_iter": pipeline_section.get("n_iter", 1),
-                "output_dir": pipeline_section.get("output_dir", "output"),
+                "output_dir": pipeline_section.get("output_dir")
+                or self._config_manager.get_setting("output_dir", "output"),
                 "filename_pattern": pipeline_section.get("filename_pattern", "{seed}"),
                 "image_format": pipeline_section.get("image_format", "png"),
                 "seed_mode": pipeline_section.get("seed_mode", "fixed"),
@@ -5708,157 +5714,75 @@ class AppController:
                 self._append_log(f"[controller] Error applying global prompt settings: {e}")
 
         self._append_log(f"[controller] Loaded config for pack '{pack_id}'")
+        return True
 
-    def on_pipeline_pack_apply_config(self, pack_ids: list[str]) -> None:
-        """Write current stage config into one or more packs."""
-        self._append_log(f"[controller] Applying config to packs: {pack_ids}")
-
-        # Gather CURRENT config from ALL stage cards
-        current_config: dict[str, Any] = {}
-
-        # Get stage cards panel
-        stage_panel = self._get_stage_cards_panel()
-        if stage_panel:
-            # Gather from txt2img card
-            txt2img_card = getattr(stage_panel, "txt2img_card", None)
-            if txt2img_card and hasattr(txt2img_card, "to_config_dict"):
-                try:
-                    txt2img_config = txt2img_card.to_config_dict()
-                    current_config.update(txt2img_config)
-                    self._append_log("[controller] Gathered txt2img config from GUI")
-                except Exception as e:
-                    self._append_log(f"[controller] Error gathering txt2img config: {e}")
-
-            # Gather from img2img card
-            img2img_card = getattr(stage_panel, "img2img_card", None)
-            if img2img_card and hasattr(img2img_card, "to_config_dict"):
-                try:
-                    img2img_config = img2img_card.to_config_dict()
-                    current_config.update(img2img_config)
-                    self._append_log("[controller] Gathered img2img config from GUI")
-                except Exception as e:
-                    self._append_log(f"[controller] Error gathering img2img config: {e}")
-
-            # Gather from upscale card
-            upscale_card = getattr(stage_panel, "upscale_card", None)
-            if upscale_card and hasattr(upscale_card, "to_config_dict"):
-                try:
-                    upscale_config = upscale_card.to_config_dict()
-                    current_config.update(upscale_config)
-                    self._append_log("[controller] Gathered upscale config from GUI")
-                except Exception as e:
-                    self._append_log(f"[controller] Error gathering upscale config: {e}")
-
-            # Gather from adetailer card (returns flat dict)
-            adetailer_card = getattr(stage_panel, "adetailer_card", None)
-            if adetailer_card and hasattr(adetailer_card, "to_config_dict"):
-                try:
-                    adetailer_config = adetailer_card.to_config_dict()
-                    # Wrap in "adetailer" section to match pack structure
-                    if "adetailer" not in current_config:
-                        current_config["adetailer"] = {}
-                    current_config["adetailer"].update(adetailer_config)
-
-                    # CRITICAL: Also include enabled flag in adetailer section
-                    # Get it from pipeline_tab since adetailer card doesn't track it
-                    pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-                    if pipeline_tab:
-                        adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
-                        if adetailer_enabled_var is not None:
-                            current_config["adetailer"]["adetailer_enabled"] = bool(adetailer_enabled_var.get())
-
-                    self._append_log("[controller] Gathered adetailer config from GUI")
-                except Exception as e:
-                    self._append_log(f"[controller] Error gathering adetailer config: {e}")
-
-        # Add randomizer config
-        panel_randomizer = self._get_panel_randomizer_config()
-        if panel_randomizer:
-            current_config.update(panel_randomizer)
-
-        # Add LoRA settings
+    def _collect_working_config_for_pack_save(self) -> dict[str, Any]:
+        """The working stage settings as they would be saved: stage cards, LoRA strengths, output and stage flags."""
+        current_config = self._collect_current_stage_configs()
         if self.app_state and self.app_state.lora_strengths:
             current_config["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
-        prompt_optimizer_config = self._read_prompt_optimizer_ui_config()
-        if prompt_optimizer_config is not None:
-            current_config["prompt_optimizer"] = prompt_optimizer_config
-
         if not current_config:
-            self._append_log("[controller] No current config to apply")
-            return
-
-        # Update app_state with gathered config
-        if self.app_state:
-            self.app_state.set_run_config(current_config)
-
-        # Gather output settings from GUI output panel
+            return {}
+        pipeline = current_config.setdefault("pipeline", {})
         sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
         output_card = getattr(sidebar, "output_settings_card", None) if sidebar else None
         output_panel = getattr(output_card, "child", None) if output_card else None
         if output_panel and hasattr(output_panel, "get_output_overrides"):
             try:
-                output_overrides = output_panel.get_output_overrides()
-                # Ensure pipeline section exists
-                if "pipeline" not in current_config:
-                    current_config["pipeline"] = {}
-                # Map output panel keys to pipeline section keys
-                current_config["pipeline"]["images_per_prompt"] = output_overrides.get("batch_size", 1)
-                current_config["pipeline"]["n_iter"] = output_overrides.get("n_iter", 1)
-                current_config["pipeline"]["output_dir"] = output_overrides.get("output_dir", "output")
-                current_config["pipeline"]["filename_pattern"] = output_overrides.get("filename_pattern", "{seed}")
-                current_config["pipeline"]["image_format"] = output_overrides.get("image_format", "png")
-                current_config["pipeline"]["seed_mode"] = output_overrides.get("seed_mode", "fixed")
-                current_config["pipeline"]["output_route"] = output_overrides.get("output_route", "Auto")
-                self._append_log("[controller] Gathered output settings from GUI")
+                output = output_panel.get_output_overrides()
+                pipeline["images_per_prompt"] = output.get("batch_size", 1)
+                pipeline["n_iter"] = output.get("n_iter", 1)
+                pipeline["output_dir"] = output.get("output_dir", "output")
+                pipeline["filename_pattern"] = output.get("filename_pattern", "{seed}")
+                pipeline["image_format"] = output.get("image_format", "png")
+                pipeline["seed_mode"] = output.get("seed_mode", "fixed")
+                pipeline["output_route"] = output.get("output_route", "Auto")
             except Exception as e:
                 self._append_log(f"[controller] Error gathering output settings: {e}")
-
-        # Gather pipeline stage flags from pipeline_tab
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab:
-            try:
-                # Ensure pipeline section exists
-                if "pipeline" not in current_config:
-                    current_config["pipeline"] = {}
+            # Always gather every stage flag so the saved pipeline section is complete (merge-with-defaults must not
+            # fall back to stale default flags).
+            for stage, default in (
+                ("txt2img", True),
+                ("img2img", False),
+                ("adetailer", False),
+                ("upscale", False),
+            ):
+                var = getattr(pipeline_tab, f"{stage}_enabled", None)
+                pipeline[f"{stage}_enabled"] = bool(var.get()) if var is not None else default
+        return current_config
 
-                # CRITICAL: Always gather ALL stage flags to ensure complete pipeline section
-                # This prevents merge-with-defaults from using old default values
-                txt2img_enabled_var = getattr(pipeline_tab, "txt2img_enabled", None)
-                img2img_enabled_var = getattr(pipeline_tab, "img2img_enabled", None)
-                adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
-                upscale_enabled_var = getattr(pipeline_tab, "upscale_enabled", None)
+    def working_settings_fingerprint(self) -> str:
+        """Digest of the working stage settings, so the sidebar can tell unsaved edits from a freshly loaded source."""
+        try:
+            config = self._collect_working_config_for_pack_save()
+            return hashlib.sha256(json.dumps(config, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        except Exception:  # noqa: BLE001 - an unreadable working state is reported as unknown, never as clean
+            return ""
 
-                # Set all flags explicitly (use True as default for txt2img, False for others)
-                current_config["pipeline"]["txt2img_enabled"] = (
-                    bool(txt2img_enabled_var.get()) if txt2img_enabled_var is not None else True
-                )
-                current_config["pipeline"]["img2img_enabled"] = (
-                    bool(img2img_enabled_var.get()) if img2img_enabled_var is not None else False
-                )
-                current_config["pipeline"]["adetailer_enabled"] = (
-                    bool(adetailer_enabled_var.get()) if adetailer_enabled_var is not None else False
-                )
-                current_config["pipeline"]["upscale_enabled"] = (
-                    bool(upscale_enabled_var.get()) if upscale_enabled_var is not None else False
-                )
+    def on_pipeline_pack_apply_config(self, pack_ids: list[str]) -> PackApplyReport | None:
+        """Write the working stage settings into the saved settings of the selected PromptPacks (explicit action).
 
-                self._append_log(
-                    f"[controller] Gathered pipeline stage flags: "
-                    f"txt2img={current_config['pipeline'].get('txt2img_enabled')}, "
-                    f"img2img={current_config['pipeline'].get('img2img_enabled')}, "
-                    f"adetailer={current_config['pipeline'].get('adetailer_enabled')}, "
-                    f"upscale={current_config['pipeline'].get('upscale_enabled')}"
-                )
-            except Exception as e:
-                self._append_log(f"[controller] Error gathering stage flags: {e}")
+        Only each pack's ``preset_data`` changes; prompts, Matrix and the working state do not. The report names every
+        pack that was and was not updated.
+        """
+        self._append_log(f"[controller] Applying config to packs: {pack_ids}")
+        current_config = self._collect_working_config_for_pack_save()
+        if not current_config:
+            self._append_log("[controller] No current config to apply")
+            return None
+        report = apply_settings_to_packs(
+            self._config_manager, pack_ids, current_config, source="the current stage settings"
+        )
+        self._log_pack_apply_report(report)
+        return report
 
-        # Save to each pack
-        for pack_id in pack_ids:
-            success = self._config_manager.save_pack_config(pack_id, current_config)
-            if success:
-                self._append_log(f"[controller] Applied config to pack '{pack_id}'")
-            else:
-                self._append_log(f"[controller] Failed to apply config to pack '{pack_id}'")
+    def _log_pack_apply_report(self, report: PackApplyReport) -> None:
+        for pack_id in report.succeeded:
+            self._append_log(f"[controller] Applied {report.source} to pack '{pack_id}'")
+        for failure in report.failed:
+            self._append_log(f"[controller] Failed to apply {report.source} to pack '{failure.pack_id}': {failure.error}")
 
     def save_current_pipeline_saved_recipe(self, recipe_name: str) -> bool:
         """Persist the current pipeline/stage config as a named saved recipe."""
@@ -6479,19 +6403,13 @@ class AppController:
         self.job_service.resume()
         self._append_log("[controller] Resumed current job")
 
-    def on_pipeline_saved_recipe_apply_to_working_state(self, recipe_name: str) -> None:
-        """Apply saved recipe config to the current run config and optionally mark default."""
+    def on_pipeline_saved_recipe_apply_to_working_state(self, recipe_name: str) -> bool:
+        """Load a generation preset into the working state (stage settings and Base Generation).
+
+        Writes nothing: no PromptPack, no preset and no default-preset marker. Returns whether the preset loaded.
+        """
         self._append_log(f"[controller] Applying saved recipe '{recipe_name}' to working state")
-
-        recipe_config = self._load_and_apply_saved_recipe(recipe_name)
-        if recipe_config is None:
-            return
-
-        success = self._config_manager.set_default_preset(recipe_name)
-        if success:
-            self._append_log(f"[controller] Set '{recipe_name}' as default preset")
-        else:
-            self._append_log("[controller] Failed to set default preset")
+        return self._load_and_apply_saved_recipe(recipe_name) is not None
 
     def _load_and_apply_saved_recipe(self, recipe_name: str) -> dict[str, Any] | None:
         recipe_config = self._config_manager.load_preset(recipe_name)
@@ -6504,31 +6422,28 @@ class AppController:
 
     def on_pipeline_saved_recipe_apply_to_selected_packs(
         self, recipe_name: str, pack_ids: list[str]
-    ) -> None:
-        """Copy saved recipe values into configs of selected packs."""
+    ) -> PackApplyReport | None:
+        """Copy a generation preset's settings into the saved settings of the selected PromptPacks (explicit action)."""
         self._append_log(f"[controller] Applying saved recipe '{recipe_name}' to packs: {pack_ids}")
 
         recipe_config = self._config_manager.load_preset(recipe_name)
         if recipe_config is None:
             self._append_log(f"[controller] Failed to load saved recipe: {recipe_name}")
-            return
+            return None
+        report = apply_settings_to_packs(
+            self._config_manager, pack_ids, recipe_config, source=f"Generation Preset '{recipe_name}'"
+        )
+        self._log_pack_apply_report(report)
+        return report
 
-        # Apply to each pack
-        for pack_id in pack_ids:
-            success = self._config_manager.save_pack_config(pack_id, recipe_config)
-            if success:
-                self._append_log(f"[controller] Applied saved recipe to pack '{pack_id}'")
-            else:
-                self._append_log(f"[controller] Failed to apply saved recipe to pack '{pack_id}'")
-
-    def on_pipeline_saved_recipe_load_to_pipeline(self, recipe_name: str) -> None:
-        """Load saved recipe values into the active pipeline workspace."""
+    def on_pipeline_saved_recipe_load_to_pipeline(self, recipe_name: str) -> bool:
+        """Load a generation preset's stage settings into the working state (writes nothing). Returns success."""
         self._append_log(f"[controller] Loading saved recipe '{recipe_name}' to pipeline")
 
         recipe_config = self._config_manager.load_preset(recipe_name)
         if recipe_config is None:
             self._append_log(f"[controller] Failed to load saved recipe: {recipe_name}")
-            return
+            return False
 
         # Apply to run config
         if self.app_state:
@@ -6537,6 +6452,7 @@ class AppController:
         self._sync_prompt_optimizer_run_config(recipe_config)
 
         self._apply_adetailer_config_section(recipe_config)
+        return True
 
     def on_pipeline_saved_recipe_save_current(self, recipe_name: str) -> None:
         """Save current stage config as a saved recipe."""

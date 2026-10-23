@@ -5,11 +5,16 @@ import logging
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
-from tkinter import simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk
 from typing import Any
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.scrolling import enable_mousewheel
+from src.gui.settings_actions_presenter import (
+    CHANNEL_PACK,
+    CHANNEL_PRESET,
+    SettingsActionsPresenter,
+)
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import (
     ACCENT_GOLD,
@@ -27,6 +32,7 @@ from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.state.workspace_paths import workspace_paths
 from src.utils.atomic_io import atomic_write_text
+from src.utils.config import preset_name_problem
 from src.utils.file_io import read_prompt_pack
 
 from .base_generation_panel_v2 import BaseGenerationPanelV2
@@ -122,7 +128,7 @@ class _SidebarCard(BaseStageCardV2):
 
 
 class SidebarPanelV2(ttk.Frame):
-    """Container for saved recipes, packs, base generation, and pipeline controls."""
+    """Container for Generation Presets, PromptPacks, base generation, and pipeline controls."""
 
     _STAGE_ORDER = get_pipeline_stage_order() or ["txt2img", "img2img", "adetailer", "upscale"]
     _STAGE_LABELS = {
@@ -134,7 +140,7 @@ class SidebarPanelV2(ttk.Frame):
     CARD_BASE_WIDTH = 240
     CARD_WIDTH = 80
     _MAX_PREVIEW_CHARS = 4000
-    _CREATE_SAVED_RECIPE_LABEL = "Create new recipe from stages"
+    _CREATE_SAVED_RECIPE_LABEL = "Create new preset from current settings"
 
     def __init__(
         self,
@@ -198,6 +204,13 @@ class SidebarPanelV2(ttk.Frame):
         self._last_valid_saved_recipe: str = self.saved_recipe_var.get()
         self.config_source_label: ttk.Label | None = None
         self.recipe_hint_label: ttk.Label | None = None
+        self.recipe_action_label: ttk.Label | None = None
+        self.pack_action_label: ttk.Label | None = None
+        self._actions = SettingsActionsPresenter(
+            controller_getter=lambda: self.controller,
+            confirm=self._confirm_dialog,
+            say=self._say_action,
+        )
         self._recipe_menu_entries: tuple[tuple[str, str, Callable[[], None]], ...] = ()
         # Where the working stage settings were last loaded from; selecting a recipe alone never changes it.
         self._settings_source = source_contract.SettingsSource()
@@ -273,7 +286,7 @@ class SidebarPanelV2(ttk.Frame):
 
         self.saved_recipe_card = _SidebarCard(
             self,
-            title="Saved Recipes",
+            title="Generation Presets",
             build_child=lambda parent: self._build_saved_recipe_actions_section(parent),
         )
         self.saved_recipe_card.grid(row=0, column=0, sticky="ew", padx=8, pady=(0, 4))
@@ -321,8 +334,10 @@ class SidebarPanelV2(ttk.Frame):
         # PR-GUI-H: Use embed_mode=True to build widgets directly into card body_frame
         self.output_settings_card = _SidebarCard(
             self,
-            title="Output Settings",
-            build_child=lambda parent: OutputSettingsPanelV2(parent, embed_mode=True),
+            title="Output Settings (saved with pack settings)",
+            build_child=lambda parent: OutputSettingsPanelV2(
+                parent, embed_mode=True, default_output_dir=self._application_output_dir()
+            ),
         )
         self.output_settings_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
 
@@ -350,6 +365,17 @@ class SidebarPanelV2(ttk.Frame):
         self._bind_app_state()
         # PR-PERSIST-001: Restore saved state
         self.restore_state()
+
+    def _application_output_dir(self) -> str | None:
+        """The saved application default output folder (Engine Settings), or None to use the built-in default."""
+        getter = getattr(self.config_manager, "get_setting", None)
+        if not callable(getter):
+            return None
+        try:
+            value = getter("output_dir", None)
+        except Exception:
+            return None
+        return value if isinstance(value, str) and value.strip() else None
 
     def _list_recipe_names(self) -> list[str]:
         """Saved recipes only: the presets folder also holds the application's own settings files."""
@@ -423,7 +449,7 @@ class SidebarPanelV2(ttk.Frame):
         create_button.grid(row=0, column=0, sticky="nw")
         attach_tooltip(
             create_button,
-            "Saves the current stage settings as a new named recipe. Prompts are not part of a recipe.",
+            source_contract.NEW_RECIPE_TIP,
         )
 
         self.config_source_label = ttk.Label(
@@ -441,6 +467,11 @@ class SidebarPanelV2(ttk.Frame):
         )
         self.recipe_hint_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
         bind_wraplength(self.recipe_hint_label, maximum=420)
+        self.recipe_action_label = ttk.Label(
+            frame, text="", style=MUTED_LABEL_STYLE, wraplength=420, justify="left"
+        )
+        self.recipe_action_label.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        bind_wraplength(self.recipe_action_label, maximum=420)
         self._sync_recipe_widgets()
         self._update_config_source_label(self.saved_recipe_var.get() or None)
         return frame
@@ -474,21 +505,35 @@ class SidebarPanelV2(ttk.Frame):
         self._handle_create_saved_recipe_action()
 
     def _handle_create_saved_recipe_action(self) -> None:
-        recipe_name = simpledialog.askstring("Create recipe", "Recipe name:", parent=self)
+        recipe_name = simpledialog.askstring(
+            "Create Generation Preset", "Preset name:", parent=self
+        )
         if not recipe_name:
             self._restore_last_saved_recipe_selection()
             return
-        controller = self.controller
-        saved = False
-        if controller and hasattr(controller, "save_current_pipeline_saved_recipe"):
-            try:
-                saved = controller.save_current_pipeline_saved_recipe(recipe_name)
-            except Exception:
-                saved = False
-        if saved:
+        recipe_name = recipe_name.strip()
+        problem = preset_name_problem(recipe_name)
+        if problem:
+            self._say_action(CHANNEL_PRESET, problem)
+            self._restore_last_saved_recipe_selection()
+            return
+        if self._save_preset(recipe_name):
             self._populate_saved_recipe_combo(select=recipe_name)
         else:
             self._restore_last_saved_recipe_selection()
+
+    def _save_preset(self, recipe_name: str) -> bool:
+        """Save the working stage settings as a Generation Preset, confirming only an overwrite."""
+        controller = self.controller
+        saver = getattr(controller, "save_current_pipeline_saved_recipe", None)
+        if not callable(saver):
+            return False
+        return self._actions.save_preset(
+            recipe_name,
+            exists=recipe_name in self._list_recipe_names(),
+            invoke=lambda name: bool(saver(name)),
+            confirm_overwrite=True,
+        )
 
     def _apply_saved_recipe_selection(self, name: str | None) -> None:
         if name and name in self.saved_recipe_names:
@@ -529,6 +574,11 @@ class SidebarPanelV2(ttk.Frame):
         text = source_contract.source_status_text(self._settings_source, recipe_name or "", detail)
         if self.config_source_label:
             self.config_source_label.config(text=text)
+
+    @property
+    def settings_source(self) -> source_contract.SettingsSource:
+        """Where the working stage settings were last loaded from (read-only; the effective-settings view cites it)."""
+        return self._settings_source
 
     def _set_settings_source(self, kind: str, name: str) -> None:
         self._settings_source = source_contract.SettingsSource(kind, name)
@@ -581,6 +631,11 @@ class SidebarPanelV2(ttk.Frame):
             btn_frame, text="Add to Job", command=self._on_add_to_job, style="Dark.TButton"
         )
         self.add_to_job_button.grid(row=1, column=0, sticky="ew", padx=(0, 2))
+        self.pack_action_label = ttk.Label(
+            btn_frame, text="", style=MUTED_LABEL_STYLE, wraplength=360, justify="left"
+        )
+        self.pack_action_label.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        bind_wraplength(self.pack_action_label, maximum=420)
         self.preview_toggle_button = ttk.Button(
             btn_frame,
             text="Show Preview",
@@ -870,13 +925,17 @@ class SidebarPanelV2(ttk.Frame):
         if not pack_id:
             return
         controller = self.controller
-        if controller and hasattr(controller, "on_pipeline_pack_load_config"):
-            try:
-                controller.on_pipeline_pack_load_config(pack_id)
-            except Exception:
-                return
-            if self._pack_has_saved_config(pack_id):
-                self._set_settings_source(source_contract.SOURCE_PACK, pack_id)
+        loader = getattr(controller, "on_pipeline_pack_load_config", None)
+        if not callable(loader):
+            return
+        outcome = self._actions.load(
+            CHANNEL_PACK,
+            f"the saved settings of PromptPack '{pack_id}'",
+            lambda: loader(pack_id),
+            succeeded=lambda: self._pack_has_saved_config(pack_id),
+        )
+        if outcome.loaded:
+            self._set_settings_source(source_contract.SOURCE_PACK, pack_id)
 
     def _pack_has_saved_config(self, pack_id: str) -> bool:
         """True when the pack has a saved-settings entry, i.e. a load actually had something to load."""
@@ -889,20 +948,17 @@ class SidebarPanelV2(ttk.Frame):
             return False
 
     def _on_pack_apply_config(self) -> None:
+        """Overwrite the saved settings of the selected PromptPacks with the working stage settings (confirmed)."""
         if not self.pack_listbox:
             return
         selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
-        if not selection:
-            return
         pack_ids = [
             self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
         ]
-        controller = self.controller
-        if controller and hasattr(controller, "on_pipeline_pack_apply_config"):
-            try:
-                controller.on_pipeline_pack_apply_config(pack_ids)
-            except Exception:
-                pass
+        applier = getattr(self.controller, "on_pipeline_pack_apply_config", None)
+        if not pack_ids or not callable(applier):
+            return
+        self._actions.apply_to_packs("the current stage settings", pack_ids, applier)
 
     def _on_add_to_job(self) -> None:
         """Handle 'Add to Job' button click.
@@ -1062,7 +1118,10 @@ class SidebarPanelV2(ttk.Frame):
         if self.load_config_button:
             self.load_config_button.config(state=tk.NORMAL if single else tk.DISABLED)
         if self.apply_config_button:
-            self.apply_config_button.config(state=tk.NORMAL if has_selection else tk.DISABLED)
+            self.apply_config_button.config(
+                state=tk.NORMAL if has_selection else tk.DISABLED,
+                text=source_contract.apply_button_label(len(selection)),
+            )
         if self.add_to_job_button:
             # PR-CORE-D/E: PromptPack-only architecture - "Add to Job" requires pack selection
             self.add_to_job_button.config(state=tk.NORMAL if has_selection else tk.DISABLED)
@@ -1232,15 +1291,12 @@ class SidebarPanelV2(ttk.Frame):
         recipe_name = self.saved_recipe_var.get()
         if not recipe_name:
             return
-        controller = self.controller
-        if controller and hasattr(controller, "on_pipeline_saved_recipe_apply_to_working_state"):
-            try:
-                controller.on_pipeline_saved_recipe_apply_to_working_state(recipe_name)
-            except Exception:
-                return
-            self._note_recipe_loaded(recipe_name)
+        loader = getattr(self.controller, "on_pipeline_saved_recipe_apply_to_working_state", None)
+        if callable(loader):
+            self._load_recipe(recipe_name, loader)
 
     def _on_saved_recipe_apply_to_selected_packs(self) -> None:
+        """Overwrite the selected PromptPacks' saved settings with this Generation Preset (confirmed)."""
         recipe_name = self.saved_recipe_var.get()
         if not recipe_name or not self.pack_listbox:
             return
@@ -1248,23 +1304,32 @@ class SidebarPanelV2(ttk.Frame):
         pack_ids = [
             self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
         ]
-        controller = self.controller
-        if controller and hasattr(controller, "on_pipeline_saved_recipe_apply_to_selected_packs"):
-            try:
-                controller.on_pipeline_saved_recipe_apply_to_selected_packs(recipe_name, pack_ids)
-            except Exception:
-                pass
+        applier = getattr(self.controller, "on_pipeline_saved_recipe_apply_to_selected_packs", None)
+        if not pack_ids or not callable(applier):
+            return
+        self._actions.apply_to_packs(
+            f"Generation Preset '{recipe_name}'",
+            pack_ids,
+            lambda ids: applier(recipe_name, ids),
+        )
 
     def _on_saved_recipe_load_to_pipeline(self) -> None:
         recipe_name = self.saved_recipe_var.get()
         if not recipe_name:
             return
-        controller = self.controller
-        if controller and hasattr(controller, "on_pipeline_saved_recipe_load_to_pipeline"):
-            try:
-                controller.on_pipeline_saved_recipe_load_to_pipeline(recipe_name)
-            except Exception:
-                return
+        loader = getattr(self.controller, "on_pipeline_saved_recipe_load_to_pipeline", None)
+        if callable(loader):
+            self._load_recipe(recipe_name, loader)
+
+    def _load_recipe(self, recipe_name: str, loader: Callable[[str], Any]) -> None:
+        """Load a Generation Preset into the working settings (confirming first when unsaved edits would be lost)."""
+        outcome = self._actions.load(
+            CHANNEL_PRESET,
+            f"Generation Preset '{recipe_name}'",
+            lambda: loader(recipe_name),
+            succeeded=lambda: recipe_name in self._list_recipe_names(),
+        )
+        if outcome.loaded:
             self._note_recipe_loaded(recipe_name)
 
     def _note_recipe_loaded(self, recipe_name: str) -> None:
@@ -1274,18 +1339,18 @@ class SidebarPanelV2(ttk.Frame):
 
     def _on_saved_recipe_save_current(self) -> None:
         recipe_name = self.saved_recipe_var.get()
-        if not recipe_name:
-            return
-        controller = self.controller
-        if controller and hasattr(controller, "on_pipeline_saved_recipe_save_current"):
-            try:
-                controller.on_pipeline_saved_recipe_save_current(recipe_name)
-            except Exception:
-                pass
+        if recipe_name:
+            self._save_preset(recipe_name)
 
     def _on_saved_recipe_delete(self) -> None:
         recipe_name = self.saved_recipe_var.get()
         if not recipe_name:
+            return
+        if not self._confirm_dialog(
+            "Delete Generation Preset?",
+            f"Delete the Generation Preset '{recipe_name}'? This removes its file from the presets folder. "
+            "No PromptPack is changed.",
+        ):
             return
         controller = self.controller
         if controller and hasattr(controller, "on_pipeline_saved_recipe_delete"):
@@ -1294,6 +1359,26 @@ class SidebarPanelV2(ttk.Frame):
             except Exception:
                 return
             self._populate_saved_recipe_combo()
+            gone = recipe_name not in self.saved_recipe_names
+            self._say_action(
+                CHANNEL_PRESET,
+                f"Deleted Generation Preset '{recipe_name}'."
+                if gone
+                else f"Could not delete Generation Preset '{recipe_name}'.",
+            )
+
+    def _confirm_dialog(self, title: str, message: str) -> bool:
+        """Ask a yes/no question. Tests set ``_confirm_override`` instead of driving a native dialog."""
+        override = getattr(self, "_confirm_override", None)
+        if callable(override):
+            return bool(override(title, message))
+        return bool(messagebox.askyesno(title, message, parent=self))
+
+    def _say_action(self, channel: str, text: str) -> None:
+        """Show inline (non-modal) feedback next to the controls the action belongs to."""
+        label = self.pack_action_label if channel == CHANNEL_PACK else self.recipe_action_label
+        if label is not None:
+            label.config(text=text)
 
     def _build_stages_section(self, parent: ttk.Frame) -> ttk.Frame:
         """Build stages section with horizontal 2-column layout."""

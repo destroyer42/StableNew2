@@ -57,6 +57,21 @@ def _isolate_prompt_pack_dir(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) 
 
 
 @pytest.fixture(autouse=True)
+def _gui_tests_never_open_a_native_yes_no_dialog(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real ``askyesno`` blocks the test run forever; fail fast and name the test that needs an injected answer.
+
+    Sidebar tests answer confirmations through ``panel._confirm_override``.
+    """
+
+    from tkinter import messagebox
+
+    def _blocked(title: str = "", message: str = "", **_kwargs: object) -> bool:
+        raise AssertionError(f"Unexpected native yes/no dialog in a test: {title!r}: {message!r}")
+
+    monkeypatch.setattr(messagebox, "askyesno", _blocked)
+
+
+@pytest.fixture(autouse=True)
 def _gui_tests_never_probe_a_live_webui(monkeypatch: pytest.MonkeyPatch) -> None:
     """GUI tests must not depend on whether a WebUI is reachable on the host.
 

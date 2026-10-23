@@ -38,6 +38,7 @@ from src.gui.view_contracts.workspace_density_contract import (
     preview_panel_stacked,
 )
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
+from src.gui_v2.effective_settings import EffectiveContext, project_effective_settings
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.state.workspace_paths import workspace_paths
 from src.utils.atomic_io import atomic_write_text
@@ -244,6 +245,39 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.adaptation_label.pack(anchor=tk.W, pady=(0, 4))
 
+        # PR-GUI-UX-520: read-only effective settings of the compiled preview jobs (never of the draft).
+        self._effective_visible_var = tk.BooleanVar(value=False)
+        self.effective_toggle = ttk.Checkbutton(
+            left_frame,
+            text="Show effective settings",
+            variable=self._effective_visible_var,
+            command=self._on_effective_toggle,
+            style="Dark.TCheckbutton",
+        )
+        self.effective_toggle.pack(anchor=tk.W, pady=(0, 4))
+        attach_tooltip(
+            self.effective_toggle,
+            "Shows the settings of the compiled jobs that Add to Queue will submit. It is read-only.",
+        )
+        self.effective_frame = ttk.Frame(left_frame, style=SURFACE_FRAME_STYLE)
+        self.effective_frame.columnconfigure(0, weight=1)
+        self.effective_text = tk.Text(
+            self.effective_frame,
+            height=12,
+            wrap="word",
+            bg=BACKGROUND_ELEVATED,
+            fg=TEXT_PRIMARY,
+            relief="flat",
+            state="disabled",
+        )
+        self.effective_text.grid(row=0, column=0, sticky="nsew")
+        effective_scroll = ttk.Scrollbar(
+            self.effective_frame, orient=tk.VERTICAL, command=self.effective_text.yview
+        )
+        effective_scroll.grid(row=0, column=1, sticky="ns")
+        self.effective_text.config(yscrollcommand=effective_scroll.set)
+        self._effective_text_value = ""
+
         self.randomizer_label = ttk.Label(
             left_frame,  # PR-GUI-FIX: pack into left_frame, not body
             text="Randomizer: OFF",
@@ -428,6 +462,7 @@ class PreviewPanelV2(ttk.Frame):
         start = time.perf_counter()
         self._job_summaries = list(summaries)
         self.update_from_app_state()
+        self._refresh_effective_settings()
         last_summary = summaries[-1] if summaries else None
         render_signature = self._build_render_signature(last_summary, len(summaries))
         if last_summary is not None and render_signature == self._last_render_signature:
@@ -699,6 +734,7 @@ class PreviewPanelV2(ttk.Frame):
         )
         last_summary = self._job_summaries[-1] if self._job_summaries else None
         self._render_summary(last_summary, len(self._job_summaries))
+        self._refresh_effective_settings()
 
     def _on_content_visibility_mode_changed(self) -> None:
         self.on_content_visibility_mode_changed()
@@ -1035,6 +1071,40 @@ class PreviewPanelV2(ttk.Frame):
                 show_log_trace_panel()
                 return
         self._show_preview_details()
+
+    # -- PR-GUI-UX-520: effective settings -------------------------------------------------------------------------
+
+    def _on_effective_toggle(self) -> None:
+        self._refresh_effective_settings()
+
+    def _effective_context(self) -> EffectiveContext:
+        controller = self.controller
+        override = getattr(controller, "override_pack_config_enabled", None)
+        sidebar = getattr(getattr(controller, "main_window", None), "sidebar_panel_v2", None)
+        source = getattr(sidebar, "settings_source", None)
+        kwargs: dict[str, Any] = {
+            "override_pack_config": override if isinstance(override, bool) else None,
+            "visible": self._content_visibility_mode == "nsfw",
+        }
+        if source is not None:
+            kwargs["settings_source"] = source
+        return EffectiveContext(**kwargs)
+
+    def _refresh_effective_settings(self) -> None:
+        """Show or hide the effective-settings text and fill it from the current compiled preview jobs only."""
+        if not self._effective_visible_var.get():
+            if self.effective_frame.winfo_manager():
+                self.effective_frame.pack_forget()
+            return
+        records = getattr(self.app_state, "preview_jobs", None) if self.app_state else None
+        jobs = [job for job in (records or []) if isinstance(job, NormalizedJobRecord)]
+        text = project_effective_settings(jobs, self._effective_context()).as_text()
+        if not self.effective_frame.winfo_manager():
+            self.effective_frame.pack(fill=tk.X, pady=(0, 4), after=self.effective_toggle)
+        if text != self._effective_text_value:
+            self._set_text_widget(
+                self.effective_text, text, cache_attr_name="_effective_text_value"
+            )
 
     def _update_action_states(
         self,

@@ -486,6 +486,7 @@ class PromptPackNormalizedJobBuilder:
             entry.pack_id,
             self._pack_source_fingerprint(entry.pack_id),
             self._runtime_params_cache_key(runtime_params),
+            self._application_defaults_key(),
         )
         cached_resolved = self._resolved_config_cache.get(resolved_cache_key)
         if cached_resolved is None:
@@ -1252,6 +1253,11 @@ class PromptPackNormalizedJobBuilder:
             return (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
         except Exception:
             return (str(path), "missing")
+
+    def _application_defaults_key(self) -> tuple[Any, ...]:
+        """Changes when the saved application defaults change, so a cached resolution never outlives them."""
+        key = getattr(self._config_manager, "application_defaults_key", None)
+        return tuple(key()) if callable(key) else ()
 
     def _pack_source_fingerprint(self, pack_id: str) -> tuple[Any, ...]:
         json_path = self._resolve_pack_json_path(pack_id)

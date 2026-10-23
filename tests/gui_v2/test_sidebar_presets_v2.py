@@ -68,7 +68,7 @@ class TestSidebarPresets:
 
             assert mock_controller.selected_recipe == "preset1"
             rendered = sidebar.config_source_label.cget("text")
-            assert "Recipe 'preset1' selected, not applied" in rendered
+            assert "Generation Preset 'preset1' selected, not loaded" in rendered
             assert "sdxl | 768x768 | Euler" in rendered
         finally:
             sidebar.destroy()

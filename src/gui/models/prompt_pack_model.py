@@ -272,16 +272,41 @@ class PromptPackModel:
             {
                 "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
                 "pack_data": existing_pack_data,
-                "preset_data": copy.deepcopy(getattr(self, "preset_data", {})),
+                "preset_data": self._preset_data_for_save(target),
             }
         )
         try:
             save_prompt_pack_document(target, payload)
         except Exception as exc:
             raise OSError(f"Failed to save prompt pack: {exc}") from exc
+        self.preset_data = copy.deepcopy(payload["preset_data"])
         self.path = str(target)
         self._native_document = copy.deepcopy(payload)
         return target
+
+    def _preset_data_for_save(self, target: Path) -> dict[str, Any]:
+        """``preset_data`` to write, without reverting settings saved to this file since it was loaded.
+
+        The sidebar's Save Config to Pack rewrites ``preset_data`` in the same file while this model holds the copy it
+        loaded. A top-level key this model did not change since it was loaded or last saved is therefore taken from the
+        file; a key the Prompt tab did change (for example ``style_lora``) wins. Saving to a different file, or a file
+        that is missing or no longer valid, writes this model's copy as before.
+        """
+        mine = copy.deepcopy(getattr(self, "preset_data", {}) or {})
+        if not self.path or Path(self.path).resolve() != target.resolve() or not target.is_file():
+            return mine
+        try:
+            disk = load_prompt_pack_document(target).get("preset_data", {})
+        except (OSError, ValueError):  # PromptPackFormatError is a ValueError
+            return mine
+        base = self._native_document.get("preset_data", {})
+        merged: dict[str, Any] = {}
+        for key in dict.fromkeys([*mine, *disk]):
+            changed_here = (key in mine) != (key in base) or mine.get(key) != base.get(key)
+            source = mine if changed_here else disk
+            if key in source:
+                merged[key] = copy.deepcopy(source[key])
+        return merged
 
     def export_to_file(self, target: str | Path) -> Path:
         """Explicitly export a flattened TXT or TSV interchange file."""

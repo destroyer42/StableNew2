@@ -156,6 +156,13 @@ def _build(
         pack_list_manager=FakePackLists(pack_lists),
     )
     panel.update_idletasks()
+    panel.asked = []  # type: ignore[attr-defined]
+
+    def _answer(title: str, message: str) -> bool:
+        panel.asked.append((title, message))  # type: ignore[attr-defined]
+        return True
+
+    panel._confirm_override = _answer  # type: ignore[attr-defined]
     return panel, controller, config_manager
 
 
@@ -187,12 +194,12 @@ def test_empty_recipe_list_explains_itself_and_disables_actions(
     try:
         assert panel.saved_recipe_names == []
         assert list(panel.saved_recipe_combo["values"]) == [panel._CREATE_SAVED_RECIPE_LABEL]
-        assert "No saved recipes yet" in panel.recipe_hint_label.cget("text")
+        assert "No Generation Presets yet" in panel.recipe_hint_label.cget("text")
         assert "+ New" in panel.recipe_hint_label.cget("text")
         assert str(panel.saved_recipe_menu_button.cget("state")) == "disabled"
         assert set(_menu_states(panel).values()) == {"disabled"}
         assert panel.config_source_label.cget("text") == (
-            "In use: Working stage settings (no recipe or pack loaded)"
+            "In use: Working stage settings (no preset or pack loaded)"
         )
         # An action with nothing selected must not reach the controller.
         panel._on_saved_recipe_apply_to_working_state()
@@ -215,7 +222,7 @@ def test_recipe_list_hides_application_settings_files(tk_root: tk.Tk, tmp_path: 
             "mine",
             panel._CREATE_SAVED_RECIPE_LABEL,
         ]
-        assert "No saved recipes yet" not in panel.recipe_hint_label.cget("text")
+        assert "No Generation Presets yet" not in panel.recipe_hint_label.cget("text")
     finally:
         panel.destroy()
 
@@ -227,8 +234,8 @@ def test_selecting_a_recipe_reports_selected_not_applied(tk_root: tk.Tk, tmp_pat
         panel._on_saved_recipe_selected()
 
         lines = panel.config_source_label.cget("text").splitlines()
-        assert lines[0] == "In use: Working stage settings (no recipe or pack loaded)"
-        assert lines[1].startswith("Recipe 'beta' selected, not applied: sdxl | 832x1216")
+        assert lines[0] == "In use: Working stage settings (no preset or pack loaded)"
+        assert lines[1].startswith("Generation Preset 'beta' selected, not loaded: sdxl | 832x1216")
         assert controller.calls == [("selected", ("beta",))]
         assert panel._settings_source == contract.SettingsSource()
     finally:
@@ -244,19 +251,19 @@ def test_apply_and_load_record_the_recipe_as_source_and_keep_the_selection(
         panel._on_saved_recipe_apply_to_working_state()
 
         assert controller.calls[-1] == ("apply_working", ("beta",))
-        assert "last loaded from recipe 'beta'" in panel.config_source_label.cget("text")
-        assert "Recipe 'beta' applied" in panel.config_source_label.cget("text")
+        assert "last loaded from Generation Preset 'beta'" in panel.config_source_label.cget("text")
+        assert "Generation Preset 'beta' loaded" in panel.config_source_label.cget("text")
         assert panel.saved_recipe_var.get() == "beta"
 
         panel.saved_recipe_var.set("alpha")
         panel._on_saved_recipe_selected()
         text = panel.config_source_label.cget("text")
-        assert "recipe 'beta'" in text.splitlines()[0]
-        assert "Recipe 'alpha' selected, not applied" in text
+        assert "Generation Preset 'beta'" in text.splitlines()[0]
+        assert "Generation Preset 'alpha' selected, not loaded" in text
 
         panel._on_saved_recipe_load_to_pipeline()
         assert controller.calls[-1] == ("load_pipeline", ("alpha",))
-        assert "recipe 'alpha'" in panel.config_source_label.cget("text").splitlines()[0]
+        assert "Generation Preset 'alpha'" in panel.config_source_label.cget("text").splitlines()[0]
         assert panel.saved_recipe_var.get() == "alpha"
     finally:
         panel.destroy()
@@ -286,7 +293,7 @@ def test_recipe_menu_labels_name_what_each_action_writes(tk_root: tk.Tk, tmp_pat
 
         assert labels == list(contract.RECIPE_MENU_LABELS.values())
         assert "Overwrite" in contract.RECIPE_MENU_LABELS["save_current"]
-        assert "Selected Packs" in contract.RECIPE_MENU_LABELS["apply_packs"]
+        assert "PromptPack" in contract.RECIPE_MENU_LABELS["apply_packs"]
     finally:
         panel.destroy()
 
@@ -321,7 +328,9 @@ def test_new_recipe_is_selected_and_listed_after_creation(
         assert "zeta" in panel.saved_recipe_combo["values"]
         # Creating a recipe saves it; it does not load it into the working settings.
         assert panel._settings_source == contract.SettingsSource()
-        assert "Recipe 'zeta' selected, not applied" in panel.config_source_label.cget("text")
+        assert "Generation Preset 'zeta' selected, not loaded" in panel.config_source_label.cget(
+            "text"
+        )
     finally:
         panel.destroy()
 
@@ -354,7 +363,7 @@ def test_deleting_the_last_recipe_returns_to_the_explained_empty_state(
         assert controller.calls == [("delete", ("alpha",))]
         assert panel.saved_recipe_names == []
         assert panel.saved_recipe_var.get() == ""
-        assert "No saved recipes yet" in panel.recipe_hint_label.cget("text")
+        assert "No Generation Presets yet" in panel.recipe_hint_label.cget("text")
         assert str(panel.saved_recipe_menu_button.cget("state")) == "disabled"
     finally:
         panel.destroy()
@@ -366,8 +375,8 @@ def test_deleting_the_last_recipe_returns_to_the_explained_empty_state(
 def test_pack_config_buttons_are_named_for_what_they_do(tk_root: tk.Tk, tmp_path: Path) -> None:
     panel, _, _ = _build(tk_root, tmp_path, packs=["p1"])
     try:
-        assert panel.load_config_button.cget("text") == "Load Pack Config"
-        assert panel.apply_config_button.cget("text") == "Save Config to Pack"
+        assert panel.load_config_button.cget("text") == "Load Pack Settings"
+        assert panel.apply_config_button.cget("text") == "Apply to PromptPack\u2026"
         assert panel.add_to_job_button.cget("text") == "Add to Job"
     finally:
         panel.destroy()
@@ -411,13 +420,15 @@ def test_load_pack_config_names_the_promptpack_as_the_source(
         panel._on_pack_load_config()
 
         assert controller.calls == [("load_pack", ("p1",))]
-        assert "last loaded from PromptPack 'p1'" in panel.config_source_label.cget("text")
+        assert "last loaded from PromptPack Settings of 'p1'" in panel.config_source_label.cget(
+            "text"
+        )
 
         # A pack with no saved settings loads nothing, so it must not become the source.
         _select_packs(panel, 1)
         panel._on_pack_load_config()
-        assert "PromptPack 'p1'" in panel.config_source_label.cget("text")
-        assert "PromptPack 'p2'" not in panel.config_source_label.cget("text")
+        assert "PromptPack Settings of 'p1'" in panel.config_source_label.cget("text")
+        assert "PromptPack Settings of 'p2'" not in panel.config_source_label.cget("text")
     finally:
         panel.destroy()
 
@@ -456,7 +467,7 @@ def test_empty_saved_pack_list_dropdown_is_disabled_and_explained(
     try:
         assert str(panel.pack_list_combo.cget("state")) == "disabled"
         caption = panel.pack_list_caption_label.cget("text")
-        assert "No saved pack lists" in caption
+        assert "No Saved Pack Lists" in caption
         assert "custom_pack_lists.json" in caption
         assert panel.pack_listbox.size() == 1
         assert panel.pack_status_label.cget("text") == "Showing 1 PromptPack."
@@ -478,7 +489,7 @@ def test_saved_pack_list_filters_and_reports_the_filter(tk_root: tk.Tk, tmp_path
         panel.pack_list_var.set("Favourites")
         panel._on_pack_list_selected()
         assert list(panel.pack_listbox.get(0, "end")) == ["p2"]
-        assert "from saved list 'Favourites'" in panel.pack_status_label.cget("text")
+        assert "from Saved Pack List 'Favourites'" in panel.pack_status_label.cget("text")
 
         panel.pack_list_var.set("Old")
         panel._on_pack_list_selected()
@@ -667,7 +678,7 @@ def test_pipeline_help_points_existing_images_to_review_and_photo_optimize() -> 
     assert "Make Video (it opens Video Workflow)" in text
     assert "only for a job that has saved an image" in text
     assert "PromptPacks (authored in the Prompt tab)" in text
-    assert "Saved recipes: named copies of stage settings" in text
+    assert "Generation Presets: named copies of stage settings" in text
 
 
 def test_video_workflow_help_mentions_the_make_video_handoff() -> None:

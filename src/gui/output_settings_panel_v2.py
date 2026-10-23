@@ -7,7 +7,8 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 
 from src.config import app_config
-from src.gui.theme_v2 import HEADING_LABEL_STYLE
+from src.gui.theme_v2 import HEADING_LABEL_STYLE, MUTED_LABEL_STYLE
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.state.output_routing import OUTPUT_ROUTE_AUTO, OUTPUT_ROUTE_PIPELINE, OUTPUT_ROUTE_TESTING
 
 
@@ -22,9 +23,18 @@ class OutputSettingsPanelV2(ttk.Frame):
     SEED_MODES = ("fixed", "increment", "random")
     OUTPUT_ROUTES = (OUTPUT_ROUTE_AUTO, OUTPUT_ROUTE_PIPELINE, OUTPUT_ROUTE_TESTING)
 
-    def __init__(self, master: tk.Misc, *, embed_mode: bool = False) -> None:
+    NOTE = (
+        "These values are saved into a PromptPack by Apply to PromptPack and are loaded from a pack by Load Pack "
+        "Settings. They do not change the jobs in the current Preview. The default output folder for new jobs is "
+        "set in Engine Settings."
+    )
+
+    def __init__(
+        self, master: tk.Misc, *, embed_mode: bool = False, default_output_dir: str | None = None
+    ) -> None:
         super().__init__(master, style="Panel.TFrame", padding=0 if embed_mode else 8)
         self._embed_mode = embed_mode
+        self._default_output_dir = default_output_dir
         self._build_widgets(self)
 
     def _build_widgets(self, parent: tk.Misc) -> None:
@@ -34,7 +44,7 @@ class OutputSettingsPanelV2(ttk.Frame):
         )
 
         # Convert default output dir to absolute path for display
-        default_output = app_config.output_dir_default()
+        default_output = self._default_output_dir or app_config.output_dir_default()
         abs_output = os.path.abspath(default_output)
 
         self.output_dir_var = tk.StringVar(value=abs_output)
@@ -101,6 +111,11 @@ class OutputSettingsPanelV2(ttk.Frame):
             "Auto keeps route-based defaults. Use Testing to isolate debug output in output\\Testing.",
         )
 
+        note = ttk.Label(
+            parent, text=self.NOTE, style=MUTED_LABEL_STYLE, wraplength=380, justify="left"
+        )
+        note.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(2, 0))
+        bind_wraplength(note, maximum=420)
         parent.columnconfigure(1, weight=1)
 
     def _build_dir_row(
