@@ -111,6 +111,7 @@ class OpenPosePickerPanel(ttk.LabelFrame):
         self._pending_identity = ""
         self._image_facts: dict[str, Any] | None = None
         self._first_map_done = not refresh_on_map
+        self._exclusion = ""
         self._build_ui()
         self._render()
         if refresh_on_map:
@@ -276,6 +277,11 @@ class OpenPosePickerPanel(ttk.LabelFrame):
 
         self._target = target
         self._render_status()
+
+    def set_exclusion(self, reason: str) -> None:
+        """Why a new declaration cannot be started here (the slot uses ordered units); empty allows it. Display only."""
+
+        self._exclusion = str(reason or "")
 
     def set_content_visibility_mode(self, mode: str) -> None:
         self._content_visibility_mode = str(mode or "nsfw")
@@ -560,6 +566,10 @@ class OpenPosePickerPanel(ttk.LabelFrame):
         if current is None:
             if self._declaration is not None:
                 return  # invalid saved value: Remove first
+            if self._exclusion:
+                self.notes_var.set(self._exclusion)
+                self._select_in_list("")
+                return
             model = self.model_var.get().strip()
             if not model:
                 from src.conditioning.openpose_diagnostics import pose_model_hint

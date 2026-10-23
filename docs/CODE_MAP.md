@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-506 of 660 modules have a docstring.
+512 of 666 modules have a docstring.
 
 ## src/
 
@@ -69,6 +69,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_preview.py`: Bounded, read-only local adapter preview access
 - `observation.py`: Tier-1 observational inventory (PR-IMG-MODELS-152): bounded, cancellable, header-only, no hashing
 - `registry.py`: Offline local-file identity registry; never contacts A1111 or a network
+- `resource_catalog.py`: Checked-in, versioned catalog of curated model resources (PR-ASSET-130)
+- `resource_readiness.py`: Offline readiness projection of installed assets against the curated catalog (PR-ASSET-130)
 
 ## src/conditioning/
 
@@ -253,6 +255,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Namespace for V2 panel re-exports
 - `api_failure_visualizer_v2.py`: API Failure Visualizer for the Debug Hub
+- `asset_readiness_tab_v2.py`: Read-only asset readiness tab for the Debug Hub (PR-ASSET-130)
 - `debug_hub_panel_v2.py`: Unified Debug Hub panel for StableNew V2
 - `debug_log_panel_v2.py`: Simple debug log console for job lifecycle events
 - `job_explanation_panel_v2.py`: Job Explanation panel for the Debug Hub
@@ -361,7 +364,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `action_explainer_panel_v2.py`: (no docstring)
 - `config_sweep_widget_v2.py`: Config Sweep Widget for PR-CORE-E
-- `controlnet_units_panel.py`: Ordered ControlNet authoring; resource discovery is off Tk, never a compiler
+- `controlnet_units_panel.py`: Guided authoring of up to two ordered ControlNet units; resource discovery is off Tk, never a compiler
 - `disclosure_section_v2.py`: Keyboard-accessible collapsible section (PR-GUI-110)
 - `embedding_picker_panel.py`: Embedding picker panel with per-embedding weight controls
 - `expander_v2.py`: Unified expander button used by Pipeline Tab cards
@@ -373,6 +376,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `matrix_slot_picker.py`: MatrixSlotPickerDialog - Modal dialog for selecting matrix slot to insert
 - `matrix_tab_panel.py`: MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab
 - `openpose_picker_panel.py`: PromptPack OpenPose reference picker (PR-IMG-CNET-210)
+- `reference_map_browser.py`: Searchable reference-map list with a bounded thumbnail (PR-GUI-UX-550)
 - `responsive_wrap_v2.py`: Width-following label wrapping for responsive workspaces (PR-GUI-110)
 - `scrollable_frame_v2.py`: (no docstring)
 - `submission_notice_v2.py`: Inline, non-modal submission feedback (PR-VID-UX-313)
@@ -384,6 +388,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
+- `asset_readiness_view.py`: Toolkit-neutral session and row projection for the read-only asset readiness view (PR-ASSET-130)
+- `controlnet_guidance.py`: Toolkit-neutral guidance and local readiness for ordered ControlNet units (PR-GUI-UX-550)
 - `effective_settings.py`: Read-only "Effective Settings" projection of compiled preview jobs (PR-GUI-UX-520)
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
 - `lora_authoring_view.py`: Toolkit-neutral presentation of a selected LoRA inside the Prompt tab (GUI-540)

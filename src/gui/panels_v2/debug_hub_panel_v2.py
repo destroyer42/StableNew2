@@ -14,6 +14,7 @@ from typing import Any
 
 from src.gui.log_trace_panel_v2 import LogTracePanelV2
 from src.gui.panels_v2.api_failure_visualizer_v2 import ApiFailureVisualizerV2
+from src.gui.panels_v2.asset_readiness_tab_v2 import AssetReadinessTab
 from src.gui.views.diagnostics_dashboard_v2 import DiagnosticsDashboardV2
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.utils import InMemoryLogHandler
@@ -90,6 +91,9 @@ class DebugHubPanelV2(tk.Toplevel):
 
         self.system_tab = _SystemTab(notebook)
         notebook.add(self.system_tab, text="System")
+
+        self.assets_tab = AssetReadinessTab(notebook)
+        notebook.add(self.assets_tab, text="Model Resources")
 
         self.bind("<Destroy>", self._on_destroy, add="+")
 

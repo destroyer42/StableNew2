@@ -110,7 +110,7 @@ def test_prompt_tab_displays_pack_prompt(tk_root: tk.Tk):
 def test_debug_hub_has_expected_tabs(tk_root: tk.Tk):
     job = _build_job()
     panel, _ = _create_panel(job, tk_root)
-    assert len(panel.notebook.tabs()) == 6
+    assert len(panel.notebook.tabs()) == 7
     _cleanup_panel(panel)
 
 
