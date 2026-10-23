@@ -394,7 +394,7 @@
     "metric": "findings per src file",
     "totals": {
       "BLE001": 1332,
-      "S110": 525,
+      "S110": 521,
       "S112": 37
     },
     "counts": {
@@ -630,7 +630,7 @@
       },
       "src/gui/sidebar_panel_v2.py": {
         "BLE001": 32,
-        "S110": 21
+        "S110": 17
       },
       "src/gui/stage_cards_v2/adetailer_stage_card_v2.py": {
         "BLE001": 1,

@@ -15,16 +15,19 @@ class SavedRecipeSummary:
     enabled_stages: tuple[str, ...]
     last_updated: str
 
-    def to_label_text(self) -> str:
-        if not self.name:
-            return "Working state"
+    def to_detail_text(self) -> str:
+        """The recipe's headline settings on one line (no name, no claim about whether it is applied)."""
         stages = ", ".join(self.enabled_stages) if self.enabled_stages else "txt2img"
         updated = f" | updated {self.last_updated}" if self.last_updated else ""
         return (
-            f"Saved Recipe: {self.name}\n"
             f"{self.model or 'Unknown model'} | {self.resolution or 'Unknown size'} | "
             f"{self.sampler or 'Unknown sampler'} | stages: {stages}{updated}"
         )
+
+    def to_label_text(self) -> str:
+        if not self.name:
+            return "Working state"
+        return f"Saved Recipe: {self.name}\n{self.to_detail_text()}"
 
 
 def build_saved_recipe_summary(

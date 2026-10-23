@@ -34,21 +34,22 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
     "pipeline": TabOverviewContent(
         tab_id="pipeline",
         tab_name="Pipeline",
-        compact_summary="Use Pipeline to prepare new image jobs, choose stage chains, preview outputs, and queue work without leaving the main generation workspace.",
+        compact_summary="Use Pipeline to prepare new image jobs from PromptPacks, choose stage chains, check the job preview, and queue work. For images you already have, use Review or Photo Optimize.",
         purpose="Pipeline is the queue-first workspace for fresh image generation and controlled stage execution.",
         inputs=(
-            "Prompt packs, saved recipes, and base generation settings.",
-            "Optional downstream stage settings for img2img, ADetailer, and upscale.",
+            "PromptPacks (authored in the Prompt tab); each keeps its own saved settings.",
+            "Saved recipes: named copies of stage settings you can load into the working stage settings.",
+            "Base generation settings and optional downstream stages (img2img, ADetailer, upscale).",
             "Queue and history context from recent runs.",
         ),
         actions=(
             "Queue new generation jobs.",
             "Adjust effective stage settings before submission.",
-            "Inspect previews, running jobs, and recent history in one place.",
+            "Inspect the job preview, running jobs, and recent history in one place. The preview shows a thumbnail only for a job that has saved an image.",
         ),
         connections=(
-            "Outputs can be opened later in Review for advanced reprocess work.",
-            "Still-image outputs can feed SVD or Video Workflow tabs.",
+            "To work on images you already have, open Review (compare, edit prompts, reprocess) or Photo Optimize (enhance photos).",
+            "To make a motion clip from a finished image, use Make Video (it opens Video Workflow) or the SVD Img2Vid tab.",
             "Learning can consume completed runs after generation finishes.",
         ),
     ),
@@ -68,7 +69,7 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
             "Import selected items into Learning when they should become curation evidence.",
         ),
         connections=(
-            "Review receives outputs from Pipeline and history imports.",
+            "Review receives outputs from Pipeline and history imports; Photo Optimize is the separate tab for enhancing photos.",
             "Selected items can move into Learning for feedback and staged curation work.",
             "Reprocess actions eventually route back through the queue-backed pipeline.",
         ),
@@ -131,7 +132,7 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
             "Prepare anchored or chained video inputs without editing runtime internals.",
         ),
         connections=(
-            "Can start from recent image outputs or explicit handoff bundles.",
+            "Can start from recent image outputs, from Make Video on the Pipeline preview, Review or Job History, or from explicit handoff bundles.",
             "Outputs can continue into Movie Clips for assembly work.",
             "The queue and history surfaces remain the system of record for execution.",
         ),
