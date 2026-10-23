@@ -42,8 +42,13 @@ FAKE_CHILD = textwrap.dedent(
     if record:
         with open(record, "w", encoding="utf-8") as handle:
             json.dump({"argv": argv, "cuda": os.environ.get("CUDA_VISIBLE_DEVICES"), "env": sorted(os.environ),
-                       "no_proxy": os.environ.get("NO_PROXY"), "cwd": os.getcwd()}, handle)
+                       "no_proxy": os.environ.get("NO_PROXY"), "cwd": os.getcwd(),
+                       "llama": {k: v for k, v in os.environ.items() if k.upper().startswith("LLAMA")}}, handle)
     pidfile = lines.get("TEST_PIDFILE")
+    selfpid = lines.get("TEST_SELFPID")
+    if selfpid:
+        with open(selfpid, "w") as handle:
+            handle.write(str(os.getpid()))
     positive = prompt.split("POSITIVE_PROMPT:", 1)[1].split("NEGATIVE_PROMPT:", 1)[0].strip("\\n")
     schema = "ai_assist.suggestion/1"
     if mode == "sleep":
@@ -63,6 +68,19 @@ FAKE_CHILD = textwrap.dedent(
         print("Sure! " + json.dumps({"schema": schema, "status": "ok"}))
     elif mode == "big":
         sys.stdout.write("x" * (2 * 1024 * 1024))
+    elif mode == "echo_prompt":
+        sys.stdout.write(prompt)
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "prompt_rewrite", "positive": positive,
+                          "negative": "", "changes": []}))
+    elif mode == "banner":
+        print("llama.cpp build b0000")
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "prompt_rewrite", "positive": positive,
+                          "negative": "", "changes": []}))
+        print("[end of text]")
+    elif mode == "timings":
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "prompt_rewrite", "positive": positive,
+                          "negative": "", "changes": []}))
+        print("llama_print_timings: eval time = 1234.5 ms / 87 runs ( 14.19 ms per token, 70.46 tokens per second)")
     elif mode == "exit3":
         sys.exit(3)
     elif mode == "wrong_enum":
@@ -86,7 +104,7 @@ class Install:
     entry: ModelEntry
     child: Path
 
-    def runtime(self, runner=None) -> AiRuntime:
+    def runtime(self, runner=None, extra_environ=None) -> AiRuntime:
         kwargs = {} if runner is None else {"runner": runner}
         return AiRuntime(
             self.root,
@@ -95,6 +113,7 @@ class Install:
                 "SystemRoot": "C:/Windows",
                 "SECRET_TOKEN": "must-not-leak",
                 "HTTP_PROXY": "http://x",
+                **(extra_environ or {}),
             },
             **kwargs,
         )

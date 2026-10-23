@@ -25,6 +25,10 @@ from src.utils.managed_process import ProcessOutcome, run_bounded
 
 logger = logging.getLogger(__name__)
 
+#: A request's scratch directory is removed when it ends, so one this old is a leftover of a hard kill, a power loss or a
+#: locked file. ``RunLimits.timeout_seconds`` is at most 600 s, so no live request can be this old.
+STALE_SCRATCH_SECONDS = 3600.0
+
 CommandFactory = Callable[[Path, list[str]], Sequence[str]]
 Runner = Callable[..., ProcessOutcome]
 
@@ -143,6 +147,40 @@ class AiRuntime:
         return RuntimeResult(
             None, "", stdout=outcome.stdout, elapsed_ms=elapsed_ms, exit_code=outcome.returncode
         )
+
+    def sweep_stale_scratch(
+        self,
+        max_age_seconds: float = STALE_SCRATCH_SECONDS,
+        *,
+        wall_clock: Callable[[], float] = time.time,
+    ) -> int:
+        """Remove leftover per-request scratch directories (they hold prompt text). Returns how many were removed.
+
+        Only direct children (never a symlink or junction) of ``<root>/work`` older than ``max_age_seconds`` are touched, so another live
+        request (this process's or another's) is never disturbed. A directory that cannot be removed is logged and left
+        for the next sweep; nothing here ever raises.
+        """
+
+        base = self._root / "work"
+        removed = 0
+        try:
+            children = list(base.iterdir()) if base.is_dir() else []
+        except OSError:
+            logger.warning("AI assist scratch area could not be listed", exc_info=True)
+            return 0
+        for child in children:
+            try:
+                if child.is_symlink() or child.is_junction() or not child.is_dir():
+                    continue
+                if wall_clock() - child.stat().st_mtime < max_age_seconds:
+                    continue
+                shutil.rmtree(child)
+                removed += 1
+            except OSError:
+                logger.warning(
+                    "A stale AI assist scratch directory could not be removed", exc_info=True
+                )
+        return removed
 
     @staticmethod
     def _cleanup(scratch: Path) -> None:

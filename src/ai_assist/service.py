@@ -26,6 +26,8 @@ from src.ai_assist.host import (
     GenerationActivityProvider,
     HostMemory,
     MemoryProbe,
+    checked_activity,
+    checked_memory,
     read_host_memory,
 )
 from src.ai_assist.manifests import (
@@ -90,6 +92,16 @@ class _Watch:
         self.outcome: tuple[OutcomeCode, str] | None = None
 
     def __call__(self) -> bool:
+        # ``run_bounded`` treats an exception from this callable as "not cancelled" and would leave the child running, so
+        # nothing may escape: any failure here is itself a reason to stop.
+        try:
+            return self._poll()
+        except Exception:  # noqa: BLE001 - see above; fail closed
+            logger.warning("AI assist watch failed; stopping the request", exc_info=True)
+            self.outcome = (OutcomeCode.YIELDED_TO_GENERATION, "watch_error")
+            return True
+
+    def _poll(self) -> bool:
         if self.outcome is not None:
             return True
         if self._token.cancelled:
@@ -99,10 +111,8 @@ class _Watch:
         if now - self._last < self._interval:
             return False
         self._last = now
-        try:
-            activity = self._activity()
-        except Exception:  # noqa: BLE001 - no answer is treated as a conflict, never as "idle"
-            logger.warning("Generation activity could not be read; yielding", exc_info=True)
+        activity = self._read_activity()
+        if activity is None:
             self.outcome = (OutcomeCode.YIELDED_TO_GENERATION, "activity_unreadable")
             return True
         if activity.running_jobs > 0:
@@ -111,21 +121,29 @@ class _Watch:
         if activity.gpu_quarantined:
             self.outcome = (OutcomeCode.YIELDED_TO_GENERATION, "gpu_quarantine")
             return True
-        memory = self._safe_memory()
-        breached = (
-            memory is None
-            or memory.available_gib < GUARD_AVAILABLE_GIB
-            or memory.commit_headroom_gib < GUARD_COMMIT_HEADROOM_GIB
+        memory = self._read_memory()
+        # Written so that anything that is not a clear pass counts as a breach.
+        clear = (
+            memory is not None
+            and memory.available_gib >= GUARD_AVAILABLE_GIB
+            and memory.commit_headroom_gib >= GUARD_COMMIT_HEADROOM_GIB
         )
-        self._strikes = self._strikes + 1 if breached else 0
+        self._strikes = 0 if clear else self._strikes + 1
         if self._strikes >= GUARD_CONSECUTIVE:
             self.outcome = (OutcomeCode.RESOURCE_INSUFFICIENT, "memory_guard")
             return True
         return False
 
-    def _safe_memory(self) -> HostMemory | None:
+    def _read_activity(self) -> GenerationActivity | None:
         try:
-            return self._memory()
+            return checked_activity(self._activity())
+        except Exception:  # noqa: BLE001 - no answer is treated as a conflict, never as "idle"
+            logger.warning("Generation activity could not be read; yielding", exc_info=True)
+            return None
+
+    def _read_memory(self) -> HostMemory | None:
+        try:
+            return checked_memory(self._memory())
         except Exception:  # noqa: BLE001 - an unreadable probe counts as a breach
             logger.warning("Host memory probe failed", exc_info=True)
             return None
@@ -164,6 +182,7 @@ class AiAssistService:
         self._lock = threading.Lock()
         self._active: tuple[str, AiCancelToken] | None = None
         self._worker: threading.Thread | None = None
+        self._swept = False
 
     # -- public API ---------------------------------------------------------------------------------------------------
 
@@ -231,6 +250,20 @@ class AiAssistService:
             return not worker.is_alive()
         return True
 
+    def _read_activity(self) -> GenerationActivity | None:
+        try:
+            return checked_activity(self._activity())
+        except Exception:  # noqa: BLE001 - no answer is treated as a conflict, never as "idle"
+            logger.warning("Generation activity could not be read; refusing", exc_info=True)
+            return None
+
+    def _read_memory(self) -> HostMemory | None:
+        try:
+            return checked_memory(self._memory())
+        except Exception:  # noqa: BLE001 - an unreadable probe counts as a failed reading
+            logger.warning("Host memory probe failed", exc_info=True)
+            return None
+
     # -- admission ----------------------------------------------------------------------------------------------------
 
     def _admit(self, request: AssistRequest, token: AiCancelToken) -> AssistOutcome | Verification:
@@ -242,6 +275,11 @@ class AiAssistService:
         with self._lock:
             if self._active is not None:
                 return refuse(OutcomeCode.BUSY, "another_request_active")
+            if not self._swept:
+                # Once per service, before the first request: remove scratch directories (which hold prompt text) that a
+                # hard kill or a locked file left behind. Age-gated, so another live request is never touched.
+                self._swept = True
+                self._runtime.sweep_stale_scratch()
             verification = verify_installation(
                 self._root,
                 self._manifest,
@@ -253,10 +291,8 @@ class AiAssistService:
                 return refuse(verification.code, verification.reason)
             if self._policy.strict_offline and read_attestation(self._root) is None:
                 return refuse(OutcomeCode.EGRESS_NOT_ATTESTED, "operator_attestation_missing")
-            try:
-                activity: GenerationActivity = self._activity()
-            except Exception:  # noqa: BLE001 - no answer is treated as a conflict, never as "idle"
-                logger.warning("Generation activity could not be read; refusing", exc_info=True)
+            activity = self._read_activity()
+            if activity is None:
                 return refuse(OutcomeCode.GENERATION_ACTIVE, "activity_unreadable")
             if activity.running_jobs > 0:
                 return refuse(OutcomeCode.GENERATION_ACTIVE, "generation_running")
@@ -264,16 +300,12 @@ class AiAssistService:
                 return refuse(OutcomeCode.GENERATION_ACTIVE, "gpu_quarantine")
             assert verification.entry is not None
             needed = verification.entry.bytes / _GIB + MEMORY_MARGIN_GIB
-            try:
-                memory = self._memory()
-            except Exception:  # noqa: BLE001
-                logger.warning("Host memory probe failed", exc_info=True)
-                memory = None
+            memory = self._read_memory()
             if memory is None:
                 return refuse(OutcomeCode.RESOURCE_INSUFFICIENT, "memory_unreadable")
-            if memory.available_gib < needed:
+            if not memory.available_gib >= needed:
                 return refuse(OutcomeCode.RESOURCE_INSUFFICIENT, "available_ram_below_requirement")
-            if memory.commit_headroom_gib < needed:
+            if not memory.commit_headroom_gib >= needed:
                 return refuse(
                     OutcomeCode.RESOURCE_INSUFFICIENT, "commit_headroom_below_requirement"
                 )
@@ -353,7 +385,9 @@ class AiAssistService:
         ):
             record["model_sha256_prefix"] = verification.entry.sha256[:12]
             record["runtime_build_id"] = verification.build.build_id
-        self._events.append(record)
+        if not self._events.append(record):
+            # Not silent: the append already logged a warning; the outcome says so too, without failing the request.
+            outcome.details["event_log_failed"] = True
         return outcome
 
 

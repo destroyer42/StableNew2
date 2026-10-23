@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import math
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -33,6 +34,36 @@ class GenerationActivity:
 
 MemoryProbe = Callable[[], HostMemory | None]
 GenerationActivityProvider = Callable[[], GenerationActivity]
+
+
+def checked_activity(value: object) -> GenerationActivity | None:
+    """``value`` if it is a well-formed activity reading, else ``None`` (which every caller treats as a conflict)."""
+
+    if (
+        isinstance(value, GenerationActivity)
+        and type(value.running_jobs) is int
+        and value.running_jobs >= 0
+        and type(value.gpu_quarantined) is bool
+    ):
+        return value
+    return None
+
+
+def checked_memory(value: object) -> HostMemory | None:
+    """``value`` if it is a well-formed, finite, non-negative reading, else ``None`` (treated as a failed reading).
+
+    A NaN would compare false against every threshold and read as "plenty", so it must never get past this point.
+    """
+
+    if isinstance(value, HostMemory) and all(
+        isinstance(number, (int, float))
+        and not isinstance(number, bool)
+        and math.isfinite(number)
+        and number >= 0
+        for number in (value.available_gib, value.commit_headroom_gib)
+    ):
+        return value
+    return None
 
 
 class _PerformanceInformation(ctypes.Structure):
@@ -83,5 +114,7 @@ __all__ = [
     "GenerationActivityProvider",
     "HostMemory",
     "MemoryProbe",
+    "checked_activity",
+    "checked_memory",
     "read_host_memory",
 ]

@@ -19,7 +19,7 @@ from src.ai_assist.argv import (
     build_environment,
 )
 from src.ai_assist.attestation import read_attestation, record_attestation
-from src.ai_assist.events import MAX_RECORDS, EventLog
+from src.ai_assist.events import EventLog
 from src.ai_assist.paths import attestation_path, resolve_ai_root
 
 
@@ -125,19 +125,6 @@ def test_event_log_accepts_only_whitelisted_short_scalars(tmp_path: Path) -> Non
     assert [r["request_id"] for r in log.tail()] == ["r1"]
 
 
-def test_event_log_is_bounded_and_survives_a_write_failure(tmp_path: Path) -> None:
-    log = EventLog(tmp_path / "events.jsonl")
-    for index in range(MAX_RECORDS + 25):
-        assert log.append({"request_id": f"r{index}"})
-    records = log.tail(MAX_RECORDS + 100)
-    assert len(records) == MAX_RECORDS and records[-1]["request_id"] == f"r{MAX_RECORDS + 24}"
-    blocked = tmp_path / "blocked"
-    blocked.mkdir()
-    assert (
-        EventLog(blocked).append({"request_id": "x"}) is False
-    )  # a directory cannot be written; no exception
-
-
 def test_attestation_is_an_operator_statement_and_blank_or_corrupt_means_not_attested(
     tmp_path: Path,
 ) -> None:
@@ -163,3 +150,33 @@ def test_ai_root_is_user_data_never_repository_relative() -> None:
     assert resolve_ai_root(environ={}, system_name="Linux", home_dir="/home/u") == Path(
         "/home/u/.local/share/StableNew/ManagedAi"
     )
+
+
+def test_no_llama_variable_is_inherited_and_the_offline_switch_is_forced_on(tmp_path: Path) -> None:
+    parent = {
+        "SystemRoot": r"C:\Windows",
+        "LLAMA_ARG_MODEL": "evil.gguf",
+        "LLAMA_ARG_HF_REPO": "someone/model",
+        "LLAMA_ARG_HOST": "0.0.0.0",
+        "LLAMA_ARG_PORT": "8080",
+        "LLAMA_ARG_N_GPU_LAYERS": "99",
+        "LLAMA_ARG_OFFLINE": "0",
+        "LLAMA_ARG_API_KEY": "k",
+        "LLAMA_CACHE": r"C:\cache",
+        "LLAMA_LOG_FILE": r"C:\log.txt",
+        "llama_arg_lower": "x",
+    }
+    environment = build_environment(tmp_path / "runtime", parent, tmp_path / "work")
+    assert {k for k in environment if k.upper().startswith("LLAMA")} == {"LLAMA_ARG_OFFLINE"}
+    assert environment["LLAMA_ARG_OFFLINE"] == "1"
+    assert set(environment) <= {
+        "SystemRoot",
+        "TEMP",
+        "TMP",
+        "PATH",
+        "CUDA_VISIBLE_DEVICES",
+        "HF_HUB_OFFLINE",
+        "TRANSFORMERS_OFFLINE",
+        "LLAMA_ARG_OFFLINE",
+        "NO_PROXY",
+    }

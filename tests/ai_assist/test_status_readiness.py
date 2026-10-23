@@ -118,3 +118,26 @@ def test_default_readiness_projection_is_optional_on_a_clean_machine(
     record = _service(None).collect().record_for("ai_assist")
     assert record is not None and record.state is OperatorReadinessState.OPTIONAL
     assert not (tmp_path / "ai").exists(), "reading status must not create anything"
+
+
+def test_a_machine_that_never_set_this_up_reads_no_config_file(monkeypatch, tmp_path: Path) -> None:
+    import builtins
+    import io
+
+    opened: list[str] = []
+    real_open, real_io_open = builtins.open, io.open
+
+    def spy(real):
+        def wrapper(file, *args, **kwargs):
+            opened.append(str(file))
+            return real(file, *args, **kwargs)
+
+        return wrapper
+
+    monkeypatch.setattr(builtins, "open", spy(real_open))
+    monkeypatch.setattr(io, "open", spy(real_io_open))
+    status = read_status(tmp_path / "never-created")
+    assert status.state == STATE_NOT_INSTALLED
+    assert not [
+        path for path in opened if "ai_model_registry" in path or "managed_ai_runtime" in path
+    ]
