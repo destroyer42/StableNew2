@@ -21,7 +21,13 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Directories whose contents belong to the operator, never to a journey.
 _PROTECTED_DIRS = ("state", "data", "presets", "config", "packs")
+# Immutable, checked-in manifests that Offline AI Assist reads to report its installation status (exact repo-relative
+# paths, read-only).  Nothing else under a protected directory is exempt, and a write to either is still a violation.
+_COMMITTED_READ_ONLY = frozenset(
+    {"config/managed_ai_runtime.json", "config/ai_model_registry.json"}
+)
 _ENV_KEYS = (
+    "STABLENEW_AI_DIR",
     "STABLENEW_WEBUI_ROOT",
     "STABLENEW_OUTPUT_DIR",
     "STABLENEW_WEBUI_BASE_URL",
@@ -142,6 +148,12 @@ class OperatorWorkspace:
         return self.root / "output"
 
     @property
+    def ai_assist_dir(self) -> Path:
+        """Disposable stand-in for the per-user Offline AI Assist directory (runtimes, models, records)."""
+
+        return self.root / "ai-assist"
+
+    @property
     def state_dir(self) -> Path:
         return self.root / "state"
 
@@ -154,6 +166,7 @@ class OperatorWorkspace:
             self.presets_dir,
             self.packs_dir,
             self.global_prompts_dir,
+            self.ai_assist_dir,
             self.output_dir,
             self.state_dir,
             self.records_path.parent,
@@ -204,6 +217,7 @@ class OperatorWorkspace:
                 "STABLENEW_WEBUI_BASE_URL": self.webui_base_url,
                 "STABLENEW_PROMPTPACK_DIR": str(self.packs_dir),
                 "STABLENEW_GLOBAL_PROMPT_DIR": str(self.global_prompts_dir),
+                "STABLENEW_AI_DIR": str(self.ai_assist_dir),
             }
         )
         if self.startup_grace_sec is not None:
@@ -280,6 +294,15 @@ class AccessSpy:
         except (ValueError, OSError):
             return False
 
+    def _is_committed_read_only(self, path: Path) -> bool:
+        """Exactly one of the checked-in AI manifests, addressed from this spy's repository root."""
+
+        try:
+            relative = path.resolve().relative_to(self.repo_root)
+        except (ValueError, OSError):
+            return False
+        return relative.as_posix() in _COMMITTED_READ_ONLY
+
     def _is_output(self, path: Path) -> bool:
         return path.resolve().relative_to(self.repo_root).parts[0] == "output"
 
@@ -324,6 +347,8 @@ class AccessSpy:
                         writing = bool(_WRITE_MODE_CHARS & set(str(mode)))
                         if writing:
                             spy.written.append(str(target))
+                        elif spy._is_committed_read_only(target):
+                            pass  # an immutable, checked-in manifest opened for reading
                         elif spy._is_output(target):
                             spy.read_outputs.append(str(target))
                         else:

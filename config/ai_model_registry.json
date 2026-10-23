@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "description": "Pinned model weights for Offline AI Assist. An entry is usable only with complete provenance (publisher and packager repository and revision, converter, https source URL), an exact byte size and SHA-256. An unknown or mismatched hash is refused. This file ships with no entries: PR-AI-111 registers candidates after the operator imports them. Nothing is downloaded by the application.",
+  "models": []
+}
