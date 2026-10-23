@@ -90,6 +90,9 @@ P2-6 wave 1 retired the leaf harnesses; the rest stay with named retirement cond
 
 Video: the owner-accepted video roadmap is `docs/audits/2026-10-20_video_experience_roadmap.md` (phases A-E, decisions D1-D8).
 
+GUI: the dated workflow/usability audit, evidence classifications and candidate PR tranche are at
+`docs/audits/2026-10-22_gui_ux_audit_and_tranche.md`; future PRs require their own current contract checks.
+
 Assessment practice: the framework (v1.2) is in `docs/assessments/README.md`. Its dated 2026-10-15 findings predate Phases 0 and 1
 of the roadmap; where they conflict with this file, this file and the repository are current.
 
