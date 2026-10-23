@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tkinter import ttk
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -167,24 +168,40 @@ def test_history_publication_updates_only_exact_job_artifact(tk_root, tmp_path, 
         panel.destroy()
 
 
-def test_selected_video_uses_its_recorded_image_thumbnail_and_respects_visibility(
-    tk_root, tmp_path
+def test_selected_video_plays_its_recorded_clip_not_the_poster_and_respects_visibility(
+    tk_root, tmp_path, monkeypatch
 ):
+    import src.gui.job_history_panel_v2 as history_module
     from src.gui.job_history_panel_v2 import JobHistoryPanelV2
     from tests.gui_v2.test_job_history_panel_v2 import _make_entry
 
+    class FakeVideoPreview(ttk.Frame):
+        def __init__(self, parent, *, edge):
+            super().__init__(parent)
+            self.shown: list[str] = []
+            self.stop_count = 0
+
+        def show(self, path):
+            self.shown.append(path)
+
+        def stop(self):
+            self.stop_count += 1
+
+    monkeypatch.setattr(history_module, "VideoPreviewWidget", FakeVideoPreview)
     state = AppStateV2()
     panel = JobHistoryPanelV2(tk_root, app_state=state)
     panel.show_artifact_var.set(True)
     panel.artifact_thumbnail.set_image_from_path = Mock()
     thumb = tmp_path / "frame.png"
     thumb.write_bytes(b"thumbnail")
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"recorded clip; playback is faked")
     entry = _make_entry("video", replayable=True)
     entry.payload_summary = "explicit"
     entry.result = {
         "artifact": {
             "artifact_type": "video",
-            "primary_path": str(tmp_path / "clip.mp4"),
+            "primary_path": str(clip),
             "thumbnail_path": str(thumb),
         }
     }
@@ -192,11 +209,24 @@ def test_selected_video_uses_its_recorded_image_thumbnail_and_respects_visibilit
         panel._populate_history([entry])
         panel.history_tree.selection_set(panel.history_tree.get_children()[0])
         panel._on_select()
-        panel.artifact_thumbnail.set_image_from_path.assert_called_once_with(str(thumb))
+        player = panel.artifact_video_preview
+        assert isinstance(player, FakeVideoPreview)
+        assert player.shown == [str(clip)]
+        panel.artifact_thumbnail.set_image_from_path.assert_not_called()
+        assert panel._shown_artifact_path == str(clip)
+        assert panel.artifact_frame.winfo_manager() == "grid"
+        stops = player.stop_count
         state.set_content_visibility_mode("sfw")
         state.flush_now()
+        assert player.stop_count > stops
+        assert player.shown == [str(clip)]
         assert panel._shown_artifact_path is None
         assert panel.artifact_frame.winfo_manager() == ""
+        assert not player.winfo_manager()
+        assert panel.artifact_status_var.get() == ""
+        assert panel.artifact_open_btn.instate(["disabled"])
+        assert panel.artifact_reveal_btn.instate(["disabled"])
+        panel.artifact_thumbnail.set_image_from_path.assert_not_called()
     finally:
         panel.destroy()
 
