@@ -20,6 +20,7 @@ Before deleting, find importers of every form, not only `from tools.qualificatio
 
 | Harness | Reason retained | Retire when |
 |---|---|---|
+| `qualification/wan321f` | Offline A14B feasibility proposal and deterministic safety/evidence controls; no physical CLI | WAN-321F is accepted or rejected and no test or follow-up qualification needs these controls; preserve its verdict note |
 | `qualification/vid110` | Shared monitor, Comfy client and metrics for the video and acceptance harnesses; `build_lane_a` parity test in `tests/video/test_wan22_experimental_workflow.py` | Its dependents retire; then move the parity graph into a test fixture |
 | `qualification/vid150`, `acceptance/vid130_wan_acceptance` | Wan2.2 TI2V-5B is experimental; promotion (roadmap P5-7) re-runs this acceptance; `vid150` imports `vid130` | Wan2.2 is promoted or rejected |
 | `acceptance/vid190_queue_recycling_acceptance` | Comfy runtime recycling acceptance, to re-run after P3-3/P3-4 change the managed Comfy process | P3-3 and P3-4 are accepted |

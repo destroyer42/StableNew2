@@ -1,0 +1,158 @@
+# PR-VID-WAN-321F: A14B target-hardware feasibility
+
+Verdict: **INCONCLUSIVE — Stage 1 offline preparation only; zero physical attempts.**
+No resource-feasibility or physical-quality claim. This evidence does not authorize WAN-321 integration.
+
+Execution profile: Standard, qualification-only. Model recommendation: Claude Code Sonnet 5.5 High /
+Codex GPT-6.1 Sol High, Local/Desktop for local assets and Windows evidence. Expected order of magnitude:
+1M cache-read / 20k output tokens. Controller Surface Assessment: no controller/coordinator or production
+code changes. Token-Efficient Validation Plan: focused deterministic qualification controls plus existing
+workflow-version preservation tests; one canonical local gate using the existing Python 3.14 `.venv`;
+hosted CI only after separately authorized publication. No environment rebuild.
+
+## Authority and scope
+
+Base: `991aebc6c409b7174d7d10e2df20b337f28fbc5d`, local `main` / cached `origin/main`, checked out
+initially at `C:/Users/rob/projects/StableNew-main`. Worktree:
+`C:/Users/rob/projects/StableNew-main/tmp/wan321f`, branch `qual/wan321f-a14b-480p`.
+Root `AGENTS.md`, `STATUS.md`, `docs/CODEX_MAP.md`, `VIDEO_PIPELINE.md` and the accepted
+`docs/audits/2026-10-20_video_experience_roadmap.md` govern. Accepted WAN-321 findings from the preceding
+investigation are reused, including upstream revisions, LFS checksums, license declarations and stock-node schemas.
+No upstream research was repeated. Current local file checks are fresh evidence.
+
+The owner's final restriction requires separate authorization for downloads, generation and runtime restart.
+Abort thresholds/time limits must be accepted and the contradictory retry wording resolved before execution.
+The CLI in this package only writes an offline freeze; it has no physical execution option. The physical adapter,
+exclusive session claim, sampling/interrupt loop, output verification and event-log collection remain to be wired
+and tested after those decisions. The tested controls are primitives, not an end-to-end physical harness.
+
+No catalog registration, NJR, queue, GUI, runner, backend ownership or workflow-governance changes. Every published
+TI2V-5B version stays unchanged. Physical operations never bypass the production submission path for product jobs;
+this package is isolated operator qualification tooling, following the retained qualification harness convention.
+
+## Frozen candidate
+
+`tools/qualification/wan321f/plan.py::frozen_plan()` is the machine-readable proposal. Its canonical JSON SHA-256:
+`c795fa82ffc1309a3df57df6662b34ad9b3164af526e76cf4a35ae7f7f85eb97`.
+Changing any asset, path, prompt, seed, graph, runtime command or safety proposal changes that digest and requires
+acceptance of the new plan before physical execution.
+
+All six destinations are under `E:/Users/rober/ComfyUI/models/`. Exact filenames, full SHA-256 values, sizes,
+upstream paths and revisions are in `ASSETS` and each frozen `plan.json`:
+
+| Role | Destination relative to model root | Bytes | Local verification |
+|---|---|---:|---|
+| High expert | `diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors` | 14,294,742,832 | Missing |
+| Low expert | `diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors` | 14,294,742,832 | Missing |
+| UMT5 | `text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors` | 6,735,906,897 | Hash matches |
+| VAE | `vae/wan_2.1_vae.safetensors` | 253,815,318 | Hash matches |
+| High LoRA | `loras/wan2.2_i2v_A14b_high_noise_lora_rank64_lightx2v_4step_1022.safetensors` | 634,645,944 | Missing |
+| Low LoRA | `loras/wan2.2_i2v_A14b_low_noise_lora_rank64_lightx2v_4step_1022.safetensors` | 739,472,104 | Missing |
+
+Experts/encoder/VAE: `Comfy-Org/Wan-2.2` revision `ee6f4a40737a995bf5818954cfce6d59443b0f04`.
+LoRAs: `lightx2v/Wan2.2-Distill-Loras` revision `57adea585d1d21085e2dfc91ce3c7b646cdd9345`.
+Accepted primary-source declarations are Apache-2.0; original Wan2.2, Wan2.1 and Google UMT5 declarations were
+also checked in WAN-321. These are publisher declarations, not a new legal opinion. Missing weights have no
+local digest verdict. No downloads are performed by this package.
+
+Input: `C:/Users/rob/qual/vid184/env/inputs/source_fullbody.png`, 385,055 bytes, 480x832,
+SHA-256 `362c86cc83876e340b8927dd54a0f55af1c5fb82c1e9c98d624e67044afa71bb`.
+It is the already retained synthetic full-body reference, not the driving-video workload. The freeze copies its
+verified bytes to `wan321f-source.png`. Recheck that snapshot before staging it into Comfy's isolated input directory.
+
+ComfyUI 0.38.0 revision `6b747c0428c343e1417219641db93a4fb7cb69ae`, installed at
+`C:/Users/rob/AppData/Local/StableNew/ManagedComfy/v0.38.0-py313`. The exact proposed command is frozen in the plan:
+isolated port 8197 and input/output/temp/user directories under `reports/wan321f/runtime`, existing managed interpreter,
+`--disable-pinned-memory --disable-auto-launch --disable-all-custom-nodes`, default cache and memory policy.
+No cache, precision, attention, offload, model, graph or launch-flag fallback. No process adoption or restart.
+An occupied endpoint refuses the run. Future operations must use `ComfyProcessManager`, not `OwnedComfy`'s historical
+direct-Popen launcher or a new process authority.
+
+Stock graph: two scaled-FP8 `UNETLoader` -> model-only LoRAs (strength 1) -> `ModelSamplingSD3` shift 5;
+CPU UMT5 `CLIPLoader(type=wan)`; Wan **2.1** VAE; `LoadImage` -> `WanImageToVideo` (480x832, 81 frames,
+batch 1) -> two `KSamplerAdvanced` nodes -> `VAEDecode` -> `SaveImage`.
+Four total Euler/simple steps, CFG 1: high steps [0,2), add noise and retain leftover noise;
+low steps [2,4), no new noise and full final denoise. Both passes share their attempt's seed and conditioning.
+The three candidate seeds are 321001/321002/321003; only seed and output prefix differ, so sampling is recomputed
+rather than reusing cached outputs. First attempt is cold; subsequent attempts may reuse weights/conditioning.
+Expected output: 81 full-resolution PNG frames (intended playback 16 fps), no RIFE or video encoding.
+The dynamic arm and 720p are excluded.
+
+The accepted publisher example uses custom nodes and explicit sigmas; it is **not** imported or executed.
+Local-source inspection adds the stock schedule translation: `ModelSamplingDiscreteFlow.set_parameters` creates
+1000 points, `simple_scheduler` selects indices 999/749/499/249 and appends zero. Shift 5 produces
+`[1, 0.9375, 0.8333333333, 0.625, 0]`, matching the accepted example within rounding. This establishes numerical
+schedule correspondence, not physical output equivalence. The five local source-file hashes are pinned in the plan
+and verified by the offline freeze without importing Comfy/Torch.
+
+## Capacity and safety proposal awaiting acceptance
+
+Snapshot: 2026-10-22 21:43 EDT (`2026-10-23T01:43:52Z`). Six assets total **36,953,325,927 bytes**;
+four missing assets require **29,963,603,712 additional bytes** at their frozen E: destinations.
+E: free **143,206,596,608 bytes**. C: free **126,574,559,232 bytes**; reserve **1,364,875,264 bytes** for
+three uncompressed RGB frame sets plus a 1 GiB evidence/log allowance. Capacity suffices for these byte budgets.
+This excludes temporary download copies, which need their own staging allowance/authorization. Recheck before execution.
+Disk size does not establish peak RAM, commit or VRAM residency.
+
+Historical `vid160c` / `vid184r` safety limits are proposed, **not accepted for this package**:
+
+| Signal | Proposed stop |
+|---|---|
+| Windows system commit | >=97% for 2 consecutive samples |
+| Commit headroom | <1 GiB for 2 consecutive samples |
+| Available physical RAM | <0.25 GiB for 2 consecutive samples |
+| Sampling | Every 0.5 s; missing/invalid telemetry or gap >2 s stops immediately |
+| Per-attempt / whole session | 1200 s / 3600 s; session time includes startup and teardown |
+| GPU status, device-loss log marker, CUDA OOM/allocation failure | Immediate stop, end entire session, preserve evidence |
+
+Reuse `vid160c.win_memory.read_system_commit` and `read_process_memory` for system and **owned PID** memory in GiB.
+Use driver/NVML observations for VRAM, GPU health and device loss, plus the existing bounded GPU hang recorder if
+separately authorized. Do not reuse `CommitAwareResourceSampler` unchanged: its missing-GPU/commit reads can silently
+omit samples; the new guard requires a complete, timestamped sample and stops on missing data. VRAM is measured;
+no speculative A14B readiness floor is borrowed from TI2V-5B. Record working set and private commit without inventing
+a process-memory floor. Freeze any additional owner-required limit before execution.
+
+Budget currently frozen as a **proposal**: at most three dispatch identities, no 720p or fallback, automatic-retry
+count unresolved. No automatic retry is implemented. An ambiguous dispatch consumes its identity and ends the
+session; `prompt_id` is correlation, never an idempotency key. A named decision must clarify whether one retry is
+inside the three-attempt ceiling and what positively resolved failure permits it. No OOM/device-loss retry.
+
+## Deterministic evidence and future physical acceptance
+
+The offline tests cover graph wiring/sampler handoff, version preservation, complete file refusals, changed hashes,
+limits and telemetry loss, durable dispatch-intent-before-call, one dispatch per identity (including process interruption
+and ambiguous reply), disk-write refusal, evidence non-replacement and manager-owned cleanup/external refusal.
+They exercise fakes, not the future physical loop. Startup containment and process-tree cleanup remain under the
+existing manager. Exclusive evidence-directory claims survive interruption; no earlier attempt directory may be reused.
+
+Before a physical attempt: verify exact accepted plan/source/asset/input hashes and runtime identity; persist graph,
+command, baseline, owner decision, intended attempt and session claim. Start telemetry before the owned runtime.
+Persist telemetry incrementally with flush/fsync, collect bounded runtime logs and Windows GPU/WHEA events.
+Stop submission on a safety stop, interrupt only the acknowledged owned prompt, then clean up only the manager-owned
+process tree. Unknown dispatch is never replayed or inferred successful from HTTP responsiveness.
+
+For each completed attempt require exactly 81 decodable RGB-compatible 480x832 PNGs; record paths, frame order,
+hashes, runtime history and timing. Reject missing/extra/wrong-size/corrupt frames; a prompt acknowledgement alone
+is not success. Record observed commit/working-set/private-memory/VRAM peaks, minimum headroom/physical RAM,
+sample gaps, baseline outside-GPU use, log faults, and positive teardown evidence. Hash and preserve all partial
+artifacts on failure; never delete prior evidence or rewrite the plan after execution.
+
+Proposed verdict rules: PASS requires completion of the accepted workload/budget with valid frames, no safety stop
+or device-loss/allocation failure, complete telemetry and verified owned teardown. A demonstrated memory/commit
+safety stop or allocation failure is NO-GO for that exact configuration. Missing assets/authorization, ambiguous
+dispatch, incomplete telemetry, infrastructure failure or unverified teardown is INCONCLUSIVE. Stop after any
+unsafe/ambiguous attempt. A physical PASS does not qualify motion/identity quality or authorize promotion.
+
+Offline artifact: `C:/Users/rob/projects/StableNew-main/reports/wan321f/offline-freeze-20261022-final/`
+contains the proposal, three graphs, verified input snapshot and disk/refusal evidence. The earlier preliminary
+freeze remains preserved; only the final digest above is the proposal of record. These machine-local artifacts
+are ignored, not source or authority.
+
+Reproduce the offline freeze (new destination only):
+
+```powershell
+C:/Users/rob/projects/StableNew-main/.venv/Scripts/python.exe -m tools.qualification.wan321f --out <new-evidence-directory>
+```
+
+No physical adapter is available in this command. Do not treat historical roadmap download/spike decisions as
+the current named authorization required by the owner's closing restriction.
