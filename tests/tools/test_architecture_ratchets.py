@@ -120,3 +120,33 @@ def test_the_broken_precommit_scripts_and_the_second_formatter_are_gone() -> Non
     assert "psf/black" not in config  # ruff-format is the one formatter
     assert not (ROOT / "scripts" / "check_daemon_threads.py").exists()
     assert not (ROOT / "scripts" / "check_thread_registry_usage.py").exists()
+
+
+def test_ai_assist_may_import_only_itself_utils_and_prompting() -> None:
+    allowed = "from src.utils.atomic_io import atomic_write_json\nfrom src.prompting.prompt_compatibility import X\nfrom src.ai_assist.contracts import Y\n"
+    assert arch.scan_source("src/ai_assist/x.py", allowed) == {}
+    for forbidden in (
+        "from src.queue.job_queue import JobQueue\n",
+        "from src.controller.job_service import JobService\n",
+        "import src.pipeline.pipeline_runner\n",
+        "from src.pipeline.njr_core_v26 import NormalizedJobRecord\n",
+        "from src.gui.main_window_v2 import MainWindow\n",
+        "from src.image_backends.model_policy import ModelPolicy\n",
+        "from src import queue\n",
+    ):
+        assert arch.scan_source("src/ai_assist/x.py", forbidden) == {
+            "ai_assist_forbidden_imports": 1
+        }, forbidden
+
+
+def test_ai_assist_relative_imports_that_leave_the_package_are_counted() -> None:
+    assert arch.scan_source("src/ai_assist/x.py", "from . import contracts\n") == {}
+    assert arch.scan_source("src/ai_assist/x.py", "from ..queue import job_queue\n") == {
+        "ai_assist_forbidden_imports": 1
+    }
+
+
+def test_the_ai_assist_rule_applies_only_to_ai_assist_and_the_package_is_clean() -> None:
+    assert arch.scan_source("src/services/x.py", "from src.queue.job_queue import JobQueue\n") == {}
+    assert not [path for path in arch.collect() if path.startswith("src/ai_assist/")]
+    assert "ai_assist_forbidden_imports" in arch.RULES
