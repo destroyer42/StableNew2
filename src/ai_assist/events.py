@@ -50,6 +50,9 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "model_sha256_prefix",
         "runtime_build_id",
         "strict_offline",
+        "peak_private_gib",
+        "priority_verified",
+        "child_observed",
     }
 )
 

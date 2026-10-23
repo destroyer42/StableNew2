@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-512 of 666 modules have a docstring.
+513 of 667 modules have a docstring.
 
 ## src/
 
@@ -25,6 +25,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `framing.py`: The fixed instruction frame and the JSON Schema for one request
 - `host.py`: Read-only host seams: memory and generation activity
 - `manifests.py`: Pinned runtime manifest, provenance-gated model registry, local import and integrity verification
+- `observe.py`: Observe, prioritise and bound the inference child from inside the AI layer (PR-AI-111, deferred finding F2)
 - `paths.py`: Where the offline AI runtime, weights and records live
 - `runtime.py`: One bounded, contained, CPU-only inference as a short-lived child (owner decision D2)
 - `service.py`: Single-flight admission, yielding and outcome mapping for one AI request at a time

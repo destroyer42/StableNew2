@@ -29,11 +29,30 @@ from src.ai_assist.status import MODEL_REGISTRY_PATH, RUNTIME_MANIFEST_PATH
 from .conftest import FILES, MODEL_BYTES, Install, build_archive, make_build, make_entry, sha
 
 
-def test_shipped_manifests_parse_and_register_nothing_as_qualified() -> None:
+def test_shipped_manifests_parse_cleanly_and_nothing_is_qualified() -> None:
     runtime = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
     registry = load_model_registry(MODEL_REGISTRY_PATH)
     assert runtime.problems == () and registry.problems == ()
-    assert runtime.builds == () and registry.entries == ()
+    # No runtime build is pinned until the operator imports the archive and every loadable file can be hashed.
+    assert runtime.builds == ()
+    assert not any(build.qualified for build in runtime.builds)
+    assert len(registry.entries) >= 1 and not any(entry.qualified for entry in registry.entries)
+
+
+def test_shipped_candidate_pins_are_complete_unique_and_content_addressed() -> None:
+    import re
+
+    registry = load_model_registry(MODEL_REGISTRY_PATH)
+    assert len({e.model_id for e in registry.entries}) == len(registry.entries)
+    assert len({e.sha256 for e in registry.entries}) == len(registry.entries)
+    for entry in registry.entries:
+        assert re.fullmatch(r"[0-9a-f]{64}", entry.sha256) and entry.bytes > 10**8
+        assert entry.filename.endswith(".gguf") and entry.license_spdx == "Apache-2.0"
+        assert re.fullmatch(r"[0-9a-f]{40}", entry.provenance.publisher_revision)
+        assert re.fullmatch(r"[0-9a-f]{40}", entry.provenance.packager_revision)
+        assert entry.provenance.source_url.startswith("https://huggingface.co/")
+        assert entry.provenance.packager_revision in entry.provenance.source_url
+        assert entry.filename in entry.provenance.source_url
 
 
 def _model_doc(**overrides) -> dict:
