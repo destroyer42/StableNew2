@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-488 of 642 modules have a docstring.
+489 of 643 modules have a docstring.
 
 ## src/
 
@@ -276,6 +276,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `config_source_contract.py`: Truthful wording for the Pipeline's settings sources and empty states (PR-GUI-UX-500)
 - `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
 - `form_section_contract.py`: Form section contract independent of widget framework
+- `history_artifact_contract.py`: Select a recorded History artifact by media type, not by its poster image
 - `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
 - `movie_clips_contract.py`: Movie Clips tab UI normalization helpers
 - `photo_optimize_layout_contract.py`: Pure fit/placement rules for the Photo Optimize tab (PR-GUI-420)
