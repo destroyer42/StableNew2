@@ -21,7 +21,6 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
-from src.gui.view_contracts.pipeline_composer_contract import STAGE_LABELS
 from src.learning.lora_variant import extract_lora_tokens
 from src.learning.recommendation_engine import RecommendationEngine
 from tools.operator_journey.capture import FaultCapture, leaked_non_daemon_threads, thread_snapshot
@@ -338,6 +337,9 @@ class _Journey:
             self.driver.invoke(button, label=f"toggle {text}")
 
     def _configure(self) -> None:
+        # Imported here: the harness must not import app modules until the journey runs.
+        from src.gui.view_contracts.pipeline_composer_contract import STAGE_LABELS
+
         ph = "configure"
         d = self.driver
         window = self.window
