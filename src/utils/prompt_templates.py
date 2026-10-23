@@ -18,36 +18,74 @@ _FALLBACK_PROMPT_TEMPLATE_PAYLOAD: dict[str, Any] = {
             "category": "shot",
             "template": "cinematic wide establishing shot of {scene}, {environment}, {lighting}, {style}",
             "description": "Use for scene-setting openers and location reveals.",
+            "examples": {
+                "scene": "a lone knight arriving at an ancient fortress",
+                "environment": "mist-covered stone walls and a mountain valley",
+                "lighting": "warm golden-hour backlighting",
+                "style": "cinematic realism",
+            },
         },
         "character_close_up": {
             "label": "Character Close-Up",
             "category": "portrait",
             "template": "intimate close-up of {subject}, {expression}, {lighting}, {style}",
             "description": "Use for emotional beats and performance-driven framing.",
+            "examples": {
+                "subject": "a weathered sea captain",
+                "expression": "quiet determination",
+                "lighting": "soft window light",
+                "style": "cinematic realism",
+            },
         },
         "over_the_shoulder": {
             "label": "Over-The-Shoulder",
             "category": "coverage",
             "template": "over-the-shoulder shot of {subject} facing {focus}, {environment}, {lighting}",
             "description": "Use for dialogue, reveals, and guided audience focus.",
+            "examples": {
+                "subject": "a detective",
+                "focus": "a rain-streaked apartment window",
+                "environment": "a dim city apartment at night",
+                "lighting": "cool neon spill",
+            },
         },
         "tracking_action": {
             "label": "Tracking Action Shot",
             "category": "action",
             "template": "tracking shot of {subject} {action}, {environment}, {camera}, {style}",
             "description": "Use for motion-heavy beats with cinematic camera language.",
+            "examples": {
+                "subject": "a courier",
+                "action": "sprinting across rooftops",
+                "environment": "a dense city skyline at dusk",
+                "camera": "low tracking angle, shallow depth of field",
+                "style": "cinematic realism",
+            },
         },
         "moody_portrait": {
             "label": "Moody Portrait",
             "category": "portrait",
             "template": "moody portrait of {subject}, {environment}, {lighting}, {mood}, {style}",
             "description": "Use for stylized character portraiture with strong atmosphere.",
+            "examples": {
+                "subject": "a young violinist",
+                "environment": "an empty concert hall",
+                "lighting": "a single warm spotlight",
+                "mood": "melancholic and reflective",
+                "style": "painterly realism",
+            },
         },
         "aerial_reveal": {
             "label": "Aerial Reveal",
             "category": "shot",
             "template": "dramatic aerial reveal of {scene}, {environment}, {lighting}, {mood}",
             "description": "Use for scale, geography, and cinematic reveal moments.",
+            "examples": {
+                "scene": "a hidden valley city",
+                "environment": "terraced cliffs and winding rivers",
+                "lighting": "early morning haze",
+                "mood": "awe and discovery",
+            },
         },
     },
 }
@@ -62,10 +100,16 @@ class PromptTemplateDefinition:
     category: str
     template: str
     description: str = ""
+    #: Optional editable starting values keyed by placeholder (presentation only; never stored with a pack).
+    examples: tuple[tuple[str, str], ...] = ()
 
     @property
     def placeholders(self) -> tuple[str, ...]:
         return extract_template_placeholders(self)
+
+    @property
+    def example_values(self) -> dict[str, str]:
+        return dict(self.examples)
 
 
 class _PartialTemplateValues(dict[str, str]):
@@ -81,6 +125,21 @@ def _default_prompt_template_payload() -> dict[str, Any]:
     return cast(dict[str, Any], deepcopy(_FALLBACK_PROMPT_TEMPLATE_PAYLOAD))
 
 
+def _normalize_examples(raw_examples: Any, template_text: str) -> tuple[tuple[str, str], ...]:
+    """Keep non-empty example strings for placeholders the template really has; anything else is ignored."""
+
+    if not isinstance(raw_examples, Mapping):
+        return ()
+    placeholders = extract_template_placeholders(template_text)
+    examples: list[tuple[str, str]] = []
+    for placeholder in placeholders:
+        value = raw_examples.get(placeholder)
+        text = value.strip() if isinstance(value, str) else ""
+        if text:
+            examples.append((placeholder, text))
+    return tuple(examples)
+
+
 def _normalize_template_definition(
     template_id: str, raw_definition: Mapping[str, Any]
 ) -> PromptTemplateDefinition:
@@ -94,6 +153,7 @@ def _normalize_template_definition(
         category=str(raw_definition.get("category") or "general").strip() or "general",
         template=template_text,
         description=str(raw_definition.get("description") or "").strip(),
+        examples=_normalize_examples(raw_definition.get("examples"), template_text),
     )
 
 

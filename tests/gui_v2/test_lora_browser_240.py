@@ -93,6 +93,11 @@ def panel(monkeypatch):
         _annotations={},
         _lora_entries=[],
         selection_listener=None,
+        insertion_status=Value(),
+        inventory_listener=None,
+        _inventory_names=None,
+        _asset_snapshot=AssetRegistrySnapshot(()),
+        _model_name="",
         on_change_callback=None,
         discovery_status=Value(),
         lora_name_var=Value(),
@@ -415,6 +420,9 @@ def test_selected_name_tooltip_annotations_redact_on_mode_change(panel):
                 "name_label",
                 "keywords_button",
                 "inventory_label",
+                "compatibility_label",
+                "trigger_label",
+                "insert_button",
                 "annotation_label",
             )
         }
@@ -522,28 +530,32 @@ def test_disguised_eps_preview_never_enters_external_decoder(tmp_path, monkeypat
 def test_browser_selection_and_keyword_insertion_reuse_style_projection():
     from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 
-    updates, metadata = [], []
+    updates, metadata, inserted = [], [], []
     frame = SimpleNamespace(
         _suppress_editor_change=False,
         lora_picker=SimpleNamespace(get_loras=lambda: [("style", 1.23)]),
         workspace_state=SimpleNamespace(
             get_current_slot_index=lambda: 0,
+            get_current_prompt_text=lambda: "sunlight",
             set_slot_loras=lambda index, value: updates.append((index, value)),
             set_slot_text=lambda index, value: updates.append((index, value)),
         ),
+        _cached_style_selection=lambda: (None, False),
         _mark_pack_modified=lambda: None,
         _highlight_matrix_tokens=lambda: None,
         _validate_matrix_slots=lambda: None,
         _refresh_template_preview=lambda: None,
         _refresh_metadata=lambda *, scan_style=True: metadata.append(scan_style),
         editor=SimpleNamespace(
-            insert=lambda *_: None,
+            cget=lambda _option: "normal",
+            insert=lambda *args: inserted.append(args),
             edit_modified=lambda *args: not args,
             get=lambda *_: "sunlight\n",
         ),
     )
     frame._on_editor_modified = lambda: PromptTabFrame._on_editor_modified(frame)
     PromptTabFrame._on_loras_changed(frame)
-    PromptTabFrame._insert_keywords_to_prompt(frame, "sunlight")
+    PromptTabFrame._insert_keywords_to_prompt(frame, "moonlight")
     assert metadata == [False, False]
+    assert inserted == [("end-1c", ", moonlight")]
     assert updates == [(0, [("style", 1.23)]), (0, "sunlight")]

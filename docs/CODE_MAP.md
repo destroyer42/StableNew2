@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-487 of 641 modules have a docstring.
+490 of 644 modules have a docstring.
 
 ## src/
 
@@ -367,6 +367,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
+- `lora_authoring_view.py`: Toolkit-neutral presentation of a selected LoRA inside the Prompt tab (GUI-540)
 - `lora_browser.py`: Pure browser projection; registry evidence and ModelPolicy remain authoritative
 - `mask_editor_state.py`: Original-pixel mask editing and viewport transforms; no Tk, files or backend state
 - `model_policy_projection.py`: Toolkit-neutral projection of a model policy onto the Base Generation controls (PR-IMG-130A)
@@ -374,7 +375,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `outpaint_canvas_view.py`: Toolkit-neutral view of an outpaint canvas: where the original sits as the margins change
 - `pack_lora_selection_projection.py`: Read-only, visibility-aware reporting of frozen explicit selection evidence
 - `prompt_adaptation_preview.py`: Toolkit-neutral preview model for the explicit Prompt-tab "Adapt for Target" action (PR-IMG-130C)
+- `prompt_template_view.py`: Toolkit-neutral presentation of the cinematic template editor (GUI-540)
 - `recommendation_targets.py`: Toolkit-neutral mapping from Learning parameters to executable operator controls
+- `style_consistency_view.py`: Toolkit-neutral presentation of the Style Consistency selector (GUI-540)
 
 ## src/gui_v2/adapters/
 
