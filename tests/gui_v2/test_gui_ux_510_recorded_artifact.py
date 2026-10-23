@@ -132,14 +132,14 @@ def test_history_shows_video_not_poster_and_reuses_player_on_selection(
     for path in (clip, poster, image):
         path.touch()
 
-    video = _entry("video", {
-        "video_bundle": {"primary_path": str(clip), "thumbnail_path": str(poster)}
-    })
-    still = _entry("image", {
-        "artifact": {"artifact_type": "image", "primary_path": str(image)}
-    })
+    video = _entry(
+        "video", {"video_bundle": {"primary_path": str(clip), "thumbnail_path": str(poster)}}
+    )
+    still = _entry("image", {"artifact": {"artifact_type": "image", "primary_path": str(image)}})
     seen_images: list[str] = []
-    monkeypatch.setattr(panel.artifact_thumbnail, "set_image_from_path", lambda path: seen_images.append(str(path)))
+    monkeypatch.setattr(
+        panel.artifact_thumbnail, "set_image_from_path", lambda path: seen_images.append(str(path))
+    )
     panel.show_artifact_var.set(True)
     panel._refresh_selected_artifact(video)
     assert len(players) == 1
@@ -151,8 +151,14 @@ def test_history_shows_video_not_poster_and_reuses_player_on_selection(
 
     opened: list[str] = []
     revealed: list[str] = []
-    monkeypatch.setattr(history_module, "open_file", lambda path: opened.append(path) or ShellResult(True))
-    monkeypatch.setattr(history_module, "reveal_in_file_manager", lambda path: revealed.append(path) or ShellResult(True))
+    monkeypatch.setattr(
+        history_module, "open_file", lambda path: opened.append(path) or ShellResult(True)
+    )
+    monkeypatch.setattr(
+        history_module,
+        "reveal_in_file_manager",
+        lambda path: revealed.append(path) or ShellResult(True),
+    )
     panel._on_open_artifact()
     panel._on_reveal_artifact()
     assert opened == [str(clip)]
@@ -174,14 +180,19 @@ def test_history_reports_missing_video_and_disables_open(
     panel = JobHistoryPanelV2(tk_root, app_state=AppStateV2())
     poster = tmp_path / "poster.png"
     poster.touch()
-    entry = _entry("missing", {
-        "video_bundle": {
-            "primary_path": str(tmp_path / "missing.mp4"),
-            "thumbnail_path": str(poster),
-        }
-    })
+    entry = _entry(
+        "missing",
+        {
+            "video_bundle": {
+                "primary_path": str(tmp_path / "missing.mp4"),
+                "thumbnail_path": str(poster),
+            }
+        },
+    )
     seen: list[str] = []
-    monkeypatch.setattr(panel.artifact_thumbnail, "set_image_from_path", lambda path: seen.append(str(path)))
+    monkeypatch.setattr(
+        panel.artifact_thumbnail, "set_image_from_path", lambda path: seen.append(str(path))
+    )
     panel.show_artifact_var.set(True)
     panel._refresh_selected_artifact(entry)
     assert seen == []

@@ -266,7 +266,10 @@ class JobHistoryPanelV2(ttk.Frame):
         )
         self.artifact_open_btn.pack(side=tk.LEFT, padx=(0, 4))
         self.artifact_reveal_btn = ttk.Button(
-            self.artifact_actions, text="Reveal", command=self._on_reveal_artifact, state=tk.DISABLED
+            self.artifact_actions,
+            text="Reveal",
+            command=self._on_reveal_artifact,
+            state=tk.DISABLED,
         )
         self.artifact_reveal_btn.pack(side=tk.LEFT)
         self.artifact_status_var = tk.StringVar(value="")

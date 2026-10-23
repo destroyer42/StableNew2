@@ -38,7 +38,11 @@ def _paths(payload: Mapping[str, Any]) -> list[str]:
     for key in ("video_paths", "gif_paths", "output_paths"):
         raw = payload.get(key)
         if isinstance(raw, (tuple, list)):
-            values.extend(str(item) for item in raw if isinstance(item, (str, os.PathLike)) and str(item).strip())
+            values.extend(
+                str(item)
+                for item in raw
+                if isinstance(item, (str, os.PathLike)) and str(item).strip()
+            )
     return list(dict.fromkeys(values))
 
 
@@ -55,14 +59,19 @@ def _video_bundles(result: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     if direct:
         bundles.append(direct)
     artifact = _mapping(result.get("artifact"))
-    if (
-        str(artifact.get("artifact_type") or "").lower() == "video"
-        or any(Path(path).suffix.lower() in _VIDEO_SUFFIXES for path in _paths(artifact))
+    if str(artifact.get("artifact_type") or "").lower() == "video" or any(
+        Path(path).suffix.lower() in _VIDEO_SUFFIXES for path in _paths(artifact)
     ):
         bundles.append(artifact)
 
     metadata = _metadata(result)
-    for key in ("video_primary_artifact", "movie_assembly_artifact", "video_workflow_artifact", "svd_native_artifact", "animatediff_artifact"):
+    for key in (
+        "video_primary_artifact",
+        "movie_assembly_artifact",
+        "video_workflow_artifact",
+        "svd_native_artifact",
+        "animatediff_artifact",
+    ):
         candidate = _mapping(metadata.get(key))
         if candidate:
             bundles.append(candidate)
@@ -87,7 +96,9 @@ def _video_candidates(bundle: Mapping[str, Any]) -> list[str]:
         return candidates
     for artifact in bundle.get("artifacts") or []:
         if isinstance(artifact, Mapping):
-            candidates.extend(path for path in _paths(artifact) if Path(path).suffix.lower() in _VIDEO_SUFFIXES)
+            candidates.extend(
+                path for path in _paths(artifact) if Path(path).suffix.lower() in _VIDEO_SUFFIXES
+            )
     return list(dict.fromkeys(candidates))
 
 
@@ -95,7 +106,10 @@ def _has_frames(bundle: Mapping[str, Any]) -> bool:
     frames = bundle.get("frame_paths")
     if isinstance(frames, (tuple, list)) and any(frames):
         return True
-    if str(bundle.get("artifact_type") or "").lower() == "video" or str(bundle.get("stage") or "") in _VIDEO_STAGES:
+    if (
+        str(bundle.get("artifact_type") or "").lower() == "video"
+        or str(bundle.get("stage") or "") in _VIDEO_STAGES
+    ):
         return any(Path(path).suffix.lower() in _IMAGE_SUFFIXES for path in _paths(bundle))
     return False
 
@@ -118,11 +132,17 @@ def resolve_recorded_artifact(
                 exists = False
             if exists:
                 return RecordedArtifact("video", primary)
-            return RecordedArtifact("video", message=f"Recorded video file is missing: {Path(primary).name}")
+            return RecordedArtifact(
+                "video", message=f"Recorded video file is missing: {Path(primary).name}"
+            )
         if _has_frames(bundle):
-            return RecordedArtifact("frames", message="This job recorded frames, but no playable video clip.")
+            return RecordedArtifact(
+                "frames", message="This job recorded frames, but no playable video clip."
+            )
     if video_bundles:
-        return RecordedArtifact("video", message="This job recorded a video result without a playable video file.")
+        return RecordedArtifact(
+            "video", message="This job recorded a video result without a playable video file."
+        )
 
     artifacts = [_mapping(payload.get("artifact"))]
     for variant in payload.get("variants") or []:
@@ -142,7 +162,9 @@ def resolve_recorded_artifact(
                     return RecordedArtifact("image", first)
             except (OSError, ValueError):
                 pass
-            return RecordedArtifact("image", message=f"Recorded image file is missing: {Path(first).name}")
+            return RecordedArtifact(
+                "image", message=f"Recorded image file is missing: {Path(first).name}"
+            )
     return RecordedArtifact("none", message="No recorded artifact for this job.")
 
 
