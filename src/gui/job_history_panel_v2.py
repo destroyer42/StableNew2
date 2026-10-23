@@ -29,11 +29,11 @@ from src.gui.view_contracts.movie_clips_contract import extract_source_paths_fro
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.gui.widgets.video_preview_widget_v2 import VideoPreviewWidget
 from src.pipeline.artifact_contract import extract_artifact_paths
-from src.utils.os_shell import open_file, reveal_in_file_manager
 from src.queue.job_history_store import (
     INTERRUPTED_RESTART_ACTION_REQUIRED,
     JobHistoryEntry,
 )
+from src.utils.os_shell import open_file, reveal_in_file_manager
 from src.video.sequence_history import SequenceHistoryInfo, sequence_history_info
 from src.video.video_artifact_helpers import extract_source_image_for_handoff
 from src.video.video_review_group import snapshot_is_experiment_arm
