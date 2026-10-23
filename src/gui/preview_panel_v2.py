@@ -31,6 +31,7 @@ from src.gui.theme_v2 import (
     SURFACE_FRAME_STYLE,
     TEXT_PRIMARY,
 )
+from src.gui.tooltip import attach_tooltip
 from src.gui.utils.display_helpers import format_seed_display
 from src.gui.view_contracts.workspace_density_contract import (
     RESIZE_COALESCE_MS,
@@ -54,6 +55,20 @@ class PreviewPanelV2(ttk.Frame):
     NEGATIVE_THUMBNAIL_CACHE_TTL_S = 1.0
     POSITIVE_THUMBNAIL_CACHE_TTL_S = 15.0
     SLOW_REFRESH_THRESHOLD_MS = 20.0
+
+    # PR-GUI-UX-500: a thumbnail exists only for a job that has saved an image; the words never promise otherwise.
+    PREVIEW_CHECKBOX_LABEL = "Show output thumbnail"
+    PREVIEW_CHECKBOX_TIP = (
+        "Shows a saved output image of the previewed job once it exists. "
+        "A draft or queued job has no image yet; ticking this does not generate one."
+    )
+    NO_JOB_PLACEHOLDER = "No job previewed yet."
+    NO_ARTIFACT_PLACEHOLDER = (
+        "No image for this job yet.\n"
+        "A thumbnail appears only after this job has saved an image. Previewing a draft does not create one."
+    )
+
+    HIDDEN_PLACEHOLDER = "Thumbnail hidden by the content-visibility setting."
 
     def __init__(
         self,
@@ -114,7 +129,7 @@ class PreviewPanelV2(ttk.Frame):
             right_frame,
             width=300,
             height=300,
-            placeholder_text="No Preview",
+            placeholder_text=self.NO_JOB_PLACEHOLDER,
             on_source_changed=self._on_thumbnail_source_changed,
         )
         self.thumbnail.pack(anchor="ne")
@@ -143,12 +158,13 @@ class PreviewPanelV2(ttk.Frame):
         self._show_preview_var = tk.BooleanVar(value=False)
         self.preview_checkbox = ttk.Checkbutton(
             header_frame,
-            text="Show preview thumbnails",
+            text=self.PREVIEW_CHECKBOX_LABEL,
             variable=self._show_preview_var,
             command=self._on_preview_checkbox_changed,
             style="Dark.TCheckbutton",
         )
         self.preview_checkbox.pack(side=tk.RIGHT, padx=(0, 8))
+        attach_tooltip(self.preview_checkbox, self.PREVIEW_CHECKBOX_TIP)
 
         # Left column: Job info + prompts + settings
         left_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
@@ -1280,6 +1296,13 @@ class PreviewPanelV2(ttk.Frame):
         y = (dialog.winfo_screenheight() // 2) - (height // 2)
         dialog.geometry(f"{width}x{height}+{x}+{y}")
 
+    def _missing_thumbnail_text(self, job: Any | None) -> str:
+        """Why no thumbnail shows: the visibility setting hides it, or the job has saved no image yet."""
+        mode = getattr(self, "_content_visibility_mode", "nsfw")
+        if job is not None and not ContentVisibilityResolver(mode).is_visible(job):
+            return self.HIDDEN_PLACEHOLDER
+        return self.NO_ARTIFACT_PLACEHOLDER
+
     def _find_recent_thumbnail(self, job: Any, pack_name: str | None = None) -> Any:
         """Return no candidate; previews must come from exact job artifacts.
 
@@ -1509,7 +1532,9 @@ class PreviewPanelV2(ttk.Frame):
         if resolved_path and resolved_path.exists():
             self.thumbnail.set_image_from_path(resolved_path)
         else:
-            self.thumbnail.set_placeholder("No generated preview yet")
+            self.thumbnail.set_placeholder(
+                self._missing_thumbnail_text(getattr(self, "_current_preview_job", None))
+            )
 
     def _update_thumbnail(
         self, job: Any | None = None, pack_name: str | None = None, show_preview: bool = True
@@ -1539,7 +1564,7 @@ class PreviewPanelV2(ttk.Frame):
 
         # No directory scan or recent-output fallback: a draft/queued job has
         # no generated preview until its exact artifact is persisted.
-        self.thumbnail.set_placeholder("No generated preview yet")
+        self.thumbnail.set_placeholder(self._missing_thumbnail_text(job))
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         self._record_refresh_metric("_update_thumbnail", elapsed_ms)
 
