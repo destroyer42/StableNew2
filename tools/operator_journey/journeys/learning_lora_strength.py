@@ -337,18 +337,21 @@ class _Journey:
             self.driver.invoke(button, label=f"toggle {text}")
 
     def _configure(self) -> None:
+        # Imported here: the harness must not import app modules until the journey runs.
+        from src.gui.view_contracts.pipeline_composer_contract import STAGE_LABELS
+
         ph = "configure"
         d = self.driver
         window = self.window
         d.select_tab(window.center_notebook, "Pipeline")
         pipeline = window.pipeline_tab
-        for text, wanted in (
-            ("Enable txt2img", True),
-            ("Enable img2img", False),
-            ("Enable ADetailer", False),
-            ("Enable upscale", False),
-        ):
-            self._set_toggle(pipeline, text, wanted)
+        for stage, wanted in (("txt2img", True), ("adetailer", False), ("upscale", False)):
+            self._set_toggle(pipeline, STAGE_LABELS[stage], wanted)
+        # PR-GUI-UX-530: normal Create has no img2img switch. The reference run must not carry the legacy
+        # stage, so open the advanced section only if a loaded configuration left it on.
+        if bool(window.sidebar_panel_v2.stage_states["img2img"].get()):
+            window.sidebar_panel_v2.legacy_stage_section.set_expanded(True)
+            self._set_toggle(pipeline, STAGE_LABELS["img2img"], False)
         card = pipeline.stage_cards_panel.txt2img_card
         d.set_variable(card.steps_var, self.config.steps, label="txt2img steps")
         d.set_variable(card.width_var, self.config.width, label="txt2img width")

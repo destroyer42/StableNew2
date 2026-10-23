@@ -13,6 +13,7 @@ from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.view_contracts.pipeline_composer_contract import LEGACY_IMG2IMG_CARD_DESCRIPTION
 from src.gui.view_contracts.pipeline_layout_contract import (
     get_stage_card_min_width,
     get_two_pair_form_column_specs,
@@ -22,11 +23,13 @@ from src.utils.webui_resource_names import normalize_vae_config_value
 
 class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
     panel_header = "Img2Img Configuration"
+    legacy_description = LEGACY_IMG2IMG_CARD_DESCRIPTION
 
     def __init__(self, master: tk.Misc, *, controller=None, theme=None, **kwargs: Any) -> None:
         self.controller = controller
         self.theme = theme
         self._on_change = None
+        kwargs.setdefault("description", self.legacy_description)
         super().__init__(master, title=self.panel_header, **kwargs)
 
     def _build_body(self, parent: ttk.Frame) -> None:
