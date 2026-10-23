@@ -162,8 +162,8 @@ Forge receives the same `preprocessor: "None"` unit as for a hand-supplied map. 
   reader; an adjacent `<name>.stablenew-map.json` records method, version, config, source and result hashes, auxiliary file
   hashes, runtime versions and warnings (no path, source bytes, landmarks or prompt).
 - Not qualified: real-model output quality and agreement with the upstream DWPose preprocessing (its code revision is not pinned
-  by the catalog). OpenPose needs `onnxruntime`, which is not in the pinned environment, so it is unavailable until the owner
-  decides to pin it (STATUS.md, open decisions).
+  by the catalog). OpenPose needs `onnxruntime`, pinned in `constraints/windows-py314-cu130.txt` and `requirements.txt`; in an
+  environment that has not been re-bootstrapped it is unavailable (`runtime_missing:onnxruntime`) (STATUS.md, decision 12).
 
 Deterministic coverage: `tests/integration/test_pr_img_cnet_220.py`, `tests/gui_v2/test_controlnet_units_220.py` and the
 existing OpenPose suites. This establishes plumbing and refusals, not physical two-unit fidelity, VRAM fit or performance.
