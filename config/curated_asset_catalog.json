@@ -1,0 +1,697 @@
+{
+  "contract": "curated_asset_catalog/1",
+  "catalog_version": "2026-10-23.1",
+  "description": "Curated acquisition guidance. It is not model policy and not runtime authority: the readiness projection re-derives what the product can use from product code.",
+  "hash_semantics": "sha256 values are the Hugging Face LFS object ids at the pinned revision (the SHA-256 of the file bytes). A null sha256 means pending_verification: no upstream digest was independently verified, so an installed copy can never be reported as verified.",
+  "resources": [
+    {
+      "id": "sdxl-controlnet-canny",
+      "title": "SDXL ControlNet - Canny",
+      "category": "controlnet_weights",
+      "capability": {
+        "id": "controlnet_unit.canny",
+        "policy": "supported_now",
+        "modality": "canny",
+        "reason_codes": [
+          "policy_allows_prerendered_map_unit"
+        ],
+        "basis": "The product accepts an ordered ControlNet unit of this modality with a pre-rendered map (preprocessor None) when the weight shows SDXL header evidence; nothing here preprocesses an image."
+      },
+      "source": {
+        "publisher_repo": "diffusers/controlnet-canny-sdxl-1.0",
+        "url": "https://huggingface.co/diffusers/controlnet-canny-sdxl-1.0",
+        "revision": "eb115a19a10d14909256db740ed109532ab1483c",
+        "revision_status": "pinned",
+        "license": {
+          "model_card_tag": "openrail++",
+          "spdx": "OpenRAIL++",
+          "status": "model_card_declared",
+          "note": "The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+        },
+        "verified_on": "2026-10-23",
+        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+      },
+      "placement": {
+        "root": "controlnet",
+        "directory": "",
+        "instructions": "Place the file directly in <WebUI root>/models/ControlNet under the suggested filename, then run an explicit refresh."
+      },
+      "files": [
+        {
+          "role": "weights",
+          "required": true,
+          "description": "One of the safetensors weight variants (half or full precision). The pickle-based .bin variants are not catalogued.",
+          "variants": [
+            {
+              "variant_id": "diffusion_pytorch_model.fp16.safetensors",
+              "upstream_path": "diffusion_pytorch_model.fp16.safetensors",
+              "suggested_filename": "diffusers_xl_canny_fp16.safetensors",
+              "sha256": "b2e7d3921058a442cc80430d1ec8847f42599c705e2451c95e77cf4dcf8d6c25",
+              "size_bytes": 2502139136,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            },
+            {
+              "variant_id": "diffusion_pytorch_model.safetensors",
+              "upstream_path": "diffusion_pytorch_model.safetensors",
+              "suggested_filename": "diffusers_xl_canny_full.safetensors",
+              "sha256": "ea99040544a999f814fd854575a3aee069a005d026864c8d321b82576706a221",
+              "size_bytes": 5004167864,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        }
+      ],
+      "external_prerequisites": [],
+      "notes": [
+        "Canny edge maps must be pre-rendered; automatic preprocessing is not part of the product."
+      ]
+    },
+    {
+      "id": "sdxl-controlnet-depth",
+      "title": "SDXL ControlNet - Depth",
+      "category": "controlnet_weights",
+      "capability": {
+        "id": "controlnet_unit.depth",
+        "policy": "supported_now",
+        "modality": "depth",
+        "reason_codes": [
+          "policy_allows_prerendered_map_unit"
+        ],
+        "basis": "The product accepts an ordered ControlNet unit of this modality with a pre-rendered map (preprocessor None) when the weight shows SDXL header evidence; nothing here preprocesses an image."
+      },
+      "source": {
+        "publisher_repo": "diffusers/controlnet-depth-sdxl-1.0",
+        "url": "https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0",
+        "revision": "17bb97973f29801224cd66f192c5ffacf82648b4",
+        "revision_status": "pinned",
+        "license": {
+          "model_card_tag": "openrail++",
+          "spdx": "OpenRAIL++",
+          "status": "model_card_declared",
+          "note": "The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+        },
+        "verified_on": "2026-10-23",
+        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+      },
+      "placement": {
+        "root": "controlnet",
+        "directory": "",
+        "instructions": "Place the file directly in <WebUI root>/models/ControlNet under the suggested filename, then run an explicit refresh."
+      },
+      "files": [
+        {
+          "role": "weights",
+          "required": true,
+          "description": "One of the safetensors weight variants (half or full precision). The pickle-based .bin variants are not catalogued.",
+          "variants": [
+            {
+              "variant_id": "diffusion_pytorch_model.fp16.safetensors",
+              "upstream_path": "diffusion_pytorch_model.fp16.safetensors",
+              "suggested_filename": "diffusers_xl_depth_fp16.safetensors",
+              "sha256": "66a6813e6bd7270ecfe68206a59ddd605a011ae85321188376605c66e0a4f303",
+              "size_bytes": 2502139134,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            },
+            {
+              "variant_id": "diffusion_pytorch_model.safetensors",
+              "upstream_path": "diffusion_pytorch_model.safetensors",
+              "suggested_filename": "diffusers_xl_depth_full.safetensors",
+              "sha256": "b760b1ed26970c7c60abbcef08e7238bb9428bee510a405aff239e06a1471945",
+              "size_bytes": 5004167860,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        }
+      ],
+      "external_prerequisites": [],
+      "notes": [
+        "Depth maps must be pre-rendered; Depth Anything V2 (below) is a candidate future depth preprocessor."
+      ]
+    },
+    {
+      "id": "sdxl-controlnet-openpose-thibaud",
+      "title": "SDXL ControlNet - OpenPose (thibaud)",
+      "category": "controlnet_weights",
+      "capability": {
+        "id": "controlnet_unit.openpose",
+        "policy": "supported_now",
+        "modality": "openpose",
+        "reason_codes": [
+          "policy_allows_prerendered_map_unit"
+        ],
+        "basis": "The product accepts an ordered ControlNet unit of this modality with a pre-rendered map (preprocessor None) when the weight shows SDXL header evidence; nothing here preprocesses an image."
+      },
+      "source": {
+        "publisher_repo": "thibaud/controlnet-openpose-sdxl-1.0",
+        "url": "https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0",
+        "revision": "1db673ed3dad75181fcf2e24f827597fe34e97b7",
+        "revision_status": "pinned",
+        "license": {
+          "model_card_tag": "other",
+          "spdx": null,
+          "status": "unknown",
+          "note": "The model card declares license 'other' without a resolvable SPDX identifier; the license terms were not independently verified. The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+        },
+        "verified_on": "2026-10-23",
+        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+      },
+      "placement": {
+        "root": "controlnet",
+        "directory": "",
+        "instructions": "Place the file directly in <WebUI root>/models/ControlNet under the suggested filename, then run an explicit refresh."
+      },
+      "files": [
+        {
+          "role": "weights",
+          "required": true,
+          "description": "The full OpenPoseXL2 weight. The rank-256 control-LoRA and the pickle .bin file in the same repository are not catalogued.",
+          "variants": [
+            {
+              "variant_id": "OpenPoseXL2.safetensors",
+              "upstream_path": "OpenPoseXL2.safetensors",
+              "suggested_filename": "thibaud_xl_openpose.safetensors",
+              "sha256": "5a4b928cb1e93748217900cb66d4135bf70d932d2924232f925910fad9e43a92",
+              "size_bytes": 5004167829,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        }
+      ],
+      "external_prerequisites": [],
+      "notes": [
+        "Header evidence, not the filename, decides whether an installed copy is treated as SDXL."
+      ]
+    },
+    {
+      "id": "sdxl-controlnet-openpose-xinsir",
+      "title": "SDXL ControlNet - OpenPose (xinsir)",
+      "category": "controlnet_weights",
+      "capability": {
+        "id": "controlnet_unit.openpose",
+        "policy": "supported_now",
+        "modality": "openpose",
+        "reason_codes": [
+          "policy_allows_prerendered_map_unit"
+        ],
+        "basis": "The product accepts an ordered ControlNet unit of this modality with a pre-rendered map (preprocessor None) when the weight shows SDXL header evidence; nothing here preprocesses an image."
+      },
+      "source": {
+        "publisher_repo": "xinsir/controlnet-openpose-sdxl-1.0",
+        "url": "https://huggingface.co/xinsir/controlnet-openpose-sdxl-1.0",
+        "revision": "23f966cd5cfdd3f7729c903e243d87152162d2b7",
+        "revision_status": "pinned",
+        "license": {
+          "model_card_tag": "apache-2.0",
+          "spdx": "Apache-2.0",
+          "status": "model_card_declared",
+          "note": "The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+        },
+        "verified_on": "2026-10-23",
+        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+      },
+      "placement": {
+        "root": "controlnet",
+        "directory": "",
+        "instructions": "Place the file directly in <WebUI root>/models/ControlNet under the suggested filename, then run an explicit refresh."
+      },
+      "files": [
+        {
+          "role": "weights",
+          "required": true,
+          "description": "The primary weight. 'diffusion_pytorch_model_twins.safetensors' in the same repository is a different file and is not catalogued.",
+          "variants": [
+            {
+              "variant_id": "diffusion_pytorch_model.safetensors",
+              "upstream_path": "diffusion_pytorch_model.safetensors",
+              "suggested_filename": "xinsir_openpose_sdxl.safetensors",
+              "sha256": "b8524e557a7df60d081f5d4a0eb109967d107df217943bf88c2d99b9ebcc06c5",
+              "size_bytes": 2502139104,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        }
+      ],
+      "external_prerequisites": [],
+      "notes": []
+    },
+    {
+      "id": "depth-anything-v2-small-hf",
+      "title": "Depth Anything V2 Small (Transformers export)",
+      "category": "preprocessor_model",
+      "capability": {
+        "id": "preprocessor.depth",
+        "policy": "needs_integration",
+        "modality": "depth",
+        "reason_codes": [
+          "no_preprocessor_runtime"
+        ],
+        "basis": "No preprocessing runtime exists in StableNew; a future package must add one before this model can be used."
+      },
+      "source": {
+        "publisher_repo": "depth-anything/Depth-Anything-V2-Small-hf",
+        "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf",
+        "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+        "revision_status": "pinned",
+        "license": {
+          "model_card_tag": "apache-2.0",
+          "spdx": "Apache-2.0",
+          "status": "model_card_declared",
+          "note": "The Small variant's model card declares Apache-2.0; larger Depth Anything V2 variants use different licenses and are not catalogued. The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+        },
+        "verified_on": "2026-10-23",
+        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+      },
+      "placement": {
+        "root": "auxiliary",
+        "directory": "depth-anything-v2-small-hf",
+        "instructions": "Place each file under <WebUI root>/models/StableNewAux/depth-anything-v2-small-hf/ using the suggested filenames, then run an explicit refresh. StableNew does not read this folder for generation yet."
+      },
+      "files": [
+        {
+          "role": "weights",
+          "required": true,
+          "description": "Transformers safetensors export (preferred over the original .pth).",
+          "variants": [
+            {
+              "variant_id": "model.safetensors",
+              "upstream_path": "model.safetensors",
+              "suggested_filename": "model.safetensors",
+              "sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70",
+              "size_bytes": 99173660,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        },
+        {
+          "role": "model_config",
+          "required": true,
+          "description": "Model configuration.",
+          "variants": [
+            {
+              "variant_id": "config.json",
+              "upstream_path": "config.json",
+              "suggested_filename": "config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        },
+        {
+          "role": "image_processor_config",
+          "required": true,
+          "description": "Image processor configuration.",
+          "variants": [
+            {
+              "variant_id": "preprocessor_config.json",
+              "upstream_path": "preprocessor_config.json",
+              "suggested_filename": "preprocessor_config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        }
+      ],
+      "external_prerequisites": [
+        {
+          "id": "transformers_runtime",
+          "kind": "python_package",
+          "state": "not_integrated",
+          "description": "A Transformers runtime able to load the export; no such dependency or loader is part of the pinned application environment."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "dwpose-onnx",
+      "title": "DWPose (ONNX pose estimator and person detector)",
+      "category": "preprocessor_model",
+      "capability": {
+        "id": "preprocessor.openpose",
+        "policy": "needs_integration",
+        "modality": "openpose",
+        "reason_codes": [
+          "no_preprocessor_runtime",
+          "onnx_runtime_not_integrated"
+        ],
+        "basis": "No ONNX or preprocessing runtime exists in StableNew; a future package must add one before these files can be used."
+      },
+      "source": {
+        "publisher_repo": "yzd-v/DWPose",
+        "url": "https://huggingface.co/yzd-v/DWPose",
+        "revision": "1a7144101628d69ee7a3768d1ee3a094070dc388",
+        "revision_status": "pinned",
+        "license": {
+          "model_card_tag": "apache-2.0",
+          "spdx": "Apache-2.0",
+          "status": "model_card_declared",
+          "note": "The model card declares Apache-2.0; per-file provenance (notably the detector) was not independently verified. The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+        },
+        "verified_on": "2026-10-23",
+        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+      },
+      "placement": {
+        "root": "auxiliary",
+        "directory": "dwpose-onnx",
+        "instructions": "Place each file under <WebUI root>/models/StableNewAux/dwpose-onnx/ using the suggested filenames, then run an explicit refresh. StableNew does not read this folder for generation yet."
+      },
+      "files": [
+        {
+          "role": "pose_estimator",
+          "required": true,
+          "description": "Whole-body pose estimator (ONNX).",
+          "variants": [
+            {
+              "variant_id": "dw-ll_ucoco_384.onnx",
+              "upstream_path": "dw-ll_ucoco_384.onnx",
+              "suggested_filename": "dw-ll_ucoco_384.onnx",
+              "sha256": "724f4ff2439ed61afb86fb8a1951ec39c6220682803b4a8bd4f598cd913b1843",
+              "size_bytes": 134399116,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        },
+        {
+          "role": "person_detector",
+          "required": true,
+          "description": "Person detector (ONNX).",
+          "variants": [
+            {
+              "variant_id": "yolox_l.onnx",
+              "upstream_path": "yolox_l.onnx",
+              "suggested_filename": "yolox_l.onnx",
+              "sha256": "7860ae79de6c89a3c1eb72ae9a2756c0ccfbe04b7791bb5880afabd97855a411",
+              "size_bytes": 216746733,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        }
+      ],
+      "external_prerequisites": [
+        {
+          "id": "onnx_runtime",
+          "kind": "python_package",
+          "state": "not_integrated",
+          "description": "An ONNX runtime package; none is part of the pinned application environment and none is installed for inventory."
+        },
+        {
+          "id": "dwpose_code_revision",
+          "kind": "source_revision",
+          "state": "pending_verification",
+          "description": "The DWPose preprocessing code and the version matching these files are not pinned."
+        }
+      ],
+      "notes": [
+        "The .pth checkpoints in the same repository are pickle-based and are not catalogued."
+      ]
+    },
+    {
+      "id": "sam-2-1-small",
+      "title": "SAM 2.1 Hiera Small (Transformers export)",
+      "category": "vision_model",
+      "capability": {
+        "id": "segmentation.sam2",
+        "policy": "needs_integration",
+        "modality": null,
+        "reason_codes": [
+          "feature_not_built",
+          "no_segmentation_runtime"
+        ],
+        "basis": "Segmentation is not a StableNew feature yet; verified files do not make it usable."
+      },
+      "source": {
+        "publisher_repo": "facebook/sam2.1-hiera-small",
+        "url": "https://huggingface.co/facebook/sam2.1-hiera-small",
+        "revision": "ee5bba1d82bb8749febdf90f45e84b687142ba03",
+        "revision_status": "pinned",
+        "license": {
+          "model_card_tag": "apache-2.0",
+          "spdx": "Apache-2.0",
+          "status": "model_card_declared",
+          "note": "The model card declares Apache-2.0. The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+        },
+        "verified_on": "2026-10-23",
+        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+      },
+      "placement": {
+        "root": "auxiliary",
+        "directory": "sam-2-1-small",
+        "instructions": "Place each file under <WebUI root>/models/StableNewAux/sam-2-1-small/ using the suggested filenames, then run an explicit refresh. StableNew does not read this folder for generation yet."
+      },
+      "files": [
+        {
+          "role": "weights",
+          "required": true,
+          "description": "Transformers safetensors export.",
+          "variants": [
+            {
+              "variant_id": "model.safetensors",
+              "upstream_path": "model.safetensors",
+              "suggested_filename": "model.safetensors",
+              "sha256": "0a4067b11ce1e23d5229203f11c718a823060d15a4b23fa2372a7d4b77cbbc60",
+              "size_bytes": 184305280,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        },
+        {
+          "role": "model_config",
+          "required": true,
+          "description": "Model configuration.",
+          "variants": [
+            {
+              "variant_id": "config.json",
+              "upstream_path": "config.json",
+              "suggested_filename": "config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        },
+        {
+          "role": "image_processor_config",
+          "required": true,
+          "description": "Image processor configuration.",
+          "variants": [
+            {
+              "variant_id": "preprocessor_config.json",
+              "upstream_path": "preprocessor_config.json",
+              "suggested_filename": "preprocessor_config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        },
+        {
+          "role": "processor_config",
+          "required": true,
+          "description": "Processor configuration.",
+          "variants": [
+            {
+              "variant_id": "processor_config.json",
+              "upstream_path": "processor_config.json",
+              "suggested_filename": "processor_config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        },
+        {
+          "role": "video_processor_config",
+          "required": false,
+          "description": "Only needed for video propagation.",
+          "variants": [
+            {
+              "variant_id": "video_preprocessor_config.json",
+              "upstream_path": "video_preprocessor_config.json",
+              "suggested_filename": "video_preprocessor_config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        }
+      ],
+      "external_prerequisites": [
+        {
+          "id": "transformers_sam2_support",
+          "kind": "python_package",
+          "state": "not_integrated",
+          "description": "A Transformers release with SAM 2.1 support; the minimum version was not verified and none is part of the pinned environment."
+        }
+      ],
+      "notes": [
+        "The original sam2.1_hiera_small.pt checkpoint is pickle-based and is not catalogued."
+      ]
+    },
+    {
+      "id": "florence-2-base-ft",
+      "title": "Florence-2 Base FT",
+      "category": "vision_model",
+      "capability": {
+        "id": "captioning.florence2",
+        "policy": "needs_integration",
+        "modality": null,
+        "reason_codes": [
+          "feature_not_built",
+          "custom_code_not_permitted"
+        ],
+        "basis": "Captioning and grounding are not StableNew features yet, and the repository ships custom model code that StableNew would not execute without an owner decision."
+      },
+      "source": {
+        "publisher_repo": "microsoft/Florence-2-base-ft",
+        "url": "https://huggingface.co/microsoft/Florence-2-base-ft",
+        "revision": "f6c1a25888ffc1d945ee8a1a77ac833c7303d46e",
+        "revision_status": "pinned",
+        "license": {
+          "model_card_tag": "mit",
+          "spdx": "MIT",
+          "status": "model_card_declared",
+          "note": "The model card declares MIT and the repository carries a LICENSE file. The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+        },
+        "verified_on": "2026-10-23",
+        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+      },
+      "placement": {
+        "root": "auxiliary",
+        "directory": "florence-2-base-ft",
+        "instructions": "Place each file under <WebUI root>/models/StableNewAux/florence-2-base-ft/ using the suggested filenames, then run an explicit refresh. StableNew does not read this folder for generation yet."
+      },
+      "files": [
+        {
+          "role": "weights",
+          "required": true,
+          "description": "Safetensors weights.",
+          "variants": [
+            {
+              "variant_id": "model.safetensors",
+              "upstream_path": "model.safetensors",
+              "suggested_filename": "model.safetensors",
+              "sha256": "58757d657ff44051314c8030b68e04cb1bb618ca9a4885418f111f6fb708185a",
+              "size_bytes": 463221266,
+              "hash_status": "verified_upstream",
+              "hash_basis": "hub_lfs_oid"
+            }
+          ]
+        },
+        {
+          "role": "model_config",
+          "required": true,
+          "description": "Model configuration.",
+          "variants": [
+            {
+              "variant_id": "config.json",
+              "upstream_path": "config.json",
+              "suggested_filename": "config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        },
+        {
+          "role": "image_processor_config",
+          "required": true,
+          "description": "Image processor configuration.",
+          "variants": [
+            {
+              "variant_id": "preprocessor_config.json",
+              "upstream_path": "preprocessor_config.json",
+              "suggested_filename": "preprocessor_config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        },
+        {
+          "role": "tokenizer",
+          "required": true,
+          "description": "Tokenizer.",
+          "variants": [
+            {
+              "variant_id": "tokenizer.json",
+              "upstream_path": "tokenizer.json",
+              "suggested_filename": "tokenizer.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        },
+        {
+          "role": "tokenizer_config",
+          "required": true,
+          "description": "Tokenizer configuration.",
+          "variants": [
+            {
+              "variant_id": "tokenizer_config.json",
+              "upstream_path": "tokenizer_config.json",
+              "suggested_filename": "tokenizer_config.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        },
+        {
+          "role": "vocabulary",
+          "required": true,
+          "description": "Vocabulary.",
+          "variants": [
+            {
+              "variant_id": "vocab.json",
+              "upstream_path": "vocab.json",
+              "suggested_filename": "vocab.json",
+              "sha256": null,
+              "size_bytes": null,
+              "hash_status": "pending_verification",
+              "hash_basis": null
+            }
+          ]
+        }
+      ],
+      "external_prerequisites": [
+        {
+          "id": "custom_model_code",
+          "kind": "custom_code",
+          "state": "blocked_by_policy",
+          "description": "configuration_florence2.py, modeling_florence2.py and processing_florence2.py run under trust_remote_code, which StableNew never enables. They were not downloaded or inspected."
+        },
+        {
+          "id": "transformers_runtime",
+          "kind": "python_package",
+          "state": "not_integrated",
+          "description": "A Transformers runtime; none is part of the pinned application environment."
+        }
+      ],
+      "notes": [
+        "pytorch_model.bin in the same repository is pickle-based and is not catalogued."
+      ]
+    }
+  ]
+}

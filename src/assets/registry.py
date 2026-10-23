@@ -66,12 +66,25 @@ class AssetKind(str, Enum):
     ADETAILER = "adetailer"
     #: Pre-rendered OpenPose reference images under ``models/OpenPose`` (conditioning input, never a model weight).
     OPENPOSE_IMAGE = "openpose_image"
+    #: Auxiliary model files (preprocessor, vision and processor assets) under ``models/StableNewAux`` (PR-ASSET-130).
+    #: Identity only: nothing here is a selectable checkpoint, and it is never part of a default ``refresh()``.
+    AUXILIARY_MODEL = "auxiliary_model"
 
 
 _IMAGE_KINDS = frozenset({AssetKind.OPENPOSE_IMAGE})
+_AUXILIARY_KINDS = frozenset({AssetKind.AUXILIARY_MODEL})
+#: Auxiliary files are indexed by byte identity only. Pickle-based containers (``.pt``/``.pth``/``.bin``/``.ckpt``) are
+#: deliberately absent, and the small JSON/text members exist so a processor bundle can be verified as a group.
+_AUXILIARY_EXTENSIONS = frozenset({".json", ".onnx", ".safetensors", ".txt"})
+#: A single auxiliary file larger than this is refused rather than streamed (no auxiliary asset approaches it).
+AUXILIARY_MAX_BYTES = 16 * 1024**3
+#: Kinds a default (``kinds=None``) refresh covers; auxiliary files are hashed only when explicitly requested.
+_DEFAULT_REFRESH_KINDS = frozenset(set(AssetKind) - _AUXILIARY_KINDS)
 
 
 def _extensions_for(kind: AssetKind) -> frozenset[str]:
+    if kind in _AUXILIARY_KINDS:
+        return _AUXILIARY_EXTENSIONS
     return _IMAGE_EXTENSIONS if kind in _IMAGE_KINDS else _EXTENSIONS
 
 
@@ -188,12 +201,12 @@ _NO_SIDECAR: dict[str, Any] = {
 
 
 def _contained(kind: AssetKind, root: Path, path: Path) -> bool:
-    """Reference images must resolve inside their library: a link that leaves it is never indexed.
+    """Reference images and auxiliary files must resolve inside their library: a link that leaves it is never indexed.
 
     Model-weight kinds are deliberately unchanged (their existing scan semantics are not part of this contract).
     """
 
-    if kind not in _IMAGE_KINDS:
+    if kind not in _IMAGE_KINDS and kind not in _AUXILIARY_KINDS:
         return True
     try:
         return path.resolve().is_relative_to(root.resolve())
@@ -323,6 +336,7 @@ class AssetRegistry:
             (AssetKind.BLIP, models / "BLIP"),
             (AssetKind.ADETAILER, models / "adetailer"),
             (AssetKind.OPENPOSE_IMAGE, models / "OpenPose"),
+            (AssetKind.AUXILIARY_MODEL, models / "StableNewAux"),
         )
 
     def observation_roots(self) -> tuple[ObservationRoot, ...]:
@@ -421,7 +435,7 @@ class AssetRegistry:
         entries, computed, hits = self._prepare_refresh(
             kinds, checkpoint_paths, cancelled, progress, counters, read_only=not persist,
         )
-        selected = set(kinds) if kinds is not None else set(AssetKind)
+        selected = set(kinds) if kinds is not None else set(_DEFAULT_REFRESH_KINDS)
         if persist:
             self._commit_entries(
                 entries,
@@ -615,7 +629,7 @@ class AssetRegistry:
         counters: RefreshCounters,
         *, read_only: bool = False,
     ) -> tuple[dict[str, dict[str, Any]], int, int]:
-        selected = set(kinds) if kinds is not None else set(AssetKind)
+        selected = set(kinds) if kinds is not None else set(_DEFAULT_REFRESH_KINDS)
         next_entries: dict[str, dict[str, Any]] = {}
         computed = hits = 0
         roots_and_paths: list[tuple[AssetKind, Path, Iterable[Path]]]
@@ -651,6 +665,8 @@ class AssetRegistry:
                     raise ValueError("Unsupported checkpoint file type")
                 key = str(path.resolve())
                 stat = path.stat()
+                if kind in _AUXILIARY_KINDS and stat.st_size > AUXILIARY_MAX_BYTES:
+                    raise ValueError("Auxiliary asset exceeds the size limit")
                 cached = self._entries.get(key)
                 if read_only:
                     # Browsing never follows model/sidecar aliases outside the configured library.
@@ -660,10 +676,10 @@ class AssetRegistry:
                         raise ValueError("Sidecar outside local library")
                 reason = self._identity_reason(cached, kind, stat)
                 model_valid = reason is CheckpointMiss.CURRENT
-                # A reference image has no sidecar contract: it is never searched for, read or fingerprinted.
+                # A reference image or auxiliary file has no sidecar contract: never searched for, read or fingerprinted.
                 sidecar_fields = (
                     dict(_NO_SIDECAR)
-                    if kind in _IMAGE_KINDS
+                    if kind in _IMAGE_KINDS or kind in _AUXILIARY_KINDS
                     else _resolve_sidecar(path, cached if model_valid else None)
                 )
                 sidecar_changed = model_valid and cached is not None and (
@@ -898,6 +914,9 @@ class AssetRegistry:
         if ordered and all(item.kind in _IMAGE_KINDS for item in ordered):
             # A reference image has byte identity only: no family/compatibility evidence is meaningful for it.
             return AssetRecord(digest, ordered, {}, None, None, None, {})
+        if ordered and all(item.kind in _AUXILIARY_KINDS for item in ordered):
+            # Auxiliary files likewise carry identity only; a filename must never become a checkpoint-family hint.
+            return AssetRecord(digest, ordered, {}, None, content[2], None, {})
 
         evidence: list[FamilyEvidence] = []
         evidence.extend(embedded_metadata_evidence(metadata))

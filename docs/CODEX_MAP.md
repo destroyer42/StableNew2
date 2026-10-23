@@ -18,7 +18,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Matrix and randomization | `src/pipeline/config_variant_plan_v2.py` -> `src/randomizer/` |
 | Image backends and model profiles | `docs/Subsystems/Image/IMAGE_PIPELINE.md` and `MODEL_PROFILES.md` first, then `src/image_backends/image_backend_registry.py`, `src/image_backends/model_policy.py` |
 | Prompt compatibility and adaptation | `src/prompting/`; `docs/Subsystems/Prompting/` |
-| Assets (models, LoRAs, embeddings) | `src/assets/registry.py`; `docs/Subsystems/Image/PR-ASSET-110_Local_Asset_Registry.md` |
+| Assets (models, LoRAs, embeddings, curated resource readiness) | `src/assets/registry.py`; `docs/Subsystems/Image/PR-ASSET-110_Local_Asset_Registry.md`; readiness `src/assets/resource_readiness.py`, `tools/asset_readiness_report.py` |
 | WebUI process, outage and startup hold | `docs/Subsystems/Runtime/QUEUE_AND_RUNTIME.md`; `src/api/webui_process_manager.py`, `src/controller/webui_outage_coordinator.py`, `src/controller/job_service_outage.py` |
 | GPU device-loss containment | `src/controller/gpu_loss_coordinator.py`; `docs/Subsystems/Runtime/PR-QUEUE-GPU-180_GPU_Loss_Dispatch_Containment.md` |
 | Native SVD video | `docs/Subsystems/Video/VIDEO_PIPELINE.md`; `src/video/svd_service.py` -> `src/video/svd_native_backend.py` -> `src/video/svd_runner.py`; RIFE `src/video/rife_runtime.py`, loop export `src/video/loop_export.py`, retired secondary motion `src/pipeline/secondary_motion_retirement.py` |
