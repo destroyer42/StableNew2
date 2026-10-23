@@ -1,10 +1,14 @@
 # PR-VID-WAN-321F: A14B target-hardware feasibility
 
-Verdict: **Feasibility demonstrated; closed (owner disposition, 2026-10-23).** One physical session ran: all three
-attempts produced 81 valid frames inside the limits with no safety stop, device loss or allocation failure. The owner
-accepted this as a successful feasibility result and closed WAN-321F. The frozen rules' own verdict remains
-**INCONCLUSIVE** because the adapter could not verify owned-process teardown; that record is unchanged and is not
-reclassified here. See "Physical session result" and "Owner disposition".
+Two separate conclusions, deliberately not merged:
+
+- **Owner acceptance (2026-10-23):** the feasibility investigation gave sufficient information to close the research
+  objective, and the owner closed WAN-321F.
+- **Frozen technical verdict: INCONCLUSIVE.** Teardown verification did not pass (`teardown.json` `verified: false`).
+  This is not a successful qualification against every frozen criterion, and the verdict is not reclassified here.
+
+What one physical session showed: all three attempts produced 81 valid frames inside the limits with no safety stop,
+device loss or allocation failure. See "Physical session result" and "Owner disposition".
 No physical-quality claim. This evidence does not authorize WAN-321 integration.
 
 Execution profile: Standard, qualification-only. Model recommendation: Claude Code Sonnet 5.5 High /
@@ -201,9 +205,10 @@ the two adapter fixes, a new session identity and a new owner decision on the bu
 
 ## Owner disposition (2026-10-23)
 
-The owner recorded the physical session as a **successful feasibility result** and closed this package. The recorded
-frozen-rule verdict (INCONCLUSIVE, `teardown.json` `verified: false`) is kept as evidence and was not edited. No
-repeat session, catalog registration, promotion or WAN-321 integration is authorized by this disposition.
+The owner accepted that the investigation provided sufficient information to close the research objective and closed this
+package. That is an acceptance of research closure, not a successful qualification against every frozen criterion: the
+recorded frozen technical verdict (INCONCLUSIVE, `teardown.json` `verified: false`) is kept as evidence and was not edited.
+No repeat session, catalog registration, promotion or WAN-321 integration is authorized by this disposition.
 
 To be addressed during full implementation (carried forward, not fixed here):
 
