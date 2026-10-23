@@ -111,6 +111,8 @@ class ThumbnailWidget(ttk.Frame):
             fill=TEXT_MUTED,
             font=("Segoe UI", 9),
             anchor="center",
+            justify="center",
+            width=max(40, self._width - 24),
         )
 
     def set_image(self, image: Image.Image | None) -> None:

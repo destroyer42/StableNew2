@@ -44,44 +44,31 @@ class TestSidebarPresets:
             values = sidebar.saved_recipe_dropdown.cget("values")
             assert isinstance(values, (tuple, list))
 
-    @patch("tkinter.Tk")
-    def test_sidebar_preset_selection_calls_controller(self, mock_tk, mock_controller, tmp_path):
-        """Test that selecting a preset calls the controller's on_preset_selected method."""
-        # Mock Tkinter components
-        mock_root = Mock()
-        mock_tk.return_value = mock_root
-        mock_root.withdraw = Mock()
-        mock_root.destroy = Mock()
+    def test_sidebar_preset_selection_calls_controller(self, mock_controller, tmp_path, tk_root):
+        """Selecting a recipe calls the controller and reports it as selected, not applied."""
+        config_manager = Mock()
+        config_manager.presets_dir = tmp_path
+        config_manager.list_presets.return_value = ["preset1", "preset2"]
+        config_manager.load_preset.return_value = {
+            "txt2img": {"model": "sdxl", "sampler_name": "Euler", "width": 768, "height": 768}
+        }
+        sidebar = SidebarPanelV2(
+            tk_root,
+            controller=mock_controller,
+            prompt_pack_adapter=Mock(load_summaries=Mock(return_value=[])),
+            config_manager=config_manager,
+            pack_list_manager=Mock(
+                get_list_names=Mock(return_value=[]), get_list=Mock(return_value=None)
+            ),
+        )
+        try:
+            sidebar.saved_recipe_var.set("preset1")
 
-        # Mock the dropdown
-        mock_dropdown = Mock()
-        mock_dropdown.cget.return_value = ("preset1", "preset2")
-
-        # Mock the config source label
-        mock_label = Mock()
-
-        with (
-            patch.object(SidebarPanelV2, "__init__", return_value=None),
-            patch.object(SidebarPanelV2, "grid_columnconfigure", return_value=None),
-        ):
-            sidebar = SidebarPanelV2.__new__(SidebarPanelV2)
-            sidebar.controller = mock_controller
-            sidebar.saved_recipe_dropdown = mock_dropdown
-            sidebar.saved_recipe_var = Mock()
-            sidebar.saved_recipe_var.get.return_value = "preset1"
-            sidebar.config_source_label = mock_label
-            sidebar.config_manager = Mock()
-            sidebar.config_manager.presets_dir = tmp_path
-            sidebar.config_manager.load_preset.return_value = {
-                "txt2img": {"model": "sdxl", "sampler_name": "Euler", "width": 768, "height": 768}
-            }
-
-            # Simulate selecting a preset
             sidebar._on_saved_recipe_selected()
 
-            # Check that controller was called
             assert mock_controller.selected_recipe == "preset1"
-            # Check that label was updated
-            mock_label.config.assert_called()
-            rendered = mock_label.config.call_args.kwargs["text"]
-            assert rendered.startswith("Saved Recipe: preset1")
+            rendered = sidebar.config_source_label.cget("text")
+            assert "Recipe 'preset1' selected, not applied" in rendered
+            assert "sdxl | 768x768 | Euler" in rendered
+        finally:
+            sidebar.destroy()
