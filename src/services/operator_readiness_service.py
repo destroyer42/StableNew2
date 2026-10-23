@@ -11,6 +11,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
+from src.ai_assist.status import (
+    STATE_INTEGRITY_FAILED,
+    STATE_READY,
+    AiAssistStatus,
+)
+from src.ai_assist.status import (
+    read_status as read_ai_assist_status,
+)
 from src.pipeline.video import resolve_ffmpeg_executable
 from src.promptpacks.paths import resolve_prompt_pack_dir
 from src.queue.job_history_store import INTERRUPTED_RESTART_ACTION_REQUIRED
@@ -183,8 +191,10 @@ class OperatorReadinessService:
         webui_outage_provider: Callable[[], dict[str, Any] | None] | None = None,
         gpu_loss_provider: Callable[[], dict[str, Any] | None] | None = None,
         comfy_command_provider: Callable[[], tuple[str, ...]] | None = None,
+        ai_assist_status_provider: Callable[[], AiAssistStatus] | None = None,
     ) -> None:
         self._repository = repository
+        self._ai_assist_status_provider = ai_assist_status_provider or read_ai_assist_status
         self._webui_outage_provider = webui_outage_provider
         self._gpu_loss_provider = gpu_loss_provider
         self._comfy_command_provider = comfy_command_provider or configured_comfy_command
@@ -230,6 +240,7 @@ class OperatorReadinessService:
                 self._svd_source_record(preflight),
                 self._ffmpeg_record(),
                 self._comfy_video_record(),
+                self._ai_assist_record(),
                 self._recovery_record(),
             ),
         )
@@ -555,6 +566,40 @@ class OperatorReadinessService:
             blocking_reasons=(),
             operator_actions=(),
             source="comfy launch configuration",
+        )
+
+    def _ai_assist_record(self) -> OperatorReadinessRecord:
+        """Static view of the optional Offline AI Assist installation. Never hashes, spawns or runs anything."""
+
+        try:
+            status = self._ai_assist_status_provider()
+        except Exception as exc:  # noqa: BLE001 - a broken optional feature must not break the readiness window
+            return _unknown_record(
+                "ai_assist",
+                "Offline AI Assist",
+                f"The Offline AI Assist status could not be read ({type(exc).__name__}).",
+                "AI assist installation status",
+            )
+        if status.state == STATE_READY:
+            state = OperatorReadinessState.READY
+        elif status.state == STATE_INTEGRITY_FAILED:
+            state = OperatorReadinessState.ACTION_REQUIRED
+        else:
+            state = OperatorReadinessState.OPTIONAL
+        egress = (
+            "Outbound firewall restriction: attested by the operator, not verified by StableNew."
+            if status.egress == "attested"
+            else "Outbound firewall restriction: not attested."
+        )
+        last = f" Last request outcome: {status.last_outcome}." if status.last_outcome else ""
+        return OperatorReadinessRecord(
+            id="ai_assist",
+            display_name="Offline AI Assist",
+            state=state,
+            summary=f"{status.summary} {egress}{last}",
+            blocking_reasons=status.blockers if state is OperatorReadinessState.ACTION_REQUIRED else (),
+            operator_actions=status.actions,
+            source="AI assist installation status",
         )
 
     def _recovery_record(self) -> OperatorReadinessRecord:

@@ -279,6 +279,10 @@ requires an explicitly approved architecture exception.
   `workspace_paths`, `ConfigManager` defaults, PromptPack/output env, and the
   cwd, drops test-mode env switches, and a `UserDataGuard` fails the run if
   protected data or tracked Git files change.
+- A journey also redirects Offline AI Assist's per-user directory (`STABLENEW_AI_DIR`) to a disposable
+  `OperatorWorkspace.ai_assist_dir` and restores the previous value. Under the spy, exactly two checked-in
+  manifests (`config/managed_ai_runtime.json`, `config/ai_model_registry.json`) may be *read*; every other read,
+  every write (including to those two) and every listing under a protected directory is still a violation.
 - Reads and directory listings of the operator's real `output/` tree are isolation
   violations (not only writes); default scan/diagnostic roots must come from
   `workspace_paths`, never a repo-root constant. Drive the app under `mainloop`
