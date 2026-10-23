@@ -68,6 +68,11 @@ _NUMERIC_DEFAULTS = {
     "guidance_start": DEFAULT_GUIDANCE_START,
     "guidance_end": DEFAULT_GUIDANCE_END,
 }
+#: Wrapped help text follows the panel width between these bounds, so it never forces horizontal scrolling in a narrow
+#: window and stays readable in a wide one.
+_WRAP_MIN = 200
+_WRAP_MAX = 520
+_WRAP_MARGIN = 40
 _LEGACY_SWITCH_WARNING = (
     "This slot uses the legacy OpenPose reference. Ordered units cannot coexist with it in one slot.\n\n"
     "Continuing removes the legacy OpenPose reference and its settings from this slot's pack (save the pack to keep "
@@ -135,7 +140,7 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
     # ------------------------------------------------------------------ construction
 
     def _label(self, parent: tk.Misc, **kwargs: Any) -> ttk.Label:
-        label = ttk.Label(parent, justify="left", wraplength=520, **kwargs)
+        label = ttk.Label(parent, justify="left", wraplength=_WRAP_MAX, **kwargs)
         self._wrap_labels.append(label)
         return label
 
@@ -337,8 +342,10 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
             row=9, column=0, sticky="ew", pady=(4, 0)
         )
 
-    def _on_resize(self, event: tk.Event[Any]) -> None:
-        wrap = max(200, int(event.width) - 40)
+    def _on_resize(self, event: Any) -> None:
+        if getattr(event, "widget", self) is not self:
+            return  # only the panel's own geometry sets the wrap
+        wrap = min(_WRAP_MAX, max(_WRAP_MIN, int(event.width) - _WRAP_MARGIN))
         for label in self._wrap_labels:
             label.configure(wraplength=wrap)
 
@@ -466,7 +473,7 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
         unit = self._selected_unit()
         if unit is None:
             return
-        name = recommended_model(str(unit.get("modality")), self._models)
+        name = recommended_model(str(unit.get("modality")), self._visible_models())
         if name is not None:
             self.variables["model"].set(name)
             self._edit()
@@ -644,13 +651,18 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
             key=lambda choice: (not choice.compatible, choice.name.lower()),
         )
         self.model_combo.configure(values=[choice.name for choice in ranked])
-        recommended = recommended_model(modality, self._models)
+        recommended = recommended_model(modality, self._visible_models())
         self.use_recommended_button.configure(
             state="normal"
             if recommended is not None and recommended != selected.get("model")
             else "disabled"
         )
         self.model_hint_var.set(self._model_hint(modality, recommended))
+
+    def _visible_models(self) -> list[Any]:
+        """The installed inventory the content policy lets the operator see; recommendations are drawn only from it."""
+
+        return [option for option in self._models if self._visible(option.name)]
 
     def _library_help(self) -> str:
         if self._scanning:
@@ -669,16 +681,17 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
         label = modality_label(modality)
         if not self._loaded:
             return "Refresh to list the installed ControlNet models and check them against this purpose."
+        if self._listing.error:
+            return (
+                f"Resource refresh failed ({self._listing.error}); installed ControlNet models could not be checked. "
+                "This does not mean none are installed. Your saved choice is unchanged; refresh to try again."
+            )
         if recommended is not None:
             return (
                 f"Recommended: {self._shown(recommended)} (positive SDXL structure evidence and documented for "
                 f"{label}). Choosing it is up to you; saved choices are never replaced."
             )
-        fits = [
-            c.name
-            for c in model_choices(modality, self._models)
-            if c.compatible and self._visible(c.name)
-        ]
+        fits = [c.name for c in model_choices(modality, self._visible_models()) if c.compatible]
         if fits:
             return f"Installed models documented for {label}: {', '.join(fits)}. Choose one."
         return (

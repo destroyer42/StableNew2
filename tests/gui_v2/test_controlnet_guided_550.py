@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -724,6 +725,54 @@ def test_every_control_is_reachable_inside_the_scrolling_conditioning_tab(tab):
     for key in ("guidance_start", "guidance_end", "control_mode", "resize_mode"):
         assert picker.controls[key].winfo_manager() == "grid"
     # Wrapped text follows the available width, so a narrow window never needs horizontal scrolling.
-    picker.event_generate("<Configure>", width=300)
-    picker.update_idletasks()
-    assert all(int(label.cget("wraplength")) <= 520 for label in picker._wrap_labels)
+    picker._on_resize(SimpleNamespace(widget=picker, width=300))
+    assert {int(label.cget("wraplength")) for label in picker._wrap_labels} == {260}
+
+
+@pytest.mark.parametrize(("width", "expected"), [(100, 200), (300, 260), (560, 520), (2000, 520)])
+def test_wrapping_is_floored_for_narrow_windows_and_capped_for_wide_ones(panel, width, expected):
+    # The real Configure width differs between Windows Tk and Linux/Xvfb, so the rule is exercised directly.
+    panel._on_resize(SimpleNamespace(widget=panel, width=width))
+    assert {int(label.cget("wraplength")) for label in panel._wrap_labels} == {expected}
+    panel._on_resize(
+        SimpleNamespace(widget=panel.browser, width=9999)
+    )  # a child's geometry is not the panel's
+    assert {int(label.cget("wraplength")) for label in panel._wrap_labels} == {expected}
+
+
+def test_a_hidden_compatible_model_is_never_recommended_or_assigned(panel, changes, monkeypatch):
+    raw = declaration("depth")
+    raw["units"][0]["model"] = ""
+    panel.set_declaration(raw)
+    _with_models(panel, _evidence(DEPTH_MODEL))  # the only compatible candidate
+    assert panel.model_hint_var.get().startswith("Recommended: " + DEPTH_MODEL)
+    monkeypatch.setattr(
+        panel, "_visible", lambda name: name != DEPTH_MODEL
+    )  # the content policy hides it
+    panel._render()
+    assert str(panel.use_recommended_button.cget("state")) == "disabled"
+    hint = panel.model_hint_var.get()
+    assert not hint.startswith("Recommended") and "Installed models documented" not in hint
+    assert DEPTH_MODEL not in list(panel.model_combo.cget("values"))
+    panel.use_recommended_model()  # even a direct call cannot assign it
+    assert _units(panel)[0]["model"] == "" and changes == []
+    assert [m.name for m in panel._models] == [DEPTH_MODEL]  # the inventory itself is intact
+    monkeypatch.undo()
+    panel._render()
+    assert str(panel.use_recommended_button.cget("state")) == "normal"
+
+
+def test_a_failed_refresh_is_not_reported_as_no_compatible_models(panel, changes):
+    raw = declaration("depth")
+    panel.set_declaration(raw)
+    panel._listing = LibraryListing(error="disk offline")
+    panel._models = []
+    panel._loaded = True
+    panel._render()
+    hint = panel.model_hint_var.get()
+    assert "refresh failed" in hint and "disk offline" in hint and "could not be checked" in hint
+    assert (
+        "No installed ControlNet weight" not in hint and "Add one to models/ControlNet" not in hint
+    )
+    assert str(panel.use_recommended_button.cget("state")) == "disabled"
+    assert panel.get_declaration() == raw and changes == []
