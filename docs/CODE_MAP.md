@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-487 of 641 modules have a docstring.
+488 of 642 modules have a docstring.
 
 ## src/
 
@@ -273,6 +273,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Toolkit-agnostic view contracts for GUI surfaces
 - `batch_operations_contract.py`: Toolkit-neutral session for the Queue/History "Batches" view (PR-BATCH-OPS-201)
+- `config_source_contract.py`: Truthful wording for the Pipeline's settings sources and empty states (PR-GUI-UX-500)
 - `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
 - `form_section_contract.py`: Form section contract independent of widget framework
 - `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
