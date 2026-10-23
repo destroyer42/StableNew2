@@ -63,6 +63,9 @@ def test_refiner_options_shown_when_enabled() -> None:
         card = AdvancedTxt2ImgStageCardV2(root, controller=None)
         card.pack(fill="both", expand=True)
         root.update_idletasks()
+        # PR-GUI-UX-530: Refiner and Hires fix live in a section that starts collapsed.
+        card.advanced_generation_section.set_expanded(True)
+        root.update_idletasks()
 
         # Enable refiner
         card.refiner_enabled_var.set(True)
@@ -89,6 +92,9 @@ def test_refiner_visibility_toggles_with_checkbox() -> None:
 
         card = AdvancedTxt2ImgStageCardV2(root, controller=None)
         card.pack(fill="both", expand=True)
+        root.update_idletasks()
+        # PR-GUI-UX-530: Refiner and Hires fix live in a section that starts collapsed.
+        card.advanced_generation_section.set_expanded(True)
         root.update_idletasks()
 
         # Start disabled
@@ -159,6 +165,9 @@ def test_hires_options_shown_when_enabled() -> None:
 
         card = AdvancedTxt2ImgStageCardV2(root, controller=None)
         card.pack(fill="both", expand=True)
+        root.update_idletasks()
+        # PR-GUI-UX-530: Refiner and Hires fix live in a section that starts collapsed.
+        card.advanced_generation_section.set_expanded(True)
         root.update_idletasks()
 
         # Enable hires
