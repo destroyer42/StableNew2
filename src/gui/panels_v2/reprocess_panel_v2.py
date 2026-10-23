@@ -7,6 +7,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, MUTED_LABEL_STYLE
+from src.gui.view_contracts.pipeline_composer_contract import REVIEW_HANDOFF_MISSING
 
 
 class ReprocessPanelV2(ttk.Frame):
@@ -38,7 +39,8 @@ class ReprocessPanelV2(ttk.Frame):
             self,
             text="This tab makes new images from PromptPacks. To work on images you already have, "
             "use Review (select images, inspect embedded metadata, edit prompts, submit queue-backed reprocess "
-            "jobs) or Photo Optimize (enhance photos).",
+            "jobs) or Photo Optimize (enhance photos). Opening Review changes no generation settings and "
+            "queues nothing.",
             style=BODY_LABEL_STYLE,
             wraplength=560,
             justify="left",
@@ -65,7 +67,7 @@ class ReprocessPanelV2(ttk.Frame):
 
         self.helper_label = ttk.Label(
             self,
-            text="Tip: Review supports both selected-image and folder-based reprocess flows.",
+            text="Review supports both selected-image and folder-based reprocess flows.",
             style=MUTED_LABEL_STYLE,
             wraplength=560,
             justify="left",
@@ -111,6 +113,13 @@ class ReprocessPanelV2(ttk.Frame):
 
     def _on_open_review(self) -> None:
         opened = self._activate_review_tab()
+        self.helper_label.configure(
+            text=(
+                "Review supports both selected-image and folder-based reprocess flows."
+                if opened
+                else REVIEW_HANDOFF_MISSING
+            )
+        )
         if not opened and self.controller is not None:
             logger = getattr(self.controller, "_append_log", None)
             if callable(logger):

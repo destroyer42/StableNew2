@@ -23,6 +23,22 @@ from src.gui.theme_v2 import (
 )
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts import config_source_contract as source_contract
+from src.gui.view_contracts.pipeline_composer_contract import (
+    COMPOSER_INTRO,
+    GENERATE_STAGE,
+    GROUP_ADVANCED,
+    GROUP_GENERATE,
+    GROUP_IMPROVE,
+    IMPROVE_STAGES,
+    LEGACY_STAGES,
+    REVIEW_HANDOFF_TITLE,
+    STAGE_HELP,
+    STAGE_LABELS,
+    legacy_stage_notice,
+    legacy_stage_status,
+)
+from src.gui.view_contracts.workspace_density_contract import wrap_width
+from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.state.workspace_paths import workspace_paths
@@ -125,12 +141,7 @@ class SidebarPanelV2(ttk.Frame):
     """Container for saved recipes, packs, base generation, and pipeline controls."""
 
     _STAGE_ORDER = get_pipeline_stage_order() or ["txt2img", "img2img", "adetailer", "upscale"]
-    _STAGE_LABELS = {
-        "txt2img": "Enable txt2img",
-        "img2img": "Enable img2img",
-        "adetailer": "Enable ADetailer",
-        "upscale": "Enable upscale",
-    }
+    _STAGE_LABELS = STAGE_LABELS
     CARD_BASE_WIDTH = 240
     CARD_WIDTH = 80
     _MAX_PREVIEW_CHARS = 4000
@@ -340,7 +351,7 @@ class SidebarPanelV2(ttk.Frame):
 
         self.reprocess_card = _SidebarCard(
             self,
-            title="Reprocess Images",
+            title=REVIEW_HANDOFF_TITLE,
             build_child=_build_reprocess_panel,
             collapsible=True,
         )
@@ -1296,29 +1307,112 @@ class SidebarPanelV2(ttk.Frame):
             self._populate_saved_recipe_combo()
 
     def _build_stages_section(self, parent: ttk.Frame) -> ttk.Frame:
-        """Build stages section with horizontal 2-column layout."""
+        """Task-oriented stage composer (PR-GUI-UX-530).
+
+        Generate (txt2img), Improve Result (ADetailer, upscale) and a collapsed Advanced and legacy section
+        (img2img). Every checkbox is bound to the same ``stage_states`` flag as before, so grouping and
+        collapsing never change which stages are enabled.
+        """
         frame = ttk.Frame(parent)
-        for idx, stage in enumerate(self._STAGE_ORDER):
-            var = self.stage_states.get(stage)
-            if var is None:
-                continue
-            label = self._STAGE_LABELS.get(stage, stage.title())
+        frame.columnconfigure(0, weight=1)
+        self.stage_checkbuttons: dict[str, ttk.Checkbutton] = {}
+        self._stage_wrap_labels: list[ttk.Label] = []
 
-            def make_toggle_command(stage_name: str) -> Callable[[], None]:
-                return lambda: self._on_stage_toggle(stage_name)
+        intro = ttk.Label(
+            frame, text=COMPOSER_INTRO, style=MUTED_LABEL_STYLE, wraplength=self.CARD_BASE_WIDTH
+        )
+        intro.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self._stage_wrap_labels.append(intro)
 
-            cb = ttk.Checkbutton(
-                frame,
-                text=label,
-                variable=var,
-                command=make_toggle_command(stage),
-                style="Dark.TCheckbutton",
+        row = 1
+        ttk.Label(frame, text=GROUP_GENERATE, style=HEADING_LABEL_STYLE).grid(
+            row=row, column=0, sticky="w"
+        )
+        row += 1
+        row = self._add_stage_checkbutton(frame, GENERATE_STAGE, row)
+
+        ttk.Label(frame, text=GROUP_IMPROVE, style=HEADING_LABEL_STYLE).grid(
+            row=row, column=0, sticky="w", pady=(8, 0)
+        )
+        row += 1
+        for stage in self._STAGE_ORDER:
+            if stage in IMPROVE_STAGES:
+                row = self._add_stage_checkbutton(frame, stage, row)
+
+        self.legacy_stage_section = DisclosureSection(
+            frame, title=GROUP_ADVANCED, expanded=False, body_style=CARD_FRAME_STYLE
+        )
+        self.legacy_stage_section.grid(row=row, column=0, sticky="ew", pady=(8, 0))
+        self.legacy_stage_section.body.columnconfigure(0, weight=1)
+        self.legacy_stage_notice_label = ttk.Label(
+            self.legacy_stage_section.body,
+            text="",
+            style=MUTED_LABEL_STYLE,
+            wraplength=self.CARD_BASE_WIDTH,
+        )
+        self.legacy_stage_notice_label.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        self._stage_wrap_labels.append(self.legacy_stage_notice_label)
+        legacy_row = 1
+        for stage in LEGACY_STAGES:
+            legacy_row = self._add_stage_checkbutton(
+                self.legacy_stage_section.body, stage, legacy_row
             )
-            # 2-column layout: row = idx // 2, column = idx % 2
-            row = idx // 2
-            col = idx % 2
-            cb.grid(row=row, column=col, sticky="w", pady=2, padx=(0, 12))
+        for stage in LEGACY_STAGES:
+            var = self.stage_states.get(stage)
+            if var is not None:
+                var.trace_add("write", lambda *_: self._refresh_legacy_stage_summary())
+        self._refresh_legacy_stage_summary()
+
+        frame.bind("<Configure>", self._on_stage_section_configure, add="+")
         return frame
+
+    def _add_stage_checkbutton(self, frame: ttk.Frame, stage: str, row: int) -> int:
+        var = self.stage_states.get(stage)
+        if var is None:
+            return row
+
+        def make_toggle_command(stage_name: str) -> Callable[[], None]:
+            return lambda: self._on_stage_toggle(stage_name)
+
+        cb = ttk.Checkbutton(
+            frame,
+            text=self._STAGE_LABELS.get(stage, stage.title()),
+            variable=var,
+            command=make_toggle_command(stage),
+            style="Dark.TCheckbutton",
+        )
+        cb.grid(row=row, column=0, sticky="w", pady=(2, 0))
+        self.stage_checkbuttons[stage] = cb
+        help_text = STAGE_HELP.get(stage, "")
+        if help_text:
+            help_label = ttk.Label(
+                frame,
+                text=help_text,
+                style=MUTED_LABEL_STYLE,
+                wraplength=self.CARD_BASE_WIDTH,
+                justify="left",
+            )
+            help_label.grid(row=row + 1, column=0, sticky="ew", padx=(22, 0))
+            self._stage_wrap_labels.append(help_label)
+            return row + 2
+        return row + 1
+
+    def _on_stage_section_configure(self, event: tk.Event) -> None:
+        width = wrap_width(int(getattr(event, "width", 0) or 0), margin=32, maximum=420)
+        for label in self._stage_wrap_labels:
+            try:
+                label.configure(wraplength=width)
+            except tk.TclError:
+                continue
+
+    def _refresh_legacy_stage_summary(self) -> None:
+        section = getattr(self, "legacy_stage_section", None)
+        if section is None:
+            return
+        enabled = self.get_enabled_stages()
+        status, active = legacy_stage_status(enabled)
+        section.set_status(status, active=active)
+        self.legacy_stage_notice_label.configure(text=legacy_stage_notice(enabled))
 
     def _on_stage_toggle(self, stage: str) -> None:
         var = self.stage_states.get(stage)
@@ -1412,10 +1506,8 @@ class SidebarPanelV2(ttk.Frame):
         # Stage toggles section
         stage_section = ttk.Frame(frame)
         stage_section.pack(fill="x", pady=(0, 8))
-        header = ttk.Label(stage_section, text="Stages", style=HEADING_LABEL_STYLE)
-        header.pack(anchor="w")
         stages_frame = self._build_stages_section(stage_section)
-        stages_frame.pack(fill="x", pady=(4, 0))
+        stages_frame.pack(fill="x")
         # PR-GUI-213: The archived PipelineConfigPanel is no longer part of the
         # active GUI path. Stage toggles and sidebar-driven config are the only
         # supported live surface.

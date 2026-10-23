@@ -12,12 +12,14 @@ from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import LabeledSlider, SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
-from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
+from src.gui.view_contracts.pipeline_composer_contract import advanced_generation_status
 from src.gui.view_contracts.pipeline_layout_contract import (
     get_single_pair_form_column_specs,
     get_stage_card_min_width,
     get_two_pair_form_column_specs,
 )
+from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.utils.webui_resource_names import normalize_vae_config_value, vae_names_match
 
 
@@ -376,9 +378,26 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.refiner_model_var.trace_add("write", lambda *_: self._on_refiner_model_changed())
         self.refiner_switch_var.trace_add("write", lambda *_: self._on_refiner_switch_changed())
 
+        # PR-GUI-UX-530: Refiner and Hires fix are advanced txt2img options. They live in one collapsed
+        # section so they do not dominate normal generation. Collapsing only unmaps the section: the
+        # variables, stored values and compiled settings are unchanged, and the collapsed header says
+        # which of the two are ON.
+        self.advanced_generation_section = DisclosureSection(
+            parent,
+            title="Advanced: Refiner and Hires fix",
+            expanded=False,
+            body_style=CARD_FRAME_STYLE,
+        )
+        self.advanced_generation_section.grid(row=3, column=0, sticky="ew", pady=(8, 4))
+        self.advanced_generation_section.body.columnconfigure(0, weight=1)
+        for var in (self.refiner_enabled_var, self.hires_enabled_var):
+            var.trace_add("write", lambda *_: self._refresh_advanced_generation_summary())
+
         # --- Refiner Frame with collapsible options (PR-GUI-E) ---
-        refiner_frame = ttk.LabelFrame(parent, text="SDXL Refiner", style="Dark.TLabelframe")
-        refiner_frame.grid(row=3, column=0, sticky="ew", pady=(8, 4))
+        refiner_frame = ttk.LabelFrame(
+            self.advanced_generation_section.body, text="SDXL Refiner", style="Dark.TLabelframe"
+        )
+        refiner_frame.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         configure_grid_columns(refiner_frame, get_single_pair_form_column_specs())
         self._refiner_frame = refiner_frame
 
@@ -446,8 +465,10 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         )
 
         # --- Hires Frame with collapsible options (PR-GUI-E) ---
-        hires_frame = ttk.LabelFrame(parent, text="Hires fix", style="Dark.TLabelframe")
-        hires_frame.grid(row=4, column=0, sticky="ew", pady=(0, 4))
+        hires_frame = ttk.LabelFrame(
+            self.advanced_generation_section.body, text="Hires fix", style="Dark.TLabelframe"
+        )
+        hires_frame.grid(row=1, column=0, sticky="ew", pady=(0, 4))
         configure_grid_columns(hires_frame, get_single_pair_form_column_specs())
         self._hires_frame = hires_frame
 
@@ -618,6 +639,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # PR-GUI-E: Set initial visibility (in case no config is loaded)
         self._update_refiner_visibility()
         self._update_hires_visibility()
+        self._refresh_advanced_generation_summary()
 
     def set_on_change(self, callback: Any) -> None:
         self._on_change = callback
@@ -731,6 +753,16 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             # User selected a specific model
             model_name = self._model_name_map.get(selected, selected)
             self._update_current_config(hires_model_override=model_name)
+
+    def _refresh_advanced_generation_summary(self) -> None:
+        section = getattr(self, "advanced_generation_section", None)
+        if section is None:
+            return
+        status, active = advanced_generation_status(
+            refiner_enabled=bool(self.refiner_enabled_var.get()),
+            hires_enabled=bool(self.hires_enabled_var.get()),
+        )
+        section.set_status(status, active=active)
 
     # PR-GUI-E: Visibility toggle helpers
     def _update_refiner_visibility(self) -> None:
