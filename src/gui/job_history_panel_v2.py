@@ -19,6 +19,7 @@ from src.controller.pipeline_controller_services.history_handoff_service import 
     HistoryHandoffService,
 )
 from src.gui import theme_v2 as theme_mod
+from src.gui.view_contracts.history_artifact_contract import resolve_recorded_artifact
 from src.gui.view_contracts.history_sequence_contract import (
     ACTION_REPLAY,
     ACTION_RESUME,
@@ -26,7 +27,9 @@ from src.gui.view_contracts.history_sequence_contract import (
 )
 from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
+from src.gui.widgets.video_preview_widget_v2 import VideoPreviewWidget
 from src.pipeline.artifact_contract import extract_artifact_paths
+from src.utils.os_shell import open_file, reveal_in_file_manager
 from src.queue.job_history_store import (
     INTERRUPTED_RESTART_ACTION_REQUIRED,
     JobHistoryEntry,
@@ -251,9 +254,31 @@ class JobHistoryPanelV2(ttk.Frame):
         self.history_tree.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.artifact_frame = ttk.LabelFrame(tree_frame, text="Recorded artifact")
+        self.artifact_frame.columnconfigure(0, weight=1)
         self.artifact_thumbnail = ThumbnailWidget(self.artifact_frame, width=144, height=144)
-        self.artifact_thumbnail.pack()
+        self.artifact_thumbnail.grid(row=0, column=0, sticky="n")
+        # Decode video only on demand; reuse the existing bounded, cancellable player.
+        self.artifact_video_preview: VideoPreviewWidget | None = None
+        self.artifact_actions = ttk.Frame(self.artifact_frame)
+        self.artifact_actions.grid(row=1, column=0, sticky="ew")
+        self.artifact_open_btn = ttk.Button(
+            self.artifact_actions, text="Open", command=self._on_open_artifact, state=tk.DISABLED
+        )
+        self.artifact_open_btn.pack(side=tk.LEFT, padx=(0, 4))
+        self.artifact_reveal_btn = ttk.Button(
+            self.artifact_actions, text="Reveal", command=self._on_reveal_artifact, state=tk.DISABLED
+        )
+        self.artifact_reveal_btn.pack(side=tk.LEFT)
+        self.artifact_status_var = tk.StringVar(value="")
+        ttk.Label(
+            self.artifact_frame,
+            textvariable=self.artifact_status_var,
+            style=theme_mod.MUTED_LABEL_STYLE,
+            wraplength=170,
+            justify="left",
+        ).grid(row=2, column=0, sticky="ew", pady=(4, 0))
         self._shown_artifact_path: str | None = None
+        self._shown_artifact_kind: str = "none"
         tree_frame.grid_rowconfigure(0, weight=1)
         tree_frame.grid_columnconfigure(0, weight=1)
         self.history_tree.bind("<<TreeviewSelect>>", self._on_select)
@@ -672,11 +697,12 @@ class JobHistoryPanelV2(ttk.Frame):
         return callable(getattr(self.controller, name, None))
 
     def _refresh_selected_artifact(self, entry: JobHistoryEntry | None = None) -> None:
+        """Show the recorded image or play the recorded clip, never the video poster PNG."""
         if not hasattr(self, "artifact_thumbnail"):
             return
-        entry = entry or self._selected_entry()
-        path = None
-        if entry is not None and self.show_artifact_var.get():
+        entry = entry if isinstance(entry, JobHistoryEntry) else self._selected_entry()
+        visible = bool(entry and self.show_artifact_var.get())
+        if visible:
             state = self.app_state or getattr(self.controller, "app_state", None)
             mode = getattr(state, "content_visibility_mode", "nsfw")
             njr = None
@@ -690,24 +716,58 @@ class JobHistoryPanelV2(ttk.Frame):
                 "positive_prompt": njr.positive_prompt if njr else "",
                 "negative_prompt": njr.negative_prompt if njr else "",
             }
-            if (mode != "sfw" or njr is not None) and ContentVisibilityResolver(mode).is_visible(
-                subject
-            ):
-                thumbnail = self._extract_primary_artifact(entry).get("thumbnail_path")
-                path = (
-                    str(thumbnail)
-                    if self._is_existing_file(thumbnail, _IMAGE_OUTPUT_SUFFIXES)
-                    else self._usable_image_artifact_path(entry)
-                )
-        if path:
-            self.artifact_frame.grid(row=0, column=2, sticky="n", padx=(8, 0))
-            if path != self._shown_artifact_path:
-                self.artifact_thumbnail.set_image_from_path(path)
-                self._shown_artifact_path = path
-        else:
-            self.artifact_thumbnail.clear()
+            visible = (mode != "sfw" or njr is not None) and ContentVisibilityResolver(
+                mode
+            ).is_visible(subject)
+
+        projection = resolve_recorded_artifact(entry.result) if visible and entry else None
+        kind = projection.kind if projection else "none"
+        path = projection.path if projection else None
+        if not visible:
             self.artifact_frame.grid_remove()
-            self._shown_artifact_path = None
+            self.artifact_status_var.set("")
+        else:
+            self.artifact_frame.grid(row=0, column=2, sticky="n", padx=(8, 0))
+            self.artifact_status_var.set(projection.message if projection else "")
+        state = tk.NORMAL if path else tk.DISABLED
+        self.artifact_open_btn.configure(state=state)
+        self.artifact_reveal_btn.configure(state=state)
+
+        if kind == "video" and path:
+            self.artifact_thumbnail.grid_remove()
+            if self.artifact_video_preview is None:
+                self.artifact_video_preview = VideoPreviewWidget(self.artifact_frame, edge=144)
+            self.artifact_video_preview.grid(row=0, column=0, sticky="n")
+            if path != self._shown_artifact_path or kind != self._shown_artifact_kind:
+                self.artifact_video_preview.show(path)
+        else:
+            if self.artifact_video_preview is not None:
+                self.artifact_video_preview.stop()
+                self.artifact_video_preview.grid_remove()
+            if kind == "image" and path:
+                self.artifact_thumbnail.grid(row=0, column=0, sticky="n")
+                if path != self._shown_artifact_path or kind != self._shown_artifact_kind:
+                    self.artifact_thumbnail.set_image_from_path(path)
+            else:
+                self.artifact_thumbnail.clear()
+                self.artifact_thumbnail.grid_remove()
+        self._shown_artifact_kind = kind if visible else "none"
+        self._shown_artifact_path = path if visible else None
+
+    def _on_open_artifact(self) -> None:
+        """Open the selected recorded file with the system viewer (not the thumbnail)."""
+        path = self._shown_artifact_path
+        if not path:
+            return
+        result = open_file(path)
+        self.artifact_status_var.set("" if result.ok else result.message)
+
+    def _on_reveal_artifact(self) -> None:
+        path = self._shown_artifact_path
+        if not path:
+            return
+        result = reveal_in_file_manager(path)
+        self.artifact_status_var.set("" if result.ok else result.message)
 
     @staticmethod
     def _is_existing_file(path_value: object, suffixes: set[str]) -> bool:
