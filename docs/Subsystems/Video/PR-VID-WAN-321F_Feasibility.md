@@ -21,7 +21,8 @@ investigation are reused, including upstream revisions, LFS checksums, license d
 No upstream research was repeated. Current local file checks are fresh evidence.
 
 The owner's final restriction requires separate authorization for downloads, generation and runtime restart.
-Abort thresholds/time limits must be accepted and the contradictory retry wording resolved before execution.
+Memory abort thresholds and the whole-session limit must be accepted before execution. The owner accepted a
+300-second per-attempt limit and three attempts total, including at most one retry of a positively resolved failure.
 The CLI in this package only writes an offline freeze; it has no physical execution option. The physical adapter,
 exclusive session claim, sampling/interrupt loop, output verification and event-log collection remain to be wired
 and tested after those decisions. The tested controls are primitives, not an end-to-end physical harness.
@@ -33,7 +34,7 @@ this package is isolated operator qualification tooling, following the retained 
 ## Frozen candidate
 
 `tools/qualification/wan321f/plan.py::frozen_plan()` is the machine-readable proposal. Its canonical JSON SHA-256:
-`c795fa82ffc1309a3df57df6662b34ad9b3164af526e76cf4a35ae7f7f85eb97`.
+`7b47d278e1519574330a3d912009fb14dba54d3090b5788ee6164c481562b976`.
 Changing any asset, path, prompt, seed, graph, runtime command or safety proposal changes that digest and requires
 acceptance of the new plan before physical execution.
 
@@ -94,7 +95,8 @@ three uncompressed RGB frame sets plus a 1 GiB evidence/log allowance. Capacity 
 This excludes temporary download copies, which need their own staging allowance/authorization. Recheck before execution.
 Disk size does not establish peak RAM, commit or VRAM residency.
 
-Historical `vid160c` / `vid184r` safety limits are proposed, **not accepted for this package**:
+The owner accepted the **300-second per-attempt limit**. Historical `vid160c` / `vid184r` memory limits and
+the whole-session ceiling below remain proposals, **not accepted for this package**:
 
 | Signal | Proposed stop |
 |---|---|
@@ -102,7 +104,8 @@ Historical `vid160c` / `vid184r` safety limits are proposed, **not accepted for 
 | Commit headroom | <1 GiB for 2 consecutive samples |
 | Available physical RAM | <0.25 GiB for 2 consecutive samples |
 | Sampling | Every 0.5 s; missing/invalid telemetry or gap >2 s stops immediately |
-| Per-attempt / whole session | 1200 s / 3600 s; session time includes startup and teardown |
+| Per attempt (owner accepted) | 300 s |
+| Whole session (proposal) | 3600 s, including startup and teardown |
 | GPU status, device-loss log marker, CUDA OOM/allocation failure | Immediate stop, end entire session, preserve evidence |
 
 Reuse `vid160c.win_memory.read_system_commit` and `read_process_memory` for system and **owned PID** memory in GiB.
@@ -112,10 +115,10 @@ omit samples; the new guard requires a complete, timestamped sample and stops on
 no speculative A14B readiness floor is borrowed from TI2V-5B. Record working set and private commit without inventing
 a process-memory floor. Freeze any additional owner-required limit before execution.
 
-Budget currently frozen as a **proposal**: at most three dispatch identities, no 720p or fallback, automatic-retry
-count unresolved. No automatic retry is implemented. An ambiguous dispatch consumes its identity and ends the
-session; `prompt_id` is correlation, never an idempotency key. A named decision must clarify whether one retry is
-inside the three-attempt ceiling and what positively resolved failure permits it. No OOM/device-loss retry.
+Owner-accepted budget: **three total attempts, including at most one retry** of a positively resolved failure;
+no 720p or fallback. This is permission for the budget, not a new execution/download authorization. No automatic
+retry is implemented. An ambiguous dispatch consumes its identity and ends the session; `prompt_id` is correlation,
+never an idempotency key. No safety-stop, allocation-failure or device-loss retry.
 
 ## Deterministic evidence and future physical acceptance
 
@@ -143,9 +146,9 @@ safety stop or allocation failure is NO-GO for that exact configuration. Missing
 dispatch, incomplete telemetry, infrastructure failure or unverified teardown is INCONCLUSIVE. Stop after any
 unsafe/ambiguous attempt. A physical PASS does not qualify motion/identity quality or authorize promotion.
 
-Offline artifact: `C:/Users/rob/projects/StableNew-main/reports/wan321f/offline-freeze-20261022-final/`
+Offline artifact: `C:/Users/rob/projects/StableNew-main/reports/wan321f/offline-freeze-20261022-300s/`
 contains the proposal, three graphs, verified input snapshot and disk/refusal evidence. The earlier preliminary
-freeze remains preserved; only the final digest above is the proposal of record. These machine-local artifacts
+freezes, including the original Stage 1 proposal, remain preserved; only the digest above is the proposal of record. These machine-local artifacts
 are ignored, not source or authority.
 
 Reproduce the offline freeze (new destination only):

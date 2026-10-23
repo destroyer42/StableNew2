@@ -121,14 +121,17 @@ def test_plan_keeps_physical_operations_disabled():
     plan = frozen_plan()
     assert not any(plan["authorization"].values())
     assert not plan["safety_proposal"]["owner_accepted"]
-    assert plan["budget"]["automatic_retries"] is None
-    assert len(physical_refusals()) == 3
+    assert plan["budget"]["maximum_dispatches"] == 3
+    assert plan["budget"]["automatic_retries"] == 1
+    assert plan["safety_proposal"]["attempt_seconds"] == 300
+    assert plan["safety_proposal"]["attempt_time_owner_accepted"]
+    assert len(physical_refusals()) == 2
     assert plan["input"]["sha256"] == INPUT_SHA
 
 
 def test_frozen_proposal_digest_and_exact_stock_launch_policy():
     plan = frozen_plan()
-    assert digest(plan) == "c795fa82ffc1309a3df57df6662b34ad9b3164af526e76cf4a35ae7f7f85eb97"
+    assert digest(plan) == "7b47d278e1519574330a3d912009fb14dba54d3090b5788ee6164c481562b976"
     command = plan["launch_command"]
     assert command[0].endswith("v0.38.0-py313/venv/Scripts/python.exe")
     assert command[command.index("--port") + 1] == "8197"
@@ -202,7 +205,7 @@ def test_recovery_resets_counters_and_boundary_is_not_below_floor():
         (sample(owned_private_gib=-1), "invalid telemetry"),
         (sample(vram_total_mib=0), "inconsistent telemetry"),
         (sample(commit_percent=101), "inconsistent telemetry"),
-        (sample(elapsed=1200), "attempt time limit"),
+        (sample(elapsed=300), "attempt time limit"),
     ],
 )
 def test_telemetry_failure_and_time_limit_stop_immediately(bad, reason):
@@ -214,6 +217,12 @@ def test_telemetry_failure_and_time_limit_stop_immediately(bad, reason):
 )
 def test_gpu_status_requires_known_boolean_telemetry(field, value):
     assert "invalid GPU status" in guard().observe(sample(**{field: value}))
+
+
+def test_owner_accepted_five_minute_limit_stops_at_exact_boundary():
+    safety = guard()
+    assert not safety.observe(sample(elapsed=299.5))
+    assert safety.observe(sample(elapsed=300)) == "attempt time limit"
 
 
 @pytest.mark.parametrize("elapsed", [0, -0.5, 2.1])

@@ -181,7 +181,9 @@ def physical_refusals() -> list[str]:
         "Stage 1 only: separate authorization for assets, generation and runtime operations is required"
     ]
     if not plan["safety_proposal"]["owner_accepted"]:
-        reasons.append("Owner acceptance of abort thresholds and time limits is missing")
+        reasons.append(
+            "Owner acceptance of memory abort thresholds and whole-session time limit is missing"
+        )
     if plan["budget"]["automatic_retries"] is None:
         reasons.append("Total attempt/retry budget clarification is missing")
     return reasons

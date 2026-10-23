@@ -257,17 +257,21 @@ def frozen_plan() -> dict[str, Any]:
         ],
         "budget": {
             "maximum_dispatches": 3,
-            "automatic_retries": None,
-            "retry_policy": "OWNER DECISION REQUIRED; ambiguous dispatch is never retried",
+            "automatic_retries": 1,
+            "retry_policy": (
+                "At most one retry of a positively resolved failure within three total attempts; "
+                "never retry ambiguous dispatch, safety stop, allocation failure or device loss"
+            ),
         },
         "safety_proposal": {
             "owner_accepted": False,
+            "attempt_time_owner_accepted": True,
             "sample_seconds": 0.5,
             "commit_percent_abort": 97.0,
             "commit_headroom_gib_abort": 1.0,
             "physical_available_gib_abort": 0.25,
             "consecutive": 2,
-            "attempt_seconds": 1200.0,
+            "attempt_seconds": 300.0,
             "session_seconds": 3600.0,
             "telemetry_gap_seconds": 2.0,
             "missing_telemetry": "immediate stop",
