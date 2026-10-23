@@ -702,7 +702,7 @@ class JobHistoryPanelV2(ttk.Frame):
             return
         entry = entry if isinstance(entry, JobHistoryEntry) else self._selected_entry()
         visible = bool(entry and self.show_artifact_var.get())
-        if visible:
+        if visible and entry is not None:
             state = self.app_state or getattr(self.controller, "app_state", None)
             mode = getattr(state, "content_visibility_mode", "nsfw")
             njr = None
