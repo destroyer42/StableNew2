@@ -1,8 +1,10 @@
 # PR-VID-WAN-321F: A14B target-hardware feasibility
 
-Verdict: **INCONCLUSIVE under the frozen rules.** One physical session ran on 2026-10-23: all three attempts produced 81
-valid frames inside the limits with no safety stop, but the adapter could not verify owned-process teardown, and
-per-process memory was measured on the launcher stub instead of the Comfy worker. See "Physical session result".
+Verdict: **Feasibility demonstrated; closed (owner disposition, 2026-10-23).** One physical session ran: all three
+attempts produced 81 valid frames inside the limits with no safety stop, device loss or allocation failure. The owner
+accepted this as a successful feasibility result and closed WAN-321F. The frozen rules' own verdict remains
+**INCONCLUSIVE** because the adapter could not verify owned-process teardown; that record is unchanged and is not
+reclassified here. See "Physical session result" and "Owner disposition".
 No physical-quality claim. This evidence does not authorize WAN-321 integration.
 
 Execution profile: Standard, qualification-only. Model recommendation: Claude Code Sonnet 5.5 High /
@@ -196,3 +198,19 @@ What this does and does not show: on the frozen stock-node plan the A14B pair ra
 target host with the memory guard never near a limit. It does not establish motion or identity quality, does not qualify
 720p or the dynamic arm, and does not authorize catalog registration or promotion. A teardown-verified repeat needs
 the two adapter fixes, a new session identity and a new owner decision on the budget.
+
+## Owner disposition (2026-10-23)
+
+The owner recorded the physical session as a **successful feasibility result** and closed this package. The recorded
+frozen-rule verdict (INCONCLUSIVE, `teardown.json` `verified: false`) is kept as evidence and was not edited. No
+repeat session, catalog registration, promotion or WAN-321 integration is authorized by this disposition.
+
+To be addressed during full implementation (carried forward, not fixed here):
+
+1. Teardown of the managed Comfy tree must be verified with a bounded wait before a result is recorded, and the
+   check must cover the whole process tree, not a single `pid_exists` call.
+2. Per-process memory must be sampled for the worker tree (the launcher stub the adapter measured reads about 0.001 GiB),
+   so the worker's working set and private commit are evidence, not only system-level commit, RAM and VRAM.
+3. The A14B resource envelope above (system commit peak 37.6 GiB, minimum available RAM 4.8 GiB, VRAM peak 9,596 MiB)
+   was observed on a quiet host with a managed Comfy only; production integration must re-establish it beside the
+   other managed runtimes and the transition policy.
