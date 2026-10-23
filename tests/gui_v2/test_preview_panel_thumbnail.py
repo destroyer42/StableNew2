@@ -175,7 +175,7 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
                 with patch.object(self.panel.thumbnail, "set_placeholder") as mock_placeholder:
                     self.panel._update_thumbnail(job, pack_name="pack-a", show_preview=True)
 
-        mock_placeholder.assert_called_once_with("No generated preview yet")
+        mock_placeholder.assert_called_once_with(PreviewPanelV2.NO_ARTIFACT_PLACEHOLDER)
         mock_schedule.assert_not_called()
 
     def test_apply_thumbnail_lookup_result_updates_current_job_only(self) -> None:

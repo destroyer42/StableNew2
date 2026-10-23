@@ -21,6 +21,8 @@ from src.gui.theme_v2 import (
     MUTED_LABEL_STYLE,
     TEXT_PRIMARY,
 )
+from src.gui.tooltip import attach_tooltip
+from src.gui.view_contracts import config_source_contract as source_contract
 from src.gui.view_contracts.pipeline_composer_contract import (
     COMPOSER_INTRO,
     GENERATE_STAGE,
@@ -37,6 +39,7 @@ from src.gui.view_contracts.pipeline_composer_contract import (
 )
 from src.gui.view_contracts.workspace_density_contract import wrap_width
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.state.workspace_paths import workspace_paths
 from src.utils.atomic_io import atomic_write_text
@@ -153,6 +156,8 @@ class SidebarPanelV2(ttk.Frame):
         prompt_pack_adapter: PromptPackAdapterV2 | None = None,
         on_apply_pack: Callable[[str, PromptPackSummary | None], None] | None = None,
         on_change: Callable[[], None] | None = None,
+        config_manager: Any = None,
+        pack_list_manager: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style=CARD_FRAME_STYLE, padding=8, **kwargs)
@@ -189,24 +194,26 @@ class SidebarPanelV2(ttk.Frame):
 
         # PR-GUI-H: config_source_label moved into the saved-recipe panel
 
-        from src.utils.config import ConfigManager
+        if config_manager is None:
+            from src.utils.config import ConfigManager
 
-        self.config_manager = ConfigManager()
-        self.saved_recipe_names = (
-            self.config_manager.list_presets()
-            if hasattr(self.config_manager, "list_presets")
-            else []
-        )
+            config_manager = ConfigManager()
+        self.config_manager = config_manager
+        self.saved_recipe_names = self._list_recipe_names()
         self.saved_recipe_var = tk.StringVar(
             value=self.saved_recipe_names[0] if self.saved_recipe_names else ""
         )
         self.saved_recipe_combo: ttk.Combobox | None = None
         self.saved_recipe_menu_button: ttk.Menubutton | None = None
         self.saved_recipe_menu: tk.Menu | None = None
-        self._last_valid_saved_recipe: str = ""
+        self._last_valid_saved_recipe: str = self.saved_recipe_var.get()
         self.config_source_label: ttk.Label | None = None
+        self.recipe_hint_label: ttk.Label | None = None
+        self._recipe_menu_entries: tuple[tuple[str, str, Callable[[], None]], ...] = ()
+        # Where the working stage settings were last loaded from; selecting a recipe alone never changes it.
+        self._settings_source = source_contract.SettingsSource()
 
-        self.pack_list_manager = PromptPackListManager()
+        self.pack_list_manager: PromptPackListManager = pack_list_manager or PromptPackListManager()
         self.pack_list_names = self.pack_list_manager.get_list_names()
         self.pack_list_var = tk.StringVar(
             value=self.pack_list_names[0] if self.pack_list_names else ""
@@ -226,6 +233,11 @@ class SidebarPanelV2(ttk.Frame):
         self._manual_pack_names: list[str] | None = None
         self._current_pack_names: list[str] = []
         self._preview_cache: dict[Path, str] = {}
+        self._hidden_prompt_pack_count = 0
+        self._pack_list_fell_back = False
+        self.pack_status_label: ttk.Label | None = None
+        self.pack_list_caption_label: ttk.Label | None = None
+        self.override_description_label: ttk.Label | None = None
 
         self.global_negative_enabled_var = tk.BooleanVar(value=True)  # Default enabled
         self.global_negative_text_var = tk.StringVar(value="")
@@ -350,6 +362,20 @@ class SidebarPanelV2(ttk.Frame):
         # PR-PERSIST-001: Restore saved state
         self.restore_state()
 
+    def _list_recipe_names(self) -> list[str]:
+        """Saved recipes only: the presets folder also holds the application's own settings files."""
+        lister = getattr(self.config_manager, "list_presets", None)
+        if not callable(lister):
+            return []
+        try:
+            names = [str(name) for name in lister()]
+        except (OSError, ValueError):
+            return []
+        return source_contract.recipe_names_for_display(names)
+
+    def _recipe_combo_values(self) -> list[str]:
+        return [*self.saved_recipe_names, self._CREATE_SAVED_RECIPE_LABEL]
+
     def _build_saved_recipe_actions_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
         frame.columnconfigure(0, weight=1)
@@ -359,7 +385,7 @@ class SidebarPanelV2(ttk.Frame):
 
         self.saved_recipe_combo = ttk.Combobox(
             combo_frame,
-            values=self.saved_recipe_names,
+            values=self._recipe_combo_values(),
             textvariable=self.saved_recipe_var,
             state="readonly",
             style="Dark.TCombobox",
@@ -372,22 +398,25 @@ class SidebarPanelV2(ttk.Frame):
         )
         self.saved_recipe_menu_button.grid(row=0, column=1, padx=(4, 0))
         self.saved_recipe_dropdown = self.saved_recipe_menu_button
-        self.saved_recipe_menu = tk.Menu(self.saved_recipe_menu_button, tearoff=0)
-        self.saved_recipe_menu.add_command(
-            label="Apply to Working State", command=self._on_saved_recipe_apply_to_working_state
+        self.saved_recipe_menu = tk.Menu(
+            self.saved_recipe_menu_button,
+            tearoff=0,
+            postcommand=self._sync_recipe_widgets,
         )
-        self.saved_recipe_menu.add_command(
-            label="Apply to Selected Packs", command=self._on_saved_recipe_apply_to_selected_packs
+        labels = source_contract.RECIPE_MENU_LABELS
+        self._recipe_menu_entries = (
+            (
+                "apply_working",
+                labels["apply_working"],
+                self._on_saved_recipe_apply_to_working_state,
+            ),
+            ("apply_packs", labels["apply_packs"], self._on_saved_recipe_apply_to_selected_packs),
+            ("load_pipeline", labels["load_pipeline"], self._on_saved_recipe_load_to_pipeline),
+            ("save_current", labels["save_current"], self._on_saved_recipe_save_current),
+            ("delete", labels["delete"], self._on_saved_recipe_delete),
         )
-        self.saved_recipe_menu.add_command(
-            label="Load to Pipeline", command=self._on_saved_recipe_load_to_pipeline
-        )
-        self.saved_recipe_menu.add_command(
-            label="Save Current as Recipe", command=self._on_saved_recipe_save_current
-        )
-        self.saved_recipe_menu.add_command(
-            label="Delete Recipe", command=self._on_saved_recipe_delete
-        )
+        for _key, label, command in self._recipe_menu_entries:
+            self.saved_recipe_menu.add_command(label=label, command=command)
         self.saved_recipe_menu_button.config(menu=self.saved_recipe_menu)
 
         # PR-GUI-H: Bottom row with smaller create button and config source label
@@ -402,17 +431,54 @@ class SidebarPanelV2(ttk.Frame):
             command=self._create_saved_recipe_from_stages,
             style="Dark.TButton",
         )
-        create_button.grid(row=0, column=0, sticky="w")
+        create_button.grid(row=0, column=0, sticky="nw")
+        attach_tooltip(
+            create_button,
+            "Saves the current stage settings as a new named recipe. Prompts are not part of a recipe.",
+        )
 
         self.config_source_label = ttk.Label(
             bottom_row,
-            text="Working state",
+            text=source_contract.source_status_text(self._settings_source, ""),
             style=MUTED_LABEL_STYLE,
             wraplength=420,
-            justify="right",
+            justify="left",
         )
-        self.config_source_label.grid(row=0, column=1, sticky="e", padx=(8, 0))
+        self.config_source_label.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+        bind_wraplength(self.config_source_label, maximum=420)
+
+        self.recipe_hint_label = ttk.Label(
+            frame, text="", style=MUTED_LABEL_STYLE, wraplength=420, justify="left"
+        )
+        self.recipe_hint_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        bind_wraplength(self.recipe_hint_label, maximum=420)
+        self._sync_recipe_widgets()
+        self._update_config_source_label(self.saved_recipe_var.get() or None)
         return frame
+
+    def _sync_recipe_widgets(self) -> None:
+        """Enable the recipe actions that can work now and explain an empty list."""
+        recipe = self._selected_recipe_name()
+        has_pack_selection = bool(
+            self.pack_listbox and self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
+        )
+        state = source_contract.recipe_action_state(bool(recipe), has_pack_selection)
+        menu = self.saved_recipe_menu
+        if menu is not None:
+            for index, (key, _label, _command) in enumerate(self._recipe_menu_entries):
+                menu.entryconfigure(index, state=tk.NORMAL if getattr(state, key) else tk.DISABLED)
+        button = self.saved_recipe_menu_button
+        if button is not None:
+            button.config(state=tk.NORMAL if state.any_enabled else tk.DISABLED)
+        if self.recipe_hint_label is not None:
+            self.recipe_hint_label.config(
+                text=source_contract.recipe_empty_hint(len(self.saved_recipe_names))
+            )
+
+    def _selected_recipe_name(self) -> str:
+        """The recipe shown in the list, or '' (the 'create' entry and a stale name are not recipes)."""
+        name = self.saved_recipe_var.get()
+        return name if name in self.saved_recipe_names else ""
 
     def _create_saved_recipe_from_stages(self) -> None:
         """Prompt for a name and persist the current stage config as a preset."""
@@ -431,8 +497,7 @@ class SidebarPanelV2(ttk.Frame):
             except Exception:
                 saved = False
         if saved:
-            self._populate_saved_recipe_combo()
-            self._apply_saved_recipe_selection(recipe_name)
+            self._populate_saved_recipe_combo(select=recipe_name)
         else:
             self._restore_last_saved_recipe_selection()
 
@@ -445,6 +510,7 @@ class SidebarPanelV2(ttk.Frame):
             self.saved_recipe_var.set("")
             self._last_valid_saved_recipe = ""
             self._update_config_source_label(None)
+        self._sync_recipe_widgets()
 
     def _restore_last_saved_recipe_selection(self) -> None:
         if (
@@ -456,7 +522,8 @@ class SidebarPanelV2(ttk.Frame):
             self._apply_saved_recipe_selection(None)
 
     def _update_config_source_label(self, recipe_name: str | None) -> None:
-        text = "Working state"
+        """Show what the working settings came from, and which recipe is merely selected."""
+        detail = ""
         if recipe_name:
             recipe_path = Path(self.config_manager.presets_dir) / f"{recipe_name}.json"
             recipe_config = None
@@ -465,14 +532,18 @@ class SidebarPanelV2(ttk.Frame):
                     recipe_config = self.config_manager.load_preset(recipe_name)
                 except Exception:
                     recipe_config = None
-            summary = build_saved_recipe_summary(
+            detail = build_saved_recipe_summary(
                 recipe_name,
                 recipe_config,
                 recipe_path=recipe_path,
-            )
-            text = summary.to_label_text()
+            ).to_detail_text()
+        text = source_contract.source_status_text(self._settings_source, recipe_name or "", detail)
         if self.config_source_label:
             self.config_source_label.config(text=text)
+
+    def _set_settings_source(self, kind: str, name: str) -> None:
+        self._settings_source = source_contract.SettingsSource(kind, name)
+        self._update_config_source_label(self._selected_recipe_name() or None)
 
     def _build_pack_selector_section(self, parent: ttk.Frame) -> ttk.Frame:
         frame = ttk.Frame(parent)
@@ -481,11 +552,15 @@ class SidebarPanelV2(ttk.Frame):
         toolbar_row = ttk.Frame(frame)
         toolbar_row.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         toolbar_row.columnconfigure(0, weight=1)
-        ttk.Label(
+        help_label = ttk.Label(
             toolbar_row,
-            text="Select PromptPacks to preview, apply, or add to the draft job.",
+            text=source_contract.PACK_SELECTOR_HELP,
             style=MUTED_LABEL_STYLE,
-        ).grid(row=0, column=0, sticky="w")
+            wraplength=360,
+            justify="left",
+        )
+        help_label.grid(row=0, column=0, sticky="ew")
+        bind_wraplength(help_label, maximum=420)
         self.refresh_packs_button = ttk.Button(
             toolbar_row,
             text="Refresh",
@@ -497,22 +572,26 @@ class SidebarPanelV2(ttk.Frame):
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=1, column=0, sticky="ew", pady=(0, 4))
-        btn_frame.columnconfigure(0, weight=1)
-        btn_frame.columnconfigure(1, weight=1)
-        btn_frame.columnconfigure(2, weight=1)
-        btn_frame.columnconfigure(3, weight=1)
+        btn_frame.columnconfigure(0, weight=1, uniform="pack_actions")
+        btn_frame.columnconfigure(1, weight=1, uniform="pack_actions")
         self.load_config_button = ttk.Button(
-            btn_frame, text="Load Config", command=self._on_pack_load_config, style="Dark.TButton"
+            btn_frame,
+            text=source_contract.LOAD_PACK_CONFIG_LABEL,
+            command=self._on_pack_load_config,
+            style="Dark.TButton",
         )
-        self.load_config_button.grid(row=0, column=0, sticky="ew", padx=(0, 2))
+        self.load_config_button.grid(row=0, column=0, sticky="ew", padx=(0, 2), pady=(0, 2))
         self.apply_config_button = ttk.Button(
-            btn_frame, text="Apply Config", command=self._on_pack_apply_config, style="Dark.TButton"
+            btn_frame,
+            text=source_contract.SAVE_PACK_CONFIG_LABEL,
+            command=self._on_pack_apply_config,
+            style="Dark.TButton",
         )
-        self.apply_config_button.grid(row=0, column=1, sticky="ew", padx=(0, 2))
+        self.apply_config_button.grid(row=0, column=1, sticky="ew", pady=(0, 2))
         self.add_to_job_button = ttk.Button(
             btn_frame, text="Add to Job", command=self._on_add_to_job, style="Dark.TButton"
         )
-        self.add_to_job_button.grid(row=0, column=2, sticky="ew", padx=(0, 2))
+        self.add_to_job_button.grid(row=1, column=0, sticky="ew", padx=(0, 2))
         self.preview_toggle_button = ttk.Button(
             btn_frame,
             text="Show Preview",
@@ -520,23 +599,39 @@ class SidebarPanelV2(ttk.Frame):
             state=tk.DISABLED,
             style="Dark.TButton",
         )
-        self.preview_toggle_button.grid(row=0, column=3, sticky="ew")
+        self.preview_toggle_button.grid(row=1, column=1, sticky="ew")
+        attach_tooltip(self.load_config_button, source_contract.LOAD_PACK_CONFIG_TIP)
+        attach_tooltip(self.apply_config_button, source_contract.SAVE_PACK_CONFIG_TIP)
+        attach_tooltip(self.add_to_job_button, source_contract.ADD_TO_JOB_TIP)
+        attach_tooltip(
+            self.preview_toggle_button,
+            "Shows the first prompt text of the selected PromptPack. It does not generate an image.",
+        )
 
         list_frame = ttk.Frame(frame)
         list_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 8))
         list_frame.columnconfigure(0, weight=1)
+        self.pack_list_caption_label = ttk.Label(
+            list_frame,
+            text=source_contract.pack_list_caption(len(self.pack_list_names)),
+            style=MUTED_LABEL_STYLE,
+            wraplength=360,
+            justify="left",
+        )
+        self.pack_list_caption_label.grid(row=0, column=0, sticky="ew", pady=(0, 2))
+        bind_wraplength(self.pack_list_caption_label, maximum=420)
         self.pack_list_combo = ttk.Combobox(
             list_frame,
             values=self.pack_list_names,
             textvariable=self.pack_list_var,
-            state="readonly",
+            state="readonly" if self.pack_list_names else "disabled",
             style="Dark.TCombobox",
         )
-        self.pack_list_combo.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        self.pack_list_combo.grid(row=1, column=0, sticky="ew", pady=(0, 4))
         self.pack_list_combo.bind("<<ComboboxSelected>>", self._on_pack_list_selected)
 
         list_box_frame = ttk.Frame(list_frame)
-        list_box_frame.grid(row=1, column=0, sticky="nsew")
+        list_box_frame.grid(row=2, column=0, sticky="nsew")
         list_box_frame.rowconfigure(0, weight=1)
         list_box_frame.columnconfigure(0, weight=1)
         self.pack_listbox = tk.Listbox(
@@ -565,6 +660,11 @@ class SidebarPanelV2(ttk.Frame):
             lambda event: self._on_pack_selection_changed(),
         )
         self.packs_list = self.pack_listbox
+        self.pack_status_label = ttk.Label(
+            list_frame, text="", style=MUTED_LABEL_STYLE, wraplength=360, justify="left"
+        )
+        self.pack_status_label.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+        bind_wraplength(self.pack_status_label, maximum=420)
 
         self._preview_frame = ttk.Frame(frame)
         self._preview_frame.grid(row=3, column=0, sticky="ew", pady=(0, 8))
@@ -662,13 +762,14 @@ class SidebarPanelV2(ttk.Frame):
         )
         save_neg_btn.grid(row=neg_row + 2, column=0, columnspan=2, sticky="ew", pady=(2, 0))
 
-        frame.rowconfigure(1, weight=1)
+        frame.rowconfigure(2, weight=1)
         self._populate_packs_for_selected_list()
         self._update_pack_actions_state()
         return frame
 
     def _on_pack_selection_changed(self) -> None:
         self._update_pack_actions_state()
+        self._sync_recipe_widgets()
 
     def _on_pack_list_selected(self, event: object | None = None) -> None:
         if event is not None and getattr(event, "widget", None) is self.pack_list_combo:
@@ -687,6 +788,7 @@ class SidebarPanelV2(ttk.Frame):
         except Exception:
             summaries = []
         filtered = self._filter_visible_prompt_summaries(summaries)
+        self._hidden_prompt_pack_count = max(0, len(summaries) - len(filtered))
         self._prompt_summaries = filtered
         return filtered
 
@@ -707,11 +809,13 @@ class SidebarPanelV2(ttk.Frame):
         if selected_list:
             pack_names = self.pack_list_manager.get_list(selected_list) or []
             packs = [summary for summary in summaries if summary.name in pack_names]
+        self._pack_list_fell_back = bool(selected_list) and not packs
         if not packs:
             packs = summaries
         if self._manual_pack_names:
             summary_by_name = {summary.name: summary for summary in summaries}
             packs = [summary_by_name[pn] for pn in self._manual_pack_names if pn in summary_by_name]
+            self._pack_list_fell_back = False
             if not packs:
                 packs = summaries
         self._current_pack_names = [summary.name for summary in packs]
@@ -722,21 +826,35 @@ class SidebarPanelV2(ttk.Frame):
             for index, name in enumerate(self._current_pack_names):
                 if name in selected_names:
                     self.pack_listbox.selection_set(index)
+        self._update_pack_status()
         self._update_pack_actions_state()
 
-    def _populate_saved_recipe_combo(self) -> None:
+    def _update_pack_status(self) -> None:
+        """Say how many PromptPacks are listed and why, or why the list is empty."""
+        if self.pack_status_label is None:
+            return
+        selected_list = (self.pack_list_var.get() or "").strip()
+        packs_dir = getattr(self.prompt_pack_adapter, "packs_dir", "") or ""
+        self.pack_status_label.config(
+            text=source_contract.pack_selector_status(
+                shown=len(self._current_pack_names),
+                hidden_by_visibility=self._hidden_prompt_pack_count,
+                packs_dir=str(packs_dir),
+                list_name=selected_list if not self._manual_pack_names else "",
+                list_matched=not self._pack_list_fell_back,
+            )
+        )
+
+    def _populate_saved_recipe_combo(self, select: str | None = None) -> None:
+        """Re-read the recipe folder; keep ``select`` (else the first recipe) selected."""
         if not self.saved_recipe_combo:
             return
-        presets = (
-            self.config_manager.list_presets()
-            if hasattr(self.config_manager, "list_presets")
-            else []
-        )
-        self.saved_recipe_names = presets
-        values = presets + [self._CREATE_SAVED_RECIPE_LABEL]
-        self.saved_recipe_combo.config(values=values)
-        if presets:
-            self._apply_saved_recipe_selection(presets[0])
+        self.saved_recipe_names = self._list_recipe_names()
+        self.saved_recipe_combo.config(values=self._recipe_combo_values())
+        if select and select in self.saved_recipe_names:
+            self._apply_saved_recipe_selection(select)
+        elif self.saved_recipe_names:
+            self._apply_saved_recipe_selection(self.saved_recipe_names[0])
         else:
             self._apply_saved_recipe_selection(None)
 
@@ -767,7 +885,19 @@ class SidebarPanelV2(ttk.Frame):
             try:
                 controller.on_pipeline_pack_load_config(pack_id)
             except Exception:
-                pass
+                return
+            if self._pack_has_saved_config(pack_id):
+                self._set_settings_source(source_contract.SOURCE_PACK, pack_id)
+
+    def _pack_has_saved_config(self, pack_id: str) -> bool:
+        """True when the pack has a saved-settings entry, i.e. a load actually had something to load."""
+        loader = getattr(self.config_manager, "load_pack_config", None)
+        if not callable(loader):
+            return False
+        try:
+            return loader(pack_id) is not None
+        except (OSError, ValueError):
+            return False
 
     def _on_pack_apply_config(self) -> None:
         if not self.pack_listbox:
@@ -943,7 +1073,7 @@ class SidebarPanelV2(ttk.Frame):
         if self.load_config_button:
             self.load_config_button.config(state=tk.NORMAL if single else tk.DISABLED)
         if self.apply_config_button:
-            self.apply_config_button.config(state=tk.NORMAL)
+            self.apply_config_button.config(state=tk.NORMAL if has_selection else tk.DISABLED)
         if self.add_to_job_button:
             # PR-CORE-D/E: PromptPack-only architecture - "Add to Job" requires pack selection
             self.add_to_job_button.config(state=tk.NORMAL if has_selection else tk.DISABLED)
@@ -1082,8 +1212,13 @@ class SidebarPanelV2(ttk.Frame):
         self.pack_list_names = names
         if self.pack_list_combo:
             self.pack_list_combo["values"] = names
+            self.pack_list_combo.config(state="readonly" if names else "disabled")
             if names:
                 self.pack_list_var.set(names[0])
+            else:
+                self.pack_list_var.set("")
+        if self.pack_list_caption_label is not None:
+            self.pack_list_caption_label.config(text=source_contract.pack_list_caption(len(names)))
 
     def _on_saved_recipe_selected(self, event: object = None) -> None:
         selected_recipe = self.saved_recipe_var.get()
@@ -1101,6 +1236,7 @@ class SidebarPanelV2(ttk.Frame):
                 pass
         self._last_valid_saved_recipe = selected_recipe
         self._update_config_source_label(selected_recipe)
+        self._sync_recipe_widgets()
         self.grid_columnconfigure(0, weight=1)
 
     def _on_saved_recipe_apply_to_working_state(self) -> None:
@@ -1112,7 +1248,8 @@ class SidebarPanelV2(ttk.Frame):
             try:
                 controller.on_pipeline_saved_recipe_apply_to_working_state(recipe_name)
             except Exception:
-                pass
+                return
+            self._note_recipe_loaded(recipe_name)
 
     def _on_saved_recipe_apply_to_selected_packs(self) -> None:
         recipe_name = self.saved_recipe_var.get()
@@ -1138,7 +1275,13 @@ class SidebarPanelV2(ttk.Frame):
             try:
                 controller.on_pipeline_saved_recipe_load_to_pipeline(recipe_name)
             except Exception:
-                pass
+                return
+            self._note_recipe_loaded(recipe_name)
+
+    def _note_recipe_loaded(self, recipe_name: str) -> None:
+        """Record the recipe as the settings source if it still exists (the controller logs its own failures)."""
+        if recipe_name in self._list_recipe_names():
+            self._set_settings_source(source_contract.SOURCE_RECIPE, recipe_name)
 
     def _on_saved_recipe_save_current(self) -> None:
         recipe_name = self.saved_recipe_var.get()
@@ -1160,7 +1303,8 @@ class SidebarPanelV2(ttk.Frame):
             try:
                 controller.on_pipeline_saved_recipe_delete(recipe_name)
             except Exception:
-                pass
+                return
+            self._populate_saved_recipe_combo()
 
     def _build_stages_section(self, parent: ttk.Frame) -> ttk.Frame:
         """Task-oriented stage composer (PR-GUI-UX-530).
@@ -1286,6 +1430,10 @@ class SidebarPanelV2(ttk.Frame):
     def _on_override_changed(self) -> None:
         """Called when override pack config checkbox state changes."""
         enabled = bool(self.override_pack_config_var.get())
+        if self.override_description_label is not None:
+            self.override_description_label.config(
+                text=source_contract.override_description(enabled)
+            )
         controller = self.controller
         if controller and hasattr(controller, "on_override_pack_config_changed"):
             try:
@@ -1345,6 +1493,15 @@ class SidebarPanelV2(ttk.Frame):
             style="Dark.TCheckbutton",
         )
         override_cb.pack(anchor="w")
+        self.override_description_label = ttk.Label(
+            override_frame,
+            text=source_contract.override_description(bool(self.override_pack_config_var.get())),
+            style=MUTED_LABEL_STYLE,
+            wraplength=360,
+            justify="left",
+        )
+        self.override_description_label.pack(anchor="w", fill="x", padx=(24, 0))
+        bind_wraplength(self.override_description_label, maximum=420)
 
         # Stage toggles section
         stage_section = ttk.Frame(frame)

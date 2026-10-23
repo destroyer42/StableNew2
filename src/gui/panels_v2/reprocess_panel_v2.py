@@ -37,9 +37,10 @@ class ReprocessPanelV2(ttk.Frame):
 
         description = ttk.Label(
             self,
-            text="To edit or reprocess an image you already have, open Review. Choose the image there, "
-            "inspect embedded metadata, edit prompts, and submit queue-backed reprocess jobs. "
-            "Opening Review changes no generation settings and queues nothing.",
+            text="This tab makes new images from PromptPacks. To work on images you already have, "
+            "use Review (select images, inspect embedded metadata, edit prompts, submit queue-backed reprocess "
+            "jobs) or Photo Optimize (enhance photos). Opening Review changes no generation settings and "
+            "queues nothing.",
             style=BODY_LABEL_STYLE,
             wraplength=560,
             justify="left",
@@ -48,7 +49,8 @@ class ReprocessPanelV2(ttk.Frame):
 
         details = ttk.Label(
             self,
-            text="Review owns image selection, prompt delta modes, and batch-aware reprocess submission.",
+            text="Review owns image selection, prompt delta modes, and batch-aware reprocess submission. "
+            "To turn a finished image into a motion clip, use Make Video; it opens the Video Workflow tab.",
             style=MUTED_LABEL_STYLE,
             wraplength=560,
             justify="left",

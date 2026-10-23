@@ -69,6 +69,12 @@ The nine workspaces stay nine tabs of the one `MainWindowV2.center_notebook`; `_
 
 The notebook's own tab strip is hidden only after the bar is built (`hide_notebook_tab_strip`); if the bar cannot be built, or the theme refuses the empty tab layout, the native strip stays (documented fallback), and Ctrl+Tab / Ctrl+PageUp/PageDown cycle the notebook either way. `tabs.selected_tab_id` is the persisted selection; the historic numeric `tabs.selected_index` is still written for older builds and is read only when no valid id is stored, translated through `LEGACY_TAB_ORDER` (the notebook creation order, which must not be reordered). The stored tab is restored after the panels attach, because `LayoutManagerV2.attach_panels` raises Pipeline. A tab that fails to build shows a placeholder and is listed by `MainWindowV2.tab_failures()`; a tab that cannot be added to the notebook is not registered and its navigation button is disabled.
 
+### Pipeline settings sources (PR-GUI-UX-500)
+
+The Pipeline sidebar keeps four things apart, and `view_contracts/config_source_contract.py` owns their wording and the small decisions behind it (no Tk, no persistence): a **PromptPack** (authored prompt file that also stores its own saved settings), a **saved recipe** (a named copy of stage settings in the `presets` folder, no prompts), a **saved pack list** (a named group of PromptPacks that only filters the pack list; read from `state/custom_pack_lists.json`, and no in-app action creates one) and the **working stage settings**. The recipe list hides the application's own files in `presets` (`settings`, `last_settings`, `pack_overrides`); that is display only and no file is moved or deleted. The sidebar's source label states what the working settings were last loaded from (an Apply to Working State / Load to Pipeline of a recipe, or Load Pack Config of a PromptPack) and says a merely selected recipe is "selected, not applied"; later stage edits are not tracked. Load Pack Config copies a pack's saved settings into the stage cards; Save Config to Pack overwrites the settings stored in the selected packs (prompts are untouched). An empty recipe list, pack list or saved-pack-list dropdown states why it is empty and which supported action fills it.
+
+The Pipeline preview thumbnail shows a saved image of the previewed job (the last of the previewed jobs) or says why there is none: no job, no image saved yet, or hidden by the content-visibility setting. Ticking "Show output thumbnail" never generates an image.
+
 ---
 
 ## 3. `src/gui_v2/` — Adapter Scaffolding

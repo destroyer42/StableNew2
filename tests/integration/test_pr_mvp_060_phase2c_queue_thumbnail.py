@@ -113,7 +113,7 @@ def test_thumbnail_uses_exact_artifact_and_neutral_no_artifact_state(tmp_path: P
 
     no_artifact = SimpleNamespace(job_id="draft", prompt_pack_name="pack")
     panel._update_thumbnail(no_artifact, show_preview=True)
-    assert panel.thumbnail.placeholder == "No generated preview yet"
+    assert panel.thumbnail.placeholder == PreviewPanelV2.NO_ARTIFACT_PLACEHOLDER
     assert panel._find_recent_thumbnail(no_artifact) is None
 
 
@@ -140,4 +140,4 @@ def test_thumbnail_adapter_enforces_explicit_sfw_mode(tmp_path: Path) -> None:
         show_preview=True,
     )
     assert panel.thumbnail.loaded is None
-    assert panel.thumbnail.placeholder == "No generated preview yet"
+    assert panel.thumbnail.placeholder == PreviewPanelV2.HIDDEN_PLACEHOLDER
