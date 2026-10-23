@@ -1,7 +1,9 @@
 # PR-VID-WAN-321F: A14B target-hardware feasibility
 
-Verdict: **INCONCLUSIVE — Stage 1 offline preparation only; zero physical attempts.**
-No resource-feasibility or physical-quality claim. This evidence does not authorize WAN-321 integration.
+Verdict: **INCONCLUSIVE under the frozen rules.** One physical session ran on 2026-10-23: all three attempts produced 81
+valid frames inside the limits with no safety stop, but the adapter could not verify owned-process teardown, and
+per-process memory was measured on the launcher stub instead of the Comfy worker. See "Physical session result".
+No physical-quality claim. This evidence does not authorize WAN-321 integration.
 
 Execution profile: Standard, qualification-only. Model recommendation: Claude Code Sonnet 5.5 High /
 Codex GPT-6.1 Sol High, Local/Desktop for local assets and Windows evidence. Expected order of magnitude:
@@ -23,9 +25,9 @@ No upstream research was repeated. Current local file checks are fresh evidence.
 The owner's final restriction requires separate authorization for downloads, generation and runtime restart.
 Memory abort thresholds and the whole-session limit must be accepted before execution. The owner accepted a
 300-second per-attempt limit and three attempts total, including at most one retry of a positively resolved failure.
-The CLI in this package only writes an offline freeze; it has no physical execution option. The physical adapter,
-exclusive session claim, sampling/interrupt loop, output verification and event-log collection remain to be wired
-and tested after those decisions. The tested controls are primitives, not an end-to-end physical harness.
+The offline CLI (`python -m tools.qualification.wan321f`) only writes an offline freeze. The physical adapter is a separate
+module, `tools/qualification/wan321f/physical.py` (exclusive session claim, sampling/interrupt loop, output verification,
+event-log collection), run once with `--authorize-plan <digest>`. Its tests use fakes only.
 
 No catalog registration, NJR, queue, GUI, runner, backend ownership or workflow-governance changes. Every published
 TI2V-5B version stays unchanged. Physical operations never bypass the production submission path for product jobs;
@@ -157,5 +159,40 @@ Reproduce the offline freeze (new destination only):
 C:/Users/rob/projects/StableNew-main/.venv/Scripts/python.exe -m tools.qualification.wan321f --out <new-evidence-directory>
 ```
 
-No physical adapter is available in this command. Do not treat historical roadmap download/spike decisions as
+This command has no physical option. Do not treat historical roadmap download/spike decisions as
 the current named authorization required by the owner's closing restriction.
+
+## Physical session result (2026-10-23)
+
+Run by `tools/qualification/wan321f/physical.py` at `6fc4a906` against plan digest `7b47d278...b976`, on a host with no
+competing gate processes (started with 31.6 GiB commit headroom and 16.4 GiB physical RAM free). Evidence:
+`reports/wan321f/physical-001/` (ignored, machine-local). The session claim is spent: this budget of three dispatches is
+used, and the owner's three-attempt allowance is exhausted.
+
+| Item | Result |
+|---|---|
+| Dispatches / completed | 3 / 3, seeds 321001-321003, one dispatch each, no retry |
+| Output | 81 decodable 480x832 PNG frames per attempt, validated and hashed |
+| Prompt time | 124.9 s (cold), 92.3 s, 90.6 s; all under the 300 s limit |
+| Safety stop, allocation failure, device loss, WHEA or System events | none |
+| System commit | baseline 22.5 GiB, peak 37.6 GiB (67.5%), minimum headroom 18.1 GiB |
+| Physical RAM | minimum available 4.8 GiB |
+| VRAM | peak 9,596 MiB of 12,282; minimum free 2,686 MiB (baseline 1,420 MiB in use) |
+| Telemetry | 613 samples at about 0.5 s, maximum gap 0.68 s, no missing sample |
+
+Why the frozen verdict is INCONCLUSIVE: `teardown.json` recorded `verified: false` with child PID 8940 still present when
+it was written, about 1 s after the last Comfy log write, following a `grace_seconds=0` stop followed by a single `pid_exists` check.
+Both observed children and the owned PID were absent when checked afterward (`post-hoc-teardown-check.json`), which makes an
+asynchronous job-object kill plausible, but PID reuse cannot be excluded, so it is not a teardown verification.
+
+Adapter defects found (not fixed after execution, to keep the evidence tied to the executed SHA):
+
+1. Teardown is checked once with no bounded wait for the contained tree to exit.
+2. Per-process memory sampled only the owned PID, which is the 4.7 MB launcher stub (about 0.0009 GiB private in every
+   sample). The Comfy worker's working set and private commit were never measured. System-level commit, RAM and VRAM
+   figures are unaffected and are the evidence above.
+
+What this does and does not show: on the frozen stock-node plan the A14B pair ran three times to completion on the
+target host with the memory guard never near a limit. It does not establish motion or identity quality, does not qualify
+720p or the dynamic arm, and does not authorize catalog registration or promotion. A teardown-verified repeat needs
+the two adapter fixes, a new session identity and a new owner decision on the budget.
