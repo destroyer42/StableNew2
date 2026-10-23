@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.assets.controlnet_structure import STATUS_SDXL, controlnet_evidence_for_name, name_key
+from src.assets.controlnet_identity import MODEL_MODALITIES as MODEL_MODALITIES
+from src.assets.controlnet_identity import model_problem as model_problem
+from src.assets.controlnet_structure import controlnet_evidence_for_name
 from src.conditioning.controlnet import SLOT_FIELD, FrozenControlNet
 from src.conditioning.openpose import SLOT_FIELD as LEGACY_FIELD
 from src.conditioning.openpose import OpenPoseDeclarationError
@@ -32,16 +34,8 @@ from src.image_backends.model_policy import EVIDENCE_REGISTRY, resolve_model_pol
 from src.image_backends.openpose_capability import assess_openpose_target
 
 RUNTIME_KEY = "controlnet_units_runtime"
-# Exact published model identities, separate from SDXL architecture evidence.
-# A name is compatibility guidance, never a claim of weight integrity or quality.
-# Full Canny/Depth and Thibaud names: https://github.com/Mikubill/sd-webui-controlnet/discussions/2039
-# Xinsir: existing PR-IMG-CNET-210 declaration example; no fuzzy aliases are inferred.
-MODEL_MODALITIES = {
-    "thibaud_xl_openpose": "openpose",
-    "xinsir_openpose_sdxl": "openpose",
-    "diffusers_xl_canny_full": "canny",
-    "diffusers_xl_depth_full": "depth",
-}
+# The model-identity policy (``MODEL_MODALITIES``, ``model_problem``) is defined once in ``assets.controlnet_identity`` so the
+# offline readiness projection cannot drift from this admission; both names stay importable from here.
 
 
 def validate_intent(
@@ -78,17 +72,6 @@ def validate_target(model: str, backend_id: str, backend_options: Any) -> None:
             CODE_BACKEND,
             "ControlNet requires a registry-verified SDXL checkpoint on Forge; unknown families and exact profiles are refused.",
         )
-
-
-def model_problem(modality: str, model: str, architecture: str | None) -> str:
-    if architecture != STATUS_SDXL:
-        return (
-            "ControlNet weight SDXL architecture is missing, ambiguous, unverified or incompatible."
-        )
-    known = MODEL_MODALITIES.get(name_key(model))
-    if known != modality:
-        return f"ControlNet model modality is {'unverified' if known is None else known}; cannot admit {modality}. Choose a documented compatible model."
-    return ""
 
 
 @dataclass(frozen=True, slots=True)

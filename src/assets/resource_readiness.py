@@ -94,6 +94,25 @@ def _expected_relative(resource: CatalogResource, filename: str) -> str:
     )
 
 
+def _inside_resource_directory(resource: CatalogResource, item: InstalledFile) -> bool:
+    """Whether an installed auxiliary file lies below its own resource's declared placement directory.
+
+    A file elsewhere (another resource's folder, the auxiliary root, an escaping or malformed path) is never a candidate for
+    this resource, even when its bytes match: identical bytes belonging to another resource do not install this one.
+    ControlNet weights live in one flat folder and keep their alias behavior.
+    """
+
+    if resource.placement_root != ROOT_AUXILIARY:
+        return True
+    directory = resource.placement_directory.split("/")
+    parts = item.relative.split("/")
+    if len(parts) <= len(directory) or any(part in ("", ".", "..") for part in parts):
+        return False
+    return [part.casefold() for part in parts[: len(directory)]] == [
+        part.casefold() for part in directory
+    ]
+
+
 def _name_match(resource: CatalogResource, spec: ResourceFile, item: InstalledFile) -> bool:
     if item.root != resource.placement_root:
         return False
@@ -127,6 +146,7 @@ def _file_result(
         item
         for item in evidence.files
         if item.root == resource.placement_root
+        and _inside_resource_directory(resource, item)
         and (
             _name_match(resource, spec, item) or (item.sha256 is not None and item.sha256 in pinned)
         )
@@ -263,6 +283,21 @@ def _headline(required: list[dict[str, Any]], capability: dict[str, Any]) -> tup
     return VERIFIED, reasons
 
 
+def _identity_admitted(modality: str, files: Sequence[InstalledFile]) -> bool:
+    """Whether production ControlNet admission would accept every installed file's model identity for ``modality``.
+
+    Integrity (the digest), architecture (header evidence) and identity (the documented model name for the modality) are
+    three separate facts; only the last is decided here, by the production policy itself, never by a second copy of it.
+    """
+
+    from src.assets.controlnet_identity import model_problem
+
+    return bool(files) and all(
+        not model_problem(modality, item.relative.rsplit("/", 1)[-1], item.controlnet_evidence)
+        for item in files
+    )
+
+
 def _resource_result(resource: CatalogResource, evidence: InstalledEvidence) -> dict[str, Any]:
     files = [_file_result(resource, spec, evidence) for spec in resource.files]
     required = [entry for entry in files if entry["required"]]
@@ -274,7 +309,11 @@ def _resource_result(resource: CatalogResource, evidence: InstalledEvidence) -> 
             matched = [item for entry in required for item in entry["_candidates"]]
             kinds = {item.controlnet_evidence for item in matched}
             if kinds == {_SDXL}:
-                runnable = True
+                if _identity_admitted(str(capability["modality"]), matched):
+                    runnable = True
+                else:
+                    # Verified bytes with SDXL structure are still refused by production admission under this name.
+                    status, reasons = UNSUPPORTED, ["controlnet_identity_not_admitted"]
             elif _NOT_SDXL in kinds:
                 status, reasons = UNSUPPORTED, ["controlnet_header_not_sdxl"]
             else:
@@ -362,11 +401,13 @@ def collect_installed_evidence(
     refresh: bool,
     cancelled: Callable[[], bool] | None = None,
     progress: Callable[[Any, int, int], None] | None = None,
+    roots: frozenset[str] | None = None,
 ) -> InstalledEvidence:
     """Gather evidence from the one registry. Worker-only: ``refresh=True`` streams SHA-256 of every file in two roots.
 
     ``refresh=False`` reads the persisted cache and keeps only entries whose size/mtime fingerprint still matches; it
-    can say what is present but never that something is absent, so it is reported as incomplete.
+    can say what is present but never that something is absent, so it is reported as incomplete. ``roots`` limits the
+    evidence (and the refresh) to the named catalog roots; a caller that needs one root never pays to hash the other.
     """
 
     from src.assets.controlnet_structure import inspect_controlnet_file
@@ -375,7 +416,14 @@ def collect_installed_evidence(
     basis = BASIS_REFRESH if refresh else BASIS_CACHE
     if getattr(registry, "webui_root", None) is None:
         return InstalledEvidence((), basis, False, "no_webui_root")
-    kind_roots = {AssetKind.CONTROLNET: ROOT_CONTROLNET, AssetKind.AUXILIARY_MODEL: ROOT_AUXILIARY}
+    kind_roots = {
+        kind: root
+        for kind, root in (
+            (AssetKind.CONTROLNET, ROOT_CONTROLNET),
+            (AssetKind.AUXILIARY_MODEL, ROOT_AUXILIARY),
+        )
+        if roots is None or root in roots
+    }
     try:
         if refresh:
             snapshot = registry.refresh(

@@ -27,7 +27,9 @@ def scenario(tmp_path: Path) -> tuple[Path, Path]:
     """A verified ControlNet, a mismatched one, a bundle missing a dependency and a verified-but-unsupported model."""
 
     registry = make_registry(tmp_path)
-    canny = write_controlnet_weights(controlnet_dir(registry) / "canny_xl.safetensors", "sdxl")
+    canny = write_controlnet_weights(
+        controlnet_dir(registry) / "diffusers_xl_canny_full.safetensors", "sdxl"
+    )
     expected_depth = write_controlnet_weights(
         tmp_path / "upstream_depth.safetensors", "sdxl_original_layout"
     )
@@ -46,7 +48,12 @@ def scenario(tmp_path: Path) -> tuple[Path, Path]:
         "resources": [
             resource(
                 "fx-canny",
-                [file_spec("weights", [variant("canny_xl.safetensors", sha256_of(canny))])],
+                [
+                    file_spec(
+                        "weights",
+                        [variant("diffusers_xl_canny_full.safetensors", sha256_of(canny))],
+                    )
+                ],
                 root="controlnet",
                 capability=controlnet_capability("canny"),
             ),

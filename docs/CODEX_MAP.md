@@ -29,6 +29,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Learning and experiments | `docs/Subsystems/Learning/LEARNING.md`; `src/learning/`, `src/gui/controllers/learning_controller.py` |
 | Review, reprocess and batch operations | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/queue/batch_projection.py`; masked edit and outpaint `src/controller/masked_edit_service.py`, `src/controller/outpaint_edit_service.py`, `src/pipeline/outpaint_canvas.py` |
 | Photo Optimize | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/photo_optimize/`, `src/controller/photo_optimize_submission.py` |
+| ControlNet units and reference maps | `docs/Subsystems/Image/IMAGE_PIPELINE.md` section 3.1; `src/conditioning/controlnet.py`, `src/pipeline/controlnet_compile.py`; operator-created maps `src/conditioning/reference_map/service.py` -> `src/gui_v2/reference_map_flow.py` -> `src/gui/widgets/reference_map_dialog.py` |
 | Adaptive refinement and ADetailer | `src/refinement/`, `src/pipeline/adetailer_contract.py` |
 | GUI views and state | `src/gui/views/`, `src/gui/app_state_v2.py`, `src/gui/main_window_v2.py`; styles and tokens: `docs/Subsystems/GUI/GUI_STYLE_GUIDE.md` |
 | Crash-safe state files | `src/utils/atomic_io.py` (every persisted JSON/text store goes through it) |

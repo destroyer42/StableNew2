@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-515 of 669 modules have a docstring.
+529 of 683 modules have a docstring.
 
 ## src/
 
@@ -63,6 +63,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `checkpoint_structure.py`: Bounded safetensors header evidence for AssetRegistry, never tensor loading
 - `compatibility.py`: Conservative, observational model-family compatibility evidence
 - `component_evidence.py`: Bounded structural evidence for multi-component image models (PR-IMG-MODELS-150)
+- `controlnet_identity.py`: Documented ControlNet model identities and their modality (PR-IMG-CNET-210/220), below both its consumers
 - `controlnet_structure.py`: Bounded safetensors-header evidence for ControlNet weights (PR-IMG-CNET-210)
 - `gguf.py`: Bounded GGUF container inspection for the observational inventory (PR-IMG-MODELS-152)
 - `inventory_report.py`: Deterministic, bounded, redacted operator report over the observational inventory (PR-IMG-MODELS-152)
@@ -81,6 +82,20 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `openpose_diagnostics.py`: OpenPose input/modality feedback; no inference, mutation or model loading (PR-IMG-CNET-211)
 - `openpose_library.py`: The OpenPose reference-image library: safe resolution, bounded validation, thumbnails (PR-IMG-CNET-210)
 - `openpose_snapshot.py`: Frozen OpenPose conditioning: verified identity plus a job-owned, content-addressed input snapshot (PR-IMG-CN…
+
+## src/conditioning/reference_map/
+
+- `__init__.py`: Operator-invoked reference-map preparation (PR-IMG-CNET-230)
+- `auxiliary.py`: Installed auxiliary-model identity for map preparation, taken from the curated catalog and the asset registry
+- `canny.py`: Canny edge map: a deterministic CPU adapter (PR-IMG-CNET-230)
+- `contracts.py`: Small typed contracts shared by every reference-map modality (PR-IMG-CNET-230)
+- `depth.py`: Relative depth map: pure normalization of a model's prediction (PR-IMG-CNET-230)
+- `library.py`: Publishing a prepared map into the existing OpenPose conditioning-image library (PR-IMG-CNET-230)
+- `pose.py`: OpenPose maps from DWPose whole-body keypoints: pure decoding helpers and one deterministic renderer (PR-IMG-…
+- `providers.py`: One provider per map type, behind one seam (PR-IMG-CNET-230)
+- `service.py`: Reference-map preparation service: one blocking seam, thread-agnostic (PR-IMG-CNET-230)
+- `source.py`: Reading the operator's source image once, safely and reproducibly (PR-IMG-CNET-230)
+- `worker.py`: Contained child process that runs one model for a reference map (PR-IMG-CNET-230)
 
 ## src/config/
 
@@ -378,6 +393,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `matrix_tab_panel.py`: MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab
 - `openpose_picker_panel.py`: PromptPack OpenPose reference picker (PR-IMG-CNET-210)
 - `reference_map_browser.py`: Searchable reference-map list with a bounded thumbnail (PR-GUI-UX-550)
+- `reference_map_dialog.py`: The "Create map from image" dialog: thin Tk over ``ReferenceMapFlow`` (PR-IMG-CNET-230)
 - `responsive_wrap_v2.py`: Width-following label wrapping for responsive workspaces (PR-GUI-110)
 - `scrollable_frame_v2.py`: (no docstring)
 - `submission_notice_v2.py`: Inline, non-modal submission feedback (PR-VID-UX-313)
@@ -404,6 +420,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_adaptation_preview.py`: Toolkit-neutral preview model for the explicit Prompt-tab "Adapt for Target" action (PR-IMG-130C)
 - `prompt_template_view.py`: Toolkit-neutral presentation of the cinematic template editor (GUI-540)
 - `recommendation_targets.py`: Toolkit-neutral mapping from Learning parameters to executable operator controls
+- `reference_map_flow.py`: Toolkit-neutral state of the "Create map from image" task (PR-IMG-CNET-230)
 - `style_consistency_view.py`: Toolkit-neutral presentation of the Style Consistency selector (GUI-540)
 
 ## src/gui_v2/adapters/
