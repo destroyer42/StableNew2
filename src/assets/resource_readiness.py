@@ -362,11 +362,13 @@ def collect_installed_evidence(
     refresh: bool,
     cancelled: Callable[[], bool] | None = None,
     progress: Callable[[Any, int, int], None] | None = None,
+    roots: frozenset[str] | None = None,
 ) -> InstalledEvidence:
     """Gather evidence from the one registry. Worker-only: ``refresh=True`` streams SHA-256 of every file in two roots.
 
     ``refresh=False`` reads the persisted cache and keeps only entries whose size/mtime fingerprint still matches; it
-    can say what is present but never that something is absent, so it is reported as incomplete.
+    can say what is present but never that something is absent, so it is reported as incomplete. ``roots`` limits the
+    evidence (and the refresh) to the named catalog roots; a caller that needs one root never pays to hash the other.
     """
 
     from src.assets.controlnet_structure import inspect_controlnet_file
@@ -375,7 +377,14 @@ def collect_installed_evidence(
     basis = BASIS_REFRESH if refresh else BASIS_CACHE
     if getattr(registry, "webui_root", None) is None:
         return InstalledEvidence((), basis, False, "no_webui_root")
-    kind_roots = {AssetKind.CONTROLNET: ROOT_CONTROLNET, AssetKind.AUXILIARY_MODEL: ROOT_AUXILIARY}
+    kind_roots = {
+        kind: root
+        for kind, root in (
+            (AssetKind.CONTROLNET, ROOT_CONTROLNET),
+            (AssetKind.AUXILIARY_MODEL, ROOT_AUXILIARY),
+        )
+        if roots is None or root in roots
+    }
     try:
         if refresh:
             snapshot = registry.refresh(

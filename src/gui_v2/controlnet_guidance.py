@@ -65,9 +65,12 @@ SCOPE_NOTE = (
 )
 EMPTY_LIBRARY_HELP = (
     "Add a pre-rendered OpenPose, Canny, or Depth reference image to the configured models/OpenPose library, then "
-    "refresh. Choosing a purpose does not prepare or generate the image."
+    "refresh, or use Create map from image to make one on request. Choosing a purpose does not prepare or generate the image."
 )
-NO_PREPROCESSING_NOTE = "Preprocessor: None. StableNew passes your pre-rendered map as-is; it does not detect poses, edges or depth."
+NO_PREPROCESSING_NOTE = (
+    "Preprocessor: None. Generation passes your saved map as-is and never detects poses, edges or depth. "
+    "Create map from image makes one only when you ask, saves it to the library and queues nothing."
+)
 STRENGTH_HELP = (
     f"Controls how strongly the reference map influences generation ({MIN_WEIGHT:g}-{MAX_WEIGHT:g}). "
     "Higher values generally emphasize the reference more strongly."
@@ -103,21 +106,21 @@ MODALITY_GUIDES: tuple[ModalityGuide, ...] = (
         "Pose / Body Position",
         "Uses an existing pre-rendered OpenPose reference to guide approximate body position and limb arrangement.",
         "Use when approximate human body position or arrangement matters.",
-        "StableNew does not generate a pose map for you.",
+        "Generation does not make a pose map; Create map from image makes one only when you ask.",
     ),
     ModalityGuide(
         "canny",
         "Edges / Structure",
         "Uses a pre-rendered Canny-style edge map to preserve outlines, silhouettes and structural boundaries.",
         "Use when the outlines or structure of an existing reference matter.",
-        "StableNew does not detect edges for you.",
+        "Generation does not make an edge map; Create map from image makes one only when you ask.",
     ),
     ModalityGuide(
         "depth",
         "Depth / Spatial Layout",
         "Uses a pre-rendered depth map to guide spatial relationships and approximate scene geometry.",
         "Use when approximate spatial composition or distance relationships matter.",
-        "StableNew does not estimate depth for you.",
+        "Generation does not make a depth map; Create map from image makes one only when you ask.",
     ),
 )
 _GUIDES = {guide.modality: guide for guide in MODALITY_GUIDES}

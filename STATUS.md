@@ -44,7 +44,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 - Exact model profiles: FLUX.2 Klein 4B FP8 (`docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`) and
   Z-Image-Turbo FP8 (`docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md`; physical qualification
   inconclusive, see Holds). Klein Base 9B is refused (`NO_GO_RESOURCE_RISK`).
-- SDXL PromptPack ControlNet: legacy OpenPose and up to two ordered pre-rendered OpenPose/Canny/Depth units (`docs/Subsystems/Image/IMAGE_PIPELINE.md` section 3.1); ADetailer control
+- SDXL PromptPack ControlNet: legacy OpenPose and up to two ordered pre-rendered OpenPose/Canny/Depth units, with maps that can be created on request from a reference image (Canny and depth; OpenPose waits on the onnxruntime pin, open decision 12) (`docs/Subsystems/Image/IMAGE_PIPELINE.md` section 3.1); ADetailer control
   truth (`docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md`); supported-option upscale defaults (`docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md`).
 - PromptPacks (versioned JSON), Review and reprocess, Photo Optimize with scope-aware editing and historical baselines
   (`docs/Subsystems/Image/PR-IMG-PHOTO-222_Scope_Aware_Editing.md`), cross-workflow model compatibility preflight.
@@ -120,6 +120,7 @@ of the roadmap; where they conflict with this file, this file and the repository
    TI2V-5B 1.2.0 is promoted; the frames-out 1.3.0 was promoted on 2026-10-21 after real acceptance runs.
 11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a single
    composition root (P3-2, decision 11), a durable CANCELLING status (decision 12), and moving the executor into `image_backends` (decision 14).
+12. OpenPose map creation (DWPose ONNX) needs the `onnxruntime` CPU package, which the pinned Python 3.14 environment lacks (a cp314 win_amd64 wheel exists). Pin it in `constraints/windows-py314-cu130.txt` and `requirements.txt`, or keep the option unavailable; real-model quality of all created maps is unqualified.
 
 ## Holds and safety constraints
 
