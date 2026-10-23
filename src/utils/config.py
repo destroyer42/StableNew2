@@ -10,6 +10,7 @@ from typing import Any
 
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.state.workspace_paths import workspace_paths
+from src.utils.atomic_io import atomic_write_json
 
 DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
     "blurry, bad quality, distorted, ugly, malformed, nsfw, nude, naked, explicit, "
@@ -19,6 +20,25 @@ DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
 DEFAULT_GLOBAL_POSITIVE_PROMPT = ""
 
 logger = logging.getLogger(__name__)
+
+#: JSON files in the presets folder that the application itself owns. They are never reusable generation presets, so
+#: they are not listed, loaded, saved over or deleted as one (``list_presets`` globs every ``*.json`` there).
+RESERVED_PRESET_STEMS: frozenset[str] = frozenset({"settings", "last_settings", "pack_overrides"})
+_INVALID_PRESET_CHARS = frozenset('/\\:*?"<>|\x00')
+
+
+def preset_name_problem(name: str) -> str | None:
+    """Why ``name`` cannot be a preset file name, or ``None`` when it can."""
+
+    if not isinstance(name, str) or not name.strip():
+        return "A preset needs a name."
+    if name != name.strip() or ".." in name or any(ch in _INVALID_PRESET_CHARS for ch in name):
+        return "A preset name cannot start or end with a space, contain '..', or contain / \\ : * ? \" < > |."
+    if name.casefold() in RESERVED_PRESET_STEMS:
+        return f"'{name}' is an application file in the presets folder, not a preset."
+    return None
+
+
 LAST_RUN_PATH = workspace_paths.last_run_v2()
 
 
@@ -181,8 +201,16 @@ class ConfigManager:
             GLOBAL_POSITIVE_FILENAME,
             resolve_global_prompt_dir,
         )
-        from src.promptpacks.paths import resolve_prompt_pack_dir
+        from src.promptpacks import (
+            PACK_AUTHORED_PRESET_KEYS,
+            resolve_prompt_pack_dir,
+            update_prompt_pack_preset_data,
+        )
 
+        # The canonical versioned storage boundary is bound here, with the other layer-above collaborators, so
+        # saving pack settings adds no further upward import to this module.
+        self._update_pack_preset_data = update_prompt_pack_preset_data
+        self._pack_authored_preset_keys = PACK_AUTHORED_PRESET_KEYS
         self.packs_dir = resolve_prompt_pack_dir(packs_dir)
         self.global_prompt_dir = resolve_global_prompt_dir(global_prompt_dir)
         self._global_negative_path = self.global_prompt_dir / GLOBAL_NEGATIVE_FILENAME
@@ -204,6 +232,9 @@ class ConfigManager:
         Returns:
             Preset configuration dictionary
         """
+        if preset_name_problem(name):
+            logger.warning(f"Not a preset name: {name!r}")
+            return None
         preset_path = self.presets_dir / f"{name}.json"
         if not preset_path.exists():
             logger.warning(f"Preset '{name}' not found at {preset_path}")
@@ -227,13 +258,18 @@ class ConfigManager:
             config: Configuration dictionary
 
         Returns:
-            True if saved successfully
+            True if saved successfully. An invalid or reserved name, or a failed write, leaves any
+            existing file untouched (the publish is atomic).
         """
+        problem = preset_name_problem(name)
+        if problem:
+            logger.error(f"Failed to save preset {name!r}: {problem}")
+            return False
         preset_path = self.presets_dir / f"{name}.json"
         try:
             merged = self._merge_config_with_defaults(config)
-            with open(preset_path, "w", encoding="utf-8") as f:
-                json.dump(merged, f, indent=2, ensure_ascii=False)
+            self.presets_dir.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(preset_path, merged, indent=2, ensure_ascii=False)
             logger.info(f"Saved preset: {name}")
             return True
         except Exception as e:
@@ -245,9 +281,13 @@ class ConfigManager:
         List all available presets.
 
         Returns:
-            List of preset names
+            List of preset names (the application's own settings files are not presets)
         """
-        presets = [p.stem for p in self.presets_dir.glob("*.json")]
+        presets = [
+            p.stem
+            for p in self.presets_dir.glob("*.json")
+            if p.stem.casefold() not in RESERVED_PRESET_STEMS
+        ]
         logger.debug(f"Found {len(presets)} presets")
         return sorted(presets)
 
@@ -261,8 +301,11 @@ class ConfigManager:
         Returns:
             True if deleted successfully
         """
-        if name == "default":
+        if isinstance(name, str) and name.casefold() == "default":
             logger.warning("Cannot delete the default preset")
+            return False
+        if preset_name_problem(name):
+            logger.warning(f"Not a preset name: {name!r}")
             return False
 
         preset_path = self.presets_dir / f"{name}.json"
@@ -461,8 +504,10 @@ class ConfigManager:
         Returns:
             Resolved configuration dictionary
         """
-        # Start with default config
+        # Start with default config, then the application-wide defaults (Settings) as the base layer: a PromptPack's
+        # saved settings and the job's own snapshot still override them, and queued or finished jobs never change.
         config = self.get_default_config()
+        self._apply_application_defaults(config)
 
         # Apply preset overrides
         if preset_name:
@@ -479,6 +524,21 @@ class ConfigManager:
             config = self._merge_configs(config, runtime_params)
 
         return config
+
+    def application_defaults_key(self) -> tuple[Any, ...]:
+        """Value that changes whenever a saved application default that feeds ``resolve_config`` changes."""
+
+        return (self._load_settings().get("output_dir"),)
+
+    def _apply_application_defaults(self, config: dict[str, Any]) -> None:
+        """Layer the saved application-wide output folder under pack and job values (in place).
+
+        Only a stored, non-empty ``output_dir`` is applied, so an install that never set one compiles exactly as before.
+        """
+
+        stored = self._load_settings().get("output_dir")
+        if isinstance(stored, str) and stored.strip():
+            config.setdefault("pipeline", {})["output_dir"] = stored.strip()
 
     def _merge_configs(
         self, base_config: dict[str, Any], override_config: dict[str, Any]
@@ -570,18 +630,21 @@ class ConfigManager:
         overrides_file = self.presets_dir / "pack_overrides.json"
 
         try:
-            # Load existing overrides
-            all_overrides = {}
+            # Load existing overrides. An unreadable or non-object file aborts the save: replacing it would
+            # silently discard every other pack's entries.
+            all_overrides: dict[str, Any] = {}
             if overrides_file.exists():
                 with open(overrides_file, encoding="utf-8") as f:
-                    all_overrides = json.load(f)
+                    loaded = json.load(f)
+                if not isinstance(loaded, dict):
+                    raise ValueError("pack_overrides.json is not a JSON object")
+                all_overrides = loaded
 
             # Update with new overrides
             all_overrides[pack_name] = overrides
 
-            # Save back
-            with open(overrides_file, "w", encoding="utf-8") as f:
-                json.dump(all_overrides, f, indent=2, ensure_ascii=False)
+            # Save back (atomic: a failed write leaves the previous file readable)
+            atomic_write_json(overrides_file, all_overrides, indent=2, ensure_ascii=False)
 
             logger.info(f"Saved pack overrides for: {pack_name}")
             return True
@@ -671,76 +734,42 @@ class ConfigManager:
 
         return merged
 
+    def update_pack_config(self, pack_name: str, config: dict[str, Any]) -> Path:
+        """Replace only the ``preset_data`` of an existing native PromptPack, atomically.
+
+        Goes through the canonical versioned storage boundary (``src.promptpacks.storage``), so schema, slots, Matrix and
+        unknown metadata are preserved and a missing, unreadable, legacy or unsupported pack is refused untouched.
+
+        Raises:
+            PromptPackFormatError: the pack is missing or is not a valid native document (actionable message).
+            OSError: the write failed; the previous file is unchanged.
+        """
+
+        # Narrow persistence-boundary sync only -- not the full defaults merge, which would inject unrelated default
+        # fields into preset_data. Never mutates the caller's own config object.
+        synchronized = synchronize_adetailer_enablement(config)
+        pipeline_section = synchronized.get("pipeline", {})
+        logger.info(
+            "Saving pack config '%s': pipeline flags: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
+            pack_name,
+            pipeline_section.get("txt2img_enabled"),
+            pipeline_section.get("img2img_enabled"),
+            pipeline_section.get("adetailer_enabled"),
+            pipeline_section.get("upscale_enabled"),
+        )
+        saved = self._update_pack_preset_data(
+            self._pack_config_path(pack_name),
+            synchronized,
+            preserve_keys=self._pack_authored_preset_keys,
+        )
+        logger.info(f"Saved pack config to: {saved}")
+        return saved
+
     def save_pack_config(self, pack_name: str, config: dict[str, Any]) -> bool:
-        """
-        Save pipeline configuration to unified JSON's preset_data section.
-
-        Args:
-            pack_name: Name of the prompt pack (e.g., "heroes.txt")
-            config: Configuration to save
-
-        Returns:
-            True if successful
-        """
+        """Boolean wrapper over :meth:`update_pack_config` that logs the reason for a failure."""
 
         try:
-            # Convert pack_name to config filename (heroes.txt -> heroes.json)
-            config_path = self._pack_config_path(pack_name)
-
-            # Narrow persistence-boundary sync only -- not the full defaults
-            # merge, which would inject unrelated default fields into
-            # preset_data. Never mutates the caller's own config object.
-            config = synchronize_adetailer_enablement(config)
-
-            # Debug: Log what we're about to save
-            pipeline_section = config.get("pipeline", {})
-            logger.info(
-                "Saving pack config '%s': pipeline flags: txt2img=%s, img2img=%s, adetailer=%s, upscale=%s",
-                pack_name,
-                pipeline_section.get("txt2img_enabled"),
-                pipeline_section.get("img2img_enabled"),
-                pipeline_section.get("adetailer_enabled"),
-                pipeline_section.get("upscale_enabled"),
-            )
-
-            # Ensure packs directory exists
-            config_path.parent.mkdir(exist_ok=True)
-
-            # Load existing data to preserve pack_data section
-            existing_data = {}
-            if config_path.exists():
-                try:
-                    with open(config_path, encoding="utf-8") as f:
-                        existing_data = json.load(f)
-                except Exception:
-                    pass  # If load fails, start fresh
-
-            # Build unified structure
-            if "pack_data" in existing_data:
-                # Unified format - preserve pack_data, update preset_data
-                unified_data = existing_data
-                unified_data["preset_data"] = config
-            elif "name" in existing_data and "slots" in existing_data:
-                # Legacy pack format - convert to unified
-                unified_data = {
-                    "pack_data": existing_data,
-                    "preset_data": config,
-                }
-            else:
-                # No existing data or legacy config-only format
-                unified_data = {
-                    "pack_data": {
-                        "name": Path(pack_name).stem,
-                        "slots": [],
-                        "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []},
-                    },
-                    "preset_data": config,
-                }
-
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(unified_data, f, indent=2, ensure_ascii=False)
-
-            logger.info(f"Saved pack config to: {config_path}")
+            self.update_pack_config(pack_name, config)
             return True
         except Exception as e:
             logger.error(f"Failed to save pack config '{pack_name}': {e}")
@@ -763,10 +792,10 @@ class ConfigManager:
             # Create pack config from preset defaults
             preset_config = self.load_preset(preset_name)
             if preset_config:
-                self.save_pack_config(pack_name, preset_config)
-                logger.info(
-                    f"Created pack config for '{pack_name}' based on preset '{preset_name}'"
-                )
+                if self.save_pack_config(pack_name, preset_config):
+                    logger.info(
+                        f"Created pack config for '{pack_name}' based on preset '{preset_name}'"
+                    )
                 return self._merge_config_with_defaults(preset_config)
             else:
                 logger.warning(f"Failed to create pack config - preset '{preset_name}' not found")
@@ -826,17 +855,15 @@ class ConfigManager:
     def get_setting(self, key: str, default: Any = None) -> Any:
         return self.load_settings().get(key, default)
 
-    def update_settings(self, updates: dict[str, Any]) -> None:
+    def update_settings(self, updates: dict[str, Any]) -> bool:
         current = dict(self._load_settings())
         current.update({k: v for k, v in updates.items() if v is not None})
-        self.save_settings(current)
+        return self.save_settings(current)
 
     def save_settings(self, settings: dict[str, Any] | None = None) -> bool:
         data = settings if settings is not None else dict(self._load_settings())
         try:
-            self._settings_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._settings_path, "w", encoding="utf-8") as fh:
-                json.dump(data, fh, indent=2, ensure_ascii=False)
+            atomic_write_json(self._settings_path, data, indent=2, ensure_ascii=False)
             self._settings_cache = dict(data)
             self._settings_load_error = None
             return True

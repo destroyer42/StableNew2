@@ -184,8 +184,18 @@ class EngineSettingsDialog(ttk.Frame):
             variable=self._webui_autostart_var,
         ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
-        self._add_label_entry(paths_frame, "Output directory:", self._output_dir_var, row=0)
+        self._add_label_entry(paths_frame, "Default output folder:", self._output_dir_var, row=0)
         self._add_label_entry(paths_frame, "Model directory:", self._model_dir_var, row=1)
+        ttk.Label(
+            paths_frame,
+            text=(
+                "New jobs save images in the default output folder unless the PromptPack's saved settings name "
+                "their own. Changing it does not move or alter queued or finished jobs."
+            ),
+            style="Muted.TLabel",
+            wraplength=420,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         ttk.Radiobutton(
             visibility_frame,

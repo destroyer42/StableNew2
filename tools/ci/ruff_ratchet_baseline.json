@@ -393,8 +393,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1331,
-      "S110": 520,
+      "BLE001": 1319,
+      "S110": 516,
       "S112": 37
     },
     "counts": {
@@ -430,7 +430,7 @@
         "BLE001": 18
       },
       "src/controller/app_controller.py": {
-        "BLE001": 149,
+        "BLE001": 144,
         "S110": 53,
         "S112": 4
       },
@@ -629,8 +629,8 @@
         "S110": 1
       },
       "src/gui/sidebar_panel_v2.py": {
-        "BLE001": 32,
-        "S110": 17
+        "BLE001": 26,
+        "S110": 14
       },
       "src/gui/stage_cards_v2/adetailer_stage_card_v2.py": {
         "BLE001": 1,
@@ -939,8 +939,7 @@
         "S112": 1
       },
       "src/utils/config.py": {
-        "BLE001": 14,
-        "S110": 1
+        "BLE001": 13
       },
       "src/utils/config_helpers.py": {
         "BLE001": 1,

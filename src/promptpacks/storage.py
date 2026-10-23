@@ -127,6 +127,39 @@ def save_prompt_pack_document(path: str | Path, document: dict[str, Any]) -> Pat
     return target
 
 
+#: ``preset_data`` keys that are authored in the Prompt tab or are pack identity, not generation settings. Applying a
+#: stage configuration to a pack keeps them unless the applied configuration defines them itself.
+PACK_AUTHORED_PRESET_KEYS: tuple[str, ...] = ("style_lora", "version")
+
+
+def update_prompt_pack_preset_data(
+    path: str | Path,
+    preset_data: dict[str, Any],
+    *,
+    preserve_keys: tuple[str, ...] = (),
+) -> Path:
+    """Replace the ``preset_data`` of an existing native PromptPack, touching nothing else.
+
+    The destination must already be a valid versioned document; a missing, unreadable, legacy or unsupported file is
+    refused with ``PromptPackFormatError`` and left untouched (nothing is fabricated or migrated here; use the explicit
+    import and migration operations). Every other key, including unknown ones, is preserved, as are the existing
+    ``preserve_keys`` entries the new ``preset_data`` does not define. The write is the atomic
+    ``save_prompt_pack_document`` publish.
+    """
+
+    target = Path(path)
+    if not target.is_file():
+        raise PromptPackFormatError(f"PromptPack not found: {target}")
+    document = load_prompt_pack_document(target)
+    updated = copy.deepcopy(preset_data)
+    existing = document.get("preset_data", {})
+    for key in preserve_keys:
+        if key in existing and key not in updated:
+            updated[key] = copy.deepcopy(existing[key])
+    document["preset_data"] = updated
+    return save_prompt_pack_document(target, document)
+
+
 def discover_native_prompt_packs(directory: str | Path) -> list[Path]:
     packs_dir = Path(directory)
     packs_dir.mkdir(parents=True, exist_ok=True)

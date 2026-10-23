@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-490 of 644 modules have a docstring.
+493 of 647 modules have a docstring.
 
 ## src/
 
@@ -126,6 +126,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `dispatch_hold_status.py`: Operator-facing reason a non-empty queue is not dispatching
 - `gui_config_service.py`: (no docstring)
 - `learning_completion_router.py`: learning_completion_router — routes job-completion events to the learning controller without hard-wiring AppC…
+- `pack_settings_apply_service.py`: Explicit "apply settings to PromptPack(s)" with a truthful per-pack result (PR-GUI-UX-520)
 - `run_submission_service.py`: (no docstring)
 - `runtime_projection_coordinator.py`: (no docstring)
 - `shutdown_coordinator.py`: Application-shutdown sequencing for the job queue (PR-RUNTIME-SHUTDOWN-140)
@@ -196,6 +197,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `recipe_summary_v2.py`: (no docstring)
 - `review_batch_dialog.py`: Transient whole-selection review; confirmation admits the exact prepared NJRs
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
+- `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply / overwrite actions (PR-GUI-UX-520)
 - `sidebar_panel_v2.py`: (no docstring)
 - `status_bar_v2.py`: Status bar scaffold for GUI v2
 - `theme.py`: Legacy theming shim
@@ -273,7 +275,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Toolkit-agnostic view contracts for GUI surfaces
 - `batch_operations_contract.py`: Toolkit-neutral session for the Queue/History "Batches" view (PR-BATCH-OPS-201)
-- `config_source_contract.py`: Truthful wording for the Pipeline's settings sources and empty states (PR-GUI-UX-500)
+- `config_source_contract.py`: Truthful wording for the Pipeline's settings sources, actions and empty states (PR-GUI-UX-500, PR-GUI-UX-520)
 - `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
 - `form_section_contract.py`: Form section contract independent of widget framework
 - `history_artifact_contract.py`: Select a recorded History artifact by media type, not by its poster image
@@ -366,6 +368,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
+- `effective_settings.py`: Read-only "Effective Settings" projection of compiled preview jobs (PR-GUI-UX-520)
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
 - `lora_authoring_view.py`: Toolkit-neutral presentation of a selected LoRA inside the Prompt tab (GUI-540)
 - `lora_browser.py`: Pure browser projection; registry evidence and ModelPolicy remain authoritative
