@@ -1,8 +1,8 @@
 {
   "contract": "curated_asset_catalog/1",
-  "catalog_version": "2026-10-23.1",
+  "catalog_version": "2026-10-24.1",
   "description": "Curated acquisition guidance. It is not model policy and not runtime authority: the readiness projection re-derives what the product can use from product code.",
-  "hash_semantics": "sha256 values are the Hugging Face LFS object ids at the pinned revision (the SHA-256 of the file bytes). A null sha256 means pending_verification: no upstream digest was independently verified, so an installed copy can never be reported as verified.",
+  "hash_semantics": "sha256 values are the SHA-256 of the file bytes at the pinned revision. hash_basis says how the value was established: hub_lfs_oid is the Hugging Face LFS object id recorded from Hub metadata; pinned_revision_byte_hash is a digest computed from the exact bytes of that revision during offline qualification (small non-LFS files have no LFS object id). A null sha256 means pending_verification: no digest was independently verified, so an installed copy can never be reported as verified.",
   "resources": [
     {
       "id": "sdxl-controlnet-canny",
@@ -426,10 +426,10 @@
         "policy": "needs_integration",
         "modality": null,
         "reason_codes": [
-          "feature_not_built",
-          "no_segmentation_runtime"
+          "inference_not_qualified",
+          "opt_in_review_assist_only"
         ],
-        "basis": "Segmentation is not a StableNew feature yet; verified files do not make it usable."
+        "basis": "Used only by the opt-in Review Smart Review object-selection helper, in a contained CPU child process. File identity, strict loading and processor semantics were qualified offline (Transformers 5.17.0); mask quality and forward execution on real images are not qualified, so the catalog does not mark it ready."
       },
       "source": {
         "publisher_repo": "facebook/sam2.1-hiera-small",
@@ -442,13 +442,13 @@
           "status": "model_card_declared",
           "note": "The model card declares Apache-2.0. The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
         },
-        "verified_on": "2026-10-23",
-        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+        "verified_on": "2026-10-24",
+        "verified_via": "Hub LFS object id for the weights (2026-10-23 metadata) and SHA-256 of the three JSON files computed from the pinned revision during the REVIEW-320 offline qualification (2026-10-24)"
       },
       "placement": {
         "root": "auxiliary",
         "directory": "sam-2-1-small",
-        "instructions": "Place each file under <WebUI root>/models/StableNewAux/sam-2-1-small/ using the suggested filenames, then run an explicit refresh. StableNew does not read this folder for generation yet."
+        "instructions": "Place each file under <WebUI root>/models/StableNewAux/sam-2-1-small/ using the suggested filenames, then run an explicit refresh. Used only by the opt-in Review Smart Review helper."
       },
       "files": [
         {
@@ -476,10 +476,10 @@
               "variant_id": "config.json",
               "upstream_path": "config.json",
               "suggested_filename": "config.json",
-              "sha256": null,
-              "size_bytes": null,
-              "hash_status": "pending_verification",
-              "hash_basis": null
+              "sha256": "97ff9f65b76d107acda4247885f0a5555d0048850ae3c5f97183df289aaecde9",
+              "size_bytes": 5698,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         },
@@ -492,10 +492,10 @@
               "variant_id": "preprocessor_config.json",
               "upstream_path": "preprocessor_config.json",
               "suggested_filename": "preprocessor_config.json",
-              "sha256": null,
-              "size_bytes": null,
-              "hash_status": "pending_verification",
-              "hash_basis": null
+              "sha256": "6ebf229ee259368ce4a8d4f2fe893a72b053023710853e257253939e601f583d",
+              "size_bytes": 683,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         },
@@ -508,10 +508,10 @@
               "variant_id": "processor_config.json",
               "upstream_path": "processor_config.json",
               "suggested_filename": "processor_config.json",
-              "sha256": null,
-              "size_bytes": null,
-              "hash_status": "pending_verification",
-              "hash_basis": null
+              "sha256": "f8a68e865cfad115c1c2763f3d93eca7b1c622da06da2a9273eb437fb2389b6d",
+              "size_bytes": 95,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         },
@@ -536,77 +536,102 @@
         {
           "id": "transformers_sam2_support",
           "kind": "python_package",
-          "state": "not_integrated",
-          "description": "A Transformers release with SAM 2.1 support; the minimum version was not verified and none is part of the pinned environment."
+          "state": "runtime_version_checked",
+          "description": "Transformers >=5.17 and <6 (qualified on 5.17.0). StableNew checks the installed version at run time and does not install or pin it."
         }
       ],
       "notes": [
-        "The original sam2.1_hiera_small.pt checkpoint is pickle-based and is not catalogued."
+        "The original sam2.1_hiera_small.pt checkpoint is pickle-based and is not catalogued.",
+        "The pinned export is a sam2_video-typed checkpoint. Single-image use builds Sam2Model from its image sub-configurations and ignores the 160 video-only tensors (30,087,108 bytes) the model class declares ignorable.",
+        "video_preprocessor_config.json is not needed for single-image use and is not catalogued as required."
       ]
     },
     {
       "id": "florence-2-base-ft",
-      "title": "Florence-2 Base FT",
+      "title": "Florence-2 Base FT (native Transformers conversion)",
       "category": "vision_model",
       "capability": {
         "id": "captioning.florence2",
         "policy": "needs_integration",
         "modality": null,
         "reason_codes": [
-          "feature_not_built",
-          "custom_code_not_permitted"
+          "inference_not_qualified",
+          "opt_in_review_assist_only"
         ],
-        "basis": "Captioning and grounding are not StableNew features yet, and the repository ships custom model code that StableNew would not execute without an owner decision."
+        "basis": "Used only by the opt-in Review Smart Review image-analysis helper, in a contained CPU child process with the native Transformers class (no remote code, no pickle). Byte identity, conversion equivalence and strict CPU loading were qualified offline (Transformers 5.17.0); caption and detection quality are not qualified, so the catalog does not mark it ready."
       },
       "source": {
-        "publisher_repo": "microsoft/Florence-2-base-ft",
-        "url": "https://huggingface.co/microsoft/Florence-2-base-ft",
-        "revision": "f6c1a25888ffc1d945ee8a1a77ac833c7303d46e",
+        "publisher_repo": "florence-community/Florence-2-base-ft",
+        "url": "https://huggingface.co/florence-community/Florence-2-base-ft",
+        "revision": "0b03b6f15a4a211370fb204aee4e7dd48887ea37",
         "revision_status": "pinned",
         "license": {
           "model_card_tag": "mit",
           "spdx": "MIT",
           "status": "model_card_declared",
-          "note": "The model card declares MIT and the repository carries a LICENSE file. The model-card license tag is a repository-level declaration; it is not proof that every file in the repository carries the same license."
+          "note": "The converted repository's model-card metadata declares MIT, matching the original Microsoft repository. The model-card license tag is a repository-level declaration; it is not proof that every file carries the same license."
         },
-        "verified_on": "2026-10-23",
-        "verified_via": "Hugging Face public model metadata API: repository revision, model-card license tag and tree listing (metadata only; no file was downloaded)"
+        "verified_on": "2026-10-24",
+        "verified_via": "SHA-256 of all 11 files computed from the pinned revision during the REVIEW-320 offline qualification, plus Hugging Face model metadata for the license tag (2026-10-24)",
+        "lineage": {
+          "original_repo": "microsoft/Florence-2-base-ft",
+          "original_revision": "f6c1a25888ffc1d945ee8a1a77ac833c7303d46e",
+          "original_weights_sha256": "58757d657ff44051314c8030b68e04cb1bb618ca9a4885418f111f6fb708185a",
+          "original_weights_size_bytes": 463221266,
+          "conversion": "The native checkpoint is a conversion of the original weights (one document transpose, zero-bias removal, 39 added vocabulary rows). Byte equivalence of the conversion was qualified offline; this is lineage evidence, not a second installable identity."
+        }
       },
       "placement": {
         "root": "auxiliary",
         "directory": "florence-2-base-ft",
-        "instructions": "Place each file under <WebUI root>/models/StableNewAux/florence-2-base-ft/ using the suggested filenames, then run an explicit refresh. StableNew does not read this folder for generation yet."
+        "instructions": "Place each of the 11 files under <WebUI root>/models/StableNewAux/florence-2-base-ft/ using the suggested filenames, then run an explicit refresh. Used only by the opt-in Review Smart Review helper."
       },
       "files": [
         {
           "role": "weights",
           "required": true,
-          "description": "Safetensors weights.",
+          "description": "Native converted safetensors weights (F16).",
           "variants": [
             {
               "variant_id": "model.safetensors",
               "upstream_path": "model.safetensors",
               "suggested_filename": "model.safetensors",
-              "sha256": "58757d657ff44051314c8030b68e04cb1bb618ca9a4885418f111f6fb708185a",
-              "size_bytes": 463221266,
+              "sha256": "ab06dea66b16d5e54513256d64854be2194443452fd0d84353b40a278bf87d42",
+              "size_bytes": 463178864,
               "hash_status": "verified_upstream",
-              "hash_basis": "hub_lfs_oid"
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         },
         {
           "role": "model_config",
           "required": true,
-          "description": "Model configuration.",
+          "description": "Native Florence2 model configuration.",
           "variants": [
             {
               "variant_id": "config.json",
               "upstream_path": "config.json",
               "suggested_filename": "config.json",
-              "sha256": null,
-              "size_bytes": null,
-              "hash_status": "pending_verification",
-              "hash_basis": null
+              "sha256": "2a4dfe9885d183da121f239ada734bd700ee6908b650a7a25ab32eb104fe1d7a",
+              "size_bytes": 2387,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
+            }
+          ]
+        },
+        {
+          "role": "generation_config",
+          "required": true,
+          "description": "Generation defaults.",
+          "variants": [
+            {
+              "variant_id": "generation_config.json",
+              "upstream_path": "generation_config.json",
+              "suggested_filename": "generation_config.json",
+              "sha256": "0251459c49cc358ac033b5d4b8569e61ac22bde5d76be404b97a44cfb33fb12e",
+              "size_bytes": 292,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         },
@@ -619,10 +644,26 @@
               "variant_id": "preprocessor_config.json",
               "upstream_path": "preprocessor_config.json",
               "suggested_filename": "preprocessor_config.json",
-              "sha256": null,
-              "size_bytes": null,
-              "hash_status": "pending_verification",
-              "hash_basis": null
+              "sha256": "1396ec5a0a7adfe1c04fb777b09e8ba753be6dbb5868212ab3c3ef39d91fe031",
+              "size_bytes": 603,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
+            }
+          ]
+        },
+        {
+          "role": "processor_config",
+          "required": true,
+          "description": "Processor configuration.",
+          "variants": [
+            {
+              "variant_id": "processor_config.json",
+              "upstream_path": "processor_config.json",
+              "suggested_filename": "processor_config.json",
+              "sha256": "cd0e3bf41a39b1276503fbd273bc03b9afc70d7a15ea681a92a1b4b77f858ee6",
+              "size_bytes": 2264,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         },
@@ -635,10 +676,10 @@
               "variant_id": "tokenizer.json",
               "upstream_path": "tokenizer.json",
               "suggested_filename": "tokenizer.json",
-              "sha256": null,
-              "size_bytes": null,
-              "hash_status": "pending_verification",
-              "hash_basis": null
+              "sha256": "3ad7001f773409abe6bba33eac92662611a73d72f459bda2f00d2a221dd31ce4",
+              "size_bytes": 3748144,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         },
@@ -651,10 +692,42 @@
               "variant_id": "tokenizer_config.json",
               "upstream_path": "tokenizer_config.json",
               "suggested_filename": "tokenizer_config.json",
-              "sha256": null,
-              "size_bytes": null,
-              "hash_status": "pending_verification",
-              "hash_basis": null
+              "sha256": "cb5f80bd9afa767bb1bb798ee5f0a79eae45239b8e72506166b4218175a16723",
+              "size_bytes": 197922,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
+            }
+          ]
+        },
+        {
+          "role": "special_tokens_map",
+          "required": true,
+          "description": "Special tokens.",
+          "variants": [
+            {
+              "variant_id": "special_tokens_map.json",
+              "upstream_path": "special_tokens_map.json",
+              "suggested_filename": "special_tokens_map.json",
+              "sha256": "72ff172dc769bc1551b1b4211628ce3271643bc60379e4da45d85a9be9332c39",
+              "size_bytes": 146627,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
+            }
+          ]
+        },
+        {
+          "role": "added_tokens",
+          "required": true,
+          "description": "Added tokens (location tokens).",
+          "variants": [
+            {
+              "variant_id": "added_tokens.json",
+              "upstream_path": "added_tokens.json",
+              "suggested_filename": "added_tokens.json",
+              "sha256": "1d75deda84dfa81fb6c09301f3fed00f9695059568bbb1403a6bf299cd84fc37",
+              "size_bytes": 22430,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         },
@@ -667,30 +740,41 @@
               "variant_id": "vocab.json",
               "upstream_path": "vocab.json",
               "suggested_filename": "vocab.json",
-              "sha256": null,
-              "size_bytes": null,
-              "hash_status": "pending_verification",
-              "hash_basis": null
+              "sha256": "ed19656ea1707df69134c4af35c8ceda2cc9860bf2c3495026153a133670ab5e",
+              "size_bytes": 798293,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
+            }
+          ]
+        },
+        {
+          "role": "merges",
+          "required": true,
+          "description": "BPE merges.",
+          "variants": [
+            {
+              "variant_id": "merges.txt",
+              "upstream_path": "merges.txt",
+              "suggested_filename": "merges.txt",
+              "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+              "size_bytes": 456318,
+              "hash_status": "verified_upstream",
+              "hash_basis": "pinned_revision_byte_hash"
             }
           ]
         }
       ],
       "external_prerequisites": [
         {
-          "id": "custom_model_code",
-          "kind": "custom_code",
-          "state": "blocked_by_policy",
-          "description": "configuration_florence2.py, modeling_florence2.py and processing_florence2.py run under trust_remote_code, which StableNew never enables. They were not downloaded or inspected."
-        },
-        {
           "id": "transformers_runtime",
           "kind": "python_package",
-          "state": "not_integrated",
-          "description": "A Transformers runtime; none is part of the pinned application environment."
+          "state": "runtime_version_checked",
+          "description": "Transformers >=5.17 and <6 (qualified on 5.17.0). StableNew checks the installed version at run time and does not install or pin it."
         }
       ],
       "notes": [
-        "pytorch_model.bin in the same repository is pickle-based and is not catalogued."
+        "Only the native conversion is catalogued. The original microsoft repository needs trust_remote_code custom code and its pytorch_model.bin is pickle-based; neither is catalogued or ever executed.",
+        "Loading is native-only: Florence2 classes, trust_remote_code=False, safetensors, strict state-dict load with only the model's own declared tied aliases reconciled."
       ]
     }
   ]

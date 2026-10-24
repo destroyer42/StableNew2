@@ -593,6 +593,7 @@ class ReviewTabFrame(ttk.Frame):
         edit_row = ttk.Frame(run_box)
         edit_row.grid(row=5, column=0, sticky="ew", pady=(0, 6))
         edit_row.columnconfigure((0, 1), weight=1, uniform="image_edit")
+        self._smart_enablement: Any = None
         self.edit_mask_button = ttk.Button(
             edit_row, text="Edit Mask…", command=self._open_mask_editor,
         )
@@ -601,6 +602,15 @@ class ReviewTabFrame(ttk.Frame):
             edit_row, text="Extend Canvas…", command=self._open_outpaint_editor,
         )
         self.extend_canvas_button.grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        self.smart_review_button = ttk.Button(
+            edit_row, text="Smart Review…", command=self._open_smart_review,
+        )
+        self.smart_review_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        attach_tooltip(
+            self.smart_review_button,
+            "Opt-in local helpers: click an object to suggest a mask, or get a caption suggestion. "
+            "Suggestions only; nothing is edited or queued until you accept and review it.",
+        )
         self.reprocess_selected_button = ttk.Button(
             run_box,
             text="Reprocess Selected",
@@ -1495,6 +1505,29 @@ class ReviewTabFrame(ttk.Frame):
             messagebox.showwarning("Edit Mask", "The application controller is unavailable.", parent=self)
             return
         MaskEditorDialog(self, source_path=paths[0], controller=self.app_controller)
+
+    def _open_smart_review(self) -> None:
+        from src.gui.smart_review_dialog import SmartReviewDialog, TextDraft
+        from src.review.assist.session import AssistEnablement
+
+        paths = self._get_selected_review_paths()
+        if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            messagebox.showwarning("Smart Review", "Select exactly one PNG, JPEG or WebP still image.", parent=self)
+            return
+        if self.app_controller is None:
+            messagebox.showwarning("Smart Review", "The application controller is unavailable.", parent=self)
+            return
+        if self._smart_enablement is None:
+            self._smart_enablement = AssistEnablement()  # session-scoped; every capability starts off
+        SmartReviewDialog(
+            self,
+            source_path=paths[0],
+            controller=self.app_controller,
+            enablement=self._smart_enablement,
+            prompt_binding=TextDraft(self.prompt_text, self._refresh_prompt_diff),
+            visibility_mode=lambda: self._content_visibility_mode,
+            draft_current=lambda: self._get_selected_review_paths() == paths,
+        )
 
     def _open_outpaint_editor(self) -> None:
         from src.gui.outpaint_dialog import OutpaintDialog

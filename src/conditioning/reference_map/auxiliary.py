@@ -43,10 +43,15 @@ from src.conditioning.reference_map.contracts import (
 RESOURCE_BY_MODALITY: dict[str, str] = {
     "depth": "depth-anything-v2-small-hf",
     "openpose": "dwpose-onnx",
+    # Review Smart assist (PR-IMG-REVIEW-320) asks the same readiness question of its two catalog resources.
+    "sam2": "sam-2-1-small",
+    "florence2": "florence-2-base-ft",
 }
 TITLE_BY_MODALITY: dict[str, str] = {
     "depth": "Depth Anything V2 Small",
     "openpose": "DWPose ONNX",
+    "sam2": "SAM 2.1 Small",
+    "florence2": "Florence-2 Base FT",
 }
 _COPY_CHUNK = 1024 * 1024
 _ROOT_PREFIX = ROOT_LABELS[ROOT_AUXILIARY] + "/"
