@@ -43,6 +43,7 @@ from src.utils.process_container_v2 import (
     ProcessContainerConfig,
     build_process_container,
 )
+from src.utils.process_observation import ProcessTreeSample
 from src.utils.thread_registry import get_thread_registry
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,60 @@ class _Spawned:
     process: subprocess.Popen[bytes]
     container: ProcessContainer
     contained: bool
+
+
+class OwnedChildObservation:
+    """Request-scoped read capability, minted only from the child run_bounded owns.
+
+    No PID discovery, priority setter or termination API is exposed. The Windows
+    container reads retained member handles. Closing this view revokes observation.
+    """
+
+    def __init__(self, spawned: _Spawned) -> None:
+        self._spawned = spawned
+        self._active = True
+        self.pid = spawned.process.pid
+        self._identity: Any = None
+        if os.name != "nt":
+            import psutil
+
+            # Until reaped, a directly launched POSIX child's PID cannot recycle.
+            if spawned.process.poll() is not None:
+                raise OSError("owned child exited before observation")
+            self._identity = psutil.Process(self.pid)
+            self._identity.create_time()
+
+    def close(self) -> None:
+        self._active = False
+
+    def sample(self) -> ProcessTreeSample:
+        if not self._active:
+            raise OSError("owned observation expired")
+        if os.name == "nt":
+            if not self._spawned.contained:
+                raise OSError("owned container telemetry unavailable")
+            return self._spawned.container.observe_tree(self.pid)
+        # Portable read-only diagnostic fallback; no process is ever reprioritised
+        # by PID. Windows qualification still requires the job's priority read-back.
+        root = self._identity
+        if root is None or not root.is_running():
+            raise OSError("owned child identity unavailable")
+        tree = [root, *root.children(recursive=True)]
+        private = rss = 0
+        cpu = 0.0
+        for member in tree:
+            if not member.is_running():
+                raise OSError("owned member exited during observation")
+            info = member.memory_info()
+            times = member.cpu_times()
+            private += int(getattr(info, "private", info.vms))
+            rss += int(info.rss)
+            cpu += times.user + times.system
+            if not member.is_running():
+                raise OSError("owned member identity changed")
+        if not root.is_running():
+            raise OSError("owned child identity changed")
+        return ProcessTreeSample(self.pid, len(tree), private, rss, cpu, None)
 
 
 class _TrackedPopen(subprocess.Popen):  # type: ignore[type-arg]
@@ -298,6 +353,7 @@ def _spawn_contained(
     require_containment: bool | None,
     cwd: str | None,
     env: Mapping[str, str] | None,
+    below_normal: bool = False,
 ) -> _Spawned:
     """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
 
@@ -310,7 +366,9 @@ def _spawn_contained(
         label=label,
         required=required,
         container=build_process_container(label, ProcessContainerConfig(enabled=True)),
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) | (0x4000 if below_normal else 0))
+        if os.name == "nt"
+        else 0,
         cwd=cwd,
         env=None if env is None else dict(env),
         stdin=subprocess.DEVNULL,
@@ -392,6 +450,7 @@ def run_bounded(
     cwd: str | os.PathLike[str] | None = None,
     env: Mapping[str, str] | None = None,
     require_containment: bool | None = None,
+    observe: Callable[[OwnedChildObservation], None] | None = None,
 ) -> ProcessOutcome:
     """Run one child with a wall-clock timeout, output caps and cooperative cancellation.
 
@@ -401,12 +460,14 @@ def run_bounded(
     short drain even if a descendant that escaped containment still holds the child's pipes."""
 
     try:
+        spawn_options: dict[str, Any] = {"below_normal": True} if observe is not None else {}
         spawned = _spawn_contained(
             command,
             label=f"bounded-{uuid.uuid4().hex[:12]}",
             require_containment=require_containment,
             cwd=None if cwd is None else str(cwd),
             env=env,
+            **spawn_options,
         )
     except ContainmentError as exc:
         return ProcessOutcome(returncode=None, launch_error=f"containment unavailable: {exc}")
@@ -414,6 +475,7 @@ def run_bounded(
         return ProcessOutcome(returncode=None, launch_error=str(exc) or type(exc).__name__)
 
     process, container = spawned.process, spawned.container
+    observation: OwnedChildObservation | None = None
     out_buf = _CappedBuffer(max_stdout_bytes)
     err_buf = _CappedBuffer(max_stderr_bytes)
     readers: list[threading.Thread] = []
@@ -422,6 +484,9 @@ def run_bounded(
     timed_out = False
     cancelled = False
     try:
+        if observe is not None:
+            observation = OwnedChildObservation(spawned)
+            observe(observation)
         # Inside the try: if a reader cannot start, the (already running) child is still killed and released below.
         readers.append(
             _spawn_reader(
@@ -442,7 +507,8 @@ def run_bounded(
             )
         )
         stdout_reader = readers[0]
-        while stdout_reader.is_alive():
+        cancelled = _is_cancelled(cancel)
+        while not cancelled and stdout_reader.is_alive():
             if _is_cancelled(cancel):
                 cancelled = True
                 break
@@ -472,6 +538,8 @@ def run_bounded(
             reader.join(max(0.0, drain_deadline - time.monotonic()))
     finally:
         # Leave nothing behind on any path, including an exception in this thread.
+        if observation is not None:
+            observation.close()
         if process.poll() is None:
             _kill_tree(process, container)
         # Never close a stream a reader is still blocked on: that close waits for the pipe's EOF, which an escaped

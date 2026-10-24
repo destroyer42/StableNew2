@@ -10,7 +10,9 @@ and a qualification harness) never overwrite each other. On POSIX that is ``O_AP
 runtime emulates ``O_APPEND`` by seeking and then writing, which is *not* atomic across processes, so the Windows path
 opens the file with ``FILE_APPEND_DATA`` only (the kernel then positions every write at the end of file) and
 ``FILE_FLAG_WRITE_THROUGH`` (no separate flush is possible without write access). A crash can leave at most a torn final
-line: readers skip any line that is not valid JSON, and the next append starts a fresh line. The file is bounded by size:
+line: readers skip any line that is not valid JSON, and the next append starts a fresh line. Tail inspection, append and
+rotation share one bounded cross-process writer lock, so an in-flight write is never mistaken for a torn tail. The empty
+sidecar remains stable across rotation; OS closure releases the lock after a writer crash. The file is bounded by size:
 past ``MAX_BYTES`` it is rotated to ``<name>.1`` (one generation kept). ``src.utils.atomic_io`` provides atomic
 *replacement*, which cannot express an append, so this log is the one deliberate exception to "persisted state goes
 through atomic_io".
@@ -18,12 +20,15 @@ through atomic_io".
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
 import sys
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -36,6 +41,8 @@ _MAX_LINE_BYTES = 4096
 _MAX_STRING = 80
 _ATTEMPTS = 5
 _RETRY_BACKOFF_S = 0.02
+_WRITER_LOCK_TIMEOUT_S = 2.0
+_WRITER_LOCK_POLL_S = 0.01
 ALLOWED_FIELDS: frozenset[str] = frozenset(
     {
         "utc",
@@ -50,6 +57,9 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "model_sha256_prefix",
         "runtime_build_id",
         "strict_offline",
+        "peak_private_gib",
+        "priority_verified",
+        "child_observed",
     }
 )
 
@@ -63,6 +73,54 @@ def _lock_for(path: Path) -> threading.Lock:
     key = os.path.normcase(os.path.abspath(path))
     with _LOCKS_GUARD:
         return _LOCKS.setdefault(key, threading.Lock())
+
+
+def _set_writer_lock(descriptor: int, *, unlock: bool) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        msvcrt.locking(descriptor, msvcrt.LK_UNLCK if unlock else msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(descriptor, fcntl.LOCK_UN if unlock else fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+@contextmanager
+def _writer_lock(path: Path) -> Iterator[None]:
+    """Serialize tail inspection, append and rotation across processes.
+
+    The empty sidecar is never removed or rotated: every writer locks the same
+    file even when the data file moves. OS handle closure releases it on a crash.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_BINARY", 0), 0o600)
+    acquired = False
+    try:
+        deadline = time.monotonic() + _WRITER_LOCK_TIMEOUT_S
+        while not acquired:
+            try:
+                _set_writer_lock(descriptor, unlock=False)
+                acquired = True
+            except OSError as exc:
+                if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                    raise
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("AI assist event writer lock timed out") from exc
+                time.sleep(_WRITER_LOCK_POLL_S)
+        try:
+            yield
+        finally:
+            try:
+                _set_writer_lock(descriptor, unlock=True)
+            except OSError as exc:
+                # An append may already be durable. Do not retry it as a permission
+                # failure and risk duplicating a completed record.
+                raise OSError("AI assist event writer lock release failed") from exc
+    finally:
+        os.close(descriptor)
 
 
 def _append_posix(path: Path, data: bytes) -> None:
@@ -152,7 +210,9 @@ class EventLog:
         with self._lock:
             for attempt in range(1, _ATTEMPTS + 1):
                 try:
-                    self._append_once(line)
+                    with _writer_lock(self._path):
+                        self._append_once(line)
+                        self._rotate_if_needed()
                     break
                 except PermissionError:
                     # Windows briefly denies access while an indexer, antivirus scan or another process holds the file.
@@ -163,7 +223,6 @@ class EventLog:
                 except OSError:
                     logger.warning("AI assist event record could not be written", exc_info=True)
                     return False
-            self._rotate_if_needed()
         return True
 
     def _append_once(self, line: bytes) -> None:

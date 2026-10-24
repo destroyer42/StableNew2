@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-530 of 684 modules have a docstring.
+532 of 686 modules have a docstring.
 
 ## src/
 
@@ -25,6 +25,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `framing.py`: The fixed instruction frame and the JSON Schema for one request
 - `host.py`: Read-only host seams: memory and generation activity
 - `manifests.py`: Pinned runtime manifest, provenance-gated model registry, local import and integrity verification
+- `observe.py`: Consume only the read capability minted by run_bounded for this request (F2)
 - `paths.py`: Where the offline AI runtime, weights and records live
 - `runtime.py`: One bounded, contained, CPU-only inference as a short-lived child (owner decision D2)
 - `service.py`: Single-flight admission, yielding and outcome mapping for one AI request at a time
@@ -728,6 +729,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `preferences.py`: Persistence helpers for GUI preferences and last-used settings
 - `process_container_v2.py`: OS-level process container helpers (job objects / cgroup v2) for StableNew
 - `process_inspector_v2.py`: Utilities for inspecting and describing Python processes
+- `process_observation.py`: Read-only snapshots of a bounded child's owned container; no lifecycle authority
 - `prompt_pack_utils.py`: Utilities for reading metadata from native JSON PromptPacks
 - `prompt_packs.py`: Prompt pack discovery and descriptors for Architecture_v2
 - `prompt_templates.py`: (no docstring)

@@ -44,6 +44,9 @@ FAKE_CHILD = textwrap.dedent(
             json.dump({"argv": argv, "cuda": os.environ.get("CUDA_VISIBLE_DEVICES"), "env": sorted(os.environ),
                        "no_proxy": os.environ.get("NO_PROXY"), "cwd": os.getcwd(),
                        "llama": {k: v for k, v in os.environ.items() if k.upper().startswith("LLAMA")}}, handle)
+    alloc_mb = int(lines.get("TEST_ALLOC_MB", "0"))
+    held = (bytearray(b"x") * (alloc_mb * 1024 * 1024)) if alloc_mb else None
+    time.sleep(float(lines.get("TEST_SLEEP", "0")))
     pidfile = lines.get("TEST_PIDFILE")
     selfpid = lines.get("TEST_SELFPID")
     if selfpid:
