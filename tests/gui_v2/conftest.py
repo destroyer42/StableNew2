@@ -348,3 +348,23 @@ def gui_app_factory(monkeypatch: pytest.MonkeyPatch, tk_root: tk.Tk, tmp_path):
 def gui_app_with_dummies(gui_app_factory, dummy_controller, dummy_config_manager):
     app = gui_app_factory(controller=dummy_controller, config_manager=dummy_config_manager)
     return app, dummy_controller, dummy_config_manager
+
+
+@pytest.fixture(autouse=True)
+def inline_edit_work(monkeypatch):
+    """Run the Edit workspaces' (Review, Photo Optimize) background work inline so GUI tests stay deterministic.
+
+    Tests that exercise ordering, supersession or in-flight behavior replace ``coordinator_factory`` with a
+    coordinator over a manually driven thread registry (see ``tests/gui_v2/edit_work_helpers.py``).
+    """
+
+    from src.controller.app_controller_services.background_task_coordinator import (
+        BackgroundTaskCoordinator,
+    )
+    from src.gui.view_contracts import edit_work_runner
+
+    monkeypatch.setattr(
+        edit_work_runner,
+        "coordinator_factory",
+        lambda widget: BackgroundTaskCoordinator(run_inline=True),
+    )

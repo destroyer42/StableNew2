@@ -369,6 +369,7 @@ def test_resize_round_trip_keeps_selection_text_and_widgets(tk_root, tmp_path) -
         active_id = rows[1]
         tab.prompt_delta_text.insert("1.0", "run only text")
         tab.tags_var.set("kept")
+        tab._flush_baseline_now()  # the autosave of the typed tag is debounced; settle it before watching layout
         sidecar = store.sidecar_path(active_id).read_bytes()
         selected_before = tab._selected_asset_ids(batch_all=False)
         assert selected_before == [rows[0], rows[2]]

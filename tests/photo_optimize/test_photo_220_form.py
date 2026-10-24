@@ -7,6 +7,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from src.controller.app_controller_services.background_task_coordinator import (
+    BackgroundTaskCoordinator,
+)
+from src.gui.view_contracts.edit_work_runner import EditWorkRunner
+from src.gui.view_contracts.photo_baseline_save_contract import PhotoBaselineSaveSession
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
 from src.photo_optimize.editing import pipeline_mask
 from src.photo_optimize.store import PhotoOptimizeStore
@@ -18,6 +23,7 @@ from .test_photo_220 import image
 def unexpected_dialogs_fail(monkeypatch):
     def unexpected(*args, **kwargs):
         raise AssertionError(f"Unexpected headless dialog: {args}")
+
     monkeypatch.setattr("src.gui.views.photo_optimize_scope.messagebox.showerror", unexpected)
     monkeypatch.setattr("src.gui.views.photo_optimize_scope.messagebox.showwarning", unexpected)
 
@@ -157,6 +163,17 @@ def form(tmp_path):
     tab._show_asset = Mock(side_effect=lambda asset_id: setattr(tab, "_current_asset_id", asset_id))
     tab._clear_selection = Mock(side_effect=lambda: setattr(tab, "_current_asset_id", None))
     tab.winfo_ismapped = lambda: True
+    # The headless tab skips __init__, so give it the edit-work wiring it would have built (workers run inline).
+    tab.baseline_save_status_var = Variable()
+    tab._work = EditWorkRunner(BackgroundTaskCoordinator(run_inline=True), is_alive=lambda: True)
+    tab._baseline_saves = PhotoBaselineSaveSession(
+        get_store=lambda: tab.store, runner=tab._work, on_change=tab._render_baseline_save_status
+    )
+    tab._baseline_saves.rebase(asset.asset_id, tab.store.get_asset(asset.asset_id).baseline)
+    tab._baseline_debounce_id = None
+    tab._asset_load_seq = 0
+    tab.after = lambda _ms, callback: "after#1"
+    tab.after_cancel = lambda _identifier: None
     return tab
 
 
@@ -201,8 +218,15 @@ def test_invalid_form_edit_keeps_sidecar_unchanged(tmp_path, bad):
     tab = form(tmp_path)
     before = tab.store.sidecar_path(tab._current_asset_id).read_bytes()
     tab.img2img_steps_var.set(bad)
-    assert tab._persist_current_asset_baseline() is False
+    accepted = tab._persist_current_asset_baseline()
+    if bad in ("invalid", 1.5):
+        assert (
+            accepted is False
+        )  # not even a number of steps: refused before anything is sent to the worker
+    # A range error is found by the save worker's validation; either way the edit is refused with a visible
+    # reason, reported as not saved, and the sidecar is untouched.
     assert tab.settings_error_var.get()
+    assert tab.baseline_save_status_var.get().startswith("Not saved") or accepted is False
     assert tab.store.sidecar_path(tab._current_asset_id).read_bytes() == before
 
 
@@ -270,8 +294,14 @@ def test_pipeline_copy_targets_all_selected_preserving_notes_and_prompts(tmp_pat
         }
     )
     with (
-        patch("src.gui.views.photo_optimize_scope.pipeline_copy_dialog",
-              side_effect=lambda parent, snapshot, scope, review: review(pipeline_mask(snapshot, {"model", "vae", "stages", "img2img", "adetailer", "upscale"}))),
+        patch(
+            "src.gui.views.photo_optimize_scope.pipeline_copy_dialog",
+            side_effect=lambda parent, snapshot, scope, review: review(
+                pipeline_mask(
+                    snapshot, {"model", "vae", "stages", "img2img", "adetailer", "upscale"}
+                )
+            ),
+        ),
         patch("src.gui.views.photo_optimize_scope.review_dialog", return_value=True),
         patch("src.gui.views.photo_optimize_scope.messagebox.showinfo"),
     ):
@@ -317,7 +347,9 @@ def test_operation_runs_on_worker_and_result_waits_for_gui_poll(tmp_path):
     tab.after = lambda delay, callback: callbacks.append(callback)
     operation = Mock(return_value=3)
     completed = Mock()
-    with patch("src.gui.views.photo_optimize_tab_frame_v2.ThreadPoolExecutor", return_value=executor):
+    with patch(
+        "src.gui.views.photo_optimize_tab_frame_v2.ThreadPoolExecutor", return_value=executor
+    ):
         PhotoOptimizeTabFrameV2._run_photo_operation(tab, operation, completed)
     executor.submit.assert_called_once_with(operation)
     completed.assert_not_called()
@@ -330,10 +362,22 @@ def test_operation_runs_on_worker_and_result_waits_for_gui_poll(tmp_path):
 def test_pipeline_img2img_projection_preserves_zero_without_tk():
     from src.gui.stage_cards_v2.advanced_img2img_stage_card_v2 import AdvancedImg2ImgStageCardV2
 
-    card = SimpleNamespace(**{name + "_var": Variable(value) for name, value in {
-        "vae": "Automatic", "model": "photoModel", "sampler": "Euler a", "steps": 20,
-        "cfg": 0.0, "denoise": 0.0, "width": 640, "height": 960, "mask_mode": "",
-    }.items()})
+    card = SimpleNamespace(
+        **{
+            name + "_var": Variable(value)
+            for name, value in {
+                "vae": "Automatic",
+                "model": "photoModel",
+                "sampler": "Euler a",
+                "steps": 20,
+                "cfg": 0.0,
+                "denoise": 0.0,
+                "width": 640,
+                "height": 960,
+                "mask_mode": "",
+            }.items()
+        }
+    )
     projection = AdvancedImg2ImgStageCardV2.to_config_dict(card)["img2img"]
     assert projection["cfg_scale"] == 0.0
     assert projection["denoising_strength"] == 0.0
@@ -342,11 +386,23 @@ def test_pipeline_img2img_projection_preserves_zero_without_tk():
 def test_pipeline_upscale_projection_preserves_zero_without_tk():
     from src.gui.stage_cards_v2.advanced_upscale_stage_card_v2 import AdvancedUpscaleStageCardV2
 
-    card = SimpleNamespace(**{name + "_var": Variable(value) for name, value in {
-        "upscaler": "R-ESRGAN 4x+", "mode": "single", "steps": 20, "denoise": 0.0,
-        "factor": 2.0, "tile_size": 0, "face_restore": False, "face_restore_method": "CodeFormer",
-        "sampler": "Euler a", "scheduler": "normal",
-    }.items()})
+    card = SimpleNamespace(
+        **{
+            name + "_var": Variable(value)
+            for name, value in {
+                "upscaler": "R-ESRGAN 4x+",
+                "mode": "single",
+                "steps": 20,
+                "denoise": 0.0,
+                "factor": 2.0,
+                "tile_size": 0,
+                "face_restore": False,
+                "face_restore_method": "CodeFormer",
+                "sampler": "Euler a",
+                "scheduler": "normal",
+            }.items()
+        }
+    )
     card._upscaler_name_map = {}
     projection = AdvancedUpscaleStageCardV2.to_config_dict(card)["upscale"]
     assert projection["denoising_strength"] == 0.0
@@ -359,10 +415,13 @@ def test_multiselection_restore_waits_for_deferred_store(tmp_path):
     store = tab.store
     first_id = tab._current_asset_id
     tab.store = None
-    assert tab.restore_photo_optimize_state({
-        "selected_asset_id": first_id, "selected_asset_ids": [first_id, second.asset_id],
-        "show_archived": True,
-    })
+    assert tab.restore_photo_optimize_state(
+        {
+            "selected_asset_id": first_id,
+            "selected_asset_ids": [first_id, second.asset_id],
+            "show_archived": True,
+        }
+    )
     tab.store = store
     tab._refresh_assets(select_asset_id=first_id)
     assert set(tab._selected_asset_ids(batch_all=False)) == {first_id, second.asset_id}

@@ -56,8 +56,8 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
     "review": TabOverviewContent(
         tab_id="review",
         tab_name="Review",
-        compact_summary="Use Review when you already have images and want to compare metadata, inspect effective settings, edit prompts, or submit deliberate queue-backed reprocess jobs.",
-        purpose="Review is the canonical advanced reprocess workspace for existing images and lineage-aware edits.",
+        compact_summary="Quick Edit — review and reprocess images you already have: select images, inspect or edit, preview the effective job, then add it to the queue. For persistent per-photo settings and results, use the Managed Photo Set in Photo Optimize.",
+        purpose="Review (Quick Edit) is the canonical advanced reprocess workspace for existing images and lineage-aware edits. It keeps nothing per photo: each job comes from the settings you see here.",
         inputs=(
             "Existing images from disk or recent job history.",
             "Embedded metadata, resolved prompts, and derived settings.",
@@ -69,7 +69,7 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
             "Import selected items into Learning when they should become curation evidence.",
         ),
         connections=(
-            "Review receives outputs from Pipeline and history imports; Photo Optimize is the separate tab for enhancing photos.",
+            "Review receives outputs from Pipeline and history imports. Manage Selected Photos… offers images to the Managed Photo Set (Photo Optimize); nothing is copied until you confirm there.",
             "Selected items can move into Learning for feedback and staged curation work.",
             "Reprocess actions eventually route back through the queue-backed pipeline.",
         ),

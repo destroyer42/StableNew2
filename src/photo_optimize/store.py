@@ -4,13 +4,16 @@ import json
 import shutil
 import tempfile
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from threading import Lock
+from threading import Lock, RLock
 from typing import Any
 
 from src.state.workspace_paths import workspace_paths as _wp
+from src.utils.atomic_io import atomic_write_text
 
 from .migration import MigrationReport, migrate_assets
 from .models import (
@@ -32,6 +35,10 @@ def _utc_now() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
+class StaleBaselineError(ValueError):
+    """The stored baseline is no longer the one an edit was made against (another writer changed it)."""
+
+
 def _new_asset_id() -> str:
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     return f"photo_{timestamp}_{uuid.uuid4().hex[:8]}"
@@ -44,6 +51,10 @@ class PhotoOptimizeStore:
         self._staging_dir = io_path(self._root / "staging_runs")
         self._legacy_root = Path(legacy_root) if legacy_root is not None else None
         self._migration_lock = Lock()
+        # One lock per asset serialises every read-modify-write of its sidecar (GUI baseline saves, batch edit,
+        # promotion, revert, archive and job-completion history all re-read inside the lock, so none is lost).
+        self._asset_locks: dict[str, RLock] = {}
+        self._asset_locks_guard = Lock()
         self.migration_report = MigrationReport()
         self._check_writable()
         if self._legacy_root is not None:
@@ -102,6 +113,28 @@ class PhotoOptimizeStore:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    @contextmanager
+    def asset_lock(self, asset_id: str) -> Iterator[None]:
+        """Hold the per-asset sidecar lock (reentrant) for a caller that must check-then-write atomically."""
+
+        self.asset_dir(asset_id)  # rejects an invalid identity before a lock is created for it
+        with self._asset_locks_guard:
+            lock = self._asset_locks.setdefault(asset_id, RLock())
+        with lock:
+            yield
+
+    def find_asset_ids_by_content(self, sha256: str, *, include_archived: bool = True) -> list[str]:
+        """Managed assets whose recorded original bytes have this SHA-256 (content identity, never a filename)."""
+
+        digest_value = str(sha256 or "").strip().lower()
+        if not digest_value:
+            return []
+        return [
+            asset.asset_id
+            for asset in self.list_assets(include_archived=include_archived)
+            if (asset.original_sha256 or "").lower() == digest_value
+        ]
+
     def list_assets(self, *, include_archived: bool = False) -> list[PhotoOptimizeAsset]:
         assets: list[PhotoOptimizeAsset] = []
         for sidecar in sorted(self._assets_dir.glob("*/sidecar.json")):
@@ -115,20 +148,19 @@ class PhotoOptimizeStore:
         return self._read_asset(self.sidecar_path(asset_id))
 
     def save_asset(self, asset: PhotoOptimizeAsset) -> PhotoOptimizeAsset:
-        asset_dir = self.asset_dir(asset.asset_id)
-        asset_dir.mkdir(parents=True, exist_ok=True)
-        self.original_dir(asset.asset_id)
-        self.outputs_dir(asset.asset_id)
-        self.manifests_dir(asset.asset_id)
-        sidecar = self.sidecar_path(asset.asset_id)
-        payload = json.loads(sidecar.read_text(encoding="utf-8")) if sidecar.exists() else {}
-        serialized = asset.to_dict()
-        serialized["baseline"] = {**payload.get("baseline", {}), **serialized["baseline"]}
-        payload.update(serialized)
-        temporary = sidecar.with_name(f"sidecar_{uuid.uuid4().hex}.tmp")
-        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        temporary.replace(sidecar)
-        return asset
+        with self.asset_lock(asset.asset_id):
+            asset_dir = self.asset_dir(asset.asset_id)
+            asset_dir.mkdir(parents=True, exist_ok=True)
+            self.original_dir(asset.asset_id)
+            self.outputs_dir(asset.asset_id)
+            self.manifests_dir(asset.asset_id)
+            sidecar = self.sidecar_path(asset.asset_id)
+            payload = json.loads(sidecar.read_text(encoding="utf-8")) if sidecar.exists() else {}
+            serialized = asset.to_dict()
+            serialized["baseline"] = {**payload.get("baseline", {}), **serialized["baseline"]}
+            payload.update(serialized)
+            atomic_write_text(sidecar, json.dumps(payload, indent=2))
+            return asset
 
     def archive_assets(self, asset_ids: list[str]) -> None:
         self._set_archived(asset_ids, True)
@@ -140,10 +172,13 @@ class PhotoOptimizeStore:
         assets = [self.get_asset(asset_id) for asset_id in asset_ids]
         if any(asset is None for asset in assets):
             raise ValueError("A selected photo is unavailable; refresh the list")
-        for asset in assets:
-            assert asset is not None
-            asset.archived = archived
-            self.save_asset(asset)
+        for asset_id in asset_ids:
+            with self.asset_lock(asset_id):
+                asset = self.get_asset(asset_id)
+                if asset is None:
+                    raise ValueError("A selected photo is unavailable; refresh the list")
+                asset.archived = archived
+                self.save_asset(asset)
 
     def import_photo(
         self,
@@ -195,17 +230,31 @@ class PhotoOptimizeStore:
         notes: str | None = None,
         tags: list[str] | None = None,
         baseline: PhotoOptimizeBaseline | None = None,
+        expected_baseline: dict[str, Any] | None = None,
     ) -> PhotoOptimizeAsset:
-        asset = self.get_asset(asset_id)
-        if asset is None:
-            raise KeyError(asset_id)
-        if notes is not None:
-            asset.notes = notes
-        if tags is not None:
-            asset.tags = list(tags)
-        if baseline is not None:
-            asset.baseline = baseline
-        return self.save_asset(asset)
+        """Update draft fields. ``expected_baseline`` makes a baseline write conditional: the stored baseline must
+        still equal it, otherwise ``StaleBaselineError`` is raised and nothing is written."""
+
+        with self.asset_lock(asset_id):
+            asset = self.get_asset(asset_id)
+            if asset is None:
+                raise KeyError(asset_id)
+            if (
+                baseline is not None
+                and expected_baseline is not None
+                and asset.baseline.to_dict() != expected_baseline
+            ):
+                raise StaleBaselineError(
+                    "This photo's baseline was changed by another action (for example a promoted result "
+                    "or a batch edit); reselect the photo to reload it before editing again."
+                )
+            if notes is not None:
+                asset.notes = notes
+            if tags is not None:
+                asset.tags = list(tags)
+            if baseline is not None:
+                asset.baseline = baseline
+            return self.save_asset(asset)
 
     def list_result_candidates(self, asset_id):
         asset = self.get_asset(asset_id)
@@ -216,7 +265,11 @@ class PhotoOptimizeStore:
     def prepare_result_promotion(self, asset_id, candidate, *, mode):
         return prepare_promotion(self, asset_id, candidate, mode=mode)
 
-    def apply_result_promotion(self, plan):
+    def apply_result_promotion(self, plan: Any) -> Any:
+        with self.asset_lock(plan.asset_id):
+            return self._apply_result_promotion_locked(plan)
+
+    def _apply_result_promotion_locked(self, plan: Any) -> Any:
         fresh = prepare_promotion(self, plan.asset_id, plan.candidate, mode=plan.mode)
         if (fresh.fingerprint != plan.fingerprint or fresh.image_sha256 != plan.image_sha256
                 or fresh.after.to_dict() != plan.after.to_dict()):
@@ -246,16 +299,53 @@ class PhotoOptimizeStore:
         return self.apply_result_promotion(self.prepare_result_promotion(asset_id, candidate, mode="recorded"))
 
     def revert_baseline(self, asset_id: str) -> PhotoOptimizeAsset:
-        asset = self.get_asset(asset_id)
-        if asset is None:
-            raise KeyError(asset_id)
-        if not asset.baseline_snapshots:
-            raise ValueError("No baseline snapshot is available")
-        snapshot = asset.baseline_snapshots.pop()
-        asset.baseline = PhotoOptimizeBaseline.from_dict(snapshot.baseline.to_dict())
-        return self.save_asset(asset)
+        with self.asset_lock(asset_id):
+            asset = self.get_asset(asset_id)
+            if asset is None:
+                raise KeyError(asset_id)
+            if not asset.baseline_snapshots:
+                raise ValueError("No baseline snapshot is available")
+            snapshot = asset.baseline_snapshots.pop()
+            asset.baseline = PhotoOptimizeBaseline.from_dict(snapshot.baseline.to_dict())
+            return self.save_asset(asset)
 
     def record_optimize_history(
+        self,
+        asset_id: str,
+        *,
+        run_id: str,
+        input_image_path: str,
+        source_output_paths: list[str] | None,
+        prompt_mode: str,
+        prompt_delta: str,
+        negative_prompt_mode: str,
+        negative_prompt_delta: str,
+        effective_prompt: str,
+        effective_negative_prompt: str,
+        stages: list[str],
+        config_snapshot: dict[str, Any] | None,
+        job_ids: list[str] | None,
+        geometry_policy: str = "",
+    ) -> PhotoOptimizeAsset:
+        with self.asset_lock(asset_id):
+            return self._record_optimize_history_locked(
+                asset_id,
+                run_id=run_id,
+                input_image_path=input_image_path,
+                source_output_paths=source_output_paths,
+                prompt_mode=prompt_mode,
+                prompt_delta=prompt_delta,
+                negative_prompt_mode=negative_prompt_mode,
+                negative_prompt_delta=negative_prompt_delta,
+                effective_prompt=effective_prompt,
+                effective_negative_prompt=effective_negative_prompt,
+                stages=stages,
+                config_snapshot=config_snapshot,
+                job_ids=job_ids,
+                geometry_policy=geometry_policy,
+            )
+
+    def _record_optimize_history_locked(
         self,
         asset_id: str,
         *,

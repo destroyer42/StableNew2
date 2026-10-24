@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
@@ -166,6 +167,11 @@ class EditResult:
         )
 
 
+def _asset_guard(store: Any, identity: str) -> Any:
+    guard = getattr(store, "asset_lock", None)
+    return guard(identity) if callable(guard) else nullcontext()
+
+
 def _fingerprint(store, identity):
     return hashlib.sha256(store.sidecar_path(identity).read_bytes()).hexdigest()
 
@@ -273,11 +279,14 @@ def apply_edit(store, plan: EditPlan) -> EditResult:
     result = EditResult()
     for row in plan.rows:
         try:
-            if _fingerprint(store, row.asset_id) != row.fingerprint:
-                result.failed[row.asset_id] = "Changed during Apply; preview again"
-                continue
-            if row.changes:
-                store.save_asset(deepcopy(row.after))
+            with _asset_guard(
+                store, row.asset_id
+            ):  # the check and the write are one step for this photo
+                if _fingerprint(store, row.asset_id) != row.fingerprint:
+                    result.failed[row.asset_id] = "Changed during Apply; preview again"
+                    continue
+                if row.changes:
+                    store.save_asset(deepcopy(row.after))
             result.applied.append(row.asset_id)
         except (OSError, ValueError, TypeError) as exc:
             try:

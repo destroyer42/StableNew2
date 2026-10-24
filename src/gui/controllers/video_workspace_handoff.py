@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from tkinter import TclError
 from typing import Any
@@ -98,10 +99,14 @@ def route_images_to_video_workflow(
 def route_images_to_review(
     *,
     main_window: Any,
-    image_paths: list[str | Path],
+    image_paths: Sequence[str | Path],
     status_message: str | None = None,
 ) -> list[str]:
-    """Hand an ORDERED list of existing images to Review's selection (intent only; nothing is queued)."""
+    """Hand an ORDERED list of existing images to Review's selection (intent only; nothing is queued).
+
+    Replacing unsent Review work asks Replace/Cancel first. When the operator cancels, nothing changes (Review keeps
+    its state, navigation stays where it was) and the result is an empty list.
+    """
 
     paths = [str(path) for path in image_paths if str(path).strip()]
     if not paths:
@@ -112,8 +117,35 @@ def route_images_to_review(
     loader = getattr(review_tab, "load_selected_images", None)
     if not callable(loader):
         raise RuntimeError("Review tab does not support image handoff")
+    if not loader(paths, status_message=status_message):
+        return []
     _select_tab(main_window, review_tab)
-    loader(paths, status_message=status_message)
+    return paths
+
+
+def route_images_to_photo_optimize(
+    *,
+    main_window: Any,
+    image_paths: Sequence[str | Path],
+    status_message: str | None = None,
+) -> list[str]:
+    """Offer ORDERED existing images to the Managed Photo Set (import is planned and operator-confirmed there).
+
+    This carries file paths only: no Review state, History lineage or prompt text travels with it. Nothing is
+    copied or queued until the operator confirms the import inside Photo Optimize.
+    """
+
+    paths = [str(path) for path in image_paths if str(path).strip()]
+    if not paths:
+        raise ValueError("No images were provided for the Managed Photo Set")
+    photo_tab = getattr(main_window, "photo_optimize_tab", None)
+    if photo_tab is None:
+        raise RuntimeError("Photo Optimize tab is not available")
+    receiver = getattr(photo_tab, "receive_review_handoff", None)
+    if not callable(receiver):
+        raise RuntimeError("Photo Optimize tab does not support image handoff")
+    _select_tab(main_window, photo_tab)
+    receiver(paths, status_message=status_message)
     return paths
 
 
@@ -187,6 +219,7 @@ __all__ = [
     "route_image_to_movie_clips",
     "route_history_handoff_to_review",
     "route_image_to_video_workflow",
+    "route_images_to_photo_optimize",
     "route_images_to_review",
     "route_images_to_video_workflow",
     "show_queue_view",
