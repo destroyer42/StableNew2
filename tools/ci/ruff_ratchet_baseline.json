@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 383,
+    "total": 382,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -264,7 +264,6 @@
       "tests/learning_v2/test_pr_learn_300_workspace_persistence.py",
       "tests/learning_v2/test_recommendation_structured_values.py",
       "tests/photo_optimize/test_photo_220.py",
-      "tests/photo_optimize/test_photo_220_form.py",
       "tests/pipeline/test_adetailer_progress_semantics.py",
       "tests/pipeline/test_config_sweeps_v2.py",
       "tests/pipeline/test_exact_profile_effective_config_159.py",

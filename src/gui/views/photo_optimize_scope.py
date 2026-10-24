@@ -126,6 +126,9 @@ class PhotoOptimizeScopeMixin:
 
     def _optimize_saved(self, *, batch_all: bool) -> None:
         ids = self._selected_asset_ids(batch_all=batch_all)
+        if not ids:
+            messagebox.showwarning("No assets", "Select available photos first.")
+            return
         controller = self.app_controller
         store = self.store
         try:
