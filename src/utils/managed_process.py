@@ -26,6 +26,7 @@ This module imports nothing above ``src.utils``.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import subprocess
 import threading
@@ -354,18 +355,36 @@ def _spawn_contained(
     cwd: str | None,
     env: Mapping[str, str] | None,
     below_normal: bool = False,
+    memory_limit_mb: float | None = None,
 ) -> _Spawned:
     """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
+
+    A ``memory_limit_mb`` is a requirement, not a hint: the container must report exactly that limit before the child
+    starts, otherwise the child is not run. (The Windows job object quietly drops a limit the OS refuses.)
 
     Raises ``ContainmentError`` (with the child already killed) when containment is required and could not be
     established, and ``OSError`` when the child cannot launch at all."""
 
     required = containment_required() if require_containment is None else require_containment
+    container = build_process_container(
+        label, ProcessContainerConfig(enabled=True, memory_limit_mb=memory_limit_mb)
+    )
+    if memory_limit_mb is not None:
+        required = True
+        try:
+            established = container.inspect().get("memory_limit_mb")
+        except Exception:  # noqa: BLE001 - an uninspectable container cannot prove the limit
+            established = None
+        if established != memory_limit_mb:
+            _release(container)
+            raise ContainmentError(
+                f"{label}: the {memory_limit_mb:g} MB memory limit could not be established; the child was not started"
+            )
     return launch_contained(
         command,
         label=label,
         required=required,
-        container=build_process_container(label, ProcessContainerConfig(enabled=True)),
+        container=container,
         creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) | (0x4000 if below_normal else 0))
         if os.name == "nt"
         else 0,
@@ -451,16 +470,25 @@ def run_bounded(
     env: Mapping[str, str] | None = None,
     require_containment: bool | None = None,
     observe: Callable[[OwnedChildObservation], None] | None = None,
+    memory_limit_mb: float | None = None,
 ) -> ProcessOutcome:
     """Run one child with a wall-clock timeout, output caps and cooperative cancellation.
+
+    ``memory_limit_mb`` caps the memory the child's whole tree may commit (the container's job limit). When given it is
+    mandatory and verified: if the container cannot report exactly that limit the child is not run and
+    ``launch_error`` says so. ``None`` (the default) leaves memory unbounded, as before.
 
     Where containment is required (``containment_required()``) the child runs inside its own container, so a timeout or
     cancellation kills its whole tree; if that cannot be arranged the child is not run and the reason is reported in
     ``launch_error``.  ``stdin`` is closed.  A launch failure never raises.  The call returns within the timeout plus a
     short drain even if a descendant that escaped containment still holds the child's pipes."""
 
+    if memory_limit_mb is not None and not (math.isfinite(memory_limit_mb) and memory_limit_mb > 0):
+        raise ValueError("memory_limit_mb must be a positive, finite number of megabytes")
     try:
         spawn_options: dict[str, Any] = {"below_normal": True} if observe is not None else {}
+        if memory_limit_mb is not None:
+            spawn_options["memory_limit_mb"] = memory_limit_mb
         spawned = _spawn_contained(
             command,
             label=f"bounded-{uuid.uuid4().hex[:12]}",

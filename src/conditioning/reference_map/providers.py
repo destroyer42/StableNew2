@@ -3,7 +3,8 @@
 Each provider turns the loaded, oriented source into an RGB map plus the exact method identity, auxiliary-file identity,
 runtime versions and disclosed warnings. Canny is a pure CPU adapter; depth and OpenPose stage their hash-verified model
 files and run one contained child process through the repository's bounded-process helper (``run_bounded``): a
-wall-clock timeout, a stdout cap and cooperative cancellation that kills the child's whole tree. The child sees no GPU.
+wall-clock timeout, a stdout cap, a verified 6,144 MB memory limit and cooperative cancellation that kills the child's whole
+tree. The child sees no GPU.
 
 A provider that cannot run raises ``ProviderUnavailable`` with precise reason codes. Nothing falls back to another map
 type or method, and nothing here starts a thread, a runtime, a job or a network request.
@@ -46,6 +47,9 @@ from src.utils.managed_process import ProcessOutcome, run_bounded
 WORKER_PATH = Path(__file__).with_name("worker.py")
 MAX_RESULT_BYTES = 8 * 1024 * 1024
 WORKER_STDOUT_CAP = 64 * 1024
+#: Committed-memory ceiling for a model child's whole process tree (the container's job limit; IMG-QUAL-330). It is
+#: the ceiling the Florence and SAM offline qualification ran under; a container that cannot enforce it means no child.
+WORKER_MEMORY_LIMIT_MB = 6144
 DEFAULT_TIMEOUT_SECONDS = {"depth": 300.0, "openpose": 600.0}
 _ENV_ALLOWLIST = (
     "SYSTEMROOT", "SYSTEMDRIVE", "PATH", "PATHEXT", "TEMP", "TMP", "TMPDIR",
@@ -87,6 +91,7 @@ def bounded_runner(
         max_stdout_bytes=max_stdout_bytes,
         cancel=cancel,
         env=env,
+        memory_limit_mb=WORKER_MEMORY_LIMIT_MB,
     )
 
 
