@@ -161,6 +161,10 @@ class RuntimeHandoffGate:
             self._evaluated_at = self._clock()
         if assessment.state in (AssessmentState.READY, AssessmentState.DEFER):
             if own:
+                # A readiness epoch can unlock a retry, but cannot prove a failed cold start became usable.
+                # DEFER belongs to an already-unheld owned session; our hold requires positive identity proof.
+                if not probe.ready:
+                    return HELD
                 self._release("runtime_ready", probe)
             return READY
         if assessment.state is AssessmentState.BLOCKED:
