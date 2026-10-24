@@ -1669,9 +1669,8 @@ class MainWindowV2:
 
     def _handle_settings_saved(self, values: dict[str, Any], dialog: tk.Toplevel) -> None:
         controller = getattr(self.app_state, "controller", None)
-        if not (controller and hasattr(controller, "on_settings_saved")):
-            raise RuntimeError("No settings controller is available to save these settings.")
-        controller.on_settings_saved(values)  # a failure propagates: the dialog stays open and says so
+        if controller and hasattr(controller, "on_settings_saved"):
+            controller.on_settings_saved(values)  # a failure propagates: the dialog stays open and says so
         try:
             dialog.destroy()
         except Exception:

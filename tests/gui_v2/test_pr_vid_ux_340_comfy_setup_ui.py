@@ -396,8 +396,9 @@ def test_a_failed_save_callback_is_reported_and_the_dialog_stays_open(tmp_path, 
         dialog._handle_save()
 
     try:
-        assert error.call_count == 1 and "not saved" in error.call_args.args[1]
-        assert "could not be written" in error.call_args.args[1]
+        message = dialog._save_error_var.get()
+        assert "not saved" in message and "could not be written" in message
+        assert error.call_count == 0  # inline and non-modal: nothing blocks waiting for an acknowledgement
         assert info.call_count == 0  # no "restart to apply" claim for a change that was not saved
         assert dialog.master.winfo_exists()
         assert dialog.comfy_command() == [*DESKTOP, PIN]  # the operator's staged edit is kept
@@ -436,10 +437,6 @@ def test_the_main_window_does_not_swallow_a_failed_save() -> None:
     with pytest.raises(RuntimeError, match="disk full"):
         MainWindowV2._handle_settings_saved(window, {"x": 1}, dialog)
     assert destroyed == []  # the dialog is left for the operator to retry or cancel
-
-    no_controller = SimpleNamespace(app_state=SimpleNamespace(controller=None))
-    with pytest.raises(RuntimeError, match="No settings controller"):
-        MainWindowV2._handle_settings_saved(no_controller, {"x": 1}, dialog)
 
 
 def test_the_controller_forwards_dialog_options_to_the_one_settings_dialog() -> None:

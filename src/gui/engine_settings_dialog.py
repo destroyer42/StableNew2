@@ -75,6 +75,7 @@ class EngineSettingsDialog(ttk.Frame):
         )
         self._comfy_repair_reason = ""
         self._comfy_detection_note = ""
+        self._save_error_var = tk.StringVar()
         self._comfy_contract_error = ""
         if managed_comfy_contract is None:
             try:
@@ -472,6 +473,10 @@ class EngineSettingsDialog(ttk.Frame):
         cancel_btn.grid(row=0, column=1, sticky="ew", padx=4)
         save_btn = ttk.Button(btn_frame, text="Save & Close", command=self._handle_save)
         save_btn.grid(row=0, column=2, sticky="ew")
+        # A failed save is shown here, inline and non-modal: the dialog stays open without a blocking pop-up.
+        ttk.Label(
+            btn_frame, textvariable=self._save_error_var, style="Page.Muted.TLabel", wraplength=480
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
     def _add_label_entry(
         self,
@@ -663,14 +668,14 @@ class EngineSettingsDialog(ttk.Frame):
         values = self.collect_values()
         if not self._validate(values):
             return
+        self._save_error_var.set("")
         if callable(self._on_save):
             try:
                 self._on_save(values)
             except Exception as exc:  # noqa: BLE001 - a failed save is reported; the dialog stays open
-                messagebox.showerror(
-                    "Settings",
-                    f"The settings were not saved: {exc}\n\nNothing was applied. Fix the problem and "
-                    "choose Save & Close again, or Cancel.",
+                self._save_error_var.set(
+                    f"The settings were not saved: {exc} Nothing was applied. Fix the problem and "
+                    "choose Save & Close again, or Cancel."
                 )
                 return
         if self.restart_required():
