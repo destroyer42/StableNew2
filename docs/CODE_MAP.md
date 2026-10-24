@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-529 of 683 modules have a docstring.
+530 of 684 modules have a docstring.
 
 ## src/
 
@@ -418,6 +418,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `outpaint_canvas_view.py`: Toolkit-neutral view of an outpaint canvas: where the original sits as the margins change
 - `pack_lora_selection_projection.py`: Read-only, visibility-aware reporting of frozen explicit selection evidence
 - `prompt_adaptation_preview.py`: Toolkit-neutral preview model for the explicit Prompt-tab "Adapt for Target" action (PR-IMG-130C)
+- `prompt_optimizer_view.py`: Read-only optimizer illustrations and frozen-job evidence; no compilation or I/O
 - `prompt_template_view.py`: Toolkit-neutral presentation of the cinematic template editor (GUI-540)
 - `recommendation_targets.py`: Toolkit-neutral mapping from Learning parameters to executable operator controls
 - `reference_map_flow.py`: Toolkit-neutral state of the "Create map from image" task (PR-IMG-CNET-230)

@@ -79,7 +79,7 @@ def test_effective_settings_are_hidden_until_requested_and_reachable_by_keyboard
     panel, _app_state, _ = panel_env
     assert not panel.effective_frame.winfo_manager()
     assert str(panel.effective_toggle.cget("takefocus")) in {"", "1", "ttk::takefocus"}
-    assert panel.effective_toggle.cget("text") == "Show effective settings"
+    assert panel.effective_toggle.cget("text") == "Show effective settings / prompt evidence"
 
 
 def test_toggle_shows_the_compiled_jobs_settings_and_invalidation_removes_them(
@@ -100,7 +100,8 @@ def test_toggle_shows_the_compiled_jobs_settings_and_invalidation_removes_them(
     assert "Steps" in text and "31" in text
     # The override choice is part of the stated provenance (read from the controller, not re-derived).
     assert contract.OVERRIDE_ON_TEXT in text
-    assert "a knight" not in text
+    assert "Compiled Positive:" in text and "a knight" in text
+    assert "Execution-time projection unavailable" in text
 
     app_state.invalidate_preview()  # any source change invalidates the preview
     panel.update_idletasks()

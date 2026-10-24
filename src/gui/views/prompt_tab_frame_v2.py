@@ -49,6 +49,12 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui_v2.lora_authoring_view import plan_trigger_insertion, split_keywords
 from src.gui_v2.matrix_editor_view import matrix_summary_line
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
+from src.gui_v2.prompt_optimizer_view import (
+    LORA_POSITION_HELP,
+    LORA_POSITION_LABEL,
+    UNKNOWN_POSITION_HELP,
+    editor_comparison_lines,
+)
 from src.gui_v2.prompt_template_view import (
     EXAMPLE_NOTE,
     NO_TEMPLATE_LABEL,
@@ -73,8 +79,6 @@ from src.prompting.prompt_compatibility import (
     PromptTargetProjection,
     project_prompt_target,
 )
-from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
-from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.promptpacks.paths import resolve_prompt_pack_dir
 from src.training.style_lora_manager import ResolvedStyleLoRA, StyleLoRAManager
 from src.utils.config import ConfigManager
@@ -130,6 +134,7 @@ class PromptTabFrame(ttk.Frame):
         self._suppress_editor_change = False
         self._prompt_optimizer_guard = False
         self._prompt_optimizer_vars = self._build_prompt_optimizer_vars()
+        self._optimizer_diagnostics_var = tk.BooleanVar(value=False)
         # PR-IMG-130B: read-only projection of the selected model's policy onto this tab (never authoring state).
         self._model_projection = None
         self._prompt_target: PromptTargetProjection | None = None
@@ -1050,9 +1055,10 @@ class PromptTabFrame(ttk.Frame):
             settings = ConfigManager().load_settings()
             persisted = settings.get("prompt_optimizer") or {}
             if isinstance(persisted, dict):
-                defaults.update({k: v for k, v in persisted.items() if k in defaults})
+                defaults.update(persisted)
         except Exception:
             pass
+        self._prompt_optimizer_settings = defaults
         return {
             "enabled": tk.BooleanVar(value=bool(defaults["enabled"])),
             "optimize_positive": tk.BooleanVar(value=bool(defaults["optimize_positive"])),
@@ -1086,22 +1092,20 @@ class PromptTabFrame(ttk.Frame):
             ("optimize_positive", "Positive"),
             ("optimize_negative", "Negative"),
             ("dedupe_enabled", "Dedupe"),
-            ("preserve_lora_relative_order", "Preserve LoRAs"),
+            ("preserve_lora_relative_order", LORA_POSITION_LABEL),
             ("preserve_unknown_order", "Preserve Unknown"),
             ("enable_score_based_classification", "Score-Based"),
-            ("allow_subject_anchor_boost", "Anchor (inactive)"),
             ("log_before_after", "Log Before/After"),
             ("log_bucket_assignments", "Log Buckets"),
         ]
         explanations = {
-            "enabled": "Apply prompt optimization during compilation. The authored prompt stays unchanged.",
+            "enabled": "Request prompt optimization during stage execution. The authored prompt stays unchanged; model policy and effective job settings remain authoritative.",
             "optimize_positive": "Optimize the positive prompt when optimization is enabled.",
             "optimize_negative": "Optimize the negative prompt when optimization is enabled and the target supports it.",
             "dedupe_enabled": "Remove repeated prompt chunks during optimization.",
-            "preserve_lora_relative_order": "Keep LoRA references in their authored relative order.",
-            "preserve_unknown_order": "Keep unclassified chunks in their authored relative order.",
+            "preserve_lora_relative_order": LORA_POSITION_HELP,
+            "preserve_unknown_order": UNKNOWN_POSITION_HELP,
             "enable_score_based_classification": "Use classification scores to assign prompt chunks to ordering buckets.",
-            "allow_subject_anchor_boost": "Reserved setting: the current optimizer does not change subject anchors. This option has no effect.",
             "log_before_after": "Record the prompt text before and after optimization in diagnostic logs.",
             "log_bucket_assignments": "Record optimizer bucket assignments in diagnostic logs.",
         }
@@ -1137,35 +1141,23 @@ class PromptTabFrame(ttk.Frame):
             chunk_spin,
             "Warn when a prompt contains more than this many parsed chunks. This does not truncate the prompt.",
         )
-        ttk.Label(parent, text="Anchor Min").grid(
-            row=threshold_row + 1, column=0, sticky="w", pady=(2, 0)
-        )
-        anchor_spin = ttk.Spinbox(
-            parent,
-            from_=1,
-            to=64,
-            textvariable=self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"],
-            width=8,
-            command=self._on_prompt_optimizer_config_changed,
-        )
-        anchor_spin.grid(row=threshold_row + 1, column=1, sticky="ew", pady=(2, 0))
-        self._prompt_optimizer_widgets.append(anchor_spin)
-        attach_tooltip(
-            anchor_spin,
-            "Reserved threshold for Anchor Boost. The current optimizer's anchor operation has no effect.",
-        )
+        ttk.Checkbutton(
+            parent, text="Show bucket diagnostics", variable=self._optimizer_diagnostics_var,
+            command=lambda: self._refresh_metadata(scan_style=False),
+        ).grid(row=threshold_row + 1, column=0, columnspan=2, sticky="w")
         ttk.Label(
             parent, textvariable=self.optimizer_note_var, wraplength=300, justify="left"
         ).grid(row=threshold_row + 2, column=0, columnspan=2, sticky="w", pady=(4, 0))
         ttk.Label(
             parent,
-            text="Optimization reorders prompt chunks for compilation; authored text is preserved. Hover over an option for details. Anchor Boost currently has no effect.",
+            text="Optimization reorders and deduplicates stage prompts; authored text is preserved. The comparison below is an editor illustration. Check compiled prompts in Pipeline Preview.",
             wraplength=260,
             justify="left",
         ).grid(row=threshold_row + 3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
     def get_prompt_optimizer_config(self) -> dict[str, object]:
         return {
+            **self._prompt_optimizer_settings,
             "enabled": bool(self._prompt_optimizer_vars["enabled"].get()),
             "optimize_positive": bool(self._prompt_optimizer_vars["optimize_positive"].get()),
             "optimize_negative": bool(self._prompt_optimizer_vars["optimize_negative"].get()),
@@ -1180,7 +1172,6 @@ class PromptTabFrame(ttk.Frame):
             "log_bucket_assignments": bool(
                 self._prompt_optimizer_vars["log_bucket_assignments"].get()
             ),
-            "warn_on_large_chunk_count": True,
             "large_chunk_warning_threshold": int(
                 self._prompt_optimizer_vars["large_chunk_warning_threshold"].get()
             ),
@@ -1193,12 +1184,12 @@ class PromptTabFrame(ttk.Frame):
             "subject_anchor_boost_min_chunk_count": int(
                 self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"].get()
             ),
-            "opt_out_pipeline_names": [],
         }
 
     def apply_prompt_optimizer_config(self, config: dict[str, object] | None) -> None:
         merged = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
         merged.update(dict(config or {}))
+        self._prompt_optimizer_settings = merged
         self._prompt_optimizer_guard = True
         try:
             for key, variable in self._prompt_optimizer_vars.items():
@@ -1206,12 +1197,14 @@ class PromptTabFrame(ttk.Frame):
                     variable.set(merged[key])
         finally:
             self._prompt_optimizer_guard = False
-        self._refresh_metadata()
+        self._refresh_metadata(scan_style=False)
 
     def _on_prompt_optimizer_config_changed(self) -> None:
         if self._prompt_optimizer_guard:
             return
-        self._refresh_metadata()
+        if self.app_state is not None:
+            self.app_state.invalidate_preview()
+        self._refresh_metadata(scan_style=False)
 
     # Event handlers / helpers ------------------------------------------
     def _on_new_pack(self) -> None:
@@ -1751,38 +1744,12 @@ class PromptTabFrame(ttk.Frame):
         return self._adaptation_dialog
 
     def _build_prompt_optimizer_preview(self, positive_text: str, negative_text: str) -> list[str]:
-        lines = ["", "━━━ PROMPT OPTIMIZER ━━━"]
-        target = self._prompt_target
-        if target is not None and not target.optimizer_available:
-            return lines + [target.optimizer_note]
-        try:
-            config = PromptOptimizerConfig.from_dict(self.get_prompt_optimizer_config())
-            service = PromptOptimizerService(config)
-            result = service.optimize_prompts(positive_text, negative_text, pipeline_name="txt2img")
-        except Exception as exc:
-            return lines + [f"Optimizer preview unavailable: {exc}"]
-
-        lines.append(f"Changed: pos={result.positive.changed} neg={result.negative.changed}")
-        lines.append("Original Positive:")
-        lines.append(result.positive.original_prompt or "(empty)")
-        lines.append("Optimized Positive:")
-        lines.append(result.positive.optimized_prompt or "(empty)")
-        lines.append("Original Negative:")
-        lines.append(result.negative.original_prompt or "(empty)")
-        lines.append("Optimized Negative:")
-        lines.append(result.negative.optimized_prompt or "(empty)")
-        if result.positive.buckets:
-            lines.append("Positive Buckets:")
-            for bucket, values in result.positive.buckets.items():
-                lines.append(f"  {bucket}: {', '.join(values)}")
-        if result.negative.buckets:
-            lines.append("Negative Buckets:")
-            for bucket, values in result.negative.buckets.items():
-                lines.append(f"  {bucket}: {', '.join(values)}")
-        dropped = result.positive.dropped_duplicates + result.negative.dropped_duplicates
-        if dropped:
-            lines.append(f"Dropped Duplicates: {', '.join(dropped)}")
-        return lines
+        return editor_comparison_lines(
+            positive_text, negative_text, self.get_prompt_optimizer_config(),
+            target=self._prompt_target,
+            visible=self._content_visibility_mode == "nsfw",
+            diagnostics=self._optimizer_diagnostics_var.get(),
+        )
 
     def _open_matrix_helper(self) -> None:
         dialog = MatrixHelperDialog(self, on_apply=self._insert_matrix_expression)

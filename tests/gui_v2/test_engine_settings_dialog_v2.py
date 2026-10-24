@@ -43,6 +43,25 @@ def test_engine_settings_dialog_collects_values(tmp_path: Path, tk_root: tk.Tk) 
     dialog.master.destroy()
 
 
+def test_optimizer_save_preserves_unexposed_settings(tmp_path, tk_root):
+    manager = ConfigManager(tmp_path / "presets")
+    saved = {
+        "allow_subject_anchor_boost": True,
+        "subject_anchor_boost_min_chunk_count": 11,
+        "opt_out_pipeline_names": ["adetailer"],
+        "warn_on_large_chunk_count": False,
+        "future_key": {"setting": "kept"},
+    }
+    manager.save_settings({"prompt_optimizer": saved})
+    dialog = _build_dialog(tk_root, manager)
+    dialog._prompt_optimizer_vars["enabled"].set(False)
+    values = dialog.collect_values()["prompt_optimizer"]
+    assert values["enabled"] is False
+    for key, value in saved.items():
+        assert values[key] == value
+    dialog.master.destroy()
+
+
 def test_engine_settings_dialog_restore_defaults(tmp_path: Path, tk_root: tk.Tk) -> None:
     config_manager = ConfigManager(tmp_path / "presets")
     dialog = _build_dialog(tk_root, config_manager)

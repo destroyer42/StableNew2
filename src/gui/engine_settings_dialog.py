@@ -17,6 +17,12 @@ from src.api.webui_runtime_identity import (
 )
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.gui.content_visibility import normalize_content_visibility_mode
+from src.gui.tooltip import attach_tooltip
+from src.gui_v2.prompt_optimizer_view import (
+    LORA_POSITION_HELP,
+    LORA_POSITION_LABEL,
+    UNKNOWN_POSITION_HELP,
+)
 from src.utils.config import ConfigManager
 from src.video.managed_comfy_runtime import (
     ManagedComfyContract,
@@ -243,31 +249,28 @@ class EngineSettingsDialog(ttk.Frame):
             ("optimize_positive", "Optimize Positive"),
             ("optimize_negative", "Optimize Negative"),
             ("dedupe_enabled", "Enable Dedupe"),
-            ("preserve_lora_relative_order", "Preserve LoRAs"),
+            ("preserve_lora_relative_order", LORA_POSITION_LABEL),
             ("preserve_unknown_order", "Preserve Unknown"),
             ("enable_score_based_classification", "Score-Based"),
-            ("allow_subject_anchor_boost", "Anchor Boost"),
             ("log_before_after", "Log Before/After"),
             ("log_bucket_assignments", "Log Buckets"),
         ]
         for index, (key, label) in enumerate(optimizer_specs):
-            ttk.Checkbutton(
+            control = ttk.Checkbutton(
                 optimizer_frame,
                 text=label,
                 variable=self._prompt_optimizer_vars[key],
-            ).grid(row=index // 2, column=index % 2, sticky="w", pady=2)
+            )
+            control.grid(row=index // 2, column=index % 2, sticky="w", pady=2)
+            if key == "preserve_lora_relative_order":
+                attach_tooltip(control, LORA_POSITION_HELP)
+            elif key == "preserve_unknown_order":
+                attach_tooltip(control, UNKNOWN_POSITION_HELP)
         self._add_label_entry(
             optimizer_frame,
             "Chunk warning threshold:",
             self._prompt_optimizer_vars["large_chunk_warning_threshold"],
             row=5,
-            var_type="int",
-        )
-        self._add_label_entry(
-            optimizer_frame,
-            "Anchor min chunk count:",
-            self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"],
-            row=6,
             var_type="int",
         )
 
@@ -477,6 +480,7 @@ class EngineSettingsDialog(ttk.Frame):
         prompt_defaults = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
         prompt_defaults.update(defaults.get("prompt_optimizer") or {})
         prompt_defaults.update(settings.get("prompt_optimizer") or {})
+        self._prompt_optimizer_settings = prompt_defaults
         for key, var in self._prompt_optimizer_vars.items():
             value = prompt_defaults.get(key)
             if isinstance(var, tk.BooleanVar):
@@ -569,11 +573,12 @@ class EngineSettingsDialog(ttk.Frame):
             else:
                 values[key] = str(var.get()).strip()
         values["prompt_optimizer"] = {
-            key: (bool(var.get()) if isinstance(var, tk.BooleanVar) else int(var.get()))
-            for key, var in self._prompt_optimizer_vars.items()
+            **self._prompt_optimizer_settings,
+            **{
+                key: (bool(var.get()) if isinstance(var, tk.BooleanVar) else int(var.get()))
+                for key, var in self._prompt_optimizer_vars.items()
+            },
         }
-        values["prompt_optimizer"]["warn_on_large_chunk_count"] = True
-        values["prompt_optimizer"]["opt_out_pipeline_names"] = []
         self._collect_comfy_values(values)
         choice = self.selected_runtime()
         identity = self._selected_identity()
@@ -650,6 +655,7 @@ class EngineSettingsDialog(ttk.Frame):
                 var.set(str(value or ""))
         prompt_defaults = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
         prompt_defaults.update(defaults.get("prompt_optimizer") or {})
+        self._prompt_optimizer_settings = prompt_defaults
         for key, var in self._prompt_optimizer_vars.items():
             value = prompt_defaults.get(key)
             if isinstance(var, tk.BooleanVar):
