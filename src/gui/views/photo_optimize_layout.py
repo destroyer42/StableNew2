@@ -115,6 +115,17 @@ class PhotoOptimizeLayoutMixin:
         self.refresh_btn = ttk.Button(
             flow, text="Refresh", style="Dark.TButton", command=self._refresh_assets
         )
+        self.open_in_quick_edit_btn = ttk.Button(
+            flow,
+            text="Open Selected in Quick Edit",
+            style="Dark.TButton",
+            command=self._open_selected_in_quick_edit,
+        )
+        attach_tooltip(
+            self.open_in_quick_edit_btn,
+            "Send the selected photos' current working images to Quick Edit (Review). Managed baselines, "
+            "results and history stay here; Quick Edit asks before replacing unsent work.",
+        )
         self.pipeline_copy_btn = ttk.Button(
             flow,
             text="Review Pipeline Copy (editing scope)…",
@@ -159,6 +170,7 @@ class PhotoOptimizeLayoutMixin:
         )
         self._secondary_flow = [
             self.refresh_btn,
+            self.open_in_quick_edit_btn,
             self.pipeline_copy_btn,
             self.interrogate_btn,
             batch_box,

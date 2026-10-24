@@ -236,12 +236,25 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.send_video_button.grid(row=0, column=5, sticky="w", padx=(6, 0))
 
+        self.manage_photos_button = ttk.Button(
+            header,
+            text="Manage Selected Photos…",
+            style="Dark.TButton",
+            command=self._on_manage_selected_photos,
+        )
+        self.manage_photos_button.grid(row=0, column=6, sticky="w", padx=(6, 0))
+        attach_tooltip(
+            self.manage_photos_button,
+            "Offer the highlighted images to the Managed Photo Set (persistent per-photo settings and results). "
+            "Nothing is copied until you confirm there; Review keeps its selection and edits.",
+        )
+
         self.selection_label = ttk.Label(
             header,
             text="No images selected",
             style="Dark.TLabel",
         )
-        self.selection_label.grid(row=0, column=6, sticky="e")
+        self.selection_label.grid(row=0, column=7, sticky="e")
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
 
         self.workflow_hint_label = ttk.Label(
@@ -249,7 +262,7 @@ class ReviewTabFrame(ttk.Frame):
             text=self._default_workflow_hint,
             style="Dark.TLabel",
         )
-        self.workflow_hint_label.grid(row=1, column=0, columnspan=7, sticky="ew", pady=(6, 0))
+        self.workflow_hint_label.grid(row=1, column=0, columnspan=8, sticky="ew", pady=(6, 0))
         bind_wraplength(self.workflow_hint_label)
         self.action_help_panel = ActionExplainerPanel(
             header,
@@ -257,7 +270,7 @@ class ReviewTabFrame(ttk.Frame):
             app_state=self.app_state,
             wraplength=980,
         )
-        self.action_help_panel.grid(row=2, column=0, columnspan=7, sticky="ew", pady=(8, 0))
+        self.action_help_panel.grid(row=2, column=0, columnspan=8, sticky="ew", pady=(8, 0))
         self.import_selected_tooltip = attach_tooltip(
             self.import_selected_button,
             "Move the selected reviewed images into Learning staged curation. This records them as evidence candidates; it does not queue a new reprocess job by itself.",
@@ -1771,6 +1784,39 @@ class ReviewTabFrame(ttk.Frame):
             if 0 <= int(idx) < len(self._image_index_by_row):
                 paths.append(self._image_index_by_row[int(idx)])
         return paths
+
+    def _on_manage_selected_photos(self) -> None:
+        """Offer the Listbox's highlighted rows (in list order) to the Managed Photo Set.
+
+        Distinct from Quick Edit: this is an import into persistent managed assets that Photo Optimize plans and
+        the operator confirms. Only file paths travel; Review's selection, edits, History identity and staged
+        hand-off stay exactly as they are, and no lineage is attached to the managed photo."""
+
+        paths = [
+            self._image_index_by_row[int(idx)]
+            for idx in self.images_list.curselection()
+            if 0 <= int(idx) < len(self._image_index_by_row)
+        ]
+        if not paths:
+            messagebox.showinfo(
+                "Manage Selected Photos",
+                "Select one or more images in the Images list first.",
+            )
+            return
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            messagebox.showerror("Manage Selected Photos", "The main window is not available.")
+            return
+        from src.gui.controllers.video_workspace_handoff import route_images_to_photo_optimize
+
+        try:
+            route_images_to_photo_optimize(
+                main_window=main_window,
+                image_paths=paths,
+                status_message=f"Checking {len(paths)} image(s) from Quick Edit for the Managed Photo Set...",
+            )
+        except (RuntimeError, ValueError) as exc:
+            messagebox.showerror("Manage Selected Photos", str(exc))
 
     def _on_send_selected_to_video_workflow(self) -> None:
         """Hand the Listbox's highlighted rows (in list order) to the Video Workflow tab.

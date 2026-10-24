@@ -21,6 +21,7 @@ from src.photo_optimize.settings import (
     resolve_geometry,
 )
 
+from .photo_optimize_handoff import PhotoOptimizeHandoffMixin
 from .photo_optimize_layout import PhotoOptimizeLayoutMixin
 from .photo_optimize_results import PhotoOptimizeResultsMixin
 from .photo_optimize_scope import PhotoOptimizeScopeMixin
@@ -51,7 +52,13 @@ def _read_loaded_asset(store: Any, asset_id: str) -> _LoadedAsset | None:
     return _LoadedAsset(asset=asset, displayed_config=displayed, geometry_error=error)
 
 
-class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin, ttk.Frame):
+class PhotoOptimizeTabFrameV2(
+    PhotoOptimizeHandoffMixin,
+    PhotoOptimizeResultsMixin,
+    PhotoOptimizeScopeMixin,
+    PhotoOptimizeLayoutMixin,
+    ttk.Frame,
+):
     def __init__(
         self,
         master: tk.Misc,

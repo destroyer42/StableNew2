@@ -375,6 +375,7 @@ class BatchOperationsPanelV2(ttk.Frame):
         main_window = self._main_window_provider()
         if main_window is None:
             raise RuntimeError("The main window is not available")
+        # 0 means the operator chose Cancel when asked to replace unsent Review work.
         return len(route_images_to_review(
             main_window=main_window, image_paths=list(paths),
             status_message=f"Opened {len(paths)} batch output image(s) from Queue/History."))
