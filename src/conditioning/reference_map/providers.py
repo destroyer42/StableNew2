@@ -161,8 +161,12 @@ def run_worker(
     request: dict[str, Any],
     rgb: np.ndarray,
     context: Context,
+    worker_path: Path = WORKER_PATH,
 ) -> dict[str, Any]:
-    """Run the contained worker for one job and return its validated ``result.json`` document."""
+    """Run the contained worker for one job and return its validated ``result.json`` document.
+
+    ``worker_path`` lets another feature reuse this exact containment (same child protocol, caps and cancellation) with its own
+    worker script; the default is the reference-map worker."""
 
     height, width = int(rgb.shape[0]), int(rgb.shape[1])
     (job_dir / SOURCE_FILE).write_bytes(np.ascontiguousarray(rgb).tobytes())
@@ -171,7 +175,7 @@ def run_worker(
     )
     context.check()
     outcome = context.runner(
-        [context.interpreter, "-I", str(WORKER_PATH), str(job_dir)],
+        [context.interpreter, "-I", str(worker_path), str(job_dir)],
         timeout_seconds=float(context.timeouts[modality]),
         max_stdout_bytes=WORKER_STDOUT_CAP,
         cancel=context.cancel,

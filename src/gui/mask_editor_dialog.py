@@ -31,6 +31,8 @@ class MaskEditorDialog(tk.Toplevel):
         source_path: Path,
         controller: Any,
         runner: BackgroundWorkRunner | None = None,
+        suggested_mask: bytes | None = None,
+        suggested_source_sha256: str = "",
     ) -> None:
         super().__init__(master)
         apply_toplevel_theme(self)
@@ -45,6 +47,8 @@ class MaskEditorDialog(tk.Toplevel):
         self._photo: ImageTk.PhotoImage | None = None
         self._baseline: dict[str, Any] = {}
         self._source_sha256 = ""
+        self._suggested_mask = suggested_mask  # an operator-accepted Smart Review proposal; checked again once the source loads
+        self._suggested_source_sha256 = suggested_source_sha256
         self._version = 0
         self._preview: MaskEditPreview | None = None
         self._busy = True
@@ -180,8 +184,40 @@ class MaskEditorDialog(tk.Toplevel):
         self.status.set(
             f"{self.source_path.name} — {source.width} × {source.height}. Paint a region and describe the edit."
         )
+        if self._suggested_mask is not None:
+            self._adopt_suggested_mask(source)
         self._fit()
         self.after_idle(self._fit)
+
+    def _adopt_suggested_mask(self, source: Any) -> None:
+        """Copy an accepted Smart Review mask into the document, only if it is exactly this source's mask. Undo removes it."""
+
+        from src.review.assist.contracts import AssistError, SourceIdentity
+        from src.review.assist.masks import mask_image
+
+        data, self._suggested_mask = self._suggested_mask, None
+        if self.document is None or data is None:
+            return
+        if not self._suggested_source_sha256 or self._suggested_source_sha256 != source.sha256:
+            self.status.set(
+                "The suggested mask was not loaded: the image changed after it was proposed."
+            )
+            return
+        identity = SourceIdentity(
+            source.sha256, source.size, source.width, source.height, 1, source.image_format
+        )
+        try:
+            mask = mask_image(data, identity)
+        except AssistError as exc:
+            self.status.set(f"The suggested mask was not loaded: {exc.message}")
+            return
+        self.document.checkpoint()
+        self.document.mask = mask
+        self.document.revision += 1
+        self._invalidate()
+        self.status.set(
+            "Suggested mask loaded (red = change). Paint or erase to adjust, then describe the edit and Preview."
+        )
 
     def _invalidate(self) -> None:
         self._version += 1

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-530 of 684 modules have a docstring.
+541 of 695 modules have a docstring.
 
 ## src/
 
@@ -233,6 +233,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
 - `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply / overwrite actions (PR-GUI-UX-520)
 - `sidebar_panel_v2.py`: (no docstring)
+- `smart_review_dialog.py`: Review's opt-in Smart Review panel: point/box object selection and caption suggestions (PR-IMG-REVIEW-320)
 - `status_bar_v2.py`: Status bar scaffold for GUI v2
 - `theme.py`: Legacy theming shim
 - `theme_v2.py`: StableNew V2 theme definitions and helpers
@@ -671,6 +672,19 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `adetailer_outcome.py`: Operator before/after review of an ADetailer output (PR-REFINE-160), carried by the existing Review feedback…
 - `artifact_metadata_inspector.py`: Read-only artifact metadata inspection payload builder
 - `review_metadata_service.py`: Portable review metadata stamping for reviewed image artifacts
+
+## src/review/assist/
+
+- `__init__.py`: Opt-in, local Smart Review assistance: proposals only, never authority (PR-IMG-REVIEW-320)
+- `captions.py`: Caption suggestions as untrusted, bounded, visibility-aware text (PR-IMG-REVIEW-320)
+- `contracts.py`: Typed contracts and hard caps for Smart Review assistance (PR-IMG-REVIEW-320)
+- `geometry.py`: Pointer-to-pixel mapping, prompt validation and overlay composition; no Tk, files or models (PR-IMG-REVIEW-32…
+- `identity.py`: Reading the operator's source image once and binding every request to its exact bytes (PR-IMG-REVIEW-320)
+- `loading.py`: Pure checkpoint-key accounting for the two Smart Review models; no model library is imported (PR-IMG-REVIEW-3…
+- `masks.py`: Deterministic mask normalization and validation; pure image logic, no model, file or Tk (PR-IMG-REVIEW-320)
+- `providers.py`: Adapter protocols and the contained-child implementations for Smart Review (PR-IMG-REVIEW-320)
+- `session.py`: One Review image's Smart Review state: tickets, staleness, caps and the accept hand-off (PR-IMG-REVIEW-320)
+- `worker.py`: Contained child process that runs one Smart Review model once (PR-IMG-REVIEW-320)
 
 ## src/services/
 

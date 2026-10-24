@@ -132,6 +132,43 @@ behavior. Preview creates no job; Add to Queue submits the same frozen NJR throu
 exact profiles are refused. Canvas preparation, the frozen contract and the original-pixel guarantee are in
 `IMAGE_PIPELINE.md` section 3.3.
 
+### 3.3.2 Smart Review (opt-in assisted masking and caption suggestions)
+
+**Smart Review…** (below Edit Mask / Extend Canvas) opens `SmartReviewDialog` (`src/gui/smart_review_dialog.py`) for exactly one
+PNG, JPEG or WebP still image. Everything in it is a **suggestion**: nothing runs on open or selection, each capability
+(object selection: SAM 2.1 Small; image analysis: Florence-2 Base FT) is off until the operator ticks it for the session, and a
+model runs once, on a tracked worker and in a contained CPU child process, only when its button is pressed. Capability state is
+per Review tab and in memory only (a new session starts off); no model is ever downloaded, installed or fallen back from.
+
+- **Object selection.** The operator places up to four foreground/background points and/or one box on the same zoom/pan canvas
+  geometry the mask editor uses (`MaskViewport`; points outside the image are refused, not clamped). **Propose mask** returns
+  low-resolution logits; positive logits (> 0) become white (change), everything else black (preserve), upscaled
+  nearest-neighbor to the exact source size and revalidated (8-bit `L` PNG, strictly 0/255, not empty, <= 95% of the image).
+  The mask is tinted over the image; **Accept mask** hands its bytes to a new `MaskEditorDialog(suggested_mask=...)`, where it is
+  one undoable document step. **Reject**, **Cancel analysis**, changing prompts, closing, or a different selection discard it.
+  Preview, the frozen edit contract and `JobService.submit_njrs` admission (once, after explicit confirmation) are unchanged and
+  stay in the mask editor; Smart Review never builds a job, calls a runner or touches a queue.
+- **Image analysis.** **Analyze image** shows a sanitized caption (control/format characters removed, <= 600 characters) and up
+  to 16 labelled boxes, labelled with the model and runtime, as an unverified suggestion. **Copy**, **Add to prompt draft** (once,
+  reversible; **Undo** restores the draft only if the operator has not edited it since) and **Dismiss** are explicit; nothing
+  writes a rating, prompt record or Learning data. Content hidden by the Review content-visibility mode is not shown, copied or
+  applied.
+- **Identity and staleness.** Each request is bound to the file's SHA-256, size and EXIF orientation (not its name) and to a
+  session epoch; replies for another image, an older request or a closed session are dropped, and the file is re-hashed before a
+  mask is used. The coordinate frame is the mask editor's: stored pixels, with the EXIF orientation recorded in the identity but
+  not applied, so a mask always has the exact size of the edit source.
+- **Models.** `src/review/assist/` reuses the PR-IMG-CNET-230 seam: `AssetRegistry` byte verification of the catalog resource
+  (`sam-2-1-small`, `florence-2-base-ft`), hash-verified staging into a private job directory, and the bounded worker protocol
+  (`providers.run_worker`, own OS container, timeout, output cap, cooperative cancel). The child (`src/review/assist/worker.py`)
+  loads only native Transformers classes with `local_files_only=True`, `trust_remote_code=False`, safetensors and
+  `load_state_dict(strict=True)`; it never initializes a missing weight. Transformers must be >= 5.17 and < 6 (qualified on
+  5.17.0; checked at run time, not pinned). Files alone never make a capability ready: both catalog entries stay
+  `needs_integration` with `inference_not_qualified`.
+- **Limits.** Real-image mask and caption quality, GPU use and memory caps are not qualified (the shared bounded runner has no
+  per-process memory limit), and AI provenance is not recorded in the frozen edit record. Tests:
+  `tests/review/assist/test_assist_pure_320.py`, `tests/review/assist/test_assist_session_320.py`,
+  `tests/gui_v2/test_smart_review_320.py`, `tests/assets/test_review_assist_catalog_320.py`.
+
 ### 3.4 Thumbnails and compare
 
 - `ThumbnailWidget` (`src/gui/widgets/thumbnail_widget_v2.py`): latest-request-wins, one in-flight decode per path, decode via `load_image_thumbnail` (`src/utils/image_utils.py`) on a thread from `ThreadRegistry.spawn`, result marshalled with `after(0)`. Responsive mode decodes once at the maximum edge and rescales on resize (`src/gui/view_contracts/workspace_density_contract.py`). A failed worker start releases only its own request marker and shows "Preview unavailable".
