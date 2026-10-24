@@ -55,7 +55,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   Recommendations selector (default Apply with confirm); rated review drafts are saved on navigation or with Save All Drafts.
   Saved experiments reconcile exact admitted repository jobs after restart without resubmission; admission and resume-save uncertainty remain visible.
 - History browser: the Pipeline tab's Job History opens a searchable, paged view of every job (status, date, pack, prompt/model text;
-  no schema change). Text search covers only the first 64 prompt characters and the model; full-text search and "replay with changes" are not built.
+  no schema change). Text search covers only the first 64 prompt characters and the model; full-text search is not built. Iterate from History (completed single-still-image txt2img jobs only): Edit Image in Review, or an editable Regenerate with Changes draft in Pipeline; both go through the normal Preview/Add to Queue path with parent lineage and refuse unsupported jobs with a reason (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.5); parent/child compare and physical-generation acceptance are not done.
 - Batch operations: whole-selection Review preflight, multi-source Video Workflow batch, unified batch triage and retry
   (`docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md`).
 
@@ -110,7 +110,7 @@ of the roadmap; where they conflict with this file, this file and the repository
    out and needs bridge implementations plus accepted runtime evidence), the dormant story-plan/continuity authoring code, the AI
    settings-suggestion stub (external scripts importing `src.ai` would break, unverified) and the cluster scaffolding.
 7. `PR-IMG-120` (Diffusers production slice) remains unauthorized pending a separate decision.
-8. Product order after the safety work: inpainting/ControlNet (the local LoRA browser, history browser and Learning payoff are in; "replay with changes" is not).
+8. Product order after the safety work: inpainting/ControlNet (the local LoRA browser, history browser, Iterate from History and Learning payoff are in; parent/child compare is not).
 9. Learning model-comparison jobs store the whole experiment snapshot twice per job (about 750 MB across 10 experiments). Decided: store it
    once per experiment by hash, forward-only (an NJR contract change, its own PR). Open: backfilling existing rows, and whether to prune jobs
    whose images and manifests were deleted (archive then delete, or delete), both only after the owner reads the output of

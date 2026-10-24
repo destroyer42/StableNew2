@@ -32,6 +32,9 @@ from src.controller.pipeline_controller_services.preview_admission import (
     accepted_preview_records,
     release_admitted_draft,
 )
+from src.controller.pipeline_controller_services.preview_build_timing import (
+    record_preview_build_timing,
+)
 from src.controller.pipeline_controller_services.queue_submission_service import (
     QueueSubmissionService,
 )
@@ -50,6 +53,7 @@ from src.learning.model_defaults_resolver import (
     ModelDefaultsContext,
     ModelDefaultsResolver,
 )
+from src.pipeline.history_variation_compiler import compile_history_variation
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import (
     BatchSettings,
@@ -72,9 +76,6 @@ from src.utils.error_envelope_v2 import (
 
 # Logger for this module
 _logger = logging.getLogger(__name__)
-
-_PREVIEW_BUILD_TIMING_INFO_MS = 150.0
-_PREVIEW_BUILD_TIMING_WARN_MS = 1000.0
 
 
 @dataclass(frozen=True)
@@ -367,37 +368,8 @@ class PipelineController(CorePipelineController):
 
         return get_prompt_pack_builder(self)
 
-    def _record_preview_build_timing(
-        self,
-        *,
-        source: str,
-        elapsed_ms: float,
-        job_count: int,
-        pack_entry_count: int,
-        error: str | None = None,
-    ) -> None:
-        payload = {
-            "source": source,
-            "elapsed_ms": round(float(elapsed_ms), 3),
-            "job_count": int(job_count),
-            "pack_entry_count": int(pack_entry_count),
-            "error": error,
-        }
-        self._last_preview_build_timing = payload
-        if error is None and elapsed_ms < _PREVIEW_BUILD_TIMING_INFO_MS:
-            return
-        level = (
-            logging.WARNING
-            if error is not None or elapsed_ms >= _PREVIEW_BUILD_TIMING_WARN_MS
-            else logging.INFO
-        )
-        log_with_ctx(
-            _logger,
-            level,
-            "Preview build timing",
-            ctx=LogContext(subsystem="pipeline_controller", stage="preview_build"),
-            extra_fields=payload,
-        )
+    def _record_preview_build_timing(self, **timing: Any) -> None:
+        self._last_preview_build_timing = record_preview_build_timing(_logger, **timing)
 
     def get_preview_build_timing_snapshot(self) -> dict[str, Any] | None:
         payload = getattr(self, "_last_preview_build_timing", None)
@@ -408,7 +380,11 @@ class PipelineController(CorePipelineController):
     def build_preview_request(self) -> PreviewRequest:
         job_draft = getattr(self._app_state, "job_draft", None)
         pack_entries = tuple(deepcopy(getattr(job_draft, "packs", None) or ()))
-        return PreviewRequest(pack_entries=pack_entries, preview_revision=getattr(self._app_state, "preview_revision", None))
+        return PreviewRequest(
+            pack_entries=pack_entries,
+            preview_revision=getattr(self._app_state, "preview_revision", None),
+            history_variation=getattr(job_draft, "history_variation", None),
+        )
 
     def get_preview_jobs_for_request(
         self,
@@ -418,6 +394,18 @@ class PipelineController(CorePipelineController):
         source = "state"
         pack_entry_count = len(request.pack_entries)
         try:
+            if request.history_variation is not None:
+                # An edited history variation is the draft: one pure compile of its frozen source, never a pack bundle
+                # or the live state. A refusal surfaces as the Preview error and queues nothing.
+                source = "history_variation"
+                njr = compile_history_variation(request.history_variation)
+                self._record_preview_build_timing(
+                    source=source,
+                    elapsed_ms=(time.monotonic() - started_at) * 1000.0,
+                    job_count=1,
+                    pack_entry_count=0,
+                )
+                return [njr]
             if request.pack_entries:
                 source = "pack_bundle"
                 njrs = self._build_njrs_from_pack_bundle(list(request.pack_entries))
@@ -1289,6 +1277,10 @@ class PipelineController(CorePipelineController):
     # ------------------------------------------------------------------
 
     def on_add_job_to_queue_v2(self) -> None:
+        if getattr(getattr(self._app_state, "job_draft", None), "history_variation", None) is not None:
+            # Only the accepted Preview may be admitted; never a fresh compile published through set_preview_jobs.
+            self.enqueue_draft_jobs()
+            return
         records = self.get_preview_jobs()
         if not records:
             return
@@ -1466,8 +1458,8 @@ class PipelineController(CorePipelineController):
             return
         if not entries:
             return
-        self._app_state.add_packs_to_job_draft(entries)
-        if not self._app_state_preview_updates_managed_externally:
+        added = self._app_state.add_packs_to_job_draft(entries) is not False  # False: an open History variation
+        if added and not self._app_state_preview_updates_managed_externally:
             self.refresh_preview_from_state()
 
     def remove_pack_from_draft(self, pack_id: str) -> None:

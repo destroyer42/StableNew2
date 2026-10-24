@@ -168,4 +168,48 @@ def resolve_recorded_artifact(
     return RecordedArtifact("none", message="No recorded artifact for this job.")
 
 
-__all__ = ["RecordedArtifact", "resolve_recorded_artifact"]
+def resolve_single_still_image(
+    result: Mapping[str, Any] | None,
+    *,
+    is_file: Callable[[str], bool] = os.path.isfile,
+) -> RecordedArtifact:
+    """The one recorded still image of a job, or the reason there is not exactly one (PR-HISTORY-610A).
+
+    Stricter than ``resolve_recorded_artifact``: a video result, a poster/thumbnail stand-in, several recorded images
+    (artifacts or variants) or a recorded multi-image count are all refused, never narrowed to "the first one".
+    """
+    payload = _mapping(result)
+    base = resolve_recorded_artifact(payload, is_file=is_file)
+    if base.kind in {"video", "frames"}:
+        return RecordedArtifact("none", message="A video result is not a still image.")
+    if base.kind == "none":
+        return base
+    artifacts = [_mapping(payload.get("artifact"))]
+    for variant in payload.get("variants") or []:
+        if isinstance(variant, Mapping):
+            artifacts.append(_mapping(variant.get("artifact")))
+    images = list(
+        dict.fromkeys(
+            path
+            for artifact in artifacts
+            for path in _paths(artifact)
+            if Path(path).suffix.lower() in _IMAGE_SUFFIXES
+        )
+    )
+    if not images:
+        return RecordedArtifact(
+            "none", message="Only a thumbnail was recorded, not the output image."
+        )
+    if len(images) != 1:
+        return RecordedArtifact(
+            "none",
+            message=f"This job recorded {len(images)} images; choosing one is not supported yet.",
+        )
+    for key in ("image_count", "images_generated"):
+        count = payload.get(key)
+        if isinstance(count, int) and not isinstance(count, bool) and count > 1:
+            return RecordedArtifact("none", message=f"This job recorded {count} images.")
+    return resolve_recorded_artifact({"artifact": {"primary_path": images[0]}}, is_file=is_file)
+
+
+__all__ = ["RecordedArtifact", "resolve_recorded_artifact", "resolve_single_still_image"]

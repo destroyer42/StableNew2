@@ -140,6 +140,7 @@ class HistoryBrowserPanelV2(JobHistoryPanelV2):
             video_workflow=False,
             movie_clips=False,
             explain=False,
+            iterate=base.iterate,
         )
 
     # --- searching ----------------------------------------------------------------------------

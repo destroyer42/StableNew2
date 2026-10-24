@@ -63,6 +63,8 @@ class PreviewRequest:
     base_config: Any | None = None
     use_state_fallback: bool = True
     preview_revision: int | None = None
+    #: The frozen ``HistoryVariationDraft`` captured with this request; when set it is the only compile input.
+    history_variation: Any | None = None
 
 
 @dataclass(frozen=True)
