@@ -28,7 +28,10 @@ from src.controller.job_service import JobService
 from src.controller.pipeline_controller_services.history_handoff_service import (
     HistoryHandoffService,
 )
-from src.controller.pipeline_controller_services.preview_admission import accepted_preview_records
+from src.controller.pipeline_controller_services.preview_admission import (
+    accepted_preview_records,
+    release_admitted_draft,
+)
 from src.controller.pipeline_controller_services.queue_submission_service import (
     QueueSubmissionService,
 )
@@ -1452,15 +1455,10 @@ class PipelineController(CorePipelineController):
 
     def enqueue_draft_jobs(self, *, run_config: dict[str, Any] | None = None) -> int:
         """Enqueue all preview jobs derived from the current AppState job draft."""
-        preview_records = list(getattr(self._app_state, "preview_jobs", None) or [])
-        count = self.submit_preview_jobs_to_queue(records=preview_records or None, run_config=run_config)
-        if count and self._app_state:
-            self._app_state.clear_job_draft()
-            setter = getattr(self._app_state, "set_preview_jobs", None)
-            if callable(setter):
-                setter([])
-            else:
-                self.refresh_preview_from_state()
+        admitted = accepted_preview_records(self._app_state, self.get_preview_jobs)  # may raise PreviewSupersededError
+        count = self.submit_preview_jobs_to_queue(records=admitted, run_config=run_config) if admitted else 0
+        if count:
+            release_admitted_draft(self._app_state, admitted)
         return count
 
     def add_packs_to_draft(self, entries: list[PackJobEntry]) -> None:

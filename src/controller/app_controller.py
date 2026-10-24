@@ -1735,20 +1735,9 @@ class AppController:
                 )
                 return
             if submitted > 0 and clear_preview_on_success and submitted >= len(preview_records):
-                app_state = getattr(self, "app_state", None)
-                if app_state is not None:
-                    clear_fn = getattr(app_state, "clear_job_draft", None)
-                    if callable(clear_fn):
-                        try:
-                            clear_fn()
-                        except Exception:
-                            pass
-                    preview_setter = getattr(app_state, "set_preview_jobs", None)
-                    if callable(preview_setter):
-                        try:
-                            preview_setter([])
-                        except Exception:
-                            pass
+                self._get_run_submission_service().release_admitted_draft(
+                    getattr(self, "app_state", None), preview_records
+                )
                 self._log_preview_queue_finish(
                     f"[controller] Submitted {submitted} job(s) from preview to queue "
                     f"(thread={origin_thread_name})"

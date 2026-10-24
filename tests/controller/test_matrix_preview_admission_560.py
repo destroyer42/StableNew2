@@ -174,7 +174,10 @@ def test_run_and_run_now_use_the_job_service_and_never_execute_directly(harness:
 def test_the_run_service_hands_the_accepted_preview_to_the_async_run_path(harness: Harness) -> None:
     preview = harness.accept_preview()
 
-    records = QueueRunSubmissionService.accepted_preview_jobs(harness.app_state, harness.controller)
+    service = QueueRunSubmissionService(
+        append_log=lambda _m: None, capture_stage_plan_for_tests=lambda _c: None
+    )
+    records = service.accepted_preview_jobs(harness.app_state, harness.controller)
 
     assert records == preview
     assert harness.compiles == 1

@@ -511,8 +511,10 @@ class AppStateV2:
         logger.info(
             f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects"
         )
-        self.job_draft.packs.extend(entries)
-        self.invalidate_preview()
+        with self._preview_lock:
+            self.job_draft.packs.extend(entries)
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
         logger.info(f"[AppState] Total packs in draft: {len(self.job_draft.packs)}")
         self._notify("job_draft")
 
@@ -527,15 +529,42 @@ class AppStateV2:
             negative_prompt=negative_prompt,
             estimated_images=estimated_images,
         )
-        self.job_draft.add_part(part)
-        self.invalidate_preview()
+        with self._preview_lock:
+            self.job_draft.add_part(part)
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
         self._notify("job_draft")
 
     def clear_job_draft(self) -> None:
-        self.job_draft.clear()
-        self.job_draft.packs.clear()
-        self.invalidate_preview()
+        with self._preview_lock:
+            self.job_draft.clear()
+            self.job_draft.packs.clear()
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
         self._notify("job_draft")
+
+    def clear_admitted_draft(self, admitted: list[NormalizedJobRecord]) -> bool:
+        """Clear the draft and Preview of a successfully admitted submission, unless the draft changed since.
+
+        The Preview is the witness: every change to a compile input empties it (``invalidate_preview``), and an
+        admission presents its records as the Preview, so ``preview_jobs`` still being exactly ``admitted`` means
+        nothing was edited after admission. The check and the clear are one step under the lifecycle lock, so an edit
+        either lands first (nothing is cleared) or after (the edit starts the next draft). Returns whether it cleared.
+        """
+        with self._preview_lock:
+            current = self.preview_jobs
+            if (
+                not admitted
+                or len(current) != len(admitted)
+                or any(left is not right for left, right in zip(current, admitted, strict=True))
+            ):
+                return False
+            self.job_draft.clear()
+            self.job_draft.packs.clear()
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
+        self._notify("job_draft")
+        return True
 
     def pack_save_listener(self, packs_dir: str | Path) -> Callable[[Path], None]:
         """A ``PromptWorkspaceState.pack_saved_listener`` that reports saves to ``pack_file_saved`` for ``packs_dir``."""
@@ -566,10 +595,14 @@ class AppStateV2:
     def invalidate_preview(self) -> None:
         """Invalidate only transient preview work, including results awaiting UI delivery."""
         with self._preview_lock:
-            self.preview_revision += 1
-            self.preview_jobs = []
-            self.preview_error = None
+            self._reset_preview_locked()
         self._notify("preview_jobs")
+
+    def _reset_preview_locked(self) -> None:
+        """Drop the Preview and advance the revision. The caller holds ``_preview_lock`` and notifies afterwards."""
+        self.preview_revision += 1
+        self.preview_jobs = []
+        self.preview_error = None
 
     def claim_preview_for_admission(self) -> tuple[list[NormalizedJobRecord], int]:
         """``(accepted records, revision)`` for a queue submission.
