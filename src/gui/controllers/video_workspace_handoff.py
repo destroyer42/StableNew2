@@ -117,6 +117,19 @@ def route_images_to_review(
     return paths
 
 
+def route_history_handoff_to_review(*, main_window: Any, handoff: Any) -> None:
+    """Hand one recorded History image (with its job/artifact identity) to Review (intent only; nothing is queued)."""
+
+    review_tab = getattr(main_window, "review_tab", None)
+    if review_tab is None:
+        raise RuntimeError("Review tab is not available")
+    loader = getattr(review_tab, "load_history_iterate_handoff", None)
+    if not callable(loader):
+        raise RuntimeError("Review tab does not support History handoff")
+    _select_tab(main_window, review_tab)
+    loader(handoff)
+
+
 def route_bundle_to_video_workflow(
     *,
     main_window: Any,
@@ -172,6 +185,7 @@ __all__ = [
     "route_bundle_to_movie_clips",
     "route_bundle_to_video_workflow",
     "route_image_to_movie_clips",
+    "route_history_handoff_to_review",
     "route_image_to_video_workflow",
     "route_images_to_review",
     "route_images_to_video_workflow",

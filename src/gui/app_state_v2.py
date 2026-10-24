@@ -512,6 +512,8 @@ class AppStateV2:
             f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects"
         )
         with self._preview_lock:
+            # Draft modes never mix: an explicit pack add supersedes an unsent history variation.
+            self.job_draft.history_variation = None
             self.job_draft.packs.extend(entries)
             self._reset_preview_locked()
         self._notify("preview_jobs")
@@ -530,6 +532,7 @@ class AppStateV2:
             estimated_images=estimated_images,
         )
         with self._preview_lock:
+            self.job_draft.history_variation = None
             self.job_draft.add_part(part)
             self._reset_preview_locked()
         self._notify("preview_jobs")
@@ -542,6 +545,38 @@ class AppStateV2:
             self._reset_preview_locked()
         self._notify("preview_jobs")
         self._notify("job_draft")
+
+    def begin_history_variation(self, variation: Any) -> None:
+        """Make ``variation`` (a ``HistoryVariationDraft``) the unsent draft, replacing any pack/part draft.
+
+        One step under the Preview lifecycle lock: the previous draft and Preview are dropped and the revision advances,
+        so a build still in flight for the old draft can no longer publish and the old Preview cannot be admitted.
+        """
+        with self._preview_lock:
+            self.job_draft.clear()
+            self.job_draft.packs.clear()
+            self.job_draft.history_variation = variation
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
+        self._notify("job_draft")
+
+    def update_history_variation(self, variation: Any) -> bool:
+        """Replace the current variation with an edited copy; every edit invalidates the Preview. False without one."""
+        with self._preview_lock:
+            if self.job_draft.history_variation is None:
+                return False
+            if variation == self.job_draft.history_variation:
+                return True
+            self.job_draft.history_variation = variation
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
+        self._notify("job_draft")
+        return True
+
+    def has_unsent_pipeline_work(self) -> bool:
+        """Whether the Pipeline draft holds anything an operator could lose by replacing it."""
+        draft = self.job_draft
+        return bool(draft.packs or draft.parts or draft.history_variation is not None)
 
     def clear_admitted_draft(self, admitted: list[NormalizedJobRecord]) -> bool:
         """Clear the draft and Preview of a successfully admitted submission, unless the draft changed since.

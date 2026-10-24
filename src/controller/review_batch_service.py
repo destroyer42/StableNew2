@@ -76,6 +76,25 @@ def _source_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _require_history_iterate_identity(
+    metadata: dict[str, Any], embedded_job_id: Any, source_sha256: str
+) -> None:
+    """An Iterate-from-History handoff names the job and bytes it came from; the file must still be exactly that.
+
+    A different embedded job id or a changed image is a refusal, never a silent re-attribution to another parent.
+    """
+
+    claim = metadata.get("history_iterate")
+    if not isinstance(claim, dict):
+        return
+    expected_job = str(claim.get("job_id") or metadata.get("source_job_id") or "")
+    if embedded_job_id and expected_job and str(embedded_job_id) != expected_job:
+        raise ValueError("Image identity contradicts the History job it was opened from; refusing to re-attribute it")
+    expected_artifact = str(metadata.get("source_artifact_id") or "")
+    if expected_artifact and expected_artifact != f"sha256:{source_sha256}":
+        raise ValueError("The recorded image changed since it was opened from History; reopen it from History")
+
+
 def prepare_review_batch(
     controller: Any, *, image_paths: list[str], stages: list[str], fallback_config: dict[str, Any],
     prompt_delta: str = "", negative_prompt_delta: str = "", prompt_mode: str = "append",
@@ -127,7 +146,9 @@ def prepare_review_batch(
             if isinstance(source_meta, dict):
                 metadata.update(source_meta)
             kv = read_image_metadata(path)
-            metadata.update(source_job_id=kv.get(ImageMetadataContractV26.KEY_JOB_ID) or baseline.get("job_id") or metadata.get("source_job_id"),
+            embedded_job_id = kv.get(ImageMetadataContractV26.KEY_JOB_ID)
+            _require_history_iterate_identity(metadata, embedded_job_id or baseline.get("job_id"), source_sha256)
+            metadata.update(source_job_id=embedded_job_id or baseline.get("job_id") or metadata.get("source_job_id"),
                             source_artifact_id=f"sha256:{source_sha256}",
                             source_path=str(path.resolve()))
             source = ReprocessSourceItem(

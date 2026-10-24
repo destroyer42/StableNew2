@@ -1124,7 +1124,8 @@ class PreviewPanelV2(ttk.Frame):
         can_queue = self._can_add_to_queue(job_draft, preview_jobs)
         self.add_to_queue_button.state(["!disabled"] if can_queue else ["disabled"])
         has_parts = bool(getattr(getattr(job_draft, "summary", None), "part_count", 0))
-        can_clear = bool(packs or has_parts or preview_jobs or self._job_summaries)
+        has_variation = getattr(job_draft, "history_variation", None) is not None
+        can_clear = bool(packs or has_parts or has_variation or preview_jobs or self._job_summaries)
         self.clear_draft_button.state(["!disabled"] if can_clear else ["disabled"])
         error = getattr(self.app_state, "preview_error", None)
         reason = ""
@@ -1148,7 +1149,7 @@ class PreviewPanelV2(ttk.Frame):
         packs = getattr(job_draft, "packs", [])
         part_summary = getattr(job_draft, "summary", None)
         has_parts = bool(getattr(part_summary, "part_count", 0))
-        return bool(packs) or has_parts
+        return bool(packs) or has_parts or getattr(job_draft, "history_variation", None) is not None
 
     def _show_preview_details(self) -> None:
         """Display a detailed breakdown of what will be queued."""

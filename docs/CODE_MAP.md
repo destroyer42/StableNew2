@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-530 of 684 modules have a docstring.
+537 of 691 modules have a docstring.
 
 ## src/
 
@@ -168,6 +168,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `history_handoff_service.py`: (no docstring)
 - `preview_admission.py`: Which NJRs a queue submission admits: the accepted Preview, never a silent recompile (PR-GUI-UX-560)
+- `preview_build_timing.py`: Preview build timing evidence (extracted from ``PipelineController``; behavior unchanged)
 - `queue_submission_service.py`: (no docstring)
 
 ## src/controller/ports/
@@ -205,6 +206,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
 - `gui_invoker.py`: (no docstring)
 - `history_browser_panel_v2.py`: Searchable, paged browser over the whole job history (every row, not only the newest few)
+- `history_iterate_dialog.py`: The "Iterate from History" choice dialog (PR-HISTORY-610A)
 - `job_history_panel_v2.py`: Compact job history renderer for the Pipeline tab
 - `klein_lora_selection_dialog.py`: One batch review of ordered verified candidates, on the Tk thread only
 - `layout_v2.py`: (no docstring)
@@ -244,6 +246,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/gui/controllers/
 
+- `history_iterate_service.py`: Glue for "Iterate from History" (PR-HISTORY-610A): re-reads the canonical record, then hands off - never queu…
 - `learning_controller.py`: (no docstring)
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
 - `review_workflow_adapter.py`: Non-render review workflow logic for Review tab
@@ -274,6 +277,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `asset_readiness_tab_v2.py`: Read-only asset readiness tab for the Debug Hub (PR-ASSET-130)
 - `debug_hub_panel_v2.py`: Unified Debug Hub panel for StableNew V2
 - `debug_log_panel_v2.py`: Simple debug log console for job lifecycle events
+- `history_variation_panel.py`: Pipeline-tab editor for a "Regenerate with Changes" variation (PR-HISTORY-610A)
 - `job_explanation_panel_v2.py`: Job Explanation panel for the Debug Hub
 - `layout_manager_v2.py`: Optional layout manager to compose V2 panels
 - `operator_readiness_panel_v2.py`: Compact operator readiness and first-run guidance surface
@@ -409,6 +413,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `controlnet_guidance.py`: Toolkit-neutral guidance and local readiness for ordered ControlNet units (PR-GUI-UX-550)
 - `effective_settings.py`: Read-only "Effective Settings" projection of compiled preview jobs (PR-GUI-UX-520)
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
+- `history_iterate_model.py`: Toolkit-neutral eligibility for "Iterate from History" (PR-HISTORY-610A)
 - `lora_authoring_view.py`: Toolkit-neutral presentation of a selected LoRA inside the Prompt tab (GUI-540)
 - `lora_browser.py`: Pure browser projection; registry evidence and ModelPolicy remain authoritative
 - `mask_editor_state.py`: Original-pixel mask editing and viewport transforms; no Tk, files or backend state
@@ -560,6 +565,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `exact_profile_effective_config.py`: Effective-configuration preparation for the generic (non-PromptPack) NJR builder (PR-IMG-MODELS-159)
 - `executor.py`: Pipeline execution module
 - `global_prompt_policy.py`: Freeze and read the operator-selected global prompt policy
+- `history_variation_compiler.py`: Pure compiler for "Regenerate with Changes" from a persisted history job (PR-HISTORY-610A)
+- `history_variation_marker.py`: The persisted marker of an edited history variation (PR-HISTORY-610A); dependency-free so projections can rea…
 - `image_edit_inputs.py`: Bounded, content-addressed image-edit inputs in existing mutable state, like OpenPose snapshots
 - `intent_artifact_contract.py`: (no docstring)
 - `job_builder_v2.py`: JobBuilderV2: Build normalized job records from merged configs
