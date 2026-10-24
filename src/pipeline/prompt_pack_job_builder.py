@@ -748,10 +748,9 @@ class PromptPackNormalizedJobBuilder:
     @staticmethod
     def _optimizer_enabled(source_config: dict[str, Any]) -> bool:
         txt2img = _mapping_dict(source_config.get("txt2img"))
-        return bool(
-            _mapping_dict(source_config.get("prompt_optimizer")).get("enabled")
-            or _mapping_dict(txt2img.get("prompt_optimizer")).get("enabled")
-        )
+        optimizer = _mapping_dict(source_config.get("prompt_optimizer"))
+        stage_optimizer = _mapping_dict(txt2img.get("prompt_optimizer"))
+        return bool(optimizer.get("enabled", stage_optimizer.get("enabled", False)))
 
     def _resolve_style_lora(self, merged_config: dict[str, Any]) -> dict[str, Any] | None:
         raw_style_lora = merged_config.get("style_lora")
@@ -868,6 +867,9 @@ class PromptPackNormalizedJobBuilder:
         payload: dict[str, Any] = {
             "prompt": prompt_resolution.positive,
             "negative_prompt": prompt_resolution.negative,
+            # The resolved execution policy belongs to the immutable job, not
+            # the editor or defaults consulted later by the executor.
+            "prompt_optimizer": copy.deepcopy(merged_config.get("prompt_optimizer", {})),
             "model": txt2img.get("model"),
             "sampler": txt2img.get("sampler_name") or txt2img.get("sampler"),
             "scheduler": txt2img.get("scheduler"),

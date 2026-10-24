@@ -113,7 +113,8 @@ def test_sdxl_keeps_every_prompt_tool_usable(tab: PromptTabFrame) -> None:
 
     assert _detail(tab) == "" and tab.negative_note_var.get() == "" and tab.optimizer_note_var.get() == ""
     assert not any(_optimizer_disabled(tab)) and tab.embedding_picker.additions_allowed
-    assert "Optimized Positive:" in tab.meta_text.get("1.0", "end")
+    preview = tab.meta_text.get("1.0", "end")
+    assert "EDITOR ILLUSTRATION" in preview and "After (Positive illustration):" in preview
 
 
 # --- Klein ------------------------------------------------------------------------------------------------------------------------
@@ -160,12 +161,14 @@ def test_klein_makes_the_optimizer_unavailable_without_touching_stored_settings(
     assert all(_optimizer_disabled(tab)) and tab._prompt_optimizer_widgets
     assert tab.get_prompt_optimizer_config() == before
     preview = tab.meta_text.get("1.0", "end")
-    assert "Optimized Positive:" not in preview and "Not applied for FLUX.2 Klein 4B FP8" in preview
+    assert "After (Positive illustration):" not in preview
+    assert "Unavailable for model:" in preview and "Not applied for FLUX.2 Klein 4B FP8" in preview
     assert "prompt optimizer is enabled in your settings" in _detail(tab).lower()
 
     tab.on_model_projection(_projection(SDXL))
     assert not any(_optimizer_disabled(tab)) and tab.get_prompt_optimizer_config() == before
-    assert "Optimized Positive:" in tab.meta_text.get("1.0", "end")
+    preview = tab.meta_text.get("1.0", "end")
+    assert "EDITOR ILLUSTRATION" in preview and "After (Positive illustration):" in preview
 
 
 def test_klein_embeddings_are_unsupported_but_existing_ones_stay_visible_and_removable(tab: PromptTabFrame) -> None:
