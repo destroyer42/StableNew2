@@ -106,6 +106,8 @@ class SVDService:
             raise SVDInputError(f"Failed to open prepared SVD image: {exc}") from exc
 
         result: Any | None = None
+        # Denoising steps finished so far; ``None`` when the pipeline reports no steps (phase unknown).
+        steps_done: list[int] | None = None
         raw_frames: list[Image.Image] = []
         converted_frames: list[Image.Image] = []
         try:
@@ -129,10 +131,12 @@ class SVDService:
                 # SVD is micro-conditioned on fps; without this the model always sees its default.
                 call_kwargs["fps"] = config.fps
             if self._supports_step_callback(pipeline):
+                steps_done = [0]
                 call_kwargs["callback_on_step_end"] = self._build_step_callback(
                     cancel_token=cancel_token,
                     status_callback=status_callback,
                     total_steps=config.num_inference_steps,
+                    steps_done=steps_done,
                 )
             result = pipeline(
                 image,
@@ -163,7 +167,10 @@ class SVDService:
         except Exception as exc:
             self._close_images(converted_frames)
             if self._is_cuda_out_of_memory(exc):
-                raise SVDOutOfMemoryError(self._format_oom_error(config, exc)) from exc
+                completed = steps_done[0] if steps_done is not None else None
+                raise SVDOutOfMemoryError(
+                    self._format_oom_error(config, exc, completed_steps=completed)
+                ) from exc
             raise SVDInferenceError(f"SVD inference failed: {exc}") from exc
         finally:
             if image is not None:
@@ -241,6 +248,7 @@ class SVDService:
         cancel_token: CancelToken | None,
         status_callback: Callable[[dict[str, Any]], None] | None,
         total_steps: int,
+        steps_done: list[int] | None = None,
     ) -> Callable[[Any, int, Any, dict[str, Any]], dict[str, Any]]:
         def _on_step_end(
             _pipeline: Any,
@@ -250,6 +258,8 @@ class SVDService:
         ) -> dict[str, Any]:
             self._ensure_not_cancelled(cancel_token, "native SVD denoising")
             completed_step = min(max(0, int(step_index) + 1), total_steps)
+            if steps_done:
+                steps_done[0] = completed_step
             self._emit_status(
                 status_callback,
                 stage_detail="inference",
@@ -278,16 +288,48 @@ class SVDService:
         return "cuda out of memory" in message or "cuda error: out of memory" in message
 
     @staticmethod
-    def _format_oom_error(config: SVDInferenceConfig, exc: Exception) -> str:
+    def _format_oom_error(
+        config: SVDInferenceConfig,
+        exc: Exception,
+        *,
+        completed_steps: int | None = None,
+    ) -> str:
+        """Describe the failure with the effective config and advice that fits the failing phase.
+
+        ``completed_steps`` is the number of denoising steps that finished before the error, or ``None``
+        when the pipeline reports no steps. Decode chunk only bounds VAE decode memory, so it is advised
+        only when denoising had finished (or the phase is unknown).
+        """
+
+        effective_chunk = balanced_decode_chunk_size(config.num_frames, config.decode_chunk_size)
+        if completed_steps is None:
+            advice = (
+                "The failing phase is unknown. Free GPU memory held by other processes, or lower "
+                "frames or Decode chunk (it bounds VAE decode memory)"
+            )
+        elif completed_steps <= 0:
+            advice = (
+                "It failed before any denoising step completed (model placement or image "
+                "encoding), so GPU memory was already unavailable to this process. Decode chunk "
+                "does not affect this phase; free GPU memory held by other processes or runtimes"
+            )
+        elif completed_steps < config.num_inference_steps:
+            advice = (
+                f"It failed during denoising (after step {completed_steps} of "
+                f"{config.num_inference_steps}). Decode chunk does not bound this phase; lower "
+                "frames or free GPU memory held by other processes"
+            )
+        else:
+            advice = "It failed while decoding. Lower Decode chunk first (it bounds VAE decode memory), then frames"
         return (
             "Native SVD exhausted GPU memory. Effective config: "
             f"model={config.model_id}, num_frames={config.num_frames}, "
             f"num_inference_steps={config.num_inference_steps}, "
-            f"decode_chunk_size={config.decode_chunk_size}, dtype={config.torch_dtype}, "
+            f"decode_chunk_size={config.decode_chunk_size} (effective {effective_chunk}), "
+            f"dtype={config.torch_dtype}, "
             f"cpu_offload={config.cpu_offload}, forward_chunking={config.forward_chunking}. "
             "StableNew did not automatically rerun or downgrade this job. "
-            "Lower Decode chunk first (it bounds VAE decode memory), then frames, "
-            "when retrying explicitly. "
+            f"{advice}, when retrying explicitly. "
             f"Original error: {exc}"
         )
 
