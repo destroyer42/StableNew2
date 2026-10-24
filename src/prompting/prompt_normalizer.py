@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import re
 
-from src.prompting.prompt_splitter import detect_lora_syntax, detect_weight_syntax
-
 _SPACE_PATTERN = re.compile(r"\s+")
-_OUTER_WRAPPER_PATTERN = re.compile(r"^[\[(](.+?)[\])]$")
-_PAREN_WEIGHT_PATTERN = re.compile(r"^\((.+?):[+-]?\d+(?:\.\d+)?\)$")
 
 
 def normalize_for_match(text: str) -> str:
@@ -19,21 +15,15 @@ def normalize_for_match(text: str) -> str:
 
 def build_dedupe_key(text: str) -> str:
     """
-    Strip cosmetic syntax for duplicate matching while preserving concept identity.
+    Strip cosmetic syntax while preserving attention and extra-network identity.
     """
     normalized = normalize_for_match(text)
     if not normalized:
         return ""
-    if detect_lora_syntax(normalized):
+    # Bare parentheses/brackets also change attention in WebUI. They are not
+    # cosmetic wrappers, even without an explicit numeric weight.
+    if any(char in normalized for char in "()[]<>"):
         return normalized
-    if detect_weight_syntax(normalized):
-        return normalized
-    weight_match = _PAREN_WEIGHT_PATTERN.match(normalized)
-    if weight_match:
-        normalized = weight_match.group(1).strip()
-    outer_match = _OUTER_WRAPPER_PATTERN.match(normalized)
-    if outer_match:
-        normalized = outer_match.group(1).strip()
     normalized = normalized.replace("_", " ")
     normalized = normalized.replace("-", " ")
     normalized = re.sub(r"[\"'`]", "", normalized)

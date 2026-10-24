@@ -56,3 +56,8 @@ def detect_weight_syntax(chunk: str) -> bool:
 
 def detect_lora_syntax(chunk: str) -> bool:
     return bool(_LORA_PATTERN.search(str(chunk or "")))
+
+
+def lora_token_positions(text: str) -> list[tuple[str, int]]:
+    """Return verbatim inline references and character offsets using the shared syntax."""
+    return [(match.group(0), match.start()) for match in _LORA_PATTERN.finditer(text)]

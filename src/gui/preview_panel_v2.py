@@ -39,6 +39,7 @@ from src.gui.view_contracts.workspace_density_contract import (
 )
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.gui_v2.effective_settings import EffectiveContext, project_effective_settings
+from src.gui_v2.prompt_optimizer_view import compiled_prompt_lines
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.state.workspace_paths import workspace_paths
 from src.utils.atomic_io import atomic_write_text
@@ -249,7 +250,7 @@ class PreviewPanelV2(ttk.Frame):
         self._effective_visible_var = tk.BooleanVar(value=False)
         self.effective_toggle = ttk.Checkbutton(
             left_frame,
-            text="Show effective settings",
+            text="Show effective settings / prompt evidence",
             variable=self._effective_visible_var,
             command=self._on_effective_toggle,
             style="Dark.TCheckbutton",
@@ -1098,6 +1099,9 @@ class PreviewPanelV2(ttk.Frame):
         records = getattr(self.app_state, "preview_jobs", None) if self.app_state else None
         jobs = [job for job in (records or []) if isinstance(job, NormalizedJobRecord)]
         text = project_effective_settings(jobs, self._effective_context()).as_text()
+        text += "\n" + "\n".join(
+            compiled_prompt_lines(jobs, visible=self._content_visibility_mode == "nsfw")
+        )
         if not self.effective_frame.winfo_manager():
             self.effective_frame.pack(fill=tk.X, pady=(0, 4), after=self.effective_toggle)
         if text != self._effective_text_value:

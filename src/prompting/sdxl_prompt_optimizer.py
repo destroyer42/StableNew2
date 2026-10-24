@@ -22,6 +22,7 @@ from src.prompting.prompt_types import (
     PromptOptimizationResult,
 )
 from src.utils.embedding_prompt_utils import (
+    EMBEDDING_WEIGHTED_RE,
     extract_embedding_token_strings,
     strip_embedding_entries,
 )
@@ -137,6 +138,25 @@ class SDXLPromptOptimizer:
             if not original:
                 continue
             working_chunk = original
+            # Extracting a network reference from an attention group changes its
+            # scope (and can leave an empty weighted wrapper). Keep that authored
+            # group atomic. A standalone weighted embedding is already handled by
+            # the canonical embedding utility and may still move to the prefix.
+            if _has_grouped_network_reference(original):
+                result.append(
+                    PromptChunk(
+                        sequence_index=sequence_index,
+                        original_text=original,
+                        normalized_text=normalize_for_match(original),
+                        dedupe_key=build_dedupe_key(original),
+                        polarity=polarity,
+                        bucket="leftover_unknown",
+                        weight_syntax_detected=detect_weight_syntax(original),
+                        lora_syntax_detected=detect_lora_syntax(original),
+                    )
+                )
+                sequence_index += 1
+                continue
             embedding_tokens = extract_embedding_token_strings(original)
             if embedding_tokens:
                 prefix_embeddings.extend(embedding_tokens)
@@ -275,6 +295,31 @@ def _extract_lora_tokens(chunk: str) -> tuple[str, list[str]]:
     text_without_loras = _LORA_TOKEN_RE.sub(" ", chunk)
     cleaned = " ".join(text_without_loras.split()).strip(" ,")
     return cleaned, tokens
+
+
+def _has_grouped_network_reference(text: str) -> bool:
+    """Recognize attention scope without reinterpreting any network identity."""
+    depth = 0
+    index = 0
+    while index < len(text):
+        weighted_embedding = EMBEDDING_WEIGHTED_RE.match(text, index) if depth == 0 else None
+        if weighted_embedding is not None:
+            index = weighted_embedding.end()
+            continue
+        char = text[index]
+        if char == "<":
+            if depth:
+                return True
+            end = text.find(">", index)
+            if end >= 0:
+                index = end + 1
+                continue
+        elif char in "([":
+            depth += 1
+        elif char in ")]":
+            depth = max(0, depth - 1)
+        index += 1
+    return False
 
 
 def _is_embedding_only_chunk(chunk: str) -> bool:
