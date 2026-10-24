@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 382,
+    "total": 381,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -20,7 +20,6 @@
       "src/conditioning/openpose_snapshot.py",
       "src/controller/app_controller.py",
       "src/controller/app_controller_services/runtime_projection_coordinator.py",
-      "src/controller/app_controller_services/shutdown_coordinator.py",
       "src/controller/batch_operations_service.py",
       "src/controller/batch_output_resolution.py",
       "src/controller/gpu_loss_coordinator.py",

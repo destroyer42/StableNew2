@@ -201,6 +201,7 @@ class AiAssistService:
         self._lock = threading.Lock()
         self._active: tuple[str, AiCancelToken] | None = None
         self._worker: threading.Thread | None = None
+        self._closed = False
         self._swept = False
 
     # -- public API ---------------------------------------------------------------------------------------------------
@@ -232,9 +233,20 @@ class AiAssistService:
                 logger.warning("AI assist completion callback failed", exc_info=True)
 
         try:
-            thread = get_thread_registry().spawn(
-                target=work, name=f"AiAssist-{request.request_id}", purpose="AI assist request"
-            )
+            # Publish the worker under the same lock as the shutdown fence. Shutdown cannot observe a reserved
+            # request with no worker and return before that worker launches.
+            with self._lock:
+                if self._closed:
+                    self._active = None
+                    return Submission(
+                        False,
+                        AssistOutcome(
+                            OutcomeCode.UNAVAILABLE, request.request_id, "service_closed"
+                        ),
+                    )
+                self._worker = get_thread_registry().spawn(
+                    target=work, name=f"AiAssist-{request.request_id}", purpose="AI assist request"
+                )
         except Exception:  # noqa: BLE001 - e.g. the registry is shutting down: release the single-flight slot
             logger.warning("AI assist worker could not be started", exc_info=True)
             with self._lock:
@@ -245,7 +257,6 @@ class AiAssistService:
                 reason="worker_unavailable",
             )
             return Submission(False, self._record(request, refused, admitted))
-        self._worker = thread
         return Submission(True, None, token)
 
     def cancel(self, request_id: str) -> bool:
@@ -257,17 +268,27 @@ class AiAssistService:
                 return True
         return False
 
+    def begin_shutdown(self) -> None:
+        """Fence new admission and cancel the owned request without waiting."""
+
+        with self._lock:
+            self._closed = True
+            if self._active is not None:
+                self._active[1].cancel()
+
     def shutdown(self, timeout: float = 10.0) -> bool:
         """Cancel any in-flight request and wait for it. ``True`` only when nothing is left running."""
 
+        self.begin_shutdown()
         with self._lock:
-            if self._active is not None:
-                self._active[1].cancel()
             worker = self._worker
         if worker is not None and worker.is_alive():
+            if worker is threading.current_thread():
+                return False
             worker.join(timeout)
             return not worker.is_alive()
-        return True
+        with self._lock:
+            return self._active is None
 
     def _read_activity(self) -> GenerationActivity | None:
         try:
@@ -292,7 +313,9 @@ class AiAssistService:
             return AssistOutcome(code=code, request_id=request.request_id, reason=reason)
 
         with self._lock:
-            if self._active is not None:
+            if self._closed:
+                return refuse(OutcomeCode.UNAVAILABLE, "service_closed")
+            if self._active is not None or (self._worker is not None and self._worker.is_alive()):
                 return refuse(OutcomeCode.BUSY, "another_request_active")
             if not self._swept:
                 # Once per service, before the first request: remove scratch directories (which hold prompt text) that a

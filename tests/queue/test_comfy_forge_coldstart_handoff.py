@@ -624,6 +624,27 @@ def test_a_failed_startup_leaves_the_job_queued_is_not_retried_every_cycle_and_r
     assert world.posts == ["F1"] and stack.queue.is_webui_held() is False
 
 
+def test_noise_epoch_cannot_release_a_failed_identity_hold_without_positive_proof(make_stack):
+    """Drive the gate synchronously: a backend rejection/requeue cannot hide an unproven claim window."""
+    world = World(forge_up=False)
+    world.boot_identity = "unknown"
+    stack = make_stack(world)
+    stack.submit(forge("F1"))
+
+    assert stack.coordinator.prepare_next_dispatch() == "failed"
+    assert stack.queue.is_webui_held()
+    stack.manager.mark_ready(source="noise")
+    assert stack.coordinator.prepare_next_dispatch() == "held"
+    assert stack.queue.is_webui_held() and stack.status("F1") is JobStatus.QUEUED
+    assert world.launches == 1 and world.posts == []
+
+    stack.manager.operator_launches()
+    stack.coordinator.maybe_release(force=True)
+    assert stack.coordinator.prepare_next_dispatch() == "ready"
+    assert not stack.queue.is_webui_held()
+    assert stack.status("F1") is JobStatus.QUEUED and world.posts == []
+
+
 def test_a_new_readiness_epoch_allows_exactly_one_new_attempt(make_stack):
     world = World(forge_up=False)
     world.boot = "timeout"

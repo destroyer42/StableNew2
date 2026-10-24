@@ -463,6 +463,15 @@ class MainWindowV2:
         self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
         self._wire_klein_lora_projection()
         self._wire_prompt_model_target()
+        from src.gui.prompt_ai_targets import prompt_ai_targets
+
+        ai_owner = getattr(self.app_controller, "ai_assist", None)
+        if ai_owner is not None and self._invoker is not None:
+            ai_owner.set_dispatcher(self._invoker.invoke)
+            self.prompt_tab.ai_suggestions.bind(ai_owner, targets=lambda: prompt_ai_targets(
+                getattr(self.sidebar_panel_v2, "base_generation_panel", None),
+                self.prompt_tab._content_visibility_mode,
+            ))
         self._wire_learning_model_target()
         self.operator_readiness_service = self._build_operator_readiness_service()
         self._operator_readiness_window: tk.Toplevel | None = None
