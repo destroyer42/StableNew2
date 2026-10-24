@@ -398,7 +398,9 @@ def test_a_failed_save_callback_is_reported_and_the_dialog_stays_open(tmp_path, 
     try:
         message = dialog._save_error_var.get()
         assert "not saved" in message and "could not be written" in message
-        assert error.call_count == 0  # inline and non-modal: nothing blocks waiting for an acknowledgement
+        assert (
+            error.call_count == 0
+        )  # inline and non-modal: nothing blocks waiting for an acknowledgement
         assert info.call_count == 0  # no "restart to apply" claim for a change that was not saved
         assert dialog.master.winfo_exists()
         assert dialog.comfy_command() == [*DESKTOP, PIN]  # the operator's staged edit is kept
