@@ -38,6 +38,7 @@ from .api.webui_process_manager import (
 )
 from .api.webui_runtime_identity import effective_webui_base_url
 from .app_factory import build_v2_app
+from .controller.job_service_outage import arm_runtime_handoff
 from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
 from .video.comfy_healthcheck import probe_comfy_endpoint
@@ -342,6 +343,11 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
         try:
             config = _load_webui_config()
             controller = getattr(window, "app_controller", None)
+            service = getattr(controller, "job_service", None)
+            if service is not None:
+                # PR-RUNTIME-HANDOFF: the real application only. While the startup hold is in force this does
+                # nothing; afterwards a queued image job gets its managed runtime launched on demand.
+                arm_runtime_handoff(service)
             client = getattr(controller, "_api_client", None) if controller is not None else None
             if client is not None and hasattr(client, "set_startup_probe_grace"):
                 try:

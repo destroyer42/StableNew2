@@ -38,6 +38,20 @@ def bind_webui_outage_containment(
     return bound
 
 
+def arm_runtime_handoff(service: JobService) -> bool:
+    """Arm the queue-driven runtime handoff on the service's one coordinator (production wiring only).
+
+    Injected and test services never call this, so they stay inert. Returns whether a coordinator was armed.
+    """
+
+    coordinator = getattr(service, "webui_outage", None)
+    arm = getattr(coordinator, "enable_runtime_handoff", None)
+    if not callable(arm):
+        return False
+    arm()
+    return True
+
+
 def snapshot(service: JobService) -> dict[str, Any]:
     coordinator = getattr(service, "webui_outage", None)
     return coordinator.snapshot() if coordinator is not None else {}
