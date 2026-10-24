@@ -129,10 +129,7 @@ def test_generic_config_merging_retains_the_frozen_policy(tmp_path) -> None:
         negative_text="negative",
     )
 
-    merged = controller.build_merged_config_for_run(
-        model_name=None,
-        runtime_overrides=frozen,
-    )
+    merged = controller.build_merged_config_for_run(runtime_overrides=frozen)
 
     assert has_frozen_global_prompt_policy(merged)
     assert merged["global_positive_prompt"] == "positive"

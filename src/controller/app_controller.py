@@ -90,6 +90,7 @@ from src.controller.app_controller_services.runtime_projection_coordinator impor
     RuntimeProjectionCoordinator,
 )
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
+from src.controller.generation_profile_controller import GenerationProfileController
 from src.controller.global_prompt_policy_service import (
     overlay_config_in_place,
     read_current_policy,
@@ -121,7 +122,6 @@ from src.gui.app_state_projection_sink import AppStateProjectionSink
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.dropdown_loader_v2 import DropdownLoader
-from src.learning.model_profiles import get_model_profile_defaults_for_model
 from src.photo_optimize import get_photo_optimize_store
 from src.pipeline.config_contract_v26 import (
     validate_svd_native_execution_config,
@@ -1178,6 +1178,23 @@ class AppController:
         return self.gui_log_handler
 
     @property
+    def generation_profiles(self) -> GenerationProfileController:
+        """Model-aware generation profiles and startup defaults (PR-IMG-PROFILE-630)."""
+        controller = getattr(self, "_generation_profiles", None)
+        if controller is None:
+            controller = GenerationProfileController(self)
+            self._generation_profiles = controller
+        return controller
+
+    def on_save_startup_defaults(self) -> tuple[bool, str]:
+        ok, message = self.generation_profiles.save_startup_defaults()
+        self._append_log(f"[controller] {message}")
+        return ok, message
+
+    def restore_startup_defaults(self) -> None:
+        self.generation_profiles.restore_startup_defaults()
+
+    @property
     def duration_stats_service(self) -> DurationStatsService | None:
         """Expose duration stats service for queue ETA estimation (PR-PIPE-002)."""
         return getattr(self, "_duration_stats_service", None)
@@ -1343,7 +1360,8 @@ class AppController:
         controller.refresh_preview_from_state()
 
     def _build_stage_flags(self) -> dict[str, bool]:
-        defaults = {"txt2img": True, "img2img": False, "adetailer": True, "upscale": False}
+        # An unreadable stage variable never turns an optional stage on (ADetailer defaults off everywhere else).
+        defaults = {"txt2img": True, "img2img": False, "adetailer": False, "upscale": False}
         stage_flags: dict[str, bool] = dict(defaults)
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab is not None:
@@ -2444,8 +2462,6 @@ class AppController:
                 left.edit_pack_button.configure(command=self.on_edit_pack)
             if hasattr(left, "packs_list"):
                 left.packs_list.bind("<<ListboxSelect>>", self._on_pack_list_select)
-            if hasattr(left, "preset_combo"):
-                left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
 
         self._update_webui_state("disconnected")
 
@@ -4275,7 +4291,6 @@ class AppController:
                 pass
         payload = self._config_manager.load_last_run()
         if not payload:
-            self._apply_model_profile_defaults(self.state.current_config.model_name or None)
             return
         executor_config = payload.get("executor_config")
         if not isinstance(executor_config, dict):
@@ -4335,32 +4350,6 @@ class AppController:
         if self.app_state and isinstance(run_snapshot, dict):
             self.app_state.set_run_config(dict(run_snapshot))
 
-    def _apply_model_profile_defaults(self, model_name: str | None) -> None:
-        defaults = get_model_profile_defaults_for_model(model_name)
-        if not defaults:
-            return
-        configs: list[Any] = []
-        state_config = getattr(self.state, "current_config", None)
-        if state_config is not None:
-            configs.append(state_config)
-        if self.app_state is not None:
-            configs.append(self.app_state.current_config)
-        for cfg in configs:
-            self._set_profile_default(
-                cfg, "refiner_model_name", defaults.get("default_refiner_id"), ""
-            )
-            self._set_profile_default(
-                cfg, "refiner_switch_at", defaults.get("default_refiner_switch_at"), None
-            )
-            self._set_profile_default(
-                cfg, "hires_upscaler_name", defaults.get("default_hires_upscaler_id"), "Latent"
-            )
-            self._set_profile_default(
-                cfg, "hires_denoise", defaults.get("default_hires_denoise"), 0.3
-            )
-            # Keep hires_enabled False unless user explicitly toggles it.
-
-    @staticmethod
     def _set_profile_default(
         cfg: Any,
         attr: str,
@@ -4750,112 +4739,8 @@ class AppController:
             return
 
     # ------------------------------------------------------------------
-    # Packs / Presets
+    # Packs
     # ------------------------------------------------------------------
-
-    def _on_preset_combo_select(self, event: Any) -> None:
-        if self.main_window is None:
-            return
-        left_zone = getattr(self.main_window, "left_zone", None)
-        if left_zone is None:
-            return
-        combo = getattr(left_zone, "preset_combo", None)
-        if combo is None:
-            return
-        new_preset = combo.get()
-        self.on_saved_recipe_selected(new_preset)
-
-    def on_saved_recipe_selected(self, recipe_name: str) -> None:
-        self._append_log(f"[controller] Saved recipe selected: {recipe_name}")
-        # selection should not immediately mutate config; wait for action
-
-    def apply_saved_recipe_to_run_config(
-        self, recipe_config: dict[str, Any], recipe_name: str
-    ) -> None:
-        """Apply saved recipe configuration to the current run config."""
-        try:
-            # Update AppStateV2 run_config
-            if self.app_state is not None:
-                try:
-                    self.app_state.set_run_config(recipe_config)
-                except Exception:
-                    pass
-                else:
-                    self._apply_randomizer_from_config(recipe_config)
-            self._sync_prompt_optimizer_run_config(recipe_config)
-
-            base_generation_overrides = self._extract_base_generation_overrides_from_recipe(recipe_config)
-            if base_generation_overrides:
-                self._apply_base_generation_overrides(base_generation_overrides)
-
-            self._append_log(f"[controller] Applied saved recipe '{recipe_name}' to run config")
-            self._apply_adetailer_config_section(recipe_config)
-
-        except Exception as e:
-            self._append_log(f"[controller] Error applying saved recipe '{recipe_name}': {e}")
-
-    def _extract_base_generation_overrides_from_recipe(self, preset_config: dict[str, Any]) -> dict[str, Any]:
-        """Extract base-generation overrides from a saved recipe config."""
-        overrides = {}
-
-        # Get txt2img config as primary source
-        txt2img_config = preset_config.get("txt2img", {})
-
-        # Extract model
-        if "model" in txt2img_config and txt2img_config["model"]:
-            overrides["model"] = txt2img_config["model"]
-        elif "model_name" in txt2img_config and txt2img_config["model_name"]:
-            overrides["model"] = txt2img_config["model_name"]
-
-        if "vae" in txt2img_config and txt2img_config["vae"]:
-            overrides["vae"] = txt2img_config["vae"]
-        elif "vae_name" in txt2img_config and txt2img_config["vae_name"]:
-            overrides["vae"] = txt2img_config["vae_name"]
-
-        # Extract sampler
-        if "sampler_name" in txt2img_config and txt2img_config["sampler_name"]:
-            overrides["sampler"] = txt2img_config["sampler_name"]
-
-        if "scheduler" in txt2img_config and txt2img_config["scheduler"]:
-            overrides["scheduler"] = txt2img_config["scheduler"]
-
-        # Extract steps
-        if "steps" in txt2img_config:
-            try:
-                overrides["steps"] = int(txt2img_config["steps"])
-            except (ValueError, TypeError):
-                pass
-
-        # Extract cfg_scale
-        if "cfg_scale" in txt2img_config:
-            try:
-                overrides["cfg_scale"] = float(txt2img_config["cfg_scale"])
-            except (ValueError, TypeError):
-                pass
-
-        # Extract resolution
-        if "width" in txt2img_config and "height" in txt2img_config:
-            try:
-                width = int(txt2img_config["width"])
-                height = int(txt2img_config["height"])
-                overrides["width"] = width
-                overrides["height"] = height
-                # Create a preset label for common resolutions
-                if width == 512 and height == 512:
-                    overrides["resolution_preset"] = "512x512"
-                elif width == 768 and height == 768:
-                    overrides["resolution_preset"] = "768x768"
-                elif width == 1024 and height == 1024:
-                    overrides["resolution_preset"] = "1024x1024"
-                else:
-                    overrides["resolution_preset"] = f"{width}x{height}"
-            except (ValueError, TypeError):
-                pass
-
-        if "seed" in txt2img_config:
-            overrides["seed"] = txt2img_config.get("seed")
-
-        return overrides
 
     def _apply_base_generation_overrides(self, overrides: dict[str, Any]) -> None:
         """Apply base-generation overrides to the pipeline sidebar."""
@@ -5214,7 +5099,6 @@ class AppController:
     def on_model_selected(self, model_name: str) -> None:
         self._append_log(f"[controller] Model selected: {model_name}")
         self.state.current_config.model_name = model_name
-        self._apply_model_profile_defaults(model_name)
 
     def on_vae_selected(self, vae_name: str) -> None:
         self._append_log(f"[controller] VAE selected: {vae_name}")
@@ -5284,6 +5168,7 @@ class AppController:
         if resources is None:
             return
         self._runtime_projection_coordinator.publish_webui_resources(resources)
+        self.generation_profiles.on_resources_updated(resources)
 
     def _apply_webui_resources(self, resources: dict[str, list[Any]] | None) -> None:
         self._on_webui_resources_updated(resources)
@@ -5459,6 +5344,7 @@ class AppController:
             config_snapshot = self._collect_adetailer_panel_config()
             config_snapshot["enabled"] = normalized
             self.app_state.set_adetailer_config(config_snapshot)
+        self.generation_profiles.notify_changed()
 
     def on_override_pack_config_changed(self, enabled: bool) -> None:
         """Handle override pack config checkbox state change.
@@ -5468,6 +5354,7 @@ class AppController:
         This state is consumed by ConfigMergerV2 when building StageOverrideFlags.
         """
         self.override_pack_config_enabled = bool(enabled)
+        self.generation_profiles.notify_changed()
         self._append_log(
             f"[controller] Pack config override: {'ENABLED' if enabled else 'DISABLED'} - "
             f"Current stage settings will {'override' if enabled else 'not override'} pack configs"
@@ -5772,25 +5659,6 @@ class AppController:
             self._append_log(f"[controller] Applied {report.source} to pack '{pack_id}'")
         for failure in report.failed:
             self._append_log(f"[controller] Failed to apply {report.source} to pack '{failure.pack_id}': {failure.error}")
-
-    def save_current_pipeline_saved_recipe(self, recipe_name: str) -> bool:
-        """Persist the current pipeline/stage config as a named saved recipe."""
-        self._append_log(
-            f"[controller] Saving current pipeline config as saved recipe '{recipe_name}'"
-        )
-        payload = self._run_config_with_lora()
-        panel_randomizer = self._get_panel_randomizer_config()
-        if panel_randomizer:
-            payload.update(panel_randomizer)
-        if not payload:
-            self._append_log("[controller] No current config to save as saved recipe")
-            return False
-        success = self._config_manager.save_preset(recipe_name, payload)
-        if success:
-            self._append_log(f"[controller] Saved recipe '{recipe_name}'")
-        else:
-            self._append_log(f"[controller] Failed to save recipe '{recipe_name}'")
-        return success
 
     def _collect_current_stage_configs(self) -> dict[str, Any]:
         """Collect current stage configurations from the GUI cards.
@@ -6248,6 +6116,8 @@ class AppController:
                     if entries and self.app_state:
                         added = self.app_state.add_packs_to_job_draft(entries) is not False
                         self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft" if added else "[controller] Packs not added: discard the open History variation first")
+                        if added:
+                            self.generation_profiles.note_draft_built()
                         # Use debounced refresh instead of direct call
                         self._mark_ui_dirty(preview=True)
 
@@ -6355,6 +6225,7 @@ class AppController:
         if not self.app_state:
             return
         self.app_state.clear_job_draft()
+        self.generation_profiles.clear_draft_record()
         self._append_log("[controller] Job draft cleared")
 
     def on_pause_queue(self) -> None:
@@ -6391,85 +6262,6 @@ class AppController:
             return
         self.job_service.resume()
         self._append_log("[controller] Resumed current job")
-
-    def on_pipeline_saved_recipe_apply_to_working_state(self, recipe_name: str) -> bool:
-        """Load a generation preset into the working state (stage settings and Base Generation).
-
-        Writes nothing: no PromptPack, no preset and no default-preset marker. Returns whether the preset loaded.
-        """
-        self._append_log(f"[controller] Applying saved recipe '{recipe_name}' to working state")
-        return self._load_and_apply_saved_recipe(recipe_name) is not None
-
-    def _load_and_apply_saved_recipe(self, recipe_name: str) -> dict[str, Any] | None:
-        recipe_config = self._config_manager.load_preset(recipe_name)
-        if recipe_config is None:
-            self._append_log(f"[controller] Failed to load saved recipe: {recipe_name}")
-            return None
-
-        self.apply_saved_recipe_to_run_config(recipe_config, recipe_name)
-        return recipe_config
-
-    def on_pipeline_saved_recipe_apply_to_selected_packs(
-        self, recipe_name: str, pack_ids: list[str]
-    ) -> PackApplyReport | None:
-        """Copy a generation preset's settings into the saved settings of the selected PromptPacks (explicit action)."""
-        self._append_log(f"[controller] Applying saved recipe '{recipe_name}' to packs: {pack_ids}")
-
-        recipe_config = self._config_manager.load_preset(recipe_name)
-        if recipe_config is None:
-            self._append_log(f"[controller] Failed to load saved recipe: {recipe_name}")
-            return None
-        report = apply_settings_to_packs(
-            self._config_manager, pack_ids, recipe_config, source=f"Generation Preset '{recipe_name}'"
-        )
-        self._log_pack_apply_report(report)
-        return report
-
-    def on_pipeline_saved_recipe_load_to_pipeline(self, recipe_name: str) -> bool:
-        """Load a generation preset's stage settings into the working state (writes nothing). Returns success."""
-        self._append_log(f"[controller] Loading saved recipe '{recipe_name}' to pipeline")
-
-        recipe_config = self._config_manager.load_preset(recipe_name)
-        if recipe_config is None:
-            self._append_log(f"[controller] Failed to load saved recipe: {recipe_name}")
-            return False
-
-        # Apply to run config
-        if self.app_state:
-            self.app_state.set_run_config(recipe_config)
-            self._apply_randomizer_from_config(recipe_config)
-        self._sync_prompt_optimizer_run_config(recipe_config)
-
-        self._apply_adetailer_config_section(recipe_config)
-        return True
-
-    def on_pipeline_saved_recipe_save_current(self, recipe_name: str) -> None:
-        """Save current stage config as a saved recipe."""
-        self._append_log(f"[controller] Saving saved recipe '{recipe_name}' from stages")
-
-        # Get current config
-        current_config = self._run_config_with_lora()
-        if not current_config:
-            self._append_log("[controller] No current config to save")
-            return
-
-        # Save as preset
-        success = self._config_manager.save_preset(recipe_name, current_config)
-        if success:
-            self._append_log(f"[controller] Saved recipe '{recipe_name}'")
-        else:
-            self._append_log(f"[controller] Failed to save saved recipe '{recipe_name}'")
-
-    def on_pipeline_saved_recipe_delete(self, recipe_name: str) -> None:
-        """Remove an existing saved recipe."""
-        self._append_log(f"[controller] Deleting saved recipe '{recipe_name}'")
-
-        # TODO: Add confirmation dialog if needed
-        success = self._config_manager.delete_preset(recipe_name)
-        if success:
-            self._append_log(f"[controller] Deleted saved recipe '{recipe_name}'")
-        else:
-            self._append_log(f"[controller] Failed to delete saved recipe '{recipe_name}'")
 
     # ------------------------------------------------------------------
     # Movie Clips: a queued assembly job (PR-VID-ASM-332)

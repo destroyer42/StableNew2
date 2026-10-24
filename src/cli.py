@@ -49,10 +49,6 @@ def main():
     )
 
     parser.add_argument(
-        "--preset", type=str, default="default", help="Configuration preset name (default: default)"
-    )
-
-    parser.add_argument(
         "--batch-size", type=int, default=1, help="Number of images to generate (default: 1)"
     )
 
@@ -96,12 +92,8 @@ def main():
     config_manager = ConfigManager()
     structured_logger = StructuredLogger()
 
-    # Load configuration
-    config = config_manager.load_preset(args.preset)
-    if not config:
-        logger.error(f"Failed to load preset: {args.preset}")
-        logger.info("Using default configuration")
-        config = config_manager.get_default_config()
+    # The CLI runs the engine defaults; named Generation Presets were retired (PR-IMG-PROFILE-630).
+    config = config_manager.get_default_config()
 
     # Modify config based on arguments
     if args.no_img2img:

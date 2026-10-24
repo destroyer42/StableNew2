@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from pathlib import Path, PureWindowsPath
-from types import SimpleNamespace
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,7 +14,7 @@ from src.controller.app_controller_services.pack_settings_apply_service import (
 )
 from src.gui.settings_actions_presenter import (
     CHANNEL_PACK,
-    CHANNEL_PRESET,
+    CHANNEL_SETTINGS,
     SettingsActionsPresenter,
 )
 from src.gui.view_contracts import config_source_contract as contract
@@ -58,13 +57,13 @@ def test_load_without_known_unsaved_edits_does_not_ask_but_says_it_replaced_the_
     presenter, _ctl, asked, said = _presenter()
 
     outcome = presenter.load(
-        CHANNEL_PRESET, "Generation Preset 'a'", lambda: True, succeeded=lambda: False
+        CHANNEL_SETTINGS, "startup defaults", lambda: True, succeeded=lambda: False
     )
 
     assert outcome.loaded and not outcome.replaced_edits and asked == []
-    assert said[-1][0] == CHANNEL_PRESET
-    assert "Loaded Generation Preset 'a' into the working stage settings" in said[-1][1]
-    assert "No PromptPack or preset was changed" in said[-1][1]
+    assert said[-1][0] == CHANNEL_SETTINGS
+    assert "Loaded startup defaults into the working stage settings" in said[-1][1]
+    assert "No PromptPack was changed" in said[-1][1]
 
 
 def test_load_over_unsaved_edits_asks_first_and_declining_keeps_them() -> None:
@@ -74,8 +73,8 @@ def test_load_over_unsaved_edits_asks_first_and_declining_keeps_them() -> None:
     calls: list[int] = []
 
     outcome = presenter.load(
-        CHANNEL_PRESET,
-        "Generation Preset 'a'",
+        CHANNEL_SETTINGS,
+        "startup defaults",
         lambda: calls.append(1) or True,
         succeeded=lambda: True,
     )
@@ -102,7 +101,7 @@ def test_failed_load_says_nothing_was_changed_and_keeps_the_baseline() -> None:
     presenter.mark_working_clean()
 
     outcome = presenter.load(
-        CHANNEL_PRESET, "Generation Preset 'a'", lambda: False, succeeded=lambda: True
+        CHANNEL_SETTINGS, "startup defaults", lambda: False, succeeded=lambda: True
     )
 
     assert not outcome.loaded
@@ -156,60 +155,6 @@ def test_apply_with_no_target_or_a_raising_controller_is_reported_not_raised() -
     assert "Could not apply S: disk gone" in said[-1][1]
 
 
-def test_overwriting_an_existing_preset_is_confirmed_but_a_new_one_is_not() -> None:
-    presenter, _ctl, asked, said = _presenter(answer=False)
-    saved: list[str] = []
-
-    assert presenter.save_preset(
-        "new", exists=False, invoke=lambda n: saved.append(n) or True, confirm_overwrite=True
-    )
-    assert (
-        asked == []
-        and saved == ["new"]
-        and said[-1][1].startswith("Saved new Generation Preset 'new'")
-    )
-
-    assert not presenter.save_preset(
-        "old", exists=True, invoke=lambda n: saved.append(n) or True, confirm_overwrite=True
-    )
-    assert saved == ["new"] and len(asked) == 1 and "kept" in said[-1][1]
-
-
-def test_windows_case_alias_requires_overwrite_confirmation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from src.gui import sidebar_panel_v2
-
-    presenter, _ctl, asked, said = _presenter(answer=False)
-    saved: list[str] = []
-    panel = SimpleNamespace(
-        controller=SimpleNamespace(
-            save_current_pipeline_saved_recipe=lambda name: saved.append(name) or True
-        ),
-        _actions=presenter,
-        _list_recipe_names=lambda: ["Look"],
-    )
-    # Exercise Windows filename identity on every CI host without creating a Tk window.
-    monkeypatch.setattr(sidebar_panel_v2, "Path", PureWindowsPath)
-
-    assert not sidebar_panel_v2.SidebarPanelV2._save_preset(panel, "look")
-    assert saved == []
-    assert asked[-1][0] == "Overwrite Generation Preset?"
-    assert "kept" in said[-1][1]
-
-
-def test_failed_preset_save_is_reported() -> None:
-    presenter, _ctl, _asked, said = _presenter()
-
-    assert not presenter.save_preset(
-        "x", exists=False, invoke=lambda n: False, confirm_overwrite=True
-    )
-    assert "Could not save Generation Preset 'x'" in said[-1][1]
-
-
-# ------------------------------------------------------------------------------------------- real sidebar
-
-
 class _ReportingController(FakeController):
     def __init__(self, config_manager: Any = None) -> None:
         super().__init__(config_manager)
@@ -222,16 +167,6 @@ class _ReportingController(FakeController):
     def on_pipeline_pack_apply_config(self, pack_ids: list[str]) -> PackApplyReport | None:
         self._record("save_to_packs", tuple(pack_ids))
         return self.report
-
-    def on_pipeline_saved_recipe_apply_to_selected_packs(
-        self, name: str, pack_ids: list[str]
-    ) -> PackApplyReport | None:
-        self._record("apply_packs", name, tuple(pack_ids))
-        return self.report
-
-    def on_pipeline_saved_recipe_apply_to_working_state(self, name: str) -> bool:
-        self._record("apply_working", name)
-        return True
 
     def on_pipeline_pack_load_config(self, pack_id: str) -> bool:
         self._record("load_pack", pack_id)
@@ -299,59 +234,6 @@ def test_apply_button_names_no_count_without_a_selection(tk_root: tk.Tk, tmp_pat
         panel.destroy()
 
 
-def test_preset_written_into_packs_confirms_with_the_preset_name(
-    tk_root: tk.Tk, tmp_path: Path
-) -> None:
-    panel, controller, _ = _sidebar(tk_root, tmp_path, recipes=["alpha"], packs=["p1"])
-    try:
-        controller.report = PackApplyReport(
-            "Generation Preset 'alpha'", (PackApplyOutcome("p1", True),)
-        )
-        _select_packs(panel, 0)
-
-        panel._on_saved_recipe_apply_to_selected_packs()
-
-        assert "Generation Preset 'alpha'" in panel.asked[-1][1]
-        assert controller.calls[-1] == ("apply_packs", ("alpha", ("p1",)))
-        assert (
-            panel.pack_action_label.cget("text")
-            == "Applied Generation Preset 'alpha' to 1 PromptPack: 'p1'."
-        )
-    finally:
-        panel.destroy()
-
-
-def test_loading_a_preset_over_edits_asks_and_otherwise_reports_the_replacement(
-    tk_root: tk.Tk, tmp_path: Path
-) -> None:
-    panel, controller, _ = _sidebar(tk_root, tmp_path, recipes=["alpha", "beta"])
-    try:
-        panel.saved_recipe_var.set("alpha")
-        panel._on_saved_recipe_apply_to_working_state()
-        assert panel.asked == []  # nothing known to be unsaved yet
-        assert (
-            "Loaded Generation Preset 'alpha' into the working stage settings"
-            in panel.recipe_action_label.cget("text")
-        )
-
-        controller.fingerprint = "user edited a stage card"
-        panel.saved_recipe_var.set("beta")
-        panel._confirm_override = lambda title, message: False
-        panel._on_saved_recipe_load_to_pipeline()
-        assert controller.calls[-1] == ("apply_working", ("alpha",))  # beta was not loaded
-        assert panel._settings_source.name == "alpha"
-        assert "Load cancelled" in panel.recipe_action_label.cget("text")
-
-        answers: list[str] = []
-        panel._confirm_override = lambda title, message: answers.append(title) or True
-        panel._on_saved_recipe_load_to_pipeline()
-        assert answers == ["Replace unsaved settings?"]
-        assert panel._settings_source.name == "beta"
-        assert "unsaved changes were replaced" in panel.recipe_action_label.cget("text")
-    finally:
-        panel.destroy()
-
-
 def test_loading_pack_settings_reports_success_and_failure_inline(
     tk_root: tk.Tk, tmp_path: Path
 ) -> None:
@@ -371,65 +253,25 @@ def test_loading_pack_settings_reports_success_and_failure_inline(
         panel.destroy()
 
 
-def test_overwriting_a_preset_is_confirmed_and_a_reserved_name_is_refused_inline(
-    tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    panel, controller, _ = _sidebar(tk_root, tmp_path, recipes=["alpha"])
-    try:
-        panel.saved_recipe_var.set("alpha")
-        panel._on_saved_recipe_save_current()
-        assert panel.asked[-1][0] == "Overwrite Generation Preset?"
-        assert controller.calls[-1] == ("create", ("alpha",))
-        assert "Overwrote Generation Preset 'alpha'" in panel.recipe_action_label.cget("text")
-
-        monkeypatch.setattr(
-            "src.gui.sidebar_panel_v2.simpledialog.askstring", lambda *a, **k: "settings"
-        )
-        before = len(controller.calls)
-        panel._create_saved_recipe_from_stages()
-        assert len(controller.calls) == before
-        assert "application file" in panel.recipe_action_label.cget("text")
-    finally:
-        panel.destroy()
-
-
-def test_deleting_a_preset_is_confirmed(tk_root: tk.Tk, tmp_path: Path) -> None:
-    panel, controller, _ = _sidebar(tk_root, tmp_path, recipes=["alpha"])
-    try:
-        panel._confirm_override = lambda title, message: False
-        panel._on_saved_recipe_delete()
-        assert controller.calls == []
-        assert panel.saved_recipe_names == ["alpha"]
-
-        panel._confirm_override = lambda title, message: True
-        panel._on_saved_recipe_delete()
-        assert controller.calls == [("delete", ("alpha",))]
-        assert "Deleted Generation Preset 'alpha'" in panel.recipe_action_label.cget("text")
-    finally:
-        panel.destroy()
-
-
 def test_user_facing_terms_name_the_concepts_without_mixing_them() -> None:
     texts = [
-        contract.NO_RECIPES_TEXT,
         contract.NO_PACK_LISTS_TEXT,
         contract.PACK_SELECTOR_HELP,
         contract.SAVE_PACK_CONFIG_TIP,
         contract.OVERRIDE_ON_TEXT,
-        *contract.RECIPE_MENU_LABELS.values(),
+        contract.SAVE_STARTUP_DEFAULTS_LABEL,
+        contract.SAVE_STARTUP_DEFAULTS_TIP,
     ]
     joined = " ".join(texts)
 
     assert (
-        "Generation Preset" in joined
+        "startup defaults" in joined.lower()
         and "Saved Pack List" in joined
         and "Current Job Overrides" in joined
     )
     assert "holds no settings" in contract.NO_PACK_LISTS_TEXT
     assert "Nothing is written to the packs" in contract.OVERRIDE_ON_TEXT
-    assert "recipe" not in joined.lower()
-    # The presets folder is not shown to the operator as a settings authority for PromptPacks.
-    assert SimpleNamespace is not None
+    assert "recipe" not in joined.lower() and "preset" not in joined.lower()
 
 
 def test_selection_changed_during_confirmation_cannot_redirect_the_write(

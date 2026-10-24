@@ -13,7 +13,7 @@ BASE_GENERATION_SETTING_HELP = {
     "scheduler": "Adjusts how the sampler distributes noise over the run. Karras-style schedules often help smoothness and detail, while other schedules can preserve different texture or timing characteristics.",
     "steps": "Sets how many denoising steps are used. Raising it can improve coherence and detail up to a point, but it also costs time. Around 20-35 is a common safe range for most general image work.",
     "cfg": "Classifier-Free Guidance strength. Raise it when the image ignores the prompt, lower it when results look overcooked or unnatural. Around 5-9 is a common safe range for balanced prompting.",
-    "preset": "A convenience shortcut for common width and height pairs. Width and Height still remain authoritative, so use presets to start quickly and then fine-tune dimensions directly if needed.",
+    "preset": "A convenience shortcut for common width and height pairs. Width and Height still remain authoritative, so use the shortcut to start quickly and then fine-tune dimensions directly if needed.",
     "width": "Final generation width in pixels. Higher values can improve detail but increase memory use and runtime. Keep dimensions aligned to model-friendly multiples, typically 64 or 128 depending on the workflow.",
     "height": "Final generation height in pixels. Taller or wider aspect ratios change composition pressure as well as cost, so adjust it alongside Width instead of treating it as a cosmetic afterthought.",
     "seed": "Controls reproducibility. Leave blank or use -1 for a fresh random seed; reuse a fixed value when you want to compare config changes against the same composition baseline.",

@@ -212,6 +212,13 @@ def _isolate_global_prompt_user_state(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 @pytest.fixture(autouse=True)
+def _isolate_generation_profile_user_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Pytest never reads or writes the operator's per-user generation-profile store or startup defaults (PR-IMG-PROFILE-630)."""
+
+    monkeypatch.setenv("STABLENEW_GENERATION_PROFILE_DIR", str(tmp_path / "GenerationProfiles"))
+
+
+@pytest.fixture(autouse=True)
 def _hermetic_video_preflight_probes(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Video Workflow tab probes runtime readiness on a worker (PR-VID-UX-311).
 

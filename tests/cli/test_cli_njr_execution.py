@@ -100,9 +100,6 @@ class _FakeConfigManager:
     def __init__(self) -> None:
         self._config = _base_config()
 
-    def load_preset(self, _name: str) -> dict[str, object]:
-        return _base_config()
-
     def get_default_config(self) -> dict[str, object]:
         return _base_config()
 
@@ -155,8 +152,6 @@ def test_cli_main_uses_pipeline_runner(monkeypatch, tmp_path: Path) -> None:
             "stablenew",
             "--prompt",
             "cli prompt",
-            "--preset",
-            "default",
             "--batch-size",
             "2",
             "--run-name",
@@ -220,8 +215,6 @@ def test_cli_main_create_video_prefers_final_stage_artifacts(monkeypatch, tmp_pa
             "stablenew",
             "--prompt",
             "cli prompt",
-            "--preset",
-            "default",
             "--create-video",
         ],
     )

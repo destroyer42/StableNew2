@@ -38,7 +38,7 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
         purpose="Pipeline is the queue-first workspace for fresh image generation and controlled stage execution.",
         inputs=(
             "PromptPacks (authored in the Prompt tab); each keeps its own saved settings.",
-            "Generation Presets: named copies of stage settings you can load into the working stage settings.",
+            "Model-aware generation profiles (Research, Learning, Custom) for the selected model, and startup defaults you can save for the next launch.",
             "Base generation settings and optional downstream stages (img2img, ADetailer, upscale).",
             "Queue and history context from recent runs.",
         ),

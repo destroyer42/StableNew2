@@ -272,6 +272,10 @@ Optimizer deduplication preserves attention syntax in concept identity: implicit
 
 The PromptPack compiler calls `adapt_structured_prompt` on structured components before rendering the executable string (`src/pipeline/resolution_layer.py`, `src/pipeline/compile_evidence.py`), so Prompt-tab preview and execution share one rule. Compile-time adaptation is compile-safe: only definitive policy facts and definitive `incompatible` LoRA evidence delete an authored component; missing or conflicting evidence preserves it and the backend's fail-closed admission stays final. Adaptation evidence is frozen into the queued job.
 
+### 4.5 Recommended generation profiles and startup defaults
+
+`src/generation_profiles/` holds advisory, source-backed Base Generation recommendations per model identity (Research, Learning, Custom) and the operator's saved startup defaults. They fill the editable working settings and never enter the canonical path: Intent, Compiler, NJR, JobService and `PipelineRunner.run_njr` are unchanged, the executable `ModelPolicy` stays final, and a profile never enables a stage. Details, evidence classes, store layout and the Learning publication seam are in `MODEL_PROFILES.md` section 17.
+
 ## 5. Assets (`src/assets/`)
 
 `AssetRegistry` (`src/assets/registry.py`) is the sole local-file identity authority: offline, streamed SHA-256, safetensors header reading only, duplicate paths grouped by content, hash cache at `state/asset_registry_v1.json` (`src/state/workspace_paths.py`, atomic writes, cross-process lock in `cache_lock.py`). Filename and path are aliases, never identity. It never contacts a WebUI; `WebUIResourceService` (`src/api/webui_resource_service.py`) is the separate read-only answer to what a running WebUI exposes.
@@ -308,6 +312,7 @@ performs no network lookup or download.
 - Detectors implement `SubjectDetector`: `NullDetector` (default) and `OpenCvFaceDetector` (YuNet, CPU, `detector_id` `opencv_yunet`). The model is the repository asset `src/refinement/assets/face_detection_yunet_2026may.onnx`; the detector refuses native loading unless size and SHA-256 match exactly. No downloads, no scans.
 - YuNet is StableNew's own CPU observation. It is not the Forge ADetailer detector and the two are never conflated.
 - ADetailer control truth: the pinned ADetailer-Neo silently drops a pass whose arguments fail its schema, and exposes no machine-readable detection result. `schema_issues` / `detector_status` (`adetailer_contract.py`) define "supported"; `build_effectiveness` (`adetailer_effectiveness.py`, schema `stablenew.adetailer-effectiveness.v1`) keeps detection, execution, observable pixel change and visual improvement as four separate outcomes. Nothing may claim an anatomy fix succeeded.
+- ADetailer enablement has three mirrors in a config (`pipeline.adetailer_enabled`, `adetailer.enabled`, `adetailer.adetailer_enabled`). Operator membership chosen at Add to Job (`PackJobEntry.stage_flags`) decides the compiled stage chain and `PromptPackNormalizedJobBuilder._align_adetailer_enablement` makes all three mirrors agree with it; without membership an explicit disable in any mirror wins and a stale parameter section never infers "enabled". An unreadable stage variable never turns ADetailer on (`AppController._build_stage_flags`). Saved ADetailer parameters stay saved while the stage is off. Evidence: `tests/pipeline/test_adetailer_enablement_truth.py`.
 - Under Forge only the managed runtime's accepted detector set is offered (`adetailer_detector_fallbacks` in `backend_capabilities.py`).
 
 ## 7. Photo Optimize touchpoint

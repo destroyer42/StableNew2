@@ -6,83 +6,31 @@ from src.gui.view_contracts import config_source_contract as contract
 from src.gui.view_contracts.task_navigation_contract import LEGACY_TAB_ORDER, all_tab_ids
 
 
-def test_application_settings_files_are_not_offered_as_recipes() -> None:
-    names = ["Heroe13", "default", "last_settings", "pack_overrides", "settings", "zeta"]
-
-    assert contract.recipe_names_for_display(names) == ["Heroe13", "default", "zeta"]
-
-
 def test_working_settings_are_the_default_source() -> None:
-    text = contract.source_status_text(contract.SettingsSource(), "")
+    text = contract.source_status_text(contract.SettingsSource())
 
-    assert text == "In use: Working stage settings (no preset or pack loaded)"
-
-
-def test_a_selected_recipe_is_not_reported_as_applied() -> None:
-    text = contract.source_status_text(contract.SettingsSource(), "Heroe13", "sdxl | 832x1216")
-
-    assert text.splitlines()[0] == "In use: Working stage settings (no preset or pack loaded)"
     assert (
-        text.splitlines()[1] == "Generation Preset 'Heroe13' selected, not loaded: sdxl | 832x1216"
+        text == "In use: Working stage settings (no PromptPack settings or startup defaults loaded)"
     )
 
 
-def test_an_applied_recipe_is_reported_as_the_source() -> None:
-    source = contract.SettingsSource(contract.SOURCE_RECIPE, "Heroe13")
+def test_restored_startup_defaults_are_named_as_the_source() -> None:
+    source = contract.SettingsSource(contract.SOURCE_STARTUP)
 
-    text = contract.source_status_text(source, "Heroe13")
-
-    assert "last loaded from Generation Preset 'Heroe13'" in text.splitlines()[0]
-    assert text.splitlines()[1] == "Generation Preset 'Heroe13' loaded"
+    assert "restored from your saved startup defaults" in contract.source_status_text(source)
 
 
-def test_a_different_recipe_selected_after_applying_stays_not_applied() -> None:
-    source = contract.SettingsSource(contract.SOURCE_RECIPE, "Heroe13")
-
-    text = contract.source_status_text(source, "Testing")
-
-    assert "Generation Preset 'Heroe13'" in text.splitlines()[0]
-    assert "'Testing' selected, not loaded" in text.splitlines()[1]
+def test_startup_save_wording_is_truthful_for_success_and_failure() -> None:
+    assert contract.startup_save_result_text(True, "Saved for FLUX.") == "Saved for FLUX."
+    failed = contract.startup_save_result_text(False, "The disk is read-only.")
+    assert failed.startswith("Startup defaults were not saved.") and "read-only" in failed
+    assert "Generation Preset" not in contract.SAVE_STARTUP_DEFAULTS_TIP
 
 
 def test_a_pack_load_names_the_promptpack_as_the_source() -> None:
     source = contract.SettingsSource(contract.SOURCE_PACK, "hero_pack")
 
     assert "last loaded from PromptPack Settings of 'hero_pack'" in source.describe()
-
-
-def test_recipe_actions_need_a_recipe_and_pack_writes_need_packs() -> None:
-    none = contract.recipe_action_state(False, True)
-    assert not none.any_enabled
-
-    recipe_only = contract.recipe_action_state(True, False)
-    assert recipe_only.apply_working and recipe_only.load_pipeline
-    assert recipe_only.save_current and recipe_only.delete
-    assert not recipe_only.apply_packs
-
-    both = contract.recipe_action_state(True, True)
-    assert both.apply_packs
-
-
-def test_every_recipe_menu_action_has_a_distinct_label() -> None:
-    labels = list(contract.RECIPE_MENU_LABELS.values())
-
-    assert len(set(labels)) == len(labels)
-    assert set(contract.RECIPE_MENU_LABELS) == {
-        "apply_working",
-        "apply_packs",
-        "load_pipeline",
-        "save_current",
-        "delete",
-    }
-
-
-def test_empty_recipe_list_says_what_populates_it() -> None:
-    hint = contract.recipe_empty_hint(0)
-
-    assert "No Generation Presets yet" in hint
-    assert "+ New" in hint
-    assert contract.recipe_empty_hint(3) == ""
 
 
 def test_no_packs_found_names_the_folder_and_the_supported_action() -> None:

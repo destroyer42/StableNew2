@@ -35,28 +35,6 @@ class ConfigService:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2)
 
-    def list_presets(self) -> list[str]:
-        return [p.stem for p in self.presets_dir.glob("*.json")]
-
-    def load_preset(self, name: str) -> dict[str, Any]:
-        path = self.presets_dir / f"{name}.json"
-        if not path.exists():
-            return {}
-        with open(path, encoding="utf-8") as f:
-            return cast(dict[str, Any], json.load(f))
-
-    def save_preset(self, name: str, cfg: dict, overwrite: bool = True) -> None:
-        path = self.presets_dir / f"{name}.json"
-        if path.exists() and not overwrite:
-            raise FileExistsError(f"Preset {name} already exists.")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
-
-    def delete_preset(self, name: str) -> None:
-        path = self.presets_dir / f"{name}.json"
-        if path.exists():
-            path.unlink()
-
     def _resolve_list_path(self, name: str | Path) -> Path:
         candidate = Path(name)
         if candidate.suffix.lower() == ".json":

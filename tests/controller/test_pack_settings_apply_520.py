@@ -1,4 +1,4 @@
-"""PR-GUI-UX-520: applying settings to PromptPacks and loading Generation Presets, against real storage.
+"""PR-GUI-UX-520: applying settings to PromptPacks and loading PromptPack settings, against real storage.
 
 A real ``ConfigManager`` over temporary folders and a real ``AppController`` (no Tk, no backend, no queue).
 """
@@ -117,43 +117,6 @@ def test_apply_with_nothing_to_apply_reports_none_and_writes_nothing(env) -> Non
     assert controller.on_pipeline_pack_apply_config(["good"]) is None
 
     assert (manager.packs_dir / "good.json").read_bytes() == before
-
-
-def test_preset_applied_to_packs_changes_only_pack_settings_and_not_the_preset(env) -> None:
-    controller, manager, _ = env
-    assert manager.save_preset("look", {"txt2img": {"steps": 44}})
-    preset_before = (manager.presets_dir / "look.json").read_bytes()
-
-    report = controller.on_pipeline_saved_recipe_apply_to_selected_packs("look", ["good"])
-
-    assert report.all_ok and report.source == "Generation Preset 'look'"
-    assert _preset(manager, "good")["preset_data"]["txt2img"]["steps"] == 44
-    assert (
-        _preset(manager, "other")["preset_data"]["txt2img"]["steps"] == 10
-    )  # unselected pack unchanged
-    assert (manager.presets_dir / "look.json").read_bytes() == preset_before
-    assert controller.on_pipeline_saved_recipe_apply_to_selected_packs("missing", ["good"]) is None
-
-
-def test_loading_a_preset_writes_nothing_and_does_not_set_a_default_marker(env) -> None:
-    controller, manager, _ = env
-    assert manager.save_preset("look", {"txt2img": {"steps": 44}})
-    snapshot = {
-        p.name: p.read_bytes()
-        for p in list(manager.packs_dir.iterdir()) + list(manager.presets_dir.iterdir())
-    }
-
-    assert controller.on_pipeline_saved_recipe_apply_to_working_state("look") is True
-    assert controller.on_pipeline_saved_recipe_load_to_pipeline("look") is True
-    assert controller.on_pipeline_saved_recipe_apply_to_working_state("nope") is False
-    assert controller.on_pipeline_saved_recipe_load_to_pipeline("nope") is False
-
-    assert controller.app_state.run_config["txt2img"]["steps"] == 44
-    assert {
-        p.name: p.read_bytes()
-        for p in list(manager.packs_dir.iterdir()) + list(manager.presets_dir.iterdir())
-    } == snapshot
-    assert not (manager.presets_dir / ".default_preset").exists()
 
 
 def test_loading_pack_settings_reports_whether_any_were_found(env) -> None:

@@ -100,13 +100,10 @@ class LeftZone(ttk.Frame):
         self.load_pack_button = ttk.Button(self, text="Load Pack")
         self.edit_pack_button = ttk.Button(self, text="Edit Pack")
         self.packs_list = tk.Listbox(self, exportselection=False)
-        self.preset_combo = ttk.Combobox(self, values=[])
 
         self.load_pack_button.pack(fill="x", padx=4, pady=2)
         self.edit_pack_button.pack(fill="x", padx=4, pady=2)
         self.packs_list.pack(fill="both", expand=True, padx=4, pady=4)
-        ttk.Label(self, text="Preset").pack(anchor="w", padx=4)
-        self.preset_combo.pack(fill="x", padx=4, pady=2)
 
 
 class BottomZone(ttk.Frame):
@@ -1360,15 +1357,6 @@ class MainWindowV2:
             try:
                 left.packs_list.bind(
                     "<<ListboxSelect>>", lambda _e: self._handle_pack_selection(ctrl), add="+"
-                )
-            except Exception:
-                pass
-
-        if hasattr(left, "preset_combo") and callable(getattr(ctrl, "on_preset_selected", None)):
-            try:
-                left.preset_combo.bind(
-                    "<<ComboboxSelected>>",
-                    lambda _e: ctrl.on_preset_selected(left.preset_combo.get()),
                 )
             except Exception:
                 pass

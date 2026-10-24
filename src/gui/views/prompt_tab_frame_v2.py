@@ -1208,9 +1208,9 @@ class PromptTabFrame(ttk.Frame):
 
     # Event handlers / helpers ------------------------------------------
     def _on_new_pack(self) -> None:
-        """Create a new pack with default preset settings.
+        """Create a new pack.
 
-        New packs save defaults inside their one native JSON document.
+        A new pack carries no saved settings of its own; it saves them inside its one native JSON document when asked.
         """
         if self.workspace_state.dirty:
             proceed = messagebox.askyesno(
@@ -1228,23 +1228,6 @@ class PromptTabFrame(ttk.Frame):
 
         # Create new pack
         self.workspace_state.new_pack(pack_name, slot_count=10)
-
-        # Load default preset settings into the pack
-        try:
-            import json
-            from pathlib import Path
-
-            default_preset_path = Path("presets") / "default.json"
-            if default_preset_path.exists():
-                with open(default_preset_path, encoding="utf-8") as f:
-                    default_preset = json.load(f)
-
-                # Apply default preset to current pack
-                if hasattr(self.workspace_state.current_pack, "preset_data"):
-                    self.workspace_state.current_pack.preset_data = default_preset
-                    self.workspace_state.mark_dirty()
-        except Exception:
-            pass  # Continue even if default preset loading fails
 
         self.workspace_state.set_current_slot_index(0)
         self.slot_list.selection_clear(0, "end")

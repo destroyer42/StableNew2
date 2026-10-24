@@ -25,10 +25,10 @@ def test_gui_v2_layout_skeleton(gui_app_factory):
     # V2 left panel attributes
     sidebar = app.sidebar_panel_v2
     assert hasattr(sidebar, "pack_panel")
-    assert hasattr(sidebar, "saved_recipe_dropdown")
+    assert hasattr(sidebar, "save_startup_defaults_button")
     assert hasattr(sidebar, "base_generation_panel")
     assert hasattr(sidebar, "config_source_label")
     assert isinstance(sidebar.pack_panel, object)
-    assert isinstance(sidebar.saved_recipe_dropdown, object)
+    assert isinstance(sidebar.save_startup_defaults_button, object)
     assert isinstance(sidebar.base_generation_panel, object)
     assert isinstance(sidebar.config_source_label, object)
