@@ -88,6 +88,10 @@ def containment_required() -> bool:
     return os.name == "nt"
 
 
+_BYTES_PER_MB = 1024 * 1024
+_LIMIT_ROUNDING_BYTES = 64 * 1024  # the largest kernel page size a cgroup limit is rounded down to
+
+
 def _spawn_reader(
     target: Callable[..., Any], *args: Any, name: str, **kwargs: Any
 ) -> threading.Thread:
@@ -359,8 +363,10 @@ def _spawn_contained(
 ) -> _Spawned:
     """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
 
-    A ``memory_limit_mb`` is a requirement, not a hint: the container must report exactly that limit before the child
-    starts, otherwise the child is not run. (The Windows job object quietly drops a limit the OS refuses.)
+    A ``memory_limit_mb`` is a requirement, not a hint: the OS itself (the job object's limit information, the cgroup's
+    ``memory.max``) must report that limit, read back, before the child starts; otherwise the child is not run. A value the
+    container merely remembers asking for is not evidence (the Windows job object quietly drops a limit the OS refuses and
+    ``LinuxCGroupV2`` only logs a refused write).
 
     Raises ``ContainmentError`` (with the child already killed) when containment is required and could not be
     established, and ``OSError`` when the child cannot launch at all."""
@@ -371,11 +377,13 @@ def _spawn_contained(
     )
     if memory_limit_mb is not None:
         required = True
+        expected = int(memory_limit_mb * _BYTES_PER_MB)
         try:
-            established = container.inspect().get("memory_limit_mb")
-        except Exception:  # noqa: BLE001 - an uninspectable container cannot prove the limit
-            established = None
-        if established != memory_limit_mb:
+            enforced = container.enforced_memory_limit_bytes()
+        except Exception:  # noqa: BLE001 - a container that cannot be read back cannot prove the limit
+            enforced = None
+        # cgroup v2 rounds ``memory.max`` down to a page; the job object keeps the exact byte count.
+        if enforced is None or not 0 <= expected - enforced < _LIMIT_ROUNDING_BYTES:
             _release(container)
             raise ContainmentError(
                 f"{label}: the {memory_limit_mb:g} MB memory limit could not be established; the child was not started"
@@ -385,6 +393,7 @@ def _spawn_contained(
         label=label,
         required=required,
         container=container,
+        require_suspended=memory_limit_mb is not None,
         creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0) | (0x4000 if below_normal else 0))
         if os.name == "nt"
         else 0,

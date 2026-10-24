@@ -31,31 +31,41 @@ _PY = sys.executable
 _ALLOCATE_MB = "x = bytearray({mb} * 1024 * 1024); print(len(x))"
 
 
-class _RecordingContainer(NullProcessContainer):
-    """A container that claims whatever limit the test wants it to report."""
+_MB = 1024 * 1024
 
-    def __init__(self, job_id: str, config: ProcessContainerConfig, reported: float | None) -> None:
+
+class _RecordingContainer(NullProcessContainer):
+    """A container whose OS read-back says whatever the test wants. ``inspect`` lies on purpose: it must not be trusted."""
+
+    def __init__(
+        self, job_id: str, config: ProcessContainerConfig, enforced_bytes: int | None
+    ) -> None:
         super().__init__(job_id, config, "test")
-        self._reported = reported
+        self._enforced = enforced_bytes
         self.torn_down = False
 
+    def enforced_memory_limit_bytes(self) -> int | None:
+        return self._enforced
+
     def inspect(self) -> dict[str, Any]:
-        return {"memory_limit_mb": self._reported}
+        return {"memory_limit_mb": self.config.memory_limit_mb}
 
     def teardown(self) -> None:
         self.torn_down = True
 
 
-def _fake_builder(reported: float | None, built: list[_RecordingContainer]):
+def _fake_builder(enforced: int | None, built: list[_RecordingContainer]):
     def build(job_id: str, config: ProcessContainerConfig) -> ProcessContainer:
-        container = _RecordingContainer(job_id, config, reported)
+        container = _RecordingContainer(job_id, config, enforced)
         built.append(container)
         return container
 
     return build
 
 
-def test_a_limit_the_container_cannot_confirm_means_no_child(monkeypatch) -> None:
+def test_a_limit_the_os_does_not_confirm_means_no_child_even_if_the_container_remembers_asking(
+    monkeypatch,
+) -> None:
     built: list[_RecordingContainer] = []
     launched: list[object] = []
     monkeypatch.setattr(managed_process, "build_process_container", _fake_builder(None, built))
@@ -72,9 +82,11 @@ def test_a_limit_the_container_cannot_confirm_means_no_child(monkeypatch) -> Non
     assert built[0].config.memory_limit_mb == 512 and built[0].torn_down is True
 
 
-def test_a_different_reported_limit_is_not_confirmation(monkeypatch) -> None:
+def test_a_different_enforced_limit_is_not_confirmation(monkeypatch) -> None:
     built: list[_RecordingContainer] = []
-    monkeypatch.setattr(managed_process, "build_process_container", _fake_builder(1024, built))
+    monkeypatch.setattr(
+        managed_process, "build_process_container", _fake_builder(1024 * _MB, built)
+    )
     outcome = run_bounded(
         [_PY, "-c", "print(1)"], timeout_seconds=5, max_stdout_bytes=1024, memory_limit_mb=512
     )
@@ -182,3 +194,178 @@ def test_every_model_child_uses_the_capped_runner_by_default() -> None:
 
     service_default = inspect.signature(ReferenceMapService.__init__).parameters["runner"].default
     assert service_default is providers.bounded_runner
+
+
+@pytest.mark.parametrize(
+    ("enforced_delta", "starts"),
+    [
+        (0, True),  # exact (job object)
+        (4096, True),  # a cgroup rounds the limit down to a page
+        (-4096, False),  # the OS holds a LAXER limit than asked for
+        (64 * 1024, False),  # more than page rounding below the request
+        (512 * _MB, False),
+    ],
+)
+def test_only_the_requested_limit_up_to_page_rounding_is_accepted(
+    monkeypatch, enforced_delta, starts
+) -> None:
+    requested = 512
+    built: list[_RecordingContainer] = []
+    launched: list[object] = []
+    monkeypatch.setattr(
+        managed_process,
+        "build_process_container",
+        _fake_builder(requested * _MB - enforced_delta, built),
+    )
+    monkeypatch.setattr(
+        managed_process,
+        "launch_contained",
+        lambda *a, **k: launched.append(k)
+        or managed_process._Spawned(None, a and k["container"], True),  # noqa: SLF001
+    )
+    # the stand-in launch returns no process, so run the spawn step directly
+    try:
+        managed_process._spawn_contained(  # noqa: SLF001
+            [_PY, "-c", "pass"],
+            label="x",
+            require_containment=False,
+            cwd=None,
+            env=None,
+            memory_limit_mb=requested,
+        )
+    except ContainmentError:
+        assert not starts and launched == []
+    else:
+        assert starts and len(launched) == 1
+        assert launched[0]["require_suspended"] is True
+
+
+def test_the_cgroup_limit_is_read_back_from_memory_max(tmp_path) -> None:
+    from src.utils.cgroup_v2 import LinuxCGroupV2
+
+    cgroup = object.__new__(LinuxCGroupV2)
+    cgroup._path = tmp_path  # noqa: SLF001
+    cgroup._memory_limit_mb = 6144  # noqa: SLF001 - what was asked for; must not be what is reported
+    assert cgroup.enforced_memory_limit_bytes() is None, "no memory.max file"
+    for text, expected in [
+        ("max\n", None),  # unlimited: the write was refused or never happened
+        ("", None),
+        ("garbage", None),
+        ("0", None),
+        ("6442450944\n", 6144 * _MB),
+    ]:
+        (tmp_path / "memory.max").write_text(text)
+        assert cgroup.enforced_memory_limit_bytes() == expected, text
+
+
+def test_the_base_container_confirms_nothing() -> None:
+    container = NullProcessContainer("x", ProcessContainerConfig(True, 512), "test")
+    assert container.enforced_memory_limit_bytes() is None
+
+
+@windows_only
+def test_a_real_job_object_reads_the_limit_back_from_the_os() -> None:
+    from src.utils.process_container_v2 import build_process_container
+
+    container = build_process_container("memlimit-readback", ProcessContainerConfig(True, 256))
+    try:
+        assert container.enforced_memory_limit_bytes() == 256 * _MB
+    finally:
+        container.teardown()
+    assert container.enforced_memory_limit_bytes() is None, "a closed job confirms nothing"
+
+
+@windows_only
+def test_a_limit_the_os_refuses_is_not_started_even_though_the_job_object_survives(
+    monkeypatch,
+) -> None:
+    from src.utils import win_jobobject
+
+    real = win_jobobject.WindowsJobObject._set_limits  # noqa: SLF001
+
+    def refuse_memory(self, info):
+        if info.BasicLimitInformation.LimitFlags & win_jobobject.JOB_OBJECT_LIMIT_JOB_MEMORY:
+            return False
+        return real(self, info)
+
+    monkeypatch.setattr(win_jobobject.WindowsJobObject, "_set_limits", refuse_memory)
+    outcome = run_bounded(
+        [_PY, "-c", "print(1)"], timeout_seconds=30, max_stdout_bytes=1024, memory_limit_mb=256
+    )
+    assert outcome.returncode is None and not outcome.stdout
+    assert "could not be established" in (outcome.launch_error or "")
+
+
+@windows_only
+def test_a_limit_changed_behind_our_back_is_detected(monkeypatch) -> None:
+    from src.utils.process_container_v2 import build_process_container
+
+    def tampered(job_id: str, config: ProcessContainerConfig) -> ProcessContainer:
+        container = build_process_container(job_id, config)
+        inner = container._inner  # noqa: SLF001
+        inner._memory_limit_mb = 1  # noqa: SLF001
+        inner._apply_limits()  # noqa: SLF001 - the OS now holds 1 MB while the config says otherwise
+        inner._memory_limit_mb = config.memory_limit_mb  # noqa: SLF001
+        return container
+
+    monkeypatch.setattr(managed_process, "build_process_container", tampered)
+    outcome = run_bounded(
+        [_PY, "-c", "print(1)"], timeout_seconds=30, max_stdout_bytes=1024, memory_limit_mb=256
+    )
+    assert outcome.returncode is None and "could not be established" in (outcome.launch_error or "")
+
+
+@pytest.mark.parametrize("path", ["depth", "openpose", "sam2", "florence2"])
+def test_each_model_backed_path_reaches_run_bounded_with_the_ceiling(
+    monkeypatch, tmp_path, path
+) -> None:
+    """The four model children, built the way production builds them (default runner), all pass 6,144 MB per child."""
+
+    import numpy as np
+
+    from src.conditioning.reference_map import auxiliary
+    from src.conditioning.reference_map.contracts import ReferenceMapError
+    from src.conditioning.reference_map.providers import Context, run_worker
+    from src.review.assist.contracts import AssistError, PointPrompt, SourceIdentity
+    from src.review.assist.identity import LoadedSource
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_run_bounded(command, **kwargs):
+        captured.append(kwargs)
+        return ProcessOutcome(0)  # no result.json: the call fails after the child "ran"
+
+    monkeypatch.setattr(providers, "run_bounded", fake_run_bounded)
+    rgb = np.zeros((8, 8, 3), np.uint8)
+    if path in {"depth", "openpose"}:
+        job = tmp_path / "job"
+        job.mkdir()
+        context = Context(registry=None, cancel=lambda: False)  # the default runner
+        with pytest.raises(ReferenceMapError):
+            run_worker(job, path, path, {}, rgb, context)
+    else:
+        monkeypatch.setattr(assist_providers, "runtime_reasons", lambda capability: ())
+        monkeypatch.setattr(
+            auxiliary,
+            "verify_resource",
+            lambda registry, modality, cancelled=None: auxiliary.VerifiedResource(modality, ()),
+        )
+        monkeypatch.setattr(
+            auxiliary,
+            "stage_resource",
+            lambda resource, root, destination, cancelled=None: destination.mkdir(parents=True)
+            or {},
+        )
+        registry = type("Registry", (), {"webui_root": tmp_path})()
+        source = LoadedSource(SourceIdentity("0" * 64, 1, 8, 8, 1, "PNG"), rgb)
+        with pytest.raises(AssistError):
+            if path == "sam2":
+                assist_providers.ChildSegmentAdapter(
+                    lambda: registry, temp_root=str(tmp_path)
+                ).segment(source, [PointPrompt(1, 1, True)], [], lambda: False)
+            else:
+                assist_providers.ChildCaptionAdapter(
+                    lambda: registry, temp_root=str(tmp_path)
+                ).caption(source, lambda: False)
+
+    assert [call["memory_limit_mb"] for call in captured] == [6144]

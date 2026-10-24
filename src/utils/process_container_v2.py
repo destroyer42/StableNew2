@@ -48,6 +48,11 @@ class ProcessContainer(ABC):
         created a child suspended never believes it is running when it is not."""
         return False
 
+    def enforced_memory_limit_bytes(self) -> int | None:
+        """The memory limit the OS currently enforces for this container, read back from the OS (never the requested
+        value). ``None`` means no limit could be confirmed, which a caller that requires one must treat as absent."""
+        return None
+
     def kill_all(self) -> None:
         """Kill all processes managed by this container."""
         raise NotImplementedError
@@ -153,6 +158,9 @@ class WindowsContainerAdapter(ProcessContainer):
     def add_pid(self, pid: int) -> bool:
         return bool(self._inner.assign(pid))
 
+    def enforced_memory_limit_bytes(self) -> int | None:
+        return self._inner.enforced_memory_limit_bytes()
+
     def resume_suspended(self, pid: int) -> bool:
         from src.utils.win_jobobject import resume_suspended_process
 
@@ -185,6 +193,9 @@ class LinuxContainerAdapter(ProcessContainer):
 
     def add_pid(self, pid: int) -> bool:
         return bool(self._inner.add_pid(pid))
+
+    def enforced_memory_limit_bytes(self) -> int | None:
+        return self._inner.enforced_memory_limit_bytes()
 
     def kill_all(self) -> None:
         self._inner.kill_all()
