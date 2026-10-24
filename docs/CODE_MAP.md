@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-526 of 680 modules have a docstring.
+529 of 683 modules have a docstring.
 
 ## src/
 
@@ -167,6 +167,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/controller/pipeline_controller_services/
 
 - `history_handoff_service.py`: (no docstring)
+- `preview_admission.py`: Which NJRs a queue submission admits: the accepted Preview, never a silent recompile (PR-GUI-UX-560)
 - `queue_submission_service.py`: (no docstring)
 
 ## src/controller/ports/
@@ -411,6 +412,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_authoring_view.py`: Toolkit-neutral presentation of a selected LoRA inside the Prompt tab (GUI-540)
 - `lora_browser.py`: Pure browser projection; registry evidence and ModelPolicy remain authoritative
 - `mask_editor_state.py`: Original-pixel mask editing and viewport transforms; no Tk, files or backend state
+- `matrix_editor_view.py`: Matrix editor wording, counts and bounded examples (PR-GUI-UX-560)
 - `model_policy_projection.py`: Toolkit-neutral projection of a model policy onto the Base Generation controls (PR-IMG-130A)
 - `openpose_conditioning_view.py`: Toolkit-neutral presentation of a slot's OpenPose conditioning (PR-IMG-CNET-210)
 - `outpaint_canvas_view.py`: Toolkit-neutral view of an outpaint canvas: where the original sits as the margins change
@@ -563,6 +565,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `job_models_v2.py`: Job models for V2 queue system
 - `klein_edit_reprocess.py`: FLUX.2 Klein single-reference edit as a normal Review/reprocess job (PR-IMG-116)
 - `last_run_store_v2_5.py`: (no docstring)
+- `matrix_expansion_plan.py`: Pure PromptPack Matrix expansion plan
 - `model_synchronizer.py`: Deterministic A1111 checkpoint synchronization for pipeline execution
 - `njr_core_v26.py`: Immutable eight-part Normalized Job Record contract for StableNew v2.6
 - `openpose_compile.py`: PromptPack OpenPose conditioning compilation (PR-IMG-CNET-210)

@@ -47,6 +47,7 @@ from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.gui.widgets.openpose_picker_panel import OpenPosePickerPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui_v2.lora_authoring_view import plan_trigger_insertion, split_keywords
+from src.gui_v2.matrix_editor_view import matrix_summary_line
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
 from src.gui_v2.prompt_template_view import (
     EXAMPLE_NOTE,
@@ -123,6 +124,8 @@ class PromptTabFrame(ttk.Frame):
                 self.app_state.prompt_workspace_state = self.workspace_state
             except Exception:
                 pass
+            # A saved pack changes what the compiler reads, so a Preview built from it must not stay current.
+            self.workspace_state.pack_saved_listener = self.app_state.pack_save_listener(self._packs_dir)
         self.workspace_state.set_current_slot_index(0)
         self._suppress_editor_change = False
         self._prompt_optimizer_guard = False
@@ -397,6 +400,7 @@ class PromptTabFrame(ttk.Frame):
             self.editor_notebook,
             workspace_state=self.workspace_state,
             on_matrix_changed=self._on_matrix_changed,
+            visibility_mode_provider=lambda: self._content_visibility_mode,
         )
         self.editor_notebook.add(self.matrix_tab_panel, text="Matrix")
 
@@ -1606,14 +1610,9 @@ class PromptTabFrame(ttk.Frame):
         )
 
         if matrix_config and matrix_config.slots:
-            valid_slots = [s for s in matrix_config.slots if s.name and s.values]
-            if valid_slots:
-                # Calculate total combinations
-
-                total_combinations = 1
-                for slot in valid_slots:
-                    total_combinations *= len(slot.values)
-                preview_lines.append(f"Matrix Combinations: {total_combinations}")
+            summary_line = matrix_summary_line(matrix_config)
+            if summary_line:
+                preview_lines.append(summary_line)
 
         preview_lines.extend(self._build_prompt_optimizer_preview(positive_text, negative_text))
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping
+import logging
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,8 @@ from src.gui.models.prompt_pack_model import PromptPackModel, render_prompt_slot
 if TYPE_CHECKING:
     from src.gui.models.prompt_pack_model import MatrixConfig, PromptSlot
 
+_logger = logging.getLogger(__name__)
+
 
 class PromptWorkspaceState:
     """Lightweight state holder for the Prompt tab."""
@@ -23,6 +26,8 @@ class PromptWorkspaceState:
         self.current_pack: PromptPackModel | None = None
         self.dirty: bool = False
         self._current_slot_index: int = 0
+        #: Called with the saved file's path after every successful save (the app uses it to invalidate a stale Preview).
+        self.pack_saved_listener: Callable[[Path], None] | None = None
 
     def new_pack(self, name: str, slot_count: int = 10) -> PromptPackModel:
         self.current_pack = PromptPackModel.new(name=name, slot_count=slot_count)
@@ -42,6 +47,7 @@ class PromptWorkspaceState:
             raise RuntimeError("No prompt pack loaded")
         saved_path = self.current_pack.save_to_file(path)
         self.dirty = False
+        self._announce_saved(saved_path)
         return saved_path
 
     def save_current_pack_as(self, path: str | Path) -> Path:
@@ -50,7 +56,16 @@ class PromptWorkspaceState:
         self.current_pack.path = str(path)
         saved_path = self.current_pack.save_to_file(path)
         self.dirty = False
+        self._announce_saved(saved_path)
         return saved_path
+
+    def _announce_saved(self, saved_path: Path) -> None:
+        listener = self.pack_saved_listener
+        if listener is not None:
+            try:
+                listener(saved_path)
+            except Exception:  # a failing observer must never fail an already-completed save
+                _logger.exception("Pack-saved listener failed for %s", saved_path)
 
     def pack_for_validation(self, json_path: Path | None) -> tuple[PromptPackModel, bool]:
         """The pack to validate and whether it carries unsaved edits.

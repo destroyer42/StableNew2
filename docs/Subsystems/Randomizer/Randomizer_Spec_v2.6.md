@@ -124,6 +124,12 @@ The prompt randomizer may apply:
 
 - matrix slot substitution
 - matrix fanout / rotate / sequential / random modes
+
+Implementation status (PromptPack compile path): the active Matrix is
+`src/pipeline/matrix_expansion_plan.py`. It supports `fanout`, `sequential` (today identical to `fanout`) and
+`random`, with an optional `matrix.sample_seed` for reproducible random selection; `rotate` is not a PromptPack
+Matrix mode. See `docs/Subsystems/PromptPacks/PROMPTPACKS_AND_PROMPTING.md` section 5.1. Unresolved tokens are
+reported by the Matrix tab but not rejected at compile; enforcing section 5.3 needs an owner decision.
 - wildcard token expansion
 - prompt search/replace rules
 

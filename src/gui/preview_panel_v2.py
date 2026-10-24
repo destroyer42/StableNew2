@@ -282,6 +282,8 @@ class PreviewPanelV2(ttk.Frame):
             left_frame,  # PR-GUI-FIX: pack into left_frame, not body
             text="Randomizer: OFF",
             style=STATUS_LABEL_STYLE,
+            wraplength=520,
+            justify=tk.LEFT,
         )
         self.randomizer_label.pack(anchor=tk.W, pady=(0, 4))
 
@@ -449,6 +451,8 @@ class PreviewPanelV2(ttk.Frame):
             seed=getattr(job, "seed", None),
             base_model=(unified.base_model if unified else getattr(ui_summary, "label", "")),
             adaptation_notice=self._adaptation_notice(job),
+            matrix_slot_values_preview=(unified.matrix_slot_values_preview if unified else ""),
+            matrix_expansion_label=(unified.matrix_expansion_label if unified else ""),
             prompt_pack_name=getattr(job, "prompt_pack_name", ""),
             thumbnail_path=getattr(job, "thumbnail_path", None),
             output_paths=list(getattr(job, "output_paths", []) or []),
@@ -658,16 +662,10 @@ class PreviewPanelV2(ttk.Frame):
         Returns:
             Formatted string like "env: volcanic lair, lighting: hellish"
         """
-        if not summary or not hasattr(summary, "matrix_slot_values"):
+        if not summary:
             return ""
-
-        slots = getattr(summary, "matrix_slot_values", None)
-        if not slots or not isinstance(slots, dict):
-            return ""
-
-        # Format as "key: value" pairs
-        pairs = [f"{key}: {value}" for key, value in slots.items()]
-        return ", ".join(pairs) if pairs else ""
+        # The compiled values frozen into the job ("name=value; ..."), exactly as the compiler selected them.
+        return str(getattr(summary, "matrix_slot_values_preview", "") or "")
 
     @staticmethod
     def _format_pack_provenance(summary: UnifiedJobSummary | None) -> str:
@@ -932,10 +930,11 @@ class PreviewPanelV2(ttk.Frame):
 
         # PR-CORE-D: Display randomization/matrix metadata if available
         randomizer_text = "Randomizer: OFF"
+        matrix_slots = self._format_matrix_slots(summary_obj)
+        if matrix_slots:
+            expansion = getattr(summary_obj, "matrix_expansion_label", "") or "Matrix"
+            randomizer_text = f"{expansion}: {matrix_slots}"
         if isinstance(summary, UnifiedJobSummary):
-            matrix_slots = self._format_matrix_slots(summary)
-            if matrix_slots:
-                randomizer_text = f"Randomizer: ON ({matrix_slots})"
             variant_idx = getattr(summary, "variant_index", None)
             batch_idx = getattr(summary, "batch_index", None)
             if variant_idx is not None or batch_idx is not None:

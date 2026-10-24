@@ -272,7 +272,8 @@ def pack_prompt_intent_from_dict(payload: Mapping[str, Any]) -> PackPromptIntent
     return PackPromptIntent(**data)
 
 
-def _substitute_matrix_tokens(template: str, slots: Mapping[str, str] | None) -> str:
+def substitute_matrix_tokens(template: str, slots: Mapping[str, str] | None) -> str:
+    """Replace ``[[token]]`` text with the slot value (exact name, then normalized alias); unmatched tokens stay."""
     if not template or not slots:
         return template
 
@@ -312,8 +313,8 @@ def resolve_pack_intent(
 ) -> PackPromptIntent:
     """Structure the authored PromptPack row: Matrix expansion plus ownership, with no rendering."""
 
-    subject = _substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
-    quality = _substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
+    subject = substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
+    quality = substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
     actors = list(actor_resolutions or [])
 
     raw_loras: list[tuple[str, float, str]] = []
@@ -576,7 +577,7 @@ class UnifiedPromptResolver:
 
     @staticmethod
     def _substitute_matrix_tokens(template: str, slots: Mapping[str, str] | None) -> str:
-        return _substitute_matrix_tokens(template, slots)
+        return substitute_matrix_tokens(template, slots)
 
     def resolve_from_pack(
         self,

@@ -30,3 +30,13 @@ def test_build_editor_warning_text_combines_modified_and_missing_slots() -> None
     )
     assert text.startswith("Editor - Faces (modified)")
     assert "Undefined slots: artifact, lighting" in text
+
+
+def test_find_undefined_slots_accepts_the_aliases_the_compiler_resolves() -> None:
+    undefined = find_undefined_slots(
+        positive_text="[[hair-color]] [[Hair_Color]] [[hair color]] [[mood]]",
+        negative_text="[[HAIRCOLOR]]",
+        defined_slots=["hair color"],
+    )
+
+    assert undefined == {"mood"}

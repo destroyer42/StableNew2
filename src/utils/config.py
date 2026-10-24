@@ -2,7 +2,7 @@
 
 import json
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -210,6 +210,8 @@ class ConfigManager:
         # The canonical versioned storage boundary is bound here, with the other layer-above collaborators, so
         # saving pack settings adds no further upward import to this module.
         self._update_pack_preset_data = update_prompt_pack_preset_data
+        #: Called with the written file's path after a pack's saved settings were written successfully.
+        self.pack_saved_listener: Callable[[Path], None] | None = None
         self._pack_authored_preset_keys = PACK_AUTHORED_PRESET_KEYS
         self.packs_dir = resolve_prompt_pack_dir(packs_dir)
         self.global_prompt_dir = resolve_global_prompt_dir(global_prompt_dir)
@@ -763,6 +765,12 @@ class ConfigManager:
             preserve_keys=self._pack_authored_preset_keys,
         )
         logger.info(f"Saved pack config to: {saved}")
+        listener = self.pack_saved_listener
+        if listener is not None:
+            try:
+                listener(saved)
+            except Exception:  # an observer must never fail a save that already succeeded
+                logger.exception("Pack-saved listener failed for %s", saved)
         return saved
 
     def save_pack_config(self, pack_name: str, config: dict[str, Any]) -> bool:
