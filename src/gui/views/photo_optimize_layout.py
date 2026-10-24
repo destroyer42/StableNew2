@@ -538,6 +538,10 @@ class PhotoOptimizeLayoutMixin:
                                    wraplength=420)
         settings_error.grid(row=12, column=0, sticky="ew")
         self._bind_wrap(settings_error, baseline_box, margin=24)
+        save_status = ttk.Label(baseline_box, textvariable=self.baseline_save_status_var,
+                                style="Dark.TLabel", wraplength=420)
+        save_status.grid(row=13, column=0, sticky="ew")
+        self._bind_wrap(save_status, baseline_box, margin=24)
 
         ttk.Label(baseline_box, text="Tags (comma-separated)", style="Dark.TLabel").grid(
             row=7, column=0, sticky="w", pady=(0, 4)

@@ -159,6 +159,11 @@ class PhotoOptimizeResultsMixin:
                 "No candidate", "Select a recorded result or the original first."
             )
             return
+        self._with_saved_baseline(
+            lambda: self._promote_saved_result(candidate), action="Promoting a result"
+        )
+
+    def _promote_saved_result(self, candidate):
         asset_id, mode = self._current_asset_id, self.promotion_mode_var.get()
 
         def prepared(plan):
@@ -190,7 +195,11 @@ class PhotoOptimizeResultsMixin:
 
     def _revert_baseline(self):
         if self._current_asset_id is not None:
-            asset_id = self._current_asset_id
+            self._with_saved_baseline(self._revert_saved_baseline, action="Restoring the previous baseline")
+
+    def _revert_saved_baseline(self):
+        asset_id = self._current_asset_id
+        if asset_id is not None:
             self._run_photo_operation(
                 lambda: self.store.revert_baseline(asset_id), self._promotion_completed
             )

@@ -3,21 +3,52 @@ from __future__ import annotations
 import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from dataclasses import dataclass
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
+from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
+from src.gui.view_contracts.photo_baseline_save_contract import (
+    BaselineDraft,
+    PhotoBaselineSaveSession,
+    SaveOutcome,
+)
 from src.photo_optimize import PhotoOptimizeAsset, PhotoOptimizeBaseline, get_photo_optimize_store
 from src.photo_optimize.settings import (
     normalize_settings,
     resolve_geometry,
-    validate_settings,
 )
 
 from .photo_optimize_layout import PhotoOptimizeLayoutMixin
 from .photo_optimize_results import PhotoOptimizeResultsMixin
 from .photo_optimize_scope import PhotoOptimizeScopeMixin
+
+#: Quiet period after the last edit before the draft is written; a burst of typing is one write.
+BASELINE_SAVE_DEBOUNCE_MS = 400
+
+
+@dataclass(frozen=True)
+class _LoadedAsset:
+    """One sidecar read plus its resolved display geometry, gathered off the Tk thread."""
+
+    asset: PhotoOptimizeAsset
+    displayed_config: dict[str, Any]
+    geometry_error: str
+
+
+def _read_loaded_asset(store: Any, asset_id: str) -> _LoadedAsset | None:
+    asset = store.get_asset(asset_id)
+    if asset is None:
+        return None
+    try:
+        displayed = resolve_geometry(asset.baseline, asset.current_input_path)
+        error = ""
+    except ValueError as exc:
+        displayed = asset.baseline.config
+        error = str(exc)
+    return _LoadedAsset(asset=asset, displayed_config=displayed, geometry_error=error)
 
 
 class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin, PhotoOptimizeLayoutMixin, ttk.Frame):
@@ -33,6 +64,16 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
         super().__init__(master, **kwargs)
         self.app_controller = app_controller
         self.app_state = None
+        # PR-GUI-UX-580: keyed latest-wins background work (asset list, active photo, selection projection) and the
+        # per-asset baseline save session; no sidecar is read or written on the Tk thread for these.
+        self._work = build_edit_work_runner(self)
+        self._baseline_saves = PhotoBaselineSaveSession(
+            get_store=lambda: self.store,
+            runner=self._work,
+            on_change=self._render_baseline_save_status,
+        )
+        self._baseline_debounce_id: str | None = None
+        self._asset_load_seq = 0
         manager = getattr(app_controller, "_config_manager", None)
         loader = getattr(manager, "load_settings", None)
         settings = loader() if callable(loader) else {}
@@ -93,6 +134,7 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
         self.geometry_mode_var = tk.StringVar(value="auto")
         self.show_archived_var = tk.BooleanVar(value=False)
         self.settings_error_var = tk.StringVar()
+        self.baseline_save_status_var = tk.StringVar()
         self.submission_summary_var = tk.StringVar(value="Select photos; each retains its own target settings.")
         self.migration_status_var = tk.StringVar(value="")
         self.adetailer_model_var = tk.StringVar()
@@ -153,22 +195,11 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
             self.upscale_face_restore_var,
             self.upscale_face_restore_method_var,
         ):
-            variable.trace_add("write", lambda *_: self._persist_current_asset_baseline())
+            variable.trace_add("write", lambda *_: self._on_baseline_form_changed())
 
-        self.baseline_prompt_text.bind(
-            "<KeyRelease>", lambda _e: self._persist_current_asset_baseline()
-        )
-        self.baseline_prompt_text.bind(
-            "<FocusOut>", lambda _e: self._persist_current_asset_baseline()
-        )
-        self.baseline_negative_text.bind(
-            "<KeyRelease>", lambda _e: self._persist_current_asset_baseline()
-        )
-        self.baseline_negative_text.bind(
-            "<FocusOut>", lambda _e: self._persist_current_asset_baseline()
-        )
-        self.notes_text.bind("<KeyRelease>", lambda _e: self._persist_current_asset_baseline())
-        self.notes_text.bind("<FocusOut>", lambda _e: self._persist_current_asset_baseline())
+        for editor in (self.baseline_prompt_text, self.baseline_negative_text, self.notes_text):
+            editor.bind("<KeyRelease>", lambda _e: self._on_baseline_form_changed())
+            editor.bind("<FocusOut>", lambda _e: self._flush_baseline_now())
         self.prompt_delta_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self.negative_delta_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
 
@@ -298,11 +329,26 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
 
 
     def _refresh_assets(self, select_asset_id: str | None = None) -> None:
+        """Enumerate the workspace on a worker (latest request wins) and publish the list when it is current."""
+
         if self.store is None:
             return
+        store = self.store
+        include_archived = self.show_archived_var.get()
+        self._work.submit(
+            "photo:assets-list",
+            lambda: store.list_assets(include_archived=include_archived),
+            on_result=lambda assets: self._apply_asset_list(assets, select_asset_id),
+            on_error=lambda exc: self.submission_summary_var.set(
+                f"Photo list unavailable: {type(exc).__name__}"
+            ),
+            name="photo-assets-list",
+            purpose="Enumerate managed photo sidecars without blocking Tk",
+        )
+
+    def _apply_asset_list(self, assets: list[PhotoOptimizeAsset], select_asset_id: str | None) -> None:
         had_assets = bool(self._asset_index_by_row)
         selected = self._selected_asset_ids(batch_all=False)
-        assets = self.store.list_assets(include_archived=self.show_archived_var.get())
         self.assets_list.delete(0, tk.END)
         self._asset_index_by_row = []
         for asset in assets:
@@ -417,11 +463,49 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
             self._show_asset(self._asset_index_by_row[index])
 
     def _show_asset(self, asset_id: str) -> None:
-        asset = self.store.get_asset(asset_id)
-        if asset is None:
+        """Make ``asset_id`` the active photo: its edits are flushed first, its sidecar is read on a worker."""
+
+        if self.store is None:
             return
+        current = self._current_asset_id
+        if current == asset_id and self._baseline_saves.is_dirty(asset_id):
+            return  # the form holds unsaved edits for this photo; reloading would discard them
+        if self._baseline_saves.is_busy(asset_id):
+            # a write for this photo is still in flight: read only after it, or the form would show old values
+            self._baseline_saves.when_settled(asset_id, lambda _outcome: self._show_asset(asset_id))
+            return
+        if current is not None and current != asset_id:
+            self._submit_dirty_draft(current)
+        self._asset_load_seq += 1
+        sequence = self._asset_load_seq
+        store = self.store
+        self._work.submit(
+            "photo:load-asset",
+            lambda: _read_loaded_asset(store, asset_id),
+            on_result=lambda loaded: self._publish_asset(sequence, loaded),
+            on_error=lambda exc: self.baseline_save_status_var.set(
+                f"Photo unavailable: {type(exc).__name__}"
+            ),
+            name="photo-load-asset",
+            purpose="Read the selected managed photo's sidecar and geometry without blocking Tk",
+        )
+
+    def _publish_asset(self, sequence: int, loaded: _LoadedAsset | None) -> None:
+        if sequence != self._asset_load_seq or loaded is None:
+            return
+        asset = loaded.asset
+        prior = self._current_asset_id
+        if prior is not None and prior != asset.asset_id:
+            self._submit_dirty_draft(prior)  # typed while this photo was loading
+        elif prior == asset.asset_id and (
+            self._baseline_saves.is_dirty(asset.asset_id) or self._baseline_saves.is_busy(asset.asset_id)
+        ):
+            return
+        self._cancel_baseline_flush()
+        asset_id = asset.asset_id
         self._current_asset_id = asset.asset_id
         self._current_asset = asset
+        self._baseline_saves.rebase(asset.asset_id, asset.baseline)
         if asset_id in self._asset_index_by_row:
             self.active_photo_combo.current(self._asset_index_by_row.index(asset_id))
         self._refresh_scope_selection()
@@ -447,22 +531,15 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
                 bool(asset.baseline.stage_defaults.get("adetailer", False))
             )
             self.stage_upscale_var.set(bool(asset.baseline.stage_defaults.get("upscale", False)))
-            try:
-                displayed_config = resolve_geometry(asset.baseline, asset.current_input_path)
-                self.settings_error_var.set("")
-            except ValueError as exc:
-                displayed_config = asset.baseline.config
-                self.settings_error_var.set(str(exc))
-            self._load_baseline_config_form(displayed_config)
+            self.settings_error_var.set(loaded.geometry_error)
+            self._load_baseline_config_form(loaded.displayed_config)
             self._apply_content_visibility_mode()
             self._populate_history(asset)
             self._refresh_preview(asset)
             self._refresh_prompt_diff()
         finally:
             self._suspend_asset_persist = False
-
-
-
+        self._render_baseline_save_status()
 
     def _selected_asset_ids(self, *, batch_all: bool) -> list[str]:
         if batch_all:
@@ -507,14 +584,39 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
             "- After completion, each asset still gets its own copied output and history entry.",
         )
 
-    def _persist_current_asset_baseline(self) -> bool:
-        if self._suspend_asset_persist or self._current_asset is None:
-            return True
-        asset = self.store.get_asset(self._current_asset.asset_id)
+    # -- baseline autosave: capture on Tk, write on a worker, in order, flushed before dependent actions --------------
+
+    def _on_baseline_form_changed(self) -> None:
+        if self._suspend_asset_persist or self._current_asset is None or self.store is None:
+            return
+        self._baseline_saves.note_edit(self._current_asset.asset_id)
+        self._cancel_baseline_flush()
+        self._baseline_debounce_id = self.after(BASELINE_SAVE_DEBOUNCE_MS, self._flush_baseline_timer)
+
+    def _cancel_baseline_flush(self) -> None:
+        if self._baseline_debounce_id is not None:
+            try:
+                self.after_cancel(self._baseline_debounce_id)
+            except tk.TclError:
+                pass
+            self._baseline_debounce_id = None
+
+    def _flush_baseline_timer(self) -> None:
+        self._baseline_debounce_id = None
+        self._submit_dirty_draft(self._current_asset_id)
+
+    def _flush_baseline_now(self) -> None:
+        self._cancel_baseline_flush()
+        self._submit_dirty_draft(self._current_asset_id)
+
+    def _capture_baseline_draft(self) -> BaselineDraft | None:
+        """The form as an immutable draft for the active photo (pure: no file is read); None when invalid."""
+
+        asset = self._current_asset
         if asset is None:
-            return False
-        baseline = PhotoOptimizeBaseline.from_dict(asset.baseline.to_dict())
+            return None
         self._update_geometry_controls()
+        baseline = PhotoOptimizeBaseline.from_dict(asset.baseline.to_dict())
         baseline.prompt = self._get_text(self.baseline_prompt_text)
         baseline.negative_prompt = self._get_text(self.baseline_negative_text)
         baseline.model = self._internal_for_display(self.model_var.get(), self._model_name_map)
@@ -530,33 +632,92 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
                 baseline.config if isinstance(baseline.config, dict) else {},
                 self._collect_baseline_config_from_form(),
             )
-            baseline.config = resolve_geometry(baseline, asset.current_input_path)
-            validate_settings(baseline.config)
         except (ValueError, TypeError, tk.TclError) as exc:
             self.settings_error_var.set(str(exc))
-            return False
-        if not baseline.working_image_path:
-            baseline.working_image_path = asset.managed_original_path
-        updated = self.store.update_asset_fields(
-            asset.asset_id,
+            return None
+        return BaselineDraft(
+            asset_id=asset.asset_id,
             notes=self._get_text(self.notes_text),
-            tags=[item.strip() for item in self.tags_var.get().split(",") if item.strip()],
+            tags=tuple(item.strip() for item in self.tags_var.get().split(",") if item.strip()),
             baseline=baseline,
         )
-        self._current_asset = updated
-        if baseline.geometry_policy == "auto":
+
+    def _submit_dirty_draft(self, asset_id: str | None) -> bool:
+        """Send the form's unsaved edits (if any) to the save worker; False when the form is not valid."""
+
+        if asset_id is None or asset_id != self._current_asset_id:
+            return True
+        if not self._baseline_saves.is_dirty(asset_id):
+            return True
+        draft = self._capture_baseline_draft()
+        if draft is None:
+            return False
+        self._baseline_saves.save(draft, on_saved=self._on_baseline_saved)
+        return True
+
+    def _persist_current_asset_baseline(self) -> bool:
+        """Send the active photo's draft to the save worker now (no debounce); False when the form is invalid."""
+
+        if self._suspend_asset_persist or self._current_asset is None or self.store is None:
+            return True
+        asset_id = self._current_asset.asset_id
+        self._cancel_baseline_flush()
+        self._baseline_saves.note_edit(asset_id)
+        return self._submit_dirty_draft(asset_id)
+
+    def _on_baseline_saved(self, asset: PhotoOptimizeAsset) -> None:
+        if asset.asset_id != self._current_asset_id:
+            return
+        self._current_asset = asset
+        if asset.baseline.geometry_policy == "auto":
             suspended = self._suspend_asset_persist
             self._suspend_asset_persist = True
             try:
-                self.img2img_width_var.set(baseline.config["img2img"]["width"])
-                self.img2img_height_var.set(baseline.config["img2img"]["height"])
+                self.img2img_width_var.set(asset.baseline.config["img2img"]["width"])
+                self.img2img_height_var.set(asset.baseline.config["img2img"]["height"])
             finally:
                 self._suspend_asset_persist = suspended
         self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
-        self._refresh_preview(updated)
-        self.settings_error_var.set("")
-        return True
+        self._refresh_preview(asset)
+
+    def _render_baseline_save_status(self) -> None:
+        asset_id = self._current_asset_id
+        if asset_id is None:
+            self.baseline_save_status_var.set("")
+            return
+        state, message = self._baseline_saves.status(asset_id)
+        self.baseline_save_status_var.set(message)
+        if state == "error":
+            self.settings_error_var.set(message)
+        elif state == "saved" and self.settings_error_var.get().startswith("Not saved"):
+            self.settings_error_var.set("")
+
+    def _with_saved_baseline(self, then, *, action: str = "continue") -> None:
+        """Run ``then`` only once the active photo's visible edits are durably saved; otherwise refuse, truthfully.
+
+        The wait never blocks Tk: the draft is captured here and written on the save worker, and ``then`` runs when
+        that write (and any earlier one) has finished. A failed or refused write stops the action with the reason.
+        """
+
+        asset_id = self._current_asset_id
+        if asset_id is None or self.store is None:
+            then()
+            return
+        if not self._submit_dirty_draft(asset_id):
+            messagebox.showerror("Invalid settings", self.settings_error_var.get())
+            return
+
+        def settled(outcome: SaveOutcome) -> None:
+            if outcome.ok:
+                then()
+                return
+            messagebox.showerror(
+                "Photo settings not saved",
+                f"{outcome.message}\n\nNothing was done: {action} needs the saved settings you see on screen.",
+            )
+
+        self._baseline_saves.when_settled(asset_id, settled)
 
     def _update_geometry_controls(self) -> None:
         mode = "normal" if self.geometry_mode_var.get() == "custom" else "disabled"
@@ -573,6 +734,11 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
     def _interrogate_current_asset(self) -> None:
         if self._current_asset is None:
             messagebox.showwarning("No asset", "Select an asset first.")
+            return
+        self._with_saved_baseline(self._interrogate_saved_asset, action="Interrogate")
+
+    def _interrogate_saved_asset(self) -> None:
+        if self._current_asset is None:
             return
         controller = self.app_controller
         interrogate = getattr(controller, "interrogate_photo_path", None)
@@ -1076,6 +1242,13 @@ class PhotoOptimizeTabFrameV2(PhotoOptimizeResultsMixin, PhotoOptimizeScopeMixin
             )
 
     def destroy(self) -> None:
+        # An unsaved edit is sent to its save worker before the view goes; the write finishes on that worker.
+        self._cancel_baseline_flush()
+        try:
+            self._submit_dirty_draft(self._current_asset_id)
+        except (tk.TclError, AttributeError):
+            pass
+        self._work.close()
         self._dispose_result_preview()
         if self._operation_poll_id is not None:
             self.after_cancel(self._operation_poll_id)
