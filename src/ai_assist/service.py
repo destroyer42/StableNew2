@@ -36,6 +36,7 @@ from src.ai_assist.manifests import (
     Verification,
     verify_installation,
 )
+from src.ai_assist.observe import ChildObserver, default_cap_gib
 from src.ai_assist.paths import events_path
 from src.ai_assist.runtime import AiRuntime
 from src.ai_assist.validators import validate_output
@@ -59,6 +60,10 @@ class ServicePolicy:
     #: Require the operator's firewall attestation before any request runs (owner decision D8).
     strict_offline: bool = False
     watch_interval_seconds: float = 0.25
+    #: Cap on the child tree's private memory (GiB); ``None`` derives it from the model size.
+    process_memory_cap_gib: float | None = None
+    #: How long the child may go unfound before the request stops (it cannot be bounded unseen).
+    observe_grace_seconds: float = 3.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +86,9 @@ class _Watch:
         memory: MemoryProbe,
         clock: Callable[[], float],
         interval: float,
+        observer: ChildObserver | None = None,
     ) -> None:
+        self._observer = observer
         self._token = token
         self._activity = activity
         self._memory = memory
@@ -107,6 +114,13 @@ class _Watch:
         if self._token.cancelled:
             self.outcome = (OutcomeCode.CANCELLED, "request_cancelled")
             return True
+        if self._observer is not None and not self._observer.evidence.child_observed:
+            # Until the child is found, look on every 50 ms poll: priority is applied as early as possible and a
+            # short request is still observed.
+            reason = self._observer.poll()
+            if reason is not None:
+                self.outcome = (OutcomeCode.RESOURCE_INSUFFICIENT, reason)
+                return True
         now = self._clock()
         if now - self._last < self._interval:
             return False
@@ -132,6 +146,11 @@ class _Watch:
         if self._strikes >= GUARD_CONSECUTIVE:
             self.outcome = (OutcomeCode.RESOURCE_INSUFFICIENT, "memory_guard")
             return True
+        if self._observer is not None:
+            reason = self._observer.poll()
+            if reason is not None:
+                self.outcome = (OutcomeCode.RESOURCE_INSUFFICIENT, reason)
+                return True
         return False
 
     def _read_activity(self) -> GenerationActivity | None:
@@ -318,17 +337,31 @@ class AiAssistService:
         self, request: AssistRequest, token: AiCancelToken, verification: Verification
     ) -> AssistOutcome:
         started = self._clock()
+        assert verification.entry is not None
+        observer = ChildObserver(
+            cap_gib=self._policy.process_memory_cap_gib
+            or default_cap_gib(verification.entry.bytes),
+            clock=self._clock,
+            grace_seconds=self._policy.observe_grace_seconds,
+        )
         watch = _Watch(
             token=token,
             activity=self._activity,
             memory=self._memory,
             clock=self._clock,
             interval=self._policy.watch_interval_seconds,
+            observer=observer,
         )
         output_chars: int | None = None
         try:
             result = self._runtime.run_once(
-                verification, request, self._limits, self._sampling, watch, watch.cancelled_outcome
+                verification,
+                request,
+                self._limits,
+                self._sampling,
+                watch,
+                watch.cancelled_outcome,
+                observe=observer.bind,
             )
             if result.code is not None:
                 outcome = AssistOutcome(
@@ -336,6 +369,7 @@ class AiAssistService:
                     request_id=request.request_id,
                     reason=result.reason,
                     elapsed_ms=result.elapsed_ms,
+                    details=observer.evidence.as_details(),
                 )
             else:
                 output_chars = len(result.stdout)
@@ -346,6 +380,7 @@ class AiAssistService:
                     reason=validated.reason,
                     suggestion=validated.suggestion,
                     elapsed_ms=result.elapsed_ms,
+                    details=observer.evidence.as_details(),
                 )
         except Exception:  # noqa: BLE001 - the request must always end in a typed outcome
             logger.exception("AI assist request failed unexpectedly")
@@ -385,6 +420,13 @@ class AiAssistService:
         ):
             record["model_sha256_prefix"] = verification.entry.sha256[:12]
             record["runtime_build_id"] = verification.build.build_id
+        for key, field in (
+            ("peak_tree_private_gib", "peak_private_gib"),
+            ("priority_verified", "priority_verified"),
+            ("child_observed", "child_observed"),
+        ):
+            if key in outcome.details:
+                record[field] = outcome.details[key]
         if not self._events.append(record):
             # Not silent: the append already logged a warning; the outcome says so too, without failing the request.
             outcome.details["event_log_failed"] = True

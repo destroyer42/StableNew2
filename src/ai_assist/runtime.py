@@ -21,7 +21,7 @@ from src.ai_assist.contracts import AssistRequest, OutcomeCode
 from src.ai_assist.framing import FramingError, build_json_schema, render_prompt
 from src.ai_assist.manifests import Verification
 from src.ai_assist.paths import runtime_dir, work_dir
-from src.utils.managed_process import ProcessOutcome, run_bounded
+from src.utils.managed_process import OwnedChildObservation, ProcessOutcome, run_bounded
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,8 @@ class AiRuntime:
         sampling: Sampling,
         cancel: Callable[[], bool],
         cancelled_outcome: Callable[[], tuple[OutcomeCode, str]],
+        *,
+        observe: Callable[[OwnedChildObservation], None] | None = None,
     ) -> RuntimeResult:
         """Run the pinned runtime once for ``request``. ``verification`` must be ``ok`` (the caller checked)."""
 
@@ -108,6 +110,7 @@ class AiRuntime:
             argv = build_argv(verification.model_path, prompt_file, schema_file, limits, sampling)
             command = self._command_factory(verification.executable, argv)
             runtime_root = runtime_dir(self._root, verification.build.build_id)
+            observation_options = {"observe": observe} if observe is not None else {}
             outcome = self._runner(
                 command,
                 timeout_seconds=limits.timeout_seconds,
@@ -115,6 +118,7 @@ class AiRuntime:
                 cancel=cancel,
                 cwd=scratch,
                 env=build_environment(runtime_root, self._environ, scratch),
+                **observation_options,
             )
         except OSError:
             logger.warning("AI assist could not prepare its scratch directory", exc_info=True)

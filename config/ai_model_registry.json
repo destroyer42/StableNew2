@@ -1,5 +1,106 @@
 {
   "schema_version": 1,
-  "description": "Pinned model weights for Offline AI Assist. An entry is usable only with complete provenance (publisher and packager repository and revision, converter, https source URL), an exact byte size and SHA-256. An unknown or mismatched hash is refused. This file ships with no entries: PR-AI-111 registers candidates after the operator imports them. Nothing is downloaded by the application.",
-  "models": []
+  "description": "Pinned model weights for Offline AI Assist. An entry is usable only with complete provenance (publisher and packager repository and revision, converter, https source URL), an exact byte size and SHA-256. An unknown or mismatched hash is refused. Every entry below is a CANDIDATE (qualified: false): its size and SHA-256 are the Hugging Face LFS values reported on 2026-10-23 and have NOT been verified against local bytes, because no weights have been downloaded. They are verified when the operator imports the file (import_model hashes it before installing). Nothing is downloaded by the application.",
+  "models": [
+    {
+      "model_id": "qwen3.5-9b-q4_k_m-unsloth",
+      "display_name": "Qwen3.5-9B Q4_K_M (unsloth GGUF)",
+      "license_spdx": "Apache-2.0",
+      "architecture": "qwen3_5",
+      "quantization": "Q4_K_M",
+      "filename": "Qwen3.5-9B-Q4_K_M.gguf",
+      "bytes": 5680522464,
+      "sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+      "max_context": 8192,
+      "capabilities": [
+        "prompt_rewrite",
+        "target_fit_advice",
+        "workflow_choice"
+      ],
+      "qualified": false,
+      "provenance": {
+        "publisher_repo": "Qwen/Qwen3.5-9B",
+        "publisher_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+        "packager_repo": "unsloth/Qwen3.5-9B-GGUF",
+        "packager_revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+        "converter": "unsloth GGUF quantisation (converter build is not stated in the repository metadata)",
+        "source_url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf"
+      }
+    },
+    {
+      "model_id": "qwen3.5-9b-q5_k_m-unsloth",
+      "display_name": "Qwen3.5-9B Q5_K_M (unsloth GGUF)",
+      "license_spdx": "Apache-2.0",
+      "architecture": "qwen3_5",
+      "quantization": "Q5_K_M",
+      "filename": "Qwen3.5-9B-Q5_K_M.gguf",
+      "bytes": 6577841376,
+      "sha256": "dc2a39aef291f91a9116ad214058da0d86eb648743a124bd8c333787c4b9c91c",
+      "max_context": 8192,
+      "capabilities": [
+        "prompt_rewrite",
+        "target_fit_advice",
+        "workflow_choice"
+      ],
+      "qualified": false,
+      "provenance": {
+        "publisher_repo": "Qwen/Qwen3.5-9B",
+        "publisher_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+        "packager_repo": "unsloth/Qwen3.5-9B-GGUF",
+        "packager_revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+        "converter": "unsloth GGUF quantisation (converter build is not stated in the repository metadata)",
+        "source_url": "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q5_K_M.gguf"
+      }
+    },
+    {
+      "model_id": "qwen3.5-4b-q8_0-unsloth",
+      "display_name": "Qwen3.5-4B Q8_0 (unsloth GGUF)",
+      "license_spdx": "Apache-2.0",
+      "architecture": "qwen3_5",
+      "quantization": "Q8_0",
+      "filename": "Qwen3.5-4B-Q8_0.gguf",
+      "bytes": 4482403488,
+      "sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
+      "max_context": 8192,
+      "capabilities": [
+        "prompt_rewrite",
+        "target_fit_advice",
+        "workflow_choice"
+      ],
+      "qualified": false,
+      "provenance": {
+        "publisher_repo": "Qwen/Qwen3.5-4B",
+        "publisher_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        "packager_repo": "unsloth/Qwen3.5-4B-GGUF",
+        "packager_revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+        "converter": "unsloth GGUF quantisation (converter build is not stated in the repository metadata)",
+        "source_url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q8_0.gguf"
+      }
+    },
+    {
+      "model_id": "qwen3.5-4b-q4_k_m-unsloth",
+      "display_name": "Qwen3.5-4B Q4_K_M (unsloth GGUF)",
+      "license_spdx": "Apache-2.0",
+      "architecture": "qwen3_5",
+      "quantization": "Q4_K_M",
+      "filename": "Qwen3.5-4B-Q4_K_M.gguf",
+      "bytes": 2740937888,
+      "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+      "max_context": 8192,
+      "capabilities": [
+        "prompt_rewrite",
+        "target_fit_advice",
+        "workflow_choice"
+      ],
+      "qualified": false,
+      "provenance": {
+        "publisher_repo": "Qwen/Qwen3.5-4B",
+        "publisher_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+        "packager_repo": "unsloth/Qwen3.5-4B-GGUF",
+        "packager_revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+        "converter": "unsloth GGUF quantisation (converter build is not stated in the repository metadata)",
+        "source_url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf"
+      }
+    }
+  ]
 }
