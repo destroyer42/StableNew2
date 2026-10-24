@@ -31,7 +31,7 @@ from typing import Any
 from src.ai_assist.argv import RunLimits, Sampling
 from src.ai_assist.attestation import read_attestation
 from src.ai_assist.contracts import OutcomeCode
-from src.ai_assist.host import GenerationActivity, read_host_memory
+from src.ai_assist.host import GenerationActivity, MemoryProbe, read_host_memory
 from src.ai_assist.manifests import (
     ImportRefused,
     ModelRegistry,
@@ -156,6 +156,7 @@ class _Sampler:
     evidence: Path
     ai_root: Path
     safety: dict[str, Any]
+    memory_probe: MemoryProbe = read_host_memory
     stop: threading.Event = field(default_factory=threading.Event)
     abort_reason: str = ""
     egress_seen: int = 0
@@ -182,7 +183,7 @@ class _Sampler:
         breaches = 0
         # A baseline sample before anything runs, one per interval, and a final one when the session stops.
         while True:
-            memory = read_host_memory()
+            memory = self.memory_probe()
             row: dict[str, Any] = {"utc": datetime.now(UTC).isoformat()}
             if memory is None:
                 breaches += 1
@@ -313,6 +314,7 @@ def run_session(
     command_factory: Callable[..., Any] | None = None,
     busy_provider: Callable[[], list[str]] | None = None,
     attest: str | None = None,
+    memory_probe: MemoryProbe = read_host_memory,
 ) -> dict[str, Any]:
     # Marker-based session egress and teardown diagnostics below are not proof
     # of process ownership. Real runtime execution stays refused until that
@@ -383,7 +385,7 @@ def run_session(
 
     limits = RunLimits(**plan["limits"])
     sampling = Sampling(**plan["sampling"])
-    sampler = _Sampler(evidence, ai_root, plan["safety"])
+    sampler = _Sampler(evidence, ai_root, plan["safety"], memory_probe=memory_probe)
     sampler.start()
     records_path = evidence / "records.jsonl"
     records: dict[str, list[dict[str, Any]]] = {}
@@ -413,6 +415,7 @@ def run_session(
                 runtime_manifest=RuntimeManifest((build,)),
                 registry=ModelRegistry((entry,)),
                 activity_provider=lambda: GenerationActivity(),
+                memory_probe=memory_probe,
                 runtime=AiRuntime(ai_root, command_factory=command_factory)
                 if command_factory
                 else None,

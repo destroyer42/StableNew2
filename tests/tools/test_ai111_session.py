@@ -23,6 +23,7 @@ from tests.ai_assist.conftest import (  # noqa: E402
     MODEL_BYTES,
     build_archive,
     make_entry,
+    roomy,
     sha,
 )
 from tools.qualification.ai111 import physical  # noqa: E402
@@ -90,6 +91,7 @@ def _run(world, cases, *, stage="A", authorization=AUTHORIZATION, busy=None, arm
         registry=world["registry"],
         command_factory=_factory(world),
         busy_provider=(lambda: busy or []),
+        memory_probe=kwargs.pop("memory_probe", roomy),
         **kwargs,
     )
 
@@ -261,3 +263,42 @@ def test_quiet_host_detection_names_what_is_running() -> None:
         found == ["busy host: comfyui", "busy host: run_pr_gate"]
         and "busy host: pytest" not in found
     )
+
+
+def test_injected_memory_probe_reaches_admission_and_session_sampling(world):
+    calls = []
+
+    def probe():
+        calls.append(True)
+        return roomy()
+
+    result = _run(world, [_case(0)], memory_probe=probe)
+    evidence = world["paths"].evidence_root / "physical-A"
+    rows = [
+        json.loads(line)
+        for line in (evidence / "records.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    model = next(row for row in rows if row["arm"] == world["entry"].model_id)
+    assert model["outcome"] == "suggestion" and result["abort_reason"] == ""
+    samples = [
+        json.loads(line)
+        for line in (evidence / "telemetry.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert samples and all(row["available_gib"] == 24.0 for row in samples)
+    assert len(calls) >= 2
+
+
+def test_unreadable_injected_memory_still_refuses_model_requests(world):
+    result = _run(world, [_case(i) for i in range(4)], memory_probe=lambda: None)
+    evidence = world["paths"].evidence_root / "physical-A"
+    rows = [
+        json.loads(line)
+        for line in (evidence / "records.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    model_rows = [row for row in rows if row["arm"] == world["entry"].model_id]
+    assert len(model_rows) == 3
+    assert all(
+        row["outcome"] == "resource_insufficient" and row["reason"] == "memory_unreadable"
+        for row in model_rows
+    )
+    assert result["abort_reason"] == "3 consecutive infrastructure failures"

@@ -46,11 +46,11 @@ Every observed hash and byte count below equals its recorded expectation.
 
 | Artifact | Exact bytes | Expected = observed SHA-256 | Result |
 |---|---:|---|---|
-| llama-b11840-bin-win-cpu-x64.zip | 24156518 | `f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034` | VERIFIED |
-| Qwen3.5-9B-Q4_K_M.gguf | 5680522464 | `03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8` | VERIFIED |
-| Qwen3.5-9B-Q5_K_M.gguf | 6577841376 | `dc2a39aef291f91a9116ad214058da0d86eb648743a124bd8c333787c4b9c91c` | VERIFIED |
-| Qwen3.5-4B-Q8_0.gguf | 4482403488 | `10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1` | VERIFIED |
-| Qwen3.5-4B-Q4_K_M.gguf | 2740937888 | `00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4` | VERIFIED |
+| llama-b11840-bin-win-cpu-x64.zip | 24,156,518 | `f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034` | VERIFIED |
+| Qwen3.5-9B-Q4_K_M.gguf | 5,680,522,464 | `03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8` | VERIFIED |
+| Qwen3.5-9B-Q5_K_M.gguf | 6,577,841,376 | `dc2a39aef291f91a9116ad214058da0d86eb648743a124bd8c333787c4b9c91c` | VERIFIED |
+| Qwen3.5-4B-Q8_0.gguf | 4,482,403,488 | `10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1` | VERIFIED |
+| Qwen3.5-4B-Q4_K_M.gguf | 2,740,937,888 | `00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4` | VERIFIED |
 
 Total: 19,505,861,734 bytes. Original download evidence:
 `C:/Users/rob/projects/StableNew-main/reports/ai111/downloads-20261023/`.
