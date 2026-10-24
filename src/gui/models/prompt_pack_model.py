@@ -57,22 +57,161 @@ class PromptSlot:
     controlnet_units: Any = None
 
 
+class _Absent:
+    """Marks a stored key that was not present, so saving an untouched value does not invent it."""
+
+    def __repr__(self) -> str:
+        return "<absent>"
+
+    def __copy__(self) -> _Absent:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> _Absent:
+        return self
+
+
+ABSENT = _Absent()
+
+
+def _kept(preserved: dict[str, tuple[Any, Any]], key: str, current: Any) -> tuple[bool, Any]:
+    """``(use_raw, value)``: the stored raw value is written back only while the field still holds its load-time reading."""
+    kept = preserved.get(key)
+    if kept is not None and current == kept[1]:
+        return True, kept[0]
+    return False, current
+
+
 @dataclass
 class MatrixSlot:
     """Single slot in the matrix configuration."""
 
     name: str
     values: list[str] = field(default_factory=list)
+    #: Stored keys this editor does not know, written back verbatim.
+    extra: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
+    #: ``field -> (stored raw value, value shown after loading)`` for stored values the editor cannot represent.
+    preserved: dict[str, tuple[Any, Any]] = field(default_factory=dict, repr=False, compare=False)
+
+    @classmethod
+    def from_mapping(cls, raw: Any) -> MatrixSlot:
+        if not isinstance(raw, dict):
+            return cls(name="", values=[], preserved={"__item__": (copy.deepcopy(raw), None)})
+        slot = cls(
+            name="",
+            values=[],
+            extra={k: copy.deepcopy(v) for k, v in raw.items() if k not in ("name", "values")},
+        )
+        name = raw.get("name", "")
+        if isinstance(name, str):
+            slot.name = name
+        else:
+            slot.name = "" if name is None else str(name)
+            slot.preserved["name"] = (copy.deepcopy(name), slot.name)
+        values = raw.get("values", [])
+        if isinstance(values, list | tuple):
+            slot.values = list(values)
+        else:
+            slot.preserved["values"] = (copy.deepcopy(values), [])
+        return slot
+
+    def to_mapping(self) -> Any:
+        item = self.preserved.get("__item__")
+        if item is not None and not self.name and not self.values and not self.extra:
+            return copy.deepcopy(item[0])
+        out = copy.deepcopy(self.extra)
+        use_raw, name = _kept(self.preserved, "name", self.name)
+        out["name"] = copy.deepcopy(name) if use_raw else name
+        use_raw, values = _kept(self.preserved, "values", self.values)
+        out["values"] = copy.deepcopy(values) if use_raw else list(values)
+        return out
 
 
 @dataclass
 class MatrixConfig:
-    """Matrix configuration for Cartesian prompt expansion."""
+    """Matrix configuration for Cartesian prompt expansion.
+
+    ``mode`` is ``fanout``, ``sequential`` or ``random`` for authored packs; any other stored value is kept as it is.
+    ``sample_seed`` is the optional seed for ``random`` selection (``None`` = not set).
+    """
 
     enabled: bool = False
-    mode: str = "fanout"  # "fanout" or "sequential"
+    mode: str = "fanout"
     limit: int = 8  # Max combinations to generate
     slots: list[MatrixSlot] = field(default_factory=list)
+    sample_seed: int | None = None
+    #: Stored keys this editor does not know, written back verbatim.
+    extra: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
+    #: ``field -> (stored raw value or ABSENT, value shown after loading)``. A stored value the editor cannot show
+    #: exactly (missing key, wrong type) is written back unchanged until the operator edits that field.
+    preserved: dict[str, tuple[Any, Any]] = field(default_factory=dict, repr=False, compare=False)
+
+    @classmethod
+    def from_mapping(cls, raw: Any) -> MatrixConfig:
+        """Read a stored ``pack_data.matrix`` without normalizing what it cannot represent."""
+        if raw is ABSENT:
+            return cls()
+        if not isinstance(raw, dict):
+            return cls(preserved={"__matrix__": (copy.deepcopy(raw), None)})
+        config = cls(
+            enabled=bool(raw.get("enabled", False)),
+            extra={
+                k: copy.deepcopy(v)
+                for k, v in raw.items()
+                if k not in ("enabled", "mode", "limit", "slots", "sample_seed")
+            },
+        )
+        mode = raw.get("mode", ABSENT)
+        if isinstance(mode, str):
+            config.mode = mode
+        else:
+            config.preserved["mode"] = (copy.deepcopy(mode), config.mode)
+        limit = raw.get("limit", ABSENT)
+        if isinstance(limit, int) and not isinstance(limit, bool):
+            config.limit = limit
+        else:
+            if limit is not ABSENT:
+                try:
+                    config.limit = int(limit or 0)  # how the compiler reads it
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            config.preserved["limit"] = (copy.deepcopy(limit), config.limit)
+        seed = raw.get("sample_seed", ABSENT)
+        if isinstance(seed, int) and not isinstance(seed, bool):
+            config.sample_seed = seed
+        elif seed is not ABSENT:
+            config.preserved["sample_seed"] = (copy.deepcopy(seed), None)
+        slots = raw.get("slots", ABSENT)
+        if isinstance(slots, list | tuple):
+            config.slots = [MatrixSlot.from_mapping(item) for item in slots]
+        else:
+            config.preserved["slots"] = (copy.deepcopy(slots), [])
+        return config
+
+    def to_mapping(self) -> Any:
+        """The stored ``pack_data.matrix`` value: edits applied, everything else exactly as it was loaded."""
+        whole = self.preserved.get("__matrix__")
+        if whole is not None and self == MatrixConfig():
+            return copy.deepcopy(whole[0])
+        out = copy.deepcopy(self.extra)
+        out["enabled"] = self.enabled
+        for key in ("mode", "limit", "sample_seed"):
+            use_raw, value = _kept(self.preserved, key, getattr(self, key))
+            if use_raw and value is ABSENT:
+                continue
+            if not use_raw and key == "sample_seed" and value is None:
+                continue
+            out[key] = copy.deepcopy(value)
+        use_raw, slots = _kept(self.preserved, "slots", self.slots)
+        if use_raw:
+            if slots is not ABSENT:
+                out["slots"] = copy.deepcopy(slots)
+        else:
+            out["slots"] = [slot.to_mapping() for slot in self.slots]
+        return out
+
+    def clear_preserved(self, key: str) -> None:
+        """The operator edited ``key`` explicitly: stop writing back its stored raw value."""
+        self.preserved.pop(key, None)
 
     def get_slot_names(self) -> list[str]:
         """Return list of slot names for insertion."""
@@ -127,7 +266,6 @@ class PromptPackModel:
         preset_data = data.get("preset_data", {})
         name = pack_data.get("name") or data_path.stem
         raw_slots = pack_data.get("slots") or []
-        matrix_data = pack_data.get("matrix", {})
 
         indexed_slots: dict[int, PromptSlot] = {}
         max_index = -1
@@ -168,17 +306,7 @@ class PromptPackModel:
         cls._reindex_slots(slots)
 
         # Load matrix config (backward compatible)
-        matrix_slots = []
-        for ms in matrix_data.get("slots", []):
-            matrix_slots.append(
-                MatrixSlot(name=str(ms.get("name", "")), values=list(ms.get("values", [])))
-            )
-        matrix = MatrixConfig(
-            enabled=bool(matrix_data.get("enabled", False)),
-            mode=str(matrix_data.get("mode", "fanout")),
-            limit=int(matrix_data.get("limit", 8)),
-            slots=matrix_slots,
-        )
+        matrix = MatrixConfig.from_mapping(pack_data.get("matrix", ABSENT))
 
         pack = cls(name=name, path=str(data_path), slots=slots, matrix=matrix)
         pack.preset_data = preset_data  # Store preset data
@@ -253,12 +381,7 @@ class PromptPackModel:
         pack_data = {
             "name": self.name,
             "slots": serialized_slots,
-            "matrix": {
-                "enabled": self.matrix.enabled,
-                "mode": self.matrix.mode,
-                "limit": self.matrix.limit,
-                "slots": [{"name": s.name, "values": s.values} for s in self.matrix.slots],
-            },
+            "matrix": self.matrix.to_mapping(),
             "show_preview": getattr(self, "show_preview", True),
         }
 

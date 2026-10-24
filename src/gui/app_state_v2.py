@@ -4,6 +4,7 @@ import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
@@ -19,6 +20,7 @@ from src.pipeline.job_models_v2 import (
 )
 from src.queue.job_history_store import JobHistoryEntry
 from src.utils.config import LoraRuntimeConfig
+from src.utils.prompt_pack_utils import pack_json_path, same_pack_file
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.gui.prompt_workspace_state import PromptWorkspaceState
@@ -95,6 +97,9 @@ class AppStateV2:
     preview_jobs: list[NormalizedJobRecord] = field(default_factory=list)
     preview_revision: int = 0
     preview_error: str | None = None
+    #: Serializes the Preview lifecycle (invalidate / claim for admission / guarded publish) across the UI thread,
+    #: background Preview builds and queue-submission workers.
+    _preview_lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
     log_events: list[JobLifecycleLogEvent] = field(default_factory=list)
     log_events_max: int = 500
     operator_log: list[str] = field(default_factory=list)
@@ -506,8 +511,10 @@ class AppStateV2:
         logger.info(
             f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects"
         )
-        self.job_draft.packs.extend(entries)
-        self.invalidate_preview()
+        with self._preview_lock:
+            self.job_draft.packs.extend(entries)
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
         logger.info(f"[AppState] Total packs in draft: {len(self.job_draft.packs)}")
         self._notify("job_draft")
 
@@ -522,22 +529,114 @@ class AppStateV2:
             negative_prompt=negative_prompt,
             estimated_images=estimated_images,
         )
-        self.job_draft.add_part(part)
-        self.invalidate_preview()
+        with self._preview_lock:
+            self.job_draft.add_part(part)
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
         self._notify("job_draft")
 
     def clear_job_draft(self) -> None:
-        self.job_draft.clear()
-        self.job_draft.packs.clear()
+        with self._preview_lock:
+            self.job_draft.clear()
+            self.job_draft.packs.clear()
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
+        self._notify("job_draft")
+
+    def clear_admitted_draft(self, admitted: list[NormalizedJobRecord]) -> bool:
+        """Clear the draft and Preview of a successfully admitted submission, unless the draft changed since.
+
+        The Preview is the witness: every change to a compile input empties it (``invalidate_preview``), and an
+        admission presents its records as the Preview, so ``preview_jobs`` still being exactly ``admitted`` means
+        nothing was edited after admission. The check and the clear are one step under the lifecycle lock, so an edit
+        either lands first (nothing is cleared) or after (the edit starts the next draft). Returns whether it cleared.
+        """
+        with self._preview_lock:
+            current = self.preview_jobs
+            if (
+                not admitted
+                or len(current) != len(admitted)
+                or any(left is not right for left, right in zip(current, admitted, strict=True))
+            ):
+                return False
+            self.job_draft.clear()
+            self.job_draft.packs.clear()
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
+        self._notify("job_draft")
+        return True
+
+    def pack_save_listener(self, packs_dir: str | Path) -> Callable[[Path], None]:
+        """A ``PromptWorkspaceState.pack_saved_listener`` that reports saves to ``pack_file_saved`` for ``packs_dir``."""
+
+        def on_saved(path: Path) -> None:
+            self.pack_file_saved(path, packs_dir=packs_dir)
+
+        return on_saved
+
+    def pack_file_saved(self, pack_path: str | Path, *, packs_dir: str | Path) -> bool:
+        """A PromptPack file was saved successfully. A Preview compiled from its previous contents is stale.
+
+        The draft's pack ids are resolved exactly as the compiler resolves them (``pack_json_path``), so only the
+        very same file matches: another pack with the same file name in a different directory does not. Invalidates
+        and announces the draft (the Pipeline tab then rebuilds the Preview) only when the draft uses that file;
+        returns whether it did. Call it after a save has succeeded, never after a failed one.
+        """
+        saved = Path(pack_path)
+        if not any(
+            same_pack_file(pack_json_path(entry.pack_id, packs_dir), saved)
+            for entry in self.job_draft.packs
+        ):
+            return False
         self.invalidate_preview()
         self._notify("job_draft")
+        return True
 
     def invalidate_preview(self) -> None:
         """Invalidate only transient preview work, including results awaiting UI delivery."""
+        with self._preview_lock:
+            self._reset_preview_locked()
+        self._notify("preview_jobs")
+
+    def _reset_preview_locked(self) -> None:
+        """Drop the Preview and advance the revision. The caller holds ``_preview_lock`` and notifies afterwards."""
         self.preview_revision += 1
         self.preview_jobs = []
         self.preview_error = None
-        self._notify("preview_jobs")
+
+    def claim_preview_for_admission(self) -> tuple[list[NormalizedJobRecord], int]:
+        """``(accepted records, revision)`` for a queue submission.
+
+        With an accepted Preview, its frozen records are returned untouched. With none, the Preview revision is
+        advanced under the lock so a build that is still in flight (for an older revision) can no longer publish: it
+        would otherwise display a different (for an unseeded random Matrix, differently sampled) selection than the
+        one the submission compiles and queues. The caller compiles once and presents that result with
+        ``accept_preview_result(..., revision=<returned revision>)``.
+        """
+        with self._preview_lock:
+            if self.preview_jobs:
+                return list(self.preview_jobs), self.preview_revision
+            self.preview_revision += 1
+            return [], self.preview_revision
+
+    def accept_preview_result(
+        self, jobs: list[NormalizedJobRecord], *, revision: int | None, error: str | None = None
+    ) -> bool:
+        """Publish ``jobs`` as the Preview only if ``revision`` is still the current one (``None`` = unconditionally).
+
+        The check and the assignment are one step under the lifecycle lock, so a concurrent claim or invalidation
+        either happens before it (the result is discarded) or after it (the result is superseded).
+        """
+        with self._preview_lock:
+            if revision is not None and revision != self.preview_revision:
+                return False
+            changed = self.preview_jobs != jobs or self.preview_error != error
+            if changed:
+                self.preview_jobs = list(jobs)
+                self.preview_error = error
+        if changed:
+            self._notify("preview_jobs")
+        return True
 
     def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None, *, error: str | None = None) -> None:
         logger.debug(f"[AppState] set_preview_jobs called with {len(jobs) if jobs else 0} jobs")

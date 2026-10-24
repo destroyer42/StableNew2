@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from src.utils.prompt_pack_utils import normalize_matrix_slot_name
+
 _TOKEN_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
 
 
@@ -31,7 +33,13 @@ def find_undefined_slots(
         used.add(match.group(1))
     for match in _TOKEN_PATTERN.finditer(str(negative_text or "")):
         used.add(match.group(1))
-    return used - known
+    # The compiler resolves a token by exact name, then by normalized alias (hair-color == hair_color == Hair Color).
+    aliases = {normalize_matrix_slot_name(name) for name in known}
+    return {
+        token
+        for token in used
+        if token not in known and (normalize_matrix_slot_name(token) not in aliases)
+    }
 
 
 def build_editor_warning_text(pack_name: str, dirty: bool, undefined_slots: set[str]) -> str:

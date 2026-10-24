@@ -111,7 +111,7 @@ share the existing `models/OpenPose` library and snapshot home; the directory na
 Enabled units are frozen in authored order with independent settings, SHA-256, size, image facts and snapshot identity.
 Provenance records `conditioning.controlnet_units`; image bytes never enter the NJR. Disabled units are not executed.
 
-The Prompt tab's Conditioning section authors these units as a guided task (PR-GUI-UX-550): the operator picks what a unit controls (Pose / Body Position, Edges / Structure, Depth / Spatial Layout; presentation labels over the unchanged `openpose`, `canny`, `depth` identifiers), chooses a pre-rendered map from a searchable list with a bounded thumbnail, and sees the installed ControlNet weights ranked by their fit (`src/gui_v2/controlnet_guidance.py`, `src/gui/widgets/controlnet_units_panel.py`, `src/gui/widgets/reference_map_browser.py`). New units carry the canonical defaults; guidance interval, control mode and resize stay under Advanced. A model is offered as a recommendation only when exactly one installed weight has positive SDXL header evidence and a documented identity for the modality; it is never applied or substituted automatically. The editor's readiness text is local evidence only ("Local resources compatible" is not "ready"); canonical Preview and Forge admission remain the authorities, and no map is detected, generated or preprocessed. A slot with a legacy `controlnet_openpose` declaration shows it unchanged and offers an explicit, confirmed switch that removes the legacy value without converting it.
+The Prompt tab's Conditioning section authors these units as a guided task (PR-GUI-UX-550): the operator picks what a unit controls (Pose / Body Position, Edges / Structure, Depth / Spatial Layout; presentation labels over the unchanged `openpose`, `canny`, `depth` identifiers), chooses a pre-rendered map from a searchable list with a bounded thumbnail, and sees the installed ControlNet weights ranked by their fit (`src/gui_v2/controlnet_guidance.py`, `src/gui/widgets/controlnet_units_panel.py`, `src/gui/widgets/reference_map_browser.py`). New units carry the canonical defaults; guidance interval, control mode and resize stay under Advanced. A model is offered as a recommendation only when exactly one installed weight has positive SDXL header evidence and a documented identity for the modality; it is never applied or substituted automatically. The editor's readiness text is local evidence only ("Local resources compatible" is not "ready"); canonical Preview and Forge admission remain the authorities, and generation never detects, generates or preprocesses a map (an operator can create one on request, see below). A slot with a legacy `controlnet_openpose` declaration shows it unchanged and offers an explicit, confirmed switch that removes the legacy value without converting it.
 
 `src/image_backends/forge_controlnet_units.py` admits the complete list against Forge's advertised models and modules,
 requiring positive SDXL header evidence for every weight and a matching documented model identity. The initial identities
@@ -132,6 +132,49 @@ existing ControlNet always-on script. Independently populated ControlNet scripts
 remain intact. Output classification uses metadata plus every input map's decoded identity to reject maps in generation
 slots and unknown trailing images before artifact writes. Unit evidence is recorded as `controlnet_units` and backend
 evidence as `image_backend_metadata.controlnet_conditioning`.
+
+#### Operator-created reference maps (PR-IMG-CNET-230)
+
+"Create map from image..." beside a unit's map picker turns one source image into a pre-rendered map, saves it into the same
+`models/OpenPose` library and attaches it to a unit only when the operator presses Save & Use. It never submits a job and
+changes no contract: a saved map is an ordinary library image, so the existing compiler freezes its SHA-256-verified bytes and
+Forge receives the same `preprocessor: "None"` unit as for a hand-supplied map. Owners: `src/conditioning/reference_map/`
+(`service.py` is the one blocking seam, `source.py`, `canny.py`, `depth.py`, `pose.py`, `providers.py`, `library.py`),
+`src/gui_v2/reference_map_flow.py` (toolkit-neutral state, latest-wins, cancel, stale results dropped) and
+`src/gui/widgets/reference_map_dialog.py` (thin Tk).
+
+- Source: read once through the library's bounded reader (byte, side, pixel, format, decompression limits), EXIF-transposed to
+  RGB (alpha over white); the file hash and the oriented-pixel hash are recorded before inference and the file hash is re-checked
+  before publication (a drifted source refuses Save & Use).
+- Canny: deterministic OpenCV CPU path with frozen luma, blur, thresholds, polarity and RGB convention, at the source's size.
+  Depth: Depth Anything V2 Small through Transformers on CPU in a contained child process (`run_bounded`, no GPU, offline,
+  `trust_remote_code=False`, safetensors only); the prediction is resized to the source and mapped min-max, nearest brightest;
+  NaN/infinity or a flat map refuses. OpenPose: DWPose ONNX (person detector and whole-body estimator) in the same kind of child
+  process, drawn by one pure OpenPose skeleton renderer; no confident person means no map, and missing hands or face are disclosed
+  warnings. A provider that cannot run reports precise reason codes (`runtime_missing:onnxruntime`) and nothing falls back to
+  another map type; manual pre-rendered selection stays available.
+- Auxiliary identity comes from `config/curated_asset_catalog.json` and `AssetRegistry` (kind `AUXILIARY_MODEL`) through
+  `src/assets/resource_readiness.py`: pinned files must be byte-verified, the verified files are copied into a private staging
+  directory while re-hashed, and a wrong hash refuses before any inference. The catalog pins no digest for the small
+  configuration JSON files, so those are recorded with a disclosed warning rather than verified. Nothing is downloaded.
+- Publication: `models/OpenPose/created/<modality>-<first 16 hex of the map SHA-256>.png`, written atomically with a no-overwrite
+  link, never over an existing file, refused if the folder is a link or leaves the library, read back through the library
+  reader; an adjacent `<name>.stablenew-map.json` records method, version, config, source and result hashes, auxiliary file
+  hashes, runtime versions and warnings (no path, source bytes, landmarks or prompt).
+- Readiness is five separate claims, and only the first three have deterministic evidence: (1) the dependency is available
+  (cheap probe, `runtime_missing:<module>` otherwise); (2) the weight files are byte-verified inside the resource's own
+  `models/StableNewAux/<resource-id>/` directory and staged (identical bytes in another resource's folder never count); (3) the
+  contained CPU inference is callable (fake-module tests of the worker glue only); (4) the output is correct against an upstream
+  reference, and (5) the physical map quality is qualified - neither of which is established. DWPose decoding and BGR
+  preprocessing follow the reference implementation from memory and its code revision is not pinned by the catalog, so installing
+  `onnxruntime` (pinned in `constraints/windows-py314-cu130.txt` and `requirements.txt`; absent from an environment that has not
+  been re-bootstrapped, where OpenPose reports `runtime_missing:onnxruntime`) is not evidence of correct pose output. Depth
+  quality is likewise unqualified.
+- ControlNet weight readiness (`src/assets/resource_readiness.py`) keeps integrity (digest), architecture (SDXL header) and
+  identity (the documented model name for the modality, defined once in `src/assets/controlnet_identity.py` and used by
+  production admission) apart; only all three together give `ready_for_use`. The catalog also lists fp16 Canny/Depth files that
+  production admission does not accept (`diffusers_xl_canny_fp16`, `diffusers_xl_depth_fp16`): they verify as bytes but are
+  reported `unsupported` (`controlnet_identity_not_admitted`), not runnable.
 
 Deterministic coverage: `tests/integration/test_pr_img_cnet_220.py`, `tests/gui_v2/test_controlnet_units_220.py` and the
 existing OpenPose suites. This establishes plumbing and refusals, not physical two-unit fidelity, VRAM fit or performance.

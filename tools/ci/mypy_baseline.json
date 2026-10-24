@@ -99,7 +99,7 @@
     "src/gui/widgets/image_thumbnail.py": 3,
     "src/gui/widgets/lora_keyword_dialog.py": 3,
     "src/gui/widgets/matrix_slot_picker.py": 2,
-    "src/gui/widgets/matrix_tab_panel.py": 5,
+    "src/gui/widgets/matrix_tab_panel.py": 4,
     "src/gui/widgets/openpose_picker_panel.py": 2,
     "src/gui/widgets/scrollable_frame_v2.py": 3,
     "src/gui/widgets/tab_overview_panel_v2.py": 5,
@@ -179,5 +179,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1510
+  "total": 1509
 }

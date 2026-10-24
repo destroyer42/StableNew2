@@ -3,6 +3,7 @@ Utilities for reading metadata from native JSON PromptPacks.
 """
 
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -89,6 +90,30 @@ def get_matrix_config_summary(metadata: dict[str, Any]) -> dict[str, Any]:
         "slot_count": len(matrix_config.get("slots", [])),
         "slot_names": [s.get("name") for s in matrix_config.get("slots", []) if s.get("name")],
     }
+
+
+def pack_json_path(pack_id: str | Path, packs_dir: str | Path) -> Path:
+    """The native JSON file a pack id names. No existence check.
+
+    An absolute id names its own file (``.json`` is forced); any other id is a stem inside ``packs_dir``. This is the
+    one resolution rule: the PromptPack compiler uses it to find a pack, and Preview invalidation uses it to decide
+    whether a saved file is the pack the job draft compiles.
+    """
+    candidate = Path(str(pack_id))
+    if candidate.is_absolute():
+        return candidate if candidate.suffix.lower() == ".json" else candidate.with_suffix(".json")
+    return Path(packs_dir) / f"{candidate.stem}.json"
+
+
+def same_pack_file(left: str | Path, right: str | Path) -> bool:
+    """True when both paths are the same file (same inode when both exist, else the same normalized path)."""
+    first, second = Path(left), Path(right)
+    try:
+        if first.exists() and second.exists():
+            return os.path.samefile(first, second)
+    except OSError:
+        pass
+    return os.path.normcase(os.path.abspath(first)) == os.path.normcase(os.path.abspath(second))
 
 
 def normalize_matrix_slot_name(name: str | None) -> str:

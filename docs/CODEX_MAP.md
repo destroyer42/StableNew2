@@ -15,7 +15,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Job record (NJR) and compilers | `src/pipeline/njr_core_v26.py`, `src/pipeline/config_contract_v26.py`, `src/pipeline/job_builder_v2.py` |
 | Running a job | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
 | PromptPacks | `docs/Subsystems/PromptPacks/PROMPTPACKS_AND_PROMPTING.md`; `src/pipeline/prompt_pack_parser.py` -> `src/pipeline/prompt_pack_job_builder.py`; `src/promptpacks/` |
-| Matrix and randomization | `src/pipeline/config_variant_plan_v2.py` -> `src/randomizer/` |
+| Matrix and randomization | `src/pipeline/matrix_expansion_plan.py` (PromptPack Matrix: counts, limit, seeded selection) -> `src/pipeline/prompt_pack_job_builder.py`; `src/pipeline/config_variant_plan_v2.py` -> `src/randomizer/` |
 | Image backends and model profiles | `docs/Subsystems/Image/IMAGE_PIPELINE.md` and `MODEL_PROFILES.md` first, then `src/image_backends/image_backend_registry.py`, `src/image_backends/model_policy.py` |
 | Prompt compatibility and adaptation | `src/prompting/`; `docs/Subsystems/Prompting/` |
 | Assets (models, LoRAs, embeddings, curated resource readiness) | `src/assets/registry.py`; `docs/Subsystems/Image/PR-ASSET-110_Local_Asset_Registry.md`; readiness `src/assets/resource_readiness.py`, `tools/asset_readiness_report.py` |
@@ -29,6 +29,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Learning and experiments | `docs/Subsystems/Learning/LEARNING.md`; `src/learning/`, `src/gui/controllers/learning_controller.py` |
 | Review, reprocess and batch operations | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/queue/batch_projection.py`; masked edit and outpaint `src/controller/masked_edit_service.py`, `src/controller/outpaint_edit_service.py`, `src/pipeline/outpaint_canvas.py` |
 | Photo Optimize | `docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md`; `src/photo_optimize/`, `src/controller/photo_optimize_submission.py` |
+| ControlNet units and reference maps | `docs/Subsystems/Image/IMAGE_PIPELINE.md` section 3.1; `src/conditioning/controlnet.py`, `src/pipeline/controlnet_compile.py`; operator-created maps `src/conditioning/reference_map/service.py` -> `src/gui_v2/reference_map_flow.py` -> `src/gui/widgets/reference_map_dialog.py` |
 | Adaptive refinement and ADetailer | `src/refinement/`, `src/pipeline/adetailer_contract.py` |
 | GUI views and state | `src/gui/views/`, `src/gui/app_state_v2.py`, `src/gui/main_window_v2.py`; styles and tokens: `docs/Subsystems/GUI/GUI_STYLE_GUIDE.md` |
 | Crash-safe state files | `src/utils/atomic_io.py` (every persisted JSON/text store goes through it) |

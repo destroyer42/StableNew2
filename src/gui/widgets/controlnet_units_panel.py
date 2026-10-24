@@ -34,6 +34,7 @@ from src.conditioning.openpose import (
 from src.conditioning.openpose_catalog import LibraryListing, controlnet_folder, refresh_listing
 from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.widgets.reference_map_browser import ReferenceMapBrowser, Runner
+from src.gui.widgets.reference_map_dialog import ReferenceMapDialog
 from src.gui_v2.controlnet_guidance import (
     CONTROL_MODE_HELP,
     EMPTY_LIBRARY_HELP,
@@ -91,6 +92,7 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
         registry_factory: Callable[[], Any] | None = None,
         runner: Runner | None = None,
         confirm: Callable[[str, str], bool] | None = None,
+        map_service_factory: Callable[[], Any] | None = None,
         lazy: bool = True,
         **kwargs: Any,
     ) -> None:
@@ -103,6 +105,8 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
         self._callback = on_change_callback
         self._on_replace_legacy = on_replace_legacy
         self._registry_factory = registry_factory
+        self._map_service_factory = map_service_factory
+        self._creator: ReferenceMapDialog | None = None
         self._confirm = confirm or (
             lambda title, message: bool(messagebox.askyesno(title, message, parent=self))
         )
@@ -240,6 +244,10 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
         asset_entry = ttk.Entry(reference, textvariable=self.variables["asset"], state="readonly")
         asset_entry.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         self.controls["asset"] = asset_entry
+        self.create_map_button = ttk.Button(
+            reference, text="Create map from image…", command=self.open_map_creator
+        )
+        self.create_map_button.grid(row=2, column=0, sticky="w", pady=(4, 0))
 
         model_box = ttk.LabelFrame(
             detail, text="ControlNet model (from models/ControlNet)", padding=4
@@ -468,6 +476,75 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
             return
         self._on_replace_legacy()
         self.set_legacy_declaration(None)
+
+    # ------------------------------------------------------------------ operator-invoked map creation
+
+    def map_attach_plan(self, modality: str) -> tuple[bool, str]:
+        """Whether a created ``modality`` map can be attached right now, and the sentence that says how."""
+
+        units = self._units()
+        label = modality_label(modality)
+        if self._legacy is not None:
+            return (
+                False,
+                "Ordered units cannot be used while this slot has the legacy OpenPose reference.",
+            )
+        if units is None:
+            return False, "The saved ControlNet declaration is invalid; fix or remove it first."
+        selected = self._selected_unit()
+        if selected is not None and selected.get("modality") == modality:
+            return True, f"Save & Use will set the map of unit {self._selected + 1} ({label})."
+        if accepts_new_unit(self._raw):
+            return True, f"Save & Use will add a new {label} unit with this map."
+        return False, f"Both units are in use by other map types; remove one to add a {label} unit."
+
+    def open_map_creator(self) -> None:
+        unit = self._selected_unit()
+        if unit is None:
+            return
+        if self._creator is not None:
+            try:
+                self._creator.lift()
+                return
+            except tk.TclError:
+                self._creator = None
+        if self._map_service_factory is not None:
+            service = self._map_service_factory()
+        else:
+            from src.assets import AssetRegistry
+            from src.conditioning.reference_map.service import ReferenceMapService
+
+            service = ReferenceMapService(self._registry_factory or AssetRegistry)
+        modality = unit.get("modality")
+        self._creator = ReferenceMapDialog(
+            self,
+            service=service,
+            modality=modality if isinstance(modality, str) else "canny",
+            attach_plan=self.map_attach_plan,
+            on_attached=self.attach_created_map,
+            redact=self._hidden,
+        )
+
+    def attach_created_map(self, saved: Any, prepared: Any) -> None:
+        """Attach a freshly saved map as an explicit operator edit; the pack is marked changed like any other edit."""
+
+        modality = str(prepared.modality)
+        ok, _ = self.map_attach_plan(modality)
+        units = self._units()
+        if not ok or units is None:
+            return
+        selected = self._selected_unit()
+        if selected is not None and selected.get("modality") == modality:
+            selected["asset"] = saved.identity
+        else:
+            self._raw = {
+                "contract": CONTRACT,
+                "units": units + [new_unit(modality, asset=saved.identity)],
+            }
+            self._selected = len(units)
+        self.notice_var.set("")
+        self._changed()
+        self.refresh_library()
 
     def use_recommended_model(self) -> None:
         unit = self._selected_unit()
@@ -760,6 +837,12 @@ class ControlNetUnitsPanel(ttk.LabelFrame):
         self._render()  # refresh is a projection: no dirty callback, edits or substitutions
 
     def destroy(self) -> None:
+        if self._creator is not None:
+            try:
+                self._creator.close()
+            except tk.TclError:
+                pass
+            self._creator = None
         if self._poll is not None:
             self.after_cancel(self._poll)
             self._poll = None

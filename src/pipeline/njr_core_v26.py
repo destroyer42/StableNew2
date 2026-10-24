@@ -968,6 +968,19 @@ class NormalizedJobRecord:
     def matrix_slot_values_preview(self) -> str:
         return "; ".join(f"{key}={value}" for key, value in self.matrix_slot_values.items())
 
+    def matrix_expansion_label(self) -> str:
+        """Operator wording for the frozen Matrix selection behind this job ("" when it has none)."""
+        expansion = self.provenance.metadata.get("matrix_expansion")
+        if not expansion:
+            return ""
+        total, selected = expansion.get("theoretical_count"), expansion.get("selected_count")
+        ordinal = int(expansion.get("selected_ordinal", 0)) + 1
+        if expansion.get("selection") == "random_sample":
+            seed = expansion.get("sample_seed")
+            how = f"sample seed {seed}" if seed is not None else "no sample seed"
+            return f"Matrix sample {ordinal} of {selected} ({total} possible, {how})"
+        return f"Matrix combination {ordinal} of {selected} ({total} possible)"
+
     @property
     def lora_preview(self) -> str:
         return ", ".join(f"{tag.name}({tag.weight})" for tag in self.lora_tags)

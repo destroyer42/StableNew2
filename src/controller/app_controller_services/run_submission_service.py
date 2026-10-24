@@ -3,6 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from src.controller.pipeline_controller_services.preview_admission import (
+    PreviewSupersededError,
+    accepted_preview_records,
+    release_admitted_draft,
+)
 from src.pipeline.config_contract_v26 import attach_config_layers
 
 
@@ -17,6 +22,22 @@ class QueueRunSubmissionService:
     ) -> None:
         self._append_log = append_log
         self._capture_stage_plan_for_tests = capture_stage_plan_for_tests
+
+    def accepted_preview_jobs(self, app_state: Any, pipeline_controller: Any) -> list[Any]:
+        """Run / Run Now admit the accepted Preview's frozen records, not a fresh (re-sampled) compile.
+
+        A compile that the draft outran is refused: nothing is returned (so nothing is queued) and the operator is told.
+        """
+        try:
+            return accepted_preview_records(app_state, pipeline_controller.get_preview_jobs)
+        except PreviewSupersededError as exc:
+            self._append_log(f"[controller] Run not submitted: {exc}")
+            return []
+
+    @staticmethod
+    def release_admitted_draft(app_state: Any, admitted: list[Any]) -> bool:
+        """Clear the draft after a successful Add to Queue, but never an edit made after the submission was admitted."""
+        return release_admitted_draft(app_state, admitted)
 
     def ensure_queue_run_mode(self, app_state: Any, button_source: str) -> None:
         pipeline_state = getattr(app_state, "pipeline_state", None)

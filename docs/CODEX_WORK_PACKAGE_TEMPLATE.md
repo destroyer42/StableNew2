@@ -21,6 +21,7 @@ authorities and exact start state.
 
 ## Exact start state and authorities
 
+- Task-start timestamp with timezone (record before discovery), participating host/session IDs and package/shared-session boundary:
 - Repository and branch:
 - Required start SHA:
 - Remote feature SHA / `origin/main`:
@@ -79,4 +80,6 @@ authorities and exact start state.
 - Main unchanged:
 - Working tree clean:
 - Ready for next phase: Yes / No
-- Model / usage (host, actual model, effort, repair passes, result, and the line from `tools/usage_report.py --since-commit <first commit> --line`):
+- Model / usage (host, actual model, effort, repair passes, result, exact start/end window and the line from
+  `tools/usage_report.py --since <task-start> --until <end-after-closeout> --session <claude:ID|codex:ID> --line`;
+  repeat session filters as needed; label project/shared-session totals and missing telemetry, never claim unsupported PR attribution):

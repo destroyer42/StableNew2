@@ -81,6 +81,7 @@ from src.controller.app_controller_services.learning_completion_router import (
 from src.controller.app_controller_services.pack_settings_apply_service import (
     PackApplyReport,
     apply_settings_to_packs,
+    bind_preview_invalidation,
 )
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
@@ -470,6 +471,7 @@ class AppController:
         self.state = AppState()
         self.threaded = threaded
         self._config_manager = config_manager or ConfigManager()
+        bind_preview_invalidation(self._config_manager, lambda: self.app_state)
         self._dropdown_loader = DropdownLoader(self._config_manager)
         self._warned_missing_pipeline_apply = False
         self._last_executor_config: dict[str, Any] | None = None
@@ -1521,7 +1523,7 @@ class AppController:
             else:
                 ready = True
             if ready:
-                preview_jobs = list(controller.get_preview_jobs() or [])
+                preview_jobs = self._get_run_submission_service().accepted_preview_jobs(self.app_state, controller)
                 had_preview_jobs = bool(preview_jobs)
                 if preview_jobs:
                     submitted = int(
@@ -1607,7 +1609,6 @@ class AppController:
                     return result
         except Exception as exc:  # noqa: BLE001
             self._append_log(f"[controller] on_run_job_now_v2 error: {exc!r}")
-        self._ensure_run_mode_default("run_now")
         start_run_v2_fn = getattr(self, "start_run_v2", None)
         if start_run_v2_fn is not None:
             underlying = getattr(start_run_v2_fn, "__func__", None)
@@ -1734,20 +1735,9 @@ class AppController:
                 )
                 return
             if submitted > 0 and clear_preview_on_success and submitted >= len(preview_records):
-                app_state = getattr(self, "app_state", None)
-                if app_state is not None:
-                    clear_fn = getattr(app_state, "clear_job_draft", None)
-                    if callable(clear_fn):
-                        try:
-                            clear_fn()
-                        except Exception:
-                            pass
-                    preview_setter = getattr(app_state, "set_preview_jobs", None)
-                    if callable(preview_setter):
-                        try:
-                            preview_setter([])
-                        except Exception:
-                            pass
+                self._get_run_submission_service().release_admitted_draft(
+                    getattr(self, "app_state", None), preview_records
+                )
                 self._log_preview_queue_finish(
                     f"[controller] Submitted {submitted} job(s) from preview to queue "
                     f"(thread={origin_thread_name})"
@@ -4651,7 +4641,6 @@ class AppController:
             close_all_structured_loggers()
         except Exception:
             pass
-
 
     def _cancel_active_jobs(self, reason: str) -> None:
         if self._cancel_token is not None:

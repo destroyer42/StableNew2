@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import copy
-import itertools
 import json
 import logging
-import random
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -55,6 +53,12 @@ from src.pipeline.job_models_v2 import (
     StageConfig,
     WorkloadKind,
 )
+from src.pipeline.matrix_expansion_plan import (
+    SEVERITY_WARNING,
+    MatrixExpansionPlan,
+    matrix_randomizer_limit_hint,
+    plan_matrix_expansion,
+)
 from src.pipeline.openpose_compile import CompiledConditioning, OpenPoseCompiler
 from src.pipeline.prompt_pack_parser import PackRow
 from src.pipeline.resolution_layer import (
@@ -85,7 +89,7 @@ from src.training.lora_manager import LoRAManager
 from src.training.style_lora_manager import StyleLoRAManager
 from src.utils.config import ConfigManager
 from src.utils.embedding_prompt_utils import render_embedding_reference
-from src.utils.prompt_pack_utils import get_matrix_slots_dict
+from src.utils.prompt_pack_utils import pack_json_path
 
 _logger = logging.getLogger(__name__)
 
@@ -98,7 +102,6 @@ _TXT2IMG_INACTIVE_HIRES_KEYS = (
     "hr_resize_x",
     "hr_resize_y",
 )
-_DEFAULT_MATRIX_EXPANSION_LIMIT = 8
 #: Version of the adaptation manifest frozen into ``NJRProvenance.metadata['prompt_adaptation']``.
 PROMPT_ADAPTATION_CONTRACT = "prompt_adaptation/1"
 
@@ -123,6 +126,8 @@ class _PreparedPrompt:
     normalizations: tuple[dict[str, Any], ...] = ()
     #: The slot's verified, frozen OpenPose conditioning (PR-IMG-CNET-210); ``None`` when the slot has none.
     conditioning: CompiledConditioning | CompiledUnits | None = None
+    #: Content-free expansion evidence for this variant (``MatrixExpansionPlan.provenance``); ``None`` without a Matrix.
+    matrix_expansion: dict[str, Any] | None = None
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -202,7 +207,7 @@ class PromptPackNormalizedJobBuilder:
                 continue
 
             # Expand entry by matrix combinations from pack JSON
-            expanded_entries = self._expand_entry_by_matrix(entry)
+            expanded_entries, matrix_plan, matrix_indexes = self._expand_entry_with_plan(entry)
             _logger.info(
                 f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) expanded to {len(expanded_entries)} variant(s)"
             )
@@ -215,6 +220,10 @@ class PromptPackNormalizedJobBuilder:
                     evidence=evidence,
                 )
                 if prompt is not None:
+                    if matrix_plan is not None and matrix_plan.expands:
+                        prompt.matrix_expansion = matrix_plan.provenance(
+                            matrix_variant_index, matrix_indexes[matrix_variant_index]
+                        )
                     prepared.append(prompt)
 
         self._freeze_conditioning(prepared, evidence)
@@ -260,109 +269,48 @@ class PromptPackNormalizedJobBuilder:
         return records
 
     def _expand_entry_by_matrix(self, entry: PackJobEntry) -> list[PackJobEntry]:
-        """Expand a single entry into multiple entries based on pack JSON matrix slots.
+        """Expand one entry into one entry per selected Matrix combination (see ``matrix_expansion_plan``).
 
-        If the pack has matrix slots defined in its JSON metadata:
-        1. Load pack JSON metadata
-        2. Extract matrix slots (e.g., {"job": ["wizard", "knight"], "env": ["forest", "castle"]})
-        3. Generate all combinations (Cartesian product)
-        4. Create one entry per combination with matrix_slot_values set
-
-        If no matrix or matrix disabled, returns [entry] unchanged.
-
-        Args:
-            entry: Original PackJobEntry
-
-        Returns:
-            List of PackJobEntry, one per matrix combination
+        A disabled Matrix, or one with no dimension that has both a name and values, returns ``[entry]``.
         """
-        # Resolve pack path
+        return self._expand_entry_with_plan(entry)[0]
+
+    def _expand_entry_with_plan(
+        self, entry: PackJobEntry
+    ) -> tuple[list[PackJobEntry], MatrixExpansionPlan | None, tuple[int, ...]]:
+        """Expanded entries plus the plan and the Cartesian position behind each one."""
         pack_path = self._resolve_pack_json_path(entry.pack_id)
         if not pack_path:
-            _logger.debug(
-                f"[Matrix Expansion] No pack path found for {entry.pack_id}, skipping expansion"
-            )
-            return [entry]
-
-        # Load pack JSON metadata
+            _logger.debug(f"[Matrix Expansion] No pack path found for {entry.pack_id}, skipping expansion")
+            return [entry], None, ()
         metadata = self._load_pack_metadata_cached(pack_path)
         if not metadata:
-            _logger.debug(
-                f"[Matrix Expansion] No JSON metadata for {entry.pack_id}, skipping expansion"
-            )
-            return [entry]
-
-        # Extract matrix slots
-        matrix_slots_dict = get_matrix_slots_dict(metadata)
-        if not matrix_slots_dict:
-            _logger.debug(
-                f"[Matrix Expansion] No matrix slots in {entry.pack_id}, skipping expansion"
-            )
-            return [entry]
-
-        # Check matrix config for mode
+            _logger.debug(f"[Matrix Expansion] No JSON metadata for {entry.pack_id}, skipping expansion")
+            return [entry], None, ()
         pack_data = metadata.get("pack_data", {})
-        matrix_config = pack_data.get("matrix", {})
-        matrix_mode = matrix_config.get("mode", "sequential")
-        limit = self._resolve_matrix_expansion_limit(entry, matrix_config, matrix_slots_dict)
+        plan = plan_matrix_expansion(
+            pack_data.get("matrix", {}) if isinstance(pack_data, Mapping) else {},
+            randomizer_limit=matrix_randomizer_limit_hint(
+                entry.randomizer_metadata, entry.config_snapshot
+            ),
+        )
+        for issue in plan.issues:
+            if issue.severity == SEVERITY_WARNING:
+                _logger.warning("[Matrix Expansion] %s: %s", entry.pack_id, issue.message)
+        if not plan.expands:
+            _logger.debug(f"[Matrix Expansion] No matrix slots in {entry.pack_id}, skipping expansion")
+            return [entry], plan, ()
 
-        slot_names = list(matrix_slots_dict.keys())
-        slot_values_lists = [matrix_slots_dict[name] for name in slot_names]
-        total_combinations = self._estimate_matrix_combinations(slot_values_lists)
-
-        # Generate combinations based on mode
-        if matrix_mode == "random":
-            target_count = (
-                min(total_combinations, limit)
-                if limit > 0
-                else min(
-                    total_combinations,
-                    _DEFAULT_MATRIX_EXPANSION_LIMIT,
-                )
-            )
-            combinations = self._sample_random_matrix_combinations(
-                slot_values_lists,
-                target_count,
-                total_combinations,
-            )
+        indexes = plan.selected_indexes()
+        if plan.truncated:
             _logger.info(
-                "[Matrix Expansion] Generated %s random combinations for %s with slots: %s "
-                "(total_possible=%s, effective_limit=%s)",
-                len(combinations),
-                entry.pack_id,
-                slot_names,
-                total_combinations,
-                target_count,
+                "[Matrix Expansion] %s: %s of %s combinations selected (limit %s from %s)",
+                entry.pack_id, plan.selected_count, plan.theoretical_count,
+                plan.effective_limit, plan.limit_source,
             )
-        else:
-            effective_limit = min(total_combinations, limit) if limit > 0 else total_combinations
-            combinations = list(
-                itertools.islice(itertools.product(*slot_values_lists), effective_limit)
-            )
-            if total_combinations > effective_limit:
-                _logger.info(
-                    "[Matrix Expansion] Limited combinations to %s (from %s total) for %s",
-                    effective_limit,
-                    total_combinations,
-                    entry.pack_id,
-                )
-            _logger.info(
-                "[Matrix Expansion] Generating %s sequential combinations for %s with slots: %s "
-                "(total_possible=%s)",
-                len(combinations),
-                entry.pack_id,
-                slot_names,
-                total_combinations,
-            )
-
-        # Create one entry per combination
-        expanded_entries = []
-        for combo in combinations:
-            # Build matrix_slot_values dict for this combination
-            matrix_values = dict(zip(slot_names, combo, strict=False))
-
-            # Create a copy of the entry with matrix_slot_values set
-            expanded_entry = PackJobEntry(
+        names = plan.dimension_names()
+        expanded_entries = [
+            PackJobEntry(
                 pack_id=entry.pack_id,
                 pack_name=entry.pack_name,
                 pack_row_index=entry.pack_row_index,
@@ -370,93 +318,12 @@ class PromptPackNormalizedJobBuilder:
                 negative_prompt_text=entry.negative_prompt_text,
                 config_snapshot=entry.config_snapshot,
                 stage_flags=entry.stage_flags,
-                matrix_slot_values=matrix_values,  # Set the matrix values for this combination
+                matrix_slot_values=dict(zip(names, plan.combination_at(index), strict=True)),
                 randomizer_metadata=entry.randomizer_metadata,
             )
-            expanded_entries.append(expanded_entry)
-
-        return expanded_entries
-
-    def _estimate_matrix_combinations(self, slot_values_lists: list[list[str]]) -> int:
-        total = 1
-        for values in slot_values_lists:
-            total *= max(1, len(values))
-        return total
-
-    def _resolve_matrix_expansion_limit(
-        self,
-        entry: PackJobEntry,
-        matrix_config: dict[str, Any],
-        matrix_slots_dict: dict[str, list[str]],
-    ) -> int:
-        raw_limit = matrix_config.get("limit")
-        try:
-            configured_limit = max(int(raw_limit or 0), 0)
-        except Exception:
-            configured_limit = 0
-
-        if configured_limit > 0:
-            return configured_limit
-
-        randomizer_limit = 0
-        randomizer_meta = entry.randomizer_metadata or {}
-        try:
-            randomizer_limit = max(int(randomizer_meta.get("max_variants") or 0), 0)
-        except Exception:
-            randomizer_limit = 0
-        if randomizer_limit <= 0:
-            randomization_cfg = (entry.config_snapshot or {}).get("randomization", {})
-            if isinstance(randomization_cfg, dict):
-                try:
-                    randomizer_limit = max(int(randomization_cfg.get("max_variants") or 0), 0)
-                except Exception:
-                    randomizer_limit = 0
-
-        slot_values_lists = [matrix_slots_dict[name] for name in matrix_slots_dict.keys()]
-        total_combinations = self._estimate_matrix_combinations(slot_values_lists)
-        auto_limit = randomizer_limit if randomizer_limit > 0 else _DEFAULT_MATRIX_EXPANSION_LIMIT
-
-        if total_combinations > auto_limit:
-            _logger.warning(
-                "[Matrix Expansion] Pack %s has %s possible combinations with no safe matrix.limit; "
-                "auto-limiting expansion to %s. Set pack_data.matrix.limit to override.",
-                entry.pack_id,
-                total_combinations,
-                auto_limit,
-            )
-        return auto_limit
-
-    def _sample_random_matrix_combinations(
-        self,
-        slot_values_lists: list[list[str]],
-        target_count: int,
-        total_combinations: int,
-    ) -> list[tuple[str, ...]]:
-        if target_count <= 0 or total_combinations <= 0:
-            return []
-        if target_count >= total_combinations:
-            return list(itertools.product(*slot_values_lists))
-
-        sampled_indexes = random.sample(range(total_combinations), target_count)
-        sampled_indexes.sort()
-        return [
-            self._decode_matrix_combination_index(index, slot_values_lists)
-            for index in sampled_indexes
+            for index in indexes
         ]
-
-    def _decode_matrix_combination_index(
-        self,
-        index: int,
-        slot_values_lists: list[list[str]],
-    ) -> tuple[str, ...]:
-        values: list[str] = []
-        remaining = index
-        for slot_values in reversed(slot_values_lists):
-            slot_size = max(1, len(slot_values))
-            remaining, position = divmod(remaining, slot_size)
-            values.append(slot_values[position])
-        values.reverse()
-        return tuple(values)
+        return expanded_entries, plan, indexes
 
     def _prepare_entry(
         self,
@@ -596,6 +463,8 @@ class PromptPackNormalizedJobBuilder:
             "contract": PROMPT_ADAPTATION_CONTRACT,
             **adaptation_plan.to_diagnostics(),
         }
+        if prepared.matrix_expansion is not None:
+            provenance_metadata["matrix_expansion"] = copy.deepcopy(prepared.matrix_expansion)
         config_for_builder = self._build_config_payload(
             entry,
             merged_config,
@@ -731,7 +600,7 @@ class PromptPackNormalizedJobBuilder:
                             "base_seed": randomizer_plan.base_seed,
                         },
                         matrix_slot_values=dict(entry.matrix_slot_values or {}),
-                        matrix_mode=matrix_section.get("mode"),
+                        matrix_mode=(prepared.matrix_expansion or {}).get("mode") or matrix_section.get("mode"),
                         matrix_prompt_mode=matrix_section.get("prompt_mode"),
                         matrix_name=matrix_section.get("name"),
                         config_variant_label=record.config_variant_label,
@@ -1234,14 +1103,7 @@ class PromptPackNormalizedJobBuilder:
         )
 
     def _resolve_pack_json_path(self, pack_id: str) -> Path | None:
-        candidate = Path(pack_id)
-        if candidate.is_absolute():
-            json_candidate = (
-                candidate if candidate.suffix.lower() == ".json" else candidate.with_suffix(".json")
-            )
-            return json_candidate if json_candidate.exists() else None
-        stem = candidate.stem
-        path = self._packs_dir / f"{stem}.json"
+        path = pack_json_path(pack_id, self._packs_dir)
         return path if path.exists() else None
 
     @staticmethod
