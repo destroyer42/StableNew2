@@ -336,6 +336,24 @@ class JobQueue:
             heapq.heappush(self._queue, item)
         return None
 
+    def peek_next_dispatch_candidate(self) -> Job | None:
+        """The QUEUED job the next claim would take if no WebUI hold were in force (read-only; nothing is popped).
+
+        Pause, the shutdown fence and the GPU quarantine still apply exactly as in ``claim_next_job``; only the
+        WebUI hold is ignored, so the runtime layer can learn which workload is next in priority/FIFO order and
+        prepare its runtime before the claim. It is an observation, never a claim: the atomic claim re-decides.
+        """
+
+        with self._lock:
+            if self._paused or self._dispatch_fenced:
+                return None
+            for item in sorted(self._queue):
+                job = self._jobs.get(item[2])
+                if job is None or job.status != JobStatus.QUEUED or self._held_by_gpu_loss_locked(job):
+                    continue
+                return job
+            return None
+
     def get_next_job(self) -> Job | None:
         """Pop the next eligible job (held jobs are skipped without losing their place)."""
         with self._lock:
