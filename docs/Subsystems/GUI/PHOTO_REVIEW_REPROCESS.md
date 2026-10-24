@@ -76,6 +76,20 @@ Every image reprocess NJR goes through `submit_reprocess_njrs`; do not add a pat
 | ADetailer before/after pair | `resolve_adetailer_pair` (`src/review/adetailer_outcome.py`) |
 | Metadata inspector | `ArtifactMetadataInspector` (`src/review/artifact_metadata_inspector.py`), `ArtifactMetadataInspectorDialog` |
 | Content visibility (redaction) | `ContentVisibilityResolver`; every prompt shown in Review/Photo/Batches is passed through it |
+| Background file work (PR-GUI-UX-580): folder scan, per-image metadata and ADetailer pair, bounded comparison decode | Tk-free `src/review/workspace_io.py`, run through `EditWorkRunner` (`src/gui/view_contracts/edit_work_runner.py`, a thin wrapper over `BackgroundTaskCoordinator`, keys `review:folder-scan`, `review:image-context`, `review:compare`) |
+| Latest-request-wins revisions | `ReviewSelectionRevisions` (`src/gui/view_contracts/review_selection_contract.py`); counters only |
+
+Quick Edit is Review's operator-facing name: select images, inspect or edit, preview the effective job, add it to the queue. It keeps nothing per photo (the Managed Photo Set, section 6, does).
+
+#### 3.1a Selection revisions and asynchronous presentation (PR-GUI-UX-580)
+
+Every route that replaces Review's selection is an *accepted selection* and bumps one revision (`_begin_selection_context`): Select Images, Select Folder, Clear, Learning staged-curation handoff, History Iterate handoff, and the Queue/History and Photo Optimize image handoffs. A folder scan, an image-context read or a comparison decode carries the revision it started under and is dropped on delivery when it is no longer current, so a late result can never replace a newer selection, its History claim, stage choices, prompt edits or status. Rules:
+
+- The folder scan, `extract_embedded_metadata`, `resolve_adetailer_pair` and the comparison composite run on a worker; the Tk thread only shows the preview and publishes a result. Effective settings wait for the image context (`_image_ready`); the one remaining synchronous reader is `AppController.get_review_reprocess_effective_settings_preview` (its config builder is Tk-bound and `AppController` is at its ceiling): known debt.
+- A folder with more than `MAX_FOLDER_IMAGES` (20,000) supported images is refused, never loaded partially. An empty or unreadable result leaves the selection alone and says so. Comparison decode is bounded (`COMPARE_MAX_EDGE` 2048 per side, `COMPARE_MAX_PIXELS` 120 M per source; refusal text never contains prompts) and reports "scaled to fit; the files are unchanged".
+- An incoming selection over unsent Review work asks Replace/Cancel once (`_confirm_incoming_replacement`, the History handoff's convention; a `_confirm_replace_hook` test seam). Cancel returns `0` / `False` / `[]` from `load_selected_images` / `load_staged_curation_handoff` / `route_images_to_review`, leaves the selection, edits, History claim and navigation exactly as they were, and queues nothing. History's own service has already asked, so `load_history_iterate_handoff` passes `confirmed=True`.
+- A manual replacement (any incoming route that is not the History handoff) clears `_active_handoff`: the History claim is attached to its image and file bytes only, and `prepare_review_batch` still refuses a changed source or contradicting embedded identity.
+- Sending images to the Managed Photo Set is a *distinct operation* (`route_images_to_photo_optimize`, section 6.6): it carries file paths only, leaves Review's selection, edits and History claim untouched, and a History-origin image is imported with no parent job or artifact.
 
 ### 3.2 Whole-selection preview and admission
 
@@ -164,8 +178,13 @@ per Review tab and in memory only (a new session starts off); no model is ever d
   `load_state_dict(strict=True)`; it never initializes a missing weight. Transformers must be >= 5.17 and < 6 (qualified on
   5.17.0; checked at run time, not pinned). Files alone never make a capability ready: both catalog entries stay
   `needs_integration` with `inference_not_qualified`.
-- **Limits.** Real-image mask and caption quality, GPU use and memory caps are not qualified (the shared bounded runner has no
-  per-process memory limit), and AI provenance is not recorded in the frozen edit record. Tests:
+- **Limits.** Real-image mask and caption quality and GPU use are not qualified. Each model child runs under a verified 6,144 MB
+  committed-memory limit, per child and not an application-wide budget (`run_bounded(memory_limit_mb=...)`: the child does not
+  start unless the OS itself reports that limit, read back from the job object or cgroup; actual peak use and model fit are
+  unmeasured). On Windows a limit that cannot be established means no child. A host other than Windows that cannot
+  establish it (for example Linux without a delegated StableNew cgroup) runs the child **without** a memory limit, logs a
+  warning, and shows "WARNING: this host could not enforce the 6,144 MB memory limit..." with the map or "MEMORY LIMIT NOT
+  ENFORCED" in the Smart Review model label. AI provenance is not recorded in the frozen edit record. Tests:
   `tests/review/assist/test_assist_pure_320.py`, `tests/review/assist/test_assist_session_320.py`,
   `tests/gui_v2/test_smart_review_320.py`, `tests/assets/test_review_assist_catalog_320.py`.
 
@@ -173,7 +192,7 @@ per Review tab and in memory only (a new session starts off); no model is ever d
 
 - `ThumbnailWidget` (`src/gui/widgets/thumbnail_widget_v2.py`): latest-request-wins, one in-flight decode per path, decode via `load_image_thumbnail` (`src/utils/image_utils.py`) on a thread from `ThreadRegistry.spawn`, result marshalled with `after(0)`. Responsive mode decodes once at the maximum edge and rescales on resize (`src/gui/view_contracts/workspace_density_contract.py`). A failed worker start releases only its own request marker and shows "Preview unavailable".
 - There is no decoded-thumbnail cache and no thumbnail grid; the list is a `Listbox` with one preview pane [V].
-- Compare view: `ReviewTabFrame._render_compare_viewer` opens both images at full resolution, converts to RGBA and composites on the Tk thread [V].
+- Compare view: `ReviewTabFrame._render_compare_viewer` opens the viewer at once and fills it when `prepare_compare` (`src/review/workspace_io.py`, bounded decode and composite) finishes on a worker; closing the viewer or starting a newer comparison discards a decode still running (section 3.1a).
 
 ### 3.5 Iterate from History (PR-HISTORY-610A)
 
@@ -235,7 +254,9 @@ Behavior that must hold:
 | `src/photo_optimize/results.py` | Result candidates and historical baseline promotion: `list_candidates`, `validate_candidate`, `prepare_promotion` -> `PromotionPlan` |
 | `src/photo_optimize/migration.py` | Verified copy-only migration from the legacy `data/photo_optimize` workspace |
 | `src/photo_optimize/paths.py` | `io_path` (Windows extended paths), `canonical_path`, `rename_without_replace` |
-| `src/gui/views/photo_optimize_tab_frame_v2.py` plus mixins `photo_optimize_layout.py`, `photo_optimize_scope.py`, `photo_optimize_results.py`, `photo_optimize_editors.py` | Tk tab; the mixins are presentation only |
+| `src/photo_optimize/managed_import.py` | `plan_managed_import` (read-only: existence, type, decode, SHA-256, existing managed asset with identical bytes) and `apply_managed_import` (operator-confirmed; uses the store's existing `import_photo`; originals untouched; no lineage) |
+| `src/gui/view_contracts/photo_baseline_save_contract.py` | `PhotoBaselineSaveSession`: per-photo ordered, coalesced, conditional baseline saves with truthful status (no Tk) |
+| `src/gui/views/photo_optimize_tab_frame_v2.py` plus mixins `photo_optimize_layout.py`, `photo_optimize_scope.py`, `photo_optimize_results.py`, `photo_optimize_editors.py`, `photo_optimize_handoff.py` | Tk tab; the mixins are presentation only |
 | `src/gui/view_contracts/photo_optimize_layout_contract.py` | Pure fit rules: `choose_body_mode`, `body_placements`, `flow_rows`, `selection_summary` (no Tk) |
 
 ### 6.2 Submission
@@ -247,7 +268,7 @@ Behavior that must hold:
 
 ### 6.2a Layout
 
-- Header: a primary row (Import Photos, Review Selected, Review All Visible, a **More actions** disclosure, and the selection line `Single Photo: <name> | Batch: N selected | M visible`) plus always-visible submission and migration status text. Refresh, Review Pipeline Copy, Interrogate, the batch-size spinbox and Migration Details/Retry sit in the collapsible "More actions" section. A migration summary containing "incomplete" expands it automatically. Header items wrap into rows with `flow_rows` (placed, never clipped); status labels wrap to the header width.
+- Header: a one-line role statement ("Managed Photo Set - persistent per-photo settings and results ...", flow and scope in its tooltip: Active photo = the one being edited, Selected photos = highlighted rows, All visible = every unarchived photo), then a primary row (Import Photos, Review Selected, Review All Visible, a **More actions** disclosure, and the selection line `Single Photo: <name> | Batch: N selected | M visible`) plus always-visible submission and migration status text. Refresh, Open Selected in Quick Edit, Review Pipeline Copy, Interrogate, the batch-size spinbox and Migration Details/Retry sit in the collapsible "More actions" section. A migration summary containing "incomplete" expands it automatically. Header items wrap into rows with `flow_rows` (placed, never clipped); status labels wrap to the header width.
 - Body: assets, previews and the editor are three existing regions that `_apply_body_layout` re-grids into `wide` (side by side), `split` (assets over previews, editor beside them) or `stacked` (one column with section headings) by `choose_body_mode`. The decision compares each region's minimum width (character widths of the real label font, so it follows Tk scaling, plus the 2 x 200 px preview floor) with the width the body actually has; there is no screen-size breakpoint. The body scrolls vertically through `ScrollableFrame`; regions keep their natural height instead of stretching to the editor.
 - Resizing only calls `grid`/`place` on existing widgets. It never recreates or reparents a region, so selection, typed text, baselines and the sidecars are untouched.
 - Review Selected / Review All Visible still call `_optimize` (prepare -> `review_dialog` -> `submit_prepared_photo_plan`); layout owns no execution path.
@@ -269,6 +290,14 @@ Photo form values exist as nested stage dicts, aliases inside them (for example 
 
 `migrate_assets` copies each legacy asset into a staging directory, verifies SHA-256 of every file, rewrites current-photo paths, writes `migration.json` (source and per-file hashes), and publishes with `rename_without_replace`. It never deletes or overwrites a source or destination, retries only Windows share/ACL errors (5, 32, 33) three times, and reports per-asset `MigrationIssue`s in a `MigrationReport`. `PhotoOptimizeStore.retry_migration` re-runs it from a worker. The global store skips migration when a test has overridden `PHOTO_OPTIMIZE_ROOT`.
 
+### 6.6 Baseline saves and Quick Edit hand-offs (PR-GUI-UX-580)
+
+- **Saving the active photo.** Edits mark the draft dirty and start a 400 ms debounce (`BASELINE_SAVE_DEBOUNCE_MS`); focus-out saves at once. The view captures an immutable `BaselineDraft` (pure, no file access) and `PhotoBaselineSaveSession` sends it to the store on a worker: one asset at a time in submission order, a burst coalesced into the latest draft, the draft always naming its asset (a delayed write cannot land on another photo). The write is conditional on the baseline the form was loaded against (`update_asset_fields(..., expected_baseline=...)`, `StaleBaselineError`), so a stale form can never replace a newer promotion, revert or batch edit; the refusal is shown ("Not saved: ...") and the edit is not reported saved. `baseline_save_status_var` reads Saved / Unsaved changes / Saving... / Not saved.
+- **Sidecar locking.** `PhotoOptimizeStore.asset_lock` is one reentrant lock per asset; `save_asset`, `update_asset_fields`, archive, restore, promotion, revert, `record_optimize_history` and Batch Edit's check-then-write take it, and `save_asset` now writes through `src/utils/atomic_io.py`. It is a store-local lock, not a transaction authority; there is still no cross-process lock (one app instance per workspace is assumed).
+- **Waiting for a save.** Preparing a plan, promotion, revert, Batch Edit preparation and Interrogate run only after the active photo's write settles (`_with_saved_baseline`); a failed write stops the action with the reason. Closing the tab sends a pending draft to its worker first.
+- **Quick Edit -> Managed Photo Set.** Review's "Manage Selected Photos..." sends the Listbox's highlighted images (explicit selection, list order) through `route_images_to_photo_optimize` (the single navigation owner is `video_workspace_handoff`) to `receive_review_handoff`. A worker plans the import (`plan_managed_import`: content SHA-256 identity, never filename; refused rows carry a reason), the operator confirms exactly what would be copied (new / already managed / refused; for already-managed images either open the existing asset or import a separate copy), and only then does a worker import with `_build_import_defaults()` (Photo Optimize's own baseline authority). Nothing is copied or queued before confirmation, the result selects the imported and opened photos and lists per-file outcomes, and Review keeps its selection, edits and History claim. Only paths cross: History lineage never reaches a managed asset.
+- **Managed Photo Set -> Quick Edit.** "Open Selected in Quick Edit" resolves the selected photos' current working images on a worker and calls `route_images_to_review`; Review asks Replace/Cancel for unsent work. A managed photo carries no History lineage into Review.
+
 ## 7. GUI-ownership rules for these surfaces
 
 Authority: `AGENTS.md` sections 3 and 4, `docs/ARCHITECTURE_v2.6.md` section 11. Rules that matter here:
@@ -287,7 +316,7 @@ The map is still the right file-placement reference, with these corrections:
 - Rule "controllers in `controllers/` orchestrate; they do not own prompt construction or job submission" is not true today: `LearningController` (~4,000 lines) compiles prompts and NJRs (audit D1 [A]), and `ReviewWorkflowAdapter.apply_prompt_delta` composes prompts inside `src/gui/controllers/`.
 - "Controllers must not mutate Tk widgets" is violated by `src/controller` (`AppController` reaches `main_window` and tabs directly; audit D3 [A]).
 - The Forbidden Patterns list does not mention the current accepted shape: Tk-free `view_contracts` sessions and the `BackgroundTaskCoordinator` / `BackgroundWorkRunner` pair.
-- Rule 9 (filesystem lookups through latest-wins background services) is not met by the Review folder scan (section 8).
+- Rule 9 (filesystem lookups through latest-wins background services) is now met by the Review folder scan, image context and comparison (section 3.1a); remaining exceptions are listed under D5.
 
 ## 8. Known debt and traps
 
@@ -295,7 +324,7 @@ Audit GUI findings as they stand on these surfaces:
 
 - **D3 composition roots and two-way coupling** [A, V examples]: `ReviewTabFrame._resolve_learning_controller` walks `app_controller.main_window.learning_tab`; the batches panel builds its own service in `pipeline_tab_frame_v2.py`; `src/controller/review_batch_service.py` imports `src/gui/controllers/review_workflow_adapter.py` (recorded in `tools/ci/architecture_baseline.json` as a controller-to-GUI import), and so do `src/photo_optimize/submission.py` and `src/photo_optimize/editing.py` (a domain package importing the GUI package, not yet ratcheted). Fix direction: move `ReviewWorkflowAdapter.apply_prompt_delta` and the prompt-term helpers to a Tk-free module under `src/prompting/` or `src/pipeline/` and import from there (audit P3-2).
 - **D4 tab failures swallowed** [A, partly fixed V]: `MainWindowV2.add_tab` now logs the traceback and shows an error placeholder naming the tab. A failure of `center_notebook.add` is now logged, recorded in `MainWindowV2.tab_failures()` and leaves the tab unregistered (PR-GUI-410).
-- **D5 blocking work on the Tk thread** [A, V]: still true for (a) Photo Optimize saves on every `<KeyRelease>` and variable write via `_persist_current_asset_baseline` (sidecar read, directory creation, write; no debounce); (b) the Review folder scan (`_on_select_folder`: `rglob` with `is_file` per entry); (c) per-selection metadata decode in `ReviewTabFrame._show_image` plus a second decode in `resolve_adetailer_pair`; (d) the full-resolution compare composite. Already off-thread: Review preview and admission, Photo prepare/submit/promotion/result thumbnails, batch repository reads. Fix direction: audit P4-7.
+- **D5 blocking work on the Tk thread** [A, V]: PR-GUI-UX-580 moved the Photo baseline save (debounced, ordered, conditional; section 6.6), the Photo asset list and per-photo sidecar reads, plan preparation's asset reads, the Review folder scan, per-image metadata and ADetailer-pair lookup, and the comparison composite off Tk. Still on the Tk thread: (a) `AppController.get_review_reprocess_effective_settings_preview` (Tk-bound `_build_reprocess_config`; `AppController` is at its line ceiling, so it was not touched); (b) Photo archive/restore, Interrogate, and Review feedback save; (c) `HistoryIterateService.edit_in_review` hashes the recorded image synchronously (History's own Replace/Cancel flow is synchronous, so moving it off Tk would change that contract; recorded rather than changed by PR-GUI-UX-580). Already off-thread: Review preview and admission, Photo prepare/submit/promotion/result thumbnails, batch repository reads. Fix direction: audit P4-7.
 - **D6 background-work patterns** [A, V]: these surfaces use four: `BackgroundTaskCoordinator` (Review), `BackgroundWorkRunner` (Batches), `ThreadPoolExecutor` polled with `after(50)` (Photo tab workspace and operations, result previews), and `ThreadRegistry.spawn` per thumbnail (one non-daemon thread per decode, no pool, no cache). The architecture baseline in `tools/ci/` caps raw and daemon threads but does not unify the patterns.
 - **D10 polish** [V]: the tab and window titles are corrected (PR-GUI-410: "Photo Optimize", "StableNew"); the import file dialog title in `photo_optimize_tab_frame_v2.py` still says "Photo Optomize". `ReviewTabFrame` has 52 `messagebox.show*`/`ask*` call sites, including a modal "Saved" after each feedback save [V count of call sites].
 
@@ -305,7 +334,7 @@ Other traps found while reading:
 - Three independent default tables for the same stages: `ReprocessJobBuilder.DEFAULT_STAGE_VALUES`, Photo `FIELDS` fallbacks, and the executor's own fallbacks (see `IMAGE_PIPELINE.md` section 11). For example img2img defaults to 15 steps in the builder but 20 in Photo `FIELDS` [V].
 - `prepare_photo_plan` has a filesystem side effect: its `output_dir_factory` calls `PhotoOptimizeStore.create_staging_run_dir`, so previewing a plan that is never submitted leaves empty `staging_runs/` directories [V].
 - Photo history is recorded only by the in-process completion handler for COMPLETED jobs; no code reconciles a job that finished while the app was closed [V: `record_optimize_history` has one caller].
-- Persistence is not on `src/utils/atomic_io.py` [V]: `PhotoOptimizeStore.save_asset` writes a temp file and `Path.replace` without fsync or the Windows retry; `write_review_sidecar` uses plain `write_text`. The audit (B4) lists the photo store as already safe [A]; that is only partly true. `PhotoOptimizeStore._read_asset` returns `None` on any exception, so a corrupt sidecar silently disappears from the list.
+- Persistence: `PhotoOptimizeStore.save_asset` now writes through `src/utils/atomic_io.py` under the per-asset lock (PR-GUI-UX-580); `write_review_sidecar` still uses plain `write_text` [V]. The audit (B4) lists the photo store as already safe [A]; that is only partly true. `PhotoOptimizeStore._read_asset` returns `None` on any exception, so a corrupt sidecar silently disappears from the list.
 - `write_png_metadata` / `write_jpg_metadata` swallow every exception and return `False`; `write_portable_review_metadata` then falls back to the sidecar file. Both are best-effort.
 - `decode_payload` gunzips without a size bound (audit B11 [A]); Review opens arbitrary user files with it.
 - `AppController` (ceiling 7,307 lines, `tools/ci/controller_surface_baseline.json`) still hosts the Review/reprocess/image-edit/Photo entry points and `_extract_reprocess_baseline_from_image`; do not grow it. New logic goes into the service modules above.
@@ -326,6 +355,7 @@ Configuration is `pyproject.toml` only. Run focused tests first, then `python to
 | Batches view | `tests/gui_v2/test_batch_operations_session_201.py`, `tests/gui_v2/test_batch_operations_view_201.py`, `tests/gui_v2/test_batch_operations_review_handoff_201.py` | Session tested without Tk |
 | Photo store, settings, migration, editing, promotion | `tests/photo_optimize/` (`test_photo_220.py`, `test_photo_optimize_store.py`, `test_migration_recovery_221.py`, `test_scope_editing_222.py`, `test_historical_results_223.py`) | Temp workspace roots; never the operator workspace |
 | Photo tab | `tests/gui_v2/test_photo_optimize_tab_v2.py`, `tests/gui_v2/test_photo_scope_222.py`, `tests/gui_v2/test_photo_results_223.py` | Headless projection where possible |
+| Quick Edit / Managed Photo Set (PR-GUI-UX-580) | `tests/gui_v2/test_review_async_580.py`, `tests/gui_v2/test_photo_baseline_save_580.py`, `tests/gui_v2/test_photo_save_gui_580.py`, `tests/gui_v2/test_edit_handoff_580.py`, `tests/photo_optimize/test_managed_import_580.py` | `tests/gui_v2/edit_work_helpers.py` (`ManualRegistry` runs a worker when the test says; `HeldDelivery` holds the UI-thread delivery so a result can arrive after the operator moved on); the autouse `inline_edit_work` fixture in `tests/gui_v2/conftest.py` runs this work inline everywhere else |
 | Thumbnails | `tests/gui_v2/test_thumbnail_widget_v2.py`, `tests/gui_v2/test_thumbnail_tooltip_recovery_111.py` | Fake loader |
 | Metadata contract and review stamping | `tests/utils/test_image_metadata_contract.py`, `tests/review/test_review_metadata_service.py`, `tests/review/test_artifact_metadata_inspector.py` | Synthetic PNG/JPEG |
 

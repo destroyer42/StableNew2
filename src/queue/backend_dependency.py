@@ -50,6 +50,9 @@ class DependencyAssessment:
     reason: str
     #: Every enabled stage is proven GPU-free. ``INDEPENDENT_VIDEO`` is independent of the WebUI, not of the GPU.
     gpu_free: bool = False
+    #: The frozen WebUI-family image backend identity (``forge_webui`` / ``a1111_webui``) a ``REQUIRES_WEBUI`` image
+    #: job executes on, from its record only. Empty for every other kind of work.
+    webui_backend_id: str = ""
 
     @property
     def held_by_webui_outage(self) -> bool:
@@ -100,8 +103,11 @@ def _classify_dependency(
         if not stages <= _IMAGE_STAGES:
             return DependencyAssessment(unresolved, "unsupported_image_stages")
         # Historical records without an explicit identity resolve exactly as they do at execution (A1111).
-        if resolve_image_backend_id(backend_options) in _WEBUI_IMAGE_BACKENDS:
-            return DependencyAssessment(BackendDependency.REQUIRES_WEBUI, "webui_image_backend")
+        backend_id = resolve_image_backend_id(backend_options)
+        if backend_id in _WEBUI_IMAGE_BACKENDS:
+            return DependencyAssessment(
+                BackendDependency.REQUIRES_WEBUI, "webui_image_backend", webui_backend_id=backend_id
+            )
         return DependencyAssessment(unresolved, "unknown_image_backend")
     if kind == "video":
         if "animatediff" in stages:

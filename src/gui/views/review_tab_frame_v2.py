@@ -26,10 +26,15 @@ from src.gui.theme_v2 import (
 )
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
 from src.gui.view_contracts.pipeline_layout_contract import (
     PRIMARY_CONTROL_MIN_WIDTH,
     get_single_pair_form_column_specs,
     get_two_pane_workspace_column_specs,
+)
+from src.gui.view_contracts.review_selection_contract import (
+    ReviewSelectionRevisions,
+    SelectionToken,
 )
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
@@ -43,14 +48,20 @@ from src.review.adetailer_outcome import (
     build_review_context,
     resolve_adetailer_pair,
 )
-from src.utils.image_metadata import (
-    extract_embedded_metadata,
-    resolve_model_vae_fields,
-    resolve_prompt_fields,
+from src.review.workspace_io import (
+    MAX_FOLDER_IMAGES,
+    CompareImageError,
+    FolderScan,
+    ImageContext,
+    PreparedCompare,
+    load_image_context,
+    prepare_compare,
+    scan_image_folder,
 )
+from src.utils.image_metadata import extract_embedded_metadata
 
 try:
-    from PIL import Image, ImageTk
+    from PIL import ImageTk
 
     PIL_AVAILABLE = True
 except ImportError:
@@ -124,6 +135,14 @@ class ReviewTabFrame(ttk.Frame):
             getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
         self._pending_visibility_refresh = False
+        # PR-GUI-UX-580: blocking file work runs on a worker; every result carries the selection revision it was
+        # requested under and is dropped when a newer selection, handoff or image request has superseded it.
+        self._revisions = ReviewSelectionRevisions()
+        self._work = build_edit_work_runner(self)
+        self._image_ready = False
+        self._pending_overlay: tuple[ReviewWorkspaceHandoff, Path] | None = None
+        self._edited_since_selection = False
+        self._confirm_replace_hook: Any = None
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
@@ -149,8 +168,8 @@ class ReviewTabFrame(ttk.Frame):
         self.stage_upscale_var.trace_add("write", lambda *_: self._refresh_effective_settings())
         self.klein_edit_var.trace_add("write", lambda *_: self._on_klein_edit_toggled())
         self.klein_edit_var.trace_add("write", lambda *_: self._refresh_effective_settings())
-        self.prompt_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
-        self.negative_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
+        self.prompt_text.bind("<KeyRelease>", lambda _e: self._on_prompt_edited())
+        self.negative_text.bind("<KeyRelease>", lambda _e: self._on_prompt_edited())
         self._set_readonly_text(self.current_prompt_text, "")
         self._set_readonly_text(self.current_negative_text, "")
         self._sync_edit_box_to_mode("prompt")
@@ -217,12 +236,25 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.send_video_button.grid(row=0, column=5, sticky="w", padx=(6, 0))
 
+        self.manage_photos_button = ttk.Button(
+            header,
+            text="Manage Selected Photos…",
+            style="Dark.TButton",
+            command=self._on_manage_selected_photos,
+        )
+        self.manage_photos_button.grid(row=0, column=6, sticky="w", padx=(6, 0))
+        attach_tooltip(
+            self.manage_photos_button,
+            "Offer the highlighted images to the Managed Photo Set (persistent per-photo settings and results). "
+            "Nothing is copied until you confirm there; Review keeps its selection and edits.",
+        )
+
         self.selection_label = ttk.Label(
             header,
             text="No images selected",
             style="Dark.TLabel",
         )
-        self.selection_label.grid(row=0, column=6, sticky="e")
+        self.selection_label.grid(row=0, column=7, sticky="e")
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
 
         self.workflow_hint_label = ttk.Label(
@@ -230,7 +262,7 @@ class ReviewTabFrame(ttk.Frame):
             text=self._default_workflow_hint,
             style="Dark.TLabel",
         )
-        self.workflow_hint_label.grid(row=1, column=0, columnspan=7, sticky="ew", pady=(6, 0))
+        self.workflow_hint_label.grid(row=1, column=0, columnspan=8, sticky="ew", pady=(6, 0))
         bind_wraplength(self.workflow_hint_label)
         self.action_help_panel = ActionExplainerPanel(
             header,
@@ -238,7 +270,7 @@ class ReviewTabFrame(ttk.Frame):
             app_state=self.app_state,
             wraplength=980,
         )
-        self.action_help_panel.grid(row=2, column=0, columnspan=7, sticky="ew", pady=(8, 0))
+        self.action_help_panel.grid(row=2, column=0, columnspan=8, sticky="ew", pady=(8, 0))
         self.import_selected_tooltip = attach_tooltip(
             self.import_selected_button,
             "Move the selected reviewed images into Learning staged curation. This records them as evidence candidates; it does not queue a new reprocess job by itself.",
@@ -573,9 +605,12 @@ class ReviewTabFrame(ttk.Frame):
         ttk.Label(batch_row, text="(groups by compatible settings)", style="Dark.TLabel").pack(
             side="left", padx=(8, 0)
         )
-        ttk.Checkbutton(batch_row, text="Order new batch by checkpoint/profile",
-                        variable=self.group_by_model_var,
-                        style="Dark.TCheckbutton").pack(side="left", padx=8)
+        ttk.Checkbutton(
+            batch_row,
+            text="Order new batch by checkpoint/profile",
+            variable=self.group_by_model_var,
+            style="Dark.TCheckbutton",
+        ).pack(side="left", padx=8)
         batch_help_btn = ttk.Button(
             batch_row,
             text="?",
@@ -595,15 +630,21 @@ class ReviewTabFrame(ttk.Frame):
         edit_row.columnconfigure((0, 1), weight=1, uniform="image_edit")
         self._smart_enablement: Any = None
         self.edit_mask_button = ttk.Button(
-            edit_row, text="Edit Mask…", command=self._open_mask_editor,
+            edit_row,
+            text="Edit Mask…",
+            command=self._open_mask_editor,
         )
         self.edit_mask_button.grid(row=0, column=0, sticky="ew", padx=(0, 3))
         self.extend_canvas_button = ttk.Button(
-            edit_row, text="Extend Canvas…", command=self._open_outpaint_editor,
+            edit_row,
+            text="Extend Canvas…",
+            command=self._open_outpaint_editor,
         )
         self.extend_canvas_button.grid(row=0, column=1, sticky="ew", padx=(3, 0))
         self.smart_review_button = ttk.Button(
-            edit_row, text="Smart Review…", command=self._open_smart_review,
+            edit_row,
+            text="Smart Review…",
+            command=self._open_smart_review,
         )
         self.smart_review_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
         attach_tooltip(
@@ -755,9 +796,15 @@ class ReviewTabFrame(ttk.Frame):
         )
         self._adetailer_outcome_widgets: list[tk.Widget] = []
         for row, (label, variable) in enumerate(
-            (("Face", self.adetailer_face_outcome_var), ("Hands", self.adetailer_hands_outcome_var)), start=1
+            (
+                ("Face", self.adetailer_face_outcome_var),
+                ("Hands", self.adetailer_hands_outcome_var),
+            ),
+            start=1,
         ):
-            ttk.Label(outcome, text=label, style="Dark.TLabel").grid(row=row, column=0, sticky="w", padx=(0, 6), pady=(2, 0))
+            ttk.Label(outcome, text=label, style="Dark.TLabel").grid(
+                row=row, column=0, sticky="w", padx=(0, 6), pady=(2, 0)
+            )
             combo = ttk.Combobox(
                 outcome,
                 textvariable=variable,
@@ -815,17 +862,76 @@ class ReviewTabFrame(ttk.Frame):
         folder = filedialog.askdirectory(title="Select folder with images")
         if not folder:
             return
+        # The dialog and this capture stay on the UI thread; the recursive walk runs on a worker, a newer folder
+        # request (or any other accepted selection) supersedes it, and nothing is published until it is current.
         root = Path(folder)
-        paths = sorted(
-            [
-                p
-                for p in root.rglob("*")
-                if p.is_file() and p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
-            ]
+        token = self._revisions.begin_folder_scan()
+        revisions = self._revisions
+        self.selection_label.config(text=f"Scanning {root.name or root} for images...")
+        self._work.submit(
+            "review:folder-scan",
+            lambda: scan_image_folder(
+                root, is_cancelled=lambda: not revisions.is_current_folder_scan(token)
+            ),
+            on_result=lambda scan: self._publish_folder_scan(token, scan),
+            on_error=lambda exc: self._folder_scan_failed(token, root, exc),
+            name="review-folder-scan",
+            purpose="Enumerate a Review folder without blocking Tk",
         )
-        self._set_selected_images(paths)
+
+    def _restore_selection_label(self) -> None:
+        count = len(self.selected_images)
+        self.selection_label.config(
+            text=f"{count} image(s) selected" if count else "No images selected"
+        )
+
+    def _publish_folder_scan(self, token: SelectionToken, scan: FolderScan) -> None:
+        if not self._revisions.is_current_folder_scan(token) or scan.cancelled:
+            return
+        self._restore_selection_label()
+        skipped = (
+            f" {len(scan.unreadable)} folder(s) could not be read and were skipped."
+            if scan.unreadable
+            else ""
+        )
+        if scan.too_many:
+            self.workflow_hint_label.config(
+                text=(
+                    f"{scan.root} holds more than {MAX_FOLDER_IMAGES:,} images, so nothing was loaded. "
+                    "Choose a subfolder."
+                )
+            )
+            return
+        if not scan.paths:
+            self.workflow_hint_label.config(
+                text=(
+                    f"No PNG, JPEG or WebP images were found under {scan.root}; "
+                    f"Review's selection was left as it was.{skipped}"
+                )
+            )
+            return
+        self._set_selected_images(list(scan.paths))
+        if skipped:
+            self.workflow_hint_label.config(text=f"Loaded {len(scan.paths)} image(s).{skipped}")
+
+    def _folder_scan_failed(self, token: SelectionToken, root: Path, error: Exception) -> None:
+        if not self._revisions.is_current_folder_scan(token):
+            return
+        self._restore_selection_label()
+        reason = getattr(error, "strerror", None) or type(error).__name__
+        self.workflow_hint_label.config(text=f"Could not scan {root}: {reason}")
+
+    def _begin_selection_context(self, handoff: ReviewWorkspaceHandoff | None) -> None:
+        """An incoming selection was accepted: outstanding work of the old context is stale, its claims are gone."""
+
+        self._revisions.accept_selection()
+        self._active_handoff = handoff
+        self._pending_overlay = None
+        self._edited_since_selection = False
 
     def _on_clear(self) -> None:
+        self._begin_selection_context(None)
+        self._image_ready = False
         self.selected_images = []
         self._image_index_by_row = []
         self.images_list.delete(0, tk.END)
@@ -834,28 +940,59 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path = None
+        self._adetailer_pair = None
+        self._set_adetailer_controls(False)
         self._reset_mode_edits_for_current_image()
         self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
         self.preview.clear()
-        self._active_handoff = None
         self._compare_mode = "single"
         self._effective_settings_var.set("Effective settings: select an image")
         self._prior_review_summary_var.set("Prior Review Summary: none")
         self.workflow_hint_label.config(text=self._default_workflow_hint)
 
-    def load_staged_curation_handoff(self, handoff: ReviewWorkspaceHandoff) -> None:
+    def _confirm_replace(self, title: str, message: str) -> bool:
+        hook = self._confirm_replace_hook
+        if callable(hook):
+            return bool(hook(title, message))
+        return bool(messagebox.askyesno(title, message, parent=self))
+
+    def _confirm_incoming_replacement(self) -> bool:
+        """Replace/Cancel, the History handoff's convention, for an incoming selection over unsent Review work."""
+
+        if not self.has_unsent_edits():
+            return True
+        return self._confirm_replace(
+            "Replace Review selection?",
+            "Review already holds a selection or edits that have not been queued. "
+            "Replace them with the incoming images?",
+        )
+
+    def load_staged_curation_handoff(
+        self, handoff: ReviewWorkspaceHandoff, *, confirmed: bool = False
+    ) -> bool:
+        """Load a handoff as Review's selection; False when the operator declined to replace unsent work."""
+
         image_paths = [Path(path) for path in list(handoff.image_paths or [])]
         if not image_paths:
             raise ValueError("No staged-curation images were provided for Review handoff")
+        if not confirmed and not self._confirm_incoming_replacement():
+            return False
 
-        self._active_handoff = handoff
-        self._set_selected_images(image_paths)
+        self._begin_selection_context(handoff)
+        self._apply_selection(image_paths)
+        if self._selected_image_path is not None:
+            self._pending_overlay = (handoff, self._selected_image_path)
         self.workflow_hint_label.config(text=get_review_handoff_hint(len(image_paths)))
 
         self.stage_img2img_var.set(bool(handoff.stage_img2img))
         self.stage_adetailer_var.set(bool(handoff.stage_adetailer))
         self.stage_upscale_var.set(bool(handoff.stage_upscale))
+        self._apply_handoff_overlay(handoff)
+        return True
+
+    def _apply_handoff_overlay(self, handoff: ReviewWorkspaceHandoff) -> None:
+        """The handoff's baseline and prompt edits over the image's own baseline (re-applied once its metadata lands)."""
 
         self._selected_base_prompt = str(handoff.base_prompt or self._selected_base_prompt or "")
         self._selected_base_negative_prompt = str(
@@ -888,23 +1025,26 @@ class ReviewTabFrame(ttk.Frame):
         self._refresh_prompt_diff()
 
     def has_unsent_edits(self) -> bool:
-        """Whether Review holds a selection or prompt edit that a History hand-off would replace."""
+        """Whether Review holds a selection or prompt edit that an incoming handoff would replace."""
 
         if self.selected_images:
             return True
-        return bool(self._get_text(self.prompt_text).strip() or self._get_text(self.negative_text).strip())
+        return bool(
+            self._get_text(self.prompt_text).strip() or self._get_text(self.negative_text).strip()
+        )
 
-    def load_history_iterate_handoff(self, handoff: ReviewWorkspaceHandoff) -> None:
+    def load_history_iterate_handoff(self, handoff: ReviewWorkspaceHandoff) -> bool:
         """Load one recorded History image as the input of a new reprocess task (PR-HISTORY-610A).
 
         Stages start unselected and nothing is queued; the handoff's ``history_iterate`` identity rides along in
-        ``source_metadata_by_path`` and is verified against the file again when the batch is prepared.
+        ``source_metadata_by_path`` and is verified against the file again when the batch is prepared. History's
+        service has already asked Replace/Cancel, so this entry point does not ask a second time.
         """
 
         paths = list(handoff.image_paths or [])
         if handoff.source != "history_iterate" or len(paths) != 1:
             raise ValueError("A History hand-off carries exactly one recorded image")
-        self.load_staged_curation_handoff(handoff)
+        self.load_staged_curation_handoff(handoff, confirmed=True)
         meta = self._lookup_handoff_source_metadata(Path(paths[0])) or {}
         job_id = str(meta.get("source_job_id") or "")
         self.workflow_hint_label.config(
@@ -915,28 +1055,41 @@ class ReviewTabFrame(ttk.Frame):
             )
             + "Choose the stages, then Preview; nothing is queued until you confirm."
         )
+        return True
 
     def load_selected_images(
-        self, image_paths: Sequence[str | Path], *, status_message: str | None = None
+        self,
+        image_paths: Sequence[str | Path],
+        *,
+        status_message: str | None = None,
+        confirmed: bool = False,
     ) -> int:
         """Select existing images in Review, in the given order (the Select Images picker's behavior).
 
-        Used by explicit "Open in Review" hand-offs (for example from Queue/History batches). It only changes
-        the selection, exactly as the Select Images picker does (the first image is shown with its own baseline
-        prompt); stage toggles are untouched, and a previous staged-curation hand-off's source metadata is
-        dropped so it cannot attach to unrelated images. Nothing is queued.
+        Used by explicit "Open in Review" hand-offs (for example from Queue/History batches or Photo Optimize).
+        It only changes the selection, exactly as the Select Images picker does (the first image is shown with its
+        own baseline prompt); stage toggles are untouched, and a previous hand-off's source metadata is dropped so
+        it cannot attach to unrelated images. Replacing unsent Review work asks Replace/Cancel first; Cancel
+        returns 0 and leaves everything as it was. Nothing is queued.
         """
 
         paths = [Path(path) for path in image_paths]
         if not paths:
             raise ValueError("No images were provided for Review")
-        self._active_handoff = None
+        if not confirmed and not self._confirm_incoming_replacement():
+            return 0
         self._set_selected_images(paths)
         if status_message:
             self.workflow_hint_label.config(text=status_message)
         return len(self.selected_images)
 
     def _set_selected_images(self, paths: list[Path]) -> None:
+        """Accept ``paths`` as a new manual selection (its own context: no earlier handoff claim applies)."""
+
+        self._begin_selection_context(None)
+        self._apply_selection(paths)
+
+    def _apply_selection(self, paths: list[Path]) -> None:
         deduped: list[Path] = []
         seen: set[str] = set()
         for path in paths:
@@ -966,21 +1119,27 @@ class ReviewTabFrame(ttk.Frame):
             return
         self._show_image(self._image_index_by_row[idx])
 
-    def _refresh_adetailer_pair(self, path: Path) -> None:
+    def _set_adetailer_controls(self, enabled: bool) -> None:
         """Enable the before/after tools only for an ADetailer output whose source image is verified."""
-        self._adetailer_pair = resolve_adetailer_pair(path)
-        enabled = self._adetailer_pair is not None
+
         self.adetailer_face_outcome_var.set(OUTCOME_LABELS["unreviewed"])
         self.adetailer_hands_outcome_var.set(OUTCOME_LABELS["unreviewed"])
         self.adetailer_outcome_note_var.set("")
         for widget in self._adetailer_outcome_widgets:
-            widget.configure(state=("readonly" if isinstance(widget, ttk.Combobox) else "normal") if enabled else "disabled")
+            widget.configure(
+                state=("readonly" if isinstance(widget, ttk.Combobox) else "normal")
+                if enabled
+                else "disabled"
+            )
         self._adetailer_compare_button.configure(state="normal" if enabled else "disabled")
 
     def _open_adetailer_compare(self) -> None:
         pair = self._adetailer_pair
         if pair is None:
-            messagebox.showinfo("ADetailer Before/After", "No verified ADetailer source image for the selected image.")
+            messagebox.showinfo(
+                "ADetailer Before/After",
+                "No verified ADetailer source image for the selected image.",
+            )
             return
         self._compare_mode = "single"
         self._render_compare_viewer(
@@ -990,44 +1149,104 @@ class ReviewTabFrame(ttk.Frame):
             labels=("Before (sent to ADetailer)", "After (ADetailer output)"),
         )
 
-    def _show_image(self, path: Path) -> None:
-        self._selected_image_path = path
-        self._refresh_adetailer_pair(path)
-        self.preview.set_image_from_path(path)
-        self._refresh_prior_review_summary(path)
-        result = extract_embedded_metadata(path)
-        if result.status != "ok" or not isinstance(result.payload, dict):
-            self.meta_label.config(text=f"Metadata: {result.status}")
-            self._selected_base_prompt = ""
-            self._selected_base_negative_prompt = ""
-            self._reset_mode_edits_for_current_image()
-            self._apply_content_visibility_mode()
-            self._refresh_prompt_diff()
-            return
+    def _on_prompt_edited(self) -> None:
+        self._edited_since_selection = True
+        self._refresh_prompt_diff()
 
-        stage_manifest = result.payload.get("stage_manifest", {})
-        if not isinstance(stage_manifest, dict):
-            stage_manifest = {}
-        generation = result.payload.get("generation", {})
-        if not isinstance(generation, dict):
-            generation = {}
-        resolved_prompt, resolved_negative_prompt = resolve_prompt_fields(result.payload)
-        model, vae = resolve_model_vae_fields(result.payload)
-        preview_prompt = str(resolved_prompt).strip()
-        if len(preview_prompt) > 120:
-            preview_prompt = f"{preview_prompt[:117]}..."
-        self._selected_base_prompt = resolved_prompt
-        self._selected_base_negative_prompt = resolved_negative_prompt
+    def _prior_summary_getter(self) -> Any:
+        controller = self._resolve_learning_controller()
+        getter = (
+            getattr(controller, "get_prior_review_summary", None)
+            if controller is not None
+            else None
+        )
+        return getter if callable(getter) else None
+
+    def _show_image(self, path: Path) -> None:
+        """Show ``path`` now (preview) and fill its metadata when the worker finishes, if it is still the latest."""
+
+        token = self._revisions.begin_image(str(path))
+        overlay = self._pending_overlay
+        if overlay is not None and overlay[1] != path:
+            self._pending_overlay = None
+        self._selected_image_path = path
+        self._image_ready = False
+        self._edited_since_selection = False
+        self._adetailer_pair = None
+        self._set_adetailer_controls(False)
+        self.preview.set_image_from_path(path)
+        self.meta_label.config(text="Metadata: loading...")
+        self._prior_review_summary_var.set("Prior Review Summary: loading...")
+        self._selected_base_prompt = ""
+        self._selected_base_negative_prompt = ""
         self._reset_mode_edits_for_current_image()
         self._apply_content_visibility_mode()
+        getter = self._prior_summary_getter()
+        self._work.submit(
+            "review:image-context",
+            lambda: load_image_context(
+                path,
+                prior_summary_getter=getter,
+                extract_metadata=extract_embedded_metadata,
+                resolve_pair=resolve_adetailer_pair,
+            ),
+            on_result=lambda context: self._publish_image_context(token, context),
+            on_error=lambda exc: self._image_context_failed(token, exc),
+            name="review-image-context",
+            purpose="Read embedded metadata and prior review for the selected Review image",
+        )
+
+    def _publish_image_context(self, token: SelectionToken, context: ImageContext) -> None:
+        if not self._revisions.is_current_image(token) or self._selected_image_path != context.path:
+            return
+        self._image_ready = True
+        self._adetailer_pair = context.adetailer_pair
+        self._set_adetailer_controls(context.adetailer_pair is not None)
+        if context.prior_summary_available:
+            self._prior_review_summary_var.set(
+                self._format_prior_review_summary(context.prior_summary)
+            )
+        else:
+            self._prior_review_summary_var.set("Prior Review Summary: unavailable")
+        overlay, self._pending_overlay = self._pending_overlay, None
+        if context.metadata_ok:
+            self._selected_base_prompt = context.prompt
+            self._selected_base_negative_prompt = context.negative_prompt
+        else:
+            self._selected_base_prompt = ""
+            self._selected_base_negative_prompt = ""
+        if not self._edited_since_selection:
+            self._reset_mode_edits_for_current_image()
+            if overlay is not None:
+                self._apply_handoff_overlay(overlay[0])
+        elif overlay is not None:
+            self._selected_base_prompt = str(overlay[0].base_prompt or self._selected_base_prompt)
+            self._selected_base_negative_prompt = str(
+                overlay[0].base_negative_prompt or self._selected_base_negative_prompt
+            )
+        self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
+        if not context.metadata_ok:
+            self.meta_label.config(text=f"Metadata: {context.metadata_status}")
+            return
+        preview_prompt = context.prompt.strip()
+        if len(preview_prompt) > 120:
+            preview_prompt = f"{preview_prompt[:117]}..."
         resolver = self._visibility_resolver()
         self.meta_label.config(
             text=(
-                f"Metadata: ok | model={model or 'n/a'} | vae={vae or 'n/a'}\n"
+                f"Metadata: ok | model={context.model or 'n/a'} | vae={context.vae or 'n/a'}\n"
                 f"Prompt: {resolver.redact_text(preview_prompt, item=self._current_visibility_subject()) or '(empty)'}"
             )
         )
+
+    def _image_context_failed(self, token: SelectionToken, error: Exception) -> None:
+        if not self._revisions.is_current_image(token):
+            return
+        self._image_ready = True
+        self._prior_review_summary_var.set("Prior Review Summary: unavailable")
+        self.meta_label.config(text=f"Metadata: unavailable ({type(error).__name__})")
+        self._refresh_prompt_diff()
 
     def _refresh_prior_review_summary(self, image_path: Path) -> None:
         learning_controller = self._resolve_learning_controller()
@@ -1248,26 +1467,28 @@ class ReviewTabFrame(ttk.Frame):
         title_prefix: str = "Large Compare",
         labels: tuple[str, str] = ("Source", "Latest derived"),
     ) -> None:
-        try:
-            with Image.open(image_path) as image:
-                left_image = image.convert("RGBA")
-            if secondary_path is not None:
-                with Image.open(secondary_path) as image:
-                    right_image = image.convert("RGBA")
-                gutter = 24
-                image_width = left_image.size[0] + right_image.size[0] + gutter
-                image_height = max(left_image.size[1], right_image.size[1])
-                composite = Image.new("RGBA", (image_width, image_height), (20, 20, 20, 255))
-                composite.paste(left_image, (0, 0))
-                composite.paste(right_image, (left_image.size[0] + gutter, 0))
-                photo = ImageTk.PhotoImage(composite)
-            else:
-                image_width, image_height = left_image.size
-                photo = ImageTk.PhotoImage(left_image)
-        except Exception as exc:
-            messagebox.showerror("Viewer failed", f"Failed to open image: {exc}")
-            return
+        """Open or refresh the viewer now and fill it when the worker's bounded decode finishes (latest wins)."""
 
+        token = self._revisions.begin_compare(str(image_path))
+        compare_label = f"{labels[0]}: {image_path.name}"
+        if secondary_path is not None:
+            compare_label += f"    {labels[1]}: {secondary_path.name}"
+        status = tk.StringVar(master=self, value=f"{compare_label}    Loading...")
+        viewer, canvas = self._build_compare_shell(f"{title_prefix} - {image_path.name}", status)
+        self._work.submit(
+            "review:compare",
+            lambda: prepare_compare(image_path, secondary_path),
+            on_result=lambda prepared: self._publish_compare(
+                token, viewer, canvas, status, compare_label, prepared
+            ),
+            on_error=lambda exc: self._compare_failed(token, status, exc),
+            name="review-compare",
+            purpose="Decode and composite the Review comparison image without blocking Tk",
+        )
+
+    def _build_compare_shell(
+        self, title: str, status: tk.StringVar
+    ) -> tuple[tk.Toplevel, tk.Canvas]:
         if self._compare_window and self._compare_window.winfo_exists():
             viewer = self._compare_window
             for child in viewer.winfo_children():
@@ -1280,7 +1501,12 @@ class ReviewTabFrame(ttk.Frame):
             viewer.bind("<Right>", lambda _event: self._show_next_image_and_refresh_viewer())
             viewer.bind("<Escape>", lambda _event: viewer.destroy())
 
-        viewer.title(f"{title_prefix} - {image_path.name}")
+            def on_destroy(event: tk.Event, window: tk.Toplevel = viewer) -> None:
+                self._on_compare_closed(event, window)
+
+            viewer.bind("<Destroy>", on_destroy, add="+")
+
+        viewer.title(title)
         viewer.transient(self.winfo_toplevel())
         viewer.resizable(True, True)
         viewer.minsize(720, 520)
@@ -1307,12 +1533,9 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabel",
         ).pack(side="left", padx=(12, 0))
 
-        compare_label = f"{labels[0]}: {image_path.name}"
-        if secondary_path is not None:
-            compare_label += f"    {labels[1]}: {secondary_path.name}"
         ttk.Label(
             frame,
-            text=compare_label,
+            textvariable=status,
             style="Dark.TLabel",
             justify="left",
         ).grid(row=1, column=0, sticky="w", pady=(0, 6))
@@ -1327,15 +1550,58 @@ class ReviewTabFrame(ttk.Frame):
         h_scroll.grid(row=3, column=0, sticky="ew")
 
         self._compare_canvas = canvas
+        self._compare_photo = None
+        viewer.lift()
+        viewer.focus_force()
+        return viewer, canvas
+
+    def _on_compare_closed(self, event: tk.Event, window: tk.Toplevel) -> None:
+        if event.widget is not window:
+            return  # a child widget of the viewer was rebuilt; the viewer itself is still open
+        self._revisions.close_compare()
+        if self._compare_window is window:
+            self._compare_window = None
+            self._compare_canvas = None
+            self._compare_photo = None
+
+    def _publish_compare(
+        self,
+        token: SelectionToken,
+        viewer: tk.Toplevel,
+        canvas: tk.Canvas,
+        status: tk.StringVar,
+        compare_label: str,
+        prepared: PreparedCompare,
+    ) -> None:
+        if not self._revisions.is_current_compare(token) or self._compare_canvas is not canvas:
+            return
+        if not viewer.winfo_exists():
+            return
+        image_width, image_height = prepared.image.size
+        photo = ImageTk.PhotoImage(prepared.image)
         self._compare_photo = photo
         canvas.create_image(0, 0, image=photo, anchor="nw")
         canvas.configure(scrollregion=(0, 0, image_width, image_height))
-
+        status.set(
+            compare_label
+            + ("    (scaled to fit; the files are unchanged)" if prepared.scaled else "")
+        )
         width = min(max(image_width + 60, 960), int(viewer.winfo_screenwidth() * 0.92))
         height = min(max(image_height + 120, 720), int(viewer.winfo_screenheight() * 0.92))
         viewer.geometry(f"{width}x{height}")
-        viewer.lift()
-        viewer.focus_force()
+
+    def _compare_failed(
+        self, token: SelectionToken, status: tk.StringVar, error: Exception
+    ) -> None:
+        if not self._revisions.is_current_compare(token):
+            return
+        reason = str(error) if isinstance(error, CompareImageError) else f"{type(error).__name__}"
+        status.set(f"Comparison unavailable: {reason}")
+
+    def destroy(self) -> None:
+        self._work.close()
+        self._revisions.close_compare()
+        super().destroy()
 
     def _show_previous_image_and_refresh_viewer(self) -> None:
         self._step_selected_image(-1)
@@ -1499,10 +1765,14 @@ class ReviewTabFrame(ttk.Frame):
 
         paths = self._get_selected_review_paths()
         if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-            messagebox.showwarning("Edit Mask", "Select exactly one PNG, JPEG or WebP still image.", parent=self)
+            messagebox.showwarning(
+                "Edit Mask", "Select exactly one PNG, JPEG or WebP still image.", parent=self
+            )
             return
         if self.app_controller is None:
-            messagebox.showwarning("Edit Mask", "The application controller is unavailable.", parent=self)
+            messagebox.showwarning(
+                "Edit Mask", "The application controller is unavailable.", parent=self
+            )
             return
         MaskEditorDialog(self, source_path=paths[0], controller=self.app_controller)
 
@@ -1512,13 +1782,19 @@ class ReviewTabFrame(ttk.Frame):
 
         paths = self._get_selected_review_paths()
         if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-            messagebox.showwarning("Smart Review", "Select exactly one PNG, JPEG or WebP still image.", parent=self)
+            messagebox.showwarning(
+                "Smart Review", "Select exactly one PNG, JPEG or WebP still image.", parent=self
+            )
             return
         if self.app_controller is None:
-            messagebox.showwarning("Smart Review", "The application controller is unavailable.", parent=self)
+            messagebox.showwarning(
+                "Smart Review", "The application controller is unavailable.", parent=self
+            )
             return
         if self._smart_enablement is None:
-            self._smart_enablement = AssistEnablement()  # session-scoped; every capability starts off
+            self._smart_enablement = (
+                AssistEnablement()
+            )  # session-scoped; every capability starts off
         SmartReviewDialog(
             self,
             source_path=paths[0],
@@ -1534,10 +1810,14 @@ class ReviewTabFrame(ttk.Frame):
 
         paths = self._get_selected_review_paths()
         if len(paths) != 1 or paths[0].suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-            messagebox.showwarning("Extend Canvas", "Select exactly one PNG, JPEG or WebP still image.", parent=self)
+            messagebox.showwarning(
+                "Extend Canvas", "Select exactly one PNG, JPEG or WebP still image.", parent=self
+            )
             return
         if self.app_controller is None:
-            messagebox.showwarning("Extend Canvas", "The application controller is unavailable.", parent=self)
+            messagebox.showwarning(
+                "Extend Canvas", "The application controller is unavailable.", parent=self
+            )
             return
         OutpaintDialog(self, source_path=paths[0], controller=self.app_controller)
 
@@ -1551,17 +1831,51 @@ class ReviewTabFrame(ttk.Frame):
                 paths.append(self._image_index_by_row[int(idx)])
         return paths
 
+    def _highlighted_image_paths(self) -> list[Path]:
+        """The Images list's explicit selection in list order (never the merely previewed image)."""
+
+        return [
+            self._image_index_by_row[int(idx)]
+            for idx in self.images_list.curselection()
+            if 0 <= int(idx) < len(self._image_index_by_row)
+        ]
+
+    def _on_manage_selected_photos(self) -> None:
+        """Offer the Listbox's highlighted rows (in list order) to the Managed Photo Set.
+
+        Distinct from Quick Edit: this is an import into persistent managed assets that Photo Optimize plans and
+        the operator confirms. Only file paths travel; Review's selection, edits, History identity and staged
+        hand-off stay exactly as they are, and no lineage is attached to the managed photo."""
+
+        paths = self._highlighted_image_paths()
+        if not paths:
+            messagebox.showinfo(
+                "Manage Selected Photos",
+                "Select one or more images in the Images list first.",
+            )
+            return
+        main_window = getattr(self.app_controller, "main_window", None)
+        if main_window is None:
+            messagebox.showerror("Manage Selected Photos", "The main window is not available.")
+            return
+        from src.gui.controllers.video_workspace_handoff import route_images_to_photo_optimize
+
+        try:
+            route_images_to_photo_optimize(
+                main_window=main_window,
+                image_paths=paths,
+                status_message=f"Checking {len(paths)} image(s) from Quick Edit for the Managed Photo Set...",
+            )
+        except (RuntimeError, ValueError) as exc:
+            messagebox.showerror("Manage Selected Photos", str(exc))
+
     def _on_send_selected_to_video_workflow(self) -> None:
         """Hand the Listbox's highlighted rows (in list order) to the Video Workflow tab.
 
         Uses the explicit selection only: not every imported image and not merely the image
         currently previewed.  Intent transfer only; the Video Workflow tab owns preview/queue."""
 
-        paths = [
-            self._image_index_by_row[int(idx)]
-            for idx in self.images_list.curselection()
-            if 0 <= int(idx) < len(self._image_index_by_row)
-        ]
+        paths = self._highlighted_image_paths()
         if not paths:
             messagebox.showinfo(
                 "Send to Video Workflow",
@@ -1689,6 +2003,10 @@ class ReviewTabFrame(ttk.Frame):
         if image_path is None:
             self._effective_settings_var.set("Effective settings: select an image")
             return
+        if not self._image_ready:
+            # The image's own metadata is still loading off the Tk thread; the summary is built once it is current.
+            self._effective_settings_var.set("Effective settings: loading image details...")
+            return
 
         controller = self.app_controller
         builder = getattr(controller, "get_review_reprocess_effective_settings_preview", None)
@@ -1814,7 +2132,10 @@ class ReviewTabFrame(ttk.Frame):
             self.negative_mode_var.set("replace")
             self.batch_size_var.set(1)
             return
-        snapshot, self._klein_snapshot = self._klein_snapshot, None  # transient: cleared once restored
+        snapshot, self._klein_snapshot = (
+            self._klein_snapshot,
+            None,
+        )  # transient: cleared once restored
         if snapshot is None:
             return
         self.stage_img2img_var.set(snapshot["img2img"])
@@ -1881,15 +2202,22 @@ class ReviewTabFrame(ttk.Frame):
             if callable(preview_batch):
                 from src.gui.review_batch_dialog import ReviewBatchDialog
 
-                source_map = dict(getattr(self._active_handoff, "source_metadata_by_path", {}) or {})
+                source_map = dict(
+                    getattr(self._active_handoff, "source_metadata_by_path", {}) or {}
+                )
                 if klein_edit:
                     source_map = self._workflow_adapter.with_klein_edit_request(source_map, targets)
                 request = {
-                    "image_paths": [str(p) for p in targets], "stages": stages,
-                    "prompt_delta": prompt_delta, "negative_prompt_delta": negative_delta,
+                    "image_paths": [str(p) for p in targets],
+                    "stages": stages,
+                    "prompt_delta": prompt_delta,
+                    "negative_prompt_delta": negative_delta,
                     "prompt_mode": "replace" if klein_edit else self.prompt_mode_var.get(),
-                    "negative_prompt_mode": "replace" if klein_edit else self.negative_mode_var.get(),
-                    "batch_size": batch_size, "source_metadata_by_image": source_map,
+                    "negative_prompt_mode": "replace"
+                    if klein_edit
+                    else self.negative_mode_var.get(),
+                    "batch_size": batch_size,
+                    "source_metadata_by_image": source_map,
                     "group_by_model": bool(self.group_by_model_var.get()),
                 }
 
@@ -1897,16 +2225,20 @@ class ReviewTabFrame(ttk.Frame):
                     if not self.winfo_exists():
                         return
                     ReviewBatchDialog(
-                        self, preview, submit=controller.submit_review_reprocess_batch_async,
+                        self,
+                        preview,
+                        submit=controller.submit_review_reprocess_batch_async,
                         repreview=lambda paths: prepare({**request, "image_paths": paths}),
                         visibility=self._visibility_resolver(),
                     )
 
                 def prepare(payload: dict[str, Any]) -> None:
                     preview_batch(
-                        **payload, on_preview=show,
+                        **payload,
+                        on_preview=show,
                         on_error=lambda exc: messagebox.showerror("Review preview failed", str(exc))
-                        if self.winfo_exists() else None,
+                        if self.winfo_exists()
+                        else None,
                     )
 
                 prepare(request)

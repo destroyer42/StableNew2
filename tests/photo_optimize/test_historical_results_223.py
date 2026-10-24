@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -267,17 +268,25 @@ def test_stale_output_bytes_and_atomic_replace_failure_never_split_snapshot(libr
     result = candidate(store, asset)
     plan = store.prepare_result_promotion(asset.asset_id, result, mode="recorded")
     before = store.sidecar_path(asset.asset_id).read_bytes()
-    actual_replace = Path.replace
+    actual_replace = os.replace
 
     def deny_replace(path, destination):
+        # The sidecar write goes through src.utils.atomic_io (fsync, then os.replace with a Windows retry).
         if Path(destination) == store.sidecar_path(asset.asset_id):
             raise PermissionError("injected atomic replace denial")
         return actual_replace(path, destination)
 
     with monkeypatch.context() as patcher:
-        patcher.setattr(Path, "replace", deny_replace)
+        patcher.setattr("src.utils.atomic_io.os.replace", deny_replace)
+        patcher.setattr("src.utils.atomic_io._REPLACE_BACKOFF_S", 0)
         with pytest.raises(PermissionError):
             store.apply_result_promotion(plan)
+    leftovers = [
+        item.name
+        for item in store.sidecar_path(asset.asset_id).parent.iterdir()
+        if item.suffix == ".tmp"
+    ]
+    assert leftovers == []
     assert store.sidecar_path(asset.asset_id).read_bytes() == before
     picture(Path(result.path), color="yellow")
     with pytest.raises(ValueError, match="(?i)integrity|changed"):

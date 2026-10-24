@@ -587,6 +587,9 @@ class BatchOperationsSession:
                 self._finish(f"No usable image to open in Review. {problems}".strip(), refresh=False)
                 return
             count = self.hooks.open_in_review(resolution.images)
+            if not count:
+                self._finish("Review kept its current work; nothing was opened.", refresh=False)
+                return
             self._finish(f"Opened {count} image(s) in Review. {problems}".strip(), refresh=False)
         elif target == "movie_clips":
             if not resolution.videos:

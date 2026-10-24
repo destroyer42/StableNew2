@@ -120,8 +120,15 @@ class PreparedMap:
     source_path: Path | None = None
 
 
+#: Carried by anything a model child produced on a host that could not enforce the memory limit (IMG-QUAL-330).
+WARNING_MEMORY_UNENFORCED = "model_memory_limit_not_enforced"
+
 #: Operator-facing text for each warning code a map may carry.
 WARNING_TEXT: dict[str, str] = {
+    WARNING_MEMORY_UNENFORCED: (
+        "WARNING: this host could not enforce the 6,144 MB memory limit, so the model ran without one. "
+        "A model that uses too much memory can slow or crash the whole computer; Windows enforces the limit."
+    ),
     "pose_no_hands": "No hands were detected; the map has no hand keypoints.",
     "pose_no_face": "No face keypoints were detected; the map has no face keypoints.",
     "pose_people_truncated": "More people were detected than the map draws; only the most confident were kept.",

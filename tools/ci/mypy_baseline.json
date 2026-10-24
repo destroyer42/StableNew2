@@ -84,7 +84,7 @@
     "src/gui/views/photo_optimize_layout.py": 65,
     "src/gui/views/photo_optimize_results.py": 79,
     "src/gui/views/photo_optimize_scope.py": 55,
-    "src/gui/views/photo_optimize_tab_frame_v2.py": 32,
+    "src/gui/views/photo_optimize_tab_frame_v2.py": 31,
     "src/gui/views/pipeline_tab_frame_v2.py": 3,
     "src/gui/views/prompt_tab_frame_v2.py": 53,
     "src/gui/views/review_tab_frame_v2.py": 9,
@@ -126,9 +126,9 @@
     "src/photo_optimize/editing.py": 20,
     "src/photo_optimize/migration.py": 3,
     "src/photo_optimize/models.py": 2,
-    "src/photo_optimize/results.py": 30,
+    "src/photo_optimize/results.py": 25,
     "src/photo_optimize/settings.py": 3,
-    "src/photo_optimize/store.py": 13,
+    "src/photo_optimize/store.py": 8,
     "src/photo_optimize/submission.py": 6,
     "src/pipeline/cli_njr_builder.py": 4,
     "src/pipeline/config_variant_plan_v2.py": 3,
@@ -179,5 +179,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1509
+  "total": 1498
 }
