@@ -69,7 +69,9 @@ def test_a_delayed_write_for_one_photo_never_lands_on_another(session_env):
     assert store.get_asset(b).baseline.prompt == "prompt for B"
 
 
-def test_a_failed_write_is_never_reported_saved_and_a_later_success_clears_it(session_env, monkeypatch):
+def test_a_failed_write_is_never_reported_saved_and_a_later_success_clears_it(
+    session_env, monkeypatch
+):
     store, (a, _b), registry, session = session_env
     real = store.update_asset_fields
 
@@ -126,7 +128,9 @@ def test_waiters_run_only_after_the_outstanding_write_settles(session_env):
 def test_a_waiter_hears_about_a_failed_write(session_env, monkeypatch):
     store, (a, _b), registry, session = session_env
     monkeypatch.setattr(
-        store, "update_asset_fields", lambda *a_, **k: (_ for _ in ()).throw(ValueError("bad geometry"))
+        store,
+        "update_asset_fields",
+        lambda *a_, **k: (_ for _ in ()).throw(ValueError("bad geometry")),
     )
     session.save(_draft(store, a, "x"))
     outcomes = []
@@ -141,7 +145,9 @@ def test_conditional_write_refuses_without_touching_the_sidecar(tmp_path):
     changed = PhotoOptimizeBaseline.from_dict(store.get_asset(a).baseline.to_dict())
     changed.prompt = "new"
     with pytest.raises(StaleBaselineError):
-        store.update_asset_fields(a, baseline=changed, expected_baseline={"prompt": "not the stored one"})
+        store.update_asset_fields(
+            a, baseline=changed, expected_baseline={"prompt": "not the stored one"}
+        )
     assert store.sidecar_path(a).read_bytes() == before
 
 

@@ -30,7 +30,9 @@ from src.photo_optimize.managed_import import (
 ImportConfirm = Callable[[ManagedImportPlan], str | None]
 
 
-def ask_import_confirmation(plan: ManagedImportPlan, *, parent: tk.Misc | None = None) -> str | None:
+def ask_import_confirmation(
+    plan: ManagedImportPlan, *, parent: tk.Misc | None = None
+) -> str | None:
     """Default confirmation: show the plan; duplicates get an explicit open-existing vs. copy-again choice."""
 
     title = "Manage selected photos"
@@ -46,7 +48,9 @@ def ask_import_confirmation(plan: ManagedImportPlan, *, parent: tk.Misc | None =
         if answer is None:
             return None
         return OPEN_EXISTING if answer else IMPORT_COPY
-    confirmed = messagebox.askokcancel(title, f"{body}\n\nCopy the new image(s) into the managed workspace?", parent=parent)
+    confirmed = messagebox.askokcancel(
+        title, f"{body}\n\nCopy the new image(s) into the managed workspace?", parent=parent
+    )
     return OPEN_EXISTING if confirmed else None
 
 
@@ -88,7 +92,9 @@ class PhotoOptimizeHandoffMixin:
             self.submission_summary_var.set("Nothing to import.\n" + plan.describe())  # type: ignore[attr-defined]
             messagebox.showinfo("Manage selected photos", plan.describe())
             return
-        confirm = self._confirm_import_hook or (lambda value: ask_import_confirmation(value, parent=self))
+        confirm = self._confirm_import_hook or (
+            lambda value: ask_import_confirmation(value, parent=self)
+        )
         duplicates = confirm(plan)
         if duplicates is None:
             self.submission_summary_var.set("Import cancelled; nothing was copied or queued.")  # type: ignore[attr-defined]
@@ -97,9 +103,13 @@ class PhotoOptimizeHandoffMixin:
         defaults = self._build_import_defaults()  # type: ignore[attr-defined]
         self._work.submit(  # type: ignore[attr-defined]
             "photo:managed-import-apply",
-            lambda: apply_managed_import(store, plan, baseline_defaults=defaults, duplicates=duplicates),
+            lambda: apply_managed_import(
+                store, plan, baseline_defaults=defaults, duplicates=duplicates
+            ),
             on_result=self._managed_import_done,
-            on_error=lambda exc: messagebox.showerror("Import failed", f"{type(exc).__name__}: {exc}"),
+            on_error=lambda exc: messagebox.showerror(
+                "Import failed", f"{type(exc).__name__}: {exc}"
+            ),
             name="photo-managed-import-apply",
             purpose="Copy operator-confirmed images into the managed workspace without blocking Tk",
         )

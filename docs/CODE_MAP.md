@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-543 of 697 modules have a docstring.
+556 of 710 modules have a docstring.
 
 ## src/
 
@@ -317,16 +317,19 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Toolkit-agnostic view contracts for GUI surfaces
 - `batch_operations_contract.py`: Toolkit-neutral session for the Queue/History "Batches" view (PR-BATCH-OPS-201)
 - `config_source_contract.py`: Truthful wording for the Pipeline's settings sources, actions and empty states (PR-GUI-UX-500, PR-GUI-UX-520)
+- `edit_work_runner.py`: Keyed, latest-wins background work for the Edit workspaces (Review and Photo Optimize), PR-GUI-UX-580
 - `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
 - `form_section_contract.py`: Form section contract independent of widget framework
 - `history_artifact_contract.py`: Select a recorded History artifact by media type, not by its poster image
 - `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
 - `movie_clips_contract.py`: Movie Clips tab UI normalization helpers
+- `photo_baseline_save_contract.py`: Toolkit-neutral save coordination for the Photo Optimize active-photo baseline (PR-GUI-UX-580)
 - `photo_optimize_layout_contract.py`: Pure fit/placement rules for the Photo Optimize tab (PR-GUI-420)
 - `pipeline_composer_contract.py`: Operator-facing grouping and summaries for the Pipeline composer (PR-GUI-UX-530)
 - `pipeline_layout_contract.py`: Toolkit-agnostic layout contracts for Pipeline tab behavior
 - `prompt_editor_contract.py`: Prompt editor contracts independent of UI toolkit
 - `queue_status_contract.py`: Queue status display contract independent of toolkit
+- `review_selection_contract.py`: Toolkit-neutral revision bookkeeping for Review's asynchronous selection (PR-GUI-UX-580)
 - `selection_list_contract.py`: Selection list contract for deterministic list + selection behavior
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
 - `task_navigation_contract.py`: Task-first navigation contract (PR-GUI-410)
@@ -360,6 +363,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_tab_frame_v2.py`: (no docstring)
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
 - `photo_optimize_editors.py`: Scoped Photo Optimize editing and review widgets; no store writes or queue authority
+- `photo_optimize_handoff.py`: Managed Photo Set hand-offs for the Photo Optimize tab (PR-GUI-UX-580)
 - `photo_optimize_layout.py`: Photo Optimize presentation builders, extracted from the tab without new execution authority
 - `photo_optimize_results.py`: Result browser and read-only thumbnail worker; the existing store owns promotion/revert
 - `photo_optimize_scope.py`: Photo editing/review orchestration in the existing view and worker seams
@@ -542,6 +546,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: (no docstring)
 - `editing.py`: Toolkit-neutral masked draft edits
+- `managed_import.py`: Operator-confirmed import of existing image files into the managed Photo Optimize workspace (PR-GUI-UX-580)
 - `migration.py`: Verified copy-only legacy migration with per-asset recovery
 - `models.py`: (no docstring)
 - `paths.py`: Windows extended paths for managed photo files with long provenance names
@@ -680,6 +685,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `adetailer_outcome.py`: Operator before/after review of an ADetailer output (PR-REFINE-160), carried by the existing Review feedback…
 - `artifact_metadata_inspector.py`: Read-only artifact metadata inspection payload builder
 - `review_metadata_service.py`: Portable review metadata stamping for reviewed image artifacts
+- `workspace_io.py`: Worker-side file work for the Review workspace (PR-GUI-UX-580)
 
 ## src/review/assist/
 

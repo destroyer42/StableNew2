@@ -279,7 +279,9 @@ def apply_edit(store, plan: EditPlan) -> EditResult:
     result = EditResult()
     for row in plan.rows:
         try:
-            with _asset_guard(store, row.asset_id):  # the check and the write are one step for this photo
+            with _asset_guard(
+                store, row.asset_id
+            ):  # the check and the write are one step for this photo
                 if _fingerprint(store, row.asset_id) != row.fingerprint:
                     result.failed[row.asset_id] = "Changed during Apply; preview again"
                     continue

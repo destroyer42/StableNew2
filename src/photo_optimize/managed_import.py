@@ -84,7 +84,9 @@ def plan_managed_import(store: Any, paths: Sequence[str | Path]) -> ManagedImpor
         path = Path(raw)
         text = str(path)
         if path.suffix.lower() not in SUPPORTED_SUFFIXES:
-            rows.append(ImportRow(text, REFUSED, reason="Unsupported image type (PNG, JPEG or WebP only)."))
+            rows.append(
+                ImportRow(text, REFUSED, reason="Unsupported image type (PNG, JPEG or WebP only).")
+            )
             continue
         try:
             stat = path.stat()
@@ -127,7 +129,9 @@ def plan_managed_import(store: Any, paths: Sequence[str | Path]) -> ManagedImpor
 @dataclass
 class ManagedImportResult:
     imported: list[tuple[str, str]] = field(default_factory=list)  # (source path, new asset id)
-    opened_existing: list[tuple[str, str]] = field(default_factory=list)  # (source path, existing asset id)
+    opened_existing: list[tuple[str, str]] = field(
+        default_factory=list
+    )  # (source path, existing asset id)
     failed: list[tuple[str, str]] = field(default_factory=list)  # (source path, reason)
     warnings: list[str] = field(default_factory=list)
 
@@ -167,7 +171,9 @@ def apply_managed_import(
             continue
         try:
             if digest(row.path) != row.sha256:
-                result.failed.append((row.path, "The file changed since you reviewed it; review again."))
+                result.failed.append(
+                    (row.path, "The file changed since you reviewed it; review again.")
+                )
                 continue
             asset = store.import_photo(row.path, baseline_defaults=baseline_defaults)
         except (OSError, ValueError) as exc:

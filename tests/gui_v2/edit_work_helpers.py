@@ -65,7 +65,8 @@ def use_manual_registry(monkeypatch) -> ManualRegistry:
         edit_work_runner,
         "coordinator_factory",
         lambda widget: BackgroundTaskCoordinator(
-            dispatcher=lambda fn: fn(), thread_registry=registry  # type: ignore[arg-type]
+            dispatcher=lambda fn: fn(),
+            thread_registry=registry,  # type: ignore[arg-type]
         ),
     )
     return registry
@@ -83,6 +84,7 @@ def use_held_delivery(monkeypatch) -> HeldDelivery:
 
 def manual_runner(registry: ManualRegistry, *, alive: bool = True) -> EditWorkRunner:
     coordinator = BackgroundTaskCoordinator(
-        dispatcher=lambda fn: fn(), thread_registry=registry  # type: ignore[arg-type]
+        dispatcher=lambda fn: fn(),
+        thread_registry=registry,  # type: ignore[arg-type]
     )
     return EditWorkRunner(coordinator, is_alive=lambda: alive)

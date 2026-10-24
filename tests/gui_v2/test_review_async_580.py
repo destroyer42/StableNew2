@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.review.workspace_io import (
-    CompareImageError,
     MAX_FOLDER_IMAGES,
+    CompareImageError,
     prepare_compare,
     scan_image_folder,
 )
@@ -35,34 +34,42 @@ def _png(path: Path, *, prompt: str | None = None, size=(24, 24), color=(5, 6, 7
 
 @pytest.fixture
 def quiet(monkeypatch):
-    monkeypatch.setattr("src.gui.views.review_tab_frame_v2.messagebox.showinfo", lambda *a, **k: None)
-    monkeypatch.setattr("src.gui.views.review_tab_frame_v2.messagebox.showerror", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "src.gui.views.review_tab_frame_v2.messagebox.showinfo", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "src.gui.views.review_tab_frame_v2.messagebox.showerror", lambda *a, **k: None
+    )
 
 
 def _pick_folder(monkeypatch, folder: Path) -> None:
-    monkeypatch.setattr("src.gui.views.review_tab_frame_v2.filedialog.askdirectory", lambda **_: str(folder))
+    monkeypatch.setattr(
+        "src.gui.views.review_tab_frame_v2.filedialog.askdirectory", lambda **_: str(folder)
+    )
 
 
 def _handoff(path: Path, **overrides):
     from src.gui.controllers.history_iterate_service import HISTORY_ITERATE_SOURCE
     from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff
 
-    fields = dict(
-        source=HISTORY_ITERATE_SOURCE,
-        workflow_title="Edit Image from History",
-        target_stage="",
-        image_paths=[path],
-        base_prompt="",
-        base_negative_prompt="",
-        prompt_delta="",
-        negative_prompt_delta="",
-        prompt_mode="append",
-        negative_prompt_mode="append",
-        stage_img2img=False,
-        stage_adetailer=False,
-        stage_upscale=False,
-        source_metadata_by_path={str(path): {"history_iterate": {"job_id": "j", "choice": "edit_image"}}},
-    )
+    fields = {
+        "source": HISTORY_ITERATE_SOURCE,
+        "workflow_title": "Edit Image from History",
+        "target_stage": "",
+        "image_paths": [path],
+        "base_prompt": "",
+        "base_negative_prompt": "",
+        "prompt_delta": "",
+        "negative_prompt_delta": "",
+        "prompt_mode": "append",
+        "negative_prompt_mode": "append",
+        "stage_img2img": False,
+        "stage_adetailer": False,
+        "stage_upscale": False,
+        "source_metadata_by_path": {
+            str(path): {"history_iterate": {"job_id": "j", "choice": "edit_image"}}
+        },
+    }
     fields.update(overrides)
     return ReviewWorkspaceHandoff(**fields)
 
@@ -81,10 +88,14 @@ def test_select_folder_returns_before_the_scan_runs_and_publishes_only_when_it_f
     tab = ReviewTabFrame(tk_root)
     try:
         tab._on_select_folder()
-        assert registry.queued and tab.selected_images == []  # the worker has not run: Tk was not asked to walk
+        assert (
+            registry.queued and tab.selected_images == []
+        )  # the worker has not run: Tk was not asked to walk
         assert "Scanning" in tab.selection_label.cget("text")
         registry.run_all()
-        assert [p.name for p in tab.selected_images] == ["b.png", "a.png"] or len(tab.selected_images) == 2
+        assert [p.name for p in tab.selected_images] == ["b.png", "a.png"] or len(
+            tab.selected_images
+        ) == 2
         assert tab.selection_label.cget("text") == "2 image(s) selected"
     finally:
         tab.destroy()
@@ -137,7 +148,9 @@ def test_an_oversized_folder_is_refused_not_partially_loaded(tmp_path):
     assert MAX_FOLDER_IMAGES >= 1000
 
 
-def test_an_empty_folder_leaves_the_selection_alone_and_says_so(tk_root, tmp_path, monkeypatch, quiet):
+def test_an_empty_folder_leaves_the_selection_alone_and_says_so(
+    tk_root, tmp_path, monkeypatch, quiet
+):
     keep = _png(tmp_path / "keep.png")
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -155,7 +168,9 @@ def test_an_empty_folder_leaves_the_selection_alone_and_says_so(tk_root, tmp_pat
 # --- image context -----------------------------------------------------------------------------------
 
 
-def test_metadata_of_a_superseded_image_never_overwrites_the_current_one(tk_root, tmp_path, monkeypatch, quiet):
+def test_metadata_of_a_superseded_image_never_overwrites_the_current_one(
+    tk_root, tmp_path, monkeypatch, quiet
+):
     held = use_held_delivery(monkeypatch)
     a = _png(tmp_path / "a.png", prompt="prompt for image A")
     b = _png(tmp_path / "b.png", prompt="prompt for image B", color=(80, 80, 80))
@@ -172,7 +187,9 @@ def test_metadata_of_a_superseded_image_never_overwrites_the_current_one(tk_root
         tab.destroy()
 
 
-def test_a_prompt_edit_made_while_metadata_loads_survives_the_late_result(tk_root, tmp_path, monkeypatch, quiet):
+def test_a_prompt_edit_made_while_metadata_loads_survives_the_late_result(
+    tk_root, tmp_path, monkeypatch, quiet
+):
     held = use_held_delivery(monkeypatch)
     a = _png(tmp_path / "a.png", prompt="stored prompt")
     tab = ReviewTabFrame(tk_root)
@@ -187,7 +204,9 @@ def test_a_prompt_edit_made_while_metadata_loads_survives_the_late_result(tk_roo
         tab.destroy()
 
 
-def test_effective_settings_wait_for_the_metadata_instead_of_guessing(tk_root, tmp_path, monkeypatch, quiet):
+def test_effective_settings_wait_for_the_metadata_instead_of_guessing(
+    tk_root, tmp_path, monkeypatch, quiet
+):
     held = use_held_delivery(monkeypatch)
     a = _png(tmp_path / "a.png", prompt="p")
     tab = ReviewTabFrame(tk_root)
@@ -215,7 +234,9 @@ def test_a_destroyed_tab_drops_every_late_callback(tk_root, tmp_path, monkeypatc
 # --- comparison viewer -------------------------------------------------------------------------------
 
 
-def test_closing_the_viewer_discards_a_decode_still_in_flight(tk_root, tmp_path, monkeypatch, quiet):
+def test_closing_the_viewer_discards_a_decode_still_in_flight(
+    tk_root, tmp_path, monkeypatch, quiet
+):
     held = use_held_delivery(monkeypatch)
     big = _png(tmp_path / "big.png", size=(64, 48))
     tab = ReviewTabFrame(tk_root)

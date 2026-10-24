@@ -51,7 +51,9 @@ def test_identity_is_the_exact_bytes_not_the_filename(store, tmp_path):
     twin = _image(tmp_path / "other" / "different_name.png", (9, 9, 9))  # identical bytes
     namesake = _image(tmp_path / "third" / "same_name.png", (200, 0, 0))  # same name, other bytes
     plan = plan_managed_import(store, [twin, namesake])
-    assert plan.rows[0].status == EXISTING and plan.rows[0].existing_asset_ids == (imported.asset_id,)
+    assert plan.rows[0].status == EXISTING and plan.rows[0].existing_asset_ids == (
+        imported.asset_id,
+    )
     assert plan.rows[1].status == NEW
 
 
@@ -65,9 +67,7 @@ def test_missing_unsupported_unreadable_and_in_selection_duplicates_are_refused_
     broken.write_bytes(b"not an image")
     text = tmp_path / "in" / "notes.txt"
     text.write_text("hello")
-    plan = plan_managed_import(
-        store, [good, dup, broken, tmp_path / "in" / "gone.png", text]
-    )
+    plan = plan_managed_import(store, [good, dup, broken, tmp_path / "in" / "gone.png", text])
     statuses = [row.status for row in plan.rows]
     assert statuses == [NEW, REFUSED, REFUSED, REFUSED, REFUSED]
     assert "earlier in this selection" in plan.rows[1].reason
@@ -102,7 +102,9 @@ def test_duplicates_open_the_existing_asset_or_import_a_separate_copy_as_the_ope
     assert len(_asset_ids(store)) == 2
 
 
-def test_a_source_that_changed_after_the_operator_reviewed_it_is_skipped_not_guessed(store, tmp_path):
+def test_a_source_that_changed_after_the_operator_reviewed_it_is_skipped_not_guessed(
+    store, tmp_path
+):
     source = _image(tmp_path / "in" / "moving.png", (1, 1, 1))
     plan = plan_managed_import(store, [source])
     _image(source, (250, 250, 250))  # replaced between planning and confirmation
@@ -120,6 +122,12 @@ def test_the_managed_asset_carries_no_lineage_from_where_it_came_from(store, tmp
     asset_id = result.imported[0][1]
     payload = json.loads(store.sidecar_path(asset_id).read_text(encoding="utf-8"))
     flat = json.dumps(payload).lower()
-    for forbidden in ("history_iterate", "source_job_id", "parent_job", "parent_artifact", "source_artifact_id"):
+    for forbidden in (
+        "history_iterate",
+        "source_job_id",
+        "parent_job",
+        "parent_artifact",
+        "source_artifact_id",
+    ):
         assert forbidden not in flat
     assert payload["baseline"]["prompt"] == "operator default"

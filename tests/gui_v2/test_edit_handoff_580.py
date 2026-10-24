@@ -10,7 +10,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PIL import Image
 
 from src.gui.controllers.video_workspace_handoff import (
     route_images_to_photo_optimize,
@@ -19,9 +18,8 @@ from src.gui.controllers.video_workspace_handoff import (
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
 from src.photo_optimize.managed_import import IMPORT_COPY, OPEN_EXISTING
 from src.photo_optimize.store import PhotoOptimizeStore
-from src.utils.image_metadata import build_contract_kv, write_image_metadata
-from tests.gui_v2.test_history_iterate_service_610a import JOB_ID, Env, _png
 from tests.gui_v2 import test_history_iterate_service_610a as service_tests
+from tests.gui_v2.test_history_iterate_service_610a import JOB_ID, Env, _png
 
 env = service_tests.env  # the 610A Review + History fixture, reused as-is
 
@@ -42,7 +40,8 @@ def quiet_dialogs(monkeypatch):
     for module in ("src.gui.views.photo_optimize_handoff", "src.gui.views.review_tab_frame_v2"):
         for name in ("showinfo", "showwarning", "showerror"):
             monkeypatch.setattr(
-                f"{module}.messagebox.{name}", lambda title, message, **_: shown.append((title, message))
+                f"{module}.messagebox.{name}",
+                lambda title, message, **_: shown.append((title, message)),
             )
     return shown
 
@@ -88,7 +87,9 @@ def workspace(env, tk_root, tmp_path):
 
 
 def _other(tmp_path: Path, name: str = "other.png", job_id: str | None = "other-job") -> Path:
-    shade = sum(name.encode()) % 200  # distinct bytes per name: identity is the content, not the file name
+    shade = (
+        sum(name.encode()) % 200
+    )  # distinct bytes per name: identity is the content, not the file name
     return Path(_png(tmp_path / name, job_id=job_id, color=(shade, 30, 60)))
 
 
@@ -119,7 +120,9 @@ def test_manual_replacement_drops_the_history_claim_for_every_incoming_route(env
         if route == "select_images":
             env.tab._set_selected_images([other])
         else:
-            assert route_images_to_review(main_window=env.app.main_window, image_paths=[other]) == [str(other)]
+            assert route_images_to_review(main_window=env.app.main_window, image_paths=[other]) == [
+                str(other)
+            ]
         assert env.tab._active_handoff is None  # the claim no longer attaches to anything
         assert [str(p) for p in env.tab.selected_images] == [str(other)]
 
@@ -149,12 +152,18 @@ def test_nothing_is_managed_or_queued_before_the_operator_confirms(env, workspac
 
     assert len(workspace.confirmations) == 1
     seen = workspace.confirmations[0]
-    assert seen.assets_at_prompt == 0 and seen.jobs_at_prompt == 0  # nothing existed while the question was open
+    assert (
+        seen.assets_at_prompt == 0 and seen.jobs_at_prompt == 0
+    )  # nothing existed while the question was open
     assert workspace.asset_count() == 0 and env.repository.list_jobs() == []
-    assert workspace.notebook.selected == [workspace.photo]  # the operator did go to the Managed Photo Set
+    assert workspace.notebook.selected == [
+        workspace.photo
+    ]  # the operator did go to the Managed Photo Set
 
 
-def test_a_history_origin_image_is_imported_with_no_parent_claim_and_review_keeps_its_own(env, workspace):
+def test_a_history_origin_image_is_imported_with_no_parent_claim_and_review_keeps_its_own(
+    env, workspace
+):
     handoff = _history_handoff_loaded(env)
     env.tab.images_list.selection_set(0)
 
@@ -162,8 +171,16 @@ def test_a_history_origin_image_is_imported_with_no_parent_claim_and_review_keep
 
     assert workspace.asset_count() == 1
     asset = workspace.store.list_assets()[0]
-    stored = json.dumps(json.loads(workspace.store.sidecar_path(asset.asset_id).read_text(encoding="utf-8"))).lower()
-    for forbidden in ("history_iterate", JOB_ID, "parent_job", "parent_artifact", "source_artifact_id"):
+    stored = json.dumps(
+        json.loads(workspace.store.sidecar_path(asset.asset_id).read_text(encoding="utf-8"))
+    ).lower()
+    for forbidden in (
+        "history_iterate",
+        JOB_ID,
+        "parent_job",
+        "parent_artifact",
+        "source_artifact_id",
+    ):
         assert forbidden.lower() not in stored
     # The import is a distinct operation: Review still holds its handoff and the claim still verifies.
     assert env.tab._active_handoff is handoff
@@ -185,14 +202,17 @@ def test_returning_from_the_managed_set_keeps_review_edits(env, workspace, tmp_p
     assert env.tab._active_handoff is not None and env.tab.has_unsent_edits()
 
 
-def test_matrix_sourced_history_job_still_offers_edit_image_after_this_change(tk_root, tmp_path, monkeypatch):
-    from tests.pipeline.test_history_variation_compiler_610a import _source
+def test_matrix_sourced_history_job_still_offers_edit_image_after_this_change(
+    tk_root, tmp_path, monkeypatch
+):
     from tests.gui_v2.test_history_iterate_model_610a import _entry, _result
+    from tests.pipeline.test_history_variation_compiler_610a import _source
 
     environment = Env(tk_root, tmp_path, monkeypatch)
     try:
         environment.entry = _entry(
-            _source(job_id=JOB_ID, matrix_slot_values={"hair": "red"}), result=_result(environment.image)
+            _source(job_id=JOB_ID, matrix_slot_values={"hair": "red"}),
+            result=_result(environment.image),
         )
         assessment = environment.iterate.assess(JOB_ID)
         assert assessment.review.supported and not assessment.pipeline.supported
@@ -217,18 +237,26 @@ def test_review_offers_exactly_the_highlighted_images_in_list_order(env, workspa
     plan = workspace.confirmations[0].plan
     assert [Path(row.path) for row in plan.rows] == [files[0], files[2]]
     assert workspace.asset_count() == 2
-    assert [str(p) for p in env.tab.selected_images] == [str(p) for p in files]  # Review's selection is untouched
+    assert [str(p) for p in env.tab.selected_images] == [
+        str(p) for p in files
+    ]  # Review's selection is untouched
 
 
 def test_nothing_highlighted_offers_nothing(env, workspace, quiet_dialogs, tmp_path):
     env.tab._set_selected_images([_other(tmp_path)])
     env.tab.images_list.selection_clear(0, "end")
     env.tab._on_manage_selected_photos()
-    assert workspace.confirmations == [] and quiet_dialogs and "Select one or more" in quiet_dialogs[-1][1]
+    assert (
+        workspace.confirmations == []
+        and quiet_dialogs
+        and "Select one or more" in quiet_dialogs[-1][1]
+    )
     assert workspace.notebook.selected == []
 
 
-def test_duplicate_content_opens_the_existing_asset_or_copies_when_the_operator_says_so(env, workspace, tmp_path):
+def test_duplicate_content_opens_the_existing_asset_or_copies_when_the_operator_says_so(
+    env, workspace, tmp_path
+):
     source = _other(tmp_path, "dup.png", job_id=None)
     existing = workspace.store.import_photo(source)
     env.tab._set_selected_images([source])
@@ -237,7 +265,9 @@ def test_duplicate_content_opens_the_existing_asset_or_copies_when_the_operator_
     workspace.answer = OPEN_EXISTING
     env.tab._on_manage_selected_photos()
     assert workspace.asset_count() == 1
-    assert workspace.photo._current_asset_id == existing.asset_id  # the existing managed photo was opened
+    assert (
+        workspace.photo._current_asset_id == existing.asset_id
+    )  # the existing managed photo was opened
 
     workspace.answer = IMPORT_COPY
     env.tab._on_manage_selected_photos()
@@ -275,11 +305,15 @@ def test_the_managed_set_never_receives_review_state_only_paths(workspace, tmp_p
     received = []
     window = SimpleNamespace(
         photo_optimize_tab=SimpleNamespace(
-            receive_review_handoff=lambda paths, status_message=None: received.append((paths, status_message))
+            receive_review_handoff=lambda paths, status_message=None: received.append(
+                (paths, status_message)
+            )
         ),
         center_notebook=_Notebook(),
     )
-    route_images_to_photo_optimize(main_window=window, image_paths=[tmp_path / "x.png"], status_message="hello")
+    route_images_to_photo_optimize(
+        main_window=window, image_paths=[tmp_path / "x.png"], status_message="hello"
+    )
     assert received == [([str(tmp_path / "x.png")], "hello")]
 
 

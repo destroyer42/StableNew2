@@ -281,7 +281,11 @@ def test_stale_output_bytes_and_atomic_replace_failure_never_split_snapshot(libr
         patcher.setattr("src.utils.atomic_io._REPLACE_BACKOFF_S", 0)
         with pytest.raises(PermissionError):
             store.apply_result_promotion(plan)
-    leftovers = [item.name for item in store.sidecar_path(asset.asset_id).parent.iterdir() if item.suffix == ".tmp"]
+    leftovers = [
+        item.name
+        for item in store.sidecar_path(asset.asset_id).parent.iterdir()
+        if item.suffix == ".tmp"
+    ]
     assert leftovers == []
     assert store.sidecar_path(asset.asset_id).read_bytes() == before
     picture(Path(result.path), color="yellow")

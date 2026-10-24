@@ -195,7 +195,9 @@ class PhotoOptimizeResultsMixin:
 
     def _revert_baseline(self):
         if self._current_asset_id is not None:
-            self._with_saved_baseline(self._revert_saved_baseline, action="Restoring the previous baseline")
+            self._with_saved_baseline(
+                self._revert_saved_baseline, action="Restoring the previous baseline"
+            )
 
     def _revert_saved_baseline(self):
         asset_id = self._current_asset_id

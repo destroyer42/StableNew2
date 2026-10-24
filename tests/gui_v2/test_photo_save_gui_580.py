@@ -42,9 +42,13 @@ class Env:
         self.registry: ManualRegistry = use_manual_registry(monkeypatch)
         self.store, imported = _store(tmp_path)
         self.errors: list[tuple[str, str]] = []
-        for module in ("src.gui.views.photo_optimize_tab_frame_v2", "src.gui.views.photo_optimize_scope"):
+        for module in (
+            "src.gui.views.photo_optimize_tab_frame_v2",
+            "src.gui.views.photo_optimize_scope",
+        ):
             monkeypatch.setattr(
-                f"{module}.messagebox.showerror", lambda title, message, **_: self.errors.append((title, message))
+                f"{module}.messagebox.showerror",
+                lambda title, message, **_: self.errors.append((title, message)),
             )
             monkeypatch.setattr(f"{module}.messagebox.showwarning", lambda *a, **k: None)
         self.prepared_with: list[str] = []
@@ -52,11 +56,15 @@ class Env:
             build_photo_optimize_defaults=lambda: {},
             prepare_photo_optimize_plan=self._prepare,
         )
-        monkeypatch.setattr("src.gui.views.photo_optimize_scope.review_dialog", lambda *a, **k: False)
+        monkeypatch.setattr(
+            "src.gui.views.photo_optimize_scope.review_dialog", lambda *a, **k: False
+        )
         self.tab = PhotoOptimizeTabFrameV2(tk_root, app_controller=controller, store=self.store)
         self.root = tk_root
         self.drain()
-        self.ids = list(self.tab._asset_index_by_row)  # the list's own order (asset ids are not time-ordered)
+        self.ids = list(
+            self.tab._asset_index_by_row
+        )  # the list's own order (asset ids are not time-ordered)
         assert sorted(self.ids) == sorted(imported) and self.tab._current_asset_id == self.ids[0]
 
     def _prepare(self, **arguments):
@@ -98,7 +106,9 @@ def test_typing_is_debounced_into_one_write_of_the_latest_text(env, monkeypatch)
     for text in ("a", "ab", "abc", "abcd"):
         env.type_prompt(text)
     assert BASELINE_SAVE_DEBOUNCE_MS > 0
-    assert "photo-baseline-save" not in [name for name, _t, _a in env.registry.queued] and writes == []
+    assert (
+        "photo-baseline-save" not in [name for name, _t, _a in env.registry.queued] and writes == []
+    )
     # keystrokes only schedule the debounce; Tk does no file work and no write is submitted yet
     assert env.tab.baseline_save_status_var.get() == "Unsaved changes"
     env.tab._flush_baseline_timer()  # the quiet period elapsed
@@ -133,14 +143,20 @@ def test_a_plan_is_prepared_only_after_the_visible_edit_is_persisted(env):
 
 def test_a_failed_save_blocks_the_dependent_action_and_says_why(env, monkeypatch):
     monkeypatch.setattr(
-        env.store, "update_asset_fields", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
+        env.store,
+        "update_asset_fields",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("disk full")),
     )
     env.type_prompt("never reaches disk")
     ran = []
     env.tab._with_saved_baseline(lambda: ran.append(True), action="Promoting a result")
     env.drain()
     assert ran == []
-    assert env.errors and "disk full" in env.errors[-1][1] and "Promoting a result" in env.errors[-1][1]
+    assert (
+        env.errors
+        and "disk full" in env.errors[-1][1]
+        and "Promoting a result" in env.errors[-1][1]
+    )
     assert env.tab.baseline_save_status_var.get().startswith("Not saved")
     assert env.stored_prompt(env.ids[0]) != "never reaches disk"
 

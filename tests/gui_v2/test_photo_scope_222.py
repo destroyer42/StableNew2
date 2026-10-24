@@ -85,7 +85,9 @@ def test_operator_journey_batch_single_review_queue(tk_root, photos):
         tk_root.update()
         other_before = {i: store.sidecar_path(i).read_bytes() for i in ids if i != active}
         tab.img2img_steps_var.set(29)
-        assert store.get_asset(active).baseline.config["img2img"]["steps"] == 20  # debounced, not per keystroke
+        assert (
+            store.get_asset(active).baseline.config["img2img"]["steps"] == 20
+        )  # debounced, not per keystroke
         tab._flush_baseline_now()  # what the debounce timer or FocusOut does; the write runs on the save worker
         assert store.get_asset(active).baseline.config["img2img"]["steps"] == 29
         assert {i: store.sidecar_path(i).read_bytes() for i in other_before} == other_before
