@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
@@ -19,6 +19,8 @@ from src.controller.pipeline_controller_services.history_handoff_service import 
     HistoryHandoffService,
 )
 from src.gui import theme_v2 as theme_mod
+from src.gui.controllers.history_iterate_service import HistoryIterateRefused, HistoryIterateService
+from src.gui.history_iterate_dialog import CHOICE_REVIEW, HistoryIterateDialog
 from src.gui.view_contracts.history_artifact_contract import resolve_recorded_artifact
 from src.gui.view_contracts.history_sequence_contract import (
     ACTION_REPLAY,
@@ -69,6 +71,7 @@ class HistoryActionState:
     video_review: bool = False
     sequence_resume: bool = False
     sequence_replay: bool = False
+    iterate: bool = False
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -121,6 +124,13 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         self.replay_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.iterate_btn = ttk.Button(
+            action_bar,
+            text="Iterate...",
+            command=self._on_iterate,
+            state=tk.DISABLED,
+        )
+        self.iterate_btn.pack(side=tk.LEFT, padx=(4, 0))
         self.svd_btn = ttk.Button(
             action_bar,
             text="Animate with SVD",
@@ -288,6 +298,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.history_tree.bind("<Motion>", self._on_tree_motion)
         self.history_tree.bind("<Leave>", self._hide_tooltip)
         self._history_menu = tk.Menu(self, tearoff=0)
+        self._history_menu.add_command(label="Iterate from History...", command=self._on_iterate)
         self._history_menu.add_command(label="Animate with SVD", command=self._on_send_to_svd)
         self._history_menu.add_command(label="Make Video", command=self._on_send_to_video_workflow)
         self._history_menu.add_command(
@@ -525,6 +536,41 @@ class JobHistoryPanelV2(ttk.Frame):
                 "Replay was not queued. Check the application log and queue admission state."
             )
 
+    def _confirm_replace(self, title: str, message: str) -> bool:
+        hook = getattr(self, "_confirm_replace_hook", None)
+        if callable(hook):
+            return bool(hook(title, message))
+        return bool(messagebox.askyesno(title, message, parent=self))
+
+    def _on_iterate(self) -> None:
+        """Offer Edit Image / Regenerate for the selected job; the record is re-read, never trusted from the table."""
+
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).iterate:
+            return
+        job_id = entry.job_id
+        service = HistoryIterateService(self.controller)
+        assessment = service.assess(job_id)
+
+        def choose(key: str) -> None:
+            try:
+                outcome = (
+                    service.edit_in_review(job_id, self._confirm_replace)
+                    if key == CHOICE_REVIEW
+                    else service.regenerate_in_pipeline(job_id, self._confirm_replace)
+                )
+            except HistoryIterateRefused as exc:
+                self.replay_status_var.set(f"Not loaded: {exc}")
+                return
+            except Exception:  # noqa: BLE001 - never leave the table silent about a failed hand-off
+                self.replay_status_var.set(
+                    "Iterate failed. Check the application log; nothing was loaded."
+                )
+                return
+            self.replay_status_var.set(outcome.message)
+
+        HistoryIterateDialog(self, assessment, on_choose=choose)
+
     def _on_browse_all(self) -> None:
         """Open (or raise) the searchable browser over the whole history in its own window."""
 
@@ -619,6 +665,10 @@ class JobHistoryPanelV2(ttk.Frame):
         actions = self._history_action_state(entry)
         self.open_btn.configure(state=tk.NORMAL if actions.open_folder else tk.DISABLED)
         self.replay_btn.configure(state=tk.NORMAL if actions.replay else tk.DISABLED)
+        self.iterate_btn.configure(state=tk.NORMAL if actions.iterate else tk.DISABLED)
+        self._history_menu.entryconfigure(
+            "Iterate from History...", state=tk.NORMAL if actions.iterate else tk.DISABLED
+        )
         self.svd_btn.configure(state=tk.NORMAL if actions.svd else tk.DISABLED)
         self.video_workflow_btn.configure(
             state=tk.NORMAL if actions.video_workflow else tk.DISABLED
@@ -872,6 +922,16 @@ class JobHistoryPanelV2(ttk.Frame):
             ),
             sequence_resume=bool(sequence_ready and sequence is not None and sequence.can_resume),
             sequence_replay=bool(sequence_ready and sequence is not None and sequence.can_replay),
+            iterate=self._iterate_offered(entry),
+        )
+
+    def _iterate_offered(self, entry: JobHistoryEntry) -> bool:
+        """Cheap gate for the Iterate button; the dialog shows the full, re-read assessment and any reason."""
+
+        return (
+            getattr(self.controller, "pipeline_controller", None) is not None
+            and str(getattr(entry.status, "value", entry.status)) == "completed"
+            and bool(entry.snapshot)
         )
 
     def _review_repository_available(self) -> bool:

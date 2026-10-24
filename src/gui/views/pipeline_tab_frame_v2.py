@@ -18,6 +18,7 @@ from src.gui.layout_v2 import (
     apply_compact_layout_hooks,
     measure_horizontal_extent,
 )
+from src.gui.panels_v2.history_variation_panel import HistoryVariationPanelV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
@@ -137,6 +138,9 @@ class PipelineTabFrame(ttk.Frame):
             on_change=lambda: self._handle_sidebar_change(),
         )
         self.sidebar.pack(fill="both", pady=(0, 12), expand=True)
+        # PR-HISTORY-610A: the editor for "Regenerate with Changes"; empty (zero height) unless a variation is the draft.
+        self.history_variation_panel = HistoryVariationPanelV2(self.left_inner, app_state=self.app_state)
+        self.history_variation_panel.pack(fill="x", pady=(0, 12), before=self.sidebar)
 
         # PR-GUI-H: prompt_text and refresh_packs_button moved to sidebar Pack Selector card
         # Keep references for compatibility

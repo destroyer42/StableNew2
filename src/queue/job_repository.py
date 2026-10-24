@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.pipeline.history_variation_marker import is_history_variation
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.history_query import HistoryPage, HistoryQuery, run_history_query
 from src.queue.job_history_store import (
@@ -846,7 +847,11 @@ class JobRepository(JobHistoryStore):
         )
 
     def list_replay_child_rows(self, parent_job_ids: Sequence[str]) -> list[ReplayChildRow]:
-        """Jobs compiled as a history replay of any of ``parent_job_ids`` (read-only; a retry is a child)."""
+        """Jobs compiled as an *unchanged* history replay of any of ``parent_job_ids`` (read-only; a retry is a child).
+
+        An edited "Regenerate with Changes" variation shares the ``history_replay`` kind and the parent lineage column but
+        is not a retry of its parent's batch member, so it is excluded here (it stays reachable through ``parent_job_id``).
+        """
 
         ordered = list(dict.fromkeys(str(job_id) for job_id in parent_job_ids if job_id))
         children: list[ReplayChildRow] = []
@@ -864,6 +869,8 @@ class JobRepository(JobHistoryStore):
                 normalized = snapshot.get("normalized_job") if isinstance(snapshot, dict) else None
                 source = normalized.get("source") if isinstance(normalized, dict) else None
                 if not isinstance(source, dict) or source.get("kind") != "history_replay":
+                    continue
+                if is_history_variation(source.get("metadata")):
                     continue
                 children.append(
                     ReplayChildRow(

@@ -39,6 +39,9 @@ class JobDraft:
     packs: list[PackJobEntry] = field(default_factory=list)
     parts: list[JobDraftPart] = field(default_factory=list)
     summary: JobDraftSummary = field(default_factory=JobDraftSummary)
+    #: An unsent "Regenerate with Changes" draft (``HistoryVariationDraft``). It replaces, never merges with, the
+    #: pack/part draft above and is cleared with it, so there is no second draft store.
+    history_variation: Any | None = None
 
     def add_part(self, part: JobDraftPart) -> None:
         self.parts.append(part)
@@ -50,6 +53,7 @@ class JobDraft:
     def clear(self) -> None:
         self.parts.clear()
         self.summary = JobDraftSummary()
+        self.history_variation = None
 
 
 @dataclass

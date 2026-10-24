@@ -6246,8 +6246,8 @@ class AppController:
                 # PR-HB-003: Schedule UI updates on main thread using debounced refresh
                 def _update_ui():
                     if entries and self.app_state:
-                        self.app_state.add_packs_to_job_draft(entries)
-                        self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft")
+                        added = self.app_state.add_packs_to_job_draft(entries) is not False
+                        self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft" if added else "[controller] Packs not added: discard the open History variation first")
                         # Use debounced refresh instead of direct call
                         self._mark_ui_dirty(preview=True)
 
@@ -6292,8 +6292,8 @@ class AppController:
         if not prompt:
             return
         negative = (getattr(self.app_state, "negative_prompt", "") or "").strip()
-        self.app_state.add_job_draft_part(prompt, negative, estimated_images=1)
-        self._append_log("[controller] Added current prompt pair to job draft")
+        added = self.app_state.add_job_draft_part(prompt, negative, estimated_images=1) is not False
+        self._append_log("[controller] Added current prompt pair to job draft" if added else "[controller] Prompt not added: discard the open History variation first")
         if hasattr(self, "_ui_thread_id") or getattr(self, "main_window", None) is not None:
             self._mark_ui_dirty(preview=True)
             return

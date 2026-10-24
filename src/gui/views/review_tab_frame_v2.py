@@ -877,6 +877,35 @@ class ReviewTabFrame(ttk.Frame):
         self._set_text(self.negative_text, self._negative_mode_edits.get(negative_mode, ""))
         self._refresh_prompt_diff()
 
+    def has_unsent_edits(self) -> bool:
+        """Whether Review holds a selection or prompt edit that a History hand-off would replace."""
+
+        if self.selected_images:
+            return True
+        return bool(self._get_text(self.prompt_text).strip() or self._get_text(self.negative_text).strip())
+
+    def load_history_iterate_handoff(self, handoff: ReviewWorkspaceHandoff) -> None:
+        """Load one recorded History image as the input of a new reprocess task (PR-HISTORY-610A).
+
+        Stages start unselected and nothing is queued; the handoff's ``history_iterate`` identity rides along in
+        ``source_metadata_by_path`` and is verified against the file again when the batch is prepared.
+        """
+
+        paths = list(handoff.image_paths or [])
+        if handoff.source != "history_iterate" or len(paths) != 1:
+            raise ValueError("A History hand-off carries exactly one recorded image")
+        self.load_staged_curation_handoff(handoff)
+        meta = self._lookup_handoff_source_metadata(Path(paths[0])) or {}
+        job_id = str(meta.get("source_job_id") or "")
+        self.workflow_hint_label.config(
+            text=(
+                f"Editing the recorded image of History job {job_id}. "
+                if job_id
+                else "Editing a recorded History image. "
+            )
+            + "Choose the stages, then Preview; nothing is queued until you confirm."
+        )
+
     def load_selected_images(
         self, image_paths: Sequence[str | Path], *, status_message: str | None = None
     ) -> int:

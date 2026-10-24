@@ -82,6 +82,38 @@ def test_add_to_job_with_pack_selection_calls_pack_handler(monkeypatch, tk_root:
     assert controller.calls == []
 
 
+def test_add_to_job_is_announced_and_refused_while_a_history_variation_is_open(
+    monkeypatch, tk_root: tk.Tk
+) -> None:
+    from src.pipeline.history_variation_compiler import HistoryVariationDraft
+    from tests.pipeline.test_history_variation_compiler_610a import _source
+
+    monkeypatch.setattr("src.gui.sidebar_panel_v2.PromptPackListManager", _FakePackListManager)
+    shown: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "src.gui.sidebar_panel_v2.messagebox.showinfo",
+        lambda title, message, **_: shown.append((title, message)),
+    )
+    controller, state = _DummyController(), AppStateV2()
+    draft = HistoryVariationDraft.from_source(_source()).with_edits(steps=44)
+    state.begin_history_variation(draft)
+    panel = SidebarPanelV2(tk_root, controller=controller, app_state=state)
+    panel._current_pack_names = ["pack-alpha"]
+    panel.pack_listbox.delete(0, "end")
+    panel.pack_listbox.insert("end", "pack-alpha")
+    panel.pack_listbox.selection_set(0)
+    panel._on_add_to_job()
+    panel.pack_listbox.selection_clear(0, "end")
+    panel._on_add_to_job()
+    assert (
+        len(shown) == 2
+        and "Discard variation" in shown[0][1]
+        and "Nothing was changed" in shown[0][1]
+    )
+    assert controller.pack_calls == [] and controller.calls == []
+    assert state.job_draft.history_variation is draft
+
+
 @pytest.mark.gui
 def test_main_window_pack_selection_keeps_sidebar_actions_live(
     tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
