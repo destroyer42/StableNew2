@@ -123,12 +123,25 @@ def test_readiness_recovery_is_reachable_with_long_guidance(tk_root, tmp_path):
         tk_root.withdraw()
 
 
-def test_optimizer_explains_inactive_anchor_and_logging(tk_root, tmp_path):
+def test_optimizer_retires_anchor_controls_and_explains_logging(tk_root, tmp_path):
     frame = PromptTabFrame(tk_root, packs_dir=tmp_path / "packs")
     try:
+        frame.apply_prompt_optimizer_config({
+            "allow_subject_anchor_boost": True,
+            "subject_anchor_boost_min_chunk_count": 11,
+        })
+        assert not any(
+            "Anchor" in str(widget.cget("text"))
+            for widget in frame._prompt_optimizer_widgets
+            if "text" in widget.keys()
+        )
+        config = frame.get_prompt_optimizer_config()
+        assert config["allow_subject_anchor_boost"] is True
+        assert config["subject_anchor_boost_min_chunk_count"] == 11
         tips = [getattr(widget, "tooltip", None) for widget in frame._prompt_optimizer_widgets]
         text = " ".join(tip.text for tip in tips if tip)
-        assert "has no effect" in text
+        assert "during stage execution" in text
+        assert "authored prompt stays unchanged" in text
         assert "prompt text before and after" in text
         assert "does not truncate" in text
     finally:
