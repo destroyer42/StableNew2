@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-557 of 711 modules have a docstring.
+560 of 714 modules have a docstring.
 
 ## src/
 
@@ -150,6 +150,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_mixins.py`: The controller surfaces ``VideoWorkflowController`` is composed of (kept apart so the controller module stays…
 - `webui_connection_controller.py`: (no docstring)
 - `webui_outage_coordinator.py`: Contain a WebUI outage inside the existing queue/worker/manager boundaries
+- `webui_runtime_handoff.py`: Give a queued WebUI image job the runtime it needs, through the existing owners only
+- `webui_runtime_handoff_gate.py`: Decide, before the worker claims the next workload, whether its WebUI runtime must be started or the work held
+- `webui_runtime_probe.py`: One fresh, bounded, read-only proof that the configured WebUI endpoint is a usable runtime of a given identity
 
 ## src/controller/app_controller_services/
 

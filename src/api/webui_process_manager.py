@@ -509,6 +509,12 @@ class WebUIProcessManager:
             return False
 
     @property
+    def autostart_enabled(self) -> bool:
+        """Whether this manager's configuration permits StableNew to launch the runtime (read-only)."""
+
+        return bool(getattr(self._config, "autostart_enabled", False))
+
+    @property
     def startup_timeout_seconds(self) -> float:
         """The bounded window a legitimate startup may take before it is treated as failed."""
 

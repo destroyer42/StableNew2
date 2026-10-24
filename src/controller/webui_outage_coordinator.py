@@ -14,6 +14,10 @@ single-node worker still executes, and ``WebUIProcessManager`` is still the only
 
 It never replays a generation: backend recovery and job re-execution are separate, and a job is restored to QUEUED only
 on positive evidence that nothing was dispatched. Nothing here is persisted.
+
+Production wiring also arms the queue-driven runtime handoff (``RuntimeHandoffGate``, PR-RUNTIME-HANDOFF): before a
+claim, a queued image job whose runtime is missing is held, the managed runtime is launched once through the existing
+manager, and the hold is released only after a fresh readiness proof. An outage hold here always takes precedence.
 """
 
 from __future__ import annotations
@@ -26,16 +30,21 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.api.webui_failure_evidence import (
     DispatchCertainty,
     FailureAssessment,
     FailureCategory,
 )
+from src.controller.webui_runtime_probe import ProbeResult, probe_webui_runtime
 from src.queue.dispatch_evidence import assess_dispatch
 from src.queue.job_queue import JobQueue
 from src.utils import LogContext, log_with_ctx
+
+if TYPE_CHECKING:
+    from src.controller.webui_runtime_handoff import WebUIRuntimeHandoff
+    from src.controller.webui_runtime_handoff_gate import RuntimeHandoffGate
 
 logger = logging.getLogger(__name__)
 
@@ -55,15 +64,6 @@ class WebUIHealth(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class ProbeResult:
-    ready: bool
-    reason: str = ""
-    endpoint: str = ""
-    identity: str = ""
-    recovery_allowed: bool = True
-
-
-@dataclass(frozen=True, slots=True)
 class OutageDecision:
     assessment: FailureAssessment
     #: The worker should restore the job to QUEUED instead of publishing FAILED.
@@ -78,37 +78,9 @@ NO_ACTION = OutageDecision(assessment=FailureAssessment(FailureCategory.NOT_WEBU
 
 
 def default_webui_probe() -> ProbeResult:
-    """Read-only, bounded readiness + runtime-identity proof of the configured endpoint (no discovery, no mutation)."""
+    """The release probe: readiness plus the *configured* runtime identity."""
 
-    from src.api.healthcheck import probe_webui_endpoint
-    from src.api.webui_runtime_identity import (
-        WebUIRuntimeIdentityMismatch,
-        assert_runtime_matches_backend,
-        effective_webui_base_url,
-        load_backend_settings,
-        probe_endpoint_runtime_identity,
-        resolve_configured_webui_runtime_identity,
-    )
-
-    try:
-        base_url = effective_webui_base_url()
-        expected = resolve_configured_webui_runtime_identity(load_backend_settings())
-    except Exception as exc:  # noqa: BLE001 - an unreadable configuration is "not proven ready"
-        return ProbeResult(False, f"configuration_unreadable:{type(exc).__name__}", recovery_allowed=False)
-    state = probe_webui_endpoint(base_url, timeout=1.5)
-    if state != "healthy":
-        return ProbeResult(False, f"endpoint_{state}", base_url)
-    observed = probe_endpoint_runtime_identity(base_url, timeout=2.0)
-    evidence = getattr(observed, "evidence", {}) or {}
-    if evidence.get("options_readable") is not True:
-        return ProbeResult(False, "options_unreadable", base_url, str(observed.identity), recovery_allowed=False)
-    try:
-        assert_runtime_matches_backend(expected, observed)
-    except WebUIRuntimeIdentityMismatch:
-        return ProbeResult(False, "identity_mismatch", base_url, str(observed.identity), recovery_allowed=False)
-    except ValueError:
-        return ProbeResult(False, "identity_unsupported", base_url, str(observed.identity), recovery_allowed=False)
-    return ProbeResult(True, "ready", base_url, str(observed.identity))
+    return probe_webui_runtime()
 
 
 def _default_manager() -> Any:
@@ -151,6 +123,7 @@ class WebUIOutageCoordinator:
         self._incidents: deque[dict[str, Any]] = deque(maxlen=8)
         self._listening_to: Any = None
         self._startup_gate = False
+        self._gate: RuntimeHandoffGate | None = None  # armed by production wiring only
 
     # -- queue-facing helpers ---------------------------------------------------------------------------------------
 
@@ -302,7 +275,7 @@ class WebUIOutageCoordinator:
             self._incidents.append({k: v for k, v in record.items() if k != "output_tail"})
         log_with_ctx(
             logger,
-            logging.WARNING if event != "hold_released" else logging.INFO,
+            logging.INFO if event in {"hold_released", "cold_start_started"} else logging.WARNING,
             f"WEBUI_OUTAGE | {event}",
             ctx=LogContext(job_id=job_id, subsystem="webui_outage"),
             extra_fields=record,
@@ -441,6 +414,8 @@ class WebUIOutageCoordinator:
         if self._recovery_lock.locked():
             return False
         self._listen_to(self._safe_manager())
+        gate = self._gate
+        own = gate is not None and gate.owns_hold()
         now = self._clock()
         with self._lock:
             if (
@@ -449,7 +424,7 @@ class WebUIOutageCoordinator:
                 and now - self._last_check_at < self._release_interval_s
             ):
                 return False
-        proof = self._fresh_probe()
+        proof = self._fresh_handoff_proof() if own else self._fresh_probe()
         if not proof.ready:
             return False
         if self._fenced() or not self._queue.release_webui_dispatch():
@@ -460,10 +435,55 @@ class WebUIOutageCoordinator:
             self._startup_gate = False
             self._incident_id = None
             self._affected.clear()
-            if self._last_recovery in {"none", "failed", "external_runtime_action_required"}:
+            if own:
+                self._last_recovery = "cold_start_succeeded"
+            elif self._last_recovery in {"none", "failed", "external_runtime_action_required"}:
                 self._last_recovery = "runtime_recovered"
+        if own and gate is not None:
+            gate.forget()
         self._record_incident("hold_released", incident_id=incident, probe=proof)
         return True
+
+    # -- queue-driven runtime handoff (PR-RUNTIME-HANDOFF) ----------------------------------------------------------
+
+    def enable_runtime_handoff(self, handoff: WebUIRuntimeHandoff | None = None) -> None:
+        """Arm the pre-claim runtime handoff. Production wiring only: an injected (test) service stays inert."""
+
+        from src.controller.webui_runtime_handoff import WebUIRuntimeHandoff
+        from src.controller.webui_runtime_handoff_gate import RuntimeHandoffGate
+
+        self._gate = RuntimeHandoffGate(
+            self._queue,
+            handoff or WebUIRuntimeHandoff(),
+            blocked=lambda: self._fenced() or self._gpu_quarantined(),
+            set_status=self._set_handoff_status,
+            record=self._record_incident,
+            clock=self._clock,
+            interval_s=self._release_interval_s,
+        )
+
+    def prepare_next_dispatch(self, *, force: bool = False, allow_launch: bool = True) -> str:
+        """Ready the runtime the next queued workload needs (or hold WebUI work) before the worker claims it."""
+
+        gate = self._gate
+        return gate.prepare(force=force, allow_launch=allow_launch) if gate is not None else "not_applicable"
+
+    def _set_handoff_status(self, health: str, incident_id: str | None, last_recovery: str | None) -> None:
+        with self._lock:
+            self._health = WebUIHealth(health)
+            self._incident_id = incident_id
+            if last_recovery is not None:
+                self._last_recovery = last_recovery
+
+    def _fresh_handoff_proof(self) -> ProbeResult:
+        gate = self._gate
+        proof = gate.fresh_proof() if gate is not None else None
+        if proof is None:
+            return self._fresh_probe()
+        with self._lock:
+            self._last_probe = proof
+            self._last_check_at = self._clock()
+        return proof
 
     # -- projection -------------------------------------------------------------------------------------------------
 
@@ -489,6 +509,13 @@ class WebUIOutageCoordinator:
                 ),
             }
             message = messages[health]
+            handoff = self._gate.projection() if self._gate is not None else {}
+            if handoff.get("detail") and health in (
+                WebUIHealth.RECOVERING,
+                WebUIHealth.UNAVAILABLE,
+                WebUIHealth.ACTION_REQUIRED,
+            ):
+                message = str(handoff["detail"])
             if int(summary.get("held_gpu_loss") or 0):
                 # PR-QUEUE-GPU-180: a GPU quarantine holds video jobs too, so nothing "continues" meanwhile.
                 message = message.replace(
@@ -514,6 +541,11 @@ class WebUIOutageCoordinator:
                 "held_jobs_remain_queued": True,
                 "last_probe_reason": probe.reason if probe else None,
                 "recent_incidents": [dict(item) for item in self._incidents],
+                "runtime_handoff": {
+                    "armed": self._gate is not None,
+                    "attempts": handoff.get("attempts", 0),
+                    "state": handoff.get("state", {}),
+                },
             }
 
 
@@ -525,4 +557,5 @@ __all__ = [
     "WebUIHealth",
     "WebUIOutageCoordinator",
     "default_webui_probe",
+    "probe_webui_runtime",
 ]

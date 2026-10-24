@@ -247,6 +247,22 @@ class SingleNodeJobRunner:
         except Exception:  # noqa: BLE001
             logger.debug("WebUI hold release check failed", exc_info=True)
 
+    def _prepare_runtime(self, *, force: bool = False, allow_launch: bool = True) -> str | None:
+        """Ask the coordinator to ready (or hold) the runtime the next workload needs, before the claim.
+
+        Observation and the existing managed launch only: the claim, the lifecycle and the generation dispatch are
+        untouched, and a failure of the preparation can never fail a job (the claim then proceeds as it always did).
+        """
+
+        prepare = getattr(self._outage_observer, "prepare_next_dispatch", None)
+        if not callable(prepare):
+            return None
+        try:
+            return str(prepare(force=force, allow_launch=allow_launch))
+        except Exception:  # noqa: BLE001 - containment must never break the worker
+            logger.exception("Queue-driven runtime preparation failed; the claim proceeds unchanged")
+            return None
+
     def _idle_wait(self) -> None:
         """Wait for work; when only held work remains (WebUI hold or GPU quarantine), wait longer (no hot spin)."""
         try:
@@ -371,6 +387,11 @@ class SingleNodeJobRunner:
                 return False
             # Operator intent: with auto-run off no worker loop is checking, so ask for a fresh readiness proof.
             self._maybe_release_hold(force=True)
+            if self._prepare_runtime(force=True, allow_launch=False) == "launch_needed":
+                # The next image job's runtime must be launched: that waits on a process, so it never runs on the
+                # caller's (possibly GUI) thread. The one-shot worker prepares, then makes the usual atomic claim.
+                self._launch_worker("prepare_once")
+                return True
             # One atomic claim: eligibility (WebUI hold) and QUEUED -> RUNNING cannot be separated by a hold change.
             job = self.job_queue.claim_next_job()
             if job is None:
@@ -379,12 +400,19 @@ class SingleNodeJobRunner:
             return True
 
     def _worker_main(self, mode: str, job: Job | None) -> None:
-        if mode == "once" and job is not None:
+        if mode == "prepare_once":
+            # Manual Run Next whose runtime needs a managed launch: prepare on this worker (bounded, single flight),
+            # then claim exactly like any other one-shot dispatch. A held or failed launch claims nothing.
+            self._prepare_runtime(force=True)
+            job = None if self._stop_event.is_set() else self.job_queue.claim_next_job()
+            mode = "once"
+        if mode == "once":
             failure: Exception | None = None
-            try:
-                self.run_once(job)
-            except Exception as exc:  # noqa: BLE001 - run_once already recorded the failure
-                failure = exc
+            if job is not None:
+                try:
+                    self.run_once(job)
+                except Exception as exc:  # noqa: BLE001 - run_once already recorded the failure
+                    failure = exc
             with self._lifecycle_lock:
                 handoff = (
                     self._continue_after_once
@@ -456,6 +484,7 @@ class SingleNodeJobRunner:
             self._cancel_current.clear()
             self._cancel_return_to_queue = False
             self._maybe_release_hold()
+            self._prepare_runtime()
             # Clear before claiming: a change that lands between the claim and the wait leaves the event set.
             clear_wake = getattr(self.job_queue, "clear_wake", None)
             if callable(clear_wake):

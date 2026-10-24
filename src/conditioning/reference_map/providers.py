@@ -3,7 +3,9 @@
 Each provider turns the loaded, oriented source into an RGB map plus the exact method identity, auxiliary-file identity,
 runtime versions and disclosed warnings. Canny is a pure CPU adapter; depth and OpenPose stage their hash-verified model
 files and run one contained child process through the repository's bounded-process helper (``run_bounded``): a
-wall-clock timeout, a stdout cap and cooperative cancellation that kills the child's whole tree. The child sees no GPU.
+wall-clock timeout, a stdout cap, a verified 6,144 MB memory limit and cooperative cancellation that kills the child's whole
+tree. The child sees no GPU. A host other than Windows that cannot establish the limit runs the child without it and says so
+in the result's warnings; Windows never does.
 
 A provider that cannot run raises ``ProviderUnavailable`` with precise reason codes. Nothing falls back to another map
 type or method, and nothing here starts a thread, a runtime, a job or a network request.
@@ -28,6 +30,7 @@ from src.conditioning.reference_map.contracts import (
     CODE_CANCELLED,
     CODE_INFERENCE,
     CODE_TIMEOUT,
+    WARNING_MEMORY_UNENFORCED,
     AuxiliaryFileIdentity,
     CancelCheck,
     MethodIdentity,
@@ -46,6 +49,11 @@ from src.utils.managed_process import ProcessOutcome, run_bounded
 WORKER_PATH = Path(__file__).with_name("worker.py")
 MAX_RESULT_BYTES = 8 * 1024 * 1024
 WORKER_STDOUT_CAP = 64 * 1024
+#: Committed-memory ceiling for a model child's whole process tree (the container's job limit; IMG-QUAL-330). It is
+#: the ceiling the Florence and SAM offline qualification ran under; a container that cannot enforce it means no child.
+WORKER_MEMORY_LIMIT_MB = 6144
+#: ``run_worker`` sets this key on the result document when the child ran without the limit (a host that cannot enforce it).
+MEMORY_UNENFORCED_KEY = "memory_limit_not_enforced"
 DEFAULT_TIMEOUT_SECONDS = {"depth": 300.0, "openpose": 600.0}
 _ENV_ALLOWLIST = (
     "SYSTEMROOT", "SYSTEMDRIVE", "PATH", "PATHEXT", "TEMP", "TMP", "TMPDIR",
@@ -87,6 +95,8 @@ def bounded_runner(
         max_stdout_bytes=max_stdout_bytes,
         cancel=cancel,
         env=env,
+        memory_limit_mb=WORKER_MEMORY_LIMIT_MB,
+        allow_unenforced_memory_limit=True,  # honoured off Windows only; the outcome and the operator then say so
     )
 
 
@@ -188,6 +198,8 @@ def run_worker(
     if outcome.launch_error:
         raise ReferenceMapError(CODE_INFERENCE, "The model process could not be started.")
     document = _read_result(job_dir)
+    if outcome.memory_limit_enforced is False:
+        document[MEMORY_UNENFORCED_KEY] = True
     if outcome.returncode != 0 or not document.get("ok"):
         reasons = tuple(str(item) for item in document.get("reasons", ()) if isinstance(item, str))
         if document.get("code") == "provider_unavailable":
@@ -213,6 +225,10 @@ def _read_result(job_dir: Path) -> dict[str, Any]:
     if not isinstance(document, dict):
         raise ReferenceMapError(CODE_INFERENCE, "The model produced an invalid result.")
     return document
+
+
+def unenforced_warnings(document: Mapping[str, Any]) -> tuple[str, ...]:
+    return (WARNING_MEMORY_UNENFORCED,) if document.get(MEMORY_UNENFORCED_KEY) is True else ()
 
 
 def _runtime(document: Mapping[str, Any]) -> dict[str, str]:
@@ -298,7 +314,7 @@ class DepthProvider(_AuxiliaryProvider):
             runtime=_runtime(document),
             auxiliary=verified.files,
             auxiliary_resource=verified.resource_id,
-            warnings=verified.warnings,
+            warnings=(*verified.warnings, *unenforced_warnings(document)),
         )
 
 
@@ -330,7 +346,9 @@ class PoseProvider(_AuxiliaryProvider):
             runtime=_runtime(document),
             auxiliary=verified.files,
             auxiliary_resource=verified.resource_id,
-            warnings=tuple(dict.fromkeys((*verified.warnings, *warnings))),
+            warnings=tuple(
+                dict.fromkeys((*verified.warnings, *warnings, *unenforced_warnings(document)))
+            ),
         )
 
 
