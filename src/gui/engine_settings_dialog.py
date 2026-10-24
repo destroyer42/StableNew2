@@ -24,6 +24,12 @@ from src.gui_v2.prompt_optimizer_view import (
     UNKNOWN_POSITION_HELP,
 )
 from src.utils.config import ConfigManager
+from src.video.comfy_process_manager import read_comfy_launch_facts
+from src.video.comfy_runtime_setup import (
+    ComfyLaunchFacts,
+    environment_override_notice,
+    restart_pending_notice,
+)
 from src.video.managed_comfy_runtime import (
     ManagedComfyContract,
     ManagedComfyContractError,
@@ -59,10 +65,17 @@ class EngineSettingsDialog(ttk.Frame):
         managed_comfy_contract: ManagedComfyContract | None = None,
         managed_comfy_detector: Callable[[ManagedComfyContract, int], ManagedComfyDetection]
         | None = None,
+        comfy_launch_facts: Callable[[], ComfyLaunchFacts] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
         self.config_manager = config_manager
+        self._comfy_launch_facts = comfy_launch_facts or (
+            lambda: read_comfy_launch_facts(config_manager)
+        )
+        self._comfy_repair_reason = ""
+        self._comfy_detection_note = ""
+        self._save_error_var = tk.StringVar()
         self._comfy_contract_error = ""
         if managed_comfy_contract is None:
             try:
@@ -320,7 +333,41 @@ class EngineSettingsDialog(ttk.Frame):
     def comfy_command(self) -> list[str]:
         return list(self._comfy_command)
 
+    def focus_video_runtime(self, reason: str = "") -> None:
+        """Opened from Fix ComfyUI Setup: say why, and put focus on the first available repair action."""
+
+        self._comfy_repair_reason = reason.strip()
+        self._refresh_comfy_labels()
+        for button in (self.add_comfy_flags_button, self.use_managed_comfy_button):
+            try:
+                if button.instate(["!disabled"]):
+                    button.focus_set()
+                    return
+            except tk.TclError:
+                return
+
+    def _safe_launch_facts(self) -> ComfyLaunchFacts:
+        try:
+            return self._comfy_launch_facts()
+        except Exception:  # noqa: BLE001 - unreadable facts are simply not shown
+            return ComfyLaunchFacts()
+
     def comfy_status_text(self) -> str:
+        facts = self._safe_launch_facts()
+        parts = []
+        if self._comfy_repair_reason:
+            parts.append(f"Why you are here: {self._comfy_repair_reason}")
+        parts.append(self._comfy_assessment_text())
+        if self._comfy_detection_note:
+            parts.append(self._comfy_detection_note)
+        parts.extend(
+            text
+            for text in (environment_override_notice(facts), restart_pending_notice(facts))
+            if text
+        )
+        return "\n".join(parts)
+
+    def _comfy_assessment_text(self) -> str:
         contract = self._comfy_contract
         if contract is None:
             return f"Managed ComfyUI contract unavailable: {self._comfy_contract_error}"
@@ -375,12 +422,19 @@ class EngineSettingsDialog(ttk.Frame):
             contract, port_from_base_url(self._comfy_base_url_var.get())
         )
         if not detection.found:
+            self._comfy_detection_note = (
+                "Managed ComfyUI not found:\n- "
+                + "\n- ".join(detection.problems)
+                + "\nSee docs/runbooks/managed_comfy_runtime.md to build it; nothing was changed."
+            )
+            self._refresh_comfy_labels()
             messagebox.showwarning(
                 "Managed ComfyUI not found",
                 "\n".join(detection.problems)
                 + "\n\nSee docs/runbooks/managed_comfy_runtime.md to build it.",
             )
             return False
+        self._comfy_detection_note = ""
         updates = detection.settings_updates()
         self._comfy_command = list(updates["comfy_command"])
         self._comfy_workdir = str(updates["comfy_workdir"])
@@ -419,6 +473,10 @@ class EngineSettingsDialog(ttk.Frame):
         cancel_btn.grid(row=0, column=1, sticky="ew", padx=4)
         save_btn = ttk.Button(btn_frame, text="Save & Close", command=self._handle_save)
         save_btn.grid(row=0, column=2, sticky="ew")
+        # A failed save is shown here, inline and non-modal: the dialog stays open without a blocking pop-up.
+        ttk.Label(
+            btn_frame, textvariable=self._save_error_var, style="Page.Muted.TLabel", wraplength=480
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
     def _add_label_entry(
         self,
@@ -610,18 +668,25 @@ class EngineSettingsDialog(ttk.Frame):
         values = self.collect_values()
         if not self._validate(values):
             return
+        self._save_error_var.set("")
         if callable(self._on_save):
             try:
                 self._on_save(values)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - a failed save is reported; the dialog stays open
+                self._save_error_var.set(
+                    f"The settings were not saved: {exc} Nothing was applied. Fix the problem and "
+                    "choose Save & Close again, or Cancel."
+                )
+                return
         if self.restart_required():
             messagebox.showinfo("Settings", self.runtime_notice_text())
         if self.comfy_settings_changed():
+            override = environment_override_notice(self._safe_launch_facts())
             messagebox.showinfo(
                 "Settings",
                 "Restart StableNew to apply the video runtime (ComfyUI) change. A ComfyUI that is "
-                "already running is not stopped or changed.",
+                "already running is not stopped or changed."
+                + (f"\n\n{override}" if override else ""),
             )
         if callable(self._on_content_visibility_mode_change):
             try:

@@ -4,7 +4,9 @@ Presentation only: every rule lives in ``workflow_preflight`` and ``RuntimeReadi
 driver's GPU memory and, when ComfyUI is already serving, its node list, so it runs on a worker owned by the existing
 ``ThreadRegistry``; widget reads happen before the worker starts and every widget update is marshalled back to the Tk
 thread through ``TkUiDispatcher``. The strip has no control that changes the form or what is submitted (Refresh only
-re-runs the read-only probe) and it never starts, stops or adopts a process.
+re-runs the read-only probe) and it never starts, stops or adopts a process. **Fix ComfyUI Setup** appears only beside a
+blocker Engine Settings can repair and only calls the injected ``on_fix_setup`` (which opens Engine Settings); it edits
+nothing itself.
 """
 
 from __future__ import annotations
@@ -38,12 +40,14 @@ class WorkflowRuntimeReadinessStrip(ttk.LabelFrame):
         read_selection: Callable[[], tuple[str, str]],
         on_change: Callable[[], None] | None = None,
         runner: BackgroundWorkRunner | None = None,
+        on_fix_setup: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, text="Runtime readiness", padding=8)
         self._session = session
         self._read_selection = read_selection
         self._on_change = on_change
         self._runner = runner
+        self._on_fix_setup = on_fix_setup
         self._closed = False
         self._last_view: RuntimeReadinessView | None = None
         self.columnconfigure(0, weight=1)
@@ -55,13 +59,27 @@ class WorkflowRuntimeReadinessStrip(ttk.LabelFrame):
         self.rows_frame.grid(row=1, column=0, sticky="ew", pady=(4, 0))
         self.rows_frame.columnconfigure(1, weight=1)
         self._row_labels: list[ttk.Label] = []
+        self.notices_var = tk.StringVar(value="")
+        self.notices_label = ttk.Label(
+            self, textvariable=self.notices_var, style="Muted.TLabel", justify="left"
+        )
+        self.notices_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        bind_wraplength(self.notices_label)
+        self.notices_label.grid_remove()
+        actions = ttk.Frame(self, style="Panel.TFrame")
+        actions.grid(row=3, column=0, sticky="w", pady=(6, 0))
         self.refresh_button = ttk.Button(
-            self,
+            actions,
             text="Refresh",
             style="Dark.TButton",
             command=lambda: self.request_refresh(force=True),
         )
-        self.refresh_button.grid(row=2, column=0, sticky="w", pady=(6, 0))
+        self.refresh_button.grid(row=0, column=0, sticky="w")
+        self.fix_setup_button = ttk.Button(
+            actions, text="Fix ComfyUI Setup", style="Dark.TButton", command=self._fix_setup
+        )
+        self.fix_setup_button.grid(row=0, column=1, sticky="w", padx=(6, 0))
+        self.fix_setup_button.grid_remove()
         self.bind("<Destroy>", self._on_destroy, add="+")
         self.render()
 
@@ -118,6 +136,10 @@ class WorkflowRuntimeReadinessStrip(ttk.LabelFrame):
         if follow_up is not None:
             self._start(follow_up)
 
+    def _fix_setup(self) -> None:
+        if self._on_fix_setup is not None:
+            self._on_fix_setup()
+
     def _notify(self) -> None:
         if self._on_change is not None:
             self._on_change()
@@ -155,6 +177,16 @@ class WorkflowRuntimeReadinessStrip(ttk.LabelFrame):
             body.grid(row=index, column=1, sticky="ew")
             bind_wraplength(body)
             self._row_labels.extend((tag, body))
+        notices = "\n".join(view.notices)
+        self.notices_var.set(notices)
+        if notices:
+            self.notices_label.grid()
+        else:
+            self.notices_label.grid_remove()
+        if view.repair_available and self._on_fix_setup is not None:
+            self.fix_setup_button.grid()
+        else:
+            self.fix_setup_button.grid_remove()
         self.refresh_button.configure(state="disabled" if view.busy else "normal")
 
     @property

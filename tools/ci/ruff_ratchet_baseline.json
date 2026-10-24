@@ -390,8 +390,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1312,
-      "S110": 514,
+      "BLE001": 1310,
+      "S110": 512,
       "S112": 37
     },
     "counts": {
@@ -528,8 +528,8 @@
         "S110": 7
       },
       "src/gui/engine_settings_dialog.py": {
-        "BLE001": 3,
-        "S110": 3
+        "BLE001": 2,
+        "S110": 2
       },
       "src/gui/gui_invoker.py": {
         "BLE001": 2,
@@ -552,8 +552,8 @@
         "S110": 2
       },
       "src/gui/main_window_v2.py": {
-        "BLE001": 104,
-        "S110": 72,
+        "BLE001": 103,
+        "S110": 71,
         "S112": 1
       },
       "src/gui/model_comparison_readiness.py": {
