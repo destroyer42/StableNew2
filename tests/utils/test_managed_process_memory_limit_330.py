@@ -369,3 +369,50 @@ def test_each_model_backed_path_reaches_run_bounded_with_the_ceiling(
                 ).caption(source, lambda: False)
 
     assert [call["memory_limit_mb"] for call in captured] == [6144]
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or os.path.exists("/sys/fs/cgroup/stablenew"),
+    reason="needs a POSIX host with no StableNew cgroup root",
+)
+def test_a_host_that_cannot_enforce_the_ceiling_starts_no_model_child(tmp_path) -> None:
+    """The Linux CI runner case: the capped runner refuses with a reason; it never runs the child uncapped."""
+
+    marker = tmp_path / "ran"
+    outcome = providers.bounded_runner(
+        [_PY, "-c", f"open({str(marker)!r}, 'w').write('x')"],
+        timeout_seconds=30,
+        max_stdout_bytes=1024,
+        cancel=None,
+        env=providers.worker_environment(),
+    )
+    assert (
+        outcome.returncode is None
+        and "memory limit could not be established" in outcome.launch_error
+    )
+    assert not marker.exists(), "the child ran without the required memory limit"
+
+
+def test_the_capped_runner_starts_nothing_when_the_platform_has_no_container(
+    monkeypatch, tmp_path
+) -> None:
+    """The same refusal on any host: a Linux runner without cgroup v2 builds a ``NullProcessContainer``."""
+
+    monkeypatch.setattr(
+        managed_process,
+        "build_process_container",
+        lambda job_id, config: NullProcessContainer(
+            job_id, config, "construction_failed: linux cgroup v2: CGroup v2 root not found"
+        ),
+    )
+    marker = tmp_path / "ran"
+    outcome = providers.bounded_runner(
+        [_PY, "-c", f"open({str(marker)!r}, 'w').write('x')"],
+        timeout_seconds=30,
+        max_stdout_bytes=1024,
+        cancel=None,
+        env=providers.worker_environment(),
+    )
+    assert outcome.returncode is None
+    assert "memory limit could not be established" in outcome.launch_error
+    assert not marker.exists(), "the child ran without the required memory limit"
