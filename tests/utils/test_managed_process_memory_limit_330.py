@@ -182,6 +182,7 @@ def test_the_model_runner_passes_the_documented_ceiling(monkeypatch) -> None:
     )
     assert providers.WORKER_MEMORY_LIMIT_MB == 6144
     assert captured["memory_limit_mb"] == 6144
+    assert captured["allow_unenforced_memory_limit"] is True  # honoured off Windows only
 
 
 def test_every_model_child_uses_the_capped_runner_by_default() -> None:
@@ -371,32 +372,8 @@ def test_each_model_backed_path_reaches_run_bounded_with_the_ceiling(
     assert [call["memory_limit_mb"] for call in captured] == [6144]
 
 
-@pytest.mark.skipif(
-    os.name == "nt" or os.path.exists("/sys/fs/cgroup/stablenew"),
-    reason="needs a POSIX host with no StableNew cgroup root",
-)
-def test_a_host_that_cannot_enforce_the_ceiling_starts_no_model_child(tmp_path) -> None:
-    """The Linux CI runner case: the capped runner refuses with a reason; it never runs the child uncapped."""
-
-    marker = tmp_path / "ran"
-    outcome = providers.bounded_runner(
-        [_PY, "-c", f"open({str(marker)!r}, 'w').write('x')"],
-        timeout_seconds=30,
-        max_stdout_bytes=1024,
-        cancel=None,
-        env=providers.worker_environment(),
-    )
-    assert (
-        outcome.returncode is None
-        and "memory limit could not be established" in outcome.launch_error
-    )
-    assert not marker.exists(), "the child ran without the required memory limit"
-
-
-def test_the_capped_runner_starts_nothing_when_the_platform_has_no_container(
-    monkeypatch, tmp_path
-) -> None:
-    """The same refusal on any host: a Linux runner without cgroup v2 builds a ``NullProcessContainer``."""
+def _no_container(monkeypatch) -> None:
+    """A host with no container at all, like a Linux runner without cgroup v2; containment is not required there."""
 
     monkeypatch.setattr(
         managed_process,
@@ -405,14 +382,184 @@ def test_the_capped_runner_starts_nothing_when_the_platform_has_no_container(
             job_id, config, "construction_failed: linux cgroup v2: CGroup v2 root not found"
         ),
     )
+    monkeypatch.setattr(managed_process, "containment_required", lambda: False)
+
+
+def _marker_command(marker) -> list[str]:
+    return [_PY, "-c", f"open({str(marker)!r}, 'w').write('x')"]
+
+
+def test_a_non_windows_host_that_cannot_enforce_the_cap_runs_the_child_with_a_loud_warning(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    _no_container(monkeypatch)
+    monkeypatch.setattr(managed_process, "_unenforced_fallback_allowed", lambda: True)
+    marker = tmp_path / "ran"
+    with caplog.at_level("WARNING", logger=managed_process.logger.name):
+        outcome = run_bounded(
+            _marker_command(marker),
+            timeout_seconds=30,
+            max_stdout_bytes=1024,
+            memory_limit_mb=512,
+            allow_unenforced_memory_limit=True,
+        )
+    assert outcome.returncode == 0 and not outcome.launch_error and marker.exists()
+    assert outcome.memory_limit_enforced is False
+    assert any("WITHOUT a memory limit" in record.getMessage() for record in caplog.records)
+
+
+def test_without_the_opt_in_a_host_that_cannot_enforce_the_cap_still_starts_nothing(
+    monkeypatch, tmp_path
+) -> None:
+    _no_container(monkeypatch)
+    monkeypatch.setattr(managed_process, "_unenforced_fallback_allowed", lambda: True)
+    marker = tmp_path / "ran"
+    outcome = run_bounded(
+        _marker_command(marker), timeout_seconds=30, max_stdout_bytes=1024, memory_limit_mb=512
+    )
+    assert outcome.returncode is None and "could not be established" in outcome.launch_error
+    assert outcome.memory_limit_enforced is None and not marker.exists()
+
+
+@windows_only
+def test_windows_never_runs_a_child_without_the_cap_even_when_the_caller_allows_it(
+    monkeypatch, tmp_path
+) -> None:
+    from src.utils import win_jobobject
+
+    real = win_jobobject.WindowsJobObject._set_limits  # noqa: SLF001
+
+    def refuse_memory(self, info):
+        if info.BasicLimitInformation.LimitFlags & win_jobobject.JOB_OBJECT_LIMIT_JOB_MEMORY:
+            return False
+        return real(self, info)
+
+    monkeypatch.setattr(win_jobobject.WindowsJobObject, "_set_limits", refuse_memory)
     marker = tmp_path / "ran"
     outcome = providers.bounded_runner(
-        [_PY, "-c", f"open({str(marker)!r}, 'w').write('x')"],
+        _marker_command(marker),
         timeout_seconds=30,
         max_stdout_bytes=1024,
         cancel=None,
         env=providers.worker_environment(),
     )
-    assert outcome.returncode is None
-    assert "memory limit could not be established" in outcome.launch_error
-    assert not marker.exists(), "the child ran without the required memory limit"
+    assert outcome.returncode is None and "could not be established" in outcome.launch_error
+    assert not marker.exists(), "Windows must never run a model child outside the cap"
+
+
+@windows_only
+def test_an_established_cap_is_reported_as_enforced() -> None:
+    outcome = run_bounded(
+        [_PY, "-c", "print(1)"],
+        timeout_seconds=30,
+        max_stdout_bytes=1024,
+        memory_limit_mb=512,
+        allow_unenforced_memory_limit=True,
+    )
+    assert outcome.returncode == 0 and outcome.memory_limit_enforced is True
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or os.path.exists("/sys/fs/cgroup/stablenew"),
+    reason="needs a POSIX host with no StableNew cgroup root",
+)
+def test_a_real_host_without_a_cgroup_runs_the_model_runner_uncapped_and_says_so(tmp_path) -> None:
+    marker = tmp_path / "ran"
+    outcome = providers.bounded_runner(
+        _marker_command(marker),
+        timeout_seconds=30,
+        max_stdout_bytes=1024,
+        cancel=None,
+        env=providers.worker_environment(),
+    )
+    assert outcome.returncode == 0 and marker.exists()
+    assert outcome.memory_limit_enforced is False
+
+
+def test_run_worker_marks_its_result_when_the_child_ran_without_the_cap(tmp_path) -> None:
+    import json
+    from pathlib import Path
+
+    import numpy as np
+
+    from src.conditioning.reference_map.providers import (
+        MEMORY_UNENFORCED_KEY,
+        Context,
+        run_worker,
+        unenforced_warnings,
+    )
+
+    def make_runner(enforced):
+        def runner(command, *, timeout_seconds, max_stdout_bytes, cancel, env):
+            (Path(command[-1]) / "result.json").write_text(json.dumps({"ok": True}))
+            return ProcessOutcome(0, memory_limit_enforced=enforced)
+
+        return runner
+
+    rgb = np.zeros((2, 2, 3), np.uint8)
+    for enforced, marked in [(False, True), (True, False), (None, False)]:
+        job = tmp_path / f"job-{enforced}"
+        job.mkdir()
+        context = Context(registry=None, cancel=lambda: False, runner=make_runner(enforced))
+        document = run_worker(job, "depth", "depth", {}, rgb, context)
+        assert (document.get(MEMORY_UNENFORCED_KEY) is True) is marked
+        assert bool(unenforced_warnings(document)) is marked
+
+
+def test_the_warning_reaches_the_operator_in_both_features() -> None:
+    from src.conditioning.reference_map.contracts import WARNING_MEMORY_UNENFORCED, warning_text
+    from src.review.assist.contracts import CAPABILITY_SEGMENT, ModelIdentity
+
+    text = warning_text(WARNING_MEMORY_UNENFORCED)
+    assert text.startswith("WARNING:") and "without one" in text and "Windows enforces" in text
+    plain = ModelIdentity(CAPABILITY_SEGMENT, "sam-2-1-small", "local child process, CPU")
+    flagged = ModelIdentity(
+        CAPABILITY_SEGMENT,
+        "sam-2-1-small",
+        "local child process, CPU",
+        warnings=(WARNING_MEMORY_UNENFORCED,),
+    )
+    assert "NOT ENFORCED" not in plain.label and "MEMORY LIMIT NOT ENFORCED" in flagged.label
+
+
+def test_the_smart_review_adapters_carry_the_warning_into_the_model_identity(
+    monkeypatch, tmp_path
+) -> None:
+    import json
+    from pathlib import Path
+
+    import numpy as np
+
+    from src.conditioning.reference_map import auxiliary
+    from src.conditioning.reference_map.contracts import WARNING_MEMORY_UNENFORCED
+    from src.review.assist.contracts import PointPrompt, SourceIdentity
+    from src.review.assist.identity import LoadedSource
+
+    monkeypatch.setattr(assist_providers, "runtime_reasons", lambda capability: ())
+    monkeypatch.setattr(
+        auxiliary,
+        "verify_resource",
+        lambda registry, modality, cancelled=None: auxiliary.VerifiedResource(modality, ()),
+    )
+    monkeypatch.setattr(
+        auxiliary,
+        "stage_resource",
+        lambda resource, root, destination, cancelled=None: destination.mkdir(parents=True) or {},
+    )
+
+    def runner(command, *, timeout_seconds, max_stdout_bytes, cancel, env):
+        job = Path(command[-1])
+        (job / "result.json").write_text(json.dumps({"ok": True, "shape": [2, 2], "score": 0.5}))
+        (job / "logits.f32").write_bytes(np.ones((2, 2), "<f4").tobytes())
+        return ProcessOutcome(0, memory_limit_enforced=False)
+
+    registry = type("Registry", (), {"webui_root": tmp_path})()
+    adapter = assist_providers.ChildSegmentAdapter(
+        lambda: registry, runner=runner, temp_root=str(tmp_path)
+    )
+    source = LoadedSource(
+        SourceIdentity("0" * 64, 1, 8, 8, 1, "PNG"), np.zeros((8, 8, 3), np.uint8)
+    )
+    output = adapter.segment(source, [PointPrompt(1, 1, True)], [], lambda: False)
+    assert WARNING_MEMORY_UNENFORCED in output.model.warnings
+    assert "MEMORY LIMIT NOT ENFORCED" in output.model.label

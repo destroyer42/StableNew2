@@ -167,8 +167,10 @@ per Review tab and in memory only (a new session starts off); no model is ever d
 - **Limits.** Real-image mask and caption quality and GPU use are not qualified. Each model child runs under a verified 6,144 MB
   committed-memory limit, per child and not an application-wide budget (`run_bounded(memory_limit_mb=...)`: the child does not
   start unless the OS itself reports that limit, read back from the job object or cgroup; actual peak use and model fit are
-  unmeasured; where a host cannot enforce the limit, such as Linux without a delegated StableNew cgroup, no model child
-  starts), and AI provenance is not recorded in the frozen edit record. Tests:
+  unmeasured). On Windows a limit that cannot be established means no child. A host other than Windows that cannot
+  establish it (for example Linux without a delegated StableNew cgroup) runs the child **without** a memory limit, logs a
+  warning, and shows "WARNING: this host could not enforce the 6,144 MB memory limit..." with the map or "MEMORY LIMIT NOT
+  ENFORCED" in the Smart Review model label. AI provenance is not recorded in the frozen edit record. Tests:
   `tests/review/assist/test_assist_pure_320.py`, `tests/review/assist/test_assist_session_320.py`,
   `tests/gui_v2/test_smart_review_320.py`, `tests/assets/test_review_assist_catalog_320.py`.
 

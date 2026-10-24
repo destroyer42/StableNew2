@@ -494,11 +494,7 @@ def test_the_real_worker_script_bootstraps_in_isolated_mode(tmp_path) -> None:
     job.mkdir()
     (job / "request.json").write_text(json.dumps({"kind": "nope", "width": 1, "height": 1}))
     (job / "source.rgb").write_bytes(b"\0\0\0")
-    # This test is about the script bootstrapping in isolated mode. The memory ceiling that ``bounded_runner`` adds needs a
-    # container that can enforce it (a Windows job object, or a Linux cgroup the host has delegated); where there is none the
-    # runner correctly starts nothing (see test_managed_process_memory_limit_330), so only Windows exercises the capped path.
-    runner = providers.bounded_runner if os.name == "nt" else providers.run_bounded
-    outcome = runner(
+    outcome = providers.bounded_runner(
         [sys.executable, "-I", str(providers.WORKER_PATH), str(job)],
         timeout_seconds=60,
         max_stdout_bytes=4096,

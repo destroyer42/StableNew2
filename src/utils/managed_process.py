@@ -76,6 +76,9 @@ class ProcessOutcome:
     launch_error: str = ""
     #: Whether the child ran inside an OS container (so a kill reached its whole tree).
     contained: bool = False
+    #: ``None``: no memory limit was requested. ``True``: the OS confirmed the requested limit before the child started.
+    #: ``False``: a limit was requested, the host could not establish it, and the caller allowed the child to run without it.
+    memory_limit_enforced: bool | None = None
 
 
 class ContainmentError(RuntimeError):
@@ -86,6 +89,12 @@ def containment_required() -> bool:
     """Windows is the supported runtime platform: a child there is never run without its job object."""
 
     return os.name == "nt"
+
+
+def _unenforced_fallback_allowed() -> bool:
+    """A host other than Windows (the supported runtime, where a missing limit is a fault) may run unlimited when allowed."""
+
+    return os.name != "nt"
 
 
 _BYTES_PER_MB = 1024 * 1024
@@ -128,6 +137,7 @@ class _Spawned:
     process: subprocess.Popen[bytes]
     container: ProcessContainer
     contained: bool
+    memory_limit_enforced: bool | None = None
 
 
 class OwnedChildObservation:
@@ -360,6 +370,50 @@ def _spawn_contained(
     env: Mapping[str, str] | None,
     below_normal: bool = False,
     memory_limit_mb: float | None = None,
+    allow_unenforced_memory_limit: bool = False,
+) -> _Spawned:
+    """Start ``command`` under a memory limit when one is requested, otherwise exactly as before.
+
+    With a limit the child starts only if the OS confirms it (see ``_launch_child``). When ``allow_unenforced_memory_limit``
+    is set and the host is not Windows, a host that cannot establish the limit starts the child without it instead of
+    refusing, logs a warning, and marks the result ``memory_limit_enforced=False`` so the caller can tell the operator.
+    On Windows the limit is never optional."""
+
+    kwargs: dict[str, Any] = {
+        "label": label,
+        "require_containment": require_containment,
+        "cwd": cwd,
+        "env": env,
+        "below_normal": below_normal,
+    }
+    if memory_limit_mb is None:
+        return _launch_child(command, **kwargs)
+    try:
+        spawned = _launch_child(command, memory_limit_mb=memory_limit_mb, **kwargs)
+    except ContainmentError as exc:
+        if not (allow_unenforced_memory_limit and _unenforced_fallback_allowed()):
+            raise
+        logger.warning(
+            "[managed_process] %s: %s; running the child WITHOUT a memory limit on this host (the caller allowed it)",
+            label,
+            exc,
+        )
+        spawned = _launch_child(command, **kwargs)
+        spawned.memory_limit_enforced = False
+        return spawned
+    spawned.memory_limit_enforced = True
+    return spawned
+
+
+def _launch_child(
+    command: Sequence[str],
+    *,
+    label: str,
+    require_containment: bool | None,
+    cwd: str | None,
+    env: Mapping[str, str] | None,
+    below_normal: bool = False,
+    memory_limit_mb: float | None = None,
 ) -> _Spawned:
     """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
 
@@ -480,12 +534,16 @@ def run_bounded(
     require_containment: bool | None = None,
     observe: Callable[[OwnedChildObservation], None] | None = None,
     memory_limit_mb: float | None = None,
+    allow_unenforced_memory_limit: bool = False,
 ) -> ProcessOutcome:
     """Run one child with a wall-clock timeout, output caps and cooperative cancellation.
 
     ``memory_limit_mb`` caps the memory the child's whole tree may commit (the container's job limit). When given it is
     mandatory and verified: if the container cannot report exactly that limit the child is not run and
     ``launch_error`` says so. ``None`` (the default) leaves memory unbounded, as before.
+    ``allow_unenforced_memory_limit`` relaxes that on a host other than Windows only: if the limit cannot be established the
+    child runs without it, a warning is logged and the outcome carries ``memory_limit_enforced=False``. On Windows it is
+    ignored and a limit that cannot be established still means no child.
 
     Where containment is required (``containment_required()``) the child runs inside its own container, so a timeout or
     cancellation kills its whole tree; if that cannot be arranged the child is not run and the reason is reported in
@@ -498,6 +556,7 @@ def run_bounded(
         spawn_options: dict[str, Any] = {"below_normal": True} if observe is not None else {}
         if memory_limit_mb is not None:
             spawn_options["memory_limit_mb"] = memory_limit_mb
+            spawn_options["allow_unenforced_memory_limit"] = allow_unenforced_memory_limit
         spawned = _spawn_contained(
             command,
             label=f"bounded-{uuid.uuid4().hex[:12]}",
@@ -596,6 +655,7 @@ def run_bounded(
         output_truncated=out_buf.overflow,
         cancelled=cancelled,
         contained=spawned.contained,
+        memory_limit_enforced=spawned.memory_limit_enforced,
     )
 
 
