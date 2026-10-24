@@ -13,7 +13,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from src.conditioning.reference_map.contracts import AuxiliaryFileIdentity
+from src.conditioning.reference_map.contracts import (
+    WARNING_MEMORY_UNENFORCED,
+    AuxiliaryFileIdentity,
+)
 
 CAPABILITY_SEGMENT = "sam2"
 CAPABILITY_CAPTION = "florence2"
@@ -116,7 +119,10 @@ class ModelIdentity:
     @property
     def label(self) -> str:
         versions = ", ".join(f"{k} {v}" for k, v in sorted(self.runtime.items()))
-        return f"{TITLES.get(self.capability, self.capability)} ({self.adapter}{'; ' + versions if versions else ''})"
+        unbounded = (
+            "; MEMORY LIMIT NOT ENFORCED" if WARNING_MEMORY_UNENFORCED in self.warnings else ""
+        )
+        return f"{TITLES.get(self.capability, self.capability)} ({self.adapter}{'; ' + versions if versions else ''}{unbounded})"
 
 
 @dataclass(frozen=True, slots=True)

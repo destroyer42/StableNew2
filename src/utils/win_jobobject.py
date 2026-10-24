@@ -277,6 +277,27 @@ class WindowsJobObject:
             kernel32.CloseHandle(self._handle)
             self._handle = None
 
+    def enforced_memory_limit_bytes(self) -> int | None:
+        """The committed-memory limit the OS holds for this job right now, read back from the job object.
+
+        ``None`` when the job is closed, the query fails, or no job-wide memory limit is set. This is the OS's answer, not
+        the value this instance asked for."""
+
+        if not self._handle:
+            return None
+        info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        if not kernel32.QueryInformationJobObject(
+            self._handle,
+            JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+            ctypes.byref(info),
+            ctypes.sizeof(info),
+            None,
+        ):
+            return None
+        if not info.BasicLimitInformation.LimitFlags & JOB_OBJECT_LIMIT_JOB_MEMORY:
+            return None
+        return int(info.JobMemoryLimit) or None
+
     def inspect(self) -> dict[str, Any]:
         return {
             "name": self._name,

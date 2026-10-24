@@ -34,6 +34,7 @@ from src.conditioning.reference_map.providers import (
     ProcessRunner,
     bounded_runner,
     run_worker,
+    unenforced_warnings,
 )
 from src.review.assist.contracts import (
     CAPABILITY_CAPTION,
@@ -259,7 +260,7 @@ class _ChildAdapter:
             adapter=ADAPTER_LABEL,
             files=verified.files,
             runtime=runtime,
-            warnings=verified.warnings,
+            warnings=(*verified.warnings, *unenforced_warnings(document)),
         )
 
 

@@ -90,6 +90,22 @@ class LinuxCGroupV2:
         except Exception as exc:
             logger.debug("Failed to remove cgroup path %s: %s", self._path, exc)
 
+    def enforced_memory_limit_bytes(self) -> int | None:
+        """The ``memory.max`` the kernel holds for this cgroup, read back from the file.
+
+        ``None`` when it cannot be read, is ``max`` (unlimited) or is not a positive integer. ``_write`` only logs a
+        refused write, so the value this instance asked for proves nothing."""
+
+        try:
+            text = (self._path / "memory.max").read_text().strip()
+        except OSError:
+            return None
+        try:
+            value = int(text)
+        except ValueError:
+            return None
+        return value if value > 0 else None
+
     def inspect(self) -> dict[str, Any]:
         return {
             "path": str(self._path),
