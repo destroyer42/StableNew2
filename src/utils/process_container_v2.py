@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 from src.utils import LogContext, log_with_ctx
+from src.utils.process_observation import ProcessTreeSample
 
 if TYPE_CHECKING:
     from src.utils.cgroup_v2 import LinuxCGroupV2
@@ -62,6 +63,10 @@ class ProcessContainer(ABC):
             "container_type": type(self).__name__,
             "config": asdict(self.config),
         }
+
+    def observe_tree(self, root_pid: int) -> ProcessTreeSample:
+        """Read only this container. Unsupported telemetry is an explicit failure."""
+        raise OSError("owned container telemetry unavailable")
 
 
 class NullProcessContainer(ProcessContainer):
@@ -155,6 +160,9 @@ class WindowsContainerAdapter(ProcessContainer):
 
     def kill_all(self) -> None:
         self._inner.kill_all()
+
+    def observe_tree(self, root_pid: int) -> ProcessTreeSample:
+        return self._inner.observe_tree(root_pid)
 
     def teardown(self) -> None:
         self._inner.close()

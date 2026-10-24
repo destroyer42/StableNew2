@@ -313,7 +313,7 @@ def _good_summary(**overrides) -> dict:
     return summary
 
 
-GOOD_PREFERENCE = {"judged_pairs": 120, "win_rate_lower95": 0.62}
+GOOD_PREFERENCE = {"judged_pairs": 120, "decided": 120, "win_rate_lower95": 0.62}
 
 
 def test_a_complete_clean_arm_passes_and_each_gate_is_independent() -> None:
@@ -356,7 +356,7 @@ def test_gate_boundaries_are_inclusive_where_the_owner_said_at_most() -> None:
         _good_summary(),
         thresholds,
         teardown_verified=True,
-        preference={"judged_pairs": 120, "win_rate_lower95": 0.5},
+        preference={"judged_pairs": 120, "decided": 120, "win_rate_lower95": 0.5},
     )
     assert not_enough["verdict"] == "NO-GO", "the lower bound must be strictly above 50%"
 
@@ -392,7 +392,7 @@ def test_missing_evidence_is_inconclusive_never_a_pass_or_a_failure() -> None:
             _good_summary(),
             thresholds,
             teardown_verified=True,
-            preference={"judged_pairs": 40, "win_rate_lower95": 0.9},
+            preference={"judged_pairs": 40, "decided": 40, "win_rate_lower95": 0.9},
         )["verdict"]
         == "INCONCLUSIVE"
     )

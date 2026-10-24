@@ -6,6 +6,8 @@ import logging
 import os
 from typing import Any
 
+from src.utils.process_observation import ProcessTreeSample
+
 if os.name != "nt":
     raise RuntimeError("Windows job objects are only available on Windows platforms.")
 
@@ -76,6 +78,74 @@ kernel32.SetInformationJobObject.argtypes = [
     wintypes.LPVOID,
     wintypes.DWORD,
 ]
+
+kernel32.QueryInformationJobObject.argtypes = [
+    wintypes.HANDLE,
+    wintypes.INT,
+    wintypes.LPVOID,
+    wintypes.DWORD,
+    wintypes.LPVOID,
+]
+kernel32.QueryInformationJobObject.restype = wintypes.BOOL
+kernel32.IsProcessInJob.argtypes = [wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)]
+kernel32.IsProcessInJob.restype = wintypes.BOOL
+kernel32.GetPriorityClass.argtypes = [wintypes.HANDLE]
+kernel32.GetPriorityClass.restype = wintypes.DWORD
+kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE, *([ctypes.POINTER(wintypes.FILETIME)] * 4)]
+kernel32.GetProcessTimes.restype = wintypes.BOOL
+get_process_memory_info = kernel32.K32GetProcessMemoryInfo
+
+
+class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
+    _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [
+        (name, ctypes.c_size_t)
+        for name in (
+            "PeakWorkingSetSize",
+            "WorkingSetSize",
+            "QuotaPeakPagedPoolUsage",
+            "QuotaPagedPoolUsage",
+            "QuotaPeakNonPagedPoolUsage",
+            "QuotaNonPagedPoolUsage",
+            "PagefileUsage",
+            "PeakPagefileUsage",
+            "PrivateUsage",
+        )
+    ]
+
+
+get_process_memory_info.argtypes = [
+    wintypes.HANDLE,
+    ctypes.POINTER(PROCESS_MEMORY_COUNTERS_EX),
+    wintypes.DWORD,
+]
+get_process_memory_info.restype = wintypes.BOOL
+
+
+def _member_sample(job_handle: Any, pid: int) -> tuple[int, int, float, int]:
+    # No mutation, even for a recycled PID: prove membership on the retained handle,
+    # then read that same kernel object. Never reopen by PID between check and use.
+    handle = kernel32.OpenProcess(0x0400 | 0x0010, False, pid)
+    if not handle:
+        raise OSError("owned member inaccessible")
+    try:
+        member = wintypes.BOOL()
+        if (
+            not kernel32.IsProcessInJob(handle, job_handle, ctypes.byref(member))
+            or not member.value
+        ):
+            raise OSError("process is not in the owned job")
+        info = PROCESS_MEMORY_COUNTERS_EX()
+        info.cb = ctypes.sizeof(info)
+        times = [wintypes.FILETIME() for _ in range(4)]
+        priority = kernel32.GetPriorityClass(handle)
+        if not priority or not get_process_memory_info(handle, ctypes.byref(info), info.cb):
+            raise OSError("owned member telemetry unavailable")
+        if not kernel32.GetProcessTimes(handle, *(ctypes.byref(t) for t in times)):
+            raise OSError("owned member CPU telemetry unavailable")
+        cpu = sum((t.dwHighDateTime << 32) | t.dwLowDateTime for t in times[2:]) / 10_000_000
+        return int(info.PrivateUsage), int(info.WorkingSetSize), cpu, int(priority)
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def resume_suspended_process(pid: int) -> bool:
@@ -166,6 +236,41 @@ class WindowsJobObject:
         if not self._handle:
             return
         kernel32.TerminateJobObject(self._handle, 1)
+
+    def observe_tree(self, root_pid: int) -> ProcessTreeSample:
+        if not self._handle:
+            raise OSError("owned job is closed")
+        # Job membership includes workers even after their launcher exits. Retry a
+        # growing list, but never accept a truncated list as complete telemetry.
+        for capacity in (64, 256, 1024, 4096):
+
+            class PidList(ctypes.Structure):
+                _fields_ = [
+                    ("assigned", wintypes.DWORD),
+                    ("count", wintypes.DWORD),
+                    ("pids", ctypes.c_size_t * capacity),
+                ]
+
+            members = PidList()
+            ok = kernel32.QueryInformationJobObject(
+                self._handle, 3, ctypes.byref(members), ctypes.sizeof(members), None
+            )
+            if ok and members.count <= capacity and members.assigned == members.count:
+                break
+        else:
+            raise OSError("owned job membership unavailable or oversized")
+        if not members.count:
+            raise OSError("owned child exited before observation")
+        rows = [_member_sample(self._handle, int(pid)) for pid in members.pids[: members.count]]
+        return ProcessTreeSample(
+            root_pid,
+            len(rows),
+            sum(r[0] for r in rows),
+            sum(r[1] for r in rows),
+            sum(r[2] for r in rows),
+            all(r[3] == 0x4000 for r in rows),
+            rows[0][3],
+        )
 
     def close(self) -> None:
         if self._handle:

@@ -37,7 +37,7 @@ from src.ai_assist.manifests import (
     verify_installation,
 )
 from src.ai_assist.observe import ChildObserver, default_cap_gib
-from src.ai_assist.paths import events_path, work_dir
+from src.ai_assist.paths import events_path
 from src.ai_assist.runtime import AiRuntime
 from src.ai_assist.validators import validate_output
 from src.utils.thread_registry import get_thread_registry
@@ -114,7 +114,7 @@ class _Watch:
         if self._token.cancelled:
             self.outcome = (OutcomeCode.CANCELLED, "request_cancelled")
             return True
-        if self._observer is not None and not self._observer.has_child:
+        if self._observer is not None and not self._observer.evidence.child_observed:
             # Until the child is found, look on every 50 ms poll: priority is applied as early as possible and a
             # short request is still observed.
             reason = self._observer.poll()
@@ -339,7 +339,6 @@ class AiAssistService:
         started = self._clock()
         assert verification.entry is not None
         observer = ChildObserver(
-            str(work_dir(self._root, request.request_id)),
             cap_gib=self._policy.process_memory_cap_gib
             or default_cap_gib(verification.entry.bytes),
             clock=self._clock,
@@ -356,7 +355,13 @@ class AiAssistService:
         output_chars: int | None = None
         try:
             result = self._runtime.run_once(
-                verification, request, self._limits, self._sampling, watch, watch.cancelled_outcome
+                verification,
+                request,
+                self._limits,
+                self._sampling,
+                watch,
+                watch.cancelled_outcome,
+                observe=observer.bind,
             )
             if result.code is not None:
                 outcome = AssistOutcome(

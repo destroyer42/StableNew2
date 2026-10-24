@@ -314,6 +314,17 @@ def run_session(
     busy_provider: Callable[[], list[str]] | None = None,
     attest: str | None = None,
 ) -> dict[str, Any]:
+    # Marker-based session egress and teardown diagnostics below are not proof
+    # of process ownership. Real runtime execution stays refused until that
+    # evidence path is bound to the owned container and D12b is authorized.
+    # An injected command factory is solely the hermetic Python-child test seam.
+    if command_factory is None:
+        return {
+            "verdict": "NOT TESTED",
+            "refused": [
+                "Physical qualification blocked: ownership-bound session egress and teardown evidence required before D12b"
+            ],
+        }
     registry = registry or load_model_registry(plan_module.REGISTRY_PATH)
     evidence = paths.evidence_root / f"physical-{stage}"
     # Exclusive claim: a second session of this stage is refused (FileExistsError), never merged into.

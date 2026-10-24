@@ -1,84 +1,138 @@
-# PR-AI-111: Offline AI Assist qualification, Stage 1 (offline preparation)
+# PR-AI-111: Stage 1 safety reconciliation and authorized downloads
 
-Verdict: **INCONCLUSIVE. Stage 1 offline preparation only; zero physical operations.**
-No model was downloaded, imported or run; no runtime was started. This record makes **no** claim about the quality, latency,
-memory use or refusal behaviour of any model, and it does not select a production model. It authorizes nothing: every
-physical step below needs a named owner authorization (PR-AI-100 decision D12).
+All four models: **NOT TESTED**. Physical qualification: **BLOCKED**.
+Five D12-authorized artifacts are locally size/SHA-256 verified and staged outside Git.
+Nothing has been installed into managed AI directories, extracted for execution, executed, loaded, inferred, promoted or qualified.
+No production runtime, GPU or firewall state was changed.
 
-Execution profile: Standard, qualification-only. Model recommendation: Claude Code Sonnet 5.5 High / Codex GPT-6.1 Sol High,
-local Windows host. Controller Surface Assessment: no controller or coordinator code is touched.
+## Execution Profile + Model/Reasoning Recommendation
 
-## What this stage built
+Standard, bounded lifecycle-sensitive reconciliation in the existing `ai/111-offline-qualification` worktree, starting at
+`cdafbd2d71c9fa566918ff8d30b976cf35d95432`. No merge/rebase of current main and no unrelated operator work.
+Model recommendation: Claude Code Sonnet 5.5 XHigh / Codex GPT-6.1 Sol XHigh on local Windows.
+The lifecycle and PID-reuse proof justify this tier to reduce retries and total successful-work cost.
+Expected usage: order of 10M cache-read and 60k output tokens; a planning allowance, not measured consumption.
+Controller Surface Assessment: no controller/coordinator changes; no ceiling increases.
+Token-Efficient Validation Plan: focused synthetic artifact/corpus/scoring tests and contained Python-child regressions,
+one final canonical gate after source stabilization, one security review with bounded reverification;
+reuse unchanged accepted evidence. Never execute downloaded artifacts in tests.
 
-| Area | Result |
-|---|---|
-| Deferred finding F2 (priority, worker-tree memory) | Implemented inside `src/ai_assist/observe.py` **without changing the shared `src/utils/managed_process.py`**: the service finds its own child (a descendant whose command line holds the request's unique scratch directory), applies below-normal priority to the tree and **reads it back from the OS**, samples the tree's private memory and working set, and stops the request above a cap or when the child cannot be found. Evidence (`child_observed`, `priority_verified`, `peak_tree_private_gib`, `max_tree_processes`) is returned in `AssistOutcome.details` and, as numbers only, in the event record. Tested against real child processes |
-| Candidate model pins | `config/ai_model_registry.json` now holds four **candidates** (`qualified: false`): Qwen3.5-9B Q4_K_M and Q5_K_M, Qwen3.5-4B Q8_0 and Q4_K_M (unsloth GGUF). Sizes and SHA-256 are the Hugging Face LFS values reported on 2026-10-23, with publisher and packager repository revisions and source URLs. They are **not verified against local bytes** and are checked when the operator imports a file |
-| Runtime | Intended asset only (below). No build is pinned in `config/managed_ai_runtime.json`, because that needs the SHA-256 of every loadable file in the archive, known only after an authorized download |
-| Harness | `tools/qualification/ai111/`: frozen plan with one digest, deterministic 215-case corpus, baselines (identity, deterministic engine, heuristic), per-arm scoring and gate evaluation, exact statistics, blind pairing, and the physical session driver. Tested with fakes only |
+## F2 ownership reconciliation
 
-## Frozen plan
+`run_bounded(observe=...)` opts into a read-only capability for its exact launched child.
+Existing consumers omit this parameter and retain their interfaces. The bounded runner remains the only lifecycle owner.
+On Windows, BELOW_NORMAL priority is a creation flag, applied before resume within the anonymous job.
+Job membership is enumerated from the owned job object, including workers independent of the launcher.
+Each worker handle is checked using `IsProcessInJob`; memory, CPU and priority are read from that same retained handle.
+PID reuse, matching command lines, inaccessible members and early exit grant no priority or termination authority.
+No PID-based priority setter remains. The capability expires before container teardown.
+Invalid/missing telemetry and failed priority read-back fail closed. Memory cap breaches require two consecutive samples.
+Timeout, cancellation and containment regression coverage remains on the original whole-tree teardown path.
+Portable diagnostics are read-only and do not establish Windows qualification.
 
-Plan digest (`python -m tools.qualification.ai111 --out <new-directory>`): `17814e4050049323dc4f5206417bac67f94307d7791ce580af2948e2310df338`.
-Corpus: 215 synthetic cases from seed 111, digest `bd09dee88a70252f82455329d7e885e54c1e1883715f8bf7dd3731b5ce17f5d8`.
-Changing the thresholds, the runtime asset, any model pin, the corpus specification, the limits or the safety rules changes the
-digest and needs fresh acceptance. The committed plan quotes this digest in a test, so it cannot drift silently.
+Security review and final reverification: **PASS**, no current blocking findings.
+The downloader also rejects pre-existing redirected/nonregular staging entries and empty/unknown artifact selections.
 
-| Item | Value |
-|---|---|
-| Runtime asset | `llama.cpp` `b11840` (commit `36e36e63a54fc8f85b95e9c499a022b597e478dd`), `llama-b11840-bin-win-cpu-x64.zip`, 24,156,518 bytes, SHA-256 `f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034` (GitHub release API digest), MIT. CPU build: no CUDA library is present |
-| Stage A | 30 deterministic, stratified cases for every candidate arm: latency, memory, validity smoke (go/no-go) |
-| Stage B | the full corpus for the owner-chosen leading arms; needs its own authorization |
-| Gates | refusal rate on lawful sensitive prompts at most 5% (D5); schema-valid rate 100% with the grammar; zero accepted protected-token changes, out-of-list choices, obeyed injections and observed network connections; median latency at most 20 s; child observed, priority verified and teardown verified; blind preference win-rate lower 95% bound above 50% over at least 100 judged pairs |
-| Verdict rules | a failed measured or hard gate is NO-GO for that arm; missing evidence (too few cases, unverified priority or teardown, no preference ratings) is INCONCLUSIVE; PASS needs all of it |
+## Download verification
 
-## Authorization requested (nothing below has been done)
+Publisher/runtime packager: `ggml-org/llama.cpp`; CPU-only Windows asset `b11840`,
+source commit `36e36e63a54fc8f85b95e9c499a022b597e478dd`.
+Models: publishers `Qwen/Qwen3.5-9B` and `Qwen/Qwen3.5-4B`; packagers
+`unsloth/Qwen3.5-9B-GGUF` at `3885219b6810b007914f3a7950a8d1b469d598a5` and
+`unsloth/Qwen3.5-4B-GGUF` at `e87f176479d0855a907a41277aca2f8ee7a09523`.
+Exact source URLs and publisher revisions are retained in the unchanged registry and download JSONL evidence;
+all five identities were cross-checked against the original freeze authorization request.
+Every observed hash and byte count below equals its recorded expectation.
 
-| # | Action | Bytes | Where from |
-|---|---|---:|---|
-| 1 | Download the CPU runtime archive | 24,156,518 | `https://github.com/ggml-org/llama.cpp/releases/download/b11840/llama-b11840-bin-win-cpu-x64.zip` |
-| 2 | Download Qwen3.5-9B Q4_K_M | 5,680,522,464 | `unsloth/Qwen3.5-9B-GGUF` @ `3885219b6810b007914f3a7950a8d1b469d598a5` |
-| 3 | Download Qwen3.5-9B Q5_K_M | 6,577,841,376 | same repository and revision |
-| 4 | Download Qwen3.5-4B Q8_0 | 4,482,403,488 | `unsloth/Qwen3.5-4B-GGUF` @ `e87f176479d0855a907a41277aca2f8ee7a09523` |
-| 5 | Download Qwen3.5-4B Q4_K_M | 2,740,937,888 | same repository and revision |
-| 6 | Import into an evidence-local AI root, run Stage A inference, sample memory, priority and network connections | | local only |
+| Artifact | Exact bytes | Expected = observed SHA-256 | Result |
+|---|---:|---|---|
+| llama-b11840-bin-win-cpu-x64.zip | 24156518 | `f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034` | VERIFIED |
+| Qwen3.5-9B-Q4_K_M.gguf | 5680522464 | `03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8` | VERIFIED |
+| Qwen3.5-9B-Q5_K_M.gguf | 6577841376 | `dc2a39aef291f91a9116ad214058da0d86eb648743a124bd8c333787c4b9c91c` | VERIFIED |
+| Qwen3.5-4B-Q8_0.gguf | 4482403488 | `10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1` | VERIFIED |
+| Qwen3.5-4B-Q4_K_M.gguf | 2740937888 | `00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4` | VERIFIED |
 
-Total download 19,505,861,734 bytes (18.17 GiB). Models are copied into the evidence-local AI root on import (never the
-operator's real `%LOCALAPPDATA%` directory), so plan for about twice that on disk plus 5 GiB; at freeze time `C:` had about
-107 GB free. GLM-4.7-Flash is deliberately **not** requested: its smallest sensible quantisation is 16 to 18 GB resident and
-needs owned runtimes released, so it would be a separate decision after Stage A. The owner may authorize a subset of the
-rows; the plan digest covers the full set, and `--arms` selects which run.
+Total: 19,505,861,734 bytes. Original download evidence:
+`C:/Users/rob/projects/StableNew-main/reports/ai111/downloads-20261023/`.
+Fresh independent full-byte verification:
+`C:/Users/rob/projects/StableNew-main/reports/ai111/downloads-reverified-20261023/`.
+The latter also holds passive ZIP member hashes in `binary-entry-hashes.json`; no archive extraction or binary execution occurred.
+Available disk after verification: 101100281856 bytes (point-in-time reading).
 
-Preconditions the harness enforces: a quiet host (no other gate, generation runtime or pytest running), the exact plan digest
-and a non-empty owner authorization statement recorded verbatim, every downloaded file matching its pinned size and SHA-256
-before anything is imported, an exclusive evidence directory per stage, and optionally the operator's recorded firewall
-attestation (`--strict-offline`; StableNew never edits firewall rules).
+Operator-controlled staging paths:
+- `C:\Users\rob\qual\ai111-downloads\llama-b11840-bin-win-cpu-x64.zip`
+- `C:\Users\rob\qual\ai111-downloads\Qwen3.5-9B-Q4_K_M.gguf`
+- `C:\Users\rob\qual\ai111-downloads\Qwen3.5-9B-Q5_K_M.gguf`
+- `C:\Users\rob\qual\ai111-downloads\Qwen3.5-4B-Q8_0.gguf`
+- `C:\Users\rob\qual\ai111-downloads\Qwen3.5-4B-Q4_K_M.gguf`
 
-```powershell
-python -m tools.qualification.ai111.physical --authorize-plan <digest> --authorization-text "<owner statement>" `
-  --stage A --arms B0_identity B1_engine qwen3.5-9b-q4_k_m-unsloth qwen3.5-4b-q8_0-unsloth `
-  --runtime-archive <path to the zip> --model-dir <directory holding the GGUF files> --evidence-root reports/ai111
+## Screening versus final qualification
+
+Historical Stage 1 plan SHA-256: `17814e4050049323dc4f5206417bac67f94307d7791ce580af2948e2310df338`.
+Historical corpus SHA-256: `bd09dee88a70252f82455329d7e885e54c1e1883715f8bf7dd3731b5ce17f5d8`.
+The 215-case corpus and 30-case-per-arm subset are preliminary screening only; their digest is unchanged.
+The original plan's authorization booleans remain historical freeze evidence, not current download authority.
+
+The separate `stablenew.ai111.final.v2` contract freezes 460 cases:
+300 rewrites, 100 target/workflow cases, 60 adversarial cases; the 100 allowed-sensitive cases overlap rewrites.
+At least 100 decisive blind judgments (ties excluded) are required before GO.
+Target oracles are checked against actual deterministic adaptation policy;
+workflow eligibility uses actual approved catalog ID/version pairs. These are policy eligibility oracles;
+operator preference must still establish suggestion quality.
+
+Final plan SHA-256: `3017c427c7f5c15bc900e6e5d1ef2d3e86b45c7bbb30d3a9d0a0d2f58b1eccbf`.
+Final corpus SHA-256: `a89297beb3ae86246eb25214738d91ba3f24dc1e2cd8a4f7547ae49c68a774d5`.
+Final frozen evidence: `C:/Users/rob/projects/StableNew-main/reports/ai111/final-freeze-v2-20261023/`.
+This supersedes the provisional final-freeze directory generated during reconciliation; neither has model output.
+Final GO evaluation refuses screening corpora, missing/duplicate case records, insufficient measured category coverage,
+and fewer than 100 decisive judgments. Empty physical records produce NOT TESTED.
+
+## Physical boundary and remaining authorizations
+
+The old physical harness still uses marker-only session egress/teardown diagnostics, which cannot prove owned-tree evidence.
+Ordinary real `run_session` execution now refuses before import or execution. Its injected Python-child seam remains testable.
+Replace those session diagnostics with ownership-bound evidence before D12b; the physical harness is not ready for model use.
+
+**D12a request (not granted):** authorize extraction of this verified CPU archive into a new evidence-only directory
+outside managed runtime/source directories, then only the `llama-cli.exe --version` and `llama-cli.exe --help` commands.
+Exact archive: `C:/Users/rob/qual/ai111-downloads/llama-b11840-bin-win-cpu-x64.zip`,
+SHA-256 `f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034`.
+Exact member: `llama-cli.exe`, 9,216 bytes,
+SHA-256 `c84a4604db9a01cb64ece64c7da5ace4c83c44dfb63f55a9c8d2270b685c0ee7`.
+Verify every DLL/member against the passive member-hash manifest immediately before launch.
+Host requirements: local Windows x64, quiet host, CPU-only archive, no weights present in the execution directory,
+bounded contained child, below-normal creation priority, timeout 10 s per command, stdout cap 64 KiB.
+Stop on any hash mismatch, unexpected dependency, containment/telemetry failure, nonzero exit, timeout,
+model access, connection attempt or unexpected persistent process. Do not fetch dependencies or alter firewall/runtime state.
+
+**D12b (not granted):** model import and CPU inference need a separate owner-approved package naming verified artifacts,
+frozen plan/corpus digests, arms, stage, host resource/egress/teardown requirements and evidence location.
+Resolve the ownership-bound session telemetry prerequisite first.
+No Stage A/B run, blind preference session, GPU generation, promotion, `qualified=true`, or merge is authorized.
+
+## Validation and publication
+
+Focused baseline: 293 passed, 2 skipped (Windows account cannot create test symlinks).
+Additional final-contract/session regression run: 41 passed; source safety changes are covered separately.
+Final canonical gate: **PASS**; 12,333 tests collected and 358 required-smoke tests passed (one warning), with repository unchanged.
+The final native-export/type repair and final-contract suite passed 25 tests; generated code-map checks passed 5 tests.
+Gate log: `C:/Users/rob/projects/StableNew-main/reports/ai111/reconciliation-pr-gate-frozen-20261023.log`.
+Earlier gate attempts stopped at untracked new source, a package-caused mypy error (fixed without raising the baseline),
+and a concurrent generated-document update during collection. The final run passed with the worktree frozen.
+Only this evidence-report text changed afterward; validated executable source/test content is unchanged.
+No binaries/weights are tracked or attached. Architecture ownership is unchanged.
+
+Publication is **pending explicit owner authorization** for push to `ai/111-offline-qualification`
+and creation of a draft PR against `main`. No remote branch or draft PR existed at verification.
+Hosted CI has not run for this unpublished branch. No merge/rebase/main mutation was performed.
+
+## Model / usage
+
+Codex local Windows; actual executor model `gpt-6.1-sol`, effort High (host log telemetry);
+0 published repair passes; local implementation/validation PASS; physical qualification BLOCKED.
+The required `--since-commit cdafbd2d --line` output below is the matching project-wide post-commit window,
+including other sessions on this host; it is **not** an exact PR-only token total. No missing usage is estimated.
+
+```text
+Claude Code claude-sonnet-5-5: 38 requests, fresh input 80, cache read 24.7M, cache write 95.2k, output 70.0k; Codex codex-auto-review: 61 requests, fresh input 220.4k, cache read 3.2M, cache write 0, output 6.2k; Codex gpt-6.1-sol: 186 requests, fresh input 761.1k, cache read 27.3M, cache write 0, output 91.7k (tokens from host session logs; cost not reported)
 ```
-
-## During a session (safety rules)
-
-Telemetry is flushed and fsynced incrementally: a baseline sample before anything runs, system memory once a second, and any
-network connection owned by the runtime four times a second. Each request runs through the production service (candidate mode):
-admission gates, contained CPU-only child, running memory guard, tree memory cap, priority read-back. After every request the
-child tree must be gone within a bounded wait; if it is not, the session stops and the teardown is recorded as unverified (the
-defect the WAN-321F session found). Three consecutive infrastructure failures stop the session. Records, summaries, the
-derived runtime pin (the per-file hashes the archive turns out to have, for a follow-up commit to
-`config/managed_ai_runtime.json`) and the blinded pairs are written to the evidence directory, which is machine-local and
-git-ignored. Evidence holds suggestion text so the operator can rate it; that is evaluation evidence for this run, not
-training-data capture (decision D7), and a synthetic corpus contains no operator prompts.
-
-## Limits of the evidence and open items
-
-- The closed-choice oracles are **proxies** built from how the generator made each case; the real selection evidence is the
-  operator's blind preference over their own prompts (an operator stratum of at least 100 consented prompts, supplied as JSONL
-  outside the repository).
-- The `llama.cpp` flag spellings, the JSON-schema flag and the non-interactive behaviour of the pinned binary are still
-  unverified (`AI_ASSIST.md` section 10); the first Stage A request will show whether they hold.
-- Priority and tree-memory code is proven against fake and ordinary Python children, not the real inference binary.
-- Hugging Face LFS hashes and the GitHub digest are provider-reported until verified against downloaded bytes.
-- The 20 s latency gate is a proposal; CPU decode speed on this host is an estimate until measured.

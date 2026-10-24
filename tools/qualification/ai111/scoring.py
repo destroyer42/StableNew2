@@ -243,7 +243,7 @@ def evaluate_gates(
     )
     if preference is not None:
         lower = preference["win_rate_lower95"]
-        judged = preference["judged_pairs"]
+        judged = preference.get("decided", 0)
         gate(
             "preference_judged_pairs",
             "evidence",
