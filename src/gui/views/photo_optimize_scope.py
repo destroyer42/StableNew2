@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from tkinter import messagebox
+from typing import Any, cast
 
 from src.photo_optimize.editing import apply_edit, prepare_edit, selection_values
 from src.photo_optimize.submission import describe_photo_plan
@@ -47,11 +48,11 @@ class PhotoOptimizeScopeMixin:
         self._refresh_scope_selection()
 
     def _review_edit(self, ids, mask, source):
-        self._with_saved_baseline(
+        cast(Any, self)._with_saved_baseline(
             lambda: self._review_saved_edit(ids, mask, source), action="Applying a batch edit"
         )
 
-    def _review_saved_edit(self, ids, mask, source):
+    def _review_saved_edit(self, ids: Any, mask: Any, source: Any) -> None:
         def prepared(plan):
             def render(asset, value):
                 subject = {
@@ -119,11 +120,11 @@ class PhotoOptimizeScopeMixin:
     def _optimize(self, *, batch_all):
         if not self._workspace_ready():
             return
-        self._with_saved_baseline(
+        cast(Any, self)._with_saved_baseline(
             lambda: self._optimize_saved(batch_all=batch_all), action="Preparing a plan"
         )
 
-    def _optimize_saved(self, *, batch_all):
+    def _optimize_saved(self, *, batch_all: bool) -> None:
         ids = self._selected_asset_ids(batch_all=batch_all)
         controller = self.app_controller
         store = self.store

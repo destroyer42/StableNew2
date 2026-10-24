@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from tkinter import TclError
 from typing import Any
@@ -98,7 +99,7 @@ def route_images_to_video_workflow(
 def route_images_to_review(
     *,
     main_window: Any,
-    image_paths: list[str | Path],
+    image_paths: Sequence[str | Path],
     status_message: str | None = None,
 ) -> list[str]:
     """Hand an ORDERED list of existing images to Review's selection (intent only; nothing is queued).
@@ -125,7 +126,7 @@ def route_images_to_review(
 def route_images_to_photo_optimize(
     *,
     main_window: Any,
-    image_paths: list[str | Path],
+    image_paths: Sequence[str | Path],
     status_message: str | None = None,
 ) -> list[str]:
     """Offer ORDERED existing images to the Managed Photo Set (import is planned and operator-confirmed there).

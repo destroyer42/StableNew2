@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
 from tkinter import messagebox
+from typing import Any, cast
 
 from PIL import Image
 
@@ -159,11 +160,11 @@ class PhotoOptimizeResultsMixin:
                 "No candidate", "Select a recorded result or the original first."
             )
             return
-        self._with_saved_baseline(
+        cast(Any, self)._with_saved_baseline(
             lambda: self._promote_saved_result(candidate), action="Promoting a result"
         )
 
-    def _promote_saved_result(self, candidate):
+    def _promote_saved_result(self, candidate: Any) -> None:
         asset_id, mode = self._current_asset_id, self.promotion_mode_var.get()
 
         def prepared(plan):
@@ -195,11 +196,11 @@ class PhotoOptimizeResultsMixin:
 
     def _revert_baseline(self):
         if self._current_asset_id is not None:
-            self._with_saved_baseline(
+            cast(Any, self)._with_saved_baseline(
                 self._revert_saved_baseline, action="Restoring the previous baseline"
             )
 
-    def _revert_saved_baseline(self):
+    def _revert_saved_baseline(self) -> None:
         asset_id = self._current_asset_id
         if asset_id is not None:
             self._run_photo_operation(

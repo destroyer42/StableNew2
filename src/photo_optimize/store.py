@@ -265,11 +265,11 @@ class PhotoOptimizeStore:
     def prepare_result_promotion(self, asset_id, candidate, *, mode):
         return prepare_promotion(self, asset_id, candidate, mode=mode)
 
-    def apply_result_promotion(self, plan):
+    def apply_result_promotion(self, plan: Any) -> Any:
         with self.asset_lock(plan.asset_id):
             return self._apply_result_promotion_locked(plan)
 
-    def _apply_result_promotion_locked(self, plan):
+    def _apply_result_promotion_locked(self, plan: Any) -> Any:
         fresh = prepare_promotion(self, plan.asset_id, plan.candidate, mode=plan.mode)
         if (fresh.fingerprint != plan.fingerprint or fresh.image_sha256 != plan.image_sha256
                 or fresh.after.to_dict() != plan.after.to_dict()):

@@ -5,7 +5,7 @@ import tkinter as tk
 from collections.abc import Sequence
 from tkinter import font as tkfont
 from tkinter import ttk
-from typing import cast
+from typing import Any, cast
 
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
@@ -136,7 +136,7 @@ class PhotoOptimizeLayoutMixin:
             flow,
             text="Open Selected in Quick Edit",
             style="Dark.TButton",
-            command=self._open_selected_in_quick_edit,
+            command=cast(Any, self)._open_selected_in_quick_edit,
         )
         attach_tooltip(
             self.open_in_quick_edit_btn,
@@ -567,7 +567,7 @@ class PhotoOptimizeLayoutMixin:
                                    wraplength=420)
         settings_error.grid(row=12, column=0, sticky="ew")
         self._bind_wrap(settings_error, baseline_box, margin=24)
-        save_status = ttk.Label(baseline_box, textvariable=self.baseline_save_status_var,
+        save_status = ttk.Label(baseline_box, textvariable=self.__dict__["baseline_save_status_var"],
                                 style="Dark.TLabel", wraplength=420)
         save_status.grid(row=13, column=0, sticky="ew")
         self._bind_wrap(save_status, baseline_box, margin=24)

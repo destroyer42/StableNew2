@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
@@ -261,7 +262,12 @@ class PhotoOptimizeTabFrameV2(
 
         self._run_photo_operation(self.store.retry_migration, completed)
 
-    def _run_photo_operation(self, operation, completed) -> None:
+    def _select_assets_after_refresh(self, asset_ids: list[str]) -> None:
+        """The next published list selects exactly these photos (and shows the first)."""
+
+        self._restored_asset_ids = list(asset_ids)
+
+    def _run_photo_operation(self, operation: Any, completed: Any) -> None:
         if self._operation_future is not None:
             messagebox.showwarning("Photo operation pending", "Wait for the current photo operation to finish.")
             return
@@ -700,7 +706,7 @@ class PhotoOptimizeTabFrameV2(
         elif state == "saved" and self.settings_error_var.get().startswith("Not saved"):
             self.settings_error_var.set("")
 
-    def _with_saved_baseline(self, then, *, action: str = "continue") -> None:
+    def _with_saved_baseline(self, then: Callable[[], None], *, action: str = "continue") -> None:
         """Run ``then`` only once the active photo's visible edits are durably saved; otherwise refuse, truthfully.
 
         The wait never blocks Tk: the draft is captured here and written on the save worker, and ``then`` runs when

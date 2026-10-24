@@ -12,7 +12,6 @@ Paths are the only thing that crosses: Review's History/Staged-Curation lineage 
 
 from __future__ import annotations
 
-import tkinter as tk
 from collections.abc import Callable, Sequence
 from tkinter import messagebox
 from typing import Any
@@ -30,9 +29,7 @@ from src.photo_optimize.managed_import import (
 ImportConfirm = Callable[[ManagedImportPlan], str | None]
 
 
-def ask_import_confirmation(
-    plan: ManagedImportPlan, *, parent: tk.Misc | None = None
-) -> str | None:
+def ask_import_confirmation(plan: ManagedImportPlan, *, parent: Any = None) -> str | None:
     """Default confirmation: show the plan; duplicates get an explicit open-existing vs. copy-again choice."""
 
     title = "Manage selected photos"
@@ -119,7 +116,7 @@ class PhotoOptimizeHandoffMixin:
         self.submission_summary_var.set(result.describe())  # type: ignore[attr-defined]
         if ids:
             # The list restore path selects every id (not only the first) once the refreshed list is published.
-            self._restored_asset_ids = list(ids)  # type: ignore[attr-defined]
+            self._select_assets_after_refresh(list(ids))  # type: ignore[attr-defined]
         self._refresh_assets(select_asset_id=ids[0] if ids else None)  # type: ignore[attr-defined]
         if result.failed or result.warnings:
             messagebox.showwarning("Manage selected photos", result.describe())

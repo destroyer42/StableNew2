@@ -15,7 +15,7 @@ from .paths import canonical_path, io_path
 from .settings import STAGES, resolve_geometry, validate_settings
 
 
-def digest(path):
+def digest(path: str | Path) -> str:
     with io_path(path, force=True).open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 

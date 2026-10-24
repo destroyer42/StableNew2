@@ -167,7 +167,7 @@ class EditResult:
         )
 
 
-def _asset_guard(store, identity):
+def _asset_guard(store: Any, identity: str) -> Any:
     guard = getattr(store, "asset_lock", None)
     return guard(identity) if callable(guard) else nullcontext()
 
