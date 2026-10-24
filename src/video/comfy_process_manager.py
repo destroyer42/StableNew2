@@ -5,10 +5,12 @@ import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from src.utils.config import ConfigManager
 from src.utils.managed_process import ManagedProcess
 from src.video.comfy_healthcheck import probe_comfy_endpoint, wait_for_comfy_ready
+from src.video.comfy_runtime_setup import ComfyLaunchFacts
 
 # Anchored to the repository, not the working directory, and size-rotated by ``ManagedProcess``.
 _MANAGED_COMFY_LOG_PATH = (
@@ -39,6 +41,10 @@ class ComfyStartupError(RuntimeError):
 
 
 _GLOBAL_COMFY_PROCESS_MANAGER: ComfyProcessManager | None = None
+# Evidence only: the launch configuration of the newest manager this process created. ``stop()`` unregisters a manager
+# (so a released runtime has no owner), but the manager the workflow backend keeps relaunches from this same
+# configuration until StableNew restarts, so a settings change made afterwards is still "not applied".
+_LAST_LAUNCH_CONFIG: ComfyProcessConfig | None = None
 
 
 class ComfyProcessManager:
@@ -55,13 +61,19 @@ class ComfyProcessManager:
         *,
         process_factory: Callable[..., ManagedProcess] = ManagedProcess,
     ) -> None:
-        global _GLOBAL_COMFY_PROCESS_MANAGER
+        global _GLOBAL_COMFY_PROCESS_MANAGER, _LAST_LAUNCH_CONFIG
         self._config = config
+        _LAST_LAUNCH_CONFIG = config
         self._process_factory = process_factory
         self._managed: ManagedProcess | None = None
         self._last_tails: tuple[list[str], list[str]] = ([], [])
         self._stopped = False
         _GLOBAL_COMFY_PROCESS_MANAGER = self
+
+    @property
+    def config(self) -> ComfyProcessConfig:
+        """The launch configuration this manager was created with (read-only evidence of what is active)."""
+        return self._config
 
     @property
     def process(self) -> subprocess.Popen | None:
@@ -216,8 +228,45 @@ def get_global_comfy_process_manager() -> ComfyProcessManager | None:
 
 
 def clear_global_comfy_process_manager() -> None:
-    global _GLOBAL_COMFY_PROCESS_MANAGER
+    global _GLOBAL_COMFY_PROCESS_MANAGER, _LAST_LAUNCH_CONFIG
     _GLOBAL_COMFY_PROCESS_MANAGER = None
+    _LAST_LAUNCH_CONFIG = None
+
+
+def _saved_and_environment_launch(settings: Mapping[str, Any]) -> ComfyLaunchFacts:
+    """Saved + environment launch evidence; the environment override wins at startup (documented behaviour)."""
+
+    saved = tuple(str(part) for part in settings.get("comfy_command") or [])
+    env_command = tuple(
+        part for part in os.environ.get("STABLENEW_COMFY_COMMAND", "").split() if part
+    )
+    return ComfyLaunchFacts(saved_command=saved, environment_command=env_command)
+
+
+def read_comfy_launch_facts(config_manager: ConfigManager | None = None) -> ComfyLaunchFacts:
+    """Saved, environment and active launch evidence for ``src/video/comfy_runtime_setup.py``; reads only.
+
+    The active command and ownership come from the manager this process registered (``ComfyProcessManager`` stays the
+    only lifecycle authority); nothing is started, stopped or adopted.
+    """
+
+    manager = config_manager or ConfigManager()
+    facts = _saved_and_environment_launch(manager.load_settings())
+    active = get_global_comfy_process_manager()
+    launch_config = active.config if active is not None else _LAST_LAUNCH_CONFIG
+    if launch_config is None:
+        return facts
+    try:
+        owns = bool(active is not None and active.owns_process and active.is_running())
+        command = tuple(str(part) for part in launch_config.command)
+    except Exception:  # noqa: BLE001 - an unreadable launcher is "unknown", never "matches"
+        return facts
+    return ComfyLaunchFacts(
+        saved_command=facts.saved_command,
+        environment_command=facts.environment_command,
+        active_command=command,
+        owns_runtime=owns,
+    )
 
 
 def build_default_comfy_process_config(
@@ -226,10 +275,7 @@ def build_default_comfy_process_config(
     manager = config_manager or ConfigManager()
     raw_settings = manager._load_settings()
     settings = manager.load_settings()
-    command = list(settings.get("comfy_command") or [])
-    if not command:
-        env_command = os.environ.get("STABLENEW_COMFY_COMMAND", "").split()
-        command = [part for part in env_command if part]
+    command = list(_saved_and_environment_launch(settings).effective_command)
     if not command:
         return None
     working_dir = str(settings.get("comfy_workdir") or "").strip() or None
@@ -255,4 +301,5 @@ __all__ = [
     "build_default_comfy_process_config",
     "clear_global_comfy_process_manager",
     "get_global_comfy_process_manager",
+    "read_comfy_launch_facts",
 ]

@@ -3049,21 +3049,21 @@ class AppController:
             on_error=lambda exc: self._append_log(f"[duration_stats] Refresh failed: {exc}"),
         )
 
-    def on_open_settings(self) -> None:
+    def on_open_settings(self, **dialog_options: Any) -> None:
         self._append_log("[controller] Opening settings dialog.")
         window = getattr(self, "main_window", None)
         if window is None or not hasattr(window, "open_engine_settings_dialog"):
             return
         try:
-            window.open_engine_settings_dialog(config_manager=self._config_manager)
+            window.open_engine_settings_dialog(config_manager=self._config_manager, **dialog_options)
         except Exception:
             pass
 
     def on_settings_saved(self, new_values: dict[str, Any]) -> None:
         if not new_values:
             return
-        self._config_manager.update_settings(new_values)
-        self._config_manager.save_settings()
+        if self._config_manager.update_settings(new_values) is False:
+            raise RuntimeError("Settings could not be written to disk.")
         if "webui_workdir" in new_values:
             set_webui_workdir(str(new_values.get("webui_workdir") or "").strip() or None)
         if "webui_autostart_enabled" in new_values:

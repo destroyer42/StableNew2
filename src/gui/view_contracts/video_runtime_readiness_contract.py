@@ -51,6 +51,12 @@ class RuntimeReadinessView:
     rows: tuple[GateRow, ...]
     block_reason: str
     busy: bool
+    #: Setup facts that are not gates (an environment override, a saved change waiting for a restart).
+    notices: tuple[str, ...] = ()
+    #: True only while a blocked gate is one Engine Settings > Video runtime (ComfyUI) can repair (never for RAM, VRAM,
+    #: nodes or model files). The strip offers the action; it changes nothing by itself.
+    repair_available: bool = False
+    repair_reason: str = ""
 
 
 class RuntimeReadinessSession:
@@ -187,6 +193,9 @@ class RuntimeReadinessSession:
                 rows,
                 preflight.block_reason,
                 self._state == STATE_LOADING,
+                notices=preflight.notices,
+                repair_available=preflight.setup_repair_available,
+                repair_reason=preflight.setup_repair_reason,
             )
 
 

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-556 of 710 modules have a docstring.
+557 of 711 modules have a docstring.
 
 ## src/
 
@@ -780,6 +780,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `comfy_dependency_probe.py`: (no docstring)
 - `comfy_healthcheck.py`: (no docstring)
 - `comfy_process_manager.py`: (no docstring)
+- `comfy_runtime_setup.py`: Toolkit-neutral facts about how ComfyUI is configured, what this process is running, and what that means (PR-…
 - `comfy_workflow_backend.py`: (no docstring)
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: (no docstring)

@@ -1614,7 +1614,14 @@ class MainWindowV2:
             except Exception:
                 pass
 
-    def open_engine_settings_dialog(self, *, config_manager: ConfigManager) -> None:
+    def open_engine_settings_dialog(
+        self,
+        *,
+        config_manager: ConfigManager,
+        focus_video_runtime: bool = False,
+        comfy_repair_reason: str = "",
+        on_closed: Callable[[], None] | None = None,
+    ) -> None:
         if not getattr(self, "root", None):
             return
 
@@ -1639,6 +1646,14 @@ class MainWindowV2:
             on_cancel=lambda: dialog.destroy(),
         )
         panel.pack(fill=tk.BOTH, expand=True)
+        if focus_video_runtime:
+            panel.focus_video_runtime(comfy_repair_reason)
+        if on_closed is not None:
+            dialog.bind(
+                "<Destroy>",
+                lambda event: on_closed() if event.widget is dialog else None,
+                add="+",
+            )
         try:
             dialog.grab_set()
         except Exception:
@@ -1654,11 +1669,9 @@ class MainWindowV2:
 
     def _handle_settings_saved(self, values: dict[str, Any], dialog: tk.Toplevel) -> None:
         controller = getattr(self.app_state, "controller", None)
-        if controller and hasattr(controller, "on_settings_saved"):
-            try:
-                controller.on_settings_saved(values)
-            except Exception:
-                pass
+        if not (controller and hasattr(controller, "on_settings_saved")):
+            raise RuntimeError("No settings controller is available to save these settings.")
+        controller.on_settings_saved(values)  # a failure propagates: the dialog stays open and says so
         try:
             dialog.destroy()
         except Exception:
