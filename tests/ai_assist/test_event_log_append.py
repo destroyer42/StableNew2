@@ -147,3 +147,153 @@ def test_oversized_or_foreign_fields_are_refused_before_anything_is_written(tmp_
         with pytest.raises(ValueError):
             log.append(bad)
     assert not path.exists()
+
+
+def test_torn_tail_repair_cannot_inspect_another_process_mid_append(tmp_path: Path) -> None:
+    """Force the old partial-tail/read/complete/prefix ordering without timing sleeps."""
+    path = tmp_path / "events.jsonl"
+    path.write_bytes(b'{"request_id":"seed"}\n')
+    writer = r"""
+import os, sys, time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from src.ai_assist import events
+path, sync = Path(sys.argv[2]), Path(sys.argv[3])
+def wait(name):
+    deadline = time.monotonic() + 20
+    while not (sync / name).exists():
+        if time.monotonic() > deadline:
+            raise RuntimeError("barrier timeout: " + name)
+        time.sleep(0.005)
+def split_append(target, data):
+    with target.open("ab", buffering=0) as handle:
+        handle.write(data[:-1])
+        os.fsync(handle.fileno())
+        (sync / "partial").touch()
+        wait("release")
+        handle.write(data[-1:])
+        os.fsync(handle.fileno())
+    (sync / "finished").touch()
+events._append_windows = split_append
+events._append_posix = split_append
+assert events.EventLog(path).append({"request_id": "first"})
+"""
+    contender = r"""
+import sys, time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from src.ai_assist import events
+path, sync = Path(sys.argv[2]), Path(sys.argv[3])
+def wait(name):
+    deadline = time.monotonic() + 20
+    while not (sync / name).exists():
+        if time.monotonic() > deadline:
+            raise RuntimeError("barrier timeout: " + name)
+        time.sleep(0.005)
+original = events.EventLog._ends_with_newline
+def inspect(self):
+    result = original(self)
+    (sync / "inspected").touch()
+    wait("finished")
+    return result
+events.EventLog._ends_with_newline = inspect
+# Signal the native acquisition attempt when a repaired writer serializes first.
+if sys.platform == "win32":
+    import msvcrt
+    locking = msvcrt.locking
+    def attempt(fd, mode, size):
+        if mode != msvcrt.LK_UNLCK:
+            (sync / "lock-attempt").touch()
+        return locking(fd, mode, size)
+    msvcrt.locking = attempt
+else:
+    import fcntl
+    flock = fcntl.flock
+    def attempt(fd, mode):
+        if mode != fcntl.LOCK_UN:
+            (sync / "lock-attempt").touch()
+        return flock(fd, mode)
+    fcntl.flock = attempt
+assert events.EventLog(path).append({"request_id": "second"})
+"""
+    processes = []
+    try:
+        processes.append(
+            subprocess.Popen(
+                [sys.executable, "-c", writer, str(REPO_ROOT), str(path), str(tmp_path)]
+            )
+        )
+        _wait_for_test_barrier(tmp_path, ("partial",))
+        processes.append(
+            subprocess.Popen(
+                [sys.executable, "-c", contender, str(REPO_ROOT), str(path), str(tmp_path)]
+            )
+        )
+        _wait_for_test_barrier(tmp_path, ("inspected", "lock-attempt"))
+        (tmp_path / "release").touch()
+        assert [process.wait(timeout=25) for process in processes] == [0, 0]
+        lines = path.read_bytes().splitlines()
+        assert len(lines) == 3 and all(lines), lines
+        assert [json.loads(line)["request_id"] for line in lines] == ["seed", "first", "second"]
+    finally:
+        (tmp_path / "release").touch()
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=10)
+
+
+def _wait_for_test_barrier(root: Path, names: tuple[str, ...]) -> None:
+    import time
+
+    deadline = time.monotonic() + 20
+    while not any((root / name).exists() for name in names):
+        if time.monotonic() > deadline:
+            pytest.fail(f"writer did not reach barrier: {names}")
+        time.sleep(0.005)
+
+
+def test_writer_crash_releases_lock_and_preserves_torn_tail_recovery(tmp_path: Path) -> None:
+    path = tmp_path / "events.jsonl"
+    path.write_bytes(b'{"request_id":"seed"}\n')
+    script = r"""
+import os, sys, time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from src.ai_assist.events import _writer_lock
+path, sync = Path(sys.argv[2]), Path(sys.argv[3])
+with _writer_lock(path):
+    with path.open("ab", buffering=0) as handle:
+        handle.write(b'{"request_id":"interrupted')
+        os.fsync(handle.fileno())
+    (sync / "locked").touch()
+    time.sleep(120)
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", script, str(REPO_ROOT), str(path), str(tmp_path)]
+    )
+    try:
+        _wait_for_test_barrier(tmp_path, ("locked",))
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=10)
+    assert EventLog(path).append({"request_id": "after"})
+    assert _ids(EventLog(path)) == ["seed", "after"]
+    assert json.loads(path.read_bytes().splitlines()[-1])["request_id"] == "after"
+    assert path.with_name(path.name + ".lock").exists()
+
+
+def test_writer_lock_timeout_is_visible_and_does_not_write_a_record(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    from src.ai_assist import events
+
+    path = tmp_path / "events.jsonl"
+    with events._writer_lock(path):
+        monkeypatch.setattr(events, "_WRITER_LOCK_TIMEOUT_S", 0.0)
+        assert EventLog(path).append({"request_id": "blocked"}) is False
+    assert not path.exists()
+    assert "event record could not be written" in caplog.text
+    assert EventLog(path).append({"request_id": "after"})
+    assert _ids(EventLog(path)) == ["after"]
