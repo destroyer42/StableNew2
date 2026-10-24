@@ -978,7 +978,14 @@ class SidebarPanelV2(ttk.Frame):
         Routes to controller's on_pipeline_add_packs_to_job.
         """
         logger.debug("[SidebarPanel] _on_add_to_job called")
-        if getattr(getattr(getattr(self, "app_state", None), "job_draft", None), "history_variation", None) is not None:
+        if (
+            getattr(
+                getattr(getattr(self, "app_state", None), "job_draft", None),
+                "history_variation",
+                None,
+            )
+            is not None
+        ):
             messagebox.showinfo(
                 "Add to Job",
                 "A History variation is the open Pipeline draft. Add it to the queue, or choose "
