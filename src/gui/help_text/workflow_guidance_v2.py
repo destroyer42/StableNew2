@@ -3,7 +3,8 @@ from __future__ import annotations
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent
 
 REVIEW_DEFAULT_WORKFLOW_HINT = (
-    "Review is the canonical advanced reprocess workspace. Use Learning when the goal is evidence capture, "
+    "Quick Edit: Review is the canonical advanced reprocess workspace. Select images, inspect or edit, preview the "
+    "effective job, then add it to the queue. Use Photo Optimize for persistent per-photo settings. Use Learning when the goal is evidence capture, "
     "batch triage, or discovered/imported group review instead of immediate reprocessing."
 )
 

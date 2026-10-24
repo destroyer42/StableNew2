@@ -27,12 +27,22 @@ from src.gui.view_contracts.photo_optimize_layout_contract import (
     selection_summary,
 )
 from src.gui.view_contracts.workspace_density_contract import disclosure_title, wrap_width
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 
 from .photo_optimize_editors import PhotoBatchEditor
 
 _ACTIVE_NAME_MAX = 32
+MANAGED_PHOTO_SET_ROLE = (
+    "Managed Photo Set — persistent per-photo settings and results. For one-off edits, use Quick Edit (Review)."
+)
+MANAGED_PHOTO_SET_FLOW = (
+    "Flow: Import → select photo(s) → edit the baseline or batch settings → review the frozen plan → queue → "
+    "review results and promote a baseline. "
+    "Scope: Active photo = the one being edited; Selected photos = the highlighted rows; "
+    "All visible = every unarchived photo in the list."
+)
 ROW_GAP = HEADER_ROW_GAP
 
 
@@ -56,8 +66,15 @@ class PhotoOptimizeLayoutMixin:
         self._flow_signatures: dict[str, object] = {}
         self.header_more_var = tk.BooleanVar(master=host, value=False)
 
+        self.workspace_role_label = ttk.Label(
+            header, text=MANAGED_PHOTO_SET_ROLE, style="Dark.TLabel", justify="left"
+        )
+        self.workspace_role_label.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        bind_wraplength(self.workspace_role_label)
+        attach_tooltip(self.workspace_role_label, MANAGED_PHOTO_SET_FLOW)
+
         primary = ttk.Frame(header, style="Panel.TFrame")
-        primary.grid(row=0, column=0, sticky="ew")
+        primary.grid(row=1, column=0, sticky="ew")
         self.header_primary = primary
         self.import_photos_btn = ttk.Button(
             primary, text="Import Photos", style="Dark.TButton", command=self._on_import_photos
@@ -99,11 +116,11 @@ class PhotoOptimizeLayoutMixin:
             style="Dark.TLabel",
             justify="left",
         )
-        self.submission_summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self.submission_summary_label.grid(row=2, column=0, sticky="ew", pady=(6, 0))
         self.migration_status_label = ttk.Label(
             header, textvariable=migration_var, style="Dark.TLabel", justify="left"
         )
-        self.migration_status_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        self.migration_status_label.grid(row=3, column=0, sticky="ew", pady=(4, 0))
         self.header_status_labels = (self.submission_summary_label, self.migration_status_label)
 
         secondary = ttk.LabelFrame(header, text="More actions", style="Dark.TLabelframe", padding=6)
@@ -195,7 +212,7 @@ class PhotoOptimizeLayoutMixin:
         self.header_more_var.set(bool(expanded))
         self.header_more_btn.configure(text=self._more_title())
         if expanded:
-            self.header_secondary.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+            self.header_secondary.grid(row=4, column=0, sticky="ew", pady=(6, 0))
         else:
             self.header_secondary.grid_remove()
         self._reflow_header()
@@ -453,7 +470,7 @@ class PhotoOptimizeLayoutMixin:
 
         baseline_box = ttk.LabelFrame(
             self.single_workspace,
-            text="Single Photo — prompts/settings autosave to this photo only",
+            text="Active photo — saved prompts and settings for this photo only (saved automatically)",
             style="Dark.TLabelframe",
             padding=8,
         )
