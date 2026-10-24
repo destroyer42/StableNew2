@@ -126,10 +126,12 @@ def test_readiness_recovery_is_reachable_with_long_guidance(tk_root, tmp_path):
 def test_optimizer_retires_anchor_controls_and_explains_logging(tk_root, tmp_path):
     frame = PromptTabFrame(tk_root, packs_dir=tmp_path / "packs")
     try:
-        frame.apply_prompt_optimizer_config({
-            "allow_subject_anchor_boost": True,
-            "subject_anchor_boost_min_chunk_count": 11,
-        })
+        frame.apply_prompt_optimizer_config(
+            {
+                "allow_subject_anchor_boost": True,
+                "subject_anchor_boost_min_chunk_count": 11,
+            }
+        )
         assert not any(
             "Anchor" in str(widget.cget("text"))
             for widget in frame._prompt_optimizer_widgets
