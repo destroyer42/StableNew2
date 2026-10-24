@@ -55,13 +55,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   Recommendations selector (default Apply with confirm); rated review drafts are saved on navigation or with Save All Drafts.
   Saved experiments reconcile exact admitted repository jobs after restart without resubmission; admission and resume-save uncertainty remain visible.
 - History browser: the Pipeline tab's Job History opens a searchable, paged view of every job (status, date, pack, prompt/model text;
-  no schema change). Text search covers only the first 64 prompt characters and the model; full-text search is not built.
-- Iterate from History (PR-HISTORY-610A): a completed single-still-image txt2img job offers **Edit Image in Review** (the exact recorded image becomes
-  the input of the existing Review reprocess flow, with parent job and image sha256 lineage) and **Regenerate with Changes in Pipeline** (an
-  editable txt2img draft of the frozen recipe: positive/negative prompt, seed, steps, CFG; everything else read-only), both from the compact panel and Browse All.
-  Neither queues anything; submission is the normal Preview, Add to Queue, NJR, JobService path with a new job id and `parent_job_id`. Videos, edits, multi-image,
-  variant/batch/Matrix/randomized/sweep/Learning jobs and missing or ambiguous images are refused with a reason (Review still allows an
-  edit of a Matrix or randomized job's image). Exact Replay is unchanged. Parent/child visual compare and a physical-generation acceptance run are not done.
+  no schema change). Text search covers only the first 64 prompt characters and the model; full-text search is not built. Iterate from History (completed single-still-image txt2img jobs only): Edit Image in Review, or an editable Regenerate with Changes draft in Pipeline; both go through the normal Preview/Add to Queue path with parent lineage and refuse unsupported jobs with a reason (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.5); parent/child compare and physical-generation acceptance are not done.
 - Batch operations: whole-selection Review preflight, multi-source Video Workflow batch, unified batch triage and retry
   (`docs/Subsystems/GUI/PR-BATCH-OPS-201_Unified_Batch_Operations.md`).
 
