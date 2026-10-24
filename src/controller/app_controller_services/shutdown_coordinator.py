@@ -25,6 +25,27 @@ QUEUE_QUIESCE_TIMEOUT_SECONDS = 10.0
 REPOSITORY_FINAL_CHECK_SECONDS = 1.0
 
 
+def fence_application_admission(controller: Any) -> None:
+    """Fence AI immediately at shutdown entry; preserve the canonical queue fence."""
+    ai = getattr(controller, "ai_assist", None)
+    if ai is not None:
+        ai.begin_shutdown()
+    fence_queue_admission(getattr(controller, "job_service", None))
+
+
+def shutdown_owned_services(controller: Any) -> None:
+    """Quiesce the AI worker before repository closure and the final tracked-thread join."""
+    ai = getattr(controller, "ai_assist", None)
+    if ai is not None:
+        ai.shutdown()
+    close_repository_when_quiescent(getattr(controller, "job_service", None))
+
+
+def ai_is_quiescent(controller: Any) -> bool:
+    ai = getattr(controller, "ai_assist", None)
+    return ai is None or ai.quiescent is True
+
+
 def fence_queue_admission(job_service: Any) -> bool:
     """Make shutdown authoritative for the queue *before* any slow teardown. Never raises."""
     fence = getattr(job_service, "begin_shutdown", None)
@@ -35,7 +56,9 @@ def fence_queue_admission(job_service: Any) -> bool:
     except Exception:
         logger.exception("Error fencing queue admission during shutdown")
         return False
-    logger.info("[controller] Queue admission fenced: no queued job can start; pending jobs stay durable")
+    logger.info(
+        "[controller] Queue admission fenced: no queued job can start; pending jobs stay durable"
+    )
     return True
 
 
@@ -73,7 +96,11 @@ def close_repository_when_quiescent(job_service: Any) -> bool:
     if not callable(close):
         return False
     query = getattr(job_service, "is_quiescent", None)
-    if callable(query) and not query() and not quiesce_job_service(job_service, REPOSITORY_FINAL_CHECK_SECONDS):
+    if (
+        callable(query)
+        and not query()
+        and not quiesce_job_service(job_service, REPOSITORY_FINAL_CHECK_SECONDS)
+    ):
         logger.error(
             "[controller] shutdown(): Job repository NOT closed: a queue worker is still alive. Closing SQLite "
             "under it would fail its result persistence; queued jobs remain durably QUEUED."

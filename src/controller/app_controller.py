@@ -64,6 +64,7 @@ from src.config.app_config import (
 )
 from src.contracts import PackJobEntry, PreviewRequest
 from src.controller.app_controller_services import shutdown_coordinator
+from src.controller.app_controller_services.ai_assist_integration import AiAssistIntegration
 from src.controller.app_controller_services.application_runtime_coordinator import (
     ApplicationRuntimeCoordinator,
 )
@@ -585,6 +586,7 @@ class AppController:
 
         if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
             self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
+        self.ai_assist = AiAssistIntegration(lambda: self.job_service, self._ui_dispatch)
 
         # PR-PIPE-002: Initialize duration stats service for queue ETA
         history_store = getattr(self.job_service, "history_store", None) if self.job_service else None
@@ -706,12 +708,7 @@ class AppController:
             )
 
     def shutdown(self) -> None:
-        """
-        Shutdown the AppController and all background services cleanly.
-
-        PR-SHUTDOWN-001: Enhanced to stop SystemWatchdog, join all tracked threads,
-        close file handles, and verify clean exit.
-        """
+        """Stop owned services, watchdog and tracked threads; close only a quiescent repository."""
         logger.info("[controller] shutdown(): Stopping system watchdog...")
         if hasattr(self, "_system_watchdog") and self._system_watchdog:
             try:
@@ -730,7 +727,7 @@ class AppController:
             logger.error(f"[controller] shutdown(): Error shutting down persistence worker: {e}")
 
         logger.info("[controller] shutdown(): Closing job repository (only after queue quiescence)...")
-        shutdown_coordinator.close_repository_when_quiescent(self.job_service)
+        shutdown_coordinator.shutdown_owned_services(self)
 
         # PR-THREAD-001: Join all tracked threads
         logger.info("[controller] shutdown(): Joining all tracked threads...")
@@ -4551,7 +4548,7 @@ class AppController:
                 purpose="Monitor shutdown progress",
             )
 
-        shutdown_coordinator.fence_queue_admission(getattr(self, "job_service", None))
+        shutdown_coordinator.fence_application_admission(self)
         try:
             logger.info("[controller] Step 1/8: Cancelling active jobs...")
             self._cancel_active_jobs(label)
@@ -4633,9 +4630,9 @@ class AppController:
         except Exception:
             logger.exception("Error clearing WebUI process manager during shutdown")
 
-        self._shutdown_completed = True
+        self._shutdown_completed = shutdown_coordinator.ai_is_quiescent(self)
         self._await_shutdown_watchdog_exit()
-        logger.info("[controller] ===== SHUTDOWN_APP COMPLETE =====")
+        logger.info("[controller] SHUTDOWN_APP quiescent=%s", self._shutdown_completed)
 
         try:
             close_all_structured_loggers()
