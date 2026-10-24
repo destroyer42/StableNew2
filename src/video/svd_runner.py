@@ -34,7 +34,7 @@ from src.video.svd_postprocess import (
 )
 from src.video.svd_preprocess import prepare_svd_input, validate_svd_source_image
 from src.video.svd_registry import build_svd_artifact_stem, write_svd_run_manifest
-from src.video.svd_service import SVDService
+from src.video.svd_service import SVDService, balanced_decode_chunk_size
 from src.video.video_export import export_video_gif, export_video_mp4, save_video_frames
 
 logger = logging.getLogger(__name__)
@@ -107,13 +107,16 @@ class SVDRunner:
             if not valid:
                 raise SVDPostprocessError(reason or "SVD postprocess configuration is invalid")
             logger.info(
-                "[SVD] start job=%s source=%s model=%s frames=%s fps=%s decode_chunk=%s format=%s",
+                "[SVD] start job=%s source=%s model=%s frames=%s fps=%s decode_chunk=%s effective_decode_chunk=%s format=%s",
                 job_id,
                 source_path.name,
                 config.inference.model_id,
                 config.inference.num_frames,
                 config.inference.fps,
                 config.inference.decode_chunk_size,
+                balanced_decode_chunk_size(
+                    config.inference.num_frames, config.inference.decode_chunk_size
+                ),
                 config.output.output_format,
             )
             self._emit_status(stage_detail="preflight", progress=0.05)

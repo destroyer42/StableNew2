@@ -160,6 +160,62 @@ def test_cuda_oom_is_typed_and_does_not_hide_effective_config(monkeypatch, tmp_p
 
     assert "num_inference_steps=25" in str(exc_info.value)
     assert "did not automatically rerun" in str(exc_info.value)
+    assert "failing phase is unknown" in str(exc_info.value)
+
+
+def _oom_message_after_steps(monkeypatch, tmp_path: Path, steps: int | None, config) -> str:
+    class FakeOOM(RuntimeError):
+        pass
+
+    class CallbackPipeline:
+        def __call__(self, _image, *, callback_on_step_end=None, **_kwargs):
+            for step in range(steps or 0):
+                callback_on_step_end(self, step, None, {})
+            raise FakeOOM("CUDA error: out of memory")
+
+    service = _service_with_pipeline(monkeypatch, CallbackPipeline())
+    fake_torch = SimpleNamespace(cuda=SimpleNamespace(OutOfMemoryError=FakeOOM))
+    monkeypatch.setattr(
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(import_module=lambda name: fake_torch if name == "torch" else None),
+    )
+    with pytest.raises(SVDOutOfMemoryError) as exc_info:
+        service.generate_frames(prepared_image_path=_prepared_image(tmp_path), config=config)
+    return str(exc_info.value)
+
+
+def test_oom_before_denoising_does_not_advise_lowering_decode_chunk(
+    monkeypatch, tmp_path: Path
+) -> None:
+    config = SVDInferenceConfig(num_frames=25, num_inference_steps=25, decode_chunk_size=10)
+
+    message = _oom_message_after_steps(monkeypatch, tmp_path, 0, config)
+
+    assert "before any denoising step completed" in message
+    assert "Lower Decode chunk" not in message
+    assert "decode_chunk_size=10 (effective 9)" in message
+
+
+def test_oom_during_denoising_does_not_advise_lowering_decode_chunk(
+    monkeypatch, tmp_path: Path
+) -> None:
+    config = SVDInferenceConfig(num_frames=25, num_inference_steps=25, decode_chunk_size=8)
+
+    message = _oom_message_after_steps(monkeypatch, tmp_path, 3, config)
+
+    assert "during denoising (after step 3 of 25)" in message
+    assert "Lower Decode chunk" not in message
+    assert "decode_chunk_size=8 (effective 7)" in message
+
+
+def test_oom_after_denoising_advises_lowering_decode_chunk(monkeypatch, tmp_path: Path) -> None:
+    config = SVDInferenceConfig(num_frames=25, num_inference_steps=25, decode_chunk_size=10)
+
+    message = _oom_message_after_steps(monkeypatch, tmp_path, 25, config)
+
+    assert "failed while decoding" in message
+    assert "Lower Decode chunk first" in message
 
 
 def test_runner_cancellation_before_export_produces_no_success_output(
