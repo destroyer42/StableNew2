@@ -1458,8 +1458,8 @@ class PipelineController(CorePipelineController):
             return
         if not entries:
             return
-        self._app_state.add_packs_to_job_draft(entries)
-        if not self._app_state_preview_updates_managed_externally:
+        added = self._app_state.add_packs_to_job_draft(entries) is not False  # False: an open History variation
+        if added and not self._app_state_preview_updates_managed_externally:
             self.refresh_preview_from_state()
 
     def remove_pack_from_draft(self, pack_id: str) -> None:

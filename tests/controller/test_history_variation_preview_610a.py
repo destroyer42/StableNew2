@@ -154,15 +154,26 @@ def test_switching_drafts_drops_the_old_preview_and_it_cannot_be_admitted(harnes
     assert harness.app_state.job_draft.packs == []
 
 
-def test_adding_a_pack_or_part_supersedes_the_variation_so_draft_modes_never_mix(harness):
-    harness.app_state.begin_history_variation(harness.draft)
-    harness.app_state.add_packs_to_job_draft([PackJobEntry("p", "p", {})])
-    assert harness.app_state.job_draft.history_variation is None
-    assert [entry.pack_id for entry in harness.app_state.job_draft.packs] == ["p"]
-    harness.app_state.begin_history_variation(harness.draft)
-    harness.app_state.add_job_draft_part("a part", "")
-    assert harness.app_state.job_draft.history_variation is None
-    assert harness.app_state.job_draft.summary.part_count == 1
+def test_adding_a_pack_or_part_never_discards_an_unsent_variation(harness):
+    edited = harness.draft.with_edits(steps=44)
+    harness.app_state.begin_history_variation(edited)
+    request, records, _ = harness.build_preview()
+    assert harness.app_state.add_packs_to_job_draft([PackJobEntry("p", "p", {})]) is False
+    assert harness.app_state.add_job_draft_part("a part", "") is False
+    draft = harness.app_state.job_draft
+    assert draft.history_variation is edited and not draft.packs and draft.summary.part_count == 0
+    assert (
+        harness.app_state.preview_jobs == records
+    )  # nothing changed, so the accepted Preview still stands
+    harness.controller.add_packs_to_draft(
+        [PackJobEntry("p", "p", {})]
+    )  # the controller path refuses too
+    assert (
+        harness.app_state.job_draft.history_variation is edited
+        and not harness.app_state.job_draft.packs
+    )
+    harness.app_state.clear_job_draft()  # an explicit discard is the only way out
+    assert harness.app_state.add_packs_to_job_draft([PackJobEntry("p", "p", {})]) is True
 
 
 def test_replace_decision_helper_reports_unsent_pipeline_work(harness):

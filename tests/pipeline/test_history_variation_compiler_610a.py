@@ -287,3 +287,56 @@ def test_provenance_type_is_preserved():
     job = compile_history_variation(_draft())
     assert isinstance(job.provenance, NJRProvenance)
     assert replace(job.provenance).variant_total == 1
+
+
+def test_global_prompt_terms_are_applied_once_at_run_time_never_baked_into_the_variation():
+    """The runtime merge (``merge_global_*``) prepends/appends the frozen terms with no de-duplication, so the
+    variation must carry the source's frozen policy untouched and keep the edited text free of those terms."""
+
+    from src.pipeline.global_prompt_policy import (
+        apply_global_prompt_policy,
+        has_frozen_global_prompt_policy,
+    )
+    from src.utils.negative_helpers_v2 import merge_global_negative, merge_global_positive
+
+    frozen = apply_global_prompt_policy(
+        _config(),
+        positive_enabled=True,
+        positive_text="masterpiece",
+        negative_enabled=False,
+        negative_text="lowres",
+    )
+    draft = _draft(config=frozen).with_edits(positive_prompt="a blue fox", negative_prompt="ugly")
+    job = compile_history_variation(draft)
+    parent_config, config = draft.source.config, job.config
+    assert has_frozen_global_prompt_policy(config)
+    assert {
+        key: config[key] for key in ("global_positive_prompt", "global_negative_prompt", "pipeline")
+    } == {
+        key: parent_config[key]
+        for key in ("global_positive_prompt", "global_negative_prompt", "pipeline")
+    }
+    pipeline = config["pipeline"]
+    positive_terms = (
+        config["global_positive_prompt"] if pipeline["apply_global_positive_txt2img"] else ""
+    )
+    negative_terms = (
+        config["global_negative_prompt"] if pipeline["apply_global_negative_txt2img"] else ""
+    )
+    _, final_positive, applied_positive, _ = merge_global_positive(
+        job.positive_prompt, positive_terms
+    )
+    _, final_negative, applied_negative, _ = merge_global_negative(
+        job.negative_prompt, negative_terms
+    )
+    assert applied_positive and final_positive == "masterpiece, a blue fox"
+    assert final_positive.count("masterpiece") == 1 and final_negative.count("lowres") <= 1
+    assert (
+        not applied_negative and final_negative == "ugly"
+    )  # the frozen policy disabled it, and still does
+    # the unchanged variation merges to exactly what the parent would have run with
+    unchanged = compile_history_variation(_draft())
+    assert (
+        merge_global_positive(unchanged.positive_prompt, "masterpiece")[1]
+        == merge_global_positive(draft.source.positive_prompt, "masterpiece")[1]
+    )

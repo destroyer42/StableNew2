@@ -507,36 +507,41 @@ class AppStateV2:
         self.history_items = list(self.history_items)
         self._notify("history_items")
 
-    def add_packs_to_job_draft(self, entries: list[PackJobEntry]) -> None:
+    def add_packs_to_job_draft(self, entries: list[PackJobEntry]) -> bool:
+        """Add pack entries; False (nothing changed) while an unsent history variation is the draft."""
         logger.info(
             f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects"
         )
         with self._preview_lock:
-            # Draft modes never mix: an explicit pack add supersedes an unsent history variation.
-            self.job_draft.history_variation = None
+            if self.job_draft.history_variation is not None:
+                return False  # draft modes never mix and an unsent variation is never discarded implicitly
             self.job_draft.packs.extend(entries)
             self._reset_preview_locked()
         self._notify("preview_jobs")
         logger.info(f"[AppState] Total packs in draft: {len(self.job_draft.packs)}")
         self._notify("job_draft")
+        return True
 
     def add_job_draft_part(
         self,
         positive_prompt: str,
         negative_prompt: str,
         estimated_images: int = 1,
-    ) -> None:
+    ) -> bool:
+        """Add a prompt part; False (nothing changed) while an unsent history variation is the draft."""
         part = JobDraftPart(
             positive_prompt=positive_prompt,
             negative_prompt=negative_prompt,
             estimated_images=estimated_images,
         )
         with self._preview_lock:
-            self.job_draft.history_variation = None
+            if self.job_draft.history_variation is not None:
+                return False
             self.job_draft.add_part(part)
             self._reset_preview_locked()
         self._notify("preview_jobs")
         self._notify("job_draft")
+        return True
 
     def clear_job_draft(self) -> None:
         with self._preview_lock:
