@@ -28,14 +28,18 @@ class TkUiDispatcher:
         if invoker is not None:
             invoker.schedule(fn)
             return
+        if not self._after(0, fn):
+            fn()
+
+    def _after(self, delay_ms: int, fn: Callable[[], None]) -> bool:
         after = getattr(self.root, "after", None)
-        if callable(after):
-            try:
-                after(0, fn)
-                return
-            except Exception:
-                pass
-        fn()
+        if not callable(after):
+            return False
+        try:
+            after(max(0, int(delay_ms)), fn)
+        except Exception:
+            return False
+        return True
 
     def invoke(self, fn: Callable[[], None]) -> None:
         """Backward-compatible name for :meth:`schedule`."""
@@ -46,14 +50,8 @@ class TkUiDispatcher:
         if invoker is not None:
             invoker.invoke_later(delay_ms, fn)
             return
-        after = getattr(self.root, "after", None)
-        if callable(after):
-            try:
-                after(max(0, int(delay_ms)), fn)
-                return
-            except Exception:
-                pass
-        fn()
+        if not self._after(delay_ms, fn):
+            fn()
 
     def run_on_ui_thread(self, fn: Callable[[], None]) -> None:
         invoker = self._invoker

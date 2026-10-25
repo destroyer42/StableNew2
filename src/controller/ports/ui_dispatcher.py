@@ -8,9 +8,9 @@ scheduler types directly.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol, TypeAlias
+from typing import Protocol
 
-UiCallback: TypeAlias = Callable[[], None]
+type UiCallback = Callable[[], None]
 
 
 class UiDispatcher(Protocol):

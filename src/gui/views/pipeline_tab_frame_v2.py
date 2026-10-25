@@ -551,6 +551,7 @@ class PipelineTabFrame(ttk.Frame):
         self._publish_pipeline_stage_flags(only=stage_name)
 
     _PIPELINE_STAGES = ("txt2img", "img2img", "adetailer", "upscale")
+    _VARIABLE_ERRORS = (tk.TclError, ValueError, TypeError, AttributeError)
 
     def _publish_pipeline_stage_flags(self, only: str | None = None) -> None:
         """Project the Tk stage variables into AppStateV2 (the controller reads the projection)."""
@@ -562,9 +563,10 @@ class PipelineTabFrame(ttk.Frame):
             if variable is None:
                 continue
             try:
-                setter(stage_name, bool(variable.get()))
-            except Exception:
+                value = bool(variable.get())
+            except self._VARIABLE_ERRORS:
                 continue
+            setter(stage_name, value)
 
     def _publish_pipeline_presentation_values(self) -> None:
         """Publish the prompt and upscale control values for the controller's legacy readers."""
@@ -572,22 +574,23 @@ class PipelineTabFrame(ttk.Frame):
         set_prompt = getattr(state, "set_pipeline_prompt_text", None)
         if callable(set_prompt):
             try:
-                set_prompt(self.prompt_text.get() or "")
-            except Exception:
-                pass
+                prompt = self.prompt_text.get() or ""
+            except self._VARIABLE_ERRORS:
+                prompt = ""
+            set_prompt(prompt)
         set_upscale = getattr(state, "set_pipeline_upscale_params", None)
         if callable(set_upscale):
             try:
                 factor = float(self.upscale_factor.get())
-            except Exception:
+            except self._VARIABLE_ERRORS:
                 factor = 2.0
             try:
                 model = str(self.upscale_model.get() or "").strip()
-            except Exception:
+            except self._VARIABLE_ERRORS:
                 model = ""
             try:
                 tile_size = int(self.upscale_tile_size.get())
-            except Exception:
+            except self._VARIABLE_ERRORS:
                 tile_size = 0
             set_upscale(factor=factor, model=model, tile_size=tile_size)
 
@@ -595,19 +598,16 @@ class PipelineTabFrame(ttk.Frame):
         getter = getattr(self.app_state, "get_pipeline_stage_flags", None)
         if not callable(getter):
             return
-        try:
-            flags = getter()
-        except Exception:
-            return
+        flags = getter()
         for stage_name in self._PIPELINE_STAGES:
             variable = getattr(self, f"{stage_name}_enabled", None)
             if variable is None or stage_name not in flags:
                 continue
+            target = bool(flags[stage_name])
             try:
-                target = bool(flags[stage_name])
                 if bool(variable.get()) != target:
                     variable.set(target)
-            except Exception:
+            except self._VARIABLE_ERRORS:
                 continue
 
     def _apply_stage_visibility(self) -> None:

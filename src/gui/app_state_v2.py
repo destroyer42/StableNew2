@@ -210,7 +210,7 @@ class AppStateV2:
                 else:
                     listener()
             except Exception:
-                continue
+                logger.exception("pipeline presentation listener failed")
 
     def disable_notifications(self) -> None:
         """Stop delivering listener callbacks (used during teardown)."""

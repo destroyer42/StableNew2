@@ -44,7 +44,9 @@ def test_stage_projection_notifies_through_ui_thread_contract() -> None:
     dispatcher = _RecordingDispatcher()
     calls: list[dict[str, bool]] = []
     state.set_invoker(dispatcher)
-    state.subscribe("pipeline_stage_enabled", lambda: calls.append(state.get_pipeline_stage_flags()))
+    state.subscribe(
+        "pipeline_stage_enabled", lambda: calls.append(state.get_pipeline_stage_flags())
+    )
 
     assert state.set_pipeline_stage_enabled("img2img", True) is True
 
