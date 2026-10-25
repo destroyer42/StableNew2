@@ -122,7 +122,6 @@ from src.controller.webui_connection_controller import (
 from src.gui.app_state_projection_sink import AppStateProjectionSink
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
-from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.photo_optimize import get_photo_optimize_store
 from src.pipeline.config_contract_v26 import (
     validate_svd_native_execution_config,
@@ -473,7 +472,7 @@ class AppController:
         self.threaded = threaded
         self._config_manager = config_manager or ConfigManager()
         bind_preview_invalidation(self._config_manager, lambda: self.app_state)
-        self._dropdown_loader = DropdownLoader(self._config_manager)
+        self._dropdown_loader: Any = None
         self._warned_missing_pipeline_apply = False
         self._last_executor_config: dict[str, Any] | None = None
         self._last_run_snapshot: dict[str, Any] | None = None
@@ -1356,22 +1355,19 @@ class AppController:
             return
         controller.refresh_preview_from_state()
 
-    def _build_stage_flags(self) -> dict[str, bool]:
-        # An unreadable stage variable never turns an optional stage on (ADetailer defaults off everywhere else).
+    def _get_pipeline_stage_flags_from_state(self) -> dict[str, bool]:
         defaults = {"txt2img": True, "img2img": False, "adetailer": False, "upscale": False}
-        stage_flags: dict[str, bool] = dict(defaults)
-        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-        if pipeline_tab is not None:
-            for stage in ("txt2img", "img2img", "adetailer", "upscale"):
-                value = getattr(pipeline_tab, f"{stage}_enabled", None)
-                if hasattr(value, "get"):
-                    try:
-                        stage_flags[stage] = bool(value.get())
-                        continue
-                    except Exception:
-                        pass
-                if isinstance(value, bool):
-                    stage_flags[stage] = value
+        getter = getattr(getattr(self, "app_state", None), "get_pipeline_stage_flags", None)
+        if not callable(getter):
+            return dict(defaults)
+        try:
+            return dict(getter(defaults=defaults))
+        except Exception:  # noqa: BLE001 - an unreadable projection never turns an optional stage on
+            return dict(defaults)
+
+    def _build_stage_flags(self) -> dict[str, bool]:
+        # The presentation projection lives in AppStateV2; the controller never reads toolkit variables.
+        stage_flags = self._get_pipeline_stage_flags_from_state()
         # Include derived refiner/hires flags based on current config
         stage_flags.setdefault("refiner", bool(self.state.current_config.refiner_enabled))
         stage_flags.setdefault("hires", bool(self.state.current_config.hires_enabled))
@@ -2060,11 +2056,10 @@ class AppController:
         from src.photo_optimize.submission import pipeline_defaults
 
         config = self._collect_current_stage_configs()
-        tab = getattr(getattr(self, "main_window", None), "pipeline_tab", None)
-        for stage in ("img2img", "adetailer", "upscale"):
-            flag = getattr(tab, f"{stage}_enabled", None)
-            if flag is not None:
-                config.setdefault(stage, {})["enabled"] = bool(flag.get())
+        if getattr(self, "app_state", None) is not None:
+            stage_flags = self._get_pipeline_stage_flags_from_state()
+            for stage in ("img2img", "adetailer", "upscale"):
+                config.setdefault(stage, {})["enabled"] = bool(stage_flags[stage])
         return pipeline_defaults(config)
 
     def interrogate_photo_path(self, image_path: str | Path, *, model: str = "clip") -> str:
@@ -4182,36 +4177,24 @@ class AppController:
         raise RuntimeError("Legacy runner-only path is disabled in NJR-only mode")
 
     def _get_pipeline_tab_upscale_params(self, pipeline_tab: Any) -> tuple[float, str, int]:
-        factor_var = getattr(pipeline_tab, "upscale_factor", None)
-        try:
-            factor = float(factor_var.get()) if hasattr(factor_var, "get") else float(factor_var)
-        except Exception:
-            factor = 2.0
-        model_var = getattr(pipeline_tab, "upscale_model", None)
-        model = ""
-        try:
-            model = (
-                str(model_var.get()).strip() if hasattr(model_var, "get") else str(model_var or "")
-            )
-        except Exception:
-            model = str(model_var or "")
-        tile_var = getattr(pipeline_tab, "upscale_tile_size", None)
-        try:
-            tile = int(tile_var.get()) if hasattr(tile_var, "get") else int(tile_var or 0)
-        except Exception:
-            tile = 0
-        return factor, model, tile
+        del pipeline_tab  # presentation values come from the AppStateV2 projection
+        getter = getattr(getattr(self, "app_state", None), "get_pipeline_upscale_params", None)
+        if callable(getter):
+            try:
+                return getter()  # type: ignore[no-any-return]
+            except Exception:  # noqa: BLE001 - fall back to the documented defaults
+                pass
+        return 2.0, "", 0
 
     def _get_pipeline_tab_prompt(self, pipeline_tab: Any) -> str:
-        prompt_attr = getattr(pipeline_tab, "prompt_text", None)
-        if prompt_attr is None:
-            return ""
-        try:
-            if hasattr(prompt_attr, "get"):
-                return str(prompt_attr.get() or "")
-        except Exception:
-            pass
-        return str(prompt_attr or "")
+        del pipeline_tab  # presentation values come from the AppStateV2 projection
+        getter = getattr(getattr(self, "app_state", None), "get_pipeline_prompt_text", None)
+        if callable(getter):
+            try:
+                return str(getter() or "")
+            except Exception:  # noqa: BLE001 - fall back to the documented default
+                pass
+        return ""
 
     def _coerce_bool(self, value: Any, default: bool = False) -> bool:
         if value is None:
@@ -4374,25 +4357,10 @@ class AppController:
         if not sidebar:
             return
         sidebar.set_stage_state(stage, enabled, emit_change=False)
-
-        # Also update pipeline_tab flags to keep them in sync
-        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-        if pipeline_tab:
-            enabled_var = getattr(pipeline_tab, f"{stage}_enabled", None)
-            if enabled_var is not None:
-                try:
-                    enabled_var.set(bool(enabled))
-                    logger.debug(
-                        "[controller] Synced stage '%s' to %s (sidebar + pipeline_tab)",
-                        stage,
-                        enabled,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "[controller] Failed to sync stage '%s' to pipeline_tab: %s",
-                        stage,
-                        exc,
-                    )
+        # The Pipeline view projects this back onto its own toolkit variables.
+        setter = getattr(getattr(self, "app_state", None), "set_pipeline_stage_enabled", None)
+        if callable(setter):
+            setter(stage, bool(enabled))
 
     def _apply_pipeline_stage_flags(self, pipeline_section: dict[str, Any]) -> None:
         if not pipeline_section:
@@ -5250,6 +5218,10 @@ class AppController:
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab is None:
             return
+        if self._dropdown_loader is None:
+            from src.gui.dropdown_loader_v2 import DropdownLoader
+
+            self._dropdown_loader = DropdownLoader(self._config_manager)
         dropdowns = self._dropdown_loader.load_dropdowns(self, self.app_state)
         self._dropdown_loader.apply_to_gui(pipeline_tab, dropdowns)
 
@@ -5308,32 +5280,11 @@ class AppController:
         self.app_state.set_lora_strengths(strengths)
 
     def on_stage_toggled(self, stage: str, enabled: bool) -> None:
-        """Sync sidebar checkbox changes to pipeline_tab variables.
-
-        This ensures that when user toggles a stage checkbox in the sidebar,
-        the corresponding pipeline_tab.{stage}_enabled variable is updated
-        so that Apply Config saves the correct state.
-        """
+        """Publish a sidebar stage toggle through AppStateV2 so Apply Config captures it."""
         normalized = bool(enabled)
-
-        # Sync to pipeline_tab so Apply Config captures the checkbox state
-        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-        if pipeline_tab:
-            enabled_var = getattr(pipeline_tab, f"{stage}_enabled", None)
-            if enabled_var is not None:
-                try:
-                    enabled_var.set(normalized)
-                    logger.debug(
-                        "[controller] on_stage_toggled: synced %s to %s in pipeline_tab",
-                        stage,
-                        normalized,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "[controller] Failed to sync %s toggle to pipeline_tab: %s",
-                        stage,
-                        exc,
-                    )
+        setter = getattr(getattr(self, "app_state", None), "set_pipeline_stage_enabled", None)
+        if callable(setter):
+            setter(stage, normalized)
 
         # Handle adetailer-specific app_state updates
         if stage == "adetailer" and self.app_state:
@@ -5612,18 +5563,11 @@ class AppController:
                 pipeline["output_route"] = output.get("output_route", "Auto")
             except Exception as e:
                 self._append_log(f"[controller] Error gathering output settings: {e}")
-        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-        if pipeline_tab:
-            # Always gather every stage flag so the saved pipeline section is complete (merge-with-defaults must not
-            # fall back to stale default flags).
-            for stage, default in (
-                ("txt2img", True),
-                ("img2img", False),
-                ("adetailer", False),
-                ("upscale", False),
-            ):
-                var = getattr(pipeline_tab, f"{stage}_enabled", None)
-                pipeline[f"{stage}_enabled"] = bool(var.get()) if var is not None else default
+        # Always gather every stage flag so the saved pipeline section is complete (merge-with-defaults must not
+        # fall back to stale default flags).
+        stage_flags = self._get_pipeline_stage_flags_from_state()
+        for stage in ("txt2img", "img2img", "adetailer", "upscale"):
+            pipeline[f"{stage}_enabled"] = bool(stage_flags[stage])
         return current_config
 
     def working_settings_fingerprint(self) -> str:
@@ -5710,12 +5654,9 @@ class AppController:
                     current_config["adetailer"].update(adetailer_config)
 
                     # Include enabled flag in adetailer section
-                    if hasattr(self, 'main_window') and self.main_window:
-                        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-                        if pipeline_tab:
-                            adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
-                            if adetailer_enabled_var is not None:
-                                current_config["adetailer"]["adetailer_enabled"] = bool(adetailer_enabled_var.get())
+                    current_config["adetailer"]["adetailer_enabled"] = bool(
+                        self._get_pipeline_stage_flags_from_state()["adetailer"]
+                    )
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering adetailer config: {e}")
 

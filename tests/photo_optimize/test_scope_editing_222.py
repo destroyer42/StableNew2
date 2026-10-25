@@ -131,11 +131,11 @@ def test_pipeline_snapshot_matches_live_card_serializers():
     controller._get_panel_randomizer_config = lambda: {}
     controller._read_prompt_optimizer_ui_config = lambda: None
     controller._append_log = Mock()
-    controller.main_window = SimpleNamespace(
-        pipeline_tab=SimpleNamespace(
-            img2img_enabled=var(True), adetailer_enabled=var(False), upscale_enabled=var(True)
-        )
-    )
+    from src.gui.app_state_v2 import AppStateV2
+
+    controller.app_state = AppStateV2()
+    for stage, enabled in (("img2img", True), ("adetailer", False), ("upscale", True)):
+        controller.app_state.set_pipeline_stage_enabled(stage, enabled)
     result = controller.build_photo_optimize_defaults()
     assert result["model"] == "live-img-model" and result["vae"] == ""
     assert result["config"]["img2img"]["steps"] == 31
