@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import os
 import platform
 import shutil
@@ -64,6 +65,8 @@ from tools.qualification.ai111.ownership import (
     default_host_monitor,
 )
 from tools.qualification.ai111.scoring import evaluate_gates, summarize_arm
+
+logger = logging.getLogger(__name__)
 
 _ACTIVE_SUFFIXES = frozenset(
     {".exe", ".dll", ".bat", ".cmd", ".ps1", ".py", ".sh", ".so", ".dylib"}
@@ -221,6 +224,51 @@ class _Sampler:
                 break
 
 
+#: The service's own admission rule (model file + this margin, in GiB, for BOTH available RAM and commit headroom), applied
+#: once up front for the largest requested model so a session does not import 19 GB before discovering it cannot run.
+PREFERRED_AVAILABLE_GIB = 12.0
+
+
+def resource_check(
+    memory_probe: MemoryProbe, registry: ModelRegistry, arms: list[str]
+) -> tuple[dict[str, Any], list[str]]:
+    """Readings, per-arm requirements and refusals. The preferred 12 GiB is advisory and only recorded as a warning."""
+
+    from src.ai_assist.service import MEMORY_MARGIN_GIB
+
+    needs = {
+        e.model_id: e.bytes / 1024**3 + MEMORY_MARGIN_GIB
+        for e in registry.entries
+        if e.model_id in arms
+    }
+    memory = memory_probe()
+    report: dict[str, Any] = {
+        "per_arm_requirement_gib": {k: round(v, 3) for k, v in needs.items()},
+        "preferred_available_gib": PREFERRED_AVAILABLE_GIB,
+        "warnings": [],
+    }
+    if memory is None:
+        return report, ["memory could not be read"]
+    report["available_gib"] = round(memory.available_gib, 3)
+    report["commit_headroom_gib"] = round(memory.commit_headroom_gib, 3)
+    problems: list[str] = []
+    for model_id, need in sorted(needs.items()):
+        if memory.available_gib < need:
+            problems.append(
+                f"available RAM {memory.available_gib:.2f} GiB is below {model_id}'s requirement {need:.2f} GiB"
+            )
+        if memory.commit_headroom_gib < need:
+            problems.append(
+                f"commit headroom {memory.commit_headroom_gib:.2f} GiB is below {model_id}'s requirement {need:.2f} GiB"
+            )
+    if needs and memory.available_gib < PREFERRED_AVAILABLE_GIB:
+        report["warnings"].append(
+            f"available RAM {memory.available_gib:.2f} GiB is under the preferred {PREFERRED_AVAILABLE_GIB:.0f} GiB "
+            "for the full screening session"
+        )
+    return report, problems
+
+
 def preflight(
     plan: dict[str, Any],
     paths: SessionPaths,
@@ -272,11 +320,20 @@ def run_session(**kwargs: Any) -> dict[str, Any]:
     """Run one physical session; whatever the monitor's providers hold open (an ETW trace) is released on every path."""
 
     monitor = kwargs.get("monitor")
+    result: dict[str, Any] | None = None
     try:
-        return _run_session(**kwargs)
+        result = _run_session(**kwargs)
+        return result
     finally:
         if monitor is not None:
-            monitor.close()
+            where = monitor.evidence_dir.parent if monitor.evidence_dir is not None else None
+            leaked = monitor.close_and_report(where)
+            if result is not None:
+                result["trace_sessions_left_running"] = leaked
+                if leaked and result.get("verdict") == "PASS":
+                    result["verdict"] = "INCONCLUSIVE"
+            if leaked:
+                logger.error("Trace sessions left running after the session: %s", leaked)
 
 
 def _run_session(
@@ -359,6 +416,9 @@ def _run_session(
         authorization_text=authorization_text,
         busy=busy,
     )
+    resources, resource_problems = resource_check(memory_probe, registry, arms)
+    write_new_json(evidence / "resource-preflight.json", resources)
+    problems += resource_problems
     if problems:
         write_new_json(evidence / "preflight-refusal.json", problems)
         return {"verdict": "INCONCLUSIVE", "refused": problems}
@@ -904,7 +964,8 @@ def main(argv: list[str] | None = None) -> int:
         "--provider",
         choices=("sampled", "etw"),
         default="etw",
-        help="connection/file telemetry: 'etw' needs an elevated process and a passed canary; 'sampled' always refuses",
+        help="connection/file telemetry: 'etw' needs an unelevated process holding the trace-control right and a passed "
+        "canary; 'sampled' always refuses",
     )
     args = parser.parse_args(argv)
     plan = plan_module.frozen_plan()

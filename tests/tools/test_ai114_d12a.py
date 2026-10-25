@@ -115,6 +115,7 @@ def _run(tmp_path: Path, monitor: FakeMonitor, files=None, **overrides):
         evidence_root=tmp_path / "run",
         monitor=monitor,  # type: ignore[arg-type]
         authorization_text="owner D12a",
+        attestation="test attestation",
         intent=intent,
         authorized_member_sha256=overrides.pop("member_sha", _sha(CLI)),
         passive_manifest_sha256=overrides.pop("manifest_sha", None),

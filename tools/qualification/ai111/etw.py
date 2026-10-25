@@ -1,6 +1,7 @@
 """PR-AI-QUAL-113B: ETW-backed connection and file-access providers for the ownership monitor.
 
-An elevated Windows process can ask the kernel to log every file open/write/delete/rename
+A Windows process that holds the OS's delegated trace-control right (membership of the ``Performance Log Users`` group,
+granted once by an administrator) can ask the kernel to log every file open/write/delete/rename
 (``Microsoft-Windows-Kernel-File``), every TCP/UDP network event (``Microsoft-Windows-Kernel-Network``) and every DNS
 client query (``Microsoft-Windows-DNS-Client``) for the whole time a request runs. That is the only unprivileged-process-
 independent source of connection *attempts* and file *opens*; it is what makes these two channels ``lifetime_complete``.
@@ -15,8 +16,12 @@ How it is used here, and what it deliberately is not:
   after teardown is verified. Events are kept only for pids the owned container reported, so attribution is by owned pid
   inside the request window (timestamps are not used; an owned pid reused by a foreign process in that window can only
   cause a false violation, never a missed one).
-* A provider *declares* ``lifetime_complete`` when the process is elevated on Windows; that declaration is a claim, not a
-  check. What backs it is per window: every converted trace must report zero lost events, buffers and format errors, a
+* PRIVILEGE BOUNDARY (PR-AI-QUAL-114): the harness, the runtime import and every downloaded binary run under a
+  standard-user token. No privileged process exists: the trace sessions are created by the harness itself under the
+  delegated trace-control right, and the monitor refuses an elevated harness and stops a child whose token reads as elevated
+  (``ownership.py``). If the OS refuses to start a session, the provider raises and nothing is launched.
+* A provider *declares* ``lifetime_complete`` when the process holds that right on Windows; that declaration is a claim, not
+  a check. What backs it is per window: every converted trace must report zero lost events, buffers and format errors, a
   processed-event count above zero, and that count must equal the number of events read from the XML. Any shortfall
   raises, which the monitor records as a provider failure and a violation. Because the sessions are system-wide and the
   events are filtered to owned pids, ``events_not_attributed_to_the_owned_tree`` is always 0 for this provider.
@@ -45,6 +50,7 @@ from typing import Any
 from xml.etree import ElementTree
 
 from src.utils.managed_process import ProcessOutcome, run_bounded
+from tools.qualification.ai111 import tokens
 from tools.qualification.ai111.ownership import (
     COMPLETE,
     UNAVAILABLE,
@@ -99,6 +105,15 @@ def is_elevated() -> bool:
         return False
 
 
+def can_control_traces() -> bool:
+    """Whether this process may create and control trace sessions: the delegated right, or (for tooling only) elevation.
+
+    A physical session additionally refuses an elevated harness (the monitor's privilege boundary), so in practice this
+    means ``Performance Log Users`` membership in an unelevated token."""
+
+    return os.name == "nt" and (tokens.in_performance_log_users() or is_elevated())
+
+
 def bounded_tool(command: Sequence[str]) -> tuple[int, str]:
     """Run a short OS tool (logman/tracerpt) through the bounded runner."""
 
@@ -132,7 +147,7 @@ class LogmanBackend:
         self._tracerpt = system_tool("tracerpt")
 
     def available(self) -> bool:
-        return os.name == "nt" and is_elevated()
+        return can_control_traces()
 
     def _ok(self, command: Sequence[str]) -> str:
         code, text = self._run(command)
@@ -477,7 +492,7 @@ class EtwCapture:
         *,
         specs: Sequence[SessionSpec] = SESSIONS,
         mapping: Callable[[], dict[str, str]] = device_map,
-        elevated: Callable[[], bool] = is_elevated,
+        elevated: Callable[[], bool] = can_control_traces,
     ) -> None:
         self.directory = directory
         self._backend = backend or LogmanBackend()
@@ -504,7 +519,10 @@ class EtwCapture:
                 return
             self.abort()  # a window that was never collected (its request failed before the end)
         if not self.available():
-            raise EtwError("ETW capture needs an elevated Windows process")
+            raise EtwError(
+                "ETW capture needs trace-control rights (Performance Log Users membership; a physical session "
+                "refuses an elevated process)"
+            )
         self.directory = self.directory.resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
         if not self._swept:
@@ -534,6 +552,11 @@ class EtwCapture:
         self._active = started
         self._joined = 1
         self._pending_channels = {"connections", "files"}
+
+    def leaked_sessions(self) -> list[str]:
+        """Trace sessions of this tool still live in the OS (after ``close``: none may remain). Raises if unreadable."""
+
+        return self._backend.live_sessions()
 
     def abort(self) -> None:
         for _spec, name, _etl in list(self._active.values()):
@@ -617,6 +640,9 @@ class EtwChannelProvider:
     def close(self) -> None:
         self._capture.abort()
 
+    def leaked(self) -> list[str]:
+        return self._capture.leaked_sessions()
+
 
 def etw_host_monitor(
     policy: OwnershipPolicy,
@@ -624,11 +650,14 @@ def etw_host_monitor(
     *,
     capture: EtwCapture | None = None,
     canary_script: str | None = None,
+    forbid_elevation: bool = True,
+    self_elevated: Callable[[], bool | None] = tokens.current_process_elevated,
+    token_probe: Callable[[int], bool | None] = tokens.process_token_elevated,
 ) -> OwnedSessionMonitor:
     """The monitor a physical session needs: lifetime-complete connection and file channels, canary-proven.
 
-    Ready only from an elevated Windows process; otherwise both providers report ``unavailable`` and every session
-    refuses before creating anything."""
+    Ready only from an unelevated Windows process that holds the trace-control right; otherwise both providers report
+    ``unavailable`` (or the privilege check refuses) and every session refuses before creating anything."""
 
     capture = capture or EtwCapture(evidence_dir / "etw")
     return OwnedSessionMonitor(
@@ -637,11 +666,14 @@ def etw_host_monitor(
         kind="host",
         evidence_dir=evidence_dir,
         canary_script=canary_script,
+        forbid_elevation=forbid_elevation,
+        self_elevated=self_elevated,
+        token_probe=token_probe,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Elevated canary: prove the ETW providers see this monitor's known events. Runs no model and no downloaded file."""
+    """Standard-user canary: prove the ETW providers see this monitor's known events. Runs no model and no downloaded file."""
 
     import argparse
     import json
@@ -649,9 +681,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args(argv)
-    if not is_elevated():
+    if tokens.current_process_elevated() is not False:
         print(
-            "Not elevated. Open an Administrator terminal and rerun; nothing was started.",
+            "This process is elevated or its token is unreadable. Run from an ordinary (non-Administrator) terminal; "
+            "nothing was started.",
+            flush=True,
+        )
+        return 2
+    if not can_control_traces():
+        print(
+            "This account cannot control trace sessions (not in 'Performance Log Users'); nothing was started.",
             flush=True,
         )
         return 2
@@ -662,7 +701,16 @@ def main(argv: list[str] | None = None) -> int:
         problems = monitor.readiness()
     finally:
         monitor.close()
-    summary: dict[str, Any] = {"canary": report, "problems": problems}
+    leaked = LogmanBackend().live_sessions()
+    if leaked:
+        problems = [*problems, f"trace sessions left running: {leaked}"]
+    summary: dict[str, Any] = {
+        "canary": report,
+        "problems": problems,
+        "harness_elevated": tokens.current_process_elevated(),
+        "performance_log_users": tokens.in_performance_log_users(),
+        "trace_sessions_left_running": leaked,
+    }
     (args.evidence_dir / "etw-canary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
     )

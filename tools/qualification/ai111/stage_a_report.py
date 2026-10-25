@@ -50,8 +50,9 @@ LIMITATIONS = (
     "Cold means the first request of a model's arm; the OS file cache state is not controlled.",
     "The DNS-Client provider is enabled but the canary does not exercise it, and an attempt blocked at the firewall layer "
     "may produce no Kernel-Network event; neither is shown to be covered.",
-    "The monitored child runs with the harness's own (elevated) token; monitoring cannot constrain a binary that tries to "
-    "evade it, and processes Windows starts outside the job are not attributed.",
+    "The monitored child runs with the harness's standard-user token (the token is read from the live child and the harness "
+    "refuses to run elevated); monitoring still cannot constrain a binary that tries to evade it, and processes Windows "
+    "starts outside the job are not attributed.",
     "Stage A has 30 cases per arm; rates have coarse granularity and the formal gates (>= min scored answers, 100 blind "
     "preference judgments) cannot be met here.",
 )

@@ -8,7 +8,8 @@ that and nothing more: no model file is ever present, no inference command is bu
   (recorded before any extraction), the archive is unpacked with confined member paths, and every extracted file is hashed
   again from disk immediately before launch (and again after the last command).
 * Both commands go through the ownership monitor and therefore through ``run_bounded``: the bounded runner remains the only
-  process lifecycle owner. The monitor (ETW, elevated) must be canary-proven before anything is launched, and any
+  process lifecycle owner. The monitor (ETW; the harness holds the delegated trace-control right and runs under a
+  standard-user token, so the child is never elevated) must be canary-proven before anything is launched, and any
   connection attempt, file access outside the stated roots, unexpected descendant or unverified teardown stops the run.
 * The help text is compared with the closed flag vocabulary of ``src/ai_assist/argv.py``. A missing flag is a compatibility
   finding, never a reason to substitute another spelling or to weaken the restrictions.
@@ -288,6 +289,7 @@ def run_d12a(
     evidence_root: Path,
     monitor: OwnedSessionMonitor,
     authorization_text: str,
+    attestation: str,
     runner_clock: Callable[[], float] | None = None,
     intent: dict[str, Any] | None = None,
     authorized_member_sha256: str = AUTHORIZED_MEMBER_SHA256,
@@ -301,6 +303,8 @@ def run_d12a(
     intent = intent or plan_module.RUNTIME_INTENT
     if not authorization_text.strip():
         raise D12aRefused("no owner authorization statement was supplied")
+    if not attestation.strip():
+        raise D12aRefused("no operator outbound-restriction attestation was supplied")
     not_ready = monitor.provider_problems()
     if not_ready:
         raise D12aRefused("monitoring not ready: " + "; ".join(not_ready))
@@ -326,6 +330,10 @@ def run_d12a(
         evidence / "authorization.json",
         {
             "authorization_text": authorization_text,
+            "operator_attestation": {
+                "statement": attestation,
+                "verified_by_stablenew": False,
+            },
             "scope": "extract the verified archive and run llama-cli.exe --version and --help only",
             "archive": {"path": str(archive), "bytes": size, "sha256": sha},
             "member": {"name": MEMBER, "bytes": members[MEMBER][1], "sha256": members[MEMBER][0]},
@@ -544,11 +552,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--passive-manifest", type=Path, required=True)
     parser.add_argument("--evidence-root", type=Path, required=True, help="a NEW run directory")
     parser.add_argument("--authorization-text", required=True)
+    parser.add_argument(
+        "--attest",
+        required=True,
+        help="the operator's own statement that an outbound restriction covers the extracted executable (recorded, "
+        "never verified by StableNew)",
+    )
     args = parser.parse_args(argv)
-    from tools.qualification.ai111.etw import etw_host_monitor, is_elevated
+    from tools.qualification.ai111 import tokens
+    from tools.qualification.ai111.etw import can_control_traces, etw_host_monitor
 
-    if not is_elevated():
-        print("Not elevated: open an Administrator terminal and rerun. Nothing was started.")
+    if tokens.current_process_elevated() is not False:
+        print(
+            "This process is elevated or unreadable: use an ordinary terminal. Nothing was started."
+        )
+        return 2
+    if not can_control_traces():
+        print(
+            "This account cannot control trace sessions (Performance Log Users). Nothing was started."
+        )
         return 2
     args.evidence_root.mkdir(parents=True, exist_ok=True)
     monitor = etw_host_monitor(OwnershipPolicy(), args.evidence_root / "d12a-ownership")
@@ -559,12 +581,16 @@ def main(argv: list[str] | None = None) -> int:
             evidence_root=args.evidence_root,
             monitor=monitor,
             authorization_text=args.authorization_text,
+            attestation=args.attest,
         )
     except D12aRefused as exc:
         print(json.dumps({"verdict": "NOT TESTED", "refused": str(exc)}, indent=2))
         return 1
     finally:
-        monitor.close()
+        leaked = monitor.close_and_report(args.evidence_root / "d12a")
+    if leaked:
+        print(json.dumps({"verdict": "FAIL", "trace_sessions_left_running": leaked}, indent=2))
+        return 1
     print(json.dumps({k: result[k] for k in ("verdict", "stopped") if k in result}, indent=2))
     return 0 if result["verdict"] == "PASS" else 1
 

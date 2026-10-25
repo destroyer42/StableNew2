@@ -508,7 +508,13 @@ def test_canary_plumbing_with_nt_paths_foreign_noise_and_byte_swapped_ports(tmp_
     report = monitor.run_canary(inner)
     assert report == {
         "passed": True,
-        "saw": {"descendant": True, "files": True, "writes": True, "connections": True},
+        "saw": {
+            "descendant": True,
+            "standard_user": True,
+            "files": True,
+            "writes": True,
+            "connections": True,
+        },
     }
     assert monitor.readiness() == []
     assert sorted(backend.stopped) == sorted(backend.started)
