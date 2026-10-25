@@ -95,7 +95,9 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
         self.tree.bind("<Double-Button-1>", lambda _e: self._on_open())
 
-        self.preview = VideoPreviewWidget(self, decode=decode, edge=256, scale=1)
+        self.preview = VideoPreviewWidget(
+            self, decode=decode, edge=256, scale=1, allow_original=False
+        )
         self.preview.grid(row=1, column=1, sticky="n")
         ttk.Label(self, textvariable=self.status_var, style="Muted.TLabel", justify="left").grid(
             row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0)

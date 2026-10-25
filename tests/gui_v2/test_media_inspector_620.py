@@ -107,6 +107,37 @@ def test_same_selection_does_not_decode_again_and_hide_releases(inspector):
     assert len(work.tasks) == 2
 
 
+def test_host_empty_status_survives_map_idle_policy_and_clear(inspector):
+    widget, work = inspector
+    for text in ("No saved artifact", "Hidden by content visibility"):
+        widget.set_placeholder(text)
+        widget._mapped(SimpleNamespace(widget=widget))
+        widget._policy_changed()
+        widget.update_idletasks()
+        assert widget.status_var.get() == text
+        assert widget.current_path() is None and work.tasks == []
+    widget.clear()
+    assert widget.status_var.get() == "Select media"
+
+
+def test_video_only_omits_image_controls_and_image_return_publishes(inspector):
+    from src.video.review_preview import PreviewResult
+
+    widget, work = inspector
+    widget._decode_video = lambda path, cancel: PreviewResult(
+        path=path, status="failed", message="fixture"
+    )
+    widget.set_media("one.mp4")
+    assert not widget._zoom_bar.winfo_manager()
+    widget.set_media("still.png")
+    assert widget._zoom_bar.winfo_manager() == "pack"
+    work.finish(len(work.tasks) - 1)
+    widget._render_image()
+    work.finish(len(work.tasks) - 1)
+    assert widget._photo_image is not None
+    assert widget.current_path() == "still.png"
+
+
 def test_detach_close_return_and_parent_destroy_do_not_change_selection(inspector):
     widget, work = inspector
     widget.set_media("one.png")

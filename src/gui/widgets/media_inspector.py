@@ -12,6 +12,7 @@ from typing import Any
 from PIL import ImageTk
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
+from src.gui.tooltip import Tooltip, attach_tooltip
 from src.gui.ui_dispatcher import TkUiDispatcher
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
@@ -21,6 +22,7 @@ from src.gui.view_contracts.media_image_decode import (
     render_viewport,
 )
 from src.gui.view_contracts.media_inspector_contract import MediaInspectorState
+from src.gui.view_contracts.photo_optimize_layout_contract import flow_rows
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui.widgets.video_preview_widget_v2 import VideoPreviewWidget
 
@@ -58,12 +60,14 @@ class MediaInspector(ttk.Frame):
         **kwargs: Any,
     ) -> None:
         kwargs.pop("bg", None)
+        kwargs.setdefault("style", "Panel.TFrame")
         super().__init__(master, **kwargs)
         self.model = MediaInspectorState(
             default_shown=default_shown, shown=default_shown, active=False
         )
         self._closed = False
         self._placeholder_text = placeholder_text
+        self._empty_message = placeholder_text
         self._edge = min(620, edge or (min(300, max_width) if max_width else width))
         self._height = min(620, min(300, max_height) if max_height else height)
         self._on_source_changed = on_source_changed
@@ -73,6 +77,7 @@ class MediaInspector(ttk.Frame):
         self._image: InspectionImage | None = None
         self._photo_image: ImageTk.PhotoImage | None = None
         self._video: VideoPreviewWidget | None = None
+        self._video_tooltip: Tooltip | None = None
         self._window: tk.Toplevel | None = None
         self._open_path: str | None = None
         self._resize_id: str | None = None
@@ -120,19 +125,20 @@ class MediaInspector(ttk.Frame):
             command=self._toggle,
             style="Dark.TCheckbutton",
         )
-        self.show_button.pack(anchor="w")
-        if not show_control:
-            self.show_button.pack_forget()
         self.detach_button = ttk.Button(
             self.toolbar, text="Detach", command=self.detach, style="Dark.TButton"
         )
-        self.detach_button.pack(anchor="w", pady=2)
         self.open_button = ttk.Button(
             self.toolbar, text="Open original", command=self._open_original, style="Dark.TButton"
         )
-        self.open_button.pack(anchor="w")
-        if not allow_original:
-            self.open_button.pack_forget()
+        self._toolbar_controls: list[ttk.Button | ttk.Checkbutton] = (
+            ([self.show_button] if show_control else [])
+            + [self.detach_button]
+            + ([self.open_button] if allow_original else [])
+        )
+        self._toolbar_signature: Any = None
+        self.toolbar.bind("<Configure>", self._layout_toolbar, add="+")
+        self._layout_toolbar()
         self.body = ttk.Frame(self, style="Panel.TFrame")
         self.body.grid(row=1, column=0, sticky="nsew")
         self.detached_label = ttk.Label(self, text="Media detached", style="Muted.TLabel")
@@ -146,8 +152,9 @@ class MediaInspector(ttk.Frame):
 
     def _build_image_host(self, host: tk.Misc, width: int, height: int) -> None:
         self._host = host
-        bar = ttk.Frame(host, style="Panel.TFrame")
-        bar.pack(fill="x")
+        bar = self._zoom_bar = ttk.Frame(host, style="Panel.TFrame")
+        if self.model.kind == "image":
+            bar.pack(fill="x")
         for index, (text, action) in enumerate(
             (
                 ("Fit", self.fit),
@@ -187,6 +194,25 @@ class MediaInspector(ttk.Frame):
         )
         self._status_label.pack(fill="x")
 
+    def _layout_toolbar(self, _event: Any = None) -> None:
+        """Use the established flow layout without reparenting controls or decoding media."""
+        widths = [control.winfo_reqwidth() for control in self._toolbar_controls]
+        available = self.toolbar.winfo_width()
+        rows = flow_rows(widths, available if available > 1 else self._edge, gap=4)
+        signature = (tuple(tuple(row) for row in rows), tuple(widths))
+        if signature == self._toolbar_signature:
+            return
+        self._toolbar_signature = signature
+        y = 0
+        for row in rows:
+            x = 0
+            height = max(self._toolbar_controls[index].winfo_reqheight() for index in row)
+            for index in row:
+                self._toolbar_controls[index].place(x=x, y=y)
+                x += widths[index] + 4
+            y += height + 2
+        self.toolbar.configure(width=max(widths, default=1), height=max(1, y))
+
     def _viewport_changed(self, event: Any) -> None:
         self._status_label.configure(wraplength=max(96, event.width - 8))
         self._schedule_render()
@@ -202,6 +228,8 @@ class MediaInspector(ttk.Frame):
         if self._closed:
             return
         changed = self.model.select(str(path or ""), kind)
+        if changed and path:
+            self._empty_message = self._placeholder_text
         if self._external_shown is not None:
             self.model.visibility(shown=self.shown_var.get())
         if subject is not None:
@@ -268,11 +296,22 @@ class MediaInspector(ttk.Frame):
         if self._closed:
             return
         self._apply_policy()
+        if self.model.kind == "image":
+            self._viewport.pack(fill="both", expand=True)
+            self._zoom_bar.pack(fill="x", before=self._viewport)
+        else:
+            self._zoom_bar.pack_forget()
+        if self.model.renderable and self.model.kind == "video":
+            self._status_label.pack_forget()  # the video renderer already supplies its status
+        else:
+            self._status_label.pack(fill="x")
         self.open_button.configure(state="normal" if self.model.renderable else "disabled")
         if not self.model.renderable:
             self._release()
             message = (
-                "Hidden by content visibility"
+                self._empty_message
+                if not self.model.path
+                else "Hidden by content visibility"
                 if not self.model.eligible
                 else "Media hidden"
                 if not self.model.shown
@@ -305,6 +344,7 @@ class MediaInspector(ttk.Frame):
             self._video.bind(
                 "<<VideoPreviewChanged>>", lambda _e: self._video_changed(token), add="+"
             )
+            self._video.bind("<Map>", lambda _e: self._video_changed(token), add="+")
             self._video.show(self.model.path)
         else:
             self._viewport.pack(fill="both", expand=True)
@@ -331,6 +371,23 @@ class MediaInspector(ttk.Frame):
                 "ready" if self._video.session.clip is not None else self._video.session.state
             )
             self.status_var.set(self._video.session.message)
+            clip = self._video.session.clip
+            if clip is not None:
+                # Keep the fixed decoder and every detail; avoid duplicating a tall caption in a compact dock.
+                caption = f"Bounded preview {clip.width}×{clip.height}"
+                if clip.truncated:
+                    caption += f" · first {clip.frame_count} frames"
+                self._video.caption_var.set(caption)
+                self._video.canvas.configure(
+                    width=max(min(256, self._edge), clip.width * self._video._scale),
+                    height=clip.height * self._video._scale,
+                )
+                if self._video_tooltip is None:
+                    self._video_tooltip = attach_tooltip(
+                        self._video.caption, self._video.session.message
+                    )
+                else:
+                    self._video_tooltip.text = self._video.session.message
 
     def _failed(self, token: int, error: Exception) -> None:
         if token == self.model.revision and self.model.renderable:
@@ -445,6 +502,7 @@ class MediaInspector(ttk.Frame):
         )
         self._build_image_host(container, width, height)
         self.detach_button.configure(text="Return to dock", command=self.dock)
+        self._layout_toolbar()
         self._refresh()
 
     def dock(self) -> None:
@@ -460,6 +518,7 @@ class MediaInspector(ttk.Frame):
         self.body.grid()
         self.detached_label.grid_remove()
         self.detach_button.configure(text="Detach", command=self.detach)
+        self._layout_toolbar()
         self._refresh()
 
     def _release(self) -> None:
@@ -471,6 +530,12 @@ class MediaInspector(ttk.Frame):
         if self._resize_id is not None:
             self.after_cancel(self._resize_id)
             self._resize_id = None
+        if self._video_tooltip is not None:
+            try:
+                self._video_tooltip.hide()
+            except tk.TclError:
+                logger.debug("Inspector video caption already destroyed")
+            self._video_tooltip = None
         if self._video is not None:
             self._video.stop()
             self._video.destroy()
@@ -485,7 +550,8 @@ class MediaInspector(ttk.Frame):
         self._canvas.delete("all")
 
     def set_placeholder(self, text: str) -> None:
-        self.clear()
+        self._empty_message = text
+        self.set_media(None)
         self._placeholder(text)
 
     def set_loading(self) -> None:
@@ -494,6 +560,7 @@ class MediaInspector(ttk.Frame):
     def clear(self) -> None:
         if self._closed:
             return
+        self._empty_message = self._placeholder_text
         self.set_media(None)
 
     clear_media = clear

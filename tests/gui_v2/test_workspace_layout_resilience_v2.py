@@ -180,3 +180,107 @@ def test_long_form_tabs_reach_their_lowest_control_on_a_laptop_viewport(
     finally:
         tab.destroy()
         tk_root.withdraw()
+
+
+@pytest.mark.parametrize("font_scale", [1.0, 1.5])
+def test_recent_video_controls_and_detach_return_fit_the_compact_viewport(tk_root, tmp_path, font_scale):
+    import time
+
+    from src.video.recent_video_outputs import RecentVideoOutput
+    from src.video.review_preview import PreviewClip, PreviewResult
+
+    base = float(tk_root.tk.call("tk", "scaling"))
+    tk_root.tk.call("tk", "scaling", base * font_scale)
+    layout = compute_window_layout(1366, 768)
+    tk_root.geometry(f"{layout.width}x{layout.height}+0+0")
+    tab = VideoWorkflowTabFrameV2(tk_root)
+    panel = tab.recent_outputs_panel
+    clip_path = tmp_path / "recorded.mp4"
+    clip_path.write_bytes(b"fixture; injected decoding only")
+
+    def decode(path, cancel):
+        assert not cancel.is_set()
+        # Tall preview at the existing maximum edge, not a tiny frame hiding a layout problem.
+        clip = PreviewClip(path, 128, 256, 768, 1536, 24, 1, 1, 1.0, bytes(128 * 256 * 3))
+        return PreviewResult(path=path, status="ok", clip=clip)
+
+    panel.preview._decode_video = decode
+
+    def settle(predicate):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            tk_root.update()
+            if predicate():
+                return
+            time.sleep(0.01)
+        raise AssertionError("Injected Recent Outputs preview did not settle")
+
+    try:
+        tab.pack(fill="both", expand=True)
+        tk_root.deiconify()
+        settle(lambda: panel.session.loaded)
+        panel.session.outputs = (RecentVideoOutput(
+            job_id="recorded", video_path=str(clip_path), completed_at=None,
+            bundle={"primary_path": str(clip_path), "video_paths": [str(clip_path)]},
+        ),)
+        panel.session.select("recorded")
+        settle(lambda: panel.preview._video is not None and panel.preview._video.session.clip is not None)
+        for detached in (False, True, False):
+            panel.preview.detach() if detached else panel.preview.dock()
+            tk_root.update()
+            tab._body_scroll._canvas.yview_moveto(1.0)
+            tk_root.update()
+            viewport = tab._body_scroll._canvas
+            left, top = viewport.winfo_rootx(), viewport.winfo_rooty()
+            right, bottom = left + viewport.winfo_width(), top + viewport.winfo_height()
+            if panel.winfo_height() <= viewport.winfo_height():
+                assert panel.winfo_rooty() >= top
+                assert panel.winfo_rooty() + panel.winfo_height() <= bottom + 1
+            else:
+                # At 150%, the measured panel is 453px and its viewport 361px. No scroll position can
+                # contain both edges. Preserve the normal-size containment contract; at stress scale,
+                # require each complete viewing unit and every real action to remain reachable.
+                assert font_scale == 1.5
+            for unit in (panel.tree, panel.preview):
+                assert unit.winfo_height() <= viewport.winfo_height()
+                tab._body_scroll.reveal(unit)
+                tk_root.update()
+                assert left <= unit.winfo_rootx()
+                assert unit.winfo_rootx() + unit.winfo_width() <= right + 1
+                assert top <= unit.winfo_rooty()
+                assert unit.winfo_rooty() + unit.winfo_height() <= bottom + 1
+            for control in (panel.refresh_button, panel.open_button, panel.reveal_button,
+                            panel.movie_button, panel.preview.show_button, panel.preview.detach_button):
+                # Exercise the production FocusIn router, starting with the panel scrolled away.
+                tk_root.focus_force()
+                viewport.yview_moveto(0.0)
+                tk_root.update()
+                control.focus_force()
+                tk_root.update()
+                assert tk_root.focus_get() is control
+                assert control.winfo_ismapped()
+                assert left <= control.winfo_rootx()
+                assert control.winfo_rootx() + control.winfo_width() <= right + 1
+                assert top <= control.winfo_rooty()
+                assert control.winfo_rooty() + control.winfo_height() <= bottom + 1
+            assert panel.preview.current_path() == str(clip_path)
+            assert not panel.preview._zoom_bar.winfo_manager()
+            if detached:
+                labels = [child.cget("text") for child in panel.preview._window.winfo_children()[0].winfo_children() if "text" in child.keys()]
+                assert "Show media" in labels and "Return to dock" in labels
+                window = panel.preview._window
+                for control in window.winfo_children()[0].winfo_children():
+                    if "text" in control.keys() and control.cget("text") in ("Show media", "Return to dock"):
+                        assert control.winfo_ismapped()
+                        assert window.winfo_rootx() <= control.winfo_rootx()
+                        assert control.winfo_rootx() + control.winfo_width() <= window.winfo_rootx() + window.winfo_width()
+                        assert window.winfo_rooty() <= control.winfo_rooty()
+                        assert control.winfo_rooty() + control.winfo_height() <= window.winfo_rooty() + window.winfo_height()
+            else:
+                assert panel.preview._video.session.clip is not None
+                assert panel.preview._video._tick_id is not None
+                assert "Bounded preview" in panel.preview._video.caption.cget("text")
+    finally:
+        tab.destroy()
+        tk_root.tk.call("tk", "scaling", base)
+        tk_root.withdraw()

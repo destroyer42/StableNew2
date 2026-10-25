@@ -88,6 +88,9 @@ class PreviewPanelV2(ttk.Frame):
         self.theme = theme
         self._manage_app_state_subscriptions = bool(manage_app_state_subscriptions)
         self._job_summaries: list[JobUiSummary] = []
+        self._current_preview_job: Any | None = None
+        self._current_pack_name: str | None = None
+        self._current_show_preview = False
         self._content_visibility_mode = str(
             getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )

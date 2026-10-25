@@ -70,6 +70,34 @@ def test_state_persists_on_checkbox_change(preview_panel, temp_state_file):
         mock_save.assert_called_once()
 
 
+def test_restored_empty_preview_survives_map_layout_and_policy_refresh(
+    tk_root, temp_state_file, monkeypatch
+):
+    temp_state_file.write_text(json.dumps({"schema_version": "2.6", "show_preview": True}))
+    monkeypatch.setattr("src.gui.preview_panel_v2.PREVIEW_STATE_PATH", temp_state_file)
+    callback_errors = []
+    monkeypatch.setattr(
+        tk_root, "report_callback_exception", lambda *error: callback_errors.append(error)
+    )
+    panel = PreviewPanelV2(tk_root)
+    try:
+        panel.restore_state()
+        panel.pack(fill="both", expand=True)
+        tk_root.deiconify()
+        tk_root.update()
+        panel._on_preview_checkbox_changed()
+        panel._schedule_preview_layout()
+        panel.thumbnail._policy_changed()
+        tk_root.after(150, tk_root.quit)
+        tk_root.mainloop()
+        assert callback_errors == []
+        assert panel._current_visibility_subject() == {}
+        assert panel.thumbnail.status_var.get() == panel.NO_JOB_PLACEHOLDER
+        assert panel.thumbnail.current_path() is None and panel._show_preview_var.get()
+    finally:
+        panel.destroy()
+
+
 def test_no_reset_on_clear(preview_panel):
     """Test that clearing preview doesn't reset checkbox state."""
     # Set checkbox to False
