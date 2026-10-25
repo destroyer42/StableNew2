@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-582 of 737 modules have a docstring.
+587 of 742 modules have a docstring.
 
 ## src/
 
@@ -378,6 +378,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `experiment_design_panel.py`: (no docstring)
 - `grid_design_frame.py`: (no docstring)
 - `learning_analytics_panel.py`: Analytics display panel for learning system
+- `learning_baseline_editor.py`: Editor for Learning's own experiment baseline (the fixed settings every variant shares)
 - `learning_grid_view.py`: (no docstring)
 - `learning_plan_table.py`: (no docstring)
 - `learning_preview_card.py`: (no docstring)
@@ -503,6 +504,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/learning/
 
 - `automation_modes.py`: Learning automation modes: names, labels, the default, and how a persisted choice is read back
+- `baseline_authoring.py`: Learning's independently authored experiment baseline (toolkit-neutral)
+- `baseline_draft.py`: The editable Learning baseline draft: lifecycle rules over ``LearningState.baseline_draft``
 - `dataset_builder.py`: Dataset aggregation utilities for learning groundwork
 - `design_estimate.py`: How much work a design would create, before any Preview is built
 - `discovered_grouping.py`: Grouping engine for discovered-review candidate selection
@@ -542,7 +545,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `model_evidence_readiness.py`: Worker-only readiness for selected runtime checkpoints, using AssetRegistry
 - `model_policy_service.py`: Learning policy validation and compile delegation; never an execution authority
 - `model_profiles.py`: Model Profiles & Style-Aware Defaults (V2-P1)
+- `ordinary_njr.py`: Materialise one ordinary (single-variable) Learning variant into the canonical NJR
 - `ordinary_prompt_freeze.py`: Ordinary Learning executor-base freeze and explicit saved-preview admission
+- `ordinary_snapshot.py`: The frozen snapshot of an ordinary (single-variable) Learning experiment
 - `output_scan_models.py`: Scan record models — the canonical normalized representation of one scanned image
 - `output_scanner.py`: OutputScanner — manifest-first artifact scanner
 - `preview_summary.py`: Structured, read-only summary of what a frozen Preview would submit

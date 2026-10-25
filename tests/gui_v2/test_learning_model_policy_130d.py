@@ -23,10 +23,11 @@ def panel_for_test(tmp_path):
     controller = make_controller({"txt2img": {"model": "ordinary"}})
     controller._learning_lora_resolver = exact_resolver
     panel = ExperimentDesignPanel(root, controller, packs_dir=tmp_path)
+    panel._on_shown()  # the withdrawn test root never maps the panel: this is the first-visible seed
     return root, controller, panel
 
 
-def test_listener_round_trip_preserves_authoring_and_backend(tmp_path, monkeypatch):
+def test_learning_model_not_the_pipeline_projection_drives_capabilities(tmp_path, monkeypatch):
     import requests
 
     from src.assets import AssetRegistry
@@ -37,6 +38,10 @@ def test_listener_round_trip_preserves_authoring_and_backend(tmp_path, monkeypat
     monkeypatch.setattr(AssetRegistry, "snapshot", forbidden)
     monkeypatch.setattr(requests.Session, "request", forbidden)
     root, controller, panel = panel_for_test(tmp_path)
+    klein = klein_config()["txt2img"]["model"]
+    controller._learning_policy_resolver = lambda name: (
+        resolve_model_policy(klein) if name == klein else sdxl(name)
+    )
     model_var = SimpleNamespace(get=lambda: "ordinary")
     base = SimpleNamespace(model_var=model_var)
     import tkinter as tk
@@ -62,8 +67,17 @@ def test_listener_round_trip_preserves_authoring_and_backend(tmp_path, monkeypat
     panel.variable_var.set("CFG Scale")
     panel._on_variable_changed()
     panel.start_var.set(6)
-    projection._policy_resolver = lambda _: resolve_model_policy(klein_config()["txt2img"]["model"])
+    # The Pipeline moves to Klein: Learning's own (SDXL) baseline keeps deciding its stages and variables.
+    projection._policy_resolver = lambda _: resolve_model_policy(klein)
     projection.refresh()
+    assert "profile v2" not in panel.model_target_var.get()
+    assert panel.variable_var.get() == "CFG Scale"
+    assert "CFG Scale" in panel.variable_combo.cget("values")
+    assert "adetailer" in panel.stage_combo.cget("values")
+    assert controller.authoring_baseline()["txt2img"]["model"] == "ordinary"
+    # The operator chooses Klein in Learning: now the exact profile decides.
+    controller.update_baseline_field("txt2img", "model", klein)
+    panel._on_baseline_changed()
     assert "profile v2" in panel.model_target_var.get()
     assert panel.variable_var.get() == ""
     assert str(panel.build_button.cget("state")) == "disabled"
@@ -71,9 +85,11 @@ def test_listener_round_trip_preserves_authoring_and_backend(tmp_path, monkeypat
     assert list(panel.stage_combo.cget("values")) == ["txt2img", "img2img"]
     assert "CFG Scale" not in panel.variable_combo.cget("values")
     assert panel.start_var.get() == 6
-    assert controller._get_baseline_config()["txt2img"]["model"] == "ordinary"
-    projection._policy_resolver = sdxl
-    projection.refresh()
+    assert (
+        controller._get_baseline_config()["txt2img"]["model"] == "ordinary"
+    )  # the Pipeline was never written
+    controller.update_baseline_field("txt2img", "model", "ordinary")
+    panel._on_baseline_changed()
     assert "CFG Scale" in panel.variable_combo.cget("values")
     assert "adetailer" in panel.stage_combo.cget("values")
     panel.destroy()
@@ -87,7 +103,10 @@ def test_exact_lora_projection_uses_cached_evidence_and_stage_applicability(tmp_
         loras=(("adapter", 0.8),), style_lora=None, style_lora_pending=False
     )
     policy = resolve_model_policy(klein_config()["txt2img"]["model"])
+    controller._learning_policy_resolver = lambda name: policy
+    controller.update_baseline_field("txt2img", "model", "klein")  # Learning chooses its own model
     panel.on_model_projection(project_model_controls(policy, "forge_webui", model_name="klein"))
+    panel._on_baseline_changed()
     assert list(panel.variable_combo.cget("values")) == ["LoRA Strength"]
     resolver.assert_called_with("adapter")
     panel.stage_var.set("img2img")

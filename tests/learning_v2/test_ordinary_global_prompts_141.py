@@ -192,6 +192,12 @@ def ordinary_plan(
     config["prompt_optimizer"] = {"enabled": False}
     if stage != "txt2img":
         config[stage] = copy.deepcopy(config["txt2img"])
+        # A Learning baseline for these stages must declare the stage's own settings; nothing is defaulted.
+        config[stage].update({
+            "img2img": {"denoising_strength": 0.4},
+            "adetailer": {"adetailer_model": "face_yolov8n.pt", "denoising_strength": 0.3},
+            "upscale": {"upscaler": "R-ESRGAN 4x+", "upscale_factor": 2.0},
+        }[stage])
         if variable == "Upscale Factor":
             exp.metadata.update(start_value=1.5, end_value=2, step_value=0.5)
         from PIL import Image

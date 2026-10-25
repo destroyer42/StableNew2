@@ -440,6 +440,10 @@ def test_restoring_a_queued_experiment_reopens_at_run_without_resubmitting(
 ):
     first, service = build_tab(root, tmp_path, repository)
     try:
+        first.pack(
+            fill="both", expand=True
+        )  # the Design step is on screen: the baseline seeds on first display
+        root.update()
         design_cfg_sweep(first.experiment_panel)
         click_primary(first, root)
         click_primary(first, root)

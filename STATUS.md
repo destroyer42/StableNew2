@@ -53,7 +53,7 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
   SDXL txt2img: frozen cells, common seeds, a Comparison Grid pane and a labeled contact-sheet export; its ratings never feed recommendations;
   `docs/Subsystems/Learning/LEARNING.md` section 3.7), staged curation. Recommendations are applied from the Learning tab's
   Recommendations selector (default Apply with confirm); rated review drafts are saved on navigation or with Save All Drafts.
-  Saved experiments reconcile exact admitted repository jobs after restart without resubmission; admission and resume-save uncertainty remain visible.
+  Saved experiments reconcile exact admitted repository jobs after restart without resubmission; admission and resume-save uncertainty remain visible. A designed experiment has its own Learning baseline (copied from the Pipeline only on request or once at first display), frozen at Preview (`docs/Subsystems/Learning/LEARNING.md` section 3.9).
 - History browser: the Pipeline tab's Job History opens a searchable, paged view of every job (status, date, pack, prompt/model text;
   no schema change). Text search covers only the first 64 prompt characters and the model; full-text search is not built. Iterate from History (completed single-still-image txt2img jobs only): Edit Image in Review, or an editable Regenerate with Changes draft in Pipeline; both go through the normal Preview/Add to Queue path with parent lineage and refuse unsupported jobs with a reason (`docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md` section 3.5); parent/child compare and physical-generation acceptance are not done.
 - Batch operations: whole-selection Review preflight, multi-source Video Workflow batch, unified batch triage and retry

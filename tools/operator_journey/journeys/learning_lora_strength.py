@@ -382,6 +382,17 @@ class _Journey:
         d.select_combobox(panel.stage_combo, "txt2img", label="target stage")
         d.select_combobox(panel.prompt_source_combo, "custom", label="prompt source")
         d.type_in_text(panel.custom_prompt_text, self.prompt, label="custom prompt")
+        # Learning owns its baseline: a setting the Pipeline left blank is chosen here, never defaulted for it.
+        editor = panel.baseline_editor
+        for name in ("sampler_name", "scheduler"):
+            if not editor._vars[name].get().strip():
+                choices = [str(value) for value in editor._widgets[name].cget("values")]
+                self.require(
+                    ph, f"learning_{name}_choices", bool(choices), "the backend offered no choices"
+                )
+                d.select_combobox(
+                    editor._widgets[name], choices[0], label=f"Learning baseline {name}"
+                )  # type: ignore[arg-type]
         d.select_combobox(panel.variable_combo, "LoRA Strength", label="variable under test")
         lora_combo = d.find(panel.lora_frame, ttk.Combobox, textvariable=panel.lora_selector_var)
         try:
@@ -401,6 +412,18 @@ class _Journey:
         d = self.driver
         learning = self.window.learning_tab
         panel = learning.experiment_panel
+        # Learning authors its own baseline; say what, if anything, still blocks Build Preview.
+        blockers = panel._baseline_blockers()
+        self.check(
+            ph,
+            "learning_baseline_ready",
+            not blockers,
+            f"origin={panel.baseline_editor.origin_var.get()!r}; still needed: {'; '.join(blockers)}",
+        )
+        self.ev.summary["learning_baseline"] = {
+            "origin": panel.baseline_editor.origin_var.get(),
+            "txt2img": panel.learning_controller.authoring_baseline().get("txt2img"),
+        }
         d.invoke(panel.build_button, label="Build Preview Only")
         state = learning.learning_controller.learning_state
         d.wait_until(

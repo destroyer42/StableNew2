@@ -75,6 +75,58 @@ def _seed_text(seed_policy: Mapping[str, Any]) -> str:
     return text
 
 
+def _settings_text(settings: Mapping[str, Any]) -> str:
+    return ", ".join(
+        f"{name} {value}"
+        for name, value in settings.items()
+        if name not in {"stage", "model"} and isinstance(value, (str, int, float)) and value != ""
+    )
+
+
+def _baseline_rows(snapshot: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Where the fixed settings came from and what every variant will effectively use (read from the snapshot)."""
+    from src.learning.baseline_authoring import AUTHORING_KEY, OWNERSHIP_BASELINE, origin_text
+
+    record = snapshot.get(AUTHORING_KEY)
+    if not isinstance(record, Mapping):
+        return []
+    rows: list[tuple[str, str]] = [
+        ("Baseline", origin_text(record)),
+        (
+            "Stage run",
+            " then ".join(snapshot.get("stage_chain") or [str(snapshot.get("stage") or "")]),
+        ),
+    ]
+    fixed = [
+        f"{row['label']} {row['value']}"
+        for row in snapshot.get("effective_settings") or []
+        if isinstance(row, Mapping)
+        and row.get("ownership") == OWNERSHIP_BASELINE
+        and row.get("value") not in (None, "")
+    ]
+    if fixed:
+        rows.append(("Fixed settings", "; ".join(fixed)))
+    image = snapshot.get("input_image") or {}
+    if isinstance(image, Mapping) and image.get("path"):
+        name = str(image["path"]).replace("\\", "/").rsplit("/", 1)[-1]
+        rows.append(("Source image", f"{name} (file observed at Preview)"))
+    variants = [
+        entry
+        for entry in snapshot.get("variant_effective_settings") or []
+        if isinstance(entry, Mapping)
+    ]
+    for entry in variants[:_MAX_VALUES_SHOWN]:
+        rows.append(
+            (
+                f"Variant {variant_label(entry.get('value'))}",
+                _settings_text(entry.get("settings") or {}),
+            )
+        )
+    if len(variants) > _MAX_VALUES_SHOWN:
+        rows.append(("More variants", f"+{len(variants) - _MAX_VALUES_SHOWN} more"))
+    return rows
+
+
 def build_preview_summary(
     experiment: Any,
     plan: Sequence[Any],
@@ -155,6 +207,7 @@ def build_preview_summary(
         rows.append(("Setting tested", str(snapshot.get("variable_under_test") or "not recorded")))
         rows.append(("Values", _values_text(list(snapshot.get("variant_values") or []))))
         rows.append(("Model", _model_text(context)))
+        rows.extend(_baseline_rows(snapshot))
     rows.extend(
         [
             ("Prompt", _prompt_text(source)),

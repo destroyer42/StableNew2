@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
+from tests.learning_v2.test_model_comparison_140 import baseline, policy
 
 
 def _controller() -> LearningController:
@@ -14,6 +15,10 @@ def _controller() -> LearningController:
 def test_learning_workflow_state_design_to_planned() -> None:
     controller = _controller()
     assert controller.get_workflow_state() == "idle"
+    # Learning owns its baseline: author it with the explicit one-time Copy (the Pipeline is a plain dict here).
+    controller._get_baseline_config = baseline  # type: ignore[method-assign]
+    controller._learning_policy_resolver = policy
+    controller.copy_pipeline_settings("txt2img")
 
     controller.update_experiment_design(
         {

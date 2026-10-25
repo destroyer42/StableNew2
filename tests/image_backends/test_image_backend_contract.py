@@ -357,7 +357,7 @@ def test_a1111_adapter_delegates_each_supported_stage(stage_name: str, tmp_path:
         "src/pipeline/prompt_pack_job_builder.py",  # PromptPack jobs
         "src/pipeline/cli_njr_builder.py",  # CLI
         "src/pipeline/reprocess_builder.py",  # Review / image reprocess
-        "src/gui/controllers/learning_controller.py",  # Learning experiments
+        "src/learning/ordinary_njr.py",  # Learning experiments (compile moved out of the GUI controller)
     ],
 )
 def test_every_new_image_producer_stamps_identity_through_the_one_normalization_boundary(producer: str) -> None:

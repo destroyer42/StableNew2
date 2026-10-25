@@ -10,7 +10,9 @@ from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.models.prompt_pack_model import PromptPackModel, PromptSlot
 from src.gui.ui_tokens import TOKENS
 from src.gui.views.grid_design_frame import TwoAxisDesignFrame
+from src.gui.views.learning_baseline_editor import LearningBaselineEditor
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
+from src.learning import baseline_authoring as authoring
 from src.learning.design_estimate import estimate_design
 from src.learning.experiment_naming import build_experiment_identity
 from src.learning.model_capabilities import (
@@ -18,7 +20,7 @@ from src.learning.model_capabilities import (
     policy_context,
     project_learning_capabilities,
 )
-from src.learning.model_policy_service import live_capabilities, resolve_policy
+from src.learning.model_policy_service import live_capabilities, resolve_policy, selected_model
 from src.learning.resource_access import get_resource_choices, resolve_app_state
 from src.learning.stage_capabilities import (
     get_stage_capability,
@@ -108,9 +110,12 @@ class ExperimentDesignPanel(ttk.Frame):
         self.rowconfigure(8, weight=0)  # Prompt Source
         self.rowconfigure(9, weight=0)  # Buttons
         self.rowconfigure(10, weight=0)  # Feedback
-        self.rowconfigure(11, weight=1)  # Spacer
+        self.rowconfigure(12, weight=1)  # Spacer
 
+        self._shown = False
         self._build_ui()
+        for sequence in ("<Map>", "<Visibility>", "<Expose>"):
+            self.bind(sequence, self._on_shown, add="+")
         if self._resource_state is not None and hasattr(self._resource_state, "subscribe"):
             self._resource_state.subscribe("content_visibility_mode", self._on_comparison_visibility_changed)
 
@@ -191,9 +196,25 @@ class ExperimentDesignPanel(ttk.Frame):
         )
         self.input_image_button.grid(row=0, column=1, sticky="e")
 
+        # The experiment's own fixed settings.  Learning owns this baseline; the Pipeline is only ever copied in
+        # on request, so a Pipeline edit can never change a Learning draft or Preview.
+        self.baseline_section = DisclosureSection(self, title="Learning baseline (settings held fixed)", expanded=True)
+        self.baseline_section.grid(row=8, column=0, sticky="ew", pady=(0, 10))
+        self.baseline_editor = LearningBaselineEditor(
+            self.baseline_section.body,
+            self.learning_controller,
+            stage_provider=lambda: self.stage_var.get(),
+            variable_provider=lambda: self._safe_get(getattr(self, "variable_var", None), ""),
+            input_image_provider=lambda: str(self._safe_get(getattr(self, "input_image_var", None), "")).strip(),
+            policy_notes_provider=self._policy_notes,
+            on_changed=self._on_baseline_changed,
+        )
+        self.baseline_editor.grid(row=0, column=0, sticky="ew")
+        self.baseline_section.body.columnconfigure(0, weight=1)
+
         # Variable Under Test
         self.variable_label = ttk.Label(self, text="Variable Under Test:")
-        self.variable_label.grid(row=8, column=0, sticky="w", pady=(0, 2))
+        self.variable_label.grid(row=9, column=0, sticky="w", pady=(0, 2))
         self.variable_var = tk.StringVar(value="")
         self.variable_combo = ttk.Combobox(
             self,
@@ -201,14 +222,14 @@ class ExperimentDesignPanel(ttk.Frame):
             values=get_variables_for_stage(self.stage_var.get()),
             state="readonly",
         )
-        self.variable_combo.grid(row=9, column=0, sticky="ew", pady=(0, 10))
+        self.variable_combo.grid(row=10, column=0, sticky="ew", pady=(0, 10))
 
         # PR-LEARN-020: Bind variable selection to widget switcher
         self.variable_combo.bind("<<ComboboxSelected>>", self._on_variable_changed)
 
         # Value Specification Frame (numeric range)
         self.value_frame = ttk.LabelFrame(self, text="Value Specification", padding=5)
-        self.value_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
+        self.value_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
         self.value_frame.columnconfigure(0, weight=1)
         self.value_frame.columnconfigure(1, weight=1)
         self.value_frame.columnconfigure(2, weight=1)
@@ -272,7 +293,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Images per Variant
         images_row = ttk.Frame(self)
-        images_row.grid(row=11, column=0, sticky="ew", pady=(0, 10))
+        images_row.grid(row=12, column=0, sticky="ew", pady=(0, 10))
         images_row.columnconfigure(1, weight=1)
         ttk.Label(images_row, text="Images per Variant:").grid(
             row=0, column=0, sticky="w", pady=(0, 2)
@@ -293,12 +314,12 @@ class ExperimentDesignPanel(ttk.Frame):
             lora_provider=self._grid_lora_choices,
             images_provider=lambda: int(self.images_var.get()),
         )
-        self.grid_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
+        self.grid_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
         self.grid_frame.grid_remove()
         self.images_var.trace_add("write", lambda *_: self._on_grid_design_changed())
 
         identity_actions = ttk.Frame(self)
-        identity_actions.grid(row=12, column=0, sticky="e", pady=(0, 10))
+        identity_actions.grid(row=13, column=0, sticky="e", pady=(0, 10))
         ttk.Button(
             identity_actions,
             text="Suggest Name",
@@ -312,7 +333,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Prompt Source
         prompt_frame = ttk.LabelFrame(self, text="Prompt Source", padding=5)
-        prompt_frame.grid(row=13, column=0, sticky="ew", pady=(0, 10))
+        prompt_frame.grid(row=14, column=0, sticky="ew", pady=(0, 10))
         prompt_frame.columnconfigure(1, weight=1)
 
         ttk.Label(prompt_frame, text="Source:").grid(row=0, column=0, sticky="w", pady=(0, 2))
@@ -375,7 +396,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Buttons
         button_frame = ttk.Frame(self)
-        button_frame.grid(row=14, column=0, sticky="ew", pady=(0, 10))
+        button_frame.grid(row=15, column=0, sticky="ew", pady=(0, 10))
         button_frame.columnconfigure(0, weight=1)
         button_frame.columnconfigure(1, weight=1)
 
@@ -393,7 +414,7 @@ class ExperimentDesignPanel(ttk.Frame):
         # Feedback
         self.feedback_var = tk.StringVar(value="")
         self.feedback_label = ttk.Label(self, textvariable=self.feedback_var, foreground="red", wraplength=360)
-        self.feedback_label.grid(row=15, column=0, sticky="w", pady=(0, 10))
+        self.feedback_label.grid(row=16, column=0, sticky="w", pady=(0, 10))
         self.cancel_evidence_button = ttk.Button(
             button_frame, text="Cancel Evidence", state="disabled",
             command=self._cancel_comparison_evidence,
@@ -407,10 +428,10 @@ class ExperimentDesignPanel(ttk.Frame):
             justify="left",
             foreground=TOKENS.colors.text_muted,
         )
-        self.summary_label.grid(row=16, column=0, sticky="ew", pady=(0, 6))
+        self.summary_label.grid(row=17, column=0, sticky="ew", pady=(0, 6))
         self.model_target_var = tk.StringVar(value="Learning Target: awaiting model policy")
         ttk.Label(self, textvariable=self.model_target_var, wraplength=360, justify="left").grid(
-            row=17, column=0, sticky="ew", pady=(0, 6)
+            row=18, column=0, sticky="ew", pady=(0, 6)
         )
         self._on_stage_changed()
         self._suggest_identity()
@@ -731,6 +752,11 @@ class ExperimentDesignPanel(ttk.Frame):
         if not self.learning_controller:
             self.feedback_var.set("Learning controller not available")
             return
+        # Pressing Build Preview means the operator is looking at this step: the one-time seed happens now at latest.
+        self._shown = True
+        ensure = getattr(self.learning_controller, "ensure_baseline", None)
+        if callable(ensure):
+            ensure(self.stage_var.get())
 
         # Collect form data
         experiment_data = {
@@ -1017,8 +1043,14 @@ class ExperimentDesignPanel(ttk.Frame):
             self.prompt_source_var.get(), self.prompt_pack_var.get(), self.prompt_item_var.get(), custom,
             tuple(sorted(name for name, var in self.choice_vars.items() if get(var))),
             lora, loras, self.grid_frame.signature() if self._is_grid() else None,
-            getattr(self, "_target_model", None),
+            getattr(self, "_target_model", None), self._baseline_signature(),
         )
+
+    def _baseline_signature(self) -> str:
+        authored = getattr(self.learning_controller, "authoring_baseline", None)
+        if not callable(authored):
+            return ""
+        return authoring.signature(authored(), self.stage_var.get())
 
     def preview_is_stale(self) -> bool:
         """True when a Preview exists but the design was edited after it was built.
@@ -1294,14 +1326,82 @@ class ExperimentDesignPanel(ttk.Frame):
             self.variable_var.set("")
             self._show_range_widget()
         self._refresh_identity_preview()
-        if self._target_policy is not None:
-            self._refresh_model_capabilities()
+        editor = getattr(self, "baseline_editor", None)
+        if editor is not None:
+            editor.rebuild()
+        self._refresh_model_capabilities()
 
     def on_model_projection(self, projection) -> None:
-        """Observe the canonical policy; change only transient Learning presentation."""
-        self._target_policy = projection.policy
-        self._target_model = projection.model_name
+        """Note the Pipeline's model policy; it never decides Learning's model, stages or variables.
+
+        Learning's own baseline owns the model.  The Pipeline projection only keeps the "Copy Current Pipeline
+        Settings" availability and the first-time seed of a brand-new experiment current.
+        """
+        self._pipeline_projection = projection
+        self._ensure_baseline()
         self._refresh_model_capabilities()
+
+    def _ensure_baseline(self) -> None:
+        """Seed a brand-new experiment's baseline from the Pipeline once, with its origin shown.
+
+        Only once the operator can see the Design step: a panel built at startup must not capture the Pipeline's
+        startup defaults and present them as the experiment's settings.
+        """
+        ensure = getattr(self.learning_controller, "ensure_baseline", None)
+        if callable(ensure) and getattr(self, "_shown", False):
+            ensure(self.stage_var.get())
+
+    def _on_selected_pages(self) -> bool:
+        widget: tk.Misc | None = self
+        while widget is not None:
+            parent = getattr(widget, "master", None)
+            if isinstance(parent, ttk.Notebook) and str(parent.tk.call(str(parent), "select")) != str(widget):
+                return False
+            widget = parent
+        return True
+
+    def _on_shown(self, _event: object = None) -> None:
+        """First time the Design step is visible: take the one-time seed from the Pipeline as it is now."""
+        # A hidden notebook page's children still receive <Map>; only a panel on the selected pages is displayed.
+        if self._shown or not self._on_selected_pages():
+            return
+        self._shown = True
+        self._ensure_baseline()
+        editor = getattr(self, "baseline_editor", None)
+        if editor is not None:
+            editor.rebuild()
+        self._refresh_model_capabilities()
+        self._refresh_identity_preview()
+
+    def _policy_notes(self) -> dict[str, str]:
+        """Variables the Learning model's profile decides, for the editor's "fixed by profile" notes."""
+        capability = self._learning_capabilities
+        if capability is None:
+            return {}
+        return {name: reason for name, reason in capability.unavailable if reason in {"fixed", "unsupported"}}
+
+    def _on_baseline_changed(self) -> None:
+        self._refresh_model_capabilities()
+        self._refresh_identity_preview()
+        self._notify_design_changed()
+
+    def _baseline_blockers(self) -> list[str]:
+        editor = getattr(self, "baseline_editor", None)
+        return editor.problems() if editor is not None else []
+
+    def _sync_target_from_baseline(self) -> None:
+        """Learning's model decides the policy: resolved from the Learning baseline, never the Pipeline."""
+        controller = self.learning_controller
+        authored = getattr(controller, "authoring_baseline", None)
+        self._target_policy = None
+        self._target_model = None
+        if not callable(authored):
+            return
+        baseline = authored()
+        model = selected_model(baseline, self.stage_var.get())
+        if model:
+            self._target_policy = resolve_policy(model, controller, baseline)
+            self._target_model = model
 
     def _refresh_model_capabilities(self) -> None:
         if self._is_grid():
@@ -1310,14 +1410,31 @@ class ExperimentDesignPanel(ttk.Frame):
         if self._is_model_comparison():
             self._update_policy_buttons()
             return
+        self._ensure_baseline()
+        self._sync_target_from_baseline()
+        editor = getattr(self, "baseline_editor", None)
         policy = self._target_policy
         stage = self.stage_var.get()
         controller = self.learning_controller
-        if controller is not None and callable(getattr(controller, "_get_baseline_config", None)):
-            capability = live_capabilities(controller, stage, policy=policy, model=self._target_model)
+        if policy is None:
+            self._learning_capabilities = None
+            self.stage_combo.configure(values=list_supported_stages())
+            self.variable_combo.configure(values=get_variables_for_stage(stage))
+            self.model_target_var.set("Learning Target: choose a model in the Learning baseline")
+            if editor is not None:
+                editor.refresh()
+            self._update_policy_buttons()
+            return
+        if controller is not None and callable(getattr(controller, "authoring_baseline", None)):
+            capability = live_capabilities(
+                controller, stage, policy=policy, model=self._target_model,
+                baseline=controller.authoring_baseline(),
+            )
         else:
             capability = project_learning_capabilities(policy, self._target_model, stage)
         self._learning_capabilities = capability
+        if editor is not None:
+            editor.refresh()
         stages = [s for s in list_supported_stages() if s in policy.stages and
                   (s not in {"adetailer", "upscale"} or policy.feature(s, s).supported)]
         self.stage_combo.configure(values=stages)
@@ -1357,8 +1474,15 @@ class ExperimentDesignPanel(ttk.Frame):
             return
         capability = self._learning_capabilities
         if capability is None:
+            if getattr(self, "baseline_editor", None) is not None and getattr(self, "_built", False):
+                self.build_button.configure(state="disabled")
+                self.run_button.configure(state="disabled")
             return
-        valid = capability.stage_supported and self.variable_var.get() in capability.variables
+        valid = (
+            capability.stage_supported
+            and self.variable_var.get() in capability.variables
+            and not self._baseline_blockers()
+        )
         self.build_button.configure(state="normal" if valid else "disabled")
         self.run_button.configure(state="normal" if valid else "disabled")
 
@@ -1375,7 +1499,7 @@ class ExperimentDesignPanel(ttk.Frame):
     def _show_range_widget(self) -> None:
         """Show numeric range widget (start/stop/step)."""
         # Show value frame
-        self.value_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
+        self.value_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
 
         # Hide checklist frame
         self.checklist_frame.grid_remove()
@@ -1391,7 +1515,7 @@ class ExperimentDesignPanel(ttk.Frame):
         self.lora_frame.grid_remove()
 
         # Show checklist frame at row 10
-        self.checklist_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
+        self.checklist_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
 
         # Update checklist label
         self.checklist_frame.config(text=f"Select {meta.display_name} to Test")
@@ -1501,8 +1625,8 @@ class ExperimentDesignPanel(ttk.Frame):
             for name, value in self.choice_vars.items():
                 value.set(name in selected)
             return
-        if self._target_policy is not None:
-            self._refresh_model_capabilities()
+        self._ensure_baseline()
+        self._refresh_model_capabilities()
 
         variable = self.variable_var.get().strip()
         if not variable:
@@ -1570,9 +1694,9 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _current_model_vae(self) -> tuple[str, str]:
         ctrl = self.learning_controller
-        if ctrl and hasattr(ctrl, "_get_baseline_config"):
+        if ctrl and hasattr(ctrl, "authoring_baseline"):
             try:
-                baseline = ctrl._get_baseline_config()
+                baseline = ctrl.authoring_baseline()
                 txt2img = dict((baseline or {}).get("txt2img") or {})
                 return (
                     str(txt2img.get("model") or ""),
@@ -1658,7 +1782,7 @@ class ExperimentDesignPanel(ttk.Frame):
         self.checklist_frame.grid_remove()
 
         # Show LoRA frame at row 10
-        self.lora_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
+        self.lora_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
 
         # Clear existing content
         for widget in self.lora_frame.winfo_children():
@@ -1988,6 +2112,7 @@ class ExperimentDesignPanel(ttk.Frame):
             var.set(item in selected_items)
         self._name_auto_generated = False
         self._description_auto_generated = False
+        self._refresh_model_capabilities()
         self._refresh_identity_preview()
         self._sync_study_presentation()
         self._preview_signature = (

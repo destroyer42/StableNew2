@@ -110,7 +110,11 @@ def test_clone_creates_new_identity_with_design_only() -> None:
     assert clone.experiment_id != source.experiment_id
     assert clone.name == source.name
     assert clone.execution_snapshot_json == ""
-    assert clone.baseline_config == {}
+    # The clone starts from a copy of the source's own baseline (never the live Pipeline), origin recorded.
+    assert clone.baseline_config == {"txt2img": {"cfg_scale": 6.0}}
+    assert clone.baseline_authoring["origin"] == "cloned"
+    source.baseline_config["txt2img"]["cfg_scale"] = 9.0
+    assert clone.baseline_config["txt2img"]["cfg_scale"] == 6.0
     assert clone.values == []
     assert state.plan == []
 
