@@ -15,12 +15,12 @@ from unittest.mock import Mock
 import pytest
 
 from src.gui.controllers.learning_controller import LearningController
-from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
+from src.gui.learning_state import LearningExperiment, LearningState
 from src.image_backends.forge_klein_lora import KleinLoraDecision, KleinLoraStatus
 from src.learning import baseline_authoring as authoring
 from src.learning import baseline_draft as draft
 from src.learning.execution_controller import LearningExecutionController
-from src.learning.experiment_execution import freeze_snapshot, thaw_snapshot
+from src.learning.experiment_execution import thaw_snapshot
 from src.learning.model_policy_service import live_capabilities
 from tests.learning_v2.test_model_comparison_140 import SDXL, baseline, policy
 

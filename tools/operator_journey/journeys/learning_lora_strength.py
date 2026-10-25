@@ -387,8 +387,12 @@ class _Journey:
         for name in ("sampler_name", "scheduler"):
             if not editor._vars[name].get().strip():
                 choices = [str(value) for value in editor._widgets[name].cget("values")]
-                self.require(ph, f"learning_{name}_choices", bool(choices), "the backend offered no choices")
-                d.select_combobox(editor._widgets[name], choices[0], label=f"Learning baseline {name}")  # type: ignore[arg-type]
+                self.require(
+                    ph, f"learning_{name}_choices", bool(choices), "the backend offered no choices"
+                )
+                d.select_combobox(
+                    editor._widgets[name], choices[0], label=f"Learning baseline {name}"
+                )  # type: ignore[arg-type]
         d.select_combobox(panel.variable_combo, "LoRA Strength", label="variable under test")
         lora_combo = d.find(panel.lora_frame, ttk.Combobox, textvariable=panel.lora_selector_var)
         try:
