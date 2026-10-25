@@ -133,6 +133,15 @@ Final job count for one pack row, as built today:
 - Unresolved `[[token]]` text (no matching slot) is left in the prompt. The compile path does not reject it, although `docs/Subsystems/Randomizer/Randomizer_Spec_v2.6.md` section 5.3 says it must; enforcing it would change which historical packs compile, so it needs an owner decision [V]. The Matrix tab lists such tokens as warnings and never rewrites text. The pack-editor validator warns about Matrix structure only (`validate_pack_structure`).
 - Saved packs [V]: `MatrixConfig.from_mapping`/`to_mapping` keep unknown Matrix and dimension keys, an absent `mode`/`limit` stays absent, and a malformed stored value (non-numeric limit, text `values`, bad seed, non-object dimension) loads without raising and is written back unchanged until the operator edits that field. Loading, inspecting and previewing never save a pack.
 
+Learning's explicit **Prompt Slot Experiment** uses the same Matrix token normalization and
+substitution plus structured intent/adaptation/rendering. At Preview it opens one native row,
+freezes operator-selected values for every other referenced slot and varies one selected slot
+over 2–8 ordered text alternatives. This produces one Learning variant per candidate, never
+the Matrix Cartesian product. The row's quality, embeddings, fixed LoRAs and negative ownership
+remain intact, and the PromptPack is never rewritten. Run consumes frozen prompts even after
+the source file changes or disappears. Ordinary Learning still freezes its first canonical
+Matrix vector; ordinary PromptPack expansion remains unchanged. See Learning section 3.11.
+
 ### 5.2 Config-level randomization
 
 - `RandomizationPlanV2` and `generate_run_config_variants` (`src/randomizer/randomizer_engine_v2.py`) enumerate override combinations (model, vae, sampler, scheduler, cfg, steps, batch size), shuffle with `random.Random(rng_seed)`, cap at `max_variants`, and apply `RandomizationSeedMode` (`none`, `fixed`, `per_variant`). `JobBuilderV2` passes `rng_seed=None` from every production caller [V], so when a plan has more combinations than `max_variants` the surviving subset is not reproducible. The engine's determinism guarantee holds only when a caller supplies a seed.

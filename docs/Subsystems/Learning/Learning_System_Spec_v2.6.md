@@ -13,6 +13,10 @@ It covers:
 - variable selection contracts
 - review and rating capture
 - recommendation evidence rules
+- controlled one-slot positive-prompt experiments (registry-verified SDXL txt2img): additive
+  `learning_prompt_slot/1` snapshots, frozen canonical intent and ordinary NJRs, runtime prompt
+  readback, experiment-local conclusions, and explicit isolation from setting recommendations
+  and generation-profile publication (living workflow: `LEARNING.md` section 3.11)
 
 Learning remains a post-execution subsystem. It consumes outputs and ratings; it
 does not build alternate execution paths and it does not modify the canonical

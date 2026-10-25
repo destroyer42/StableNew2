@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-590 of 745 modules have a docstring.
+593 of 748 modules have a docstring.
 
 ## src/
 
@@ -395,6 +395,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `photo_optimize_scope.py`: Photo editing/review orchestration in the existing view and worker seams
 - `photo_optimize_tab_frame_v2.py`: (no docstring)
 - `pipeline_tab_frame_v2.py`: (no docstring)
+- `prompt_slot_design_frame.py`: Ordered Prompt Slot authoring inside the existing scrollable Learning Design surface
 - `prompt_tab_frame_v2.py`: Prompt Tab Frame v2.6 - Main prompt editing interface with matrix integration
 - `review_tab_frame_v2.py`: (no docstring)
 - `stage_cards_panel.py`: (no docstring)
@@ -554,6 +555,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `output_scanner.py`: OutputScanner — manifest-first artifact scanner
 - `preview_summary.py`: Structured, read-only summary of what a frozen Preview would submit
 - `profile_publication.py`: Field-specific controlled evidence -> advisory profile; no execution or rating authority
+- `prompt_slot_experiment.py`: Controlled, frozen one-slot prompt intent; canonical Matrix/adaptation remain authoritative
 - `rating_schema.py`: (no docstring)
 - `recommendation_engine.py`: Automated Parameter Recommendation Engine (APRE)
 - `recommendation_summary.py`: Operator-facing reading of a ``RecommendationSet``: what, where, on what evidence, and what Apply may do
@@ -573,6 +575,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: learning_controller_services — extracted service helpers for LearningController
 - `experiment_persistence.py`: experiment_persistence — pure serialisation helpers for LearningController resume state
+- `prompt_slot.py`: Prompt Slot coordination over existing snapshot, ordinary NJR and Learning state owners
 
 ## src/migrations/
 

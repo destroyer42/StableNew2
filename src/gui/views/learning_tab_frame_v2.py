@@ -884,7 +884,7 @@ class LearningTabFrame(ttk.Frame):
             projection, facts = self._guide_projection()
             experiment = self.learning_controller.learning_state.current_experiment
             snapshot = str(getattr(experiment, "execution_snapshot_json", "") or "")
-            key = (projection, hash(snapshot), self._grid_present, getattr(experiment, "name", ""), facts.in_flight)
+            key = (projection, hash(snapshot), self._grid_present, getattr(experiment, "name", ""), facts.in_flight, self._content_visibility_mode)
             if not force and key == self._guide_key:
                 return
             self._guide_key = key
@@ -1128,6 +1128,8 @@ class LearningTabFrame(ttk.Frame):
         if persistence_error:
             self._summary_var.set(f"{self._summary_var.get()} | Resume save failed: {persistence_error}; do not retry jobs")
         conclusion = dict(summary.get("conclusion") or {})
+        if getattr(self, "review_panel", None) is not None:
+            self.review_panel.set_prompt_slot_conclusion(conclusion)
         if conclusion.get("values"):
             self._summary_var.set(
                 f"{self._summary_var.get()} | {conclusion.get('message', '')} "

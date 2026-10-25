@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
 
 from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, MUTED_LABEL_STYLE
 from src.gui.ui_tokens import TOKENS
@@ -36,6 +37,16 @@ class LearningPreviewCard(ttk.LabelFrame):
         self.warning_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
         self.bind("<Configure>", self._on_configure, add="+")
         self._value_labels: list[ttk.Label] = []
+        from src.gui.widgets.disclosure_section_v2 import DisclosureSection
+
+        self.prompt_details = DisclosureSection(
+            self, title="Frozen candidate prompts", expanded=False
+        )
+        self.prompt_details.grid(row=3, column=0, columnspan=2, sticky="ew", pady=4)
+        self.prompt_text = ScrolledText(
+            self.prompt_details.body, height=7, wrap="word", state="disabled"
+        )
+        self.prompt_text.pack(fill="both", expand=True)
         self.render(None, stale=False)
 
     def _on_configure(self, event: tk.Event) -> None:
@@ -45,6 +56,14 @@ class LearningPreviewCard(ttk.LabelFrame):
             label.configure(wraplength=max(200, wrap - 180))
 
     def render(self, summary: PreviewSummary | None, *, stale: bool) -> None:
+        self.prompt_text.configure(state="normal")
+        self.prompt_text.delete("1.0", tk.END)
+        if summary and summary.prompt_details:
+            self.prompt_text.insert("1.0", summary.prompt_details)
+            self.prompt_details.grid()
+        else:
+            self.prompt_details.grid_remove()
+        self.prompt_text.configure(state="disabled")
         for child in self._rows.winfo_children():
             child.destroy()
         self._value_labels = []
