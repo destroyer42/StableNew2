@@ -38,6 +38,10 @@ GATE_STEPS = (
         "architecture ratchets",
         (sys.executable, str(ROOT / "tools/ci/run_architecture_ratchets.py")),
     ),
+    (
+        "controller Tk import boundary",
+        (sys.executable, str(ROOT / "tools/ci/check_controller_tk_boundary.py")),
+    ),
     ("isolated collection", (sys.executable, str(ROOT / "tools/ci/run_collection_gate.py"))),
     ("required smoke", (sys.executable, str(ROOT / "tools/ci/run_required_smoke.py"))),
 )
