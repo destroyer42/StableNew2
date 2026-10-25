@@ -81,6 +81,11 @@ Run it locally: `python tools/ci/run_sharded_census.py [--workers 2]`. By defaul
 
 ## 6. The Windows lane
 
+Desktop pixel/DPI containment is a Windows support contract. The lane also runs
+`tests/gui_v2/test_workspace_layout_resilience_v2.py`, including the Video Workflow laptop and
+100%/150% Recent Outputs inspection cases. Those three cases run only on Windows; their assertions
+remain intact. The module's other tests and media lifecycle/functional coverage continue in the Linux census.
+
 `python tools/ci/run_windows_lane.py` (job `windows`, bash shell, `pip install -r requirements.txt -r requirements-dev.txt`). It runs `WINDOWS_LANE_TARGETS`, an explicit positive list: process ownership/containment (`tests/utils/test_job_object_isolation.py`, `test_process_container_v2.py`, `test_process_containment_failsafe.py`, `test_managed_process.py`), all of `tests/api` and `tests/safety`, atomic replace and sharing violations (`tests/utils/test_atomic_io.py`), `tests/state`, `tests/assets`, `tests/photo_optimize`, the SQLite repository and `tests/migrations` on NTFS, the production startup gate, `tests/app`, and one Tk construction smoke (`tests/gui_v2/test_p0_6_silent_failure_regressions.py`). It uses the same isolated, pollution-detecting runner as the required smoke, with `--timeout=300`. A new test never joins by accident; `tests/tools/test_ci_windows_lane.py` checks every entry still exists. It is a platform contract, not hardware qualification.
 
 ## 7. Ratchets and how baselines change

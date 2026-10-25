@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -151,7 +152,12 @@ def test_saved_geometry_is_normalized_for_the_current_screen(saved, expected) ->
         # Recent SVD Outputs action / the Video Workflow Recent outputs section (PR-VID-UX-313/314: the negative
         # prompt moved into the collapsed Advanced options).
         (SVDTabFrameV2, "_body_scroll", "open_manifest_btn"),
-        (VideoWorkflowTabFrameV2, "_body_scroll", "recent_outputs_panel"),
+        pytest.param(
+            VideoWorkflowTabFrameV2, "_body_scroll", "recent_outputs_panel",
+            marks=pytest.mark.skipif(
+                sys.platform != "win32", reason="Windows desktop pixel geometry; enforced in the Windows lane"
+            ),
+        ),
     ],
     ids=["review", "svd", "video_workflow"],
 )
@@ -182,6 +188,9 @@ def test_long_form_tabs_reach_their_lowest_control_on_a_laptop_viewport(
         tk_root.withdraw()
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="Windows desktop DPI geometry; enforced in the Windows lane"
+)
 @pytest.mark.parametrize("font_scale", [1.0, 1.5])
 def test_recent_video_controls_and_detach_return_fit_the_compact_viewport(tk_root, tmp_path, font_scale):
     import time
