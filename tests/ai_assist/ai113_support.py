@@ -79,6 +79,14 @@ def report(channel, detail, mode="unknown"):
 
 open(marker, "rb").read()
 report("files", marker, "read")
+scratch = os.path.dirname(marker)
+written, moved = os.path.join(scratch, "canary-written.bin"), os.path.join(scratch, "canary-moved.bin")
+with open(written, "wb") as handle:
+    handle.write(b"canary")
+report("files", written, "write")
+os.replace(written, moved)
+report("files", moved, "write")
+os.remove(moved)
 s = socket.socket(); s.settimeout(1.0)
 try:
     s.connect(("127.0.0.1", port))
@@ -110,7 +118,7 @@ class JournalProvider:
     def poll(self, owned_pids: frozenset[int]) -> None:
         return None
 
-    def end(self) -> list[ChannelEvent]:
+    def end(self, owned_pids: frozenset[int]) -> list[ChannelEvent]:
         if self.fail_end:
             raise RuntimeError("provider lost its trace")
         if not self.journal.exists():

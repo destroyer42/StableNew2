@@ -65,8 +65,9 @@ class ChannelProvider(Protocol):
     def poll(self, owned_pids: frozenset[int]) -> None:
         """Called about every 50 ms with the pids the container has reported so far (sampling providers look here)."""
 
-    def end(self) -> list[ChannelEvent]:
-        """The window closed after verified teardown: every event seen, unfiltered by owner."""
+    def end(self, owned_pids: frozenset[int]) -> list[ChannelEvent]:
+        """The window closed after verified teardown. ``owned_pids`` is every pid the container reported, so a
+        system-wide provider can keep only those (and count the rest) instead of returning the whole host's events."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,7 +427,7 @@ class OwnedSessionMonitor:
                 )
         for provider in self.providers:
             try:
-                events = provider.end()
+                events = provider.end(frozenset(windows))
             except Exception:  # noqa: BLE001
                 record.violations.append(f"provider_failed:{provider.channel}")
                 continue
@@ -477,6 +478,26 @@ class OwnedSessionMonitor:
                 found.append("file_access_outside_policy")
                 break
         return found
+
+    def bind_evidence(self, directory: Path) -> None:
+        """Point evidence output (and any provider that keeps raw capture files) at the session's own directory."""
+
+        self.evidence_dir = directory
+        for provider in self.providers:
+            binder = getattr(provider, "bind_directory", None)
+            if binder is not None:
+                binder(directory)
+
+    def close(self) -> None:
+        """Release whatever a provider holds open (an ETW trace session outlives its process unless stopped)."""
+
+        for provider in self.providers:
+            closer = getattr(provider, "close", None)
+            if closer is not None:
+                try:
+                    closer()
+                except Exception:  # noqa: BLE001 - best effort; a leaked trace is also swept at the next start
+                    pass
 
     # -- results ------------------------------------------------------------------------------------------------------
 
@@ -552,11 +573,25 @@ class OwnedSessionMonitor:
                 "files": any(
                     _norm(marker) == _norm(entry.partition(":")[2]) for entry in record.files
                 ),
+                # A create-and-write, then a rename and a delete: a provider that only sees opens would miss all three.
+                "writes": all(
+                    any(
+                        entry.partition(":")[0] == "write"
+                        and _norm(Path(scratch) / name) == _norm(entry.partition(":")[2])
+                        for entry in record.files
+                    )
+                    for name in (CANARY_WRITTEN, CANARY_MOVED)
+                ),
+                # Some ETW network events carry the port in network byte order; accept either spelling of the port.
                 "connections": any(
-                    entry.rpartition(":")[2] == str(port) for entry in record.connections
+                    entry.rpartition(":")[2] in (str(port), str(((port & 0xFF) << 8) | (port >> 8)))
+                    for entry in record.connections
                 ),
             }
-        self._proven = {"files": seen["files"], "connections": seen["connections"]}
+        self._proven = {
+            "files": seen["files"] and seen["writes"],
+            "connections": seen["connections"],
+        }
         ok = (
             outcome.returncode == 0
             and seen["descendant"]
@@ -567,10 +602,19 @@ class OwnedSessionMonitor:
         return self.canary_report
 
 
+CANARY_WRITTEN = "canary-written.bin"
+CANARY_MOVED = "canary-moved.bin"
+
 _CANARY_SCRIPT = (
     "import os, socket, subprocess, sys\n"
     "marker, port = sys.argv[1], int(sys.argv[2])\n"
     "open(marker, 'rb').read()\n"
+    "scratch = os.path.dirname(marker)\n"
+    f"written, moved = os.path.join(scratch, {CANARY_WRITTEN!r}), os.path.join(scratch, {CANARY_MOVED!r})\n"
+    "with open(written, 'wb') as handle:\n"
+    "    handle.write(b'canary')\n"
+    "os.replace(written, moved)\n"
+    "os.remove(moved)\n"
     "s = socket.socket(); s.settimeout(1.0)\n"
     "try:\n"
     "    s.connect(('127.0.0.1', port))\n"
@@ -626,7 +670,7 @@ class _SamplingProvider:
             except Exception:  # noqa: BLE001 - recorded: a sampler that cannot look is itself a finding
                 self.errors += 1
 
-    def end(self) -> list[ChannelEvent]:
+    def end(self, owned_pids: frozenset[int]) -> list[ChannelEvent]:
         return list(self._seen.values())
 
     def _sample(self, process: Any) -> list[ChannelEvent]:

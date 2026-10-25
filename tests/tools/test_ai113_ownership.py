@@ -132,7 +132,7 @@ def test_canary_proves_each_channel_and_the_descendant(tmp_path: Path) -> None:
     report = monitor.run_canary()
     assert report == {
         "passed": True,
-        "saw": {"descendant": True, "files": True, "connections": True},
+        "saw": {"descendant": True, "files": True, "writes": True, "connections": True},
     }
     assert monitor.readiness() == [] or monitor.readiness() == (
         ["ownership evidence requires the Windows job object; this host has none"]

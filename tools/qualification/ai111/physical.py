@@ -246,7 +246,18 @@ def preflight(
     return problems
 
 
-def run_session(
+def run_session(**kwargs: Any) -> dict[str, Any]:
+    """Run one physical session; whatever the monitor's providers hold open (an ETW trace) is released on every path."""
+
+    monitor = kwargs.get("monitor")
+    try:
+        return _run_session(**kwargs)
+    finally:
+        if monitor is not None:
+            monitor.close()
+
+
+def _run_session(
     *,
     plan: dict[str, Any],
     paths: SessionPaths,
@@ -319,7 +330,7 @@ def run_session(
 
     # Before anything is imported or launched, show the monitor detecting a known file read, connection attempt and
     # short-lived descendant of its own trusted canary child. Any shortfall refuses the whole session.
-    monitor.evidence_dir = evidence / "ownership"
+    monitor.bind_evidence(evidence / "ownership")
     monitor.bind_roots(
         read_roots=(ai_root, Path(os.environ.get("SystemRoot", "C:\\Windows"))),
         write_roots=(ai_root / "work",),
@@ -545,6 +556,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-root", type=Path, default=Path("reports/ai111"))
     parser.add_argument("--operator-corpus", type=Path)
     parser.add_argument("--strict-offline", action="store_true")
+    parser.add_argument(
+        "--provider",
+        choices=("sampled", "etw"),
+        default="sampled",
+        help="connection/file telemetry: 'etw' needs an elevated process and a passed canary; 'sampled' always refuses",
+    )
     args = parser.parse_args(argv)
     plan = plan_module.frozen_plan()
     if args.authorize_plan != plan_module.digest(plan):
@@ -557,6 +574,13 @@ def main(argv: list[str] | None = None) -> int:
         cases = stage_a_subset(cases, plan["stages"]["A"]["cases_per_arm"], plan["corpus"]["seed"])
     files = {e.model_id: args.model_dir / e.filename for e in registry.entries}
     paths = SessionPaths(args.evidence_root, args.runtime_archive, files, args.operator_corpus)
+    monitor = None
+    if args.provider == "etw":
+        from tools.qualification.ai111.etw import etw_host_monitor
+
+        monitor = etw_host_monitor(
+            OwnershipPolicy(), args.evidence_root / f"ownership-{args.stage}"
+        )
     result = run_session(
         plan=plan,
         paths=paths,
@@ -566,6 +590,7 @@ def main(argv: list[str] | None = None) -> int:
         authorization_text=args.authorization_text,
         registry=registry,
         strict_offline=args.strict_offline,
+        monitor=monitor,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["verdict"] == "PASS" else 1
