@@ -48,6 +48,48 @@ def _pick_folder(monkeypatch, folder: Path) -> None:
     )
 
 
+def test_inspector_does_not_change_review_selection_or_metadata(tk_root, tmp_path, quiet):
+    image = _png(tmp_path / "sample.png", prompt="portrait")
+    tab = ReviewTabFrame(tk_root)
+    try:
+        tab._show_image(image)
+        before = (
+            tab._selected_image_path,
+            tab._selected_base_prompt,
+            tab._selected_base_negative_prompt,
+        )
+        source = image.read_bytes()
+        tab.preview.detach()
+        tab.preview.dock()
+        tab.preview.set_visibility(False)
+        assert (
+            tab._selected_image_path,
+            tab._selected_base_prompt,
+            tab._selected_base_negative_prompt,
+        ) == before
+        assert image.read_bytes() == source
+    finally:
+        tab.destroy()
+
+
+def test_sfw_inspection_waits_for_selected_image_metadata(tk_root, tmp_path, monkeypatch, quiet):
+    from src.gui.app_state_v2 import AppStateV2
+
+    registry = use_manual_registry(monkeypatch)
+    state = AppStateV2()
+    state.set_content_visibility_mode("sfw")
+    tab = ReviewTabFrame(tk_root, app_state=state)
+    try:
+        tab._show_image(_png(tmp_path / "ordinary-name.png", prompt="explicit nude"))
+        tab.preview.set_visibility(True)
+        assert not tab.preview.model.eligible
+        registry.run_all()
+        assert tab._image_ready
+        assert not tab.preview.model.eligible and tab.preview._image is None
+    finally:
+        tab.destroy()
+
+
 def _handoff(path: Path, **overrides):
     from src.gui.controllers.history_iterate_service import HISTORY_ITERATE_SOURCE
     from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff

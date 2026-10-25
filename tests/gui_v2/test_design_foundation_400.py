@@ -821,3 +821,19 @@ def test_pipeline_review_and_video_have_no_label_boxes(tk_root: tk.Tk, style: tt
     finally:
         for tab in tabs.values():
             tab.destroy()
+
+
+def test_media_inspector_docked_and_detached_labels_match_their_surfaces(tk_root, style):
+    from src.gui.widgets.media_inspector import MediaInspector
+
+    inspector = MediaInspector(tk_root)
+    try:
+        inspector.set_media("missing-test-fixture.png")
+        assert _surface_mismatches(inspector, style, include_plain=True) == []
+        inspector.detach()
+        assert _surface_mismatches(inspector, style, include_plain=True) == []
+        assert inspector.detached_label.cget("text") == "Media detached"
+        inspector.dock()
+        assert _surface_mismatches(inspector, style, include_plain=True) == []
+    finally:
+        inspector.destroy()

@@ -27,9 +27,9 @@ from src.gui.view_contracts.photo_optimize_layout_contract import (
     selection_summary,
 )
 from src.gui.view_contracts.workspace_density_contract import disclosure_title, wrap_width
+from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
-from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 
 from .photo_optimize_editors import PhotoBatchEditor
 

@@ -191,8 +191,12 @@ def test_selected_video_plays_its_recorded_clip_not_the_poster_and_respects_visi
     from tests.gui_v2.test_job_history_panel_v2 import _make_entry
 
     class FakeVideoPreview(ttk.Frame):
-        def __init__(self, parent, *, edge):
+        def __init__(self, parent, *, edge, show_control, shown_var):
             super().__init__(parent)
+            self.edge = edge
+            self.show_control = show_control
+            self.shown_var = shown_var
+            self.visible = False
             self.shown: list[str] = []
             self.stop_count = 0
 
@@ -201,6 +205,10 @@ def test_selected_video_plays_its_recorded_clip_not_the_poster_and_respects_visi
 
         def stop(self):
             self.stop_count += 1
+
+        def set_visibility(self, shown):
+            self.visible = bool(shown)
+            self.shown_var.set(shown)
 
     monkeypatch.setattr(history_module, "VideoPreviewWidget", FakeVideoPreview)
     state = AppStateV2()
@@ -226,6 +234,8 @@ def test_selected_video_plays_its_recorded_clip_not_the_poster_and_respects_visi
         panel._on_select()
         player = panel.artifact_video_preview
         assert isinstance(player, FakeVideoPreview)
+        assert player.shown_var is panel.show_artifact_var
+        assert player.show_control is False and player.visible
         assert player.shown == [str(clip)]
         panel.artifact_thumbnail.set_image_from_path.assert_not_called()
         assert panel._shown_artifact_path == str(clip)

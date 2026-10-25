@@ -51,6 +51,8 @@ class RecentVideoOutput:
     fps: float | None = None
     #: The recorded bundle, unchanged, so Send to Movie hands over exactly what history recorded.
     bundle: Mapping[str, Any] = field(default_factory=dict)
+    #: Presentation evidence from the same frozen snapshot; never persisted or used for handoff.
+    visibility_subject: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def file_name(self) -> str:
@@ -136,6 +138,17 @@ def recent_output_from_entry(
         frame_count=_int_or_none(block.get("frame_count")) or _int_or_none(bundle.get("count")),
         fps=_float_or_none(block.get("fps")),
         bundle=dict(bundle),
+        visibility_subject={
+            "name": f"{path} {source or ''}",
+            "description": entry.payload_summary,
+            "prompt": str(
+                block.get("prompt")
+                or _mapping(_normalized_job(entry.snapshot).get("workload")).get("prompt")
+                or ""
+            ),
+            "negative_prompt": str(block.get("negative_prompt") or ""),
+            "metadata": dict(_mapping(_normalized_job(entry.snapshot).get("metadata"))),
+        },
     )
 
 

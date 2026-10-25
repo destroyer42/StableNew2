@@ -8,14 +8,12 @@ from pathlib import Path
 from tkinter import messagebox
 from typing import Any, cast
 
-from PIL import Image
-
 from src.photo_optimize.results import _recorded_baseline, list_candidates, validate_candidate
 
 from .photo_optimize_editors import review_dialog
 
 
-def _subject(asset, candidate):
+def _subject(asset: Any, candidate: Any) -> dict[str, str]:
     evidence = [asset.baseline.to_dict()]
     if asset.original_baseline is not None:
         evidence.append(asset.original_baseline.to_dict())
@@ -32,9 +30,7 @@ def _subject(asset, candidate):
 
 def _thumbnail(store, asset, candidate):
     path, _checksum, warning = validate_candidate(store, asset, candidate)
-    with Image.open(path) as image:
-        image.thumbnail((220, 220))
-        return image.copy(), warning
+    return str(path), warning
 
 
 class PhotoOptimizeResultsMixin:
@@ -145,9 +141,13 @@ class PhotoOptimizeResultsMixin:
                 return
             pictures, warnings = future.result()
             if pictures[0] is not None:
-                self.original_preview.set_image(pictures[0])
+                self.original_preview.set_image_reference(
+                    pictures[0], subject=_subject(snapshot, original)
+                )
             if pictures[1] is not None:
-                self.latest_preview.set_image(pictures[1])
+                self.latest_preview.set_image_reference(
+                    pictures[1], subject=_subject(snapshot, selected)
+                )
             if warnings[1]:
                 self.result_status_var.set(status + " " + warnings[1] + " " + note)
 

@@ -91,6 +91,15 @@ Every route that replaces Review's selection is an *accepted selection* and bump
 - A manual replacement (any incoming route that is not the History handoff) clears `_active_handoff`: the History claim is attached to its image and file bytes only, and `prepare_review_batch` still refuses a changed source or contradicting embedded identity.
 - Sending images to the Managed Photo Set is a *distinct operation* (`route_images_to_photo_optimize`, section 6.6): it carries file paths only, leaves Review's selection, edits and History claim untouched, and a History-origin image is imported with no parent job or artifact.
 
+### 3.1.1 Shared media inspection
+
+Review's selected-image preview and Photo Optimize's independent Original / Candidate previews use the shared `MediaInspector`
+for local Show, Fit, zoom/pan and detach/return. Inspection never changes Review's selection, prompts or metadata, or Photo
+Optimize's working baseline, candidate, batch selection or sidecar. Photo Optimize validates candidate identity on its existing
+worker before handing the path to the inspector. Review withholds SFW media until the selected image's metadata arrives;
+content visibility is then resolved from that same image context. Review's specialized ADetailer comparison remains separate
+and closes when the primary inspector is hidden. Mask, outpaint and Smart Review editor canvases retain their editing behavior.
+
 ### 3.2 Whole-selection preview and admission
 
 `prepare_review_batch` compiles every selected source with `ReprocessJobBuilder` (one job per source unless `batch_size > 1` was explicitly requested), reports every refusal, and queues nothing. Per source it: checks the file, hashes it (`_source_sha256`), loads it with PIL, extracts the baseline, applies prompt deltas, builds a `ReprocessSourceItem` with lineage metadata (`source_job_id`, `source_artifact_id = sha256:<bytes>`, `source_path`, plus `build_review_chunk_lineage_block`), compiles, runs `assess_njr`, then re-checks size/mtime/hash to detect a source that changed during preparation.

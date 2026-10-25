@@ -17,7 +17,7 @@ from typing import Any
 from src.gui.ui_dispatcher import TkUiDispatcher
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.gui.view_contracts.video_recent_outputs_contract import RecentOutputsSession
-from src.gui.widgets.video_preview_widget_v2 import VideoPreviewWidget
+from src.gui.widgets.media_inspector import MediaInspector as VideoPreviewWidget
 from src.utils.thread_registry import get_thread_registry
 from src.video.recent_video_outputs import RecentVideoOutput
 
@@ -95,7 +95,9 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
         self.tree.bind("<Double-Button-1>", lambda _e: self._on_open())
 
-        self.preview = VideoPreviewWidget(self, decode=decode, edge=256, scale=1)
+        self.preview = VideoPreviewWidget(
+            self, decode=decode, edge=256, scale=1, allow_original=False
+        )
         self.preview.grid(row=1, column=1, sticky="n")
         ttk.Label(self, textvariable=self.status_var, style="Muted.TLabel", justify="left").grid(
             row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0)
@@ -162,8 +164,10 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             target = selected.video_path if selected is not None else ""
             if target != self._previewed:
                 self._previewed = target
-                if target:
-                    self.preview.show(target)
+                if target and selected is not None:
+                    self.preview.set_media(
+                        target, "video", subject=selected.visibility_subject or {"name": target}
+                    )
                 else:
                     self.preview.stop()
         except tk.TclError:

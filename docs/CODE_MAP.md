@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-579 of 734 modules have a docstring.
+582 of 737 modules have a docstring.
 
 ## src/
 
@@ -341,6 +341,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `form_section_contract.py`: Form section contract independent of widget framework
 - `history_artifact_contract.py`: Select a recorded History artifact by media type, not by its poster image
 - `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
+- `media_image_decode.py`: Bounded image inspection on workers, reusing the thumbnail utilities and preserving source identity
+- `media_inspector_contract.py`: Ephemeral media inspection state; host workspaces retain artifact/selection authority
 - `movie_clips_contract.py`: Movie Clips tab UI normalization helpers
 - `photo_baseline_save_contract.py`: Toolkit-neutral save coordination for the Photo Optimize active-photo baseline (PR-GUI-UX-580)
 - `photo_optimize_layout_contract.py`: Pure fit/placement rules for the Photo Optimize tab (PR-GUI-420)
@@ -422,6 +424,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `matrix_helper_widget.py`: (no docstring)
 - `matrix_slot_picker.py`: MatrixSlotPickerDialog - Modal dialog for selecting matrix slot to insert
 - `matrix_tab_panel.py`: MatrixTabPanel v2.6 - Matrix configuration editor for Prompt Tab
+- `media_inspector.py`: Shared local media controls, bounded inspection and safely recreated dock/detach renderers
 - `openpose_picker_panel.py`: PromptPack OpenPose reference picker (PR-IMG-CNET-210)
 - `reference_map_browser.py`: Searchable reference-map list with a bounded thumbnail (PR-GUI-UX-550)
 - `reference_map_dialog.py`: The "Create map from image" dialog: thin Tk over ``ReferenceMapFlow`` (PR-IMG-CNET-230)

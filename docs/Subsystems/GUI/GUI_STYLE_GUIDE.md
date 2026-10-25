@@ -92,6 +92,14 @@ idle notice paints nothing and keeps the old reserved row height.
    heights on them.
 4. Do not add a style to fix one screen: add a role here, with a test, if more than one place needs it.
 
+### Shared media controls
+
+Shared media inspection uses `MediaInspector`: a nearby **Show media** checkbox, **Detach** / **Return to dock**, and still-image
+**Fit**, **100%**, minus/plus and scroll/pan controls. Controls use existing Dark button/checkbutton styles and muted status text;
+compact toolbars wrap vertically. A detached renderer leaves a compact placeholder in its dock. Hide is ephemeral presentation
+state, subordinate to content visibility. Resolution labels distinguish source pixels from a downsampled preview. Open original
+is offered only on hosts that already support original-file actions. No new global style, font size or modal focus grab is used.
+
 ## 7. Checks
 
 Deterministic (CI): `tests/gui_v2/test_design_foundation_400.py` (token shapes and contrast, style registration, disabled /

@@ -112,7 +112,9 @@ def test_history_shows_video_not_poster_and_reuses_player_on_selection(
     players: list[object] = []
 
     class FakeVideoPreview(ttk.Frame):
-        def __init__(self, parent: tk.Misc, *, edge: int) -> None:
+        def __init__(
+            self, parent: tk.Misc, *, edge: int, show_control: bool = True, shown_var=None
+        ) -> None:
             super().__init__(parent)
             self.shown: list[str] = []
             self.stop_count = 0
@@ -123,6 +125,9 @@ def test_history_shows_video_not_poster_and_reuses_player_on_selection(
 
         def stop(self) -> None:
             self.stop_count += 1
+
+        def set_visibility(self, shown: bool) -> None:
+            self.visible = shown
 
     monkeypatch.setattr(history_module, "VideoPreviewWidget", FakeVideoPreview)
     panel = JobHistoryPanelV2(tk_root, app_state=AppStateV2())

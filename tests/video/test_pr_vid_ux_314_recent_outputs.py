@@ -60,6 +60,20 @@ def test_a_completed_job_is_listed_with_provenance_read_from_its_frozen_njr(tmp_
     assert output.source_image_path == str(Path(source))
     assert dict(output.bundle) == result["video_bundle"]  # handed on exactly as recorded
     assert output.file_name == "alpha.mp4" and output.completed_at is not None
+    assert output.visibility_subject["prompt"] == "alpha turns"
+
+
+def test_frozen_prompt_is_preserved_for_content_visibility(tmp_path) -> None:
+    from src.controller.content_visibility_resolver import ContentVisibilityResolver
+
+    repository = new_repository(tmp_path)
+    njr, _source = _njr(tmp_path, "nude")
+    [job_id] = persist(repository, [njr])
+    clip = _clip(tmp_path, "innocent-file-name")
+    finish(repository, job_id, JobStatus.COMPLETED, result=video_result(clip))
+    [output] = list_recent_video_outputs(repository)
+    assert not ContentVisibilityResolver("sfw").is_visible(output.visibility_subject)
+    assert ContentVisibilityResolver("nsfw").is_visible(output.visibility_subject)
 
 
 def test_only_playable_completed_outputs_qualify(tmp_path) -> None:

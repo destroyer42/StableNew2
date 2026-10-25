@@ -3,7 +3,7 @@
 StableNew is a Windows desktop application, but the census runs on Linux. This lane runs, on a Windows runner, the tests
 whose behavior depends on the operating system: process containment and ownership, atomic file replacement and sharing
 violations, Windows paths and path escaping in JSON, SQLite persistence, the Photo Optimize Windows migration recovery,
-and a Tk construction smoke. It is a platform contract, not a substitute for GPU/Forge/SVD hardware qualification, which
+and Tk construction and desktop pixel/DPI geometry. It is a platform contract, not a substitute for GPU/Forge/SVD hardware qualification, which
 stays opt-in and local.
 
 Targets are explicit (a positive list, like the required smoke) so a new test never joins the lane by accident; the
@@ -40,8 +40,9 @@ WINDOWS_LANE_TARGETS = (
     # production construction path (startup gate, NJR strictness) and application bootstrap
     "tests/controller/test_production_wiring_startup_gate.py",
     "tests/app",
-    # Tk construction smoke on a real Windows desktop session
+    # Tk construction and desktop pixel/DPI geometry on a real Windows desktop session
     "tests/gui_v2/test_p0_6_silent_failure_regressions.py",
+    "tests/gui_v2/test_workspace_layout_resilience_v2.py",
 )
 
 

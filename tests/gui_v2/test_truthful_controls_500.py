@@ -320,13 +320,15 @@ def _job(job_id: str, **extra: Any) -> SimpleNamespace:
 
 
 def _image(tmp_path: Path, name: str) -> Path:
+    from PIL import Image
+
     path = tmp_path / name
-    path.write_bytes(b"\x89PNG\r\n\x1a\n")
+    Image.new("RGB", (100, 50), "navy").save(path)
     return path
 
 
 def _shown_text(panel: PreviewPanelV2) -> str | None:
-    return panel.thumbnail._placeholder_shown
+    return panel.thumbnail.status_var.get()
 
 
 def test_thumbnail_checkbox_is_named_for_a_saved_output_not_for_generation(
@@ -336,7 +338,7 @@ def test_thumbnail_checkbox_is_named_for_a_saved_output_not_for_generation(
     try:
         label = panel.preview_checkbox.cget("text")
 
-        assert label == "Show output thumbnail"
+        assert label == "Show media"
         assert "generate" not in label.lower()
         assert "ticking this does not generate one" in PreviewPanelV2.PREVIEW_CHECKBOX_TIP
     finally:
@@ -367,9 +369,12 @@ def test_a_draft_job_without_an_artifact_explains_the_missing_image(
 ) -> None:
     panel = _preview(tk_root, tmp_path, monkeypatch)
     try:
+        panel.pack(fill="both", expand=True)
+        tk_root.deiconify()
+        tk_root.update()
         panel._show_preview_var.set(True)
         panel.set_job_summaries([_job("draft-1")])
-
+        tk_root.update()
         text = _shown_text(panel)
         assert text == PreviewPanelV2.NO_ARTIFACT_PLACEHOLDER
         assert "only after this job has saved an image" in text
@@ -387,6 +392,9 @@ def test_thumbnail_comes_only_from_the_previewed_job(
     mine = _image(tmp_path, "my_job.png")
     panel = _preview(tk_root, tmp_path, monkeypatch)
     try:
+        panel.pack(fill="both", expand=True)
+        tk_root.deiconify()
+        tk_root.update()
         panel._show_preview_var.set(True)
 
         # The panel previews the last job; an earlier job's image must not stand in for it.
@@ -399,6 +407,13 @@ def test_thumbnail_comes_only_from_the_previewed_job(
         )
         assert panel._find_immediate_output_image(panel._current_preview_job) == mine
         assert panel.thumbnail.current_path() == str(mine)
+        panel.thumbnail.fit()
+        tk_root.after(250, tk_root.quit)
+        tk_root.mainloop()
+        assert panel.thumbnail.model.status == "ready"
+        assert panel.thumbnail._photo_image is not None
+        assert panel.thumbnail._photo_image.width() == 2 * panel.thumbnail._photo_image.height()
+        assert panel.thumbnail._canvas.find_all()
     finally:
         panel.destroy()
 
@@ -472,7 +487,9 @@ def test_a_thumbnail_hidden_by_visibility_is_not_reported_as_missing(
         panel.set_job_summaries(
             [_job("job", positive_prompt="explicit", output_paths=[str(saved)])]
         )
-
+        panel.pack(fill="both", expand=True)
+        tk_root.deiconify()
+        tk_root.update()
         assert _shown_text(panel) == PreviewPanelV2.HIDDEN_PLACEHOLDER
         assert panel.thumbnail.current_path() is None
     finally:

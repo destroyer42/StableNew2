@@ -28,8 +28,8 @@ from src.gui.view_contracts.history_sequence_contract import (
     run_sequence_action,
 )
 from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
-from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
-from src.gui.widgets.video_preview_widget_v2 import VideoPreviewWidget
+from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
+from src.gui.widgets.media_inspector import MediaInspector as VideoPreviewWidget
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.queue.job_history_store import (
     INTERRUPTED_RESTART_ACTION_REQUIRED,
@@ -186,7 +186,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.show_artifact_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             self,
-            text="Show selected artifact",
+            text="Show media",
             style="Dark.TCheckbutton",
             variable=self.show_artifact_var,
             command=self._refresh_selected_artifact,
@@ -265,7 +265,13 @@ class JobHistoryPanelV2(ttk.Frame):
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.artifact_frame = ttk.LabelFrame(tree_frame, text="Recorded artifact")
         self.artifact_frame.columnconfigure(0, weight=1)
-        self.artifact_thumbnail = ThumbnailWidget(self.artifact_frame, width=144, height=144)
+        self.artifact_thumbnail = ThumbnailWidget(
+            self.artifact_frame,
+            width=144,
+            height=144,
+            show_control=False,
+            shown_var=self.show_artifact_var,
+        )
         self.artifact_thumbnail.grid(row=0, column=0, sticky="n")
         # Decode video only on demand; reuse the existing bounded, cancellable player.
         self.artifact_video_preview: VideoPreviewWidget | None = None
@@ -769,6 +775,7 @@ class JobHistoryPanelV2(ttk.Frame):
                 "positive_prompt": njr.positive_prompt if njr else "",
                 "negative_prompt": njr.negative_prompt if njr else "",
             }
+            self._media_visibility_subject = subject
             visible = (mode != "sfw" or njr is not None) and ContentVisibilityResolver(
                 mode
             ).is_visible(subject)
@@ -789,7 +796,12 @@ class JobHistoryPanelV2(ttk.Frame):
         if kind == "video" and path:
             self.artifact_thumbnail.grid_remove()
             if self.artifact_video_preview is None:
-                self.artifact_video_preview = VideoPreviewWidget(self.artifact_frame, edge=144)
+                self.artifact_video_preview = VideoPreviewWidget(
+                    self.artifact_frame,
+                    edge=144,
+                    show_control=False,
+                    shown_var=self.show_artifact_var,
+                )
             self.artifact_video_preview.grid(row=0, column=0, sticky="n")
             if path != self._shown_artifact_path or kind != self._shown_artifact_kind:
                 self.artifact_video_preview.show(path)
@@ -804,8 +816,15 @@ class JobHistoryPanelV2(ttk.Frame):
             else:
                 self.artifact_thumbnail.clear()
                 self.artifact_thumbnail.grid_remove()
+        if kind == "image":
+            self.artifact_thumbnail.set_visibility(visible)
+        elif kind == "video" and self.artifact_video_preview is not None:
+            self.artifact_video_preview.set_visibility(visible)
         self._shown_artifact_kind = kind if visible else "none"
         self._shown_artifact_path = path if visible else None
+
+    def _current_visibility_subject(self) -> Any:
+        return getattr(self, "_media_visibility_subject", {})
 
     def _on_open_artifact(self) -> None:
         """Open the selected recorded file with the system viewer (not the thumbnail)."""

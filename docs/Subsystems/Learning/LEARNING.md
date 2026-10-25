@@ -92,6 +92,12 @@ A `study_type == "two_axis_grid"` experiment compares two of CFG Scale, Steps an
 
 ### 3.3 Ratings and review evidence
 
+Designed-result, discovered and staged selected previews use `MediaInspector` for local Show, bounded still zoom/pan and
+detach/return. Still comparison cards have independent inspector state. The existing sample selection and rating controls
+remain authoritative: inspection neither saves a draft/rating nor advances the sample or curation decision. A hidden workspace
+suspends its detached rendering, and content visibility remains higher priority than local Show. The frozen Two-Axis Grid
+retains its specialized bounded contact-sheet layout; selecting a cell opens its sample in the shared result inspector.
+
 | Source | Entry point | Record kind (`metadata.record_kind`) |
 |---|---|---|
 | Designed experiment image | `LearningController.record_rating` (aggregate rating, subscores, context flags, notes; embeds the frozen snapshot, executed config, seed read-back) | `learning_experiment_rating` |
