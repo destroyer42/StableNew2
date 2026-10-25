@@ -86,6 +86,7 @@ from src.learning.ordinary_prompt_freeze import (
 )
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.resource_access import get_projected_resources
+from src.learning.review_workspace import build_review_projection
 from src.learning.stage_capabilities import get_stage_capability
 from src.learning.staged_recommendations import (
     apply_derived_recommendation_patch,
@@ -816,6 +817,7 @@ class LearningController:
             except TypeError:
                 # Backward compatibility for older test doubles.
                 self._plan_table.update_plan(self.learning_state.plan)
+        self._update_variant_ratings()
         self._refresh_grid_view()
 
     def load_existing_ratings(self) -> None:
@@ -2481,19 +2483,14 @@ class LearningController:
         return recommendation_query(self)
 
     def _update_variant_ratings(self) -> None:
-        """Update all variant rows with their average ratings."""
-        if not self._learning_record_writer or not self.learning_state.current_experiment:
+        """Show each variant's average saved rating (records are keyed by the opaque ``experiment_id``)."""
+        if not self.learning_state.current_experiment or not self._plan_table:
             return
-
-        experiment_id = self.learning_state.current_experiment.name
-
-        for i, variant in enumerate(self.learning_state.plan):
-            avg = self._learning_record_writer.get_average_rating_for_variant(
-                experiment_id, variant.param_value
-            )
-
-            if self._plan_table and hasattr(self._plan_table, "update_row_rating"):
-                self._plan_table.update_row_rating(i, avg)
+        if not hasattr(self._plan_table, "update_row_rating"):
+            return
+        projection = build_review_projection(self.learning_state.plan, self.get_rating_for_image)
+        for i, summary in enumerate(projection.variants):
+            self._plan_table.update_row_rating(i, summary.average_rating)
 
     def refresh_recommendations(self) -> None:
         """Force refresh of recommendations, clearing any cache."""

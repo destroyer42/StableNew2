@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 import tkinter as tk
+from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
@@ -36,7 +39,9 @@ from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_grid_view import LearningGridView
 from src.gui.views.learning_plan_table import LearningPlanTable
+from src.gui.views.learning_preview_card import LearningPreviewCard
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.gui.views.learning_workflow_bar import LearningWorkflowBar
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.image_thumbnail import ImageThumbnail
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
@@ -51,15 +56,39 @@ from src.learning.automation_modes import (
     resolve_persisted_mode,
 )
 from src.learning.experiment_store import LearningExperimentStore
+from src.learning.guided_workflow import (
+    ACTION_BUILD_PREVIEW,
+    ACTION_RATE,
+    ACTION_RECOMMENDATIONS,
+    ACTION_REVIEW_RESULTS,
+    ACTION_RUN,
+    ACTION_SAVE_NEXT,
+    ACTION_VIEW_PROGRESS,
+    STEP_COMPARE,
+    STEP_DESIGN,
+    STEP_ORDER,
+    STEP_PREVIEW,
+    STEP_RATE,
+    STEP_RUN,
+    GuidedWorkflowProjection,
+    WorkflowFacts,
+    build_rating_progress,
+    build_workflow_facts,
+    project_guided_workflow,
+)
 from src.learning.learning_paths import get_learning_experiments_root, get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
+from src.learning.model_comparison import study_type as comparison_study_type
+from src.learning.preview_summary import build_preview_summary
 from src.services.ui_state_store import get_ui_state_store
 from src.state.output_routing import get_output_root
 from src.utils.config import ConfigManager
 
+_log = logging.getLogger(__name__)
+
 
 class LearningTabFrame(ttk.Frame):
-    """Learning tab with header and three-column workspace layout."""
+    """Learning tab: header, then the guided Design -> Preview -> Run -> Compare -> Rate workspace."""
 
     def __init__(
         self,
@@ -83,6 +112,11 @@ class LearningTabFrame(ttk.Frame):
         self.learning_record_writer = LearningRecordWriter(get_learning_records_path())
         self.experiment_store = LearningExperimentStore(get_learning_experiments_root())
         self._active_experiment_id: str | None = None
+        # Presentation-only guide state: which step page is open. Never persisted, never a lifecycle.
+        self._viewed_step: str | None = STEP_DESIGN
+        self._guide_key: Any = None
+        self._guide_refreshing = False
+        self._grid_present = False
 
         # Initialize learning state and controller
         self.learning_state = LearningState()
@@ -196,32 +230,15 @@ class LearningTabFrame(ttk.Frame):
             text="Experiment Library",
             command=self._on_open_experiment_library,
         ).grid(row=0, column=7, sticky="e", padx=(4, 0))
-        ttk.Label(self.header_frame, text="Recommendations:", style=BODY_LABEL_STYLE).grid(
-            row=1, column=5, sticky="e", pady=(6, 0)
-        )
-        self.automation_mode_box = ttk.Combobox(
-            self.header_frame,
-            textvariable=self._automation_mode_label_var,
-            values=[AUTOMATION_MODE_LABELS[mode] for mode in AUTOMATION_MODES],
-            state="readonly",
-            width=48,
-        )
-        self.automation_mode_box.grid(row=1, column=6, columnspan=2, sticky="e", padx=(4, 0), pady=(6, 0))
-        self.automation_mode_box.bind("<<ComboboxSelected>>", self._on_automation_mode_selected)
         self.stored_drafts_button = ttk.Button(
             self.header_frame,
             text="Save Stored Drafts...",
             command=self._on_commit_stored_drafts,
         )
-        self.stored_drafts_button.grid(row=2, column=6, columnspan=2, sticky="e", padx=(4, 0), pady=(2, 0))
+        self.stored_drafts_button.grid(row=1, column=5, columnspan=3, sticky="e", padx=(4, 0), pady=(6, 0))
         attach_tooltip(
             self.stored_drafts_button,
             "Save the rated drafts left in other saved experiments as ratings. Shows what it will do first.",
-        )
-        attach_tooltip(
-            self.automation_mode_box,
-            "What Apply may do with Learning recommendations. Apply with confirm asks before changing "
-            "Pipeline settings; Suggest only never applies; Auto micro-experiment also queues one preview job.",
         )
         attach_tooltip(learning_toggle, "Enable learning mode to collect ratings and feedback.")
         attach_tooltip(header_label, "Learning mode: review runs, enable adaptive loops.")
@@ -254,22 +271,27 @@ class LearningTabFrame(ttk.Frame):
         self.body_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
         self._mode_notebook.add(self.body_frame, text="Designed Experiments")
 
-        # Designed Experiments uses adjustable horizontal and vertical panes.
-        # The design form is independently scrollable so large live inventories
-        # cannot push its lower controls out of reach.
+        # Designed Experiments shows one task at a time: the step bar on top, and below it the page for the
+        # open step. The design form is independently scrollable so large live inventories cannot push its
+        # lower controls out of reach.
         self.body_frame.columnconfigure(0, weight=1)
-        self.body_frame.rowconfigure(0, weight=1)
+        self.body_frame.rowconfigure(1, weight=1)
+        self.workflow_bar = LearningWorkflowBar(
+            self.body_frame, on_step=self._on_step_selected, on_primary=self._on_primary_action
+        )
+        self.workflow_bar.grid(row=0, column=0, sticky="ew", padx=2, pady=(2, 2))
         self.designed_horizontal_panes = ttk.Panedwindow(
             self.body_frame, orient=tk.HORIZONTAL
         )
-        self.designed_horizontal_panes.grid(row=0, column=0, sticky="nsew")
+        self.designed_horizontal_panes.grid(row=1, column=0, sticky="nsew")
 
         design_host = ttk.Frame(self.designed_horizontal_panes, style=SURFACE_FRAME_STYLE)
         design_host.columnconfigure(0, weight=1)
         design_host.rowconfigure(0, weight=1)
         workspace_host = ttk.Panedwindow(self.designed_horizontal_panes, orient=tk.VERTICAL)
         self.workspace_panes = workspace_host
-        self._grid_pane_shown = False
+        self.design_host = design_host
+        self.workspace_host = workspace_host
 
         # Left panel: scrollable Experiment Design
         self.experiment_scroll = ScrollableFrame(design_host, style=SURFACE_FRAME_STYLE)
@@ -287,9 +309,25 @@ class LearningTabFrame(ttk.Frame):
         )
         self.experiment_panel.grid(row=0, column=0, sticky="ew", padx=2, pady=4)
         self.experiment_scroll.inner.columnconfigure(0, weight=1)
+        self.experiment_panel.set_on_design_changed(self._on_design_changed)
+        self.experiment_panel.set_on_preview_built(self._on_preview_built)
 
-        # Center panel: Learning Plan Table
+        # Preview / Run page header: what the frozen Preview would submit, and how the run is going.
+        summary_host = ttk.Frame(workspace_host, style=SURFACE_FRAME_STYLE)
+        summary_host.columnconfigure(0, weight=1)
+        self.summary_host = summary_host
+        self.preview_card = LearningPreviewCard(summary_host)
+        self.preview_card.grid(row=0, column=0, sticky="ew", padx=2, pady=(4, 2))
+        self.run_progress_var = tk.StringVar(value="")
+        self.run_progress_label = ttk.Label(
+            summary_host, textvariable=self.run_progress_var, style=BODY_LABEL_STYLE, wraplength=900, justify="left"
+        )
+        self.run_progress_label.grid(row=1, column=0, sticky="w", padx=6, pady=(4, 2))
+        self.run_progress_label.grid_remove()
+
+        # Plan table: the detailed per-variant view behind Preview and Run
         plan_host = ttk.Frame(workspace_host, style=SURFACE_FRAME_STYLE)
+        self.plan_host = plan_host
         plan_host.columnconfigure(0, weight=1)
         plan_host.rowconfigure(0, weight=1)
         self.plan_table = LearningPlanTable(plan_host, style=CARD_FRAME_STYLE)
@@ -310,15 +348,29 @@ class LearningTabFrame(ttk.Frame):
 
         # Right panel: Learning Review
         review_host = ttk.Frame(workspace_host, style=SURFACE_FRAME_STYLE)
+        self.review_host = review_host
         review_host.columnconfigure(0, weight=1)
         review_host.rowconfigure(0, weight=1)
         self.review_panel = LearningReviewPanel(review_host, style=CARD_FRAME_STYLE)
         self.review_panel.grid(row=0, column=0, sticky="nsew", padx=2, pady=(2, 4))
 
-        workspace_host.add(plan_host, weight=1)
-        workspace_host.add(review_host, weight=3)
-        self.designed_horizontal_panes.add(design_host, weight=1)
-        self.designed_horizontal_panes.add(workspace_host, weight=3)
+        self._apply_step_layout(STEP_DESIGN)
+        # Recommendations selector: contextual, beside the recommendations it governs.
+        ttk.Label(self.review_panel.mode_host, text="When I apply:", style=BODY_LABEL_STYLE).pack(side="left")
+        self.automation_mode_box = ttk.Combobox(
+            self.review_panel.mode_host,
+            textvariable=self._automation_mode_label_var,
+            values=[AUTOMATION_MODE_LABELS[mode] for mode in AUTOMATION_MODES],
+            state="readonly",
+            width=44,
+        )
+        self.automation_mode_box.pack(side="left", padx=(6, 0), fill="x", expand=True)
+        self.automation_mode_box.bind("<<ComboboxSelected>>", self._on_automation_mode_selected)
+        attach_tooltip(
+            self.automation_mode_box,
+            "What Apply may do with Learning recommendations. Apply with confirm asks before changing "
+            "Pipeline settings; Suggest only never applies; Auto micro-experiment also queues one preview job.",
+        )
 
         # Connect controller to review panel (bidirectional)
         self.learning_controller._review_panel = self.review_panel
@@ -772,6 +824,167 @@ class LearningTabFrame(ttk.Frame):
         self._mode_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
         self._set_discovered_scan_root(None)
         self._update_staged_action_affordances(None)
+        self._refresh_guide(force=True)
+
+    # ------------------------------------------------------------------
+    # Guided workflow: Design -> Preview -> Run -> Compare -> Rate
+    # ------------------------------------------------------------------
+
+    def _build_workflow_facts(self) -> WorkflowFacts:
+        """Read the live experiment, plan, ratings and design into the guide's facts (no I/O beyond file stats)."""
+        controller = self.learning_controller
+        state = controller.learning_state
+        experiment = state.current_experiment
+        plan = list(state.plan or [])
+
+        def exists(ref: str) -> bool:
+            try:
+                return Path(ref).is_file()
+            except (OSError, ValueError):
+                return False
+
+        rating = build_rating_progress(
+            plan,
+            is_saved=controller.is_image_rated,
+            has_draft=lambda ref: controller.get_review_draft(ref) is not None,
+            exists=exists,
+        )
+        progress = controller.get_evidence_progress()
+        panel = self.experiment_panel
+        return build_workflow_facts(
+            experiment,
+            plan,
+            rating=rating,
+            preview_stale=panel.preview_is_stale(),
+            study_type=comparison_study_type(experiment) if experiment is not None else "controlled_variable",
+            evidence_message=progress.message(),
+            evidence_ready=progress.ready,
+            design_blocker=panel.design_blocker(),
+        )
+
+    def _guide_projection(self) -> tuple[GuidedWorkflowProjection, WorkflowFacts]:
+        facts = self._build_workflow_facts()
+        projection = project_guided_workflow(facts, self._viewed_step)
+        primary = projection.primary
+        panel = self.experiment_panel
+        if primary.enabled and primary.action == ACTION_RUN and not panel.can_run():
+            primary = replace(primary, enabled=False, reason="Run is not available for this design yet.")
+        elif primary.enabled and primary.action == ACTION_BUILD_PREVIEW:
+            if str(panel.build_button.cget("state")) == "disabled":
+                primary = replace(primary, enabled=False, reason="Complete the design to build a Preview.")
+        return replace(projection, primary=primary), facts
+
+    def _refresh_guide(self, *, force: bool = False) -> None:
+        """Re-render the step bar, Preview card and layout from current state; skipped when nothing changed."""
+        if not hasattr(self, "workflow_bar") or self._guide_refreshing:
+            return
+        self._guide_refreshing = True
+        try:
+            projection, facts = self._guide_projection()
+            experiment = self.learning_controller.learning_state.current_experiment
+            snapshot = str(getattr(experiment, "execution_snapshot_json", "") or "")
+            key = (projection, hash(snapshot), self._grid_present, getattr(experiment, "name", ""), facts.in_flight)
+            if not force and key == self._guide_key:
+                return
+            self._guide_key = key
+            self.workflow_bar.render(projection, experiment_name=str(getattr(experiment, "name", "") or ""))
+            summary = build_preview_summary(
+                experiment,
+                self.learning_controller.learning_state.plan,
+                show_model_names=self._content_visibility_mode == "nsfw",
+            )
+            self.preview_card.render(summary, stale=facts.run_blocked_by_stale_preview)
+            counts = Counter(
+                str(v.status or "pending").replace("_", " ")
+                for v in self.learning_controller.learning_state.plan
+            )
+            self.run_progress_var.set(
+                "Run progress: " + (", ".join(f"{n} {name}" for name, n in sorted(counts.items())) or "nothing planned")
+                + f" | {projection.rating.describe()}"
+            )
+            self._apply_step_layout(projection.viewed_step)
+            self.review_panel.set_mode("rate" if projection.viewed_step == STEP_RATE else "compare")
+        finally:
+            self._guide_refreshing = False
+
+    def _goto_step(self, step: str) -> None:
+        self._viewed_step = step if step in STEP_ORDER else STEP_DESIGN
+        self._refresh_guide(force=True)
+        if self._viewed_step in (STEP_COMPARE, STEP_RATE):
+            self.review_panel.show_results()
+
+    def _follow_recommended_step(self) -> None:
+        """After a restore or a new session, open the step the facts say the experiment is at."""
+        self._viewed_step = None
+        projection, _facts = self._guide_projection()
+        self._viewed_step = projection.recommended_step
+        self._refresh_guide(force=True)
+
+    def _on_step_selected(self, step: str) -> None:
+        self._goto_step(step)
+
+    def _on_preview_built(self) -> None:
+        self._goto_step(STEP_PREVIEW)
+
+    def _on_design_changed(self) -> None:
+        self._refresh_guide()
+
+    def _on_primary_action(self, action: str) -> None:
+        """Route the one primary action; every route is an existing, already-gated handler."""
+        panel = self.experiment_panel
+        if action == ACTION_BUILD_PREVIEW:
+            panel._on_build_preview()
+        elif action == ACTION_RUN:
+            panel.request_run()
+            if self._build_workflow_facts().admitted:
+                self._goto_step(STEP_RUN)
+        elif action == ACTION_VIEW_PROGRESS:
+            self._goto_step(STEP_RUN)
+            self.plan_table.tree.focus_set()
+        elif action == ACTION_REVIEW_RESULTS:
+            self._goto_step(STEP_COMPARE)
+        elif action == ACTION_RATE:
+            self._goto_step(STEP_RATE)
+        elif action == ACTION_SAVE_NEXT:
+            self.review_panel.save_and_next()
+        elif action == ACTION_RECOMMENDATIONS:
+            self.review_panel.show_recommendations()
+        self._refresh_guide(force=True)
+
+    def _desired_panes(self, step: str) -> tuple[list[Any], list[Any]]:
+        """``(top-level panes, workspace panes)`` for a step. Only one experiment task is shown at a time."""
+        if step == STEP_DESIGN:
+            return [self.design_host], []
+        workspace: list[Any]
+        if step in (STEP_PREVIEW, STEP_RUN):
+            workspace = [self.summary_host, self.plan_host]
+            if self._grid_present:
+                workspace.append(self.grid_view)
+        else:
+            workspace = [self.grid_view, self.review_host] if self._grid_present else [self.review_host]
+        return [self.workspace_host], workspace
+
+    @staticmethod
+    def _set_panes(paned: ttk.Panedwindow, desired: list[Any], weights: dict[Any, int]) -> None:
+        current = [str(pane) for pane in paned.panes()]  # type: ignore[no-untyped-call]
+        wanted = [str(widget) for widget in desired]
+        if current == wanted:
+            return
+        for pane in current:
+            paned.forget(pane)
+        for widget in desired:
+            paned.add(widget, weight=weights.get(widget, 1))
+
+    def _apply_step_layout(self, step: str) -> None:
+        top, workspace = self._desired_panes(step)
+        self._set_panes(self.designed_horizontal_panes, top, {})
+        self._set_panes(self.workspace_panes, workspace, {self.summary_host: 1, self.plan_host: 2, self.grid_view: 3, self.review_host: 3})
+        if step == STEP_PREVIEW:
+            self.preview_card.grid()
+            self.run_progress_label.grid_remove()
+        elif step == STEP_RUN:
+            self.preview_card.grid_remove()
+            self.run_progress_label.grid()
 
     def _on_learning_toggle(self) -> None:
         """Handle the learning mode toggle button."""
@@ -847,6 +1060,12 @@ class LearningTabFrame(ttk.Frame):
         contract = update_status_banner(state)
         self._workflow_state_var.set(contract.display_text)
         self._persist_learning_session_state()
+        if hasattr(self, "workflow_bar"):
+            # A fresh plan means a Preview exists to inspect; an empty workspace returns to Design.
+            if state == "planned" and self._viewed_step == STEP_DESIGN:
+                self._goto_step(STEP_PREVIEW)
+            elif state == "idle":
+                self._goto_step(STEP_DESIGN)
 
     def _schedule_summary_refresh(self) -> None:
         self._refresh_summary()
@@ -862,7 +1081,15 @@ class LearningTabFrame(ttk.Frame):
             if callable(close):
                 close()
 
+    def _safe_refresh_guide(self) -> None:
+        try:
+            self._refresh_guide()
+        except Exception:  # noqa: BLE001
+            # A presentation refresh must never stop the periodic summary timer.
+            _log.exception("Learning guide refresh failed")
+
     def _refresh_summary(self) -> None:
+        self._safe_refresh_guide()
         getter = getattr(self.learning_controller, "get_learning_run_summary", None)
         if not callable(getter):
             self._summary_var.set("Plan: n/a")
@@ -948,6 +1175,7 @@ class LearningTabFrame(ttk.Frame):
         state = ui_store.load_state() or {}
         learning_state = self.get_learning_session_state()
         state["learning"] = learning_state if isinstance(learning_state, dict) else {}
+        self._safe_refresh_guide()
         if not ui_store.save_state(state):
             raise RuntimeError("Learning resume UI state could not be saved")
 
@@ -974,6 +1202,7 @@ class LearningTabFrame(ttk.Frame):
         if restored:
             self._active_experiment_id = experiment_id or self._active_experiment_id
             self._restore_experiment_panel()
+            self._follow_recommended_step()
         return restored
 
     def _save_to_store(self, *, force_new: bool) -> bool:
@@ -1016,6 +1245,7 @@ class LearningTabFrame(ttk.Frame):
                 panel.restore_state(LearningExperiment())
             except Exception:
                 pass
+        self._goto_step(STEP_DESIGN)
 
     def _on_clone_experiment(self) -> None:
         clone = self.learning_controller.clone_current_experiment_as_new()
@@ -1025,6 +1255,7 @@ class LearningTabFrame(ttk.Frame):
         self._active_experiment_id = clone.experiment_id
         self._restore_experiment_panel()
         self._persist_learning_session_state()
+        self._follow_recommended_step()
 
     def _on_open_experiment_library(self) -> None:
         all_handles = self.experiment_store.list_handles()
@@ -1748,12 +1979,8 @@ class LearningTabFrame(ttk.Frame):
         )
 
     def _on_grid_presence_changed(self, present: bool) -> None:
-        if present and not self._grid_pane_shown:
-            self.workspace_panes.insert(1, self.grid_view, weight=3)
-            self._grid_pane_shown = True
-        elif not present and self._grid_pane_shown:
-            self.workspace_panes.forget(self.grid_view)
-            self._grid_pane_shown = False
+        self._grid_present = bool(present)
+        self._refresh_guide(force=True)
 
     def _on_content_visibility_mode_changed(self) -> None:
         if not bool(self.winfo_ismapped()):

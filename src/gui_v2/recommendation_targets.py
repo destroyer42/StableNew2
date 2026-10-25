@@ -51,6 +51,27 @@ def recommendation_target(stage: str, parameter: str) -> tuple[str, str] | None:
     return _TARGETS.get(stage, {}).get(_ALIASES.get(name, name))
 
 
+def describe_apply_changes(
+    cards: Any, stage: str, recommendations: list[Any]
+) -> tuple[list[tuple[str, Any, Any]], str]:
+    """Read-only dry run of Apply: ``([(setting, current, recommended)], reason)``; never sets a control.
+
+    ``reason`` is non-empty when a setting has no faithful operator control, so the operator is told why instead of
+    being shown a partial patch.
+    """
+    if cards is None:
+        return [], "The current Pipeline settings are not available to compare."
+    try:
+        patch = prepare_recommendation_patch(cards, stage, recommendations)
+    except Exception as exc:  # noqa: BLE001 - a control's get() may raise a toolkit error; report, don't crash
+        return [], str(exc)
+    rows = []
+    for rec, (_target, _variable, value, old) in zip(recommendations, patch, strict=True):
+        name = rec.parameter_name if hasattr(rec, "parameter_name") else rec.get("parameter", "")
+        rows.append((str(name), old, value))
+    return rows, ""
+
+
 def checkpoint_for_stage(cards: Any, stage: str) -> str | None:
     """Resolve checkpoint selection, never confusing ADetailer's detector with it."""
     if stage == "adetailer":

@@ -10,6 +10,8 @@ from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.models.prompt_pack_model import PromptPackModel, PromptSlot
 from src.gui.ui_tokens import TOKENS
 from src.gui.views.grid_design_frame import TwoAxisDesignFrame
+from src.gui.widgets.disclosure_section_v2 import DisclosureSection
+from src.learning.design_estimate import estimate_design
 from src.learning.experiment_naming import build_experiment_identity
 from src.learning.model_capabilities import (
     compatible_context,
@@ -27,6 +29,33 @@ from src.promptpacks.paths import resolve_prompt_pack_dir
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import discover_packs
+
+
+def _call(panel: Any, name: str, *args: Any) -> None:
+    """Call an optional panel hook (the Preview path is also driven on stand-in panels in tests)."""
+    method = getattr(panel, name, None)
+    if callable(method):
+        method(*args)
+
+
+def _speak(panel: Any, text: str, *, ok: bool = False) -> None:
+    panel.feedback_var.set(text)
+    label = getattr(panel, "feedback_label", None)
+    if label is not None:
+        label.configure(foreground=TOKENS.colors.status_success if ok else TOKENS.colors.status_error)
+
+
+STUDY_HINTS = {
+    "Controlled Variable": "Test several values for one setting while keeping the other settings consistent.",
+    "Model Comparison": (
+        "Compare several models, each with its own validated settings and prompt. "
+        "A preference between models, not a one-variable test."
+    ),
+    "Two-Axis Grid": (
+        "Vary two settings together on one model and prompt. An exploratory comparison; "
+        "its ratings never become recommendations."
+    ),
+}
 
 
 class ExperimentDesignPanel(ttk.Frame):
@@ -57,6 +86,11 @@ class ExperimentDesignPanel(ttk.Frame):
         self._prompt_option_payloads: dict[str, dict[str, Any]] = {}
         self._study_mode = "controlled"
         self._grid_preview_signature: Any = None
+        # Signature of the inputs the current Preview was built from (None: unknown, e.g. built elsewhere).
+        self._preview_signature: Any = None
+        self._run_in_progress = False
+        self._design_changed_callback: Any = None
+        self._preview_built_callback: Any = None
         self._resource_state = resolve_app_state(self.learning_controller)
         if self._resource_state is not None and hasattr(self._resource_state, "add_resource_listener"):
             self._resource_state.add_resource_listener(self._on_resources_updated)
@@ -99,24 +133,38 @@ class ExperimentDesignPanel(ttk.Frame):
         self.name_entry.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         self.name_var.trace_add("write", lambda *_: self._on_name_changed())
 
-        # Description
-        ttk.Label(self, text="Description:").grid(row=3, column=0, sticky="w", pady=(0, 2))
+        # Description is optional context, so it lives behind a disclosure.
+        self.details_section = DisclosureSection(self, title="Optional details", expanded=False)
+        self.details_section.grid(row=3, column=0, rowspan=2, sticky="ew", pady=(0, 10))
+        details = self.details_section.body
+        details.columnconfigure(0, weight=1)
+        ttk.Label(details, text="Description:").grid(row=0, column=0, sticky="w", pady=(0, 2))
         self.desc_var = tk.StringVar(value="")
-        self.desc_entry = ttk.Entry(self, textvariable=self.desc_var)
-        self.desc_entry.grid(row=4, column=0, sticky="ew", pady=(0, 10))
+        self.desc_entry = ttk.Entry(details, textvariable=self.desc_var)
+        self.desc_entry.grid(row=1, column=0, sticky="ew")
         self.desc_var.trace_add("write", lambda *_: self._on_description_changed())
 
         # Target Stage
         study_frame = ttk.Frame(self)
         study_frame.grid(row=5, column=0, sticky="ew", pady=(0, 2))
-        study_frame.columnconfigure(1, weight=1)
-        ttk.Label(study_frame, text="Study Type:").grid(row=0, column=0, sticky="w")
+        study_frame.columnconfigure(0, weight=1)
+        # Controlled Variable is the ordinary experiment; the other studies are one disclosure away, not hidden.
+        self.study_hint_var = tk.StringVar(value=STUDY_HINTS["Controlled Variable"])
+        ttk.Label(
+            study_frame, textvariable=self.study_hint_var, wraplength=360, justify="left",
+            foreground=TOKENS.colors.text_muted,
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        self.study_section = DisclosureSection(study_frame, title="Advanced study types", expanded=False)
+        self.study_section.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+        study_body = self.study_section.body
+        study_body.columnconfigure(1, weight=1)
+        ttk.Label(study_body, text="Study Type:").grid(row=0, column=0, sticky="w")
         self.study_type_var = tk.StringVar(value="Controlled Variable")
-        self.study_type_combo = ttk.Combobox(study_frame, textvariable=self.study_type_var,
+        self.study_type_combo = ttk.Combobox(study_body, textvariable=self.study_type_var,
                                              values=("Controlled Variable", "Model Comparison", "Two-Axis Grid"), state="readonly")
-        self.study_type_combo.grid(row=0, column=1, sticky="ew", pady=(0, 6))
+        self.study_type_combo.grid(row=0, column=1, sticky="ew")
         self.study_type_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_study_type_changed())
-        ttk.Label(study_frame, text="Target Stage:").grid(row=1, column=0, sticky="w")
+        ttk.Label(study_frame, text="Target Stage:").grid(row=2, column=0, sticky="w")
         self.stage_var = tk.StringVar(value="txt2img")
         self.stage_combo = ttk.Combobox(
             self,
@@ -234,6 +282,11 @@ class ExperimentDesignPanel(ttk.Frame):
             images_row, from_=1, to=10, textvariable=self.images_var, width=8
         )
         self.images_spin.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.estimate_var = tk.StringVar(value="")
+        ttk.Label(
+            images_row, textvariable=self.estimate_var, wraplength=360, justify="left",
+            foreground=TOKENS.colors.text_muted,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
         self.grid_frame = TwoAxisDesignFrame(
             self,
             on_change=self._on_grid_design_changed,
@@ -327,14 +380,15 @@ class ExperimentDesignPanel(ttk.Frame):
         button_frame.columnconfigure(1, weight=1)
 
         self.build_button = ttk.Button(
-            button_frame, text="Build Preview Only", command=self._on_build_preview
+            button_frame, text="Build Preview", command=self._on_build_preview
         )
-        self.build_button.grid(row=0, column=0, sticky="ew", padx=(0, 5))
+        self.build_button.grid(row=0, column=0, columnspan=2, sticky="ew")
 
+        # Run belongs to the Preview step (the guide bar). The button stays as the panel's own Run-readiness
+        # state holder and is never shown here, so Design offers exactly one primary action.
         self.run_button = ttk.Button(
             button_frame, text="Run Experiment", command=self._on_run_experiment
         )
-        self.run_button.grid(row=0, column=1, sticky="ew", padx=(5, 0))
 
         # Feedback
         self.feedback_var = tk.StringVar(value="")
@@ -360,6 +414,17 @@ class ExperimentDesignPanel(ttk.Frame):
         )
         self._on_stage_changed()
         self._suggest_identity()
+        for watched in (
+            self.name_var, self.desc_var, self.stage_var, self.variable_var, self.start_var, self.end_var,
+            self.step_var, self.images_var, self.prompt_source_var, self.prompt_pack_var, self.prompt_item_var,
+            self.study_type_var,
+        ):
+            watched.trace_add("write", self._notify_design_changed)
+        self.feedback_var.trace_add("write", lambda *_: self.feedback_label.configure(
+            foreground=TOKENS.colors.status_error))
+        self._built = True
+        self._sync_study_presentation()
+        self._refresh_estimate()
 
     def _on_prompt_source_changed(self) -> None:
         use_pack = self.prompt_source_var.get() == "pack"
@@ -481,6 +546,8 @@ class ExperimentDesignPanel(ttk.Frame):
             self._on_prompt_source_changed()
             self._on_variable_changed()
         self._update_policy_buttons()
+        self._sync_study_presentation()
+        self._notify_design_changed()
 
     def _resolve_packs_dir(self) -> Path:
         if self._packs_dir is not None:
@@ -737,8 +804,10 @@ class ExperimentDesignPanel(ttk.Frame):
         # Validate
         validation_error = self._validate_experiment_data(experiment_data)
         if validation_error:
-            self.feedback_var.set(f"Validation Error: {validation_error}")
+            _speak(self, f"Validation Error: {validation_error}")
+            _call(self, "_mark_validation_failed", validation_error)
             return
+        _call(self, "_mark_validation_failed", "")
 
         if self._is_model_comparison() and hasattr(self.learning_controller, "prepare_model_comparison_evidence"):
             self._start_comparison_evidence(experiment_data)
@@ -762,14 +831,16 @@ class ExperimentDesignPanel(ttk.Frame):
                 guidance = describe_matrix_freeze(
                     self.learning_controller.learning_state.current_experiment.metadata
                 )
-                self.feedback_var.set(
-                    guidance or "Experiment definition and plan built successfully"
+                _speak(
+                    self,
+                    guidance or "Experiment definition and plan built successfully. Nothing is queued yet.",
+                    ok=True,
                 )
                 if self._is_model_comparison():
                     from src.learning.experiment_execution import thaw_snapshot
                     from src.learning.model_comparison import preview_summary
 
-                    self.feedback_var.set("Model Comparison preview ready")
+                    _speak(self, "Model Comparison preview ready", ok=True)
                     self.summary_var.set(preview_summary(thaw_snapshot(
                         self.learning_controller.learning_state.current_experiment.execution_snapshot_json),
                         show_names=self._comparison_show_names()))
@@ -778,18 +849,21 @@ class ExperimentDesignPanel(ttk.Frame):
                     from src.learning.experiment_execution import thaw_snapshot
                     from src.learning.two_axis_grid import preview_summary as grid_summary
 
-                    self.feedback_var.set("Two-Axis Grid preview ready; Run queues every cell once.")
+                    _speak(self, "Two-Axis Grid preview ready; Run queues every cell once.", ok=True)
                     self.summary_var.set(grid_summary(thaw_snapshot(
                         self._current_experiment().execution_snapshot_json)))
                     self._grid_preview_signature = self._grid_signature()
                     self._update_policy_buttons()
+                _call(self, "_mark_preview_built")
             else:
                 self.feedback_var.set("Experiment definition updated successfully")
         except Exception as e:
-            self.feedback_var.set(f"Error updating experiment: {str(e)}")
+            _speak(self, f"Error updating experiment: {str(e)}")
+            self._preview_signature = None
             if self._is_grid():
                 self._grid_preview_signature = None
                 self._update_policy_buttons()
+        _call(self, "_notify_design_changed")
 
     def _comparison_selection(self):
         from src.learning.resource_access import get_projected_resources
@@ -884,27 +958,185 @@ class ExperimentDesignPanel(ttk.Frame):
             self.after_cancel(poll_id)
         super().destroy()
 
-    def _on_run_experiment(self) -> None:
-        """Handle run experiment button click."""
-        if self._is_grid() and not self._grid_preview_fresh():
-            self.feedback_var.set("The grid design changed after Preview; Build Preview again before Run.")
-            self._update_policy_buttons()
+    # -- guided-workflow support: stale Preview, estimate and honest feedback -------------------------------------
+
+    def set_on_design_changed(self, callback: Any) -> None:
+        """Register one callback fired when the design (or the readiness of its Preview) may have changed."""
+        self._design_changed_callback = callback
+
+    def _mark_preview_built(self) -> None:
+        """Remember the inputs this Preview was built from, so a later edit can mark it out of date."""
+        self._preview_signature = self.design_signature()
+        built = self._preview_built_callback
+        if callable(built):
+            built()
+
+    def _mark_validation_failed(self, error: str) -> None:
+        self._blocker = (error, self.design_signature()) if error else None
+        self._notify_design_changed()
+
+    def set_on_preview_built(self, callback: Any) -> None:
+        """Register one callback fired after a Preview was built successfully (nothing is queued by it)."""
+        self._preview_built_callback = callback
+
+    def _notify_design_changed(self, *_: Any) -> None:
+        if not getattr(self, "_built", False):
             return
+        self._refresh_estimate()
+        callback = self._design_changed_callback
+        if callable(callback):
+            callback()
+
+    @staticmethod
+    def _safe_get(variable: Any, default: Any = None) -> Any:
+        try:
+            return variable.get()
+        except (tk.TclError, ValueError, AttributeError):
+            return default
+
+    def design_signature(self) -> tuple[Any, ...]:
+        """Every input a Preview is built from, so an edit after Preview can be detected for any study type."""
+        get = self._safe_get
+        custom = (
+            self.custom_prompt_text.get("1.0", tk.END).strip()
+            if self.prompt_source_var.get() == "custom"
+            else ""
+        )
+        lora = tuple(
+            get(getattr(self, name, None))
+            for name in (
+                "lora_mode_var", "lora_selector_var", "lora_start_var", "lora_end_var", "lora_step_var",
+                "lora_fixed_strength_var",
+            )
+        )
+        loras = tuple(sorted(name for name, var in getattr(self, "lora_choice_vars", {}).items() if get(var)))
+        return (
+            self.study_type_var.get(), self.name_var.get().strip(), self.desc_var.get().strip(),
+            self.stage_var.get(), self.variable_var.get(), self.input_image_var.get().strip(),
+            get(self.start_var), get(self.end_var), get(self.step_var), get(self.images_var),
+            self.prompt_source_var.get(), self.prompt_pack_var.get(), self.prompt_item_var.get(), custom,
+            tuple(sorted(name for name, var in self.choice_vars.items() if get(var))),
+            lora, loras, self.grid_frame.signature() if self._is_grid() else None,
+            getattr(self, "_target_model", None),
+        )
+
+    def preview_is_stale(self) -> bool:
+        """True when a Preview exists but the design was edited after it was built.
+
+        A Preview built elsewhere (no recorded signature) cannot be judged, so it is not called stale.
+        """
+        experiment = self._current_experiment()
+        if not getattr(experiment, "execution_snapshot_json", "") or self._preview_signature is None:
+            return False
+        return bool(self._preview_signature != self.design_signature())
+
+    def design_blocker(self) -> str:
+        """The unresolved validation message for the design as it stands now (cleared once the form changes)."""
+        recorded = getattr(self, "_blocker", None)
+        if recorded and recorded[1] == self.design_signature():
+            return str(recorded[0])
+        return ""
+
+    def can_run(self) -> bool:
+        return str(self.run_button.cget("state")) != "disabled" and not self.preview_is_stale()
+
+    def _refresh_estimate(self) -> None:
+        from src.learning.variable_metadata import get_variable_metadata
+
+        get = self._safe_get
+        images = get(self.images_var, 1) or 1
+        grid_cells = None
+        if self._is_grid():
+            from src.learning.two_axis_grid import plan_summary
+
+            try:
+                grid_cells = plan_summary({"grid": self.grid_frame.spec()}, int(images))[0]
+            except (ValueError, TypeError, KeyError):
+                grid_cells = None
+        meta = None if self._is_grid() or self._is_model_comparison() else get_variable_metadata(self.variable_var.get())
+        selected = [name for name, var in self.choice_vars.items() if get(var)]
+        estimate = estimate_design(
+            study_type="model_comparison" if self._is_model_comparison() else "two_axis_grid" if self._is_grid() else "controlled_variable",
+            value_type=meta.value_type if meta else "",
+            images_per_value=int(images),
+            start=float(get(self.start_var, 0.0) or 0.0),
+            end=float(get(self.end_var, 0.0) or 0.0),
+            step=float(get(self.step_var, 0.0) or 0.0),
+            selected_items=selected,
+            lora_comparison=get(getattr(self, "lora_mode_var", None)) == "comparison",
+            selected_loras=[name for name, var in getattr(self, "lora_choice_vars", {}).items() if get(var)],
+            strength_start=float(get(getattr(self, "lora_start_var", None), 0.0) or 0.0),
+            strength_end=float(get(getattr(self, "lora_end_var", None), 0.0) or 0.0),
+            strength_step=float(get(getattr(self, "lora_step_var", None), 0.0) or 0.0),
+            selected_models=selected,
+            grid_cells=grid_cells,
+        )
+        self.estimate_var.set(estimate.text())
+
+    def _say(self, text: str, *, ok: bool = False) -> None:
+        """Show feedback: errors in the error colour (the default), confirmations in the success colour."""
+        self.feedback_var.set(text)
+        self.feedback_label.configure(
+            foreground=TOKENS.colors.status_success if ok else TOKENS.colors.status_error
+        )
+
+    def _sync_study_presentation(self) -> None:
+        name = self.study_type_var.get()
+        self.study_hint_var.set(STUDY_HINTS.get(name, ""))
+        advanced = name != "Controlled Variable"
+        if advanced:
+            self.study_section.set_expanded(True)
+        self.study_section.set_status(name if advanced else "", active=advanced)
+
+    def request_run(self) -> int:
+        """Send the frozen Preview to the queue once; returns how many jobs were newly admitted."""
+        if self._run_in_progress:
+            return 0
+        if self.preview_is_stale():
+            self._say("The design changed after Preview. Build Preview again before Run.")
+            self._update_policy_buttons()
+            self._notify_design_changed()
+            return 0
+        if self._is_grid() and not self._grid_preview_fresh():
+            self._say("The grid design changed after Preview; Build Preview again before Run.")
+            self._update_policy_buttons()
+            return 0
         if not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
-                self.feedback_var.set(str(exc))
-                return
-        if not self.learning_controller:
-            self.feedback_var.set("Learning controller not available")
-            return
+                self._say(str(exc))
+                return 0
+        controller = self.learning_controller
+        if not controller:
+            self._say("Learning controller not available")
+            return 0
 
+        def admitted() -> int:
+            plan = getattr(controller.learning_state, "plan", [])
+            return sum(bool(str(getattr(variant, "job_id", "") or "").strip()) for variant in plan)
+
+        before = admitted()
+        self._run_in_progress = True
         try:
-            self.learning_controller.run_plan()
-            self.feedback_var.set("Experiment execution started")
+            controller.run_plan()
         except Exception as e:
-            self.feedback_var.set(f"Error running experiment: {str(e)}")
+            self._say(f"Error running experiment: {str(e)}")
+            return max(0, admitted() - before)
+        finally:
+            self._run_in_progress = False
+            self._notify_design_changed()
+        sent = admitted() - before
+        if sent > 0:
+            noun = "job" if sent == 1 else "jobs"
+            self._say(f"Sent {sent} {noun} to the queue. Generation starts when the queue reaches them.", ok=True)
+        else:
+            self._say("Nothing new was queued. Build a Preview first, or the variants already have jobs.")
+        return sent
+
+    def _on_run_experiment(self) -> None:
+        """Handle run experiment button click."""
+        self.request_run()
 
     def _validate_experiment_data(self, data: dict[str, Any]) -> str | None:
         """Validate experiment data and return error message if invalid.
@@ -1305,6 +1537,7 @@ class ExperimentDesignPanel(ttk.Frame):
         count = sum(1 for var in self.choice_vars.values() if var.get())
         self.choice_count_var.set(f"{count} items selected")
         self._update_policy_buttons()
+        self._notify_design_changed()
 
     def _on_name_changed(self) -> None:
         if self._suspend_identity_tracking:
@@ -1325,6 +1558,7 @@ class ExperimentDesignPanel(ttk.Frame):
     def _on_prompt_text_edited(self) -> None:
         self._refresh_identity_preview()
         self._on_grid_design_changed()
+        self._notify_design_changed()
 
     def _get_prompt_preview_text(self) -> str:
         if self.prompt_source_var.get() == "custom":
@@ -1698,6 +1932,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """Update LoRA selection count."""
         count = sum(1 for var in self.lora_choice_vars.values() if var.get())
         self.lora_count_var.set(f"{count} LoRAs selected")
+        self._notify_design_changed()
 
     def restore_state(self, experiment: Any) -> None:
         from src.learning.model_comparison import study_type
@@ -1754,3 +1989,9 @@ class ExperimentDesignPanel(ttk.Frame):
         self._name_auto_generated = False
         self._description_auto_generated = False
         self._refresh_identity_preview()
+        self._sync_study_presentation()
+        self._preview_signature = (
+            self.design_signature() if getattr(experiment, "execution_snapshot_json", "") else None
+        )
+        self._blocker = None
+        self._notify_design_changed()

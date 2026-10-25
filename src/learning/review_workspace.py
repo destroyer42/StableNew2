@@ -27,6 +27,12 @@ class ReviewVariantSummary:
     rated_count: int
     samples: tuple[ReviewSample, ...]
 
+    @property
+    def average_rating(self) -> float | None:
+        """Mean of the saved ratings of this variant's samples; ``None`` until one is saved."""
+        ratings = [sample.rating for sample in self.samples if sample.rating is not None]
+        return sum(ratings) / len(ratings) if ratings else None
+
 
 @dataclass(frozen=True)
 class ExperimentReviewProjection:
@@ -38,6 +44,29 @@ class ExperimentReviewProjection:
     @property
     def next_unrated(self) -> ReviewSample | None:
         return next((sample for sample in self.samples if sample.rating is None), None)
+
+    def next_unrated_after(
+        self,
+        variant_id: str | None,
+        image_ref: str | None,
+        *,
+        reviewable: Callable[[ReviewSample], bool] = lambda _sample: True,
+    ) -> ReviewSample | None:
+        """The next reviewable sample without a saved rating after the given one, wrapping to the start.
+
+        The position is the stable ``(variant_id, image_ref)`` identity, so a refresh that reorders or drops
+        samples never moves the operator to an unrelated image. An unknown position starts from the beginning.
+        """
+        position = next(
+            (
+                index
+                for index, sample in enumerate(self.samples)
+                if sample.variant_id == str(variant_id or "") and sample.image_ref == str(image_ref or "")
+            ),
+            -1,
+        )
+        ordered = (*self.samples[position + 1 :], *self.samples[: position + 1])
+        return next((sample for sample in ordered if sample.rating is None and reviewable(sample)), None)
 
 
 def build_review_projection(
