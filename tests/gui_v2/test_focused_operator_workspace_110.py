@@ -410,7 +410,13 @@ def test_review_preview_and_metadata_stay_inside_the_viewport_at_laptop_and_incr
                 assert right <= viewport[2] + 1, f"{widget} leaks past the viewport at scaling {scaling}"
             assert tab.preview.fitted_edge() <= 620
             assert int(str(tab.meta_label.cget("wraplength"))) <= viewport[2] - viewport[0]
-            assert tab.preview._source_image is not None  # the async decode landed (inside the real main loop)
+            assert tab.preview.current_path() == str(images[0])
+            assert tab.preview.model.status == "ready" and tab.preview.model.zoom is None
+            assert tab.preview._image is not None and tab.preview._photo_image is not None
+            assert tab.preview._canvas.find_all()  # the bounded image was published through the real main loop
+            source_width, source_height = tab.preview._image.source_size
+            photo = tab.preview._photo_image
+            assert abs(photo.width() / photo.height() - source_width / source_height) < 0.02
         finally:
             tab.destroy()
             laptop_root.tk.call("tk", "scaling", base)

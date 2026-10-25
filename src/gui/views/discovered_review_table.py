@@ -11,7 +11,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
-from src.gui.widgets.image_thumbnail import ImageThumbnail
+from src.gui.widgets.media_inspector import MediaInspector as ImageThumbnail
 from src.learning.discovered_review_models import (
     RATING_MAX,
     RATING_MIN,
@@ -156,6 +156,7 @@ class DiscoveredReviewTable(ttk.Frame):
 
         self._preview_thumbnail = ImageThumbnail(
             preview_frame,
+            allow_original=False,
             max_width=1200,
             max_height=1200,
             fit_to_widget=True,
@@ -303,7 +304,7 @@ class DiscoveredReviewTable(ttk.Frame):
         if unavailable:
             self._preview_thumbnail.clear()
         else:
-            self._preview_thumbnail.load_image(item.artifact_path)
+            self._preview_thumbnail.set_image_reference(item.artifact_path, subject=item)
 
     def _get_item(self, item_id: str | None) -> DiscoveredReviewItem | None:
         if not item_id:

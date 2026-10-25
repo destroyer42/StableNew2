@@ -162,10 +162,14 @@ def _decode_recorder(calls: list[tuple[str, int]]):
 
 
 def test_the_panel_lists_rows_previews_the_selection_and_never_decodes_on_tk(
-    tk_root, tmp_path
+    tk_root, tmp_path, monkeypatch
 ) -> None:
+    from src.gui.view_contracts import edit_work_runner
+
+    monkeypatch.setattr(edit_work_runner, "coordinator_factory", edit_work_runner._tk_coordinator)
     outputs = [_output(tmp_path, "newest"), _output(tmp_path, "older")]
     calls: list[tuple[str, int]] = []
+    tk_root.deiconify()  # hidden/unmapped inspectors deliberately do not decode
     panel = WorkflowRecentOutputsPanel(
         tk_root, list_outputs=lambda: outputs, decode=_decode_recorder(calls)
     )

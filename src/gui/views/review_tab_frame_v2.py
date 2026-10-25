@@ -37,10 +37,10 @@ from src.gui.view_contracts.review_selection_contract import (
     SelectionToken,
 )
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
-from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.queue.job_history_store import JobHistoryEntry
 from src.review.adetailer_outcome import (
     OUTCOME_LABELS,
@@ -378,6 +378,7 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.preview.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.preview._canvas.bind("<Double-Button-1>", lambda _event: self._open_compare_viewer())
+        self.preview.bind("<<MediaHidden>>", self._hide_compare_media, add="+")
 
         self.meta_label = ttk.Label(
             right,
@@ -1174,6 +1175,7 @@ class ReviewTabFrame(ttk.Frame):
         self._edited_since_selection = False
         self._adetailer_pair = None
         self._set_adetailer_controls(False)
+        self.preview.set_eligibility(self._content_visibility_mode != "sfw")
         self.preview.set_image_from_path(path)
         self.meta_label.config(text="Metadata: loading...")
         self._prior_review_summary_var.set("Prior Review Summary: loading...")
@@ -1931,6 +1933,10 @@ class ReviewTabFrame(ttk.Frame):
 
     def _apply_content_visibility_mode(self) -> None:
         resolver = self._visibility_resolver()
+        self.preview.set_eligibility(
+            (self._content_visibility_mode != "sfw" or self._image_ready)
+            and resolver.is_visible(self._current_visibility_subject())
+        )
         prompt_value = resolver.redact_text(
             self._selected_base_prompt, item=self._current_visibility_subject()
         )
@@ -1941,6 +1947,11 @@ class ReviewTabFrame(ttk.Frame):
         self._set_readonly_text(self.current_prompt_text, prompt_value)
         self._set_readonly_text(self.current_negative_text, negative_value)
         self.visibility_banner.config(text="")
+
+    def _hide_compare_media(self, _event: Any = None) -> None:
+        window = self._compare_window
+        if window is not None and window.winfo_exists():
+            window.destroy()
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(

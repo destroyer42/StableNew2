@@ -105,7 +105,7 @@ def test_preview_missing_and_flagged_results_keeps_metadata_history(tk_root, lib
     try:
         tab.on_content_visibility_mode_changed("sfw")
         settle(tk_root, tab)
-        with patch.object(tab.latest_preview, "set_image", Mock()) as load:
+        with patch.object(tab.latest_preview, "set_image_reference", Mock()) as load:
             choose(tk_root, tab)
             load.assert_not_called()
             tab.show_image_previews_var.set(False)
@@ -143,11 +143,34 @@ def test_legacy_asset_filename_still_gates_working_and_history_previews(tk_root,
     sidecar.write_text(json.dumps(legacy_payload), encoding="utf-8")
     tab = PhotoOptimizeTabFrameV2(tk_root, store=store)
     try:
-        with patch.object(tab.latest_preview, "set_image") as load:
+        with patch.object(tab.latest_preview, "set_image_reference") as load:
             tab.on_content_visibility_mode_changed("sfw")
             settle(tk_root, tab)
             load.assert_not_called()
             choose(tk_root, tab)
             load.assert_not_called()
+    finally:
+        tab.destroy()
+
+
+def test_inspection_sides_preserve_candidate_baseline_and_sidecar(tk_root, library):
+    store, asset = library
+    tab = PhotoOptimizeTabFrameV2(tk_root, store=store)
+    try:
+        settle(tk_root, tab)
+        candidate = choose(tk_root, tab)
+        before = store.sidecar_path(asset.asset_id).read_bytes()
+        baseline = tab._current_asset.current_input_path
+        assert tab.original_preview.current_path() == asset.managed_original_path
+        assert tab.latest_preview.current_path() == candidate.path
+        tab.original_preview.set_visibility(False)
+        tab.latest_preview.actual_size()
+        tab.latest_preview.detach()
+        tab.latest_preview.dock()
+        assert tab._selected_result() == candidate
+        assert tab._current_asset.current_input_path == baseline
+        assert tab.latest_preview.current_path() == candidate.path
+        assert not tab.original_preview.model.shown
+        assert store.sidecar_path(asset.asset_id).read_bytes() == before
     finally:
         tab.destroy()

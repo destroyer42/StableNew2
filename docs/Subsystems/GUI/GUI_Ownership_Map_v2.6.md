@@ -75,7 +75,29 @@ The Pipeline sidebar keeps these things apart, and `view_contracts/config_source
 
 **Generation profile strip (PR-IMG-PROFILE-630).** Directly under the Model row, `GenerationProfileStrip` (`src/gui/generation_profile_strip.py`) shows a Profile combobox (No profile, Research, Learning, Custom; a favorite is starred) and one status line. A "Details" toggle reveals Restore selected profile, Save as Custom, Update Custom, Favorite for this model and the per-setting evidence. The strip renders `src/gui_v2/generation_profile_projection.py` and calls `AppController.generation_profiles` (`GenerationProfileController`, `src/controller/generation_profile_controller.py`); it holds no profile logic and no persistence. Picking a checkpoint in the Model combobox (`<<ComboboxSelected>>`, not the value trace, so restores and programmatic loads never re-apply) applies that model's preferred profile through `BaseGenerationPanelV2.apply_profile_values`, which sets only the named controls. Nothing here queues, dispatches or rewrites a PromptPack, a draft entry or a Preview record.
 
-The Pipeline preview thumbnail shows a saved image of the previewed job (the last of the previewed jobs) or says why there is none: no job, no image saved yet, or hidden by the content-visibility setting. Ticking "Show output thumbnail" never generates an image.
+The Pipeline preview thumbnail shows a saved image of the previewed job (the last of the previewed jobs) or says why there is none: no job, no image saved yet, or hidden by the content-visibility setting. Ticking "Show media" never generates an image.
+
+### Shared media inspection
+
+`view_contracts/media_inspector_contract.py` owns ephemeral visibility, eligibility, selection revisions, zoom and dock state.
+`widgets/media_inspector.py` owns Tk renderers and non-modal detached windows. `view_contracts/media_image_decode.py` bounds
+image work; the existing keyed `EditWorkRunner`, `BackgroundTaskCoordinator`, `ThreadRegistry` and `TkUiDispatcher` own work
+and delivery. Video remains `VideoPreviewWidget` / `VideoPreviewSession` / `prepare_review_preview`, with one serial work key
+across image and video transitions. Old renderers stop before replacement; widgets are recreated, never reparented.
+
+Adoption: Pipeline Preview, Job History including Browse All, Review, Photo Optimize's independent Original and Candidate,
+Learning result review and its still comparisons, discovered/staged selected previews, Video Workflow Recent Outputs and SVD
+recent recorded media. Hosts retain selection, metadata, editing, ratings and handoffs. Refresh of the same selection preserves
+local Show and zoom; a new selection resets the inspector to shown, under the host's existing outer visibility default
+(Pipeline and History start hidden). Hide, content-policy denial, tab unmap and destruction cancel/release rendering; a hidden
+tab also suspends its detached inspector. Application content visibility has precedence over local Show.
+
+Retained specialized surfaces: Review's verified ADetailer comparison composite (closed when the primary media is hidden),
+mask/outpaint and Smart Review canvases (editing coordinates), Learning's frozen cell/contact-sheet grid (batch evidence layout
+with its existing bounded thumbnail cache; cell selection opens the shared result inspector), and the video experiment window
+(`VideoReviewSession` and its synchronized `ComparisonClock`, not independent looping players). Movie Clips is a file-list and
+assembly workspace with no inline viewer. Static icons and LoRA catalog illustrations are not selected job artifacts; the latter
+retain their bounded paged model browser. These exceptions do not add new preview surfaces.
 
 ---
 

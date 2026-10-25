@@ -16,11 +16,11 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pane_workspace_column_specs,
 )
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.submission_notice_v2 import SubmissionNotice
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
-from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
 from src.video.loop_export import LOOP_MODES, MAX_EXTEND_SECONDS
 from src.video.rife_runtime import default_rife_multiplier
@@ -1642,14 +1642,14 @@ class SVDTabFrameV2(ttk.Frame):
         if not record:
             return
         preview_path = record.get("thumbnail_path")
-        if preview_path and Path(preview_path).exists():
-            self.recent_preview.set_image_from_path(preview_path)
-            open_target = (
+        open_target = (
                 record.get("video_path")
                 or record.get("gif_path")
                 or record.get("output_path")
                 or preview_path
-            )
+        )
+        if open_target:
+            self.recent_preview.set_media(open_target, subject=record)
             self.recent_preview.set_open_target(open_target)
         else:
             self.recent_preview.clear()

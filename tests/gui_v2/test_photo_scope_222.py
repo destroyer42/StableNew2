@@ -180,7 +180,7 @@ def test_preview_preference_and_scope_restart_do_not_change_assets(tk_root, phot
         asset.baseline.prompt = "nsfw"
         store.save_asset(asset)
         restarted._show_asset(ids[0])
-        with patch.object(restarted.original_preview, "set_image") as load:
+        with patch.object(restarted.original_preview, "set_image_reference") as load:
             restarted.show_image_previews_var.set(True)
             restarted.on_content_visibility_mode_changed("sfw")
             pump(tk_root, restarted)
@@ -314,7 +314,7 @@ def test_history_previews_use_effective_prompts_and_selected_entry(tk_root, phot
         tk_root.update()
         assert tab._current_asset_id == ids[0]
         with (
-            patch.object(tab.latest_preview, "set_image") as load,
+            patch.object(tab.latest_preview, "set_image_reference") as load,
             patch.object(tab.latest_preview, "clear") as clear,
         ):
 
@@ -343,7 +343,9 @@ def test_history_previews_use_effective_prompts_and_selected_entry(tk_root, phot
             tab._on_history_select(None)
             pump(tk_root, tab)
             load.assert_called_once()
-            assert load.call_args.args[0].getpixel((0, 0)) == (0, 0, 255)
+            assert load.call_args.args[0] == str(safe)
+            with Image.open(load.call_args.args[0]) as image:
+                assert image.getpixel((0, 0)) == (0, 0, 255)
             load.reset_mock()
             tab.show_image_previews_var.set(False)
             tab._toggle_image_previews()
@@ -352,7 +354,9 @@ def test_history_previews_use_effective_prompts_and_selected_entry(tk_root, phot
             tab._toggle_image_previews()
             pump(tk_root, tab)
             load.assert_called_once()
-            assert load.call_args.args[0].getpixel((0, 0)) == (0, 0, 255)
+            assert load.call_args.args[0] == str(safe)
+            with Image.open(load.call_args.args[0]) as image:
+                assert image.getpixel((0, 0)) == (0, 0, 255)
             load.reset_mock()
             select_history(1)
             tab._on_history_select(None)

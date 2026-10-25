@@ -220,7 +220,34 @@ def test_discovered_review_uses_adjustable_35_65_navigation_and_image_workspace(
                 tab.discovered_review_table._navigation_master  # noqa: SLF001
                 is tab._discovered_item_navigation  # noqa: SLF001
             )
-            assert tab.discovered_review_table._preview_thumbnail.fit_to_widget is True  # noqa: SLF001
+            from PIL import Image
+
+            root.deiconify()
+            root.geometry("1342x672+0+0")
+            tab.pack(fill="both", expand=True)
+            tab._mode_notebook.select(tab._discovered_tab_frame)
+            root.update()
+            source = Path(tmp_dir) / "fit.png"
+            Image.new("RGB", (600, 300), "navy").save(source)
+            tab.discovered_review_table.load_items([
+                DiscoveredReviewItem(item_id="fit", artifact_path=str(source))
+            ])
+            root.after(300, root.quit)
+            root.mainloop()
+            preview = tab.discovered_review_table._preview_thumbnail
+            assert preview.current_path() == str(source)
+            assert preview.model.status == "ready" and preview.model.zoom is None
+            assert preview._photo_image is not None and preview._canvas.find_all()
+            assert abs(preview._photo_image.width() / preview._photo_image.height() - 2.0) < 0.02
+            with patch.object(preview, "_decode_image", wraps=preview._decode_image) as decode:
+                root.geometry("1100x650+0+0")
+                preview.fit()
+                root.after(300, root.quit)
+                root.mainloop()
+                decode.assert_not_called()
+                assert preview._photo_image is not None and preview.model.zoom is None
+                assert preview._photo_image.width() <= preview._canvas.winfo_width()
+                assert preview._photo_image.height() <= preview._canvas.winfo_height()
 
             header_labels = {
                 str(child.cget("text"))

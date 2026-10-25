@@ -151,6 +151,17 @@ When the spec's `runtime_policy.release_owned_runtime_after_job` is true (Wan2.2
 
 **In-app preview and Recent outputs (PR-VID-UX-314).** The Video Workflow tab lists the newest finished clips under *Recent outputs* (`src/video/recent_video_outputs.py`, `VideoWorkflowController.list_recent_video_outputs`): one bounded read of the repository's newest completed jobs (`JobRepository.list_recent_jobs`, 60-job window, 12 clips), keeping a job only when its recorded `video_bundle` names a supported video file that exists now. Provenance (workflow, source image, seed, length) is read from the frozen NJR snapshot, never recomputed, and nothing scans a folder. The list is read on a worker when the tab is first shown or Refresh is pressed, never at start-up. The selected clip plays as a looping, downscaled, frame-exact preview (`VideoPreviewWidget`, `VideoPreviewSession`): `prepare_review_preview` decodes through contained FFmpeg on a `ThreadRegistry` worker within its fixed bounds (256 px longer edge, 120 frames, 24 MB of raw frames), results return through `TkUiDispatcher` and are dropped when stale or after destroy, the Tk thread builds one `PhotoImage` per tick and repaints nothing while hidden, and a new selection, `stop` or destroy cancels the decode and releases the clip. **Open** and **Reveal** (`src/utils/os_shell.py`, argument vectors, no shell) report a missing file inline; **Send to Movie Clips** hands the recorded bundle to the existing Movie Clips handoff (intent only). The preview is a review aid, not the original. Tests: `tests/video/test_pr_vid_ux_314_recent_outputs.py`, `tests/gui_v2/test_pr_vid_ux_314_preview.py`, `tests/gui_v2/test_pr_vid_ux_314_recent_outputs_panel.py`, `tests/utils/test_os_shell_314.py`.
 
+### 4.4.1 Shared media inspection
+
+Recent Outputs, History/Browse All and SVD's recorded output use the shared `MediaInspector` for local Show and detach/return.
+The inspector composes the existing `VideoPreviewWidget` and `VideoPreviewSession`; the decoder and its fixed budgets remain
+unchanged. Hide, tab unmap, content-policy denial, selection replacement and dock/return stop the old session, cancel decoding
+and release frames/timers before another renderer starts. Detached playback may enlarge the bounded preview and is labelled as
+a preview, never source-resolution playback. Recent Outputs carries prompt visibility evidence from the same frozen NJR into
+the existing content resolver; the recorded bundle and Open / Reveal / Send to Movie Clips handoffs are unchanged. Video
+experiment comparison retains its specialized synchronized `ComparisonClock` and rating session. Movie Clips remains a file
+list/assembly workspace without an added player.
+
 ### 4.5 Managed Comfy runtime
 
 Identity lives in `config/managed_comfy_runtime.json` (ComfyUI v0.38.0 at a pinned commit, CPython 3.13 standard GIL, Torch 2.14.0+cu130, loopback only, required flags `--disable-pinned-memory` and `--disable-auto-launch`, no custom nodes) and `constraints/comfy-windows-py313-cu130-v0.38.0.txt`. Build: `scripts/bootstrap_managed_comfy_windows.ps1`; read-only verifier: `tools/runtime/verify_managed_comfy.py`; operator procedure: `docs/runbooks/managed_comfy_runtime.md`. It never shares an environment with the application (CPython 3.14).

@@ -42,6 +42,7 @@ class VideoPreviewWidget(ttk.Frame):
         decode: Any = None,
         edge: int = 256,
         scale: int = 1,
+        runner: BackgroundWorkRunner | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
@@ -50,7 +51,7 @@ class VideoPreviewWidget(ttk.Frame):
         self._closed = False
         self._tick_id: str | None = None
         self._photo: ImageTk.PhotoImage | None = None
-        self._runner: BackgroundWorkRunner | None = None
+        self._runner: BackgroundWorkRunner | None = runner
         self._decode = decode or _default_decode
         self.caption_var = tk.StringVar(value="")
         self.canvas = tk.Canvas(self, width=side, height=side, highlightthickness=1)
@@ -118,6 +119,7 @@ class VideoPreviewWidget(ttk.Frame):
             else:
                 self.canvas.delete("all")
                 self._photo = None
+            self.event_generate("<<VideoPreviewChanged>>")
         except tk.TclError:
             pass
 

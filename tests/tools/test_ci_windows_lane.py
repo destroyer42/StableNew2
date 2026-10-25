@@ -40,6 +40,7 @@ def test_the_lane_covers_each_platform_contract_it_exists_for() -> None:
         "production wiring": "test_production_wiring_startup_gate",
         "photo optimize windows migration": "tests/photo_optimize",
         "tk construction": "test_p0_6_silent_failure_regressions",
+        "desktop pixel and DPI geometry": "test_workspace_layout_resilience_v2",
     }.items():
         assert marker in targets, contract
 
