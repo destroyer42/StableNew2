@@ -73,8 +73,9 @@ _ACTIVE_SUFFIXES = frozenset(
 )
 _EXECUTABLE_PREFERENCE = ("llama-completion.exe", "llama-cli.exe")
 #: The only archive members a physical session may launch, pinned by SHA-256 (from the passive member-hash manifest).
-#: ``llama-cli.exe`` is the member D12a authorizes; ``llama-completion.exe`` is the one-shot launcher and needs its own
-#: recorded owner authorization and compatibility run before a session may name it.
+#: D12a covers both (``d12a.AUTHORIZED_MEMBERS``: the owner's AI-114 runtime-executable decision added the one-shot
+#: ``llama-completion.exe`` to the original ``llama-cli.exe``). A session may name either, but a recommendation counts only
+#: the D12a verdict of the member that actually ran.
 LAUNCHABLE_MEMBERS = {
     "llama-cli.exe": "c84a4604db9a01cb64ece64c7da5ace4c83c44dfb63f55a9c8d2270b685c0ee7",
     "llama-completion.exe": "b36b1ef84a047542f72dca924616052efde7e380c2a12562d459f5febf5cab72",

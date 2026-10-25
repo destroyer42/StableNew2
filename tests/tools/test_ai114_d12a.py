@@ -19,12 +19,22 @@ from src.utils.managed_process import ProcessOutcome  # noqa: E402
 from tools.qualification.ai111 import d12a  # noqa: E402
 
 CLI = b"fake llama-cli"
-FILES = {"llama-cli.exe": CLI, "ggml.dll": b"fake ggml", "LICENSE-X": b"licence text"}
+COMPLETION = b"fake llama-completion"
+FILES = {
+    "llama-cli.exe": CLI,
+    "llama-completion.exe": COMPLETION,
+    "ggml.dll": b"fake ggml",
+    "LICENSE-X": b"licence text",
+}
 HELP_FULL = "\n".join(f"  {flag}  value" for flag in sorted(ALLOWED_FLAGS))
 
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _pins(cli: bytes = CLI, completion: bytes = COMPLETION) -> dict[str, str]:
+    return {"llama-completion.exe": _sha(completion), "llama-cli.exe": _sha(cli)}
 
 
 def _archive(
@@ -117,7 +127,7 @@ def _run(tmp_path: Path, monitor: FakeMonitor, files=None, **overrides):
         authorization_text="owner D12a",
         attestation="test attestation",
         intent=intent,
-        authorized_member_sha256=overrides.pop("member_sha", _sha(CLI)),
+        authorized_members=overrides.pop("members_pin", _pins()),
         passive_manifest_sha256=overrides.pop("manifest_sha", None),
         **overrides,
     )
@@ -127,19 +137,33 @@ def _ok(text: str) -> ProcessOutcome:
     return ProcessOutcome(returncode=0, stdout=text.encode(), contained=True)
 
 
-def test_pass_runs_exactly_the_two_authorized_commands(tmp_path: Path) -> None:
-    monitor = FakeMonitor([_ok("version: 1 (b11840)"), _ok(HELP_FULL)])
+def _both(help_a: str = HELP_FULL, help_b: str = HELP_FULL) -> list[ProcessOutcome]:
+    """Outcomes for llama-completion.exe (version, help) then llama-cli.exe (version, help)."""
+
+    return [_ok("v-completion"), _ok(help_a), _ok("v-cli"), _ok(help_b)]
+
+
+def test_pass_runs_exactly_the_two_commands_of_each_authorized_member(tmp_path: Path) -> None:
+    monitor = FakeMonitor(_both())
     result = _run(tmp_path, monitor)
     assert result["verdict"] == "PASS", result
-    assert [c[1:] for c in monitor.launched] == [["--version"], ["--help"]]
-    assert all(Path(c[0]).name == "llama-cli.exe" for c in monitor.launched)
-    assert result["compatibility"]["required_flags_missing"] == []
+    assert [(Path(c[0]).name, *c[1:]) for c in monitor.launched] == [
+        ("llama-completion.exe", "--version"),
+        ("llama-completion.exe", "--help"),
+        ("llama-cli.exe", "--version"),
+        ("llama-cli.exe", "--help"),
+    ]
+    for name in ("llama-completion.exe", "llama-cli.exe"):
+        assert result["members"][name]["verdict"] == "PASS"
+        assert result["members"][name]["compatibility"]["required_flags_missing"] == []
     evidence = tmp_path / "run" / "d12a"
     for name in (
         "authorization.json",
         "pre-launch-verification.json",
         "post-run-verification.json",
         "result.json",
+        "llama-completion.help.stdout.txt",
+        "llama-cli.version.stdout.txt",
     ):
         assert (evidence / name).is_file()
     assert monitor.roots is not None
@@ -151,9 +175,12 @@ def test_pass_runs_exactly_the_two_authorized_commands(tmp_path: Path) -> None:
 
 def test_missing_flag_is_a_compatibility_failure_not_a_substitution(tmp_path: Path) -> None:
     text = HELP_FULL.replace("--json-schema-file", "--grammar-only")
-    result = _run(tmp_path, FakeMonitor([_ok("v"), _ok(text)]))
+    result = _run(tmp_path, FakeMonitor(_both(help_a=text)))
     assert result["verdict"] == "FAIL"
-    assert result["compatibility"]["required_flags_missing"] == ["--json-schema-file"]
+    completion = result["members"]["llama-completion.exe"]
+    assert completion["compatibility"]["required_flags_missing"] == ["--json-schema-file"]
+    # the other member is judged on its own help: nothing is silently read across, and nothing is substituted
+    assert result["members"]["llama-cli.exe"]["verdict"] == "PASS"
 
 
 def test_truncated_help_with_missing_flags_is_inconclusive() -> None:
@@ -167,17 +194,28 @@ def test_short_flags_are_not_matched_inside_other_words() -> None:
     assert d12a.flag_in_text("-c", "  -c, --ctx-size N")
 
 
-def test_nonzero_exit_stops_before_help(tmp_path: Path) -> None:
-    monitor = FakeMonitor([ProcessOutcome(returncode=3, contained=True)])
+def test_nonzero_exit_ends_that_member_only(tmp_path: Path) -> None:
+    monitor = FakeMonitor(
+        [ProcessOutcome(returncode=3, contained=True), _ok("v-cli"), _ok(HELP_FULL)]
+    )
     result = _run(tmp_path, monitor)
-    assert result["verdict"] == "FAIL" and len(monitor.launched) == 1
+    assert result["verdict"] == "FAIL" and len(monitor.launched) == 3
+    assert [Path(c[0]).name for c in monitor.launched] == [
+        "llama-completion.exe",
+        "llama-cli.exe",
+        "llama-cli.exe",
+    ]
+    assert result["members"]["llama-completion.exe"]["verdict"] == "FAIL"
+    assert result["members"]["llama-cli.exe"]["verdict"] == "PASS"
 
 
 def test_monitor_findings_stop_the_run(tmp_path: Path) -> None:
-    monitor = FakeMonitor([_ok("v"), _ok(HELP_FULL)], violations=["file_access_outside_policy"])
+    monitor = FakeMonitor(_both(), violations=["file_access_outside_policy"])
     result = _run(tmp_path, monitor)
     assert result["verdict"] == "FAIL" and len(monitor.launched) == 1
     assert "file_access_outside_policy" in result["stopped"]
+    # a security stop ends the whole run: the second member is never launched and is reported as not run
+    assert result["members"]["llama-cli.exe"]["verdict"] == "NOT TESTED"
 
 
 def test_unready_monitor_launches_nothing(tmp_path: Path) -> None:
@@ -187,10 +225,20 @@ def test_unready_monitor_launches_nothing(tmp_path: Path) -> None:
     assert result["verdict"] == "NOT TESTED" and monitor.launched == []
 
 
-def test_wrong_member_hash_refuses_before_extraction(tmp_path: Path) -> None:
-    with pytest.raises(d12a.D12aRefused):
-        _run(tmp_path, FakeMonitor([]), member_sha="0" * 64)
+@pytest.mark.parametrize("which", ["llama-completion.exe", "llama-cli.exe"])
+def test_wrong_member_hash_refuses_before_extraction(tmp_path: Path, which: str) -> None:
+    with pytest.raises(d12a.D12aRefused, match=which):
+        _run(tmp_path, FakeMonitor([]), members_pin={**_pins(), which: "0" * 64})
     assert not (tmp_path / "run" / "d12a").exists()
+
+
+def test_the_authorized_members_are_the_physical_sessions_pinned_launchers() -> None:
+    from tools.qualification.ai111 import physical
+
+    assert d12a.AUTHORIZED_MEMBERS == physical.LAUNCHABLE_MEMBERS
+    assert (
+        list(d12a.AUTHORIZED_MEMBERS)[0] == "llama-completion.exe"
+    )  # the preferred Stage A launcher runs first
 
 
 def test_unlisted_active_member_refuses(tmp_path: Path) -> None:
@@ -245,6 +293,9 @@ def test_the_recorded_manifest_pin_matches_the_real_passive_evidence_when_presen
     if not real.is_file():
         pytest.skip("passive evidence not on this host")
     assert _sha(real.read_bytes()) == d12a.PASSIVE_MANIFEST_SHA256
+    members = json.loads(real.read_text())["members"]
+    for name, pinned in d12a.AUTHORIZED_MEMBERS.items():
+        assert members[name]["sha256"] == pinned
 
 
 def test_a_loadable_file_in_the_working_directory_stops_before_launch(tmp_path: Path) -> None:
@@ -253,7 +304,7 @@ def test_a_loadable_file_in_the_working_directory_stops_before_launch(tmp_path: 
             super().bind_roots(read_roots=read_roots, write_roots=write_roots)
             (write_roots[0] / "ggml-cpu-evil.dll").write_bytes(b"x")
 
-    monitor = Planting([_ok("v"), _ok(HELP_FULL)])
+    monitor = Planting(_both())
     result = _run(tmp_path, monitor)
     assert result["verdict"] == "FAIL" and monitor.launched == []
     assert "working directory" in result["stopped"]
@@ -271,7 +322,7 @@ def test_a_loadable_file_appearing_during_a_command_is_a_violation(tmp_path: Pat
 
             return run
 
-    result = _run(tmp_path, Dropping([_ok("v"), _ok(HELP_FULL)]))
+    result = _run(tmp_path, Dropping(_both()))
     assert result["verdict"] == "FAIL"
     assert "loadable_file_in_working_directory" in result["stopped"]
 
@@ -280,15 +331,18 @@ def test_output_over_the_cap_is_inconclusive_not_a_compatibility_failure(tmp_pat
     cut = ProcessOutcome(
         returncode=1, stdout=HELP_FULL.encode()[:40], output_truncated=True, contained=True
     )
-    result = _run(tmp_path, FakeMonitor([_ok("v"), cut]))
+    result = _run(tmp_path, FakeMonitor([_ok("v"), cut, _ok("v"), _ok(HELP_FULL)]))
     assert result["verdict"] == "INCONCLUSIVE", result
-    assert "authorized" in result["stopped"]
-    assert result["compatibility"]["help_truncated_at_cap"] is True
+    completion = result["members"]["llama-completion.exe"]
+    assert "authorized" in completion["stopped"]
+    assert completion["compatibility"]["help_truncated_at_cap"] is True
+    assert result["members"]["llama-cli.exe"]["verdict"] == "PASS"
 
 
-def test_the_result_names_the_member_and_archive_it_covers(tmp_path: Path) -> None:
-    result = _run(tmp_path, FakeMonitor([_ok("v"), _ok(HELP_FULL)]))
-    assert result["member"] == "llama-cli.exe" and result["member_sha256"] == _sha(CLI)
+def test_the_result_names_each_member_and_the_archive_it_covers(tmp_path: Path) -> None:
+    result = _run(tmp_path, FakeMonitor(_both()))
+    assert result["members"]["llama-cli.exe"]["sha256"] == _sha(CLI)
+    assert result["members"]["llama-completion.exe"]["sha256"] == _sha(COMPLETION)
     assert len(result["archive_sha256"]) == 64
 
 
@@ -304,7 +358,7 @@ def test_extraction_tamper_is_caught_before_the_next_launch(tmp_path: Path) -> N
 
             return run
 
-    monitor = Tampering([_ok("v"), _ok(HELP_FULL)])
+    monitor = Tampering(_both())
     result = _run(tmp_path, monitor)
     assert result["verdict"] == "FAIL" and len(monitor.launched) == 1
     assert "tree changed before launch" in result["stopped"]

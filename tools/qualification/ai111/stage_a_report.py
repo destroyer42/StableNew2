@@ -307,17 +307,18 @@ def build_report(
     by_arm: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in records:
         by_arm[row["arm"]].append(row)
-    compat_verdict = (d12a_result or {}).get("verdict", "NOT TESTED")
+    compat_verdict = "NOT TESTED"
     ran_member = (manifest or {}).get("executable")
-    if d12a_result is not None and (
-        d12a_result.get("member") != ran_member
-        or d12a_result.get("archive_sha256") != plan["runtime_intent"]["sha256"]
-    ):
-        problems.append(
-            f"D12a covered {d12a_result.get('member')!r}, but the session launched {ran_member!r}; "
-            "binary compatibility is not shown for the executable that ran"
-        )
-        compat_verdict = "NOT TESTED"
+    if d12a_result is not None:
+        # Compatibility is judged per executable: only the D12a verdict of the member the session launched counts.
+        covered = (d12a_result.get("members") or {}).get(ran_member)
+        if covered is None or d12a_result.get("archive_sha256") != plan["runtime_intent"]["sha256"]:
+            problems.append(
+                f"D12a covered {sorted(d12a_result.get('members') or {})!r}, but the session launched {ran_member!r}; "
+                "binary compatibility is not shown for the executable that ran"
+            )
+        else:
+            compat_verdict = str(covered.get("verdict", "NOT TESTED"))
     baselines = {
         arm: {
             k: summaries[arm][k]

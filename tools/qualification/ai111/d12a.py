@@ -1,8 +1,10 @@
 """PR-AI-QUAL-114 D12a: the bounded binary-compatibility run of the frozen llama.cpp CPU build.
 
 D12a is the owner's narrow authorization to extract the verified runtime archive into a *new evidence-only directory* and
-run exactly two commands of one named member, ``llama-cli.exe --version`` and ``llama-cli.exe --help``. This module does
-that and nothing more: no model file is ever present, no inference command is built, and no other member is launched.
+run exactly two commands of each of two named members: ``--version`` and ``--help`` of ``llama-completion.exe`` (the
+harness's one-shot launcher, added by the owner's AI-114 runtime-executable decision) and of ``llama-cli.exe`` (the
+original D12a member). This module does that and nothing more: no model file is ever present, no inference command is
+built, and no other member is launched.
 
 * The archive is verified against the frozen size/SHA-256 and every member against the passive member-hash manifest
   (recorded before any extraction), the archive is unpacked with confined member paths, and every extracted file is hashed
@@ -11,8 +13,12 @@ that and nothing more: no model file is ever present, no inference command is bu
   process lifecycle owner. The monitor (ETW; the harness holds the delegated trace-control right and runs under a
   standard-user token, so the child is never elevated) must be canary-proven before anything is launched, and any
   connection attempt, file access outside the stated roots, unexpected descendant or unverified teardown stops the run.
-* The help text is compared with the closed flag vocabulary of ``src/ai_assist/argv.py``. A missing flag is a compatibility
-  finding, never a reason to substitute another spelling or to weaken the restrictions.
+* The help text of each member is compared with the closed flag vocabulary of ``src/ai_assist/argv.py`` (the flags
+  ``build_argv`` actually emits for the inference path). A missing flag is a compatibility finding for that member, never a
+  reason to substitute another spelling, another executable or to weaken the restrictions.
+* Two kinds of stop: a *security or integrity* stop (monitor finding, unproven teardown, a changed tree, a loadable file in
+  the working directory) ends the whole run; a *compatibility* stop (non-zero exit, timeout, output over the cap) ends only
+  that member, and the verdicts are kept per member so nothing is silently read as another member's result.
 
 ``--help`` output beyond the authorized 64 KiB is cut by the runner; a truncated help is reported as INCONCLUSIVE rather than
 read as proof that a flag is absent.
@@ -29,7 +35,7 @@ import re
 import stat
 import sys
 import zipfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -40,9 +46,13 @@ from src.utils.managed_process import OwnedChildObservation, ProcessOutcome
 from tools.qualification.ai111 import plan as plan_module
 from tools.qualification.ai111.ownership import OwnedSessionMonitor, OwnershipPolicy
 
-MEMBER = "llama-cli.exe"
-#: The one member the owner authorized (D12a request in ``PR-AI-111_Offline_Qualification.md``): its frozen SHA-256.
-AUTHORIZED_MEMBER_SHA256 = "c84a4604db9a01cb64ece64c7da5ace4c83c44dfb63f55a9c8d2270b685c0ee7"
+#: The members the owner authorized, with their frozen SHA-256 (from the passive member-hash manifest), in run order: the
+#: preferred Stage A launcher first. ``llama-cli.exe`` is the original D12a member; ``llama-completion.exe`` was added by
+#: the owner's AI-114 runtime-executable decision (same archive, same pins as ``physical.LAUNCHABLE_MEMBERS``).
+AUTHORIZED_MEMBERS: dict[str, str] = {
+    "llama-completion.exe": "b36b1ef84a047542f72dca924616052efde7e380c2a12562d459f5febf5cab72",
+    "llama-cli.exe": "c84a4604db9a01cb64ece64c7da5ace4c83c44dfb63f55a9c8d2270b685c0ee7",
+}
 #: SHA-256 of the passive member-hash manifest recorded before any extraction. The manifest names its own archive, which
 #: alone would let a forged manifest vouch for a swapped archive; pinning the manifest itself closes that.
 PASSIVE_MANIFEST_SHA256 = "f15151047cc3dcb3e093cffce3273a2b6f8c5acf4830a4e981174871475e8a9e"
@@ -265,10 +275,14 @@ class _CommandTrace:
 
 
 def _command_result(
-    outcome: ProcessOutcome, trace: _CommandTrace, elapsed_s: float, args: Sequence[str]
+    member: str,
+    outcome: ProcessOutcome,
+    trace: _CommandTrace,
+    elapsed_s: float,
+    args: Sequence[str],
 ) -> dict[str, Any]:
     return {
-        "command": [MEMBER, *args],
+        "command": [member, *args],
         "returncode": outcome.returncode,
         "timed_out": outcome.timed_out,
         "cancelled": outcome.cancelled,
@@ -292,7 +306,7 @@ def run_d12a(
     attestation: str,
     runner_clock: Callable[[], float] | None = None,
     intent: dict[str, Any] | None = None,
-    authorized_member_sha256: str = AUTHORIZED_MEMBER_SHA256,
+    authorized_members: Mapping[str, str] = AUTHORIZED_MEMBERS,
     passive_manifest_sha256: str | None = PASSIVE_MANIFEST_SHA256,
 ) -> dict[str, Any]:
     """Run D12a once into a new ``<evidence_root>/d12a`` directory. Returns the result record (also written)."""
@@ -321,8 +335,9 @@ def run_d12a(
         raise D12aRefused("passive member manifest is not the recorded one")
     manifest = load_passive_manifest_bytes(manifest_bytes, intent["sha256"])
     members = verify_archive_members(io.BytesIO(data), manifest)
-    if MEMBER not in members or members[MEMBER][0] != authorized_member_sha256:
-        raise D12aRefused(f"{MEMBER} is not the authorized member")
+    for name, pinned in authorized_members.items():
+        if name not in members or members[name][0] != pinned:
+            raise D12aRefused(f"{name} is not the authorized member")
 
     evidence = evidence_root / "d12a"
     evidence.mkdir(parents=True)
@@ -334,9 +349,14 @@ def run_d12a(
                 "statement": attestation,
                 "verified_by_stablenew": False,
             },
-            "scope": "extract the verified archive and run llama-cli.exe --version and --help only",
+            "scope": "extract the verified archive and run --version and --help of "
+            + " and ".join(authorized_members)
+            + " only",
             "archive": {"path": str(archive), "bytes": size, "sha256": sha},
-            "member": {"name": MEMBER, "bytes": members[MEMBER][1], "sha256": members[MEMBER][0]},
+            "members": [
+                {"name": name, "bytes": members[name][1], "sha256": members[name][0]}
+                for name in authorized_members
+            ],
             "commands": [list(c) for c in COMMANDS],
             "timeout_seconds_per_command": TIMEOUT_SECONDS,
             "stdout_cap_bytes": STDOUT_CAP_BYTES,
@@ -370,24 +390,139 @@ def run_d12a(
             evidence, "NOT TESTED", {"stopped": "monitor not ready", "problems": readiness}
         )
 
-    executable = runtime_dir / MEMBER
-    results: list[dict[str, Any]] = []
-    captured: dict[str, str] = {}
-    stopped = ""
-    truncated_stop = False
     run = monitor.runner()
+    per_member: dict[str, dict[str, Any]] = {}
+    stopped = ""  # a security or integrity stop: it ends the whole run
+    halted_by = ""
+    for member in authorized_members:
+        entry: dict[str, Any] = {
+            "sha256": members[member][0],
+            "bytes": members[member][1],
+            "stopped": "",
+            "commands": [],
+            "compatibility": None,
+            "version_first_line": "",
+            "verdict": "NOT TESTED",
+            "_captured": {},
+            "_truncated": False,
+        }
+        per_member[member] = entry
+        if stopped:
+            entry["stopped"] = "not run: an earlier member stopped the run"
+            continue
+        stopped = _run_member(
+            member,
+            entry,
+            run=run,
+            monitor=monitor,
+            runtime_dir=runtime_dir,
+            scratch=scratch,
+            evidence=evidence,
+            members=members,
+            manifest=manifest,
+            clock=clock,
+        )
+        if stopped:
+            halted_by = member
+
+    post_problems = verify_extracted(runtime_dir, members, manifest)
+    write_new_json(
+        evidence / "post-run-verification.json",
+        {"members_verified": len(members), "problems": post_problems},
+    )
+    for member, entry in per_member.items():
+        captured = entry.pop("_captured")
+        truncated_stop = entry.pop("_truncated")
+        if not entry["commands"]:
+            if member == halted_by:
+                entry["verdict"] = (
+                    "FAIL"  # stopped by the security or integrity check before its first launch
+                )
+            continue  # otherwise never launched: stays NOT TESTED with its reason
+        help_truncated = any(
+            r["output_truncated_at_cap"]
+            for r in entry["commands"]
+            if r["command"][1:] == ["--help"]
+        )
+        compat = (
+            analyze_help(captured.get("help", ""), truncated=help_truncated)
+            if "help" in captured
+            else None
+        )
+        if compat is not None:
+            write_new_json(evidence / f"{Path(member).stem}.compatibility.json", compat)
+        version_text = captured.get("version", "").strip()
+        entry["compatibility"] = compat
+        entry["version_first_line"] = version_text.splitlines()[0] if version_text else ""
+        if post_problems:
+            entry["verdict"] = "FAIL"
+        elif entry["stopped"]:
+            entry["verdict"] = "INCONCLUSIVE" if truncated_stop else "FAIL"
+        elif compat is None:
+            entry["verdict"] = "INCONCLUSIVE"
+        else:
+            entry["verdict"] = compat["verdict"]
+    verdict = _overall_verdict([e["verdict"] for e in per_member.values()])
+    stop_notes = {m: e["stopped"] for m, e in per_member.items() if e["stopped"]}
+    body = {
+        "members": per_member,
+        "archive_sha256": sha,
+        "priority_note": "below-normal is a creation flag set by run_bounded; a command shorter than the 50 ms poll may "
+        "exit before any read-back, so per-command priority_verified can be null",
+        "stopped": stopped,
+        "stopped_by_member": stop_notes,
+        "post_run_problems": post_problems,
+        "monitoring": monitor.summary(),
+        "file_access_events_by_request": [
+            {"number": r.number, "files": sorted(set(r.files))} for r in monitor.session_records()
+        ],
+    }
+    return _finish(evidence, verdict, body)
+
+
+def _overall_verdict(verdicts: Sequence[str]) -> str:
+    """The run is only as good as its weakest member: FAIL beats INCONCLUSIVE beats NOT TESTED beats PASS."""
+
+    for level in ("FAIL", "INCONCLUSIVE", "NOT TESTED"):
+        if level in verdicts:
+            return level
+    return "PASS"
+
+
+def _run_member(
+    member: str,
+    entry: dict[str, Any],
+    *,
+    run: Callable[..., ProcessOutcome],
+    monitor: OwnedSessionMonitor,
+    runtime_dir: Path,
+    scratch: Path,
+    evidence: Path,
+    members: dict[str, tuple[str, int]],
+    manifest: dict[str, tuple[str, int]],
+    clock: Callable[[], float],
+) -> str:
+    """Run both commands of one member. Returns a run-wide (security or integrity) stop reason, or ``""``.
+
+    A compatibility stop (non-zero exit, timeout, output over the cap) is recorded on ``entry`` only."""
+
+    executable = runtime_dir / member
+    stem = Path(member).stem
     for args in COMMANDS:
         # Re-hash the whole extracted tree immediately before each launch: nothing may have changed since the last check.
         again = verify_extracted(runtime_dir, members, manifest)
         if again:
-            stopped = "tree changed before launch: " + "; ".join(again[:3])
-            break
+            reason = f"{member}: tree changed before launch: " + "; ".join(again[:3])
+            entry["stopped"] = reason
+            return reason
         loose = _loadable_files(scratch)
         if loose:
-            stopped = "loadable file in the child's working directory before launch: " + ", ".join(
-                loose[:3]
+            reason = (
+                f"{member}: loadable file in the child's working directory before launch: "
+                + ", ".join(loose[:3])
             )
-            break
+            entry["stopped"] = reason
+            return reason
         trace = _CommandTrace()
         holder: list[OwnedChildObservation] = []
 
@@ -408,7 +543,7 @@ def run_d12a(
             observe=holder.append,
             cancel=cancel,
         )
-        result = _command_result(outcome, trace, clock() - started, args)
+        result = _command_result(member, outcome, trace, clock() - started, args)
         record = monitor.records[-1]
         result["ownership"] = {
             "violations": record.violations,
@@ -418,80 +553,44 @@ def run_d12a(
             "active_after_teardown": record.process.get("active_after_teardown"),
             "total_processes": record.process.get("total_processes"),
         }
-        results.append(result)
+        entry["commands"].append(result)
         planted = _loadable_files(scratch) + [
-            entry for entry in record.files if _loadable_access_in(entry, scratch)
+            entry_ for entry_ in record.files if _loadable_access_in(entry_, scratch)
         ]
         if planted:
             result["ownership"]["loadable_in_working_directory"] = planted
             record.violations.append("loadable_file_in_working_directory")
         label = "version" if args == ("--version",) else "help"
-        captured[label] = outcome.stdout.decode("utf-8", "replace")
-        (evidence / f"{label}.stdout.txt").write_bytes(outcome.stdout)
-        (evidence / f"{label}.stderr.txt").write_bytes(outcome.stderr)
+        entry["_captured"][label] = outcome.stdout.decode("utf-8", "replace")
+        (evidence / f"{stem}.{label}.stdout.txt").write_bytes(outcome.stdout)
+        (evidence / f"{stem}.{label}.stderr.txt").write_bytes(outcome.stderr)
         if outcome.stderr and label == "help" and not outcome.stdout:
-            captured[label] = outcome.stderr.decode("utf-8", "replace")
-        if (
-            outcome.launch_error or outcome.timed_out or outcome.returncode != 0
-        ) and not outcome.output_truncated:
-            stopped = f"{' '.join(args)}: launch failure, timeout or nonzero exit"
-            break
+            entry["_captured"][label] = outcome.stderr.decode("utf-8", "replace")
+        what = f"{member} {' '.join(args)}"
+        # Security and integrity first: these end the whole run.
         if record.violations or record.connections:
-            stopped = f"{' '.join(args)}: monitor findings {record.violations}"
-            break
+            reason = f"{what}: monitor findings {record.violations}"
+            entry["stopped"] = reason
+            return reason
         if (
             record.process.get("complete") is not True
             or record.process.get("active_after_teardown") != 0
         ):
-            stopped = f"{' '.join(args)}: teardown not proven"
-            break
+            reason = f"{what}: teardown not proven"
+            entry["stopped"] = reason
+            return reason
+        # Compatibility: these end this member only.
+        if (
+            outcome.launch_error or outcome.timed_out or outcome.returncode != 0
+        ) and not outcome.output_truncated:
+            entry["stopped"] = f"{what}: launch failure, timeout or nonzero exit"
+            return ""
         if outcome.output_truncated:
             # The runner kills a child that exceeds the authorized cap, so the text is a prefix: judge it, never widen the cap.
-            stopped = (
-                f"{' '.join(args)}: output exceeded the authorized {STDOUT_CAP_BYTES}-byte cap"
-            )
-            truncated_stop = True
-            break
-
-    post_problems = verify_extracted(runtime_dir, members, manifest)
-    write_new_json(
-        evidence / "post-run-verification.json",
-        {"members_verified": len(members), "problems": post_problems},
-    )
-    help_text = captured.get("help", "")
-    help_truncated = any(
-        r["output_truncated_at_cap"] for r in results if r["command"][1:] == ["--help"]
-    )
-    compat = analyze_help(help_text, truncated=help_truncated) if "help" in captured else None
-    if compat is not None:
-        write_new_json(evidence / "compatibility.json", compat)
-    version_text = captured.get("version", "").strip()
-    summary = monitor.summary()
-    if truncated_stop and not post_problems:
-        verdict = "INCONCLUSIVE"  # a cut help text neither proves nor disproves a flag
-    elif stopped or post_problems:
-        verdict = "FAIL"
-    elif compat is None:
-        verdict = "INCONCLUSIVE"
-    else:
-        verdict = compat["verdict"]
-    body = {
-        "member": MEMBER,
-        "member_sha256": members[MEMBER][0],
-        "archive_sha256": sha,
-        "priority_note": "below-normal is a creation flag set by run_bounded; a command shorter than the 50 ms poll may "
-        "exit before any read-back, so per-command priority_verified can be null",
-        "stopped": stopped,
-        "post_run_problems": post_problems,
-        "version_first_line": version_text.splitlines()[0] if version_text else "",
-        "commands": results,
-        "compatibility": compat,
-        "monitoring": summary,
-        "file_access_events_by_request": [
-            {"number": r.number, "files": sorted(set(r.files))} for r in monitor.session_records()
-        ],
-    }
-    return _finish(evidence, verdict, body)
+            entry["stopped"] = f"{what}: output exceeded the authorized {STDOUT_CAP_BYTES}-byte cap"
+            entry["_truncated"] = True
+            return ""
+    return ""
 
 
 _LOADABLE = frozenset({".dll", ".exe", ".sys", ".drv", ".ocx", ".pyd", ".bat", ".cmd", ".ps1"})

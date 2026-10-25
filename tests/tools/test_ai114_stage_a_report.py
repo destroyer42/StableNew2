@@ -24,7 +24,7 @@ BY_ID = {c.case_id: c for c in CASES}
 MODELS = [m["model_id"] for m in PLAN["models"]]
 D12A = {
     "verdict": "PASS",
-    "member": "llama-cli.exe",
+    "members": {"llama-cli.exe": {"verdict": "PASS", "sha256": "c" * 64}},
     "archive_sha256": PLAN["runtime_intent"]["sha256"],
 }
 
@@ -290,3 +290,24 @@ def test_the_markdown_states_the_limits_and_never_the_word_qualified(tmp_path: P
 @pytest.mark.parametrize("value", [None, 0.0, 12.345])
 def test_number_formatting_never_raises(value) -> None:
     assert isinstance(report._fmt(value), str)
+
+
+def test_compatibility_is_judged_per_executable_never_from_the_other_members_verdict(
+    tmp_path: Path,
+) -> None:
+    evidence = _evidence(tmp_path)
+    manifest = json.loads((evidence / "execution-manifest.json").read_text())
+    two = {
+        "verdict": "FAIL",
+        "archive_sha256": PLAN["runtime_intent"]["sha256"],
+        "members": {
+            "llama-cli.exe": {"verdict": "FAIL", "sha256": "c" * 64},
+            "llama-completion.exe": {"verdict": "PASS", "sha256": "d" * 64},
+        },
+    }
+    manifest["executable"] = "llama-completion.exe"
+    (evidence / "execution-manifest.json").write_text(json.dumps(manifest))
+    assert report.build_report(evidence, two)["binary_compatibility"] == "PASS"
+    manifest["executable"] = "llama-cli.exe"
+    (evidence / "execution-manifest.json").write_text(json.dumps(manifest))
+    assert report.build_report(evidence, two)["binary_compatibility"] == "FAIL"
