@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-575 of 728 modules have a docstring.
+579 of 734 modules have a docstring.
 
 ## src/
 
@@ -378,8 +378,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_analytics_panel.py`: Analytics display panel for learning system
 - `learning_grid_view.py`: (no docstring)
 - `learning_plan_table.py`: (no docstring)
+- `learning_preview_card.py`: (no docstring)
 - `learning_review_panel.py`: (no docstring)
 - `learning_tab_frame_v2.py`: (no docstring)
+- `learning_workflow_bar.py`: (no docstring)
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
 - `photo_optimize_editors.py`: Scoped Photo Optimize editing and review widgets; no store writes or queue authority
 - `photo_optimize_handoff.py`: Managed Photo Set hand-offs for the Photo Optimize tab (PR-GUI-UX-580)
@@ -499,6 +501,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `automation_modes.py`: Learning automation modes: names, labels, the default, and how a persisted choice is read back
 - `dataset_builder.py`: Dataset aggregation utilities for learning groundwork
+- `design_estimate.py`: How much work a design would create, before any Preview is built
 - `discovered_grouping.py`: Grouping engine for discovered-review candidate selection
 - `discovered_review_models.py`: Discovered-review group and item models
 - `discovered_review_store.py`: DiscoveredReviewStore — persists groups, items, and the scan index
@@ -516,6 +519,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `feedback_manager.py`: Feedback capture helpers for pipeline runs
 - `grid_contact_sheet.py`: Labeled PNG contact sheet for a Two-Axis Grid, rendered only from recorded artifacts
 - `grid_results.py`: Toolkit-neutral projection of a Two-Axis Grid experiment: cell coordinates, exact artifacts, placeholders
+- `guided_workflow.py`: Toolkit-neutral guide for the Designed Experiments workflow: Design, Preview, Run, Compare, Rate
 - `learning_adapter.py`: Learning adapter helpers
 - `learning_analytics.py`: Analytics engine for learning experiments
 - `learning_contract.py`: Stable stub contract for future learning consumers
@@ -538,8 +542,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `ordinary_prompt_freeze.py`: Ordinary Learning executor-base freeze and explicit saved-preview admission
 - `output_scan_models.py`: Scan record models — the canonical normalized representation of one scanned image
 - `output_scanner.py`: OutputScanner — manifest-first artifact scanner
+- `preview_summary.py`: Structured, read-only summary of what a frozen Preview would submit
 - `rating_schema.py`: (no docstring)
 - `recommendation_engine.py`: Automated Parameter Recommendation Engine (APRE)
+- `recommendation_summary.py`: Operator-facing reading of a ``RecommendationSet``: what, where, on what evidence, and what Apply may do
 - `resource_access.py`: Canonical projected WebUI resource access for Learning surfaces
 - `review_workspace.py`: Pure experiment-wide review projection and navigation rules
 - `run_metadata.py`: Helpers for run metadata capture
