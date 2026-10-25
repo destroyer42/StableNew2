@@ -101,6 +101,10 @@ retain their bounded paged model browser. These exceptions do not add new previe
 
 ---
 
+### Learning guided workflow (PR-LEARN-UX-590)
+
+`LearningTabFrame` presents Designed Experiments as Design, Preview, Run, Compare, Rate. `views/learning_workflow_bar.py` (`LearningWorkflowBar`) renders the step buttons, status and the single primary action; `views/learning_preview_card.py` (`LearningPreviewCard`) renders the frozen Preview summary. Both render pure projections from `src/learning/` (`guided_workflow`, `preview_summary`, `recommendation_summary`, `design_estimate`) and hold no lifecycle, persistence or execution logic. The viewed step is tab-local UI state; the tab swaps pane visibility per step and every primary action routes to an existing, already-gated handler (`request_run`, `_on_build_preview`, `LearningReviewPanel.save_and_next`). No widget here reaches `PipelineRunner`, a backend or a second queue. `LearningController` stays the coordinator; new view logic belongs in these modules, not in the controller.
+
 ## 3. `src/gui_v2/` — Adapter Scaffolding
 
 ### Canonical status
