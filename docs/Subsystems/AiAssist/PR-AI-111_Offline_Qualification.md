@@ -90,9 +90,9 @@ and fewer than 100 decisive judgments. Empty physical records produce NOT TESTED
 ## Physical boundary and remaining authorizations
 
 The marker-only session egress/teardown diagnostics are replaced (PR-AI-QUAL-113) by the owned container's process-tree and teardown record.
-Connection and file-access channels need a lifetime-complete provider proven by the canary: unprivileged providers are sampled, and the elevated ETW provider (PR-AI-QUAL-113B) has not yet passed its canary on the target host.
+Connection and file-access channels need a lifetime-complete provider proven by the canary: unprivileged providers are sampled, and the elevated ETW provider (PR-AI-QUAL-113B) passed its canary on the target host on 2026-10-25 (elevated terminal; it has traced only the canary child).
 A real `run_session` therefore refuses before creating evidence, importing or launching. The injected Python-child seam stays testable.
-The physical harness is not ready for model use.
+The physical harness is not ready for model use: no owner-approved D12 package exists.
 
 **D12a request (not granted):** authorize extraction of this verified CPU archive into a new evidence-only directory
 outside managed runtime/source directories, then only the `llama-cli.exe --version` and `llama-cli.exe --help` commands.
@@ -108,7 +108,7 @@ model access, connection attempt or unexpected persistent process. Do not fetch 
 
 **D12b (not granted):** model import and CPU inference need a separate owner-approved package naming verified artifacts,
 frozen plan/corpus digests, arms, stage, host resource/egress/teardown requirements and evidence location.
-First run the elevated ETW canary on the target host and have it pass.
+The elevated ETW canary has passed; the package must also state the session read/write roots for the runtime and run from an elevated terminal (`--provider etw`).
 No Stage A/B run, blind preference session, GPU generation, promotion, `qualified=true`, or merge is authorized.
 
 ## Validation and publication
