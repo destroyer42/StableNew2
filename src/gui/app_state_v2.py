@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any
 
 from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
 from src.contracts import CurrentConfig, JobDraft, JobDraftPart, PackJobEntry
+from src.controller.ports.ui_dispatcher import UiDispatcher
 from src.gui.config_adapter_v26 import GuiConfigAdapterV26
 from src.gui.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
-from src.gui.gui_invoker import GuiInvoker
 from src.pipeline.job_models_v2 import (
     JobLifecycleLogEvent,
     NormalizedJobRecord,
@@ -50,7 +50,7 @@ class AppStateV2:
     )
 
     _listeners: dict[str, list[Listener]] = field(default_factory=dict)
-    _invoker: GuiInvoker | None = None
+    _invoker: UiDispatcher | None = None
     _notifications_enabled: bool = True
     _notification_lock: threading.RLock = field(
         default_factory=threading.RLock, init=False, repr=False
@@ -139,9 +139,15 @@ class AppStateV2:
     def config_adapter(self) -> GuiConfigAdapterV26:
         return self._config_adapter
 
-    def set_invoker(self, invoker: GuiInvoker) -> None:
-        """Set an invoker used to marshal notifications onto the GUI thread."""
+    def set_invoker(self, invoker: UiDispatcher) -> None:
+        """Set the toolkit-neutral dispatcher used to marshal notifications to the UI thread."""
         self._invoker = invoker
+
+    @staticmethod
+    def _queue_on(invoker: Any, fn: Callable[[], None]) -> None:
+        """Queue ``fn`` through ``schedule``; older dispatchers only expose ``invoke``."""
+        queue = getattr(invoker, "schedule", None) or invoker.invoke
+        queue(fn)
 
     def disable_notifications(self) -> None:
         """Stop delivering listener callbacks (used during teardown)."""
@@ -189,7 +195,7 @@ class AppStateV2:
 
         for listener in listeners:
             try:
-                self._invoker.invoke(listener)
+                self._queue_on(self._invoker, listener)
             except Exception:
                 continue
 
@@ -214,7 +220,7 @@ class AppStateV2:
             if callable(invoke_later):
                 invoke_later(self._batched_flush_delay_ms, self._batched_flush_callback)
             else:
-                invoker.invoke(self._batched_flush_callback)
+                self._queue_on(invoker, self._batched_flush_callback)
         except Exception:
             with self._notification_lock:
                 self._batched_flush_scheduled = False
@@ -256,7 +262,7 @@ class AppStateV2:
             self._flush_batched_notifications()
             return
         try:
-            self._invoker.invoke(self._batched_flush_callback)
+            self._queue_on(self._invoker, self._batched_flush_callback)
         except Exception:
             self._flush_batched_notifications()
 

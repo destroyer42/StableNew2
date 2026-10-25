@@ -15,7 +15,7 @@ from src.gui.app_state_v2 import AppStateV2
 from src.gui.content_visibility import ContentVisibilitySettings
 from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from src.gui.engine_settings_dialog import EngineSettingsDialog
-from src.gui.gui_invoker import GuiInvoker
+from src.gui.gui_invoker import TkInvoker
 from src.gui.layout_v2 import configure_root_grid
 from src.gui.log_trace_panel_v2 import LogTracePanelV2
 from src.gui.panels_v2.operator_readiness_panel_v2 import (
@@ -239,7 +239,7 @@ class MainWindowV2:
         self.packs_controller = packs_controller
         self.pipeline_controller = pipeline_controller
         self.gui_log_handler = gui_log_handler
-        self._invoker = GuiInvoker(self.root)
+        self._invoker = TkInvoker(self.root)
         self.app_state.set_invoker(self._invoker)
 
         self.root.title("StableNew")
