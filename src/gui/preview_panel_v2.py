@@ -37,7 +37,7 @@ from src.gui.view_contracts.workspace_density_contract import (
     RESIZE_COALESCE_MS,
     preview_panel_stacked,
 )
-from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
+from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
 from src.gui_v2.effective_settings import EffectiveContext, project_effective_settings
 from src.gui_v2.prompt_optimizer_view import compiled_prompt_lines
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
@@ -59,7 +59,7 @@ class PreviewPanelV2(ttk.Frame):
     SLOW_REFRESH_THRESHOLD_MS = 20.0
 
     # PR-GUI-UX-500: a thumbnail exists only for a job that has saved an image; the words never promise otherwise.
-    PREVIEW_CHECKBOX_LABEL = "Show output thumbnail"
+    PREVIEW_CHECKBOX_LABEL = "Show media"
     PREVIEW_CHECKBOX_TIP = (
         "Shows a saved output image of the previewed job once it exists. "
         "A draft or queued job has no image yet; ticking this does not generate one."
@@ -127,9 +127,12 @@ class PreviewPanelV2(ttk.Frame):
         right_frame.grid(row=0, column=1, sticky="ne", padx=(8, 0))
         self.thumbnail_frame = right_frame
 
+        self._show_preview_var = tk.BooleanVar(value=False)
         self.thumbnail = ThumbnailWidget(
             right_frame,
             width=300,
+            show_control=False,
+            shown_var=self._show_preview_var,
             height=300,
             placeholder_text=self.NO_JOB_PLACEHOLDER,
             on_source_changed=self._on_thumbnail_source_changed,
@@ -157,7 +160,6 @@ class PreviewPanelV2(ttk.Frame):
 
         # Checkbox to enable/disable preview thumbnails (in the header so it never costs a column)
         # PR-PREVIEW-001: Default to False
-        self._show_preview_var = tk.BooleanVar(value=False)
         self.preview_checkbox = ttk.Checkbutton(
             header_frame,
             text=self.PREVIEW_CHECKBOX_LABEL,
@@ -1376,6 +1378,9 @@ class PreviewPanelV2(ttk.Frame):
         if job is not None and not ContentVisibilityResolver(mode).is_visible(job):
             return self.HIDDEN_PLACEHOLDER
         return self.NO_ARTIFACT_PLACEHOLDER
+
+    def _current_visibility_subject(self) -> Any:
+        return self._current_preview_job or {}
 
     def _find_recent_thumbnail(self, job: Any, pack_name: str | None = None) -> Any:
         """Return no candidate; previews must come from exact job artifacts.

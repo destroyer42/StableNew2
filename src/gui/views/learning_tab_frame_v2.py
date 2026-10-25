@@ -38,7 +38,7 @@ from src.gui.views.learning_grid_view import LearningGridView
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
-from src.gui.widgets.image_thumbnail import ImageThumbnail
+from src.gui.widgets.media_inspector import MediaInspector as ImageThumbnail
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.learning.automation_modes import (
@@ -509,6 +509,7 @@ class LearningTabFrame(ttk.Frame):
 
         self._staged_preview_thumbnail = ImageThumbnail(
             staged_right,
+            allow_original=False,
             max_width=1400,
             max_height=1400,
         )
@@ -1441,7 +1442,7 @@ class LearningTabFrame(ttk.Frame):
             )
             or "Candidate selected"
         )
-        self._staged_preview_thumbnail.load_image(str(getattr(item, "artifact_path", "") or ""))
+        self._staged_preview_thumbnail.set_image_reference(str(getattr(item, "artifact_path", "") or ""), subject=item)
         self._clear_staged_reason_tags()
         self._staged_notes_text.delete("1.0", tk.END)
         prior_review_summary = self.learning_controller.get_prior_review_summary(

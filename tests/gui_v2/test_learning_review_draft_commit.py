@@ -61,6 +61,21 @@ def _select(panel: LearningReviewPanel, index: int) -> None:
     panel._on_image_selected(None)  # noqa: SLF001
 
 
+def test_inspection_preserves_learning_sample_and_unsaved_rating(review):
+    panel, controller = review
+    _select(panel, 1)
+    panel.rating_var.set(3)
+    before = dict(controller.learning_state.review_drafts)
+    panel.image_thumbnail.detach()
+    panel.image_thumbnail.dock()
+    panel.image_thumbnail.set_visibility(False)
+    assert panel._active_image_ref == "b.png"
+    assert panel.image_listbox.curselection() == (1,)
+    assert panel.rating_var.get() == 3
+    assert controller.get_rating_for_image("b.png") is None
+    assert controller.learning_state.review_drafts == before
+
+
 def test_leaving_an_image_saves_its_rated_draft(review) -> None:
     panel, controller = review
     _select(panel, 0)

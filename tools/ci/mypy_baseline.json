@@ -82,7 +82,7 @@
     "src/gui/views/movie_clips_tab_frame_v2.py": 1,
     "src/gui/views/photo_optimize_editors.py": 19,
     "src/gui/views/photo_optimize_layout.py": 65,
-    "src/gui/views/photo_optimize_results.py": 79,
+    "src/gui/views/photo_optimize_results.py": 75,
     "src/gui/views/photo_optimize_scope.py": 55,
     "src/gui/views/photo_optimize_tab_frame_v2.py": 31,
     "src/gui/views/pipeline_tab_frame_v2.py": 3,
@@ -179,5 +179,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1498
+  "total": 1494
 }
