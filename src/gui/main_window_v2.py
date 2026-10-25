@@ -460,6 +460,15 @@ class MainWindowV2:
         self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
         self._wire_klein_lora_projection()
         self._wire_prompt_model_target()
+        from src.gui.prompt_ai_targets import prompt_ai_targets
+
+        ai_owner = getattr(self.app_controller, "ai_assist", None)
+        if ai_owner is not None and self._invoker is not None:
+            ai_owner.set_dispatcher(self._invoker.invoke)
+            self.prompt_tab.ai_suggestions.bind(ai_owner, targets=lambda: prompt_ai_targets(
+                getattr(self.sidebar_panel_v2, "base_generation_panel", None),
+                self.prompt_tab._content_visibility_mode,
+            ))
         self._wire_learning_model_target()
         self.operator_readiness_service = self._build_operator_readiness_service()
         self._operator_readiness_window: tk.Toplevel | None = None
@@ -1602,7 +1611,14 @@ class MainWindowV2:
             except Exception:
                 pass
 
-    def open_engine_settings_dialog(self, *, config_manager: ConfigManager) -> None:
+    def open_engine_settings_dialog(
+        self,
+        *,
+        config_manager: ConfigManager,
+        focus_video_runtime: bool = False,
+        comfy_repair_reason: str = "",
+        on_closed: Callable[[], None] | None = None,
+    ) -> None:
         if not getattr(self, "root", None):
             return
 
@@ -1627,6 +1643,14 @@ class MainWindowV2:
             on_cancel=lambda: dialog.destroy(),
         )
         panel.pack(fill=tk.BOTH, expand=True)
+        if focus_video_runtime:
+            panel.focus_video_runtime(comfy_repair_reason)
+        if on_closed is not None:
+            dialog.bind(
+                "<Destroy>",
+                lambda event: on_closed() if event.widget is dialog else None,
+                add="+",
+            )
         try:
             dialog.grab_set()
         except Exception:
@@ -1643,10 +1667,7 @@ class MainWindowV2:
     def _handle_settings_saved(self, values: dict[str, Any], dialog: tk.Toplevel) -> None:
         controller = getattr(self.app_state, "controller", None)
         if controller and hasattr(controller, "on_settings_saved"):
-            try:
-                controller.on_settings_saved(values)
-            except Exception:
-                pass
+            controller.on_settings_saved(values)  # a failure propagates: the dialog stays open and says so
         try:
             dialog.destroy()
         except Exception:

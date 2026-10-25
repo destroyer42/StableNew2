@@ -111,8 +111,21 @@ installation is not found, the dialog lists what is missing and changes nothing.
 `STABLENEW_COMFY_COMMAND` is **not** the recommended path for the managed runtime. Both startup readers
 (`src/main.py` and `src/video/comfy_process_manager.py`) split it on whitespace, so it cannot hold the JSON
 array above and cannot represent an executable or argument path containing spaces; do not paste the verifier's
-output into it. If it is set in the environment it can also override the settings array at app startup, so leave
-it unset when using the settings configuration.
+output into it. If it is set in the environment it overrides the settings array at app startup, so leave
+it unset when using the settings configuration. When it is set and differs from the saved command, Engine
+Settings and the Video Workflow runtime readiness strip say that the command comes from the environment and that
+the saved one is not in force; StableNew never edits the variable, so remove or change it outside StableNew and
+restart.
+
+**When a video workflow is blocked on the launch command.** The Video Workflow tab's runtime readiness strip names
+the reason (no command, a missing required flag, or a launcher that has not applied a saved change). For a
+problem Engine Settings can fix it shows **Fix ComfyUI Setup**, which only opens Engine Settings > Video runtime
+(ComfyUI) with the reason at the top; the repair is still your click on **Use managed install** or **Add required
+flags** and **Save & Close**. It is never shown for RAM, GPU memory, node or model-file blockers. A saved change is
+**not** active until StableNew restarts: the strip keeps blocking on the launcher this session started and says so,
+and Refresh cannot apply it. A ComfyUI that StableNew did not launch cannot have its flags verified, so a workflow
+that requires them stays blocked while it is serving; stop it yourself and let StableNew start its own. If
+**Save & Close** cannot write the settings, the dialog stays open and says so instead of closing.
 
 Do **not** commit the result: the paths are machine-specific and the repository default `presets/settings.json`
 is unchanged.

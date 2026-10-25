@@ -36,7 +36,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | GUI views and state | `src/gui/views/`, `src/gui/app_state_v2.py`, `src/gui/main_window_v2.py`; styles and tokens: `docs/Subsystems/GUI/GUI_STYLE_GUIDE.md` |
 | Crash-safe state files | `src/utils/atomic_io.py` (every persisted JSON/text store goes through it) |
 | Tests, CI and ratchets | `docs/Subsystems/Testing/TESTING_AND_CI.md`; `python tools/ci/run_pr_gate.py`, `.github/workflows/ci.yml`, `tools/ci/`, `docs/StableNew_Coding_and_Testing_v2.6.md` |
-| Offline AI Assist (advisory suggestions) | `docs/Subsystems/AiAssist/AI_ASSIST.md`; `src/ai_assist/contracts.py` -> `validators.py` -> `service.py` -> `runtime.py`, `observe.py` -> `src/utils/managed_process.py`, `process_observation.py`; qualification `tools/qualification/ai111/`; pinned `config/managed_ai_runtime.json`, `config/ai_model_registry.json` |
+| Offline AI Assist (advisory suggestions) | `docs/Subsystems/AiAssist/AI_ASSIST.md`; composition/activity `src/controller/app_controller_services/ai_assist_integration.py`; Prompt authoring `src/gui/prompt_ai_suggestions.py` -> `src/gui/ai_suggestion_dialog.py`, `src/gui_v2/ai_suggestion_view.py`; `src/ai_assist/contracts.py` -> `validators.py` -> `service.py` -> `runtime.py`, `observe.py` -> `src/utils/managed_process.py`, `process_observation.py`; qualification `tools/qualification/ai111/`; pinned `config/managed_ai_runtime.json`, `config/ai_model_registry.json` |
 | Offline qualification evidence | `tools/qualification/`, `tools/acceptance/` (operator-only; never part of the production path) |
 
 ## Controller decomposition

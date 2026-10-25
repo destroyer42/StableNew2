@@ -28,6 +28,7 @@ from src.gui.app_state_v2 import AppStateV2
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.models.prompt_pack_model import render_prompt_slot_text
 from src.gui.prompt_adaptation_dialog import PromptAdaptationDialog
+from src.gui.prompt_ai_suggestions import PromptAiSuggestions
 from src.gui.prompt_target_presenter import NO_TARGET_LABEL, PromptTargetPresenter
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.scrolling import enable_mousewheel
@@ -240,6 +241,8 @@ class PromptTabFrame(ttk.Frame):
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(mode or self._read_content_visibility_mode() or "nsfw")
+        if hasattr(self, "ai_suggestions"):
+            self.ai_suggestions.visibility_changed()
         self._pending_visibility_refresh = False
         if hasattr(self, "lora_picker"):
             try:
@@ -260,6 +263,8 @@ class PromptTabFrame(ttk.Frame):
     def _on_content_visibility_mode_subscription(self) -> None:
         mode = self._read_content_visibility_mode()
         self._content_visibility_mode = mode
+        if hasattr(self, "ai_suggestions"):
+            self.ai_suggestions.visibility_changed()
         if not bool(self.winfo_ismapped()):
             self._pending_visibility_refresh = True
             return
@@ -383,6 +388,7 @@ class PromptTabFrame(ttk.Frame):
             header_frame, text="Adapt for Target…", command=self._open_adaptation_preview, state="disabled"
         )
         self.adapt_button.pack(side="right", padx=(0, 8))
+        self.ai_suggestions = PromptAiSuggestions(self, header_frame)
         attach_tooltip(self.adapt_button, "Preview how this prompt would be adapted for the selected model. Nothing is changed.")
         self.target_detail_label = ttk.Label(
             self.center_frame, textvariable=self.target_detail_var, wraplength=640, justify="left"
@@ -1688,6 +1694,8 @@ class PromptTabFrame(ttk.Frame):
             except Exception:
                 logger.debug("Prompt target compatibility could not be projected", exc_info=True)
         presenter.apply(self._prompt_target)
+        if hasattr(self, "ai_suggestions"):
+            self.ai_suggestions.refresh()
 
     # Explicit target adaptation preview (PR-IMG-130C) -----------------------
     def _adaptation_input(self, state: PromptStateSnapshot) -> PromptAdaptationInput:
@@ -2533,6 +2541,8 @@ class PromptTabFrame(ttk.Frame):
         )
 
     def destroy(self) -> None:
+        if hasattr(self, "ai_suggestions"):
+            self.ai_suggestions.destroy()
         if (
             self.app_state is not None
             and self._content_visibility_listener is not None

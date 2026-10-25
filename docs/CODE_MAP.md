@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-569 of 722 modules have a docstring.
+575 of 728 modules have a docstring.
 
 ## src/
 
@@ -158,6 +158,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/controller/app_controller_services/
 
 - `__init__.py`: app_controller_services — extracted service helpers for AppController
+- `ai_assist_integration.py`: Application-scoped Offline AI Assist composition; read generation truth, never own it
 - `application_runtime_coordinator.py`: (no docstring)
 - `background_task_coordinator.py`: (no docstring)
 - `diagnostics_coordinator.py`: (no docstring)
@@ -206,6 +207,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: GUI module
 - `advanced_prompt_editor.py`: Advanced Prompt Pack Editor with validation, embedding/LoRA discovery, and smart features
+- `ai_suggestion_dialog.py`: Read-only AI review dialog; only an explicit Accept callback can edit the authoring buffer
 - `api_status_panel.py`: APIStatusPanel - UI component for displaying API connection status
 - `app_state_projection_sink.py`: (no docstring)
 - `app_state_v2.py`: (no docstring)
@@ -242,6 +244,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `pipeline_panel_v2.py`: Pipeline panel composed of modular stage cards and prompt pack summary
 - `preview_panel_v2.py`: Preview panel for GUI v2 (PR-CORE1-A3: NJR-only display)
 - `prompt_adaptation_dialog.py`: Read-only Tk dialog for the explicit "Adapt for Target" preview (PR-IMG-130C)
+- `prompt_ai_suggestions.py`: Prompt-tab AI coordination: snapshot, queued completion, read-only review and explicit stale-safe editing
+- `prompt_ai_targets.py`: Closed target advice options from the existing model picker and its canonical policy projection
 - `prompt_pack_adapter_v2.py`: Thin adapter that exposes prompt pack summaries for GUI V2 widgets
 - `prompt_pack_list_manager.py`: Manages loading, saving, and editing custom prompt pack lists
 - `prompt_target_presenter.py`: Tk application of a ``PromptTargetProjection`` to the Prompt tab (PR-IMG-130B)
@@ -430,6 +434,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
+- `ai_suggestion_view.py`: Toolkit-neutral AI suggestion review: immutable source identity and content-free outcome copy
 - `asset_readiness_view.py`: Toolkit-neutral session and row projection for the read-only asset readiness view (PR-ASSET-130)
 - `controlnet_guidance.py`: Toolkit-neutral guidance and local readiness for ordered ControlNet units (PR-GUI-UX-550)
 - `effective_settings.py`: Read-only "Effective Settings" projection of compiled preview jobs (PR-GUI-UX-520)
@@ -795,6 +800,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `comfy_dependency_probe.py`: (no docstring)
 - `comfy_healthcheck.py`: (no docstring)
 - `comfy_process_manager.py`: (no docstring)
+- `comfy_runtime_setup.py`: Toolkit-neutral facts about how ComfyUI is configured, what this process is running, and what that means (PR-…
 - `comfy_workflow_backend.py`: (no docstring)
 - `container_metadata.py`: Shared container metadata helpers for StableNew video exports
 - `continuity_models.py`: (no docstring)

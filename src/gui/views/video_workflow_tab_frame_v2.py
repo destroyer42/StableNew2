@@ -508,6 +508,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             session=self._runtime_readiness_session,
             read_selection=self._read_runtime_readiness_selection,
             on_change=self._refresh_queue_gate,
+            on_fix_setup=self._open_comfy_setup,
         )
         self.runtime_readiness_strip.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.runtime_readiness_strip.grid_remove()
@@ -1381,6 +1382,20 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             # Resolved on the Tk thread; the worker only calls the already-built controller.
             self._recent_controller = self._experiment_controller()
             recent.request_refresh()
+
+    def _open_comfy_setup(self) -> None:
+        """Open the existing Engine Settings > Video runtime (ComfyUI) section; nothing is edited or started here."""
+
+        opener = getattr(self.app_controller, "on_open_settings", None)
+        if not callable(opener):
+            return
+        strip = self.runtime_readiness_strip
+        view = strip.last_view
+        opener(
+            focus_video_runtime=True,
+            comfy_repair_reason=view.repair_reason if view else "",
+            on_closed=lambda: strip.request_refresh(force=True),  # shows a restart-pending save at once
+        )
 
     def _list_recent_outputs(self) -> list[Any]:
         getter = getattr(self._recent_controller, "list_recent_video_outputs", None)

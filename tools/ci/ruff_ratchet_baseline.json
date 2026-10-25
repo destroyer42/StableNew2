@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 382,
+    "total": 381,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -20,7 +20,6 @@
       "src/conditioning/openpose_snapshot.py",
       "src/controller/app_controller.py",
       "src/controller/app_controller_services/runtime_projection_coordinator.py",
-      "src/controller/app_controller_services/shutdown_coordinator.py",
       "src/controller/batch_operations_service.py",
       "src/controller/batch_output_resolution.py",
       "src/controller/gpu_loss_coordinator.py",
@@ -391,8 +390,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1298,
-      "S110": 510,
+      "BLE001": 1296,
+      "S110": 508,
       "S112": 37
     },
     "counts": {
@@ -529,8 +528,8 @@
         "S110": 7
       },
       "src/gui/engine_settings_dialog.py": {
-        "BLE001": 3,
-        "S110": 3
+        "BLE001": 2,
+        "S110": 2
       },
       "src/gui/gui_invoker.py": {
         "BLE001": 2,
@@ -553,8 +552,8 @@
         "S110": 2
       },
       "src/gui/main_window_v2.py": {
-        "BLE001": 103,
-        "S110": 71,
+        "BLE001": 102,
+        "S110": 70,
         "S112": 1
       },
       "src/gui/model_comparison_readiness.py": {

@@ -194,6 +194,9 @@ def _managed_runtime_logs_never_touch_the_operators_log_directory(
         monkeypatch.setattr(
             comfy_process_manager, "_MANAGED_COMFY_LOG_PATH", tmp_path / "comfy_logs" / "comfy.log"
         )
+        # The readiness probes report the registered launcher's command as active; one test's launcher is not another's.
+        monkeypatch.setattr(comfy_process_manager, "_LAST_LAUNCH_CONFIG", None)
+        monkeypatch.setattr(comfy_process_manager, "_GLOBAL_COMFY_PROCESS_MANAGER", None)
     except Exception:  # pragma: no cover - isolation must never break collection
         pass
 
