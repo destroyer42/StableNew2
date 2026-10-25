@@ -90,7 +90,7 @@ and fewer than 100 decisive judgments. Empty physical records produce NOT TESTED
 ## Physical boundary and remaining authorizations
 
 The marker-only session egress/teardown diagnostics are replaced (PR-AI-QUAL-113) by the owned container's process-tree and teardown record.
-Connection and file-access channels need a lifetime-complete provider proven by the canary: unprivileged providers are sampled, and the evidence comes from an operator-run, session-level ETW capture (PR-AI-QUAL-114E; operator procedure `docs/runbooks/ai_qualification_etw_capture.md`) because a standard-user token cannot start the kernel providers. The earlier per-request elevated provider (PR-AI-QUAL-113B) passed its canary on 2026-10-25 but required running the harness elevated, which is not allowed; the new path is NOT TESTED live.
+Connection and file-access channels need a lifetime-complete provider proven by the canary: unprivileged providers are sampled, and the evidence comes from an operator-run, session-level ETW capture (PR-AI-QUAL-114E; operator procedure `docs/runbooks/ai_qualification_etw_capture.md`) because a standard-user token cannot start the kernel providers. The earlier per-request elevated provider (PR-AI-QUAL-113B) passed its canary on 2026-10-25 but required running the harness elevated, which is not allowed; the new path passed its live canary capture on 2026-10-25 (analyzer v2 PASS; it has traced only the canary children).
 A real `run_session` therefore refuses before creating evidence, importing or launching. The injected Python-child seam stays testable.
 The physical harness is not ready for model use: no owner-approved D12 package exists.
 

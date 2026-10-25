@@ -245,7 +245,7 @@ def test_an_event_long_before_creation_or_after_termination_is_a_recycled_pid(
     assert result["attribution"]["recycled_pid_events"] == 2
 
 
-@pytest.mark.parametrize("offset_ms", [-2.0, 99.0, 98.0])
+@pytest.mark.parametrize("offset_ms", [-2.0, 99.5, 101.0])
 def test_an_event_at_a_window_boundary_is_an_explicit_ambiguity(
     tmp_path: Path, offset_ms: float
 ) -> None:
@@ -268,6 +268,42 @@ def test_a_process_that_exits_right_after_an_event_keeps_the_event_owned(tmp_pat
     result, _, _ = run_analysis(tmp_path, lambda t, d: qualification(t, d, body))
     assert result["verdict"] == "PASS"
     assert row(result, 2)["owned_file_events"] == 1
+
+
+@pytest.mark.parametrize("offset_ms", [4.0, 98.0, 98.7])
+def test_an_event_just_inside_the_measured_window_is_owned_not_ambiguous(
+    tmp_path: Path, offset_ms: float
+) -> None:
+    """Live finding (2026-10-25): shutdown reads of kernel.appcore.dll land within ~0.7 ms of the observed exit."""
+
+    def body(s: Scenario) -> None:
+        a = add_request(s, pid=6001)  # the member's window is 0 .. 99 ms
+        request_event(s, a, "read", offset_ms=offset_ms, path=ALLOWED_READ)
+
+    result, _, _ = run_analysis(tmp_path, lambda t, d: qualification(t, d, body))
+    assert result["verdict"] == "PASS", (result["capture_problems"], result["requests"])
+    assert row(result, 2)["owned_file_events"] == 1 and row(result, 2)["ambiguous_events"] == 0
+
+
+def test_slack_never_widens_what_counts_as_owned_only_what_counts_as_outside() -> None:
+    clock = analysis.ClockMap(0, 0, 2)
+    request = {
+        "number": 1,
+        "start_ns": 1_000_000_000,
+        "end_ns": 2_000_000_000,
+        "members": [{"pid": 10, "start_ns": 1_000_000_000, "end_ns": 2_000_000_000}],
+    }
+
+    def place(ts_ns: int):
+        return analysis.attribute_events([ChannelEvent(10, "x", ts_ns, "write")], [request], clock)
+
+    assert len(place(1_999_999_000).owned[1]) == 1  # 1 us before the end: owned
+    assert len(place(2_000_001_000).ambiguous[1]) == 1  # 1 us after the end: ambiguous, not owned
+    assert len(place(2_004_999_000).ambiguous[1]) == 1  # still within the slack: ambiguous
+    assert (
+        place(2_010_000_000).recycled_pid_events == 1
+    )  # 10 ms after the end: clearly another process
+    assert place(990_000_000).recycled_pid_events == 1
 
 
 def test_an_owned_event_with_no_timestamp_is_ambiguous(tmp_path: Path) -> None:

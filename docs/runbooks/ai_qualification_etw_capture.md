@@ -38,6 +38,8 @@ sequential file mode, never circular, so a full file stops recording and is repo
 (`--minutes`, 1-120, default 30; admission and the analyzer refuse an expired or late-stopped capture), and your `stop`.
 `start` refuses unless free space covers 2 x cap x 17 + 2 GiB (the tracerpt XML is far larger than the ETL).
 
+Measured on the target host (2026-10-25, idle desktop): the system-wide Kernel-File session wrote about 60 MB (162k events) in 171 s, roughly 21 MB per minute, and the network and DNS sessions about 20 MB and 9 MB. Plan windows of a few minutes, start the capture just before the session and stop it right after, and size `--max-mb` for it (256 MB is about 12 minutes). Admission refuses new requests once a file reaches 90% of its cap, and an analysis of a capture that reached 98% is INCONCLUSIVE.
+
 ## Live canary (no downloaded executable, no model)
 
 Run from the repository checkout. Replace `<id>` with the capture id that `start` prints.

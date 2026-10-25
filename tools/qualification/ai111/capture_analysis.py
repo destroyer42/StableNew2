@@ -69,7 +69,7 @@ from tools.qualification.ai111.ownership import (
 )
 from tools.qualification.ai111.tool_runner import bounded_tool
 
-ANALYZER_VERSION = "1"
+ANALYZER_VERSION = "2"  # 2: an event is owned on the measured clock interval alone; slack only guards the "outside" test
 SCHEMA = 1
 #: Counter/trace offsets from different beacons may differ by at most this much before the clocks are declared inconsistent.
 DRIFT_TOLERANCE_NS = 50_000_000
@@ -156,9 +156,9 @@ class ClockMap:
     def consistent(self) -> bool:
         return self.low - self.high <= DRIFT_TOLERANCE_NS
 
-    def interval(self, trace_ns: int) -> tuple[int, int]:
+    def interval(self, trace_ns: int, slack_ns: int = SLACK_NS) -> tuple[int, int]:
         a, b = sorted((self.low, self.high))
-        return trace_ns + a - SLACK_NS, trace_ns + b + SLACK_NS
+        return trace_ns + a - slack_ns, trace_ns + b + slack_ns
 
 
 def calibrate(
@@ -234,10 +234,16 @@ def attribute_events(
             for number, _start, _end in candidates:
                 result.ambiguous[number].append(event)
             continue
-        low, high = clock.interval(event.ts_ns)
+        # A window already contains the process's true lifetime on both sides (it opens at the launch and closes when the
+        # harness observed the exit, which is after the real one), so "owned" needs only the measured clock interval. The
+        # slack widens only the test for being clearly outside, so a borderline event is an ambiguity, never dropped.
+        low, high = clock.interval(event.ts_ns, 0)
+        wide_low, wide_high = clock.interval(event.ts_ns)
         inside = [n for n, ws, we in candidates if low >= ws and high <= we]
         touching = [
-            n for n, ws, we in candidates if not (high < ws or low > we) and n not in inside
+            n
+            for n, ws, we in candidates
+            if not (wide_high < ws or wide_low > we) and n not in inside
         ]
         if len(inside) == 1 and not touching:
             result.owned[inside[0]].append(event)
