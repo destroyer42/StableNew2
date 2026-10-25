@@ -8,7 +8,7 @@ per-user directory::
     favorites.json                            model identity key -> profile reference
     startup_defaults.json                     the operator's saved startup configuration
 
-Every file is published with :func:`atomic_write_json`, so a failed or interrupted write leaves the previous content.
+Mutable files use :func:`atomic_write_json`; Learning revisions use atomic no-replace publication.
 A revision is never rewritten: a change is the next revision, and a malformed or incompatible revision file is skipped
 (and reported) so the last valid revision keeps being used. Names live only inside the JSON, never in a path, so spaces
 and Unicode names are safe. Nothing here touches PromptPack files or the executable model policy.
@@ -40,7 +40,7 @@ from src.generation_profiles.contract import (
     ProfileRef,
     validate_settings,
 )
-from src.utils.atomic_io import atomic_write_json
+from src.utils.atomic_io import atomic_publish_json, atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -283,9 +283,18 @@ class GenerationProfileStore:
         if profile.revision != expected:
             raise ProfileError(f"Learning revision must be {expected}, not {profile.revision}.")
         previous = self.revisions(KIND_LEARNING, profile.profile_id)
-        if previous and previous[-1].model.key != profile.model.key:
+        if previous and previous[-1].model != profile.model:
             raise ProfileError("A Learning profile lineage cannot change its model.")
-        return self._publish(GenerationProfile.from_dict(profile.to_dict()))
+        validated = GenerationProfile.from_dict(profile.to_dict())
+        directory = self._profile_dir(KIND_LEARNING, validated.profile_id)
+        path = self._revision_file(directory, validated.revision)
+        try:
+            atomic_publish_json(path, validated.to_dict(), indent=2, ensure_ascii=False)
+        except (OSError, TypeError, ValueError) as exc:
+            raise ProfileStoreError(
+                f"Could not publish immutable Learning revision: {exc}"
+            ) from exc
+        return validated
 
     # ------------------------------------------------------------------ favorites
 

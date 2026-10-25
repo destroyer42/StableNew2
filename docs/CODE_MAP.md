@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-588 of 743 modules have a docstring.
+591 of 746 modules have a docstring.
 
 ## src/
 
@@ -270,6 +270,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `history_iterate_service.py`: Glue for "Iterate from History" (PR-HISTORY-610A): re-reads the canonical record, then hands off - never queu…
 - `learning_controller.py`: (no docstring)
+- `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
 - `review_workflow_adapter.py`: Non-render review workflow logic for Review tab
 - `video_workspace_handoff.py`: (no docstring)
@@ -383,6 +384,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_grid_view.py`: (no docstring)
 - `learning_plan_table.py`: (no docstring)
 - `learning_preview_card.py`: (no docstring)
+- `learning_profile_publication.py`: Progressively disclosed findings review inside Learning's existing Recommendations area
 - `learning_review_panel.py`: (no docstring)
 - `learning_tab_frame_v2.py`: (no docstring)
 - `learning_workflow_bar.py`: (no docstring)
@@ -552,6 +554,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `output_scan_models.py`: Scan record models — the canonical normalized representation of one scanned image
 - `output_scanner.py`: OutputScanner — manifest-first artifact scanner
 - `preview_summary.py`: Structured, read-only summary of what a frozen Preview would submit
+- `profile_publication.py`: Field-specific controlled evidence -> advisory profile; no execution or rating authority
 - `rating_schema.py`: (no docstring)
 - `recommendation_engine.py`: Automated Parameter Recommendation Engine (APRE)
 - `recommendation_summary.py`: Operator-facing reading of a ``RecommendationSet``: what, where, on what evidence, and what Apply may do

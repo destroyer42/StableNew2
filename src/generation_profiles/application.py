@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.generation_profiles.contract import (
+    IDENTITY_EXACT,
+    KIND_LEARNING,
     SETTING_CFG,
     SETTING_HEIGHT,
     SETTING_SAMPLER,
@@ -165,6 +167,24 @@ def plan_application(
     if match is not None and not match.applies:
         message = match.reason or "This profile belongs to a different model; nothing was applied."
         return ApplicationPlan(STATUS_IDENTITY_CONFLICT, profile.ref, {}, (), message)
+
+    if (
+        profile.kind == KIND_LEARNING
+        and profile.model.kind == IDENTITY_EXACT
+        and (
+            not policy
+            or not (profile.model.exact_profile or {}).get("version")
+            or dict(profile.model.exact_profile or {}) != dict(policy.profile_ref or {})
+            or dict(profile.executable_profile or {}) != dict(policy.profile_ref or {})
+        )
+    ):
+        return ApplicationPlan(
+            STATUS_IDENTITY_CONFLICT,
+            profile.ref,
+            {},
+            (),
+            "Learning profile executable version differs; nothing was applied.",
+        )
 
     geometry_pairs = _allowed_geometry(policy)
     covered: set[str] = set()

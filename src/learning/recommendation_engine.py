@@ -83,6 +83,21 @@ MIN_CONTROLLED_VARIANTS = 2
 MIN_CONTROLLED_RATINGS = 3
 
 
+def recommendation_confidence(count: int, stddev: float, context_confidence: float) -> float:
+    """Existing recommendation score, shared with isolated controlled-evidence projections."""
+    sample_confidence = min(1.0, count / 6.0)
+    consistency_confidence = 1.0 - min(1.0, stddev / 2.5)
+    return max(
+        0.0,
+        min(
+            1.0,
+            (sample_confidence * 0.45)
+            + (consistency_confidence * 0.25)
+            + (context_confidence * 0.30),
+        ),
+    )
+
+
 @dataclass
 class RecommendationSet:
     """Complete set of recommendations for a prompt/stage combination."""
@@ -731,9 +746,6 @@ class RecommendationEngine:
                 count = len(ratings)
 
                 # Confidence with explicit sample-volume + variance terms.
-                sample_confidence = min(1.0, count / 6.0)
-                variance_penalty = min(1.0, stddev / 2.5)
-                consistency_confidence = 1.0 - variance_penalty
                 context_weights = param_context_weights[param_name][value]
                 context_confidence = 0.0
                 if context_weights:
@@ -742,15 +754,7 @@ class RecommendationEngine:
                         0.0,
                         min(1.0, (context_mean - 1.0) / 1.5),
                     )
-                confidence = max(
-                    0.0,
-                    min(
-                        1.0,
-                        (sample_confidence * 0.45)
-                        + (consistency_confidence * 0.25)
-                        + (context_confidence * 0.30),
-                    ),
-                )
+                confidence = recommendation_confidence(count, stddev, context_confidence)
 
                 # Select based on confidence, break ties by highest rating
                 if confidence > best_confidence or (

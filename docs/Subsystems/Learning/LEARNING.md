@@ -162,6 +162,42 @@ Learning owns an editable experiment baseline: model, VAE, sampler, scheduler, s
 - **Unchanged.** Admission (`compile_all` then one `JobService.submit_njrs`), Model Comparison, Two-Axis Grid, ratings and recommendation evidence rules and the explicit Apply flow are untouched. Preview does not promise an output geometry for Upscale, and Learning stage runs on a real backend are not qualified by this package.
 - **Also fixed.** A stepped range keeps its end value despite float error (`design_estimate.range_values`: `0.2..0.6` by `0.2` is three values, not two).
 
+### 3.10 Explicit publication of evidence-qualified generation profiles
+
+Recommendations includes **Save Findings as Generation Profile**. Review Profile Findings
+reads durable ratings in background work; opening the section or saving a rating writes no
+profile. The review shows the exact checkpoint/profile version, tested values, saved sample
+and experiment counts, mean/variability, exclusions and differences from a selected Learning
+lineage. **Publish Learning Profile** requires a separate confirmation. Success refreshes the
+existing Base Generation selector; it does not select, apply or favorite the result.
+
+`src/learning/profile_publication.py` owns eligibility. Only ordinary txt2img
+`learning_experiment_rating` rows qualify. Every field needs an experiment with the shared
+`MIN_CONTROLLED_VARIANTS` and `MIN_CONTROLLED_RATINGS` thresholds, consistent frozen
+snapshot/policy, actual seed readback, executed tested values and explicit controlled validity.
+Latest saved ratings count once per experiment/job/artifact. Other rating kinds and drafts
+remain available to their existing consumers but cannot promote fields. Fixed baseline values
+are not recommendations; geometry has no independently tested variable in this publication
+scope. Resource recommendations also need the existing offered catalog and policy guards.
+The isolated controlled projection reuses the engine's volume/variance score with equal exact
+context weights; it does not change broad recommendation tiers or Apply semantics. Findings
+describe their tested context, not a universal optimum or a probability of improvement.
+
+New ordinary snapshots add a cached `model_identity` binding without changing snapshot schema
+or execution authority. Registry hashes must still match the file's size/mtime fingerprint;
+no checkpoint scan or hashing is started. Historical snapshots missing this proof are readable
+but ineligible. Model-backed findings require registry family evidence and matching SHA-256;
+exact-profile findings require matching canonical ID/version and executed profile reference.
+Changing the model, experiment, policy or saved evidence requires a fresh review. Stage-specific,
+Model Comparison and Two-Axis Grid findings cannot publish Base Generation settings.
+
+The publication adapter (`src/gui/controllers/learning_profile_publication.py`) delegates
+background work to the existing runner and ratings-file lock. It rechecks current durable
+evidence before the store call, drops stale callbacks and closes callbacks with the panel.
+`GenerationProfileStore.publish_learning_profile` alone writes the new immutable revision.
+Its same-lineage no-replace publication cannot overwrite a competing revision. Repeated identical
+findings are refused. No ratings, experiment state, jobs, favorites or startup defaults are written.
+
 ## 4. Data and persistence
 
 | Data | Location | Writer | Atomic |
