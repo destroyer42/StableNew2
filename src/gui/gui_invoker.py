@@ -10,11 +10,12 @@ from collections.abc import Callable
 logger = logging.getLogger(__name__)
 
 
-class GuiInvoker:
-    """Thread-safe invoker that schedules work on the Tk main loop."""
+class TkInvoker:
+    """Thread-safe UiDispatcher adapter over the Tk main-loop pump."""
 
     def __init__(self, root: tk.Misc) -> None:
         self._root = root
+        self._ui_thread_id = threading.get_ident()
         self._disposed = False
         self._lock = threading.Lock()
         self._pending: deque[Callable[[], None]] = deque()
@@ -36,6 +37,19 @@ class GuiInvoker:
                 return
             self._pending.append(fn)
             self._pending_ids.add(key)
+
+    def schedule(self, fn: Callable[[], None]) -> None:
+        """Toolkit-neutral name for the queued ``invoke`` behavior."""
+        self.invoke(fn)
+
+    def run_on_ui_thread(self, fn: Callable[[], None]) -> None:
+        """Run inline on the thread that owns Tk; otherwise queue on the pump."""
+        if threading.get_ident() == self._ui_thread_id:
+            if self._disposed:
+                return
+            fn()
+            return
+        self.invoke(fn)
 
     def _schedule_pump(self) -> None:
         with self._lock:
@@ -120,3 +134,10 @@ class GuiInvoker:
                 timer.cancel()
             except Exception:
                 continue
+
+
+# Compatibility alias: existing imports keep working while new code names the
+# concrete toolkit explicitly.
+GuiInvoker = TkInvoker
+
+__all__ = ["GuiInvoker", "TkInvoker"]

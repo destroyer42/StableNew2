@@ -148,6 +148,11 @@ jobs:
       run: |
         python tools/ci/run_architecture_ratchets.py
 
+    - name: Check that no controller module imports tkinter
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/check_controller_tk_boundary.py
+
     - name: Collect the active test surface in isolation
       if: steps.plan.outputs.cheap_path != 'true'
       run: |

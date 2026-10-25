@@ -390,8 +390,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1293,
-      "S110": 506,
+      "BLE001": 1286,
+      "S110": 505,
       "S112": 37
     },
     "counts": {
@@ -427,7 +427,7 @@
         "BLE001": 18
       },
       "src/controller/app_controller.py": {
-        "BLE001": 140,
+        "BLE001": 133,
         "S110": 50,
         "S112": 4
       },
@@ -655,8 +655,7 @@
         "S110": 2
       },
       "src/gui/ui_dispatcher.py": {
-        "BLE001": 2,
-        "S110": 1
+        "BLE001": 2
       },
       "src/gui/utils/display_helpers.py": {
         "BLE001": 1,

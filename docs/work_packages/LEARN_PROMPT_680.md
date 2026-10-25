@@ -124,7 +124,31 @@ STATUS line cap); no acceptance criterion, test or ceiling was weakened.
 No PromptPack, historical NJR or rating was overwritten; no second queue, runner,
 compiler or database was introduced. No physical GPU/backend execution or runtime
 restart occurred. The original main checkout remains at `612deb1e...`, including its
-unrelated untracked GUI assessment. Publication, PR creation and merge remain unauthorized.
+unrelated untracked GUI assessment. At this local acceptance boundary, publication,
+PR creation and merge were not yet authorized.
 The installed usage reporter will measure this single Codex session from the recorded
 task-start boundary through closeout; exact tokens/window and the final commit are
 reported in the completion response.
+
+## Authorized publication integration
+
+The owner subsequently authorized integration of current main into this feature branch,
+overlap resolution, revalidation, push and PR creation. Integration into long-lived main
+is not authorized. Pre-integration feature HEAD is `beaa6f5681c41e5d98f06c110d7797ecf26cb940`;
+the fetched main is `0318d3f3669535c07b6fcbaa671fd3ad069cf497` (GUI-SEAM-700 and
+GUI-QT-001 assessment integration). This is a history-preserving merge into the feature.
+
+No application-source conflict occurred. The generated code map is regenerated with
+both inventories. The mypy baseline preserves both independent reductions: 1,475 total,
+including the Learning view at 37. STATUS retains both capability/CI descriptions within
+150 lines. Feature behavior, architecture ownership and LearningController size are
+unchanged. Revalidation covers the existing affected Learning/profile/GUI suite, the
+new controller/presentation seam tests and the updated canonical gate including its
+controller Tk import-boundary check. No physical qualification or environment rebuild.
+
+Integrated-tree revalidation PASS: 1,120 affected Learning/profile/GUI/controller/code-map
+tests; updated canonical gate PASS (749 modules, all ratchets and the controller Tk
+import boundary, 13,671 collected tests, 358 required smoke tests with one warning).
+Collection and smoke report the repository unchanged. No source repair was necessary.
+The reviewed aggregate against integrated main retains the same 23-file package;
+no inherited GUI isolation/CI changes are introduced again by the feature PR.

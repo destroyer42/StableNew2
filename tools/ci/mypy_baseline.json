@@ -10,7 +10,7 @@
     "src/assets/cache_lock.py": 4,
     "src/cli.py": 2,
     "src/config/app_config.py": 1,
-    "src/controller/app_controller.py": 114,
+    "src/controller/app_controller.py": 109,
     "src/controller/app_controller_services/runtime_projection_coordinator.py": 2,
     "src/controller/core_pipeline_controller.py": 7,
     "src/controller/job_execution_controller.py": 5,
@@ -68,7 +68,6 @@
     "src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py": 18,
     "src/gui/stage_cards_v2/components.py": 5,
     "src/gui/tooltip.py": 1,
-    "src/gui/ui_dispatcher.py": 1,
     "src/gui/view_contracts/batch_operations_contract.py": 2,
     "src/gui/views/character_training_frame.py": 1,
     "src/gui/views/diagnostics_dashboard_v2.py": 2,
@@ -179,5 +178,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1481
+  "total": 1475
 }

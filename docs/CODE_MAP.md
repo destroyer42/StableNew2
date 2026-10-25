@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-593 of 748 modules have a docstring.
+594 of 749 modules have a docstring.
 
 ## src/
 
@@ -182,6 +182,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Controller-owned runtime port adapters and protocol definitions
 - `default_runtime_ports.py`: Default controller-owned adapters for image and video runtime ports
 - `runtime_ports.py`: Protocol definitions for controller-owned runtime wiring seams
+- `ui_dispatcher.py`: Toolkit-neutral UI scheduling contract
 
 ## src/curation/
 
