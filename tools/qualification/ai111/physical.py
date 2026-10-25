@@ -1,10 +1,11 @@
-"""PR-AI-111 physical qualification session (Stage A/B). NOT run in Stage 1; every test of it uses fakes.
+"""PR-AI-111 physical qualification session (Stage A/B). NOT run in Stage 1 or 113; every test of it uses fakes.
 
 One session = one evidence directory, claimed exclusively (a second session of the same stage is refused). It imports an
 operator-supplied runtime archive and the operator-supplied model files into an *evidence-local* AI root (never the
 operator's real ``%LOCALAPPDATA%`` directory), runs each requested arm over a frozen case list through the production
-``AiAssistService`` (candidate mode), records every outcome incrementally (flushed and fsynced), samples the machine and
-any network connection owned by the runtime, verifies the child tree is gone after every request, and scores the arms.
+``AiAssistService`` (candidate mode), records every outcome incrementally (flushed and fsynced), samples the machine, takes the owned container's own record of
+every process, connection attempt and file access of each request (``ownership.py``), verifies teardown from that record
+after every request, and scores the arms.
 
 It never downloads anything, never touches the firewall and never runs without a plan digest that matches the committed plan
 and a non-empty owner authorization statement that is written into the evidence.
@@ -20,7 +21,6 @@ import shutil
 import subprocess
 import sys
 import threading
-import time
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -43,7 +43,7 @@ from src.ai_assist.manifests import (
     load_model_registry,
     record_active,
 )
-from src.ai_assist.runtime import AiRuntime
+from src.ai_assist.runtime import AiRuntime, default_command
 from src.ai_assist.service import AiAssistService, ServicePolicy
 from tools.qualification.ai111 import plan as plan_module
 from tools.qualification.ai111.baselines import ARMS as BASELINE_FUNCTIONS
@@ -54,6 +54,11 @@ from tools.qualification.ai111.corpus import (
     corpus_digest,
     from_jsonl,
     stage_a_subset,
+)
+from tools.qualification.ai111.ownership import (
+    OwnedSessionMonitor,
+    OwnershipPolicy,
+    default_host_monitor,
 )
 from tools.qualification.ai111.scoring import evaluate_gates, summarize_arm
 
@@ -151,33 +156,21 @@ class SessionPaths:
 
 @dataclass
 class _Sampler:
-    """Background evidence: system memory (1 Hz) and any network connection owned by the runtime (4 Hz)."""
+    """Background evidence: system memory (1 Hz). Process, connection and file evidence is the monitor's, not this one's."""
 
     evidence: Path
-    ai_root: Path
     safety: dict[str, Any]
     memory_probe: MemoryProbe = read_host_memory
     stop: threading.Event = field(default_factory=threading.Event)
     abort_reason: str = ""
-    egress_seen: int = 0
-    _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def start(self) -> None:
-        self._threads = [
-            threading.Thread(target=self._memory_loop, name="AI111-memory"),
-            threading.Thread(target=self._egress_loop, name="AI111-egress"),
-        ]
-        for thread in self._threads:
-            thread.start()
+        self._thread = threading.Thread(target=self._memory_loop, name="AI111-memory")
+        self._thread.start()
 
     def close(self) -> None:
         self.stop.set()
-        for thread in self._threads:
-            thread.join(10)
-
-    def egress_total(self) -> int:
-        with self._lock:
-            return self.egress_seen
+        self._thread.join(10)
 
     def _memory_loop(self) -> None:
         breaches = 0
@@ -204,54 +197,6 @@ class _Sampler:
                 return
             if self.stop.wait(self.safety["sample_seconds"]):
                 break
-
-    def _egress_loop(self) -> None:
-        import psutil
-
-        marker = str(self.ai_root).lower()
-        while not self.stop.wait(0.25):
-            try:
-                owners = {
-                    p.info["pid"]
-                    for p in psutil.process_iter(["pid", "cmdline"])
-                    if marker in " ".join(p.info["cmdline"] or []).lower()
-                }
-                if not owners:
-                    continue
-                hits = [c for c in psutil.net_connections(kind="inet") if c.pid in owners]
-            except Exception:  # noqa: BLE001 - recorded, never silent: the sampler itself failing is evidence
-                append_jsonl(
-                    self.evidence / "egress.jsonl",
-                    {"utc": datetime.now(UTC).isoformat(), "sampler_error": True},
-                )
-                continue
-            if hits:
-                with self._lock:
-                    self.egress_seen += len(hits)
-                append_jsonl(
-                    self.evidence / "egress.jsonl",
-                    {
-                        "utc": datetime.now(UTC).isoformat(),
-                        "connections": [[c.status, str(c.laddr), str(c.raddr)] for c in hits],
-                    },
-                )
-
-
-def _tree_gone(marker: str, wait_seconds: float) -> bool:
-    import psutil
-
-    deadline = time.monotonic() + wait_seconds
-    while True:
-        alive = [
-            p.pid
-            for p in psutil.process_iter(["pid", "cmdline"])
-            if marker in " ".join(p.info["cmdline"] or []).lower()
-        ]
-        if not alive:
-            return True
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.25)
 
 
 def preflight(
@@ -301,7 +246,18 @@ def preflight(
     return problems
 
 
-def run_session(
+def run_session(**kwargs: Any) -> dict[str, Any]:
+    """Run one physical session; whatever the monitor's providers hold open (an ETW trace) is released on every path."""
+
+    monitor = kwargs.get("monitor")
+    try:
+        return _run_session(**kwargs)
+    finally:
+        if monitor is not None:
+            monitor.close()
+
+
+def _run_session(
     *,
     plan: dict[str, Any],
     paths: SessionPaths,
@@ -315,17 +271,18 @@ def run_session(
     busy_provider: Callable[[], list[str]] | None = None,
     attest: str | None = None,
     memory_probe: MemoryProbe = read_host_memory,
+    monitor: OwnedSessionMonitor | None = None,
 ) -> dict[str, Any]:
-    # Marker-based session egress and teardown diagnostics below are not proof
-    # of process ownership. Real runtime execution stays refused until that
-    # evidence path is bound to the owned container and D12b is authorized.
-    # An injected command factory is solely the hermetic Python-child test seam.
-    if command_factory is None:
+    # Process, connection and file evidence comes only from the ownership monitor, which reads the bounded runner's own
+    # container record. A session with no monitor, or one whose channels are not lifetime-complete and canary-proven,
+    # refuses before anything is imported or launched. ``command_factory`` is the hermetic Python-child test seam.
+    if monitor is None:
+        monitor = default_host_monitor(OwnershipPolicy())
+    static_problems = monitor.provider_problems()
+    if static_problems:
         return {
             "verdict": "NOT TESTED",
-            "refused": [
-                "Physical qualification blocked: ownership-bound session egress and teardown evidence required before D12b"
-            ],
+            "refused": [f"monitoring not ready: {problem}" for problem in static_problems],
         }
     registry = registry or load_model_registry(plan_module.REGISTRY_PATH)
     evidence = paths.evidence_root / f"physical-{stage}"
@@ -344,6 +301,10 @@ def run_session(
             "strict_offline": strict_offline,
             "started_utc": datetime.now(UTC).isoformat(),
             "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "ownership_sha256": hashlib.sha256(
+                Path(__file__).with_name("ownership.py").read_bytes()
+            ).hexdigest(),
+            "monitor_kind": monitor.kind,
             "executed_sha": _git_head(),
         },
     )
@@ -367,6 +328,25 @@ def run_session(
         write_new_json(evidence / "preflight-refusal.json", problems)
         return {"verdict": "INCONCLUSIVE", "refused": problems}
 
+    # Before anything is imported or launched, show the monitor detecting a known file read, connection attempt and
+    # short-lived descendant of its own trusted canary child. Any shortfall refuses the whole session.
+    monitor.bind_evidence(evidence / "ownership")
+    monitor.bind_roots(
+        read_roots=(ai_root, Path(os.environ.get("SystemRoot", "C:\\Windows"))),
+        write_roots=(ai_root / "work",),
+    )
+    monitor.run_canary()
+    monitor_problems = monitor.readiness()
+    write_new_json(
+        evidence / "monitor-readiness.json",
+        {"canary": monitor.canary_report, "problems": monitor_problems},
+    )
+    if monitor_problems:
+        return {
+            "verdict": "NOT TESTED",
+            "refused": [f"monitoring not ready: {problem}" for problem in monitor_problems],
+        }
+
     build = derive_runtime_build(paths.runtime_archive, plan["runtime_intent"])
     write_new_json(
         evidence / "derived-runtime-build.json",
@@ -385,13 +365,11 @@ def run_session(
 
     limits = RunLimits(**plan["limits"])
     sampling = Sampling(**plan["sampling"])
-    sampler = _Sampler(evidence, ai_root, plan["safety"], memory_probe=memory_probe)
+    sampler = _Sampler(evidence, plan["safety"], memory_probe=memory_probe)
     sampler.start()
     records_path = evidence / "records.jsonl"
     records: dict[str, list[dict[str, Any]]] = {}
-    teardown_verified = True
     abort = ""
-    marker = str(ai_root).lower()
     try:
         # Baseline arms are deterministic and free: record them first so the blind pairs have both sides.
         for arm in [a for a in arms if a in plan_module.BASELINE_ARMS]:
@@ -416,9 +394,11 @@ def run_session(
                 registry=ModelRegistry((entry,)),
                 activity_provider=lambda: GenerationActivity(),
                 memory_probe=memory_probe,
-                runtime=AiRuntime(ai_root, command_factory=command_factory)
-                if command_factory
-                else None,
+                runtime=AiRuntime(
+                    ai_root,
+                    command_factory=command_factory or default_command,
+                    runner=monitor.runner(),
+                ),
                 policy=ServicePolicy(allow_candidate=True, strict_offline=strict_offline),
                 limits=limits,
                 sampling=sampling,
@@ -428,13 +408,17 @@ def run_session(
                 if sampler.abort_reason:
                     abort = sampler.abort_reason
                     break
-                egress_before = sampler.egress_total()
+                monitored_before = len(monitor.records)
                 outcome = service.run(
                     case.request(f"{model_id[:24].replace('.', '_')}-{number:04d}")
                 )
                 suggestion = outcome.suggestion
                 details = dict(outcome.details)
-                details["egress_connections"] = sampler.egress_total() - egress_before
+                new_records = monitor.records[monitored_before:]
+                details["egress_connections"] = sum(len(r.connections) for r in new_records)
+                details["ownership_violations"] = sorted(
+                    {v for r in new_records for v in r.violations}
+                )
                 row = {
                     "case_id": case.case_id,
                     "arm": model_id,
@@ -449,9 +433,15 @@ def run_session(
                 }
                 records.setdefault(model_id, []).append(row)
                 append_jsonl(records_path, row)
-                if not _tree_gone(marker, plan["safety"]["teardown_wait_seconds"]):
-                    teardown_verified = False
-                    abort = "child tree still present after a request"
+                if new_records and not all(
+                    r.process.get("complete") is True
+                    and r.process.get("active_after_teardown") == 0
+                    for r in new_records
+                ):
+                    abort = "owned child tree not verified gone after a request"
+                    break
+                if details["ownership_violations"]:
+                    abort = "ownership violation: " + ", ".join(details["ownership_violations"])
                     break
                 infra = outcome.code in (
                     OutcomeCode.TIMEOUT,
@@ -468,6 +458,7 @@ def run_session(
     finally:
         sampler.close()
 
+    teardown_verified = monitor.teardown_verified()
     cases_by_id = {c.case_id: c for c in cases}
     summaries = {arm: summarize_arm(cases_by_id, rows) for arm, rows in records.items()}
     verdicts = {
@@ -502,7 +493,11 @@ def run_session(
     if (
         verdicts
         and not abort
-        and sampler.egress_total() == 0
+        and monitor.kind == "host"
+        and monitor.summary()["requests_monitored"] > 0
+        and monitor.teardown_verified()
+        and monitor.connection_attempts() == 0
+        and not monitor.violations()
         and all(v["verdict"] == "PASS" for v in verdicts.values())
     ):
         overall = "PASS"
@@ -512,7 +507,8 @@ def run_session(
         "verdict": overall,
         "abort_reason": abort,
         "teardown_verified": teardown_verified,
-        "egress_connections_observed": sampler.egress_total(),
+        "egress_connections_observed": monitor.connection_attempts(),
+        "monitoring": monitor.summary(),
         "arm_verdicts": {
             arm: {k: v[k] for k in ("verdict", "failed", "unmet")} for arm, v in verdicts.items()
         },
@@ -560,6 +556,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-root", type=Path, default=Path("reports/ai111"))
     parser.add_argument("--operator-corpus", type=Path)
     parser.add_argument("--strict-offline", action="store_true")
+    parser.add_argument(
+        "--provider",
+        choices=("sampled", "etw"),
+        default="sampled",
+        help="connection/file telemetry: 'etw' needs an elevated process and a passed canary; 'sampled' always refuses",
+    )
     args = parser.parse_args(argv)
     plan = plan_module.frozen_plan()
     if args.authorize_plan != plan_module.digest(plan):
@@ -572,6 +574,13 @@ def main(argv: list[str] | None = None) -> int:
         cases = stage_a_subset(cases, plan["stages"]["A"]["cases_per_arm"], plan["corpus"]["seed"])
     files = {e.model_id: args.model_dir / e.filename for e in registry.entries}
     paths = SessionPaths(args.evidence_root, args.runtime_archive, files, args.operator_corpus)
+    monitor = None
+    if args.provider == "etw":
+        from tools.qualification.ai111.etw import etw_host_monitor
+
+        monitor = etw_host_monitor(
+            OwnershipPolicy(), args.evidence_root / f"ownership-{args.stage}"
+        )
     result = run_session(
         plan=plan,
         paths=paths,
@@ -581,6 +590,7 @@ def main(argv: list[str] | None = None) -> int:
         authorization_text=args.authorization_text,
         registry=registry,
         strict_offline=args.strict_offline,
+        monitor=monitor,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["verdict"] == "PASS" else 1
