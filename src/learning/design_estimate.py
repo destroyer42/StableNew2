@@ -37,18 +37,24 @@ class DesignEstimate:
         )
 
 
-def count_range_values(start: float, end: float, step: float) -> int | None:
-    """Number of values in the inclusive stepped range, or ``None`` when it is not a valid range."""
+def range_values(start: float, end: float, step: float) -> list[float] | None:
+    """The inclusive stepped range, or ``None`` when it is not a valid range.
+
+    Each value is computed from its index rather than by repeated addition, so ``0.2..0.6`` by ``0.2`` yields
+    ``0.2, 0.4, 0.6`` instead of losing the end value to accumulated float error.
+    """
     if step <= 0 or start > end:
         return None
-    count = 0
-    current = start
-    while current <= end:
-        count += 1
-        if count > _RANGE_LIMIT:
-            return None
-        current += step
-    return count
+    count = int((end - start) / step + 1e-9) + 1
+    if count > _RANGE_LIMIT:
+        return None
+    return [round(start + index * step, 2) for index in range(count)]
+
+
+def count_range_values(start: float, end: float, step: float) -> int | None:
+    """Number of values in the inclusive stepped range, or ``None`` when it is not a valid range."""
+    values = range_values(start, end, step)
+    return None if values is None else len(values)
 
 
 def estimate_design(

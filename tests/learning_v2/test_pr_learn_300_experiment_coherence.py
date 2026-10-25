@@ -100,10 +100,14 @@ def test_preview_snapshot_is_stable_and_background_completion_keeps_selection() 
         }
     )
     controller = LearningController(state, app_controller=app_controller)
-    controller._get_baseline_config = lambda: {"txt2img": {"cfg_scale": 7.0}}  # type: ignore[method-assign]
+    complete = {
+        "model": "m.safetensors", "sampler_name": "Euler a", "scheduler": "normal", "steps": 20,
+        "width": 512, "height": 512, "seed": 1,
+    }
+    controller._get_baseline_config = lambda: {"txt2img": {**complete, "cfg_scale": 7.0}}  # type: ignore[method-assign]
     controller.build_plan(experiment)
     preview = experiment.execution_snapshot_json
-    controller._get_baseline_config = lambda: {"txt2img": {"cfg_scale": 99.0}}  # type: ignore[method-assign]
+    controller._get_baseline_config = lambda: {"txt2img": {**complete, "cfg_scale": 99.0}}  # type: ignore[method-assign]
 
     selected, background = state.plan[0], state.plan[-1]
     state.selected_variant = selected

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -30,6 +31,9 @@ class LearningExperiment:
     # Canonical JSON captured at preview time.  A JSON string prevents later
     # stage-card edits from mutating the admitted execution baseline in place.
     execution_snapshot_json: str = ""
+    # How the editable baseline was authored (origin, edits).  Empty for experiments saved before independent
+    # baselines; those keep their frozen configuration and are never re-read from the Pipeline.
+    baseline_authoring: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +49,7 @@ class LearningExperiment:
             "images_per_value": int(self.images_per_value or 0),
             "metadata": dict(self.metadata or {}),
             "execution_snapshot_json": self.execution_snapshot_json,
+            "baseline_authoring": dict(self.baseline_authoring or {}),
         }
 
     @staticmethod
@@ -62,6 +67,7 @@ class LearningExperiment:
             images_per_value=int(payload.get("images_per_value", 1) or 1),
             metadata=dict(payload.get("metadata") or {}),
             execution_snapshot_json=str(payload.get("execution_snapshot_json", "") or ""),
+            baseline_authoring=dict(payload.get("baseline_authoring") or {}),
         )
 
 
@@ -140,6 +146,9 @@ class LearningState:
         # Drafts are resumable workspace state, never submitted learning evidence.
         # Keys combine the durable experiment and artifact identities.
         self.review_drafts: dict[str, dict[str, Any]] = {}
+        # The editable Learning baseline: {"config": ..., "authoring": ...}.  Owned by Learning; seeded from the
+        # Pipeline only by an explicit copy (see src/learning/baseline_draft.py).
+        self.baseline_draft: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         selected_variant_index = -1
@@ -163,6 +172,7 @@ class LearningState:
                 for key, value in self.review_drafts.items()
                 if isinstance(value, dict)
             },
+            "baseline_draft": copy.deepcopy(self.baseline_draft) if self.baseline_draft else None,
         }
 
     @staticmethod
@@ -199,5 +209,11 @@ class LearningState:
                 str(key): dict(value)
                 for key, value in raw_drafts.items()
                 if isinstance(value, dict)
+            }
+        draft = payload.get("baseline_draft")
+        if isinstance(draft, dict) and isinstance(draft.get("config"), dict):
+            state.baseline_draft = {
+                "config": copy.deepcopy(draft["config"]),
+                "authoring": dict(draft.get("authoring") or {}),
             }
         return state

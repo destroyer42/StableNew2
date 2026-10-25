@@ -1,0 +1,959 @@
+{
+ "generated_from": "40946733",
+ "scenarios": [
+  {
+   "experiment_id": "legacy-txt2img",
+   "name": "legacy txt2img",
+   "prompt_text": "a lighthouse at dusk",
+   "snapshot_json": "{\"baseline_config\":{\"adetailer\":{\"adetailer_model\":\"face_yolov8n.pt\",\"cfg_scale\":6.5,\"denoising_strength\":0.3,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":25},\"backend_options\":{\"image\":{\"backend_id\":\"forge_webui\"}},\"global_negative_prompt\":\"global negative\",\"global_positive_prompt\":\"\",\"global_prompt_policy_source\":\"frozen_njr\",\"img2img\":{\"cfg_scale\":6.5,\"denoising_strength\":0.4,\"height\":1024,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":25,\"width\":768},\"pipeline\":{\"adetailer_enabled\":false,\"apply_global_negative_adetailer\":true,\"apply_global_negative_img2img\":true,\"apply_global_negative_txt2img\":true,\"apply_global_negative_upscale\":true,\"apply_global_positive_txt2img\":false,\"img2img_enabled\":false,\"txt2img_enabled\":true,\"upscale_enabled\":false},\"prompt_optimizer\":{\"enabled\":false},\"txt2img\":{\"cfg_scale\":7.0,\"height\":1024,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"seed\":42,\"steps\":30,\"subseed\":700,\"subseed_strength\":0.5,\"vae\":\"\",\"width\":768},\"upscale\":{\"upscale_factor\":2.0,\"upscaler\":\"R-ESRGAN 4x+\"}},\"display_name\":\"legacy txt2img\",\"experiment_id\":\"legacy-txt2img\",\"experiment_timestamp\":\"20260101-000000\",\"images_per_value\":2,\"input_image_path\":\"\",\"model_policy_context\":{\"contract\":{\"allowed_backends\":[\"forge_webui\",\"a1111_webui\"],\"controls\":{\"cfg_scale\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"denoise_strength\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"geometry\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"lora_strength\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"model\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"sampler\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"scheduler\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"steps\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"upscale_factor\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"vae\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null}},\"features\":{\"adetailer\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"controlnet\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"unsupported\"},\"embeddings\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"hires\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"lora\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"negative_prompt\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"prompt_optimizer\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"refiner\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"upscale\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"}},\"modes\":[\"txt2img\",\"img2img\",\"adetailer\",\"upscale\"],\"prompt_dialect\":\"sdxl_weighted_tags\",\"required_backend\":null,\"stages\":[\"txt2img\",\"img2img\",\"adetailer\",\"upscale\"]},\"evidence\":\"registry_evidence\",\"family\":\"sdxl\",\"policy_id\":\"sdxl\",\"profile_ref\":null,\"selected_model\":\"ordinary.safetensors\",\"stage\":\"txt2img\"},\"negative_prompt_text\":\"\",\"prompt_source\":{\"comparison_mode\":false,\"end_value\":8,\"executor_base_contract\":\"learning_executor_base/1\",\"fixed_strength\":1.0,\"grid\":null,\"lora_mode\":\"strength\",\"lora_name\":null,\"prompt_semantics\":\"executor_base_before_globals_and_optimizer\",\"prompt_source\":\"custom\",\"selected_items\":[],\"selected_loras\":[],\"selected_models\":[],\"selected_prompt_index\":0,\"selected_prompt_label\":\"\",\"selected_prompt_loras\":[],\"selected_prompt_negative_text\":\"\",\"selected_prompt_pack_name\":\"\",\"selected_prompt_pack_path\":\"\",\"start_value\":4,\"step_value\":2,\"strength_end\":1.5,\"strength_start\":0.5,\"strength_step\":0.1,\"study_type\":\"controlled_variable\"},\"prompt_text\":\"a lighthouse at dusk\",\"schema_version\":2,\"seed_policy\":{\"policy\":\"requested_seed_with_backend_observed_vector\",\"requested_base_seed\":42,\"requested_sample_count\":2,\"requested_subseed\":700,\"subseed_strength\":0.5},\"stage\":\"txt2img\",\"variable_under_test\":\"CFG Scale\",\"variant_values\":[4.0,6.0,8.0]}",
+   "stage": "txt2img",
+   "values": [
+    4.0,
+    6.0,
+    8.0
+   ],
+   "variable": "CFG Scale",
+   "variants": [
+    {
+     "expected": {
+      "cfg_scale": 4.0,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-txt2img",
+       "learning_variable": "CFG Scale",
+       "learning_variant_value": 4.0,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 4.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "seed": 42,
+      "stages": [
+       {
+        "cfg_scale": 4.0,
+        "denoising_strength": null,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "stage_type": "txt2img",
+        "steps": 30
+       }
+      ],
+      "steps": 30,
+      "variable": null,
+      "variant_value": 4.0,
+      "width": 768
+     },
+     "param_value": 4.0,
+     "planned_images": 2,
+     "variant_id": "legacy-txt2img:0"
+    },
+    {
+     "expected": {
+      "cfg_scale": 6.0,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-txt2img",
+       "learning_variable": "CFG Scale",
+       "learning_variant_value": 6.0,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 6.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "seed": 42,
+      "stages": [
+       {
+        "cfg_scale": 6.0,
+        "denoising_strength": null,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "stage_type": "txt2img",
+        "steps": 30
+       }
+      ],
+      "steps": 30,
+      "variable": null,
+      "variant_value": 6.0,
+      "width": 768
+     },
+     "param_value": 6.0,
+     "planned_images": 2,
+     "variant_id": "legacy-txt2img:1"
+    },
+    {
+     "expected": {
+      "cfg_scale": 8.0,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-txt2img",
+       "learning_variable": "CFG Scale",
+       "learning_variant_value": 8.0,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 8.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "seed": 42,
+      "stages": [
+       {
+        "cfg_scale": 8.0,
+        "denoising_strength": null,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "stage_type": "txt2img",
+        "steps": 30
+       }
+      ],
+      "steps": 30,
+      "variable": null,
+      "variant_value": 8.0,
+      "width": 768
+     },
+     "param_value": 8.0,
+     "planned_images": 2,
+     "variant_id": "legacy-txt2img:2"
+    }
+   ]
+  },
+  {
+   "experiment_id": "legacy-img2img",
+   "name": "legacy img2img",
+   "prompt_text": "a lighthouse at dusk",
+   "snapshot_json": "{\"baseline_config\":{\"adetailer\":{\"adetailer_model\":\"face_yolov8n.pt\",\"cfg_scale\":6.5,\"denoising_strength\":0.3,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":25},\"backend_options\":{\"image\":{\"backend_id\":\"forge_webui\"}},\"global_negative_prompt\":\"global negative\",\"global_positive_prompt\":\"\",\"global_prompt_policy_source\":\"frozen_njr\",\"img2img\":{\"cfg_scale\":6.5,\"denoising_strength\":0.4,\"height\":1024,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":25,\"width\":768},\"pipeline\":{\"adetailer_enabled\":false,\"apply_global_negative_adetailer\":true,\"apply_global_negative_img2img\":true,\"apply_global_negative_txt2img\":true,\"apply_global_negative_upscale\":true,\"apply_global_positive_txt2img\":false,\"img2img_enabled\":false,\"txt2img_enabled\":true,\"upscale_enabled\":false},\"prompt_optimizer\":{\"enabled\":false},\"txt2img\":{\"cfg_scale\":7.0,\"height\":1024,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"seed\":42,\"steps\":30,\"subseed\":700,\"subseed_strength\":0.5,\"vae\":\"\",\"width\":768},\"upscale\":{\"upscale_factor\":2.0,\"upscaler\":\"R-ESRGAN 4x+\"}},\"display_name\":\"legacy img2img\",\"experiment_id\":\"legacy-img2img\",\"experiment_timestamp\":\"20260101-000000\",\"images_per_value\":2,\"input_image_path\":\"{SOURCE_IMAGE}\",\"model_policy_context\":{\"contract\":{\"allowed_backends\":[\"forge_webui\",\"a1111_webui\"],\"controls\":{\"cfg_scale\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"denoise_strength\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"geometry\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"lora_strength\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"model\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"sampler\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"scheduler\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"steps\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"upscale_factor\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"vae\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null}},\"features\":{\"adetailer\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"controlnet\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"unsupported\"},\"embeddings\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"hires\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"lora\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"negative_prompt\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"prompt_optimizer\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"refiner\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"upscale\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"}},\"modes\":[\"txt2img\",\"img2img\",\"adetailer\",\"upscale\"],\"prompt_dialect\":\"sdxl_weighted_tags\",\"required_backend\":null,\"stages\":[\"txt2img\",\"img2img\",\"adetailer\",\"upscale\"]},\"evidence\":\"registry_evidence\",\"family\":\"sdxl\",\"policy_id\":\"sdxl\",\"profile_ref\":null,\"selected_model\":\"ordinary.safetensors\",\"stage\":\"img2img\"},\"negative_prompt_text\":\"\",\"prompt_source\":{\"comparison_mode\":false,\"end_value\":0.7,\"executor_base_contract\":\"learning_executor_base/1\",\"fixed_strength\":1.0,\"grid\":null,\"lora_mode\":\"strength\",\"lora_name\":null,\"prompt_semantics\":\"executor_base_before_globals_and_optimizer\",\"prompt_source\":\"custom\",\"selected_items\":[],\"selected_loras\":[],\"selected_models\":[],\"selected_prompt_index\":0,\"selected_prompt_label\":\"\",\"selected_prompt_loras\":[],\"selected_prompt_negative_text\":\"\",\"selected_prompt_pack_name\":\"\",\"selected_prompt_pack_path\":\"\",\"start_value\":0.2,\"step_value\":0.2,\"strength_end\":1.5,\"strength_start\":0.5,\"strength_step\":0.1,\"study_type\":\"controlled_variable\"},\"prompt_text\":\"a lighthouse at dusk\",\"schema_version\":2,\"seed_policy\":{\"policy\":\"requested_seed_with_backend_observed_vector\",\"requested_base_seed\":42,\"requested_sample_count\":2,\"requested_subseed\":700,\"subseed_strength\":0.5},\"stage\":\"img2img\",\"variable_under_test\":\"Denoise Strength\",\"variant_values\":[0.2,0.4,0.6]}",
+   "stage": "img2img",
+   "values": [
+    0.2,
+    0.4,
+    0.6
+   ],
+   "variable": "Denoise Strength",
+   "variants": [
+    {
+     "expected": {
+      "cfg_scale": 6.5,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.2,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-img2img",
+       "learning_variable": "Denoise Strength",
+       "learning_variant_value": 0.2,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [
+       "{SOURCE_IMAGE}",
+       "{SOURCE_IMAGE}"
+      ],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "seed": null,
+      "stages": [
+       {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.2,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "stage_type": "img2img",
+        "steps": 25
+       }
+      ],
+      "steps": 25,
+      "variable": null,
+      "variant_value": 0.2,
+      "width": 768
+     },
+     "param_value": 0.2,
+     "planned_images": 2,
+     "variant_id": "legacy-img2img:0"
+    },
+    {
+     "expected": {
+      "cfg_scale": 6.5,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-img2img",
+       "learning_variable": "Denoise Strength",
+       "learning_variant_value": 0.4,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [
+       "{SOURCE_IMAGE}",
+       "{SOURCE_IMAGE}"
+      ],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "seed": null,
+      "stages": [
+       {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "stage_type": "img2img",
+        "steps": 25
+       }
+      ],
+      "steps": 25,
+      "variable": null,
+      "variant_value": 0.4,
+      "width": 768
+     },
+     "param_value": 0.4,
+     "planned_images": 2,
+     "variant_id": "legacy-img2img:1"
+    },
+    {
+     "expected": {
+      "cfg_scale": 6.5,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.6,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-img2img",
+       "learning_variable": "Denoise Strength",
+       "learning_variant_value": 0.6,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [
+       "{SOURCE_IMAGE}",
+       "{SOURCE_IMAGE}"
+      ],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "DPM++ 2M",
+      "scheduler": "Karras",
+      "seed": null,
+      "stages": [
+       {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.6,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "stage_type": "img2img",
+        "steps": 25
+       }
+      ],
+      "steps": 25,
+      "variable": null,
+      "variant_value": 0.6,
+      "width": 768
+     },
+     "param_value": 0.6,
+     "planned_images": 2,
+     "variant_id": "legacy-img2img:2"
+    }
+   ]
+  },
+  {
+   "experiment_id": "legacy-upscale",
+   "name": "legacy upscale",
+   "prompt_text": "a lighthouse at dusk",
+   "snapshot_json": "{\"baseline_config\":{\"adetailer\":{\"adetailer_model\":\"face_yolov8n.pt\",\"cfg_scale\":6.5,\"denoising_strength\":0.3,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":25},\"backend_options\":{\"image\":{\"backend_id\":\"forge_webui\"}},\"global_negative_prompt\":\"global negative\",\"global_positive_prompt\":\"\",\"global_prompt_policy_source\":\"frozen_njr\",\"img2img\":{\"cfg_scale\":6.5,\"denoising_strength\":0.4,\"height\":1024,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"steps\":25,\"width\":768},\"pipeline\":{\"adetailer_enabled\":false,\"apply_global_negative_adetailer\":true,\"apply_global_negative_img2img\":true,\"apply_global_negative_txt2img\":true,\"apply_global_negative_upscale\":true,\"apply_global_positive_txt2img\":false,\"img2img_enabled\":false,\"txt2img_enabled\":true,\"upscale_enabled\":false},\"prompt_optimizer\":{\"enabled\":false},\"txt2img\":{\"cfg_scale\":7.0,\"height\":1024,\"model\":\"ordinary.safetensors\",\"sampler_name\":\"DPM++ 2M\",\"scheduler\":\"Karras\",\"seed\":42,\"steps\":30,\"subseed\":700,\"subseed_strength\":0.5,\"vae\":\"\",\"width\":768},\"upscale\":{\"upscale_factor\":2.0,\"upscaler\":\"R-ESRGAN 4x+\"}},\"display_name\":\"legacy upscale\",\"experiment_id\":\"legacy-upscale\",\"experiment_timestamp\":\"20260101-000000\",\"images_per_value\":2,\"input_image_path\":\"{SOURCE_IMAGE}\",\"model_policy_context\":{\"contract\":{\"allowed_backends\":[\"forge_webui\",\"a1111_webui\"],\"controls\":{\"cfg_scale\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"denoise_strength\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"geometry\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"lora_strength\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"model\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"sampler\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"scheduler\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"steps\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"upscale_factor\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null},\"vae\":{\"allowed\":[],\"mode\":\"configurable\",\"value\":null}},\"features\":{\"adetailer\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"controlnet\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"unsupported\"},\"embeddings\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"hires\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"lora\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"negative_prompt\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"prompt_optimizer\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"refiner\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"},\"upscale\":{\"compatibility_policy\":\"\",\"limit\":null,\"stages\":[],\"support\":\"supported\"}},\"modes\":[\"txt2img\",\"img2img\",\"adetailer\",\"upscale\"],\"prompt_dialect\":\"sdxl_weighted_tags\",\"required_backend\":null,\"stages\":[\"txt2img\",\"img2img\",\"adetailer\",\"upscale\"]},\"evidence\":\"registry_evidence\",\"family\":\"sdxl\",\"policy_id\":\"sdxl\",\"profile_ref\":null,\"selected_model\":\"ordinary.safetensors\",\"stage\":\"upscale\"},\"negative_prompt_text\":\"\",\"prompt_source\":{\"comparison_mode\":false,\"end_value\":2.5,\"executor_base_contract\":\"learning_executor_base/1\",\"fixed_strength\":1.0,\"grid\":null,\"lora_mode\":\"strength\",\"lora_name\":null,\"prompt_semantics\":\"executor_base_before_globals_and_optimizer\",\"prompt_source\":\"custom\",\"selected_items\":[],\"selected_loras\":[],\"selected_models\":[],\"selected_prompt_index\":0,\"selected_prompt_label\":\"\",\"selected_prompt_loras\":[],\"selected_prompt_negative_text\":\"\",\"selected_prompt_pack_name\":\"\",\"selected_prompt_pack_path\":\"\",\"start_value\":1.5,\"step_value\":0.5,\"strength_end\":1.5,\"strength_start\":0.5,\"strength_step\":0.1,\"study_type\":\"controlled_variable\"},\"prompt_text\":\"a lighthouse at dusk\",\"schema_version\":2,\"seed_policy\":{\"policy\":\"requested_seed_with_backend_observed_vector\",\"requested_base_seed\":42,\"requested_sample_count\":2,\"requested_subseed\":700,\"subseed_strength\":0.5},\"stage\":\"upscale\",\"variable_under_test\":\"Upscale Factor\",\"variant_values\":[1.5,2.0,2.5]}",
+   "stage": "upscale",
+   "values": [
+    1.5,
+    2.0,
+    2.5
+   ],
+   "variable": "Upscale Factor",
+   "variants": [
+    {
+     "expected": {
+      "cfg_scale": 7.0,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-upscale",
+       "learning_variable": "Upscale Factor",
+       "learning_variant_value": 1.5,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "upscale_factor": 1.5,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [
+       "{SOURCE_IMAGE}",
+       "{SOURCE_IMAGE}"
+      ],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "Euler a",
+      "scheduler": "Karras",
+      "seed": null,
+      "stages": [
+       {
+        "cfg_scale": 7.0,
+        "denoising_strength": 0.35,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "Euler a",
+        "scheduler": null,
+        "stage_type": "upscale",
+        "steps": 20
+       }
+      ],
+      "steps": 20,
+      "variable": null,
+      "variant_value": 1.5,
+      "width": 768
+     },
+     "param_value": 1.5,
+     "planned_images": 2,
+     "variant_id": "legacy-upscale:0"
+    },
+    {
+     "expected": {
+      "cfg_scale": 7.0,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-upscale",
+       "learning_variable": "Upscale Factor",
+       "learning_variant_value": 2.0,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [
+       "{SOURCE_IMAGE}",
+       "{SOURCE_IMAGE}"
+      ],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "Euler a",
+      "scheduler": "Karras",
+      "seed": null,
+      "stages": [
+       {
+        "cfg_scale": 7.0,
+        "denoising_strength": 0.35,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "Euler a",
+        "scheduler": null,
+        "stage_type": "upscale",
+        "steps": 20
+       }
+      ],
+      "steps": 20,
+      "variable": null,
+      "variant_value": 2.0,
+      "width": 768
+     },
+     "param_value": 2.0,
+     "planned_images": 2,
+     "variant_id": "legacy-upscale:1"
+    },
+    {
+     "expected": {
+      "cfg_scale": 7.0,
+      "config": {
+       "adetailer": {
+        "adetailer_model": "face_yolov8n.pt",
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "learning_experiment_id": "legacy-upscale",
+       "learning_variable": "Upscale Factor",
+       "learning_variant_value": 2.5,
+       "negative_prompt": "",
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt": "a lighthouse at dusk",
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "negative_prompt": "",
+        "prompt": "a lighthouse at dusk",
+        "upscale_factor": 2.5,
+        "upscaler": "R-ESRGAN 4x+"
+       }
+      },
+      "height": 1024,
+      "images_per_prompt": 2,
+      "input_image_paths": [
+       "{SOURCE_IMAGE}",
+       "{SOURCE_IMAGE}"
+      ],
+      "negative_prompt": "",
+      "positive_prompt": "a lighthouse at dusk",
+      "sampler_name": "Euler a",
+      "scheduler": "Karras",
+      "seed": null,
+      "stages": [
+       {
+        "cfg_scale": 7.0,
+        "denoising_strength": 0.35,
+        "enabled": true,
+        "model": "ordinary.safetensors",
+        "sampler_name": "Euler a",
+        "scheduler": null,
+        "stage_type": "upscale",
+        "steps": 20
+       }
+      ],
+      "steps": 20,
+      "variable": null,
+      "variant_value": 2.5,
+      "width": 768
+     },
+     "param_value": 2.5,
+     "planned_images": 2,
+     "variant_id": "legacy-upscale:2"
+    }
+   ]
+  }
+ ]
+}

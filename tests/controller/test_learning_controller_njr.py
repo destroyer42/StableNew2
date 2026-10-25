@@ -121,12 +121,18 @@ class TestLearningControllerNJR:
 
     @pytest.fixture
     def controller(self, learning_state, mock_app_controller, mock_pipeline_controller):
-        """Create LearningController with mocks."""
-        return LearningController(
+        """Create LearningController with mocks and an explicitly authored Learning baseline."""
+        controller = LearningController(
             learning_state=learning_state,
             pipeline_controller=mock_pipeline_controller,
             app_controller=mock_app_controller,
         )
+        # Learning owns its baseline: the stage cards are read once, by the explicit Copy, never at compile time.
+        controller.copy_pipeline_settings("txt2img")
+        experiment = learning_state.current_experiment
+        experiment.baseline_config = controller.authoring_baseline()
+        experiment.baseline_authoring = controller.baseline_authoring_record()
+        return controller
 
     def test_build_variant_njr_with_stage_config(self, controller, learning_state):
         """Test 1: NJR construction with explicit config from stage cards."""
@@ -207,6 +213,8 @@ class TestLearningControllerNJR:
             variable_under_test="Denoise Strength",
             prompt_text="a beautiful landscape",
             images_per_value=2,
+            baseline_config=controller.authoring_baseline(),
+            baseline_authoring=controller.baseline_authoring_record(),
         )
         variant = LearningVariant(param_value=0.45, planned_images=2)
 

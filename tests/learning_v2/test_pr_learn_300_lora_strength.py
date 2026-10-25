@@ -53,6 +53,10 @@ def _controller(prompt: str = PROMPT):
 
     controller._learning_policy_resolver = lambda name: resolve_model_policy(name, family_lookup=lambda _: SimpleNamespace(
         status=SimpleNamespace(value="resolved"), family=SimpleNamespace(value="sdxl")))
+    # Learning owns its baseline: import the Pipeline's settings once, explicitly, as the editor's Copy does.
+    controller.copy_pipeline_settings("txt2img")
+    experiment.baseline_config = controller.authoring_baseline()
+    experiment.baseline_authoring = controller.baseline_authoring_record()
     return controller, experiment
 
 

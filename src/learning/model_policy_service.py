@@ -98,8 +98,15 @@ def selected_loras(config, prompt="", metadata=None):
     return tuple(result), problems
 
 
-def live_capabilities(controller, stage: str, *, policy=None, model=None):
-    baseline = controller._get_baseline_config()
+def live_capabilities(controller, stage: str, *, policy=None, model=None, baseline=None):
+    """Project capabilities for ``model`` at ``stage``.
+
+    ``baseline`` is the configuration that owns the model/LoRA context.  Learning's own authored baseline is the
+    default; the Pipeline's settings are only ever passed in explicitly (the Apply-to-Pipeline direction).
+    """
+    if baseline is None:
+        authored = getattr(controller, "authoring_baseline", None)
+        baseline = authored() if callable(authored) else controller._get_baseline_config()
     model = model if model is not None else selected_model(baseline, stage)
     policy = policy or resolve_policy(model, controller, baseline)
     workspace = getattr(controller, "prompt_workspace_state", None)
@@ -272,7 +279,8 @@ def negative_prompt_supported(controller, config, stage):
 
 def recommendation_query(controller):
     experiment = controller.learning_state.current_experiment
-    config = controller._get_baseline_config()
+    authored = getattr(controller, "authoring_baseline", None)
+    config = (authored() if callable(authored) else None) or controller._get_baseline_config()
     stage = "txt2img"
     if experiment is not None:
         from src.learning.experiment_execution import thaw_snapshot
@@ -312,8 +320,12 @@ def validate_recommendation_apply(controller, recommendations, cards, rec_list):
 
     stage = str(getattr(recommendations, "stage", "txt2img") or "txt2img")
     model = checkpoint_for_stage(cards, stage)
+    # Apply targets the Pipeline's editable settings, so the Pipeline's own context is the correct baseline here.
     capabilities = live_capabilities(
-        controller, stage, model=model if isinstance(model, str) else None
+        controller,
+        stage,
+        model=model if isinstance(model, str) else None,
+        baseline=controller._get_baseline_config(),
     )
     target = json.loads(capabilities.context_json)
     supplied = getattr(recommendations, "model_policy_context", None)

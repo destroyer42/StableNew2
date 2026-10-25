@@ -34,7 +34,7 @@
     "src/gui/artifact_metadata_inspector_dialog.py": 1,
     "src/gui/base_generation_panel_v2.py": 12,
     "src/gui/batch_operations_panel_v2.py": 6,
-    "src/gui/controllers/learning_controller.py": 63,
+    "src/gui/controllers/learning_controller.py": 60,
     "src/gui/controllers/review_workflow_adapter.py": 1,
     "src/gui/design_system_v2.py": 26,
     "src/gui/dialogs/multi_folder_selector.py": 16,
@@ -74,7 +74,7 @@
     "src/gui/views/diagnostics_dashboard_v2.py": 2,
     "src/gui/views/discovered_review_table.py": 1,
     "src/gui/views/error_modal_v2.py": 1,
-    "src/gui/views/experiment_design_panel.py": 45,
+    "src/gui/views/experiment_design_panel.py": 42,
     "src/gui/views/learning_analytics_panel.py": 1,
     "src/gui/views/learning_plan_table.py": 1,
     "src/gui/views/learning_review_panel.py": 16,
@@ -179,5 +179,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1492
+  "total": 1486
 }

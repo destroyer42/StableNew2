@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import uuid
@@ -39,8 +40,10 @@ from src.gui_v2.adapters.learning_adapter_v2 import (
     list_recent_learning_records,
     update_record_feedback,
 )
-from src.image_backends.image_backend_types import normalize_image_backend_options
+from src.learning import baseline_authoring as authoring
+from src.learning import baseline_draft as draft_service
 from src.learning.automation_modes import DEFAULT_AUTOMATION_MODE
+from src.learning.design_estimate import range_values
 from src.learning.discovered_review_models import (
     DiscoveredReviewExperiment,
     DiscoveredReviewItem,
@@ -68,14 +71,19 @@ from src.learning.lora_variant import (
     apply_lora_variant,
     validate_lora_variant,
 )
+from src.learning.model_capabilities import policy_context
+from src.learning.model_capabilities import variable_name as internal_variable_name
 from src.learning.model_policy_service import (
     compile_variant,
     frozen_definition,
     negative_prompt_supported,
     recommendation_query,
+    resolve_policy,
+    selected_model,
     validate_experiment,
     validate_recommendation_apply,
 )
+from src.learning.ordinary_njr import materialize_njr as materialize_ordinary_njr
 from src.learning.ordinary_prompt_freeze import (
     apply_executor_base_prompts,
     freeze_ordinary_prompt_source,
@@ -84,10 +92,10 @@ from src.learning.ordinary_prompt_freeze import (
     ordinary_rating_prompt_evidence,
     validate_ordinary_prompt_snapshot,
 )
+from src.learning.ordinary_snapshot import authored_fields, ordinary_snapshot
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.resource_access import get_projected_resources
 from src.learning.review_workspace import build_review_projection
-from src.learning.stage_capabilities import get_stage_capability
 from src.learning.staged_recommendations import (
     apply_derived_recommendation_patch,
     build_derived_recommendation_patch,
@@ -99,17 +107,8 @@ from src.pipeline.global_prompt_policy import (
     has_frozen_global_prompt_policy,
 )
 from src.pipeline.job_models_v2 import (
-    CURRENT_NJR_SCHEMA_VERSION,
-    ImageWorkloadSpec,
-    LearningJobContext,
     LoRATag,
-    NJRProvenance,
     NormalizedJobRecord,
-    OutputPlan,
-    SourceDescriptor,
-    SourceKind,
-    StageConfig,
-    WorkloadKind,
 )
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
 from src.review.artifact_metadata_inspector import ArtifactMetadataInspector
@@ -288,7 +287,9 @@ class LearningController:
                 else str(getattr(existing, "experiment_id", "") or uuid.uuid4().hex)
             ),
             description=experiment_data.get("description", ""),
-            baseline_config={},  # Will be populated from pipeline state later
+            # The Learning-owned baseline (never the live Pipeline); empty only if the editor was never used.
+            baseline_config=draft_service.config_of(self.learning_state),
+            baseline_authoring=draft_service.authoring_of(self.learning_state),
             prompt_text=prompt_text,
             stage=experiment_data.get("stage", "txt2img"),
             input_image_path=str(experiment_data.get("input_image_path", "") or ""),
@@ -313,12 +314,9 @@ class LearningController:
 
     def _generate_values_from_range(self, start: float, end: float, step: float) -> list[float]:
         """Generate list of values from start to end with given step."""
-        values = []
-        current = start
-        while current <= end:
-            values.append(round(current, 2))
-            current += step
-        return values
+        if step <= 0:
+            raise ValueError("The step must be greater than zero")
+        return range_values(start, end, step) or []
 
     def _generate_variant_values(self, experiment: LearningExperiment) -> list[Any]:
         """Generate values using variable metadata.
@@ -505,7 +503,7 @@ class LearningController:
         logger = logging.getLogger(__name__)
 
         try:
-            baseline = self._get_baseline_config()
+            baseline = self.authoring_baseline()
             app_state = (
                 getattr(self.app_controller, "_app_state", None) if self.app_controller else None
             )
@@ -616,6 +614,11 @@ class LearningController:
         # Clear any existing plan
         self.learning_state.plan = []
 
+        # The Learning-owned baseline this Preview freezes.  Resolved first: value generation reads its LoRAs.
+        stage = authoring.require_stage(experiment.stage)
+        baseline = self._authored_baseline(experiment)
+        draft_signature = authoring.signature(baseline, stage)
+
         # PR-LEARN-020: Generate values using metadata-driven system
         try:
             values = self._generate_variant_values(experiment)
@@ -627,7 +630,6 @@ class LearningController:
 
         # Capture effective settings once at preview.  The runner will compile
         # only from this canonical JSON snapshot, never from live stage cards.
-        baseline = self._get_baseline_config() or dict(experiment.baseline_config or {})
         policy_getter = getattr(self.app_controller, "get_current_global_prompt_policy", None)
         policy = policy_getter() if callable(policy_getter) else None
         if isinstance(policy, dict):
@@ -643,8 +645,16 @@ class LearningController:
             experiment.prompt_text = str(prompt_source["rendered_positive_prompt"])
             negative_prompt = str(prompt_source["rendered_negative_prompt"])
         experiment.metadata.update(prompt_source)
-        experiment.baseline_config = baseline
         model_context = validate_experiment(self, experiment, baseline, experiment.values)
+        problems = authoring.baseline_problems(
+            baseline, stage, input_image_path=experiment.input_image_path,
+            resources=get_projected_resources(self),
+            fixed_by_policy=authoring.policy_owned(model_context),
+        )
+        if problems:
+            raise ValueError("The Learning baseline is incomplete: " + "; ".join(problems))
+        baseline = authoring.finalize_for_stage(baseline, stage)
+        experiment.baseline_config = baseline
         prompt_source.update(experiment.metadata)
         preserved_seed_policy = getattr(experiment, "metadata", {}).get("frozen_seed_policy")
         seed_policy = freeze_seed_policy(
@@ -654,24 +664,29 @@ class LearningController:
                 preserved_seed_policy if isinstance(preserved_seed_policy, dict) else None
             ),
         )
-        experiment.execution_snapshot_json = freeze_snapshot(
+        # Project every variant through the same derivation Run uses; a tested value that compile policy
+        # overwrites refuses the whole experiment here, before anything can be admitted.
+        preview_experiment = replace(experiment, execution_snapshot_json="")
+        variant_settings = [
             {
-                "schema_version": 2,
-                "experiment_id": experiment.experiment_id,
-                "display_name": experiment.name,
-                "baseline_config": baseline,
-                "prompt_text": experiment.prompt_text,
-                "negative_prompt_text": negative_prompt,
-                "stage": experiment.stage,
-                "variable_under_test": experiment.variable_under_test,
-                "variant_values": list(experiment.values),
-                "images_per_value": max(1, int(experiment.images_per_value or 1)),
-                "seed_policy": seed_policy,
-                "experiment_timestamp": datetime.utcnow().strftime("%Y%m%d-%H%M%S"),
-                "prompt_source": prompt_source,
-                "input_image_path": experiment.input_image_path,
-                "model_policy_context": model_context,
+                "value": value,
+                "settings": authoring.variant_projection(
+                    self._variant_config(baseline, preview_experiment, value, seed_policy, True),
+                    stage, "", None,
+                ),
             }
+            for value in experiment.values
+        ]
+        variable = internal_variable_name(experiment.variable_under_test)
+        experiment.execution_snapshot_json = freeze_snapshot(
+            ordinary_snapshot(
+                experiment, baseline=baseline, negative_prompt=negative_prompt, seed_policy=seed_policy,
+                prompt_source=prompt_source, model_context=model_context,
+                authored=authored_fields(
+                    experiment, baseline, stage, draft_signature=draft_signature, variable=variable,
+                    variant_settings=variant_settings,
+                ),
+            )
         )
 
         # Generate variants for each value in the experiment
@@ -699,7 +714,7 @@ class LearningController:
 
         if not experiment.experiment_id:
             experiment.experiment_id = uuid.uuid4().hex
-        baseline = self._get_baseline_config() or dict(experiment.baseline_config or {})
+        baseline = self._authored_baseline(experiment)
         getter = getattr(self.app_controller, "get_current_global_prompt_policy", None)
         policy = getter() if callable(getter) else None
         if isinstance(policy, dict):
@@ -731,7 +746,7 @@ class LearningController:
 
         if not experiment.experiment_id:
             experiment.experiment_id = uuid.uuid4().hex
-        baseline = self._get_baseline_config() or dict(experiment.baseline_config or {})
+        baseline = self._authored_baseline(experiment)
         getter = getattr(self.app_controller, "get_current_global_prompt_policy", None)
         policy = getter() if callable(getter) else None
         if isinstance(policy, dict):
@@ -945,6 +960,7 @@ class LearningController:
         if self.learning_state.current_experiment is not None:
             self._notify_resume_state_changed()
         self.learning_state.current_experiment = None
+        draft_service.clear(self.learning_state)
         self.learning_state.plan = []
         self.learning_state.selected_variant = None
         self.learning_state.selected_image_index = 0
@@ -967,7 +983,11 @@ class LearningController:
         if isinstance(seed_policy, dict):
             clone.metadata["frozen_seed_policy"] = dict(seed_policy)
         clone.execution_snapshot_json = ""
-        clone.baseline_config = {}
+        # The clone starts from a copy of the source's own baseline (never the live Pipeline) and is editable.
+        source_baseline = snapshot.get("baseline_config") or current.baseline_config
+        draft_service.adopt(self.learning_state, source_baseline, None, origin=authoring.ORIGIN_CLONE)
+        clone.baseline_config = draft_service.config_of(self.learning_state)
+        clone.baseline_authoring = draft_service.authoring_of(self.learning_state)
         clone.values = []
         self.learning_state.current_experiment = clone
         self.learning_state.plan = []
@@ -1168,15 +1188,11 @@ class LearningController:
     def _build_variant_njr(
         self, variant: LearningVariant, experiment: LearningExperiment
     ) -> NormalizedJobRecord:
-        """Build NormalizedJobRecord with explicit config from stage cards.
+        """Compile one variant of a frozen experiment into the canonical NJR.
 
-        PR-LEARN-010: Constructs NJR directly with all config fields populated,
-        bypassing PackJobEntry to ensure proper config propagation.
-
-        PR-LEARN-011: Enhanced with validation and comprehensive logging.
+        Only the frozen snapshot is read here: never a stage card, never the live Pipeline.  The construction
+        itself lives in ``src/learning/ordinary_njr.py``.
         """
-        import logging
-
         # Direct programmatic callers may bypass the Preview button.  Give
         # them the same stable identity rather than falling back to a name.
         if not experiment.experiment_id:
@@ -1186,11 +1202,7 @@ class LearningController:
         if not variant.variant_id:
             variant.variant_id = f"{experiment.experiment_id}:{self._get_variant_index(variant)}"
 
-        logger = logging.getLogger(__name__)
-
         # A plan created by Build Preview has a canonical serialized baseline.
-        # Fallback is only for legacy saved sessions, and is immediately frozen
-        # by build_plan on the next preview.
         snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
         snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
         experiment = frozen_definition(experiment)
@@ -1217,9 +1229,10 @@ class LearningController:
         validate_ordinary_prompt_snapshot(snapshot)
         if snapshot and snapshot.get("model_policy_context") and variant.param_value not in experiment.values:
             raise ValueError("Variant is outside the frozen experiment values")
+        strict = authoring.has_authoring(snapshot)
         baseline = dict(snapshot.get("baseline_config") or experiment.baseline_config or {})
         if not baseline:
-            baseline = self._get_baseline_config()
+            raise ValueError("The experiment has no frozen baseline. Build Preview before Run.")
         model_context = validate_experiment(self, experiment, baseline, [variant.param_value],
                                             frozen_context=snapshot.get("model_policy_context"))
         if not has_frozen_global_prompt_policy(baseline):
@@ -1229,18 +1242,12 @@ class LearningController:
                 baseline = apply_global_prompt_policy(baseline, **policy)
             baseline = freeze_preview_global_policy(baseline)
 
-        # PR-LEARN-011: Validate baseline config
-        is_valid, error_msg = self._validate_baseline_config(baseline)
-        if not is_valid:
-            logger.error(f"[LearningController] Baseline config validation failed: {error_msg}")
-            raise ValueError(f"Invalid baseline config: {error_msg}")
+        if not strict:
+            # Legacy snapshots (frozen before independent baselines) keep their historical validation.
+            is_valid, error_msg = self._validate_baseline_config(baseline)
+            if not is_valid:
+                raise ValueError(f"Invalid baseline config: {error_msg}")
 
-        # PR-LEARN-020: Apply variant override using metadata system
-        import copy
-
-        final_config = copy.deepcopy(baseline)
-        self._apply_variant_override_with_metadata(final_config, variant.param_value, experiment)
-        compile_variant(final_config, experiment)
         frozen_seed_policy = snapshot.get("seed_policy") if isinstance(snapshot, dict) else None
         if not isinstance(frozen_seed_policy, dict):
             # Compatibility for programmatic callers that construct a legacy
@@ -1249,118 +1256,54 @@ class LearningController:
             frozen_seed_policy = freeze_seed_policy(
                 baseline, max(1, int(experiment.images_per_value or 1))
             )
-            snapshot = {
-                "schema_version": 2,
-                "experiment_id": experiment.experiment_id,
-                "display_name": experiment.name,
-                "baseline_config": baseline,
-                "prompt_text": experiment.prompt_text,
-                "negative_prompt_text": "",
-                "stage": experiment.stage,
-                "variable_under_test": experiment.variable_under_test,
-                "variant_values": list(experiment.values or []),
-                "images_per_value": max(1, int(experiment.images_per_value or 1)),
-                "seed_policy": frozen_seed_policy,
-                "experiment_timestamp": datetime.utcnow().strftime("%Y%m%d-%H%M%S"),
-                "prompt_source": dict(getattr(experiment, "metadata", {}) or {}),
-                "input_image_path": experiment.input_image_path,
-                "model_policy_context": model_context,
-            }
+            snapshot = ordinary_snapshot(
+                experiment, baseline=baseline, negative_prompt="", seed_policy=frozen_seed_policy,
+                prompt_source=dict(getattr(experiment, "metadata", {}) or {}), model_context=model_context,
+            )
             snapshot_json = freeze_snapshot(snapshot)
             experiment.execution_snapshot_json = snapshot_json
-        apply_frozen_seed_policy(final_config, frozen_seed_policy)
+
+        final_config = self._variant_config(baseline, experiment, variant.param_value, frozen_seed_policy, strict)
+        stage_name = str(experiment.stage or "txt2img").strip().lower() or "txt2img"
+        expected: dict[str, Any] | None = None
+        if strict:
+            expected = authoring.variant_projection(final_config, stage_name, "", None)
+            frozen = next(
+                (
+                    entry for entry in snapshot.get("variant_effective_settings") or []
+                    if isinstance(entry, dict) and entry.get("value") == variant.param_value
+                ),
+                None,
+            )
+            if frozen is None:
+                raise ValueError("The Preview did not record this variant. Rebuild Preview before Run.")
+            drift = authoring.parity_mismatches(frozen.get("settings") or {}, expected)
+            if drift:
+                raise ValueError("This variant no longer matches its Preview: " + "; ".join(drift))
 
         # Add learning context metadata
         final_config["learning_experiment_id"] = experiment.experiment_id
         final_config["learning_variant_value"] = variant.param_value
         final_config["learning_variable"] = experiment.variable_under_test
-        stage_name = str(experiment.stage or "txt2img").strip().lower() or "txt2img"
         output_dir = self._resolve_learning_output_dir(final_config)
         filename_template = self._resolve_learning_filename_template(final_config)
         variant_index = max(0, self._get_variant_index(variant))
         variant_total = max(1, len(self.learning_state.plan) or len(experiment.values) or 1)
 
-        txt2img_final = final_config.get("txt2img", {})
-
-        # Extract explicit config values
-        model = txt2img_final.get("model", "")
-        vae = txt2img_final.get("vae", "")
-        sampler = txt2img_final.get("sampler_name", "Euler a")
-        scheduler = txt2img_final.get("scheduler", "normal")
-        steps = int(txt2img_final.get("steps", 20))
-        cfg_scale = float(txt2img_final.get("cfg_scale", 7.0))
-        seed = int(txt2img_final.get("seed", -1))
-        clip_skip = int(txt2img_final.get("clip_skip", 2))
-
-        # Debug logging for seed value
-        logger.info(f"[LearningController]   seed from config: {seed} (default=-1)")
-        if seed == -1:
-            logger.warning(
-                "[LearningController]   WARNING: Seed is -1 (random), check if stage card has seed set"
-            )
-
-        # Subseed parameters
-        subseed = int(txt2img_final.get("subseed", -1))
-        subseed_strength = float(txt2img_final.get("subseed_strength", 0.0))
-        seed_resize_from_h = int(txt2img_final.get("seed_resize_from_h", 0))
-        seed_resize_from_w = int(txt2img_final.get("seed_resize_from_w", 0))
-
-        # Get prompt from experiment or current prompt workspace
+        # The frozen prompt; only a legacy snapshot may fall back to the current prompt workspace.
         prompt = str(snapshot.get("prompt_text") or experiment.prompt_text)
-        if not prompt:
-            # If no prompt in experiment, get from current prompt workspace
+        if not prompt and not strict:
             if self.prompt_workspace_state:
                 prompt = self.prompt_workspace_state.get_current_prompt_text() or ""
-        if not prompt:
-            # Final fallback
-            prompt = "a test prompt"
-
-        # Get negative prompt from experiment or current prompt workspace
+            if not prompt:
+                prompt = "a test prompt"
         negative_prompt = frozen_negative_prompt(snapshot, experiment)
         if not snapshot_json and not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
         if not negative_prompt_supported(self, final_config, experiment.stage):
             negative_prompt = ""
 
-        # PR-LEARN-011: Comprehensive logging of final config
-        logger.info(f"[LearningController] Building NJR for variant {variant.param_value}")
-        logger.info(f"[LearningController]   model: {model}")
-        logger.info(f"[LearningController]   vae: {vae}")
-        logger.info(f"[LearningController]   sampler: {sampler}")
-        logger.info(f"[LearningController]   scheduler: {scheduler}")
-        logger.info(f"[LearningController]   steps: {steps}")
-        logger.info(f"[LearningController]   cfg_scale: {cfg_scale}")
-        logger.info(f"[LearningController]   seed: {seed}")
-        logger.info(
-            f"[LearningController]   prompt: {prompt[:50]}..."
-            if len(prompt) > 50
-            else f"[LearningController]   prompt: {prompt}"
-        )
-
-        # Generate job ID
         job_id = f"learning_{experiment.experiment_id}_{variant.variant_id or variant.param_value}_{uuid.uuid4().hex[:8]}"
-
-        # Build stage_chain (required for job validation)
-        txt2img_stage = StageConfig(
-            stage_type="txt2img",
-            enabled=True,
-            steps=steps,
-            cfg_scale=cfg_scale,
-            sampler_name=sampler,
-            scheduler=scheduler,
-            model=model,
-            vae=vae,
-            extra={},
-        )
-
-        # Build learning context for tracking and metadata
-        learning_ctx = LearningJobContext(
-            experiment_id=experiment.experiment_id,
-            experiment_name=experiment.name,
-            variant_index=variant_index,
-            variable_under_test=experiment.variable_under_test,
-            variant_value=variant.param_value,
-        )
         selected_loras: dict[str, LoRATag] = {}
         for entry in list(getattr(experiment, "metadata", {}).get("selected_prompt_loras") or []):
             if not isinstance(entry, dict):
@@ -1395,86 +1338,36 @@ class LearningController:
             experiment=experiment, variant=variant, stage_name=stage_name, final_config=final_config,
         )
         variant.executed_config = copy.deepcopy(final_config)
-        if stage_name != "txt2img":
-            capability = get_stage_capability(stage_name)
-            input_image_path = str(getattr(experiment, "input_image_path", "") or "").strip()
-            if capability.requires_input_image and not input_image_path:
-                raise ValueError(f"{capability.display_name} experiments require an input image")
-            if input_image_path and not Path(input_image_path).exists():
-                raise ValueError(f"Input image not found: {input_image_path}")
-
-            stage_section = final_config.get(stage_name, {})
-            if not isinstance(stage_section, dict):
-                stage_section = {}
-            builder = ReprocessJobBuilder()
-            repeated_inputs = [input_image_path] * max(1, int(experiment.images_per_value or 1))
-            record = builder.build_reprocess_job(
-                input_image_paths=repeated_inputs,
-                stages=[stage_name],
-                config=final_config,
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                model=str(stage_section.get("model") or model or ""),
-                pack_name=f"learning_{experiment.name}",
-                source="learning",
-                extra_metadata=learning_metadata,
-            )
-            return replace(
-                record,
-                job_id=job_id,
-                provenance=replace(
-                    record.provenance,
-                    variant_index=variant_index,
-                    variant_total=variant_total,
-                    learning_context=learning_ctx,
-                    lora_tags=tuple(selected_loras.values()),
-                    metadata=learning_metadata,
-                ),
-            )
-
-        # Build NormalizedJobRecord
-        record = NormalizedJobRecord(
-            schema_version=CURRENT_NJR_SCHEMA_VERSION,
+        return materialize_ordinary_njr(
+            final_config=final_config,
+            experiment=experiment,
+            variant=variant,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            learning_metadata=learning_metadata,
             job_id=job_id,
-            workload_kind=WorkloadKind.IMAGE,
-            source=SourceDescriptor(
-                kind=SourceKind.LEARNING,
-                display_name=experiment.name,
-            ),
-            workload=ImageWorkloadSpec(
-                positive_prompt=prompt,
-                negative_prompt=negative_prompt,
-                config=final_config,
-                images_per_prompt=max(1, int(experiment.images_per_value or 1)),
-                metadata=learning_metadata,
-                backend_options=normalize_image_backend_options(final_config.get("backend_options")),
-            ),
-            stages=(txt2img_stage,),
-            output_plan=OutputPlan(
-                base_output_dir=output_dir or "output",
-                filename_template=filename_template,
-            ),
-            provenance=NJRProvenance(
-                seed=seed,
-                variant_index=variant_index,
-                variant_total=variant_total,
-                learning_context=learning_ctx,
-                lora_tags=tuple(selected_loras.values()),
-                metadata={
-                    **learning_metadata,
-                    "subseed": subseed,
-                    "subseed_strength": subseed_strength,
-                    "seed_resize_from_h": seed_resize_from_h,
-                    "seed_resize_from_w": seed_resize_from_w,
-                    "clip_skip": clip_skip,
-                },
-            ),
+            variant_index=variant_index,
+            variant_total=variant_total,
+            selected_loras=selected_loras,
+            output_dir=output_dir,
+            filename_template=filename_template,
+            strict=strict,
+            source_identity=snapshot.get("input_image") if strict else None,
+            expected=expected,
         )
 
-        # PR-LEARN-011: Confirm NJR construction
-        logger.info(f"[LearningController] Successfully built NJR: job_id={record.job_id}")
-
-        return record
+    def _variant_config(
+        self, baseline: dict[str, Any], experiment: LearningExperiment, value: Any,
+        seed_policy: dict[str, Any], strict: bool,
+    ) -> dict[str, Any]:
+        """The one place a variant's effective configuration is derived (Preview projects it, Run compiles it)."""
+        final_config = copy.deepcopy(baseline)
+        self._apply_variant_override_with_metadata(final_config, value, experiment)
+        if strict:
+            authoring.align_aliases(final_config, authoring.require_stage(experiment.stage))
+        compile_variant(final_config, experiment)
+        apply_frozen_seed_policy(final_config, seed_policy)
+        return final_config
 
     def _resolve_learning_output_dir(self, config: dict[str, Any]) -> str:
         pipeline_cfg = config.get("pipeline", {})
@@ -1639,8 +1532,80 @@ class LearningController:
         else:
             logger.warning("[LearningController]   pipeline section MISSING")
 
+    # -- the Learning-owned baseline -----------------------------------------------------------------------
+    # Learning authors its own experiment baseline.  The Pipeline's settings are read only by
+    # ``copy_pipeline_settings`` (and the one-time seed in ``_authored_baseline``); nothing stays linked.
+
+    def authoring_baseline(self) -> dict[str, Any]:
+        """An isolated copy of the editable Learning baseline (empty until one is authored or copied)."""
+        return draft_service.config_of(self.learning_state)
+
+    def baseline_authoring_record(self) -> dict[str, Any]:
+        return draft_service.authoring_of(self.learning_state)
+
+    def pipeline_settings_available(self) -> bool:
+        """True when the Pipeline currently offers settings that a copy could import."""
+        try:
+            config = self._get_baseline_config()
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError):
+            return False
+        return bool((config.get("txt2img") or {}).get("model"))
+
+    def copy_pipeline_settings(self, stage: str = "txt2img") -> dict[str, Any]:
+        """Explicitly replace the editable baseline with a one-time copy of the Pipeline's settings."""
+        record = draft_service.copy_from_pipeline(self.learning_state, self._get_baseline_config(), stage)
+        self._notify_resume_state_changed()
+        return record
+
+    def ensure_baseline(self, stage: str = "txt2img") -> bool:
+        """Seed a brand-new experiment's baseline from the Pipeline once.  Never touches an open experiment."""
+        if draft_service.has_draft(self.learning_state) or self.learning_state.current_experiment is not None:
+            return False
+        if not self.pipeline_settings_available():
+            return False
+        draft_service.copy_from_pipeline(self.learning_state, self._get_baseline_config(), stage)
+        return True
+
+    def update_baseline_field(self, stage: str, name: str, value: Any) -> Any:
+        """Edit one Learning-owned setting; the Pipeline is never touched."""
+        return draft_service.edit_field(self.learning_state, stage, name, value)
+
+    def baseline_blockers(self, stage: str, input_image_path: str = "") -> list[str]:
+        """What stops the current Learning baseline from defining an executable experiment."""
+        baseline = self.authoring_baseline()
+        owned: frozenset[str] = frozenset()
+        model = selected_model(baseline, stage)
+        if model:
+            owned = authoring.policy_owned(policy_context(resolve_policy(model, self, baseline), model, stage))
+        return authoring.baseline_problems(
+            baseline, stage, input_image_path=input_image_path, resources=get_projected_resources(self),
+            fixed_by_policy=owned,
+        )
+
+    def _authored_baseline(self, experiment: LearningExperiment) -> dict[str, Any]:
+        """The Learning baseline a Preview freezes.  The Pipeline is consulted only to seed an empty one, once."""
+        baseline = copy.deepcopy(dict(experiment.baseline_config or {}))
+        if baseline:
+            if not experiment.baseline_authoring:
+                experiment.baseline_authoring = authoring.new_authoring(
+                    authoring.ORIGIN_LEGACY, source="experiment"
+                )
+            if not draft_service.has_draft(self.learning_state):
+                draft_service.adopt(self.learning_state, baseline, experiment.baseline_authoring)
+            return baseline
+        baseline = draft_service.config_of(self.learning_state)
+        if not baseline:
+            # Nobody opened the editor (programmatic caller): the same explicit one-time copy, origin recorded.
+            draft_service.copy_from_pipeline(self.learning_state, self._get_baseline_config(), experiment.stage)
+            baseline = draft_service.config_of(self.learning_state)
+        experiment.baseline_authoring = draft_service.authoring_of(self.learning_state)
+        return baseline
+
     def _get_baseline_config(self) -> dict[str, Any]:
-        """Get baseline configuration from current GUI state.
+        """Read the Pipeline's current settings.
+
+        This is the Pipeline-facing read behind ``copy_pipeline_settings``, the Apply-to-Pipeline checks and the
+        staged-curation presets.  It is never an authoring source for a Learning experiment's Preview or Run.
 
         BUGFIX: Get the full nested config structure from stage cards,
         not just the app_state.current_config which may have empty model/VAE.
@@ -2126,6 +2091,14 @@ class LearningController:
         self.learning_state.selected_image_index = int(restored.selected_image_index or 0)
         # Drafts are part of the saved session; dropping them here lost them at the next save.
         self.learning_state.review_drafts = dict(restored.review_drafts or {})
+        self.learning_state.baseline_draft = restored.baseline_draft
+        if not draft_service.has_draft(self.learning_state) and restored.current_experiment is not None:
+            # Opening an experiment restores its own baseline; it never reaches for the Pipeline.
+            restored_experiment = restored.current_experiment
+            draft_service.adopt(
+                self.learning_state, restored_experiment.baseline_config, restored_experiment.baseline_authoring,
+                origin=authoring.ORIGIN_LEGACY if not restored_experiment.baseline_authoring else "",
+            )
         self.load_existing_ratings()
         reconcile = getattr(self.execution_controller, "reconcile", None)
         if callable(reconcile):
