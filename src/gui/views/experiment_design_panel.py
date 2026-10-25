@@ -1355,7 +1355,7 @@ class ExperimentDesignPanel(ttk.Frame):
         widget: tk.Misc | None = self
         while widget is not None:
             parent = getattr(widget, "master", None)
-            if isinstance(parent, ttk.Notebook) and str(parent.select()) != str(widget):
+            if isinstance(parent, ttk.Notebook) and str(parent.tk.call(str(parent), "select")) != str(widget):
                 return False
             widget = parent
         return True
