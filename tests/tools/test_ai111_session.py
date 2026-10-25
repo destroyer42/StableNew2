@@ -333,7 +333,9 @@ def test_unreadable_injected_memory_still_refuses_model_requests(world):
     # admission refusal itself is covered by the service tests.
     result = _run(world, [_case(i) for i in range(4)], memory_probe=lambda: None)
     evidence = world["paths"].evidence_root / "physical-A"
-    assert result["verdict"] == "INCONCLUSIVE" and "memory could not be read" in str(result["refused"])
+    assert result["verdict"] == "INCONCLUSIVE" and "memory could not be read" in str(
+        result["refused"]
+    )
     assert not (evidence / "records.jsonl").exists()
     assert not (evidence / "ai-root" / "models").exists()
 
