@@ -53,16 +53,15 @@ class RegistryShaLookup:
             if getattr(registry, "webui_root", None) is None:
                 return None
             key = checkpoint_key(model_name)
-            digests = {
-                record.sha256
-                for record in registry.cached_snapshot().records_for(AssetKind.CHECKPOINT)
-                if record.sha256
-                and any(
-                    location.kind is AssetKind.CHECKPOINT
-                    and checkpoint_key(Path(location.path).name) == key
-                    for location in record.locations
-                )
-            }
+            digests = set()
+            for record in registry.cached_snapshot().records_for(AssetKind.CHECKPOINT):
+                for location in record.locations:
+                    if (
+                        location.kind is AssetKind.CHECKPOINT
+                        and checkpoint_key(Path(location.path).name) == key
+                    ):
+                        verified = registry.verified_sha256(Path(location.path))
+                        digests.add(verified if verified == record.sha256 else None)
         except Exception:  # noqa: BLE001 - absent evidence, never a guess
             return None
         return next(iter(digests)) if len(digests) == 1 else None
@@ -218,6 +217,25 @@ def match_identity(saved: ModelIdentity, current: ModelIdentity) -> IdentityMatc
             MATCH_UNVERIFIED_BYTES, "Matched by file name; the file contents are not verified."
         )
     return IdentityMatch(MATCH_OTHER_MODEL)
+
+
+def match_learning_identity(saved: ModelIdentity, current: ModelIdentity) -> IdentityMatch:
+    """Learning findings require frozen bytes or an identical executable profile version.
+
+    Kept separate from Research/Custom matching so their historical semantics are unchanged.
+    """
+    if saved.kind == IDENTITY_EXACT:
+        if (saved.exact_profile or {}).get("version") is None or dict(
+            saved.exact_profile or {}
+        ) != dict(current.exact_profile or {}):
+            return IdentityMatch(
+                MATCH_CONFLICT, "Learning profile executable version differs; nothing was applied."
+            )
+    elif not saved.sha256 or not current.sha256:
+        return IdentityMatch(
+            MATCH_CONFLICT, "Learning profile checkpoint bytes are unverified; nothing was applied."
+        )
+    return match_identity(saved, current)
 
 
 __all__ = [
