@@ -309,6 +309,7 @@ class PipelineTabFrame(ttk.Frame):
             )
         except Exception:
             pass
+        self._publish_pipeline_stage_flags()
 
         listener = getattr(self.pipeline_controller, "on_adetailer_config_changed", None)
         if callable(listener):
@@ -331,6 +332,9 @@ class PipelineTabFrame(ttk.Frame):
                 self.app_state.subscribe("auto_run_queue", self._on_queue_control_changed)
                 self.app_state.subscribe("history_items", self._on_history_items_changed)
                 self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
+                self.app_state.subscribe(
+                    "pipeline_stage_enabled", self._on_app_state_pipeline_stage_enabled_changed
+                )
                 self.app_state.subscribe(
                     "content_visibility_mode", lambda *_: self.batches_panel.on_visibility_changed()
                 )
@@ -498,6 +502,7 @@ class PipelineTabFrame(ttk.Frame):
         self.pack_loader_compat.set_pack_names(pack_names)
 
     def _sync_state_overrides(self) -> None:
+        self._publish_pipeline_presentation_values()
         if not self.state_manager:
             return
         # Guard against early callback before stage_cards_panel is assigned
@@ -543,6 +548,67 @@ class PipelineTabFrame(ttk.Frame):
             self.stage_cards_panel.set_stage_enabled(stage_name, enabled)
         except Exception:
             pass
+        self._publish_pipeline_stage_flags(only=stage_name)
+
+    _PIPELINE_STAGES = ("txt2img", "img2img", "adetailer", "upscale")
+
+    def _publish_pipeline_stage_flags(self, only: str | None = None) -> None:
+        """Project the Tk stage variables into AppStateV2 (the controller reads the projection)."""
+        setter = getattr(self.app_state, "set_pipeline_stage_enabled", None)
+        if not callable(setter):
+            return
+        for stage_name in (only,) if only else self._PIPELINE_STAGES:
+            variable = getattr(self, f"{stage_name}_enabled", None)
+            if variable is None:
+                continue
+            try:
+                setter(stage_name, bool(variable.get()))
+            except Exception:
+                continue
+
+    def _publish_pipeline_presentation_values(self) -> None:
+        """Publish the prompt and upscale control values for the controller's legacy readers."""
+        state = getattr(self, "app_state", None)
+        set_prompt = getattr(state, "set_pipeline_prompt_text", None)
+        if callable(set_prompt):
+            try:
+                set_prompt(self.prompt_text.get() or "")
+            except Exception:
+                pass
+        set_upscale = getattr(state, "set_pipeline_upscale_params", None)
+        if callable(set_upscale):
+            try:
+                factor = float(self.upscale_factor.get())
+            except Exception:
+                factor = 2.0
+            try:
+                model = str(self.upscale_model.get() or "").strip()
+            except Exception:
+                model = ""
+            try:
+                tile_size = int(self.upscale_tile_size.get())
+            except Exception:
+                tile_size = 0
+            set_upscale(factor=factor, model=model, tile_size=tile_size)
+
+    def _on_app_state_pipeline_stage_enabled_changed(self) -> None:
+        getter = getattr(self.app_state, "get_pipeline_stage_flags", None)
+        if not callable(getter):
+            return
+        try:
+            flags = getter()
+        except Exception:
+            return
+        for stage_name in self._PIPELINE_STAGES:
+            variable = getattr(self, f"{stage_name}_enabled", None)
+            if variable is None or stage_name not in flags:
+                continue
+            try:
+                target = bool(flags[stage_name])
+                if bool(variable.get()) != target:
+                    variable.set(target)
+            except Exception:
+                continue
 
     def _apply_stage_visibility(self) -> None:
         stage_order = get_pipeline_stage_order() or ["txt2img", "img2img", "ADetailer", "upscale"]

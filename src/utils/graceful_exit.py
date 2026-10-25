@@ -6,13 +6,15 @@ import logging
 import os
 import threading
 import time
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from src.config.app_config import is_debug_shutdown_inspector_enabled
-from src.controller.app_controller import AppController
 from src.utils.debug_shutdown_inspector import log_shutdown_state
 from src.utils.gpu_survivor_telemetry import stop_gpu_session_telemetry
 from src.utils.single_instance import SingleInstanceLock
+
+if TYPE_CHECKING:  # pragma: no cover
+    from src.controller.app_controller import AppController
 
 _shutdown_lock = threading.Lock()
 _shutdown_committed = False

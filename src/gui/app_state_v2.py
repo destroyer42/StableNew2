@@ -134,6 +134,13 @@ class AppStateV2:
     def __post_init__(self) -> None:
         self._config_adapter = GuiConfigAdapterV26(self)
         self._batched_flush_callback = self._flush_batched_notifications
+        # Deliberately not dataclass fields: live presentation projections published by the Pipeline view for
+        # controller reads. They are never persisted configuration and never execution authority.
+        self._pipeline_stage_enabled = dict(self._PIPELINE_STAGE_DEFAULTS)
+        self._pipeline_prompt_text = ""
+        self._pipeline_upscale_params: tuple[float, str, int] = (2.0, "", 0)
+
+    _PIPELINE_STAGE_DEFAULTS = {"txt2img": True, "img2img": False, "adetailer": False, "upscale": False}
 
     @property
     def config_adapter(self) -> GuiConfigAdapterV26:
@@ -148,6 +155,62 @@ class AppStateV2:
         """Queue ``fn`` through ``schedule``; older dispatchers only expose ``invoke``."""
         queue = getattr(invoker, "schedule", None) or invoker.invoke
         queue(fn)
+
+    def get_pipeline_stage_flags(self, *, defaults: dict[str, bool] | None = None) -> dict[str, bool]:
+        """Return the live Pipeline stage-toggle projection (``defaults`` fills stages never published)."""
+        flags = dict(defaults if defaults is not None else self._PIPELINE_STAGE_DEFAULTS)
+        flags.update(self._pipeline_stage_enabled)
+        return {key: bool(value) for key, value in flags.items()}
+
+    def set_pipeline_stage_enabled(self, stage: str, enabled: bool) -> bool:
+        """Publish one Pipeline stage toggle; returns True when the projection changed."""
+        name = str(stage or "").strip().lower()
+        if name not in self._PIPELINE_STAGE_DEFAULTS:
+            return False
+        value = bool(enabled)
+        if self._pipeline_stage_enabled.get(name) == value:
+            return False
+        self._pipeline_stage_enabled[name] = value
+        self._notify_on_ui_thread("pipeline_stage_enabled")
+        return True
+
+    def set_pipeline_prompt_text(self, value: str) -> None:
+        self._pipeline_prompt_text = str(value or "")
+
+    def get_pipeline_prompt_text(self) -> str:
+        return self._pipeline_prompt_text
+
+    def set_pipeline_upscale_params(self, *, factor: float, model: str, tile_size: int) -> None:
+        try:
+            normalized_factor = float(factor)
+        except (TypeError, ValueError):
+            normalized_factor = 2.0
+        try:
+            normalized_tile = int(tile_size)
+        except (TypeError, ValueError):
+            normalized_tile = 0
+        self._pipeline_upscale_params = (normalized_factor, str(model or "").strip(), normalized_tile)
+
+    def get_pipeline_upscale_params(self) -> tuple[float, str, int]:
+        return self._pipeline_upscale_params
+
+    def _notify_on_ui_thread(self, key: str) -> None:
+        """Deliver a presentation update inline on the UI thread (queued from other threads)."""
+        if not self._notifications_enabled:
+            return
+        listeners = list(self._listeners.get(key, []))
+        invoker = self._invoker
+        for listener in listeners:
+            try:
+                run = getattr(invoker, "run_on_ui_thread", None) if invoker is not None else None
+                if callable(run):
+                    run(listener)
+                elif invoker is not None:
+                    self._queue_on(invoker, listener)
+                else:
+                    listener()
+            except Exception:
+                continue
 
     def disable_notifications(self) -> None:
         """Stop delivering listener callbacks (used during teardown)."""

@@ -91,28 +91,30 @@ def test_restored_startup_defaults_are_named_as_the_source(make_sidebar) -> None
     assert "startup defaults" in sidebar.config_source_label.cget("text")
 
 
-def _controller_without_widgets(**flag_vars: Any) -> Any:
-    tab = SimpleNamespace(**flag_vars)
-    return SimpleNamespace(
-        main_window=SimpleNamespace(pipeline_tab=tab),
+def _controller_without_widgets(**published_flags: bool) -> Any:
+    state = AppStateV2()
+    for stage, enabled in published_flags.items():
+        state.set_pipeline_stage_enabled(stage, enabled)
+    controller = SimpleNamespace(
+        app_state=state,
         state=SimpleNamespace(
             current_config=SimpleNamespace(refiner_enabled=False, hires_enabled=False)
         ),
     )
+    controller._get_pipeline_stage_flags_from_state = (
+        lambda: AppController._get_pipeline_stage_flags_from_state(controller)
+    )
+    return controller
 
 
-def test_unreadable_adetailer_state_defaults_to_off_not_on() -> None:
+def test_unpublished_adetailer_state_defaults_to_off_not_on() -> None:
     flags = AppController._build_stage_flags(_controller_without_widgets())
     assert flags["adetailer"] is False and flags["txt2img"] is True
     assert flags["img2img"] is False and flags["upscale"] is False
 
 
-def test_stage_flags_follow_the_readable_stage_variables(tk_root: tk.Tk) -> None:
+def test_stage_flags_follow_the_published_stage_projection() -> None:
     flags = AppController._build_stage_flags(
-        _controller_without_widgets(
-            adetailer_enabled=tk.BooleanVar(value=True),
-            upscale_enabled=True,
-            img2img_enabled=tk.BooleanVar(value=False),
-        )
+        _controller_without_widgets(adetailer=True, upscale=True, img2img=False)
     )
     assert flags["adetailer"] is True and flags["upscale"] is True and flags["img2img"] is False

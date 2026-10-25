@@ -31,7 +31,11 @@ def test_on_pipeline_add_packs_to_job_populates_preview_metadata(tmp_path: Path)
         job_service=None,
     )
     controller.app_state = AppStateV2()
-    controller.main_window = type("Window", (), {"pipeline_tab": DummyPipelineTab()})()
+    # The controller reads the toolkit-neutral stage projection, not the Pipeline tab's variables.
+    tab = DummyPipelineTab()
+    for stage in ("txt2img", "img2img", "adetailer", "upscale"):
+        controller.app_state.set_pipeline_stage_enabled(stage, getattr(tab, f"{stage}_enabled"))
+    controller.main_window = type("Window", (), {"pipeline_tab": tab})()
     controller.packs = [PromptPackInfo(name="test_pack", path=pack_path, preset_name="")]
 
     controller.on_pipeline_add_packs_to_job(["test_pack"])
