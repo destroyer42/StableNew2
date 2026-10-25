@@ -158,3 +158,43 @@ def test_text_is_read_only_and_scrolls_for_narrow_windows(panel_env, tmp_path: P
         w for w in panel.effective_frame.winfo_children() if w.winfo_class() == "TScrollbar"
     ]
     assert scrollbars, "the summary must be reachable by scrolling when the window is narrow"
+
+
+def test_profile_lines_and_stale_draft_notices_reach_the_effective_view(
+    tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-IMG-PROFILE-630: the view names the working model/profile and warns when the draft predates a change."""
+    monkeypatch.setattr(
+        "src.gui.preview_panel_v2.PREVIEW_STATE_PATH", tmp_path / "preview_state.json"
+    )
+    listeners: list = []
+    notices: list[str] = []
+    profiles = SimpleNamespace(
+        effective_lines=lambda: ("Model: m.safetensors (sdxl)", "Profile: none selected"),
+        draft_notices=lambda: tuple(notices),
+        add_listener=listeners.append,
+    )
+    app_state = AppStateV2()
+    controller = SimpleNamespace(
+        override_pack_config_enabled=False, main_window=None, generation_profiles=profiles
+    )
+    panel = PreviewPanelV2(tk_root, controller=controller, app_state=app_state)
+    try:
+        jobs, _ = _compiled_jobs(tmp_path)
+        app_state.set_preview_jobs(jobs)
+        panel._effective_visible_var.set(True)
+        panel._on_effective_toggle()
+        text = _shown(panel)
+        assert "Working model and profile (not part of the compiled jobs)" in text
+        assert "Model: m.safetensors (sdxl)" in text
+        assert "Preview may be out of date" not in text
+
+        notices.append(
+            "The draft was built with different stages than are selected now (adetailer is on now)."
+        )
+        assert listeners, "the Preview subscribes to profile-state changes"
+        listeners[0]()  # a stage toggle / override / profile change tells the Preview to re-read
+        text = _shown(panel)
+        assert "Preview may be out of date" in text and "adetailer is on now" in text
+    finally:
+        panel.destroy()

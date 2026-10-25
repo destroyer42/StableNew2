@@ -263,27 +263,3 @@ def get_profile_defaults(profile: ModelProfile) -> dict[str, Any]:
         if style_id in profile.tags or style_id == profile.base_type:
             return defaults
     return {}
-
-
-def infer_style_id_for_model(model_name: str | None) -> str | None:
-    if not model_name:
-        return None
-    normalized = model_name.lower()
-    if "anime" in normalized or "wd" in normalized or "waifu" in normalized:
-        return "anime"
-    if "sdxl" in normalized:
-        if "portrait" in normalized or "face" in normalized:
-            return "sdxl_portrait"
-        if "stylized" in normalized or "stylize" in normalized:
-            return "sdxl_stylized"
-        return "sdxl_realism"
-    if "sd15" in normalized or "stable-diffusion-v1" in normalized or "v1-5" in normalized:
-        return "sd15_realism"
-    return None
-
-
-def get_model_profile_defaults_for_model(model_name: str | None) -> dict[str, Any]:
-    style_id = infer_style_id_for_model(model_name)
-    if not style_id:
-        return {}
-    return STYLE_DEFAULTS.get(style_id, {})

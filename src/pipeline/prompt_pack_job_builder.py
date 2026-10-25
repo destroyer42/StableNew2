@@ -148,6 +148,32 @@ def _effective_txt2img_stage_config(config: dict[str, Any]) -> dict[str, Any]:
     return effective
 
 
+def _align_adetailer_enablement(config: dict[str, Any], enabled: bool) -> None:
+    """Make the three ADetailer enablement representations agree with the compiled stage membership.
+
+    A new NJR freezes its config next to its stage chain; ``pipeline.adetailer_enabled``, ``adetailer.enabled`` and the
+    legacy ``adetailer.adetailer_enabled`` must not contradict that chain (a stale parameter section otherwise reads as
+    enabled downstream). Other ADetailer settings are inert while the stage is off and stay untouched; nothing is
+    invented when no representation exists and the stage is off.
+    """
+
+    pipeline = config.get("pipeline")
+    section = config.get("adetailer")
+    present = (
+        (isinstance(pipeline, dict) and "adetailer_enabled" in pipeline)
+        or (isinstance(section, dict) and ("enabled" in section or "adetailer_enabled" in section))
+    )
+    if not present and not enabled:
+        return
+    if not isinstance(pipeline, dict):
+        pipeline = config["pipeline"] = {}
+    if not isinstance(section, dict):
+        section = config["adetailer"] = {}
+    pipeline["adetailer_enabled"] = enabled
+    section["enabled"] = enabled
+    section["adetailer_enabled"] = enabled
+
+
 class PromptPackNormalizedJobBuilder:
     """Orchestrates prompt pack → job construction pipeline."""
 
@@ -382,8 +408,11 @@ class PromptPackNormalizedJobBuilder:
             executable_config.setdefault("pipeline", {})
         merged_config = apply_model_compile_policy(executable_config)
         stage_flags = self._normalize_stage_flags(
-            merged_config.get("pipeline", {}), entry.stage_flags or {}
+            merged_config.get("pipeline", {}),
+            entry.stage_flags or {},
+            adetailer_section=merged_config.get("adetailer"),
         )
+        _align_adetailer_enablement(merged_config, stage_flags["adetailer"])
 
         stage_chain = self._build_stage_chain(merged_config, stage_flags)
         resolved_actors = self._resolve_entry_actors(entry, merged_config)
@@ -1184,7 +1213,10 @@ class PromptPackNormalizedJobBuilder:
             return None
 
     def _normalize_stage_flags(
-        self, pipeline_section: dict[str, Any], overrides: dict[str, bool]
+        self,
+        pipeline_section: dict[str, Any],
+        overrides: dict[str, bool],
+        adetailer_section: Any = None,
     ) -> dict[str, bool]:
         # Get img2img value without default - calculate before dictionary construction
         img2img_val = pipeline_section.get("img2img_enabled")
@@ -1198,6 +1230,11 @@ class PromptPackNormalizedJobBuilder:
             "animatediff": bool(pipeline_section.get("animatediff_enabled", False)),
             "video_workflow": bool(pipeline_section.get("video_workflow_enabled", False)),
         }
+        if isinstance(adetailer_section, dict) and any(
+            adetailer_section.get(key) is False for key in ("enabled", "adetailer_enabled")
+        ):
+            # Without the operator's own membership choice, an explicit disable in any representation wins.
+            defaults["adetailer"] = False
         normalized = dict(defaults)
         for key, value in overrides.items():
             if key in normalized:

@@ -1,4 +1,4 @@
-"""Toolkit-neutral behavior behind the Pipeline sidebar's load / apply / overwrite actions (PR-GUI-UX-520).
+"""Toolkit-neutral behavior behind the Pipeline sidebar's load / apply actions (PR-GUI-UX-520).
 
 The sidebar owns widgets; this presenter owns the decisions: when a load would replace edits the operator has not saved
 (and so needs a confirmation), when saved PromptPack settings are about to be overwritten (always confirm), and what the
@@ -14,7 +14,7 @@ from typing import Any
 
 from src.gui.view_contracts import config_source_contract as contract
 
-CHANNEL_PRESET = "preset"
+CHANNEL_SETTINGS = "settings"
 CHANNEL_PACK = "pack"
 
 
@@ -144,33 +144,5 @@ class SettingsActionsPresenter:
         )
         return report
 
-    # ------------------------------------------------------------------ save / overwrite a Generation Preset
 
-    def save_preset(
-        self,
-        name: str,
-        *,
-        exists: bool,
-        invoke: Callable[[str], bool],
-        confirm_overwrite: bool,
-    ) -> bool:
-        """Save the working settings as Generation Preset ``name``; confirm only a replacement of an existing one."""
-
-        if confirm_overwrite and exists:
-            title, message = contract.overwrite_preset_confirmation_text(name)
-            if not self._confirm(title, message):
-                self._say(
-                    CHANNEL_PRESET, "Save cancelled; the existing Generation Preset was kept."
-                )
-                return False
-        try:
-            ok = bool(invoke(name))
-        except Exception:  # noqa: BLE001
-            ok = False
-        self._say(CHANNEL_PRESET, contract.save_preset_result_text(name, ok=ok, created=not exists))
-        if ok:
-            self.mark_working_clean()
-        return ok
-
-
-__all__ = ["CHANNEL_PACK", "CHANNEL_PRESET", "LoadOutcome", "SettingsActionsPresenter"]
+__all__ = ["CHANNEL_PACK", "CHANNEL_SETTINGS", "LoadOutcome", "SettingsActionsPresenter"]

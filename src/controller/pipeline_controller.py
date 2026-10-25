@@ -48,11 +48,6 @@ from src.controller.webui_connection_controller import (
 )
 from src.history.history_record import HistoryRecord
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
-from src.learning.model_defaults_resolver import (
-    GuiDefaultsResolver,
-    ModelDefaultsContext,
-    ModelDefaultsResolver,
-)
 from src.pipeline.history_variation_compiler import compile_history_variation
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import (
@@ -337,15 +332,7 @@ class PipelineController(CorePipelineController):
                 runtime_overrides["negative_prompt"] = overrides["negative_prompt"]
             copy_frozen_keys(self, runtime_overrides)
 
-            model_name = str(
-                txt2img.get("model") or txt2img.get("model_name") or ""
-            ).strip() or None
-            preset_name = str(overrides.get("preset_name") or "").strip() or None
-            base_config = self.build_merged_config_for_run(
-                model_name=model_name,
-                preset_name=preset_name,
-                runtime_overrides=runtime_overrides,
-            )
+            base_config = self.build_merged_config_for_run(runtime_overrides=runtime_overrides)
         try:
             jobs = self._job_builder.build_jobs(
                 base_config=base_config,
@@ -635,7 +622,6 @@ class PipelineController(CorePipelineController):
         job_builder: JobBuilderV2 | None = None,
         job_lifecycle_logger: JobLifecycleLogger | None = None,
         config_manager: ConfigManager | None = None,
-        gui_defaults_resolver: GuiDefaultsResolver | None = None,
         runtime_ports: ImageRuntimePorts | None = None,
         **kwargs,
     ):
@@ -671,12 +657,6 @@ class PipelineController(CorePipelineController):
         )
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_manager = config_manager or ConfigManager()
-        self._gui_defaults_resolver = (
-            gui_defaults_resolver
-            if gui_defaults_resolver is not None
-            else GuiDefaultsResolver(config_manager=self._config_manager)
-        )
-        self._model_defaults_resolver = ModelDefaultsResolver(config_manager=self._config_manager)
         self._config_assembler = config_assembler
         self._job_builder = job_builder if job_builder is not None else JobBuilderV2()
         self._runtime_ports = runtime_ports or DefaultImageRuntimePorts()
@@ -801,41 +781,13 @@ class PipelineController(CorePipelineController):
             self._queue_submission_service = current
         return current
 
-    def get_gui_model_defaults(
-        self, model_name: str | None, preset_name: str | None = None
-    ) -> dict[str, Any]:
-        """Return GUI-ready defaults for the specified model/preset."""
-        if not self._gui_defaults_resolver:
-            return {}
-        defaults = self._gui_defaults_resolver.resolve_for_gui(
-            model_name=model_name, preset_name=preset_name
-        )
-        _logger.debug(
-            "GUI defaults resolved for model=%s preset=%s keys=%s",
-            model_name,
-            preset_name,
-            sorted(defaults.keys()),
-        )
-        return defaults
-
     def build_merged_config_for_run(
         self,
-        model_name: str | None,
-        preset_name: str | None = None,
         runtime_overrides: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Return a model/preset-aware config dict for job construction."""
-        context = ModelDefaultsContext(model_name=model_name, preset_name=preset_name)
-        merged = self._model_defaults_resolver.resolve_config(
-            context,
-            runtime_overrides=runtime_overrides,
-        )
-        _logger.debug(
-            "Merged run config: model=%s preset=%s runtime_keys=%s",
-            model_name,
-            preset_name,
-            sorted((runtime_overrides or {}).keys()),
-        )
+        """Return the engine defaults with the runtime overrides applied (no model-name-derived defaults)."""
+        merged = self._config_manager.resolve_config(runtime_params=dict(runtime_overrides or {}))
+        _logger.debug("Merged run config: runtime_keys=%s", sorted((runtime_overrides or {}).keys()))
         return merged
 
     def get_learning_runner_for_tests(self):

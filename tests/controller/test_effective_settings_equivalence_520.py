@@ -113,19 +113,19 @@ def _preview(
 
 def test_precedence_is_defaults_then_pack_settings_then_job_snapshot(env) -> None:
     controller, manager, _svc, _ = env
-    # A named preset in the folder is NOT a layer of the pack compile path.
-    assert manager.save_preset(
-        "default", {"txt2img": {"steps": 99, "model": "preset_model.safetensors"}}
+    # A stray JSON file in the application folder is NOT a layer of the pack compile path.
+    (manager.presets_dir / "default.json").write_text(
+        json.dumps({"txt2img": {"steps": 99, "model": "stray_model.safetensors"}}), encoding="utf-8"
     )
 
     [job] = _preview(controller, {"txt2img": {"steps": 40}})
     config = job.config
     defaults = manager.get_default_config()
 
-    # snapshot > pack > defaults; the preset never appears.
+    # snapshot > pack > defaults; the stray file never appears.
     assert config["steps"] == 40  # job snapshot wins over pack (31)
     assert config["cfg_scale"] == 6.0  # pack wins over the code default
-    assert config["model"] == "pack_model.safetensors"  # pack, not the preset
+    assert config["model"] == "pack_model.safetensors"  # pack, not the stray file
     assert (config["width"], config["height"]) == (832, 1216)
     assert config["sampler"] == "DPM++ 2M" and config["scheduler"] == "Karras"
     assert config["pipeline"]["image_format"] == "webp"
@@ -135,26 +135,9 @@ def test_precedence_is_defaults_then_pack_settings_then_job_snapshot(env) -> Non
     assert job.output_plan.base_output_dir == "D:/pack_out"
 
 
-def test_resolve_config_includes_a_named_preset_only_when_asked(env) -> None:
-    _controller, manager, _svc, _ = env
-    assert manager.save_preset("look", {"txt2img": {"steps": 77}})
-
-    assert manager.resolve_config(pack_overrides=PACK_SETTINGS)["txt2img"]["steps"] == 31
-    assert (
-        manager.resolve_config(preset_name="look", pack_overrides=PACK_SETTINGS)["txt2img"]["steps"]
-        == 31
-    )
-    assert manager.resolve_config(preset_name="look")["txt2img"]["steps"] == 77
-    layered = manager.resolve_config(
-        preset_name="look", pack_overrides=PACK_SETTINGS, runtime_params={"txt2img": {"steps": 5}}
-    )
-    assert layered["txt2img"]["steps"] == 5
-
-
-def test_loading_a_preset_or_editing_overrides_never_persists_into_the_pack(env) -> None:
+def test_editing_overrides_never_persists_into_the_pack(env) -> None:
     controller, manager, _svc, _ = env
     before = (manager.packs_dir / "hero.json").read_bytes()
-    assert manager.save_preset("look", {"txt2img": {"steps": 77}})
 
     [job] = _preview(controller, {"txt2img": {"steps": 5}})  # a temporary override
 
