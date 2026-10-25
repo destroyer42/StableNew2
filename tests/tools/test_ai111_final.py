@@ -75,7 +75,8 @@ def test_real_physical_runtime_is_refused_before_import_or_execution(tmp_path):
         authorization_text="not binary authorization",
     )
     assert result["verdict"] == "NOT TESTED"
-    assert "ownership-bound" in result["refused"][0]
+    assert all(line.startswith("monitoring not ready:") for line in result["refused"])
+    assert any("lifetime_complete" in line for line in result["refused"])
     assert not list(tmp_path.iterdir())
 
 

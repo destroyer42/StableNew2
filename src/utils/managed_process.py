@@ -44,7 +44,11 @@ from src.utils.process_container_v2 import (
     ProcessContainerConfig,
     build_process_container,
 )
-from src.utils.process_observation import ProcessTreeSample
+from src.utils.process_observation import (
+    OwnedTreeEvidence,
+    ProcessLifecycleEvent,
+    ProcessTreeSample,
+)
 from src.utils.thread_registry import get_thread_registry
 
 logger = logging.getLogger(__name__)
@@ -54,6 +58,8 @@ DEFAULT_MAX_STDERR_BYTES = 64 * 1024
 TAIL_LINE_LIMIT = 200
 TAIL_LINE_CHARS = 2000
 _CANCEL_POLL_SECONDS = 0.05
+#: With ownership evidence the runner drains the container this often, so a short-lived member can still be identified.
+_OWNERSHIP_POLL_SECONDS = 0.01
 _KILL_WAIT_SECONDS = 5.0
 #: Total time to let the pipe readers drain after a kill; an escaped descendant can hold a pipe open indefinitely.
 _DRAIN_SECONDS = 2.0
@@ -79,6 +85,9 @@ class ProcessOutcome:
     #: ``None``: no memory limit was requested. ``True``: the OS confirmed the requested limit before the child started.
     #: ``False``: a limit was requested, the host could not establish it, and the caller allowed the child to run without it.
     memory_limit_enforced: bool | None = None
+    #: Present only when the caller asked for ownership evidence (``record_ownership``): the container's own record of
+    #: every process in the tree and of its verified teardown. ``None`` means none was requested, never "clean".
+    ownership: OwnedTreeEvidence | None = None
 
 
 class ContainmentError(RuntimeError):
@@ -163,6 +172,15 @@ class OwnedChildObservation:
 
     def close(self) -> None:
         self._active = False
+
+    def process_events(self) -> tuple[ProcessLifecycleEvent, ...]:
+        """Every creation/exit the owned container has reported so far (kernel notifications, not sampling)."""
+
+        if not self._active:
+            raise OSError("owned observation expired")
+        if not self._spawned.contained:
+            raise OSError("owned container telemetry unavailable")
+        return self._spawned.container.lifecycle_events()
 
     def sample(self) -> ProcessTreeSample:
         if not self._active:
@@ -371,6 +389,7 @@ def _spawn_contained(
     below_normal: bool = False,
     memory_limit_mb: float | None = None,
     allow_unenforced_memory_limit: bool = False,
+    record_ownership: bool = False,
 ) -> _Spawned:
     """Start ``command`` under a memory limit when one is requested, otherwise exactly as before.
 
@@ -385,6 +404,7 @@ def _spawn_contained(
         "cwd": cwd,
         "env": env,
         "below_normal": below_normal,
+        "record_ownership": record_ownership,
     }
     if memory_limit_mb is None:
         return _launch_child(command, **kwargs)
@@ -414,6 +434,7 @@ def _launch_child(
     env: Mapping[str, str] | None,
     below_normal: bool = False,
     memory_limit_mb: float | None = None,
+    record_ownership: bool = False,
 ) -> _Spawned:
     """Start ``command`` with stdout/stderr piped, inside its own OS container where one is required or available.
 
@@ -427,8 +448,17 @@ def _launch_child(
 
     required = containment_required() if require_containment is None else require_containment
     container = build_process_container(
-        label, ProcessContainerConfig(enabled=True, memory_limit_mb=memory_limit_mb)
+        label,
+        ProcessContainerConfig(
+            enabled=True, memory_limit_mb=memory_limit_mb, record_lifecycle=record_ownership
+        ),
     )
+    if record_ownership and not container.supports_lifecycle_evidence:
+        _release(container)
+        raise ContainmentError(
+            f"{label}: ownership evidence needs a container that records its members and none is available; "
+            "the child was not started"
+        )
     if memory_limit_mb is not None:
         required = True
         expected = int(memory_limit_mb * _BYTES_PER_MB)
@@ -473,6 +503,28 @@ def _kill_tree(process: subprocess.Popen[Any], container: ProcessContainer | Non
         process.wait(timeout=_KILL_WAIT_SECONDS)
     except (subprocess.TimeoutExpired, OSError):
         pass
+
+
+def _verify_ownership(root_pid: int, container: ProcessContainer) -> OwnedTreeEvidence:
+    """Terminate any survivor and read the container's own account of the tree; failure is an incomplete record."""
+
+    try:
+        return container.verify_teardown(root_pid)
+    except Exception as exc:  # noqa: BLE001 - an unverifiable teardown is reported as such, never as clean
+        logger.warning("[managed_process] teardown verification failed: %s", exc)
+        return OwnedTreeEvidence(
+            root_pid=root_pid,
+            events=(),
+            total_processes=0,
+            survivors_at_end=0,
+            runner_terminated_survivors=False,
+            active_after_teardown=-1,
+            io_read_bytes=0,
+            io_write_bytes=0,
+            io_other_bytes=0,
+            complete=False,
+            problems=("teardown_verification_failed",),
+        )
 
 
 def _release(container: ProcessContainer | None) -> None:
@@ -535,6 +587,7 @@ def run_bounded(
     observe: Callable[[OwnedChildObservation], None] | None = None,
     memory_limit_mb: float | None = None,
     allow_unenforced_memory_limit: bool = False,
+    record_ownership: bool = False,
 ) -> ProcessOutcome:
     """Run one child with a wall-clock timeout, output caps and cooperative cancellation.
 
@@ -548,12 +601,19 @@ def run_bounded(
     Where containment is required (``containment_required()``) the child runs inside its own container, so a timeout or
     cancellation kills its whole tree; if that cannot be arranged the child is not run and the reason is reported in
     ``launch_error``.  ``stdin`` is closed.  A launch failure never raises.  The call returns within the timeout plus a
-    short drain even if a descendant that escaped containment still holds the child's pipes."""
+    short drain even if a descendant that escaped containment still holds the child's pipes.
+
+    ``record_ownership`` (opt-in, read-only) has the container record every process creation and exit in the child's tree
+    and, before the container is released, terminates any survivor and proves from the container that none remains. The
+    result is ``ProcessOutcome.ownership``. A container that cannot record this makes the child not run. It grants the caller
+    no lifecycle authority: ``run_bounded`` still launches, kills and releases."""
 
     if memory_limit_mb is not None and not (math.isfinite(memory_limit_mb) and memory_limit_mb > 0):
         raise ValueError("memory_limit_mb must be a positive, finite number of megabytes")
     try:
         spawn_options: dict[str, Any] = {"below_normal": True} if observe is not None else {}
+        if record_ownership:
+            spawn_options["record_ownership"] = True
         if memory_limit_mb is not None:
             spawn_options["memory_limit_mb"] = memory_limit_mb
             spawn_options["allow_unenforced_memory_limit"] = allow_unenforced_memory_limit
@@ -579,6 +639,18 @@ def run_bounded(
     deadline = time.monotonic() + max(0.0, timeout_seconds)
     timed_out = False
     cancelled = False
+    ownership: OwnedTreeEvidence | None = None
+    poll_seconds = _OWNERSHIP_POLL_SECONDS if record_ownership else _CANCEL_POLL_SECONDS
+
+    def poll_cancel() -> bool:
+        # Drain the container's creation/exit notifications first, so a caller's cancel probe sees every event so far.
+        if record_ownership:
+            try:
+                container.poll_lifecycle()
+            except Exception:  # noqa: BLE001 - surfaces as an incomplete ownership record at teardown
+                logger.debug("[managed_process] lifecycle drain failed", exc_info=True)
+        return _is_cancelled(cancel)
+
     try:
         if observe is not None:
             observation = OwnedChildObservation(spawned)
@@ -603,30 +675,30 @@ def run_bounded(
             )
         )
         stdout_reader = readers[0]
-        cancelled = _is_cancelled(cancel)
+        cancelled = poll_cancel()
         while not cancelled and stdout_reader.is_alive():
-            if _is_cancelled(cancel):
+            if poll_cancel():
                 cancelled = True
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 timed_out = True
                 break
-            stdout_reader.join(min(_CANCEL_POLL_SECONDS, remaining))
+            stdout_reader.join(min(poll_seconds, remaining))
 
         if timed_out or cancelled or out_buf.overflow:
             _kill_tree(process, container)
         else:
             # stdout is at EOF; the child is exiting (or holds stdout open only through a grandchild).
             while process.poll() is None:
-                if _is_cancelled(cancel):
+                if poll_cancel():
                     cancelled = True
                     break
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     timed_out = True
                     break
-                time.sleep(min(_CANCEL_POLL_SECONDS, remaining))
+                time.sleep(min(poll_seconds, remaining))
             if timed_out or cancelled:
                 _kill_tree(process, container)
         drain_deadline = time.monotonic() + _DRAIN_SECONDS
@@ -638,6 +710,8 @@ def run_bounded(
             observation.close()
         if process.poll() is None:
             _kill_tree(process, container)
+        if record_ownership:
+            ownership = _verify_ownership(process.pid, container)
         # Never close a stream a reader is still blocked on: that close waits for the pipe's EOF, which an escaped
         # descendant can withhold indefinitely.  The (daemon) reader ends by itself when the pipe finally closes.
         for reader, stream in zip(readers, (process.stdout, process.stderr), strict=False):
@@ -656,6 +730,7 @@ def run_bounded(
         cancelled=cancelled,
         contained=spawned.contained,
         memory_limit_enforced=spawned.memory_limit_enforced,
+        ownership=ownership,
     )
 
 

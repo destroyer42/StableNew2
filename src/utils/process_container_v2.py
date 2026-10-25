@@ -9,7 +9,11 @@ from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 from src.utils import LogContext, log_with_ctx
-from src.utils.process_observation import ProcessTreeSample
+from src.utils.process_observation import (
+    OwnedTreeEvidence,
+    ProcessLifecycleEvent,
+    ProcessTreeSample,
+)
 
 if TYPE_CHECKING:
     from src.utils.cgroup_v2 import LinuxCGroupV2
@@ -25,12 +29,17 @@ class ProcessContainerConfig:
     memory_limit_mb: float | None = None
     cpu_limit_percent: float | None = None
     max_processes: int | None = None
+    #: Record every process creation/exit in the container (kernel notifications) for ownership-bound evidence.
+    record_lifecycle: bool = False
 
 
 class ProcessContainer(ABC):
     #: A container that can adopt a child created suspended (``CREATE_SUSPENDED``), so the child provably runs no
     #: instruction, and spawns no descendant, before it is inside the container.
     supports_suspended_start: bool = False
+    #: A container that records every member's creation and exit and can prove its own teardown (``poll_lifecycle``,
+    #: ``lifecycle_events``, ``verify_teardown``). Ownership evidence is requested only of such a container.
+    supports_lifecycle_evidence: bool = False
 
     def __init__(self, job_id: str, config: ProcessContainerConfig) -> None:
         self.job_id = job_id
@@ -73,6 +82,17 @@ class ProcessContainer(ABC):
         """Read only this container. Unsupported telemetry is an explicit failure."""
         raise OSError("owned container telemetry unavailable")
 
+    def poll_lifecycle(self) -> None:
+        """Drain queued creation/exit notifications; a container that records none does nothing."""
+        return None
+
+    def lifecycle_events(self) -> tuple[ProcessLifecycleEvent, ...]:
+        raise OSError("owned lifecycle telemetry unavailable")
+
+    def verify_teardown(self, root_pid: int) -> OwnedTreeEvidence:
+        """Terminate survivors and prove from the container itself that none remain."""
+        raise OSError("owned lifecycle telemetry unavailable")
+
 
 class NullProcessContainer(ProcessContainer):
     """No containment.  ``reason`` says why (``disabled``, ``unsupported_platform: ...``, ``construction_failed: ...``)
@@ -105,6 +125,7 @@ def build_process_container(job_id: str, config: ProcessContainerConfig) -> Proc
             container = WindowsJobObject(
                 name=f"StableNewJob-{job_id}",
                 memory_limit_mb=config.memory_limit_mb,
+                record_lifecycle=config.record_lifecycle,
             )
             return WindowsContainerAdapter(job_id, config, container)
         except Exception as exc:
@@ -145,6 +166,7 @@ def build_process_container(job_id: str, config: ProcessContainerConfig) -> Proc
 
 class WindowsContainerAdapter(ProcessContainer):
     supports_suspended_start = True
+    supports_lifecycle_evidence = True
 
     def __init__(
         self,
@@ -171,6 +193,15 @@ class WindowsContainerAdapter(ProcessContainer):
 
     def observe_tree(self, root_pid: int) -> ProcessTreeSample:
         return self._inner.observe_tree(root_pid)
+
+    def poll_lifecycle(self) -> None:
+        self._inner.poll_lifecycle()
+
+    def lifecycle_events(self) -> tuple[ProcessLifecycleEvent, ...]:
+        return self._inner.lifecycle_events()
+
+    def verify_teardown(self, root_pid: int) -> OwnedTreeEvidence:
+        return self._inner.verify_teardown(root_pid)
 
     def teardown(self) -> None:
         self._inner.close()

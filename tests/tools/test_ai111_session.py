@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -17,6 +18,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from src.ai_assist.manifests import ModelRegistry  # noqa: E402
+from tests.ai_assist.ai113_support import (  # noqa: E402
+    WRAPPER,
+    journal_monitor,
+    wrapped_command,
+)
 from tests.ai_assist.conftest import (  # noqa: E402
     FAKE_CHILD,
     FILES,
@@ -32,13 +38,21 @@ from tools.qualification.ai111.corpus import Case  # noqa: E402
 
 AUTHORIZATION = "Owner: run Stage A for the fake arm against plan <digest>."
 
+# The session refuses without an owned-container monitor, which needs the Windows job object (PR-AI-QUAL-113).
+windows_only = pytest.mark.skipif(
+    os.name != "nt", reason="ownership evidence needs Windows job objects"
+)
 
-def _case(i: int, mode: str = "ok") -> Case:
+
+def _case(i: int, mode: str = "ok", behavior: str = "", path: str = "") -> Case:
+    extra = (f"\nTEST_BEHAVIOR:{behavior}" if behavior else "") + (
+        f"\nTEST_PATH:{path}" if path else ""
+    )
     return Case(
         case_id=f"t-{i:03d}",
         stratum="rewrite_tokens",
         kind="prompt_rewrite",
-        positive=f"a barn <lora:barn:0.8> [[season]]\nTEST_MODE:{mode}\nTEST_SLEEP:0.6",
+        positive=f"a barn <lora:barn:0.8> [[season]]\nTEST_MODE:{mode}\nTEST_SLEEP:0.6{extra}",
         negative="blurry",
         target_policy_id="sdxl",
     )
@@ -65,7 +79,13 @@ def world(tmp_path: Path):
     plan["limits"]["timeout_seconds"] = 30.0
     plan["safety"].update(quiet_host_required=False, teardown_wait_seconds=10.0)
     paths = physical.SessionPaths(tmp_path / "evidence", archive, {entry.model_id: model})
+    wrapper = tmp_path / "wrapper.py"
+    wrapper.write_text(WRAPPER, encoding="utf-8")
+    monitor, journal = journal_monitor(tmp_path / "journal")
     return {
+        "monitor": monitor,
+        "journal": journal,
+        "wrapper": wrapper,
         "plan": plan,
         "paths": paths,
         "registry": ModelRegistry((entry,)),
@@ -77,7 +97,7 @@ def world(tmp_path: Path):
 
 
 def _factory(world):
-    return lambda _exe, argv: [sys.executable, str(world["child"]), *argv]
+    return wrapped_command(world["wrapper"], world["journal"], world["child"])
 
 
 def _run(world, cases, *, stage="A", authorization=AUTHORIZATION, busy=None, arms=None, **kwargs):
@@ -92,10 +112,12 @@ def _run(world, cases, *, stage="A", authorization=AUTHORIZATION, busy=None, arm
         command_factory=_factory(world),
         busy_provider=(lambda: busy or []),
         memory_probe=kwargs.pop("memory_probe", roomy),
+        monitor=kwargs.pop("monitor", world["monitor"]),
         **kwargs,
     )
 
 
+@windows_only
 def test_a_session_runs_scores_and_records_everything_incrementally(world) -> None:
     cases = [_case(i) for i in range(4)]
     result = _run(world, cases)
@@ -132,6 +154,7 @@ def test_a_session_runs_scores_and_records_everything_incrementally(world) -> No
     assert result["egress_connections_observed"] == 0
 
 
+@windows_only
 def test_blind_pairs_hide_the_arms_and_pair_the_model_with_the_engine_baseline(world) -> None:
     _run(world, [_case(i) for i in range(6)])
     evidence = world["paths"].evidence_root / "physical-A"
@@ -147,6 +170,7 @@ def test_blind_pairs_hide_the_arms_and_pair_the_model_with_the_engine_baseline(w
     assert "B1_engine" not in text and world["entry"].model_id not in text
 
 
+@windows_only
 def test_a_stage_is_claimed_exclusively_and_survives_a_second_attempt(world) -> None:
     _run(world, [_case(0)])
     before = (world["paths"].evidence_root / "physical-A" / "result.json").read_text(
@@ -159,6 +183,7 @@ def test_a_stage_is_claimed_exclusively_and_survives_a_second_attempt(world) -> 
     ) == before
 
 
+@windows_only
 @pytest.mark.parametrize(
     ("break_it", "expected"),
     [
@@ -182,6 +207,7 @@ def test_preflight_refuses_before_anything_is_imported_or_run(world, break_it, e
     )
 
 
+@windows_only
 def test_a_missing_authorization_statement_or_a_busy_host_refuses(world) -> None:
     assert any("authorization" in p for p in _run(world, [_case(0)], authorization="  ")["refused"])
     world["paths"] = physical.SessionPaths(
@@ -192,6 +218,7 @@ def test_a_missing_authorization_statement_or_a_busy_host_refuses(world) -> None
     assert busy["refused"] == ["busy host: pytest"]
 
 
+@windows_only
 def test_strict_offline_needs_the_operator_attestation(world) -> None:
     refused = _run(world, [_case(0)], strict_offline=True)
     assert any("attestation" in p for p in refused["refused"])
@@ -205,23 +232,34 @@ def test_strict_offline_needs_the_operator_attestation(world) -> None:
     assert allowed.get("refused") is None and allowed["teardown_verified"] is True
 
 
-def test_a_child_tree_that_outlives_its_request_ends_the_session_as_unverified(
+@windows_only
+def test_a_teardown_that_cannot_be_verified_refuses_the_session_before_any_request(
     world, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(physical, "_tree_gone", lambda _marker, _wait: False)
-    result = _run(world, [_case(0), _case(1)])
-    assert result["teardown_verified"] is False and "still present" in result["abort_reason"]
-    assert result["verdict"] == "INCONCLUSIVE"
-    rows = (
-        (world["paths"].evidence_root / "physical-A" / "records.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
-    )
-    assert sum(1 for line in rows if json.loads(line)["arm"] == world["entry"].model_id) == 1, (
-        "stopped after the first request"
-    )
+    from src.utils import managed_process
+
+    real = managed_process.build_process_container
+
+    def unverifiable(label, config):
+        container = real(label, config)
+
+        def refuse(_root_pid):
+            raise OSError("job accounting unavailable")
+
+        container.verify_teardown = refuse
+        return container
+
+    monkeypatch.setattr(managed_process, "build_process_container", unverifiable)
+    # The canary needs a verifiable teardown too, so the monitor refuses before any request: nothing was launched.
+    refused = _run(world, [_case(0), _case(1)])
+    assert refused["verdict"] == "NOT TESTED"
+    assert any("monitoring not ready" in p for p in refused["refused"])
+    evidence = world["paths"].evidence_root / "physical-A"
+    assert not (evidence / "records.jsonl").exists()
+    assert not (evidence / "ai-root" / "runtimes").exists()
 
 
+@windows_only
 def test_repeated_infrastructure_failures_abort_instead_of_burning_the_corpus(world) -> None:
     cases = [_case(i, mode="exit3") for i in range(8)]
     result = _run(world, cases)
@@ -265,6 +303,7 @@ def test_quiet_host_detection_names_what_is_running() -> None:
     )
 
 
+@windows_only
 def test_injected_memory_probe_reaches_admission_and_session_sampling(world):
     calls = []
 
@@ -288,6 +327,7 @@ def test_injected_memory_probe_reaches_admission_and_session_sampling(world):
     assert len(calls) >= 2
 
 
+@windows_only
 def test_unreadable_injected_memory_still_refuses_model_requests(world):
     result = _run(world, [_case(i) for i in range(4)], memory_probe=lambda: None)
     evidence = world["paths"].evidence_root / "physical-A"
@@ -302,3 +342,85 @@ def test_unreadable_injected_memory_still_refuses_model_requests(world):
         for row in model_rows
     )
     assert result["abort_reason"] == "3 consecutive infrastructure failures"
+
+
+# -- PR-AI-QUAL-113: ownership monitoring is part of the session contract ----------------------------------------------
+
+
+def test_a_real_session_without_a_ready_monitor_refuses_before_creating_anything(world) -> None:
+    result = physical.run_session(
+        plan=world["plan"],
+        paths=world["paths"],
+        stage="A",
+        arms=["B0_identity", world["entry"].model_id],
+        cases=[_case(0)],
+        authorization_text=AUTHORIZATION,
+        registry=world["registry"],
+    )
+    assert result["verdict"] == "NOT TESTED"
+    assert any(p.startswith("monitoring not ready:") for p in result["refused"])
+    assert not world["paths"].evidence_root.exists(), (
+        "no evidence directory, import or launch happened"
+    )
+
+
+@windows_only
+def test_a_blind_monitor_refuses_before_the_runtime_or_model_is_imported(tmp_path, world) -> None:
+    blind, _ = journal_monitor(tmp_path / "blind", silent_canary=True)
+    result = _run(world, [_case(0)], monitor=blind)
+    evidence = world["paths"].evidence_root / "physical-A"
+    assert result["verdict"] == "NOT TESTED"
+    assert any("the canary did not show" in p for p in result["refused"])
+    readiness = json.loads((evidence / "monitor-readiness.json").read_text(encoding="utf-8"))
+    assert readiness["problems"]
+    assert not (evidence / "ai-root" / "runtimes").exists()
+    assert not (evidence / "ai-root" / "models").exists()
+    assert not (evidence / "records.jsonl").exists()
+
+
+@windows_only
+@pytest.mark.parametrize(
+    ("behavior", "outside", "violation"),
+    [
+        ("egress", False, "egress_attempt_observed"),
+        ("write_outside", True, "file_access_outside_policy"),
+        ("descendant", False, "unexpected_descendants"),
+    ],
+)
+def test_an_ownership_violation_ends_the_session_after_the_offending_request(
+    world, tmp_path, behavior, outside, violation
+) -> None:
+    path = str(tmp_path / "elsewhere.bin") if outside else ""
+    cases = [_case(i, behavior=behavior, path=path) for i in range(3)]
+    result = _run(world, cases)
+    evidence = world["paths"].evidence_root / "physical-A"
+    assert result["abort_reason"].startswith("ownership violation:")
+    assert violation in result["abort_reason"]
+    assert result["verdict"] == "INCONCLUSIVE"
+    assert violation in result["monitoring"]["violations"]
+    assert result["teardown_verified"] is True, (
+        "the offending tree was still cleaned up and proven gone"
+    )
+    model_rows = [
+        row
+        for row in (
+            json.loads(line)
+            for line in (evidence / "records.jsonl").read_text(encoding="utf-8").splitlines()
+        )
+        if row["arm"] == world["entry"].model_id
+    ]
+    assert len(model_rows) == 1, "no further request ran after the violation"
+    assert violation in model_rows[0]["details"]["ownership_violations"]
+    if behavior == "egress":
+        assert result["egress_connections_observed"] == 1
+        assert model_rows[0]["details"]["egress_connections"] == 1
+    assert list((evidence / "ownership").glob("ownership-request-*.json"))
+
+
+@windows_only
+def test_a_hermetic_monitor_can_never_certify_a_pass(world) -> None:
+    result = _run(world, [_case(i) for i in range(4)])
+    assert result["monitoring"]["kind"] == "hermetic"
+    assert result["monitoring"]["violations"] == []
+    assert result["monitoring"]["teardown_verified"] is True
+    assert result["verdict"] != "PASS"
