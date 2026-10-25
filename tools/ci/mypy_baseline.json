@@ -86,7 +86,7 @@
     "src/gui/views/photo_optimize_scope.py": 55,
     "src/gui/views/photo_optimize_tab_frame_v2.py": 31,
     "src/gui/views/pipeline_tab_frame_v2.py": 3,
-    "src/gui/views/prompt_tab_frame_v2.py": 53,
+    "src/gui/views/prompt_tab_frame_v2.py": 52,
     "src/gui/views/review_tab_frame_v2.py": 9,
     "src/gui/views/stage_cards_panel_v2.py": 1,
     "src/gui/views/svd_tab_frame_v2.py": 1,
@@ -148,7 +148,7 @@
     "src/refinement/detectors/opencv_face_detector.py": 1,
     "src/refinement/refinement_policy_registry.py": 4,
     "src/review/artifact_metadata_inspector.py": 2,
-    "src/services/config_service.py": 2,
+    "src/services/config_service.py": 1,
     "src/services/diagnostics_service_v2.py": 2,
     "src/services/operator_readiness_service.py": 2,
     "src/services/ui_state_store.py": 1,
@@ -179,5 +179,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1494
+  "total": 1492
 }

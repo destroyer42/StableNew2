@@ -39,6 +39,10 @@ class EffectiveContext:
     override_pack_config: bool | None = None
     settings_source: contract.SettingsSource = contract.SettingsSource()
     visible: bool = True  # False in hidden-content mode: asset names are replaced by counts
+    #: Selected model and generation profile as the working settings hold them (PR-IMG-PROFILE-630); never a job fact.
+    profile_lines: tuple[str, ...] = ()
+    #: Why this Preview may no longer match the working settings (the draft was built before a stage/override/profile change).
+    draft_notices: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -55,20 +59,29 @@ class EffectiveSettingsView:
     adjustment_summary: str = ""
     provenance: tuple[str, ...] = ()
     empty_text: str = ""
+    profile: tuple[str, ...] = ()
+    notices: tuple[str, ...] = ()
 
     def value_of(self, label: str) -> str | None:
         return next((row.value for row in self.rows if row.label == label), None)
 
     def as_text(self) -> str:
+        head: list[str] = []
+        if self.notices:
+            head.extend(["Preview may be out of date", *(f"  {item}" for item in self.notices), ""])
         if self.job_count == 0:
-            return self.empty_text or NO_PREVIEW_TEXT
+            return "\n".join([*head, self.empty_text or NO_PREVIEW_TEXT])
         noun = "job" if self.job_count == 1 else "jobs"
-        lines = [f"Effective settings of {self.job_count} compiled {noun}"]
+        lines = [*head, f"Effective settings of {self.job_count} compiled {noun}"]
         width = max(len(row.label) for row in self.rows) if self.rows else 0
         lines.extend(f"{row.label.ljust(width)}  {row.value}" for row in self.rows)
         lines.append("")
         lines.append("Compile adjustments")
         lines.extend(f"  {item}" for item in self.adjustments or (NO_ADJUSTMENTS_TEXT,))
+        if self.profile:
+            lines.append("")
+            lines.append("Working model and profile (not part of the compiled jobs)")
+            lines.extend(f"  {item}" for item in self.profile)
         lines.append("")
         lines.append("Where the values come from")
         lines.extend(f"  {item}" for item in self.provenance)
@@ -143,6 +156,12 @@ def _job_rows(job: Any, context: EffectiveContext) -> dict[str, str]:
         for stage in getattr(job, "stages", ())
         if getattr(stage, "enabled", False)
     ]
+    disabled = [
+        str(getattr(stage, "stage_type", "") or "")
+        for stage in getattr(job, "stages", ())
+        if not getattr(stage, "enabled", False)
+    ]
+    disabled = [name for name in disabled if name]
     width, height = _first(config, "width"), _first(config, "height")
     sampler, scheduler = _first(config, "sampler_name", "sampler"), _first(config, "scheduler")
     per_prompt = int(getattr(workload, "images_per_prompt", 1) or 1)
@@ -153,6 +172,7 @@ def _job_rows(job: Any, context: EffectiveContext) -> dict[str, str]:
         "Source": _source_text(job),
         "Model": _text(_first(config, "model", "model_name")),
         "Stages": " + ".join(stages) if stages else "-",
+        "Stages off": ", ".join(disabled) if disabled else "none",
         "Size": f"{width} x {height}" if width and height else "-",
         "Sampler": f"{_text(sampler)} / {_text(scheduler)}",
         "Steps": _text(_first(config, "steps")),
@@ -227,7 +247,7 @@ def _provenance(jobs: Sequence[Any], context: EffectiveContext) -> tuple[str, ..
         lines.append(contract.override_description(context.override_pack_config))
     lines.append(context.settings_source.describe() + ". Edits after loading are not tracked.")
     lines.append(
-        "Model adjustments change the compiled job only; the saved PromptPack and preset files are not rewritten."
+        "Model adjustments change the compiled job only; the saved PromptPack files are not rewritten."
     )
     lines.append(PER_FIELD_NOTE)
     return tuple(lines)
@@ -241,7 +261,9 @@ def project_effective_settings(
     context = context or EffectiveContext()
     records = [job for job in (jobs or ()) if hasattr(job, "stages") and hasattr(job, "source")]
     if not records:
-        return EffectiveSettingsView(job_count=0, empty_text=NO_PREVIEW_TEXT)
+        return EffectiveSettingsView(
+            job_count=0, empty_text=NO_PREVIEW_TEXT, notices=tuple(context.draft_notices)
+        )
     adjustments, summary = _adjustments(records, context)
     return EffectiveSettingsView(
         job_count=len(records),
@@ -249,6 +271,8 @@ def project_effective_settings(
         adjustments=adjustments,
         adjustment_summary=summary,
         provenance=_provenance(records, context),
+        profile=tuple(context.profile_lines),
+        notices=tuple(context.draft_notices),
     )
 
 

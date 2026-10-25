@@ -135,46 +135,16 @@ class DummyConfigManager:
             "img2img": deepcopy(DEFAULT_IMG2IMG_CFG),
             "upscale": deepcopy(DEFAULT_UPSCALE_CFG),
         }
-        self._presets = {"default": deepcopy(self._default_config)}
         self._pack_configs: dict[str, dict] = {}
-        self._default_preset = "default"
 
     def get_default_config(self):
         return deepcopy(self._default_config)
-
-    def list_presets(self):
-        return sorted(self._presets.keys())
-
-    def save_preset(self, name, config):
-        self._presets[name] = deepcopy(config)
-        return True
-
-    def get_default_preset(self):
-        return self._default_preset
-
-    def set_default_preset(self, name):
-        if name in self._presets:
-            self._default_preset = name
-        return True
-
-    def load_preset(self, name):
-        return deepcopy(self._presets.get(name) or self._default_config)
-
-    def ensure_pack_config(self, _pack_name, preset_name):
-        preset = preset_name or self._default_preset
-        return deepcopy(self._pack_configs.get(_pack_name) or self.load_preset(preset))
 
     def load_pack_config(self, pack_name):
         return deepcopy(self._pack_configs.get(pack_name) or self._default_config)
 
     def save_pack_config(self, pack_name, config):
         self._pack_configs[pack_name] = deepcopy(config)
-        return True
-
-    def delete_preset(self, name):
-        self._presets.pop(name, None)
-        if self._default_preset == name:
-            self._default_preset = "default"
         return True
 
 

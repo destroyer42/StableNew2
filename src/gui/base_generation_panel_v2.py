@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import tkinter as tk
 from collections.abc import Callable, Iterable, Mapping
@@ -9,6 +10,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.config import app_config
+from src.gui.generation_profile_strip import GenerationProfileStrip
 from src.gui.help_text.stage_setting_help_v2 import BASE_GENERATION_SETTING_HELP
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.model_policy_panel_projection import ModelPolicyPanelProjection
@@ -28,6 +30,8 @@ from src.utils.webui_resource_names import (
     vae_names_match,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class BaseGenerationPanelV2(BaseStageCardV2):
     """Expose shared image-generation defaults for the active pipeline UI."""
@@ -36,7 +40,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
     MAX_DIMENSION = 4096
     GEOMETRY_HELP = (
         "Width and height are the source of truth. "
-        "The preset dropdown is only a helper for common resolution pairs."
+        "The size shortcut is only a helper for common resolution pairs."
     )
     LABEL_COLUMN_MIN_WIDTH = LABEL_COLUMN_MIN_WIDTH
     PRIMARY_CONTROL_MIN_WIDTH = PRIMARY_CONTROL_MIN_WIDTH
@@ -201,6 +205,13 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             help_key="model",
             help_text=BASE_GENERATION_SETTING_HELP["model"],
         )
+        self._model_combo.bind("<<ComboboxSelected>>", self._on_model_chosen, add="+")
+        row_idx += 1
+
+        self._profile_strip = GenerationProfileStrip(
+            parent, controller_getter=self._profile_controller, wraplength=COMPACT_HINT_WRAPLENGTH
+        )
+        self._profile_strip.grid(row=row_idx, column=0, columnspan=4, sticky="ew", pady=(0, 4))
         row_idx += 1
 
         if self._include_vae:
@@ -283,7 +294,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         )
 
     def _build_resolution_row(self, parent: ttk.Frame, row_idx: int) -> None:
-        preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)
+        preset_label = ttk.Label(parent, text="Size shortcut", style=BODY_LABEL_STYLE)
         preset_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         self._preset_combo = self._build_combo(
             parent, self.resolution_preset_var, tuple(self._preset_map.keys())
@@ -413,9 +424,24 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             except Exception:
                 pass
 
+    def _profile_controller(self) -> Any:
+        return getattr(self._controller, "generation_profiles", None)
+
+    def _on_model_chosen(self, _event: object = None) -> None:
+        """The operator picked a checkpoint: let the profile controller apply that model's preferred profile."""
+        profiles = self._profile_controller()
+        if profiles is not None:
+            try:
+                profiles.on_model_chosen(self._normalize_model_name(self.model_var.get()))
+            except Exception:  # noqa: BLE001 - a profile problem never blocks choosing a model
+                logger.debug("generation profile application failed", exc_info=True)
+
     def _on_value_changed(self) -> None:
         if not self._sync_enabled:
             return
+        strip = getattr(self, "_profile_strip", None)
+        if strip is not None:
+            strip.schedule_refresh()
         controller = self._controller
         model_name = self._normalize_model_name(self.model_var.get())
         vae_name = self._normalize_vae_name(self.vae_var.get())
@@ -887,6 +913,46 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 self._on_change()
             except Exception:
                 pass
+
+    def apply_profile_values(self, values: Mapping[str, object]) -> None:
+        """Set only the named working values (profile setting names, plus ``model``); every other control is untouched."""
+        if not values:
+            return
+        self._sync_enabled = False
+        try:
+            if values.get("model"):
+                self.model_var.set(self._display_model_name(str(values["model"])))
+            if "vae" in values and values["vae"] is not None:
+                self.vae_var.set(self._display_vae_name(values["vae"]))
+            if values.get("sampler_name"):
+                self.sampler_var.set(str(values["sampler_name"]))
+            if values.get("scheduler") is not None and "scheduler" in values:
+                self.scheduler_var.set(str(values["scheduler"]))
+            if values.get("steps") is not None:
+                self.steps_var.set(self._safe_int(values["steps"], 20))
+            if values.get("cfg_scale") is not None:
+                self.cfg_var.set(self._safe_float(values["cfg_scale"], 7.0))
+            if values.get("width") is not None:
+                self.width_var.set(str(self._safe_int(values["width"], 768)))
+            if values.get("height") is not None:
+                self.height_var.set(str(self._safe_int(values["height"], 768)))
+            if values.get("width") is not None or values.get("height") is not None:
+                self.resolution_preset_var.set(
+                    self._preset_label_from_dimensions(
+                        self._safe_int(self.width_var.get(), 768), self._safe_int(self.height_var.get(), 768)
+                    )
+                )
+        finally:
+            self._sync_enabled = True
+        projection = getattr(self, "_model_policy_projection", None)
+        if projection is not None:
+            projection.refresh()
+        self._update_current_config()
+        if callable(self._on_change):
+            try:
+                self._on_change()
+            except Exception:  # noqa: BLE001
+                logger.debug("change callback failed after applying profile values", exc_info=True)
 
     def _normalize_model_name(self, raw: object) -> str:
         value = str(raw or "").strip()

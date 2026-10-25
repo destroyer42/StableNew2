@@ -258,6 +258,11 @@ class PreviewPanelV2(ttk.Frame):
             style="Dark.TCheckbutton",
         )
         self.effective_toggle.pack(anchor=tk.W, pady=(0, 4))
+        add_listener = getattr(
+            getattr(controller, "generation_profiles", None), "add_listener", None
+        )
+        if callable(add_listener):
+            add_listener(self._on_profile_state_changed)
         attach_tooltip(
             self.effective_toggle,
             "Shows the settings of the compiled jobs that Add to Queue will submit. It is read-only.",
@@ -1090,7 +1095,23 @@ class PreviewPanelV2(ttk.Frame):
         }
         if source is not None:
             kwargs["settings_source"] = source
+        profiles = getattr(controller, "generation_profiles", None)
+        for key, reader in (
+            ("profile_lines", "effective_lines"),
+            ("draft_notices", "draft_notices"),
+        ):
+            try:
+                lines: Any = getattr(profiles, reader)()
+            except Exception:  # noqa: BLE001 - the Preview never fails because a profile line could not be read
+                lines = None
+            if isinstance(lines, tuple):
+                kwargs[key] = lines
         return EffectiveContext(**kwargs)
+
+    def _on_profile_state_changed(self) -> None:
+        if self._dispatch_to_ui(self._on_profile_state_changed):
+            return
+        self._refresh_effective_settings()
 
     def _refresh_effective_settings(self) -> None:
         """Show or hide the effective-settings text and fill it from the current compiled preview jobs only."""

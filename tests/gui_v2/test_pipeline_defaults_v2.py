@@ -7,7 +7,6 @@ import pytest
 
 from src.gui.app_state_v2 import CurrentConfig
 from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
-from src.learning.model_profiles import get_model_profile_defaults_for_model
 
 # Setup TCL/TK environment variables at module load time
 if sys.platform.startswith("win"):
@@ -47,15 +46,15 @@ class DummyController:
         return []
 
 
-def test_txt2img_card_respects_model_profile_defaults() -> None:
+def test_txt2img_card_shows_the_working_refiner_and_hires_values() -> None:
+    """The card projects the working configuration; no model name derives hidden refiner or hires defaults."""
     root = _create_root()
     try:
         current = CurrentConfig()
         current.model_name = "sdxl-base-realism"
-        defaults = get_model_profile_defaults_for_model(current.model_name)
-        current.refiner_model_name = defaults.get("default_refiner_id", "")
-        current.hires_upscaler_name = defaults.get("default_hires_upscaler_id", "Latent")
-        current.hires_denoise = defaults.get("default_hires_denoise", 0.3)
+        current.refiner_model_name = "working-refiner"
+        current.hires_upscaler_name = "4x-UltraSharp"
+        current.hires_denoise = 0.4
         controller_state = SimpleNamespace(current_config=current)
         controller = DummyController(controller_state)
 

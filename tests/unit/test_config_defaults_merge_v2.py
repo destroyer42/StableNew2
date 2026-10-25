@@ -10,38 +10,6 @@ def config_manager(tmp_path: Path) -> ConfigManager:
     return ConfigManager(presets_dir=tmp_path / "presets")
 
 
-def test_presets_roundtrip_refiner_and_hires_defaults(config_manager: ConfigManager):
-    custom_config = {
-        "txt2img": {
-            "refiner_enabled": True,
-            "refiner_model_name": "sdxl_custom_refiner",
-            "refiner_switch_at": 0.6,
-        },
-        "hires_fix": {
-            "enabled": True,
-            "upscaler_name": "ESRGAN 4x+",
-            "upscale_factor": 3.0,
-            "steps": 32,
-            "denoise": 0.28,
-            "use_base_model": False,
-        },
-    }
-    assert config_manager.save_preset("test_refiner", custom_config)
-    loaded = config_manager.load_preset("test_refiner")
-    assert loaded is not None
-    txt2img = loaded["txt2img"]
-    assert txt2img["refiner_enabled"] is True
-    assert txt2img["refiner_model_name"] == "sdxl_custom_refiner"
-    assert abs(txt2img["refiner_switch_at"] - 0.6) < 1e-6
-    hires = loaded["hires_fix"]
-    assert hires["enabled"] is True
-    assert hires["upscaler_name"] == "ESRGAN 4x+"
-    assert hires["upscale_factor"] == 3.0
-    assert hires["steps"] == 32
-    assert abs(hires["denoise"] - 0.28) < 1e-6
-    assert hires["use_base_model"] is False
-
-
 def test_config_defaults_always_include_refiner_hires(config_manager: ConfigManager):
     config = config_manager._merge_config_with_defaults({})
     pipeline = config["pipeline"]
@@ -166,46 +134,22 @@ def test_other_stages_are_never_synchronized_by_the_adetailer_helper():
     assert result["video_workflow"]["enabled"] is False
 
 
-def test_save_preset_roundtrip_synchronizes_adetailer_enablement(
-    config_manager: ConfigManager, tmp_path: Path
-):
-    """Standalone saved recipe: reload the raw preset JSON directly (not through
-    load_preset's own merge) and verify every representation agrees."""
-
-    import json
-
-    assert config_manager.save_preset(
-        "ad_sync_test",
-        {
-            "pipeline": {"adetailer_enabled": True},
-            "adetailer": {"enabled": False, "adetailer_enabled": False},
-        },
-    )
-    raw = json.loads((config_manager.presets_dir / "ad_sync_test.json").read_text(encoding="utf-8"))
-    assert raw["pipeline"]["adetailer_enabled"] is True
-    assert raw["adetailer"]["enabled"] is True
-    assert raw["adetailer"]["adetailer_enabled"] is True
-
-
 def test_runtime_stage_plan_still_enables_adetailer_after_persistence_sync(
     config_manager: ConfigManager,
 ):
     """The synchronization must not accidentally disable ADetailer while making
     the metadata consistent: a canonical-enabled config still produces an
-    enabled ADetailer stage in the execution plan after persistence/load."""
+    enabled ADetailer stage in the execution plan after the defaults merge."""
 
     from src.pipeline.stage_sequencer import build_stage_execution_plan
 
-    assert config_manager.save_preset(
-        "ad_runtime_test",
+    loaded = config_manager._merge_config_with_defaults(
         {
             "pipeline": {"txt2img_enabled": True, "adetailer_enabled": True},
             "adetailer": {"enabled": False},
             "txt2img": {"model": "test.safetensors"},
-        },
+        }
     )
-    loaded = config_manager.load_preset("ad_runtime_test")
-    assert loaded is not None
     assert loaded["adetailer"]["enabled"] is True  # sync proof
 
     plan = build_stage_execution_plan(loaded)

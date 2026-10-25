@@ -21,24 +21,6 @@ DEFAULT_GLOBAL_POSITIVE_PROMPT = ""
 
 logger = logging.getLogger(__name__)
 
-#: JSON files in the presets folder that the application itself owns. They are never reusable generation presets, so
-#: they are not listed, loaded, saved over or deleted as one (``list_presets`` globs every ``*.json`` there).
-RESERVED_PRESET_STEMS: frozenset[str] = frozenset({"settings", "last_settings", "pack_overrides"})
-_INVALID_PRESET_CHARS = frozenset('/\\:*?"<>|\x00')
-
-
-def preset_name_problem(name: str) -> str | None:
-    """Why ``name`` cannot be a preset file name, or ``None`` when it can."""
-
-    if not isinstance(name, str) or not name.strip():
-        return "A preset needs a name."
-    if name != name.strip() or ".." in name or any(ch in _INVALID_PRESET_CHARS for ch in name):
-        return "A preset name cannot start or end with a space, contain '..', or contain / \\ : * ? \" < > |."
-    if name.casefold() in RESERVED_PRESET_STEMS:
-        return f"'{name}' is an application file in the presets folder, not a preset."
-    return None
-
-
 LAST_RUN_PATH = workspace_paths.last_run_v2()
 
 
@@ -219,109 +201,9 @@ class ConfigManager:
         self._global_negative_cache: str | None = None
         self._global_positive_path = self.global_prompt_dir / GLOBAL_POSITIVE_FILENAME
         self._global_positive_cache: str | None = None
-        self._default_preset_path = self.presets_dir / ".default_preset"
         self._settings_path = self.presets_dir / "settings.json"
         self._settings_cache: dict[str, Any] | None = None
         self._settings_load_error: str | None = None
-
-    def load_preset(self, name: str) -> dict[str, Any] | None:
-        """
-        Load a preset configuration.
-
-        Args:
-            name: Name of the preset
-
-        Returns:
-            Preset configuration dictionary
-        """
-        if preset_name_problem(name):
-            logger.warning(f"Not a preset name: {name!r}")
-            return None
-        preset_path = self.presets_dir / f"{name}.json"
-        if not preset_path.exists():
-            logger.warning(f"Preset '{name}' not found at {preset_path}")
-            return None
-
-        try:
-            with open(preset_path, encoding="utf-8") as f:
-                preset = self._merge_config_with_defaults(json.load(f))
-            logger.info(f"Loaded preset: {name}")
-            return preset
-        except Exception as e:
-            logger.error(f"Failed to load preset '{name}': {e}")
-            return None
-
-    def save_preset(self, name: str, config: dict[str, Any]) -> bool:
-        """
-        Save a preset configuration.
-
-        Args:
-            name: Name of the preset
-            config: Configuration dictionary
-
-        Returns:
-            True if saved successfully. An invalid or reserved name, or a failed write, leaves any
-            existing file untouched (the publish is atomic).
-        """
-        problem = preset_name_problem(name)
-        if problem:
-            logger.error(f"Failed to save preset {name!r}: {problem}")
-            return False
-        preset_path = self.presets_dir / f"{name}.json"
-        try:
-            merged = self._merge_config_with_defaults(config)
-            self.presets_dir.mkdir(parents=True, exist_ok=True)
-            atomic_write_json(preset_path, merged, indent=2, ensure_ascii=False)
-            logger.info(f"Saved preset: {name}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to save preset '{name}': {e}")
-            return False
-
-    def list_presets(self) -> list[str]:
-        """
-        List all available presets.
-
-        Returns:
-            List of preset names (the application's own settings files are not presets)
-        """
-        presets = [
-            p.stem
-            for p in self.presets_dir.glob("*.json")
-            if p.stem.casefold() not in RESERVED_PRESET_STEMS
-        ]
-        logger.debug(f"Found {len(presets)} presets")
-        return sorted(presets)
-
-    def delete_preset(self, name: str) -> bool:
-        """
-        Delete a preset configuration.
-
-        Args:
-            name: Name of the preset to delete
-
-        Returns:
-            True if deleted successfully
-        """
-        if isinstance(name, str) and name.casefold() == "default":
-            logger.warning("Cannot delete the default preset")
-            return False
-        if preset_name_problem(name):
-            logger.warning(f"Not a preset name: {name!r}")
-            return False
-
-        preset_path = self.presets_dir / f"{name}.json"
-        if not preset_path.exists():
-            logger.warning(f"Preset '{name}' not found at {preset_path}")
-            return False
-
-        try:
-            preset_path.unlink()
-            logger.info(f"Deleted preset: {name}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete preset '{name}': {e}")
-            return False
 
     def get_default_config(self) -> dict[str, Any]:
         """
@@ -491,15 +373,13 @@ class ConfigManager:
 
     def resolve_config(
         self,
-        preset_name: str | None = None,
         pack_overrides: dict[str, Any] | None = None,
         runtime_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Resolve configuration with hierarchy: Default → Preset → Pack overrides → Runtime params.
+        Resolve configuration with hierarchy: Default → Pack overrides → Runtime params.
 
         Args:
-            preset_name: Name of preset to load
             pack_overrides: Pack-specific configuration overrides
             runtime_params: Runtime parameter overrides
 
@@ -510,12 +390,6 @@ class ConfigManager:
         # saved settings and the job's own snapshot still override them, and queued or finished jobs never change.
         config = self.get_default_config()
         self._apply_application_defaults(config)
-
-        # Apply preset overrides
-        if preset_name:
-            preset_config = self.load_preset(preset_name)
-            if preset_config:
-                config = self._merge_configs(config, preset_config)
 
         # Apply pack-specific overrides
         if pack_overrides:
@@ -783,33 +657,6 @@ class ConfigManager:
             logger.error(f"Failed to save pack config '{pack_name}': {e}")
             return False
 
-    def ensure_pack_config(self, pack_name: str, preset_name: str = "default") -> dict[str, Any]:
-        """
-        Ensure pack has a configuration file, creating one with preset defaults if needed.
-
-        Args:
-            pack_name: Name of the prompt pack
-            preset_name: Preset to use as base for new pack config
-
-        Returns:
-            Pack configuration
-        """
-        config = self._merge_config_with_defaults(self.get_pack_config(pack_name))
-
-        if not config:
-            # Create pack config from preset defaults
-            preset_config = self.load_preset(preset_name)
-            if preset_config:
-                if self.save_pack_config(pack_name, preset_config):
-                    logger.info(
-                        f"Created pack config for '{pack_name}' based on preset '{preset_name}'"
-                    )
-                return self._merge_config_with_defaults(preset_config)
-            else:
-                logger.warning(f"Failed to create pack config - preset '{preset_name}' not found")
-
-        return self._merge_config_with_defaults(config)
-
     def _load_settings(self) -> dict[str, Any]:
         if self._settings_cache is not None:
             return self._settings_cache
@@ -1056,76 +903,6 @@ class ConfigManager:
             else:
                 merged[key] = value
         return merged
-
-    def set_default_preset(self, preset_name: str) -> bool:
-        """
-        Set a preset as the default to load on startup.
-
-        Args:
-            preset_name: Name of the preset to set as default
-
-        Returns:
-            True if set successfully
-        """
-        if not preset_name:
-            logger.warning("Cannot set empty preset name as default")
-            return False
-
-        # Verify preset exists
-        preset_path = self.presets_dir / f"{preset_name}.json"
-        if not preset_path.exists():
-            logger.warning(f"Preset '{preset_name}' does not exist, cannot set as default")
-            return False
-
-        try:
-            self._default_preset_path.write_text(preset_name, encoding="utf-8")
-            logger.info(f"Set default preset to: {preset_name}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to set default preset: {e}")
-            return False
-
-    def get_default_preset(self) -> str | None:
-        """
-        Get the name of the default preset.
-
-        Returns:
-            Name of default preset, or None if not set
-        """
-        if not self._default_preset_path.exists():
-            return None
-
-        try:
-            preset_name = self._default_preset_path.read_text(encoding="utf-8").strip()
-            if preset_name:
-                # Verify preset still exists
-                preset_path = self.presets_dir / f"{preset_name}.json"
-                if preset_path.exists():
-                    return preset_name
-                else:
-                    logger.warning(f"Default preset '{preset_name}' no longer exists")
-                    # Clean up stale reference
-                    self._default_preset_path.unlink(missing_ok=True)
-                    return None
-            return None
-        except Exception as e:
-            logger.error(f"Failed to read default preset: {e}")
-            return None
-
-    def clear_default_preset(self) -> bool:
-        """
-        Clear the default preset setting.
-
-        Returns:
-            True if cleared successfully
-        """
-        try:
-            self._default_preset_path.unlink(missing_ok=True)
-            logger.info("Cleared default preset")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to clear default preset: {e}")
-            return False
 
     def write_last_run(self, payload: dict[str, Any]) -> None:
         """Persist the last-run payload so the GUI can restore it later."""

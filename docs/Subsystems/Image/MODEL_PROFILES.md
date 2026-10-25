@@ -13,7 +13,7 @@ How to keep this true:
 
 Covered: the two exact profiles (FLUX.2 Klein 4B FP8 v1/v2, Z-Image-Turbo FP8 v1), the refusal of Klein Base 9B, `ModelPolicy`, operation compatibility, effective-config adaptation and global-positive ownership, local asset evidence as it gates dispatch, readiness, and Model Comparison where it touches profiles. Not covered: SDXL ordinary work (generic path), OpenPose (IMAGE_PIPELINE 3.1), video.
 
-Four concepts stay separate; most bugs here come from mixing them (`model_policy.py` module docstring):
+Four concepts stay separate (a fifth, advisory recommended generation profiles, is in section 17); most bugs here come from mixing them (`model_policy.py` module docstring):
 
 | Concept | Authority | Never |
 |---|---|---|
@@ -257,6 +257,18 @@ New envelope for an existing model (for example a Klein v3):
 4. Tests for old versions must keep passing unchanged (a v1/v2 NJR must behave as before). Add version-pair tests, then update this file.
 
 New exact profile for another model: follow IMAGE_PIPELINE section 12 (profile file, `exact_model_profile.py`, `model_policy.py`, `forge_webui_backend.py`, builders, readiness, tests). Additions specific to this file: a `normalize_profile_owned_values` branch if it owns inherited values, the global-positive decision (cleared like Klein or composed like Z-Image), an operation-compatibility mode in `ModelPolicy.modes`, a Model Comparison eligibility check (it will need `exact_identity_authority` and an explicit position on every feature), and `QUALIFIED_REGISTRY_POLICY_IDS` only for ordinary registry-evidenced families.
+
+## 17. Recommended generation profiles (advisory, `src/generation_profiles/`)
+
+A recommended generation profile is a typed, versioned set of **partial** Base Generation recommendations (`sampler_name`, `scheduler`, `steps`, `cfg_scale`, `width`, `height`, `vae`) for one model identity, with per-setting evidence. It is a fifth concept, separate from the four above: it never owns execution, never enables a stage, and the executable policy stays final. `application.plan_application` skips a value `ModelPolicy` owns and says so; the compiler and backend validate the job regardless.
+
+- Kinds: **research** (code-owned, read-only, `research.py`), **learning** (published only through `GenerationProfileStore.publish_learning_profile`, the seam LEARN-PROFILE-660 will call; it accepts only the next immutable revision of a Learning lineage and never touches Custom data), **custom** (operator saved, editable by writing the next revision). Missing or malformed profile files give an explicit fallback status and are skipped; the last valid revision keeps being used.
+- Identity (`identity.py`): from the exact profile (whole-name plus recorded SHA-256 evidence) or the `AssetRegistry` family via `RegistryFamilyLookup`; never a filename substring. An unverified model gets no profile and a stated reason. A renamed file with the same bytes matches; a same-name file with different bytes conflicts and nothing is applied.
+- Research coverage is exactly SDXL (registry-verified family: only 1024 x 1024, because the SDXL base model card gives no standalone-base sampler, scheduler, steps or CFG and StableNew has not qualified one), FLUX.2 Klein 4B FP8 and Z-Image-Turbo FP8 (values derived from, and tested equal to, the executable profiles). Every value carries a source class: official model recommendation, StableNew-tested, community or inferred, or unverified; a value without a source is shown as "no recommendation", never invented.
+- Store: per-user data directory (`LOCALAPPDATA`, else `XDG_DATA_HOME`; `STABLENEW_GENERATION_PROFILE_DIR` overrides it, and tests isolate it): `profiles/custom|learning/<id>/rNNNN.json` (one immutable file per revision), `favorites.json`, `startup_defaults.json`, all through `atomic_write_json`. It is not `presets/`, not a PromptPack and not `settings.json`.
+- Application: choosing a checkpoint in the Base Generation panel applies the favorite (else the Research) profile to the editable working settings only. Prompt text, stage flags and stage intent are untouched; a VAE never travels to a different model family (including when the new profile has no VAE recommendation); a sampler or scheduler the runtime does not offer is reported, not rewritten. PromptPacks, the Job Draft, queued jobs and Preview records are never rewritten. Override OFF keeps each pack's own saved settings; Override ON compiles from the working stage snapshot.
+- Startup defaults (`startup.py`, button "Save Current Settings as Startup Defaults" in the Pipeline sidebar): the model identity and name, the selected profile reference, the Base Generation values, the stage flags and the stage settings. Never saved: input or source image paths, masks and anchors, Learning/experiment working state, active or historical jobs, result paths, model assets (`sanitize_stage_settings` drops them by key and by file extension). The save reports its real outcome. Restore runs once after the last-run restore, so it wins; it never scans or launches a runtime, reports a model or value the runtime does not offer instead of substituting one, and revalidates the model when the resource list first arrives.
+- Layering: domain in `src/generation_profiles/` (no Tk, no controller), controller adapter `src/controller/generation_profile_controller.py`, text in `src/gui_v2/generation_profile_projection.py`, widget `src/gui/generation_profile_strip.py`.
 
 ## 16. Evidence records
 

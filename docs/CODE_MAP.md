@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-568 of 722 modules have a docstring.
+578 of 731 modules have a docstring.
 
 ## src/
 
@@ -118,6 +118,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `batch_output_resolution.py`: Resolve a batch's recorded outputs against the file system (PR-BATCH-OPS-201)
 - `content_visibility_resolver.py`: (no docstring)
 - `core_pipeline_controller.py`: Controller-owned base pipeline controller
+- `generation_profile_controller.py`: Controller adapter for model-aware generation profiles and startup defaults (PR-IMG-PROFILE-630)
 - `global_prompt_policy_service.py`: Controller-side projection of current global prompt intent
 - `gpu_loss_coordinator.py`: Contain a confirmed GPU device loss inside the existing queue/worker boundaries
 - `job_execution_controller.py`: Job execution bridge for queue-backed pipeline runs
@@ -191,6 +192,17 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `models.py`: Canonical staged-curation data models
 - `workflow_summary.py`: Workflow summary and replay helpers for staged curation
 
+## src/generation_profiles/
+
+- `__init__.py`: Model-aware generation-settings profiles (PR-IMG-PROFILE-630)
+- `application.py`: Deterministic planning of how a profile lands on the working Base Generation settings (PR-IMG-PROFILE-630)
+- `contract.py`: Typed, versioned generation-settings profile contract (PR-IMG-PROFILE-630)
+- `identity.py`: Resolve which model a selected checkpoint is, and whether a saved profile belongs to it (PR-IMG-PROFILE-630)
+- `research.py`: Built-in Research profiles: sourced starting values for the models StableNew can actually support (PR-IMG-PRO…
+- `service.py`: Tk-free session service for generation-settings profiles (PR-IMG-PROFILE-630)
+- `startup.py`: Startup defaults: the operator's saved starting configuration, and how it is restored (PR-IMG-PROFILE-630)
+- `store.py`: Application-owned, versioned store for generation-settings profiles, favorites and startup defaults (PR-IMG-P…
+
 ## src/gui/
 
 - `__init__.py`: GUI module
@@ -210,6 +222,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `dropdown_loader_v2.py`: (no docstring)
 - `engine_settings_dialog.py`: Modern engine settings dialog for GUI V2
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
+- `generation_profile_strip.py`: Compact generation-profile selector for the Base Generation panel (PR-IMG-PROFILE-630)
 - `gui_invoker.py`: (no docstring)
 - `history_browser_panel_v2.py`: Searchable, paged browser over the whole job history (every row, not only the newest few)
 - `history_iterate_dialog.py`: The "Iterate from History" choice dialog (PR-HISTORY-610A)
@@ -238,10 +251,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_target_presenter.py`: Tk application of a ``PromptTargetProjection`` to the Prompt tab (PR-IMG-130B)
 - `prompt_workspace_state.py`: (no docstring)
 - `randomizer_panel_v2.py`: Randomizer panel for GUI v2 - Full plan builder UI
-- `recipe_summary_v2.py`: (no docstring)
 - `review_batch_dialog.py`: Transient whole-selection review; confirmation admits the exact prepared NJRs
 - `scrolling.py`: Scrolling helpers for V2 GUI widgets
-- `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply / overwrite actions (PR-GUI-UX-520)
+- `settings_actions_presenter.py`: Toolkit-neutral behavior behind the Pipeline sidebar's load / apply actions (PR-GUI-UX-520)
 - `sidebar_panel_v2.py`: (no docstring)
 - `smart_review_dialog.py`: Review's opt-in Smart Review panel: point/box object selection and caption suggestions (PR-IMG-REVIEW-320)
 - `status_bar_v2.py`: Status bar scaffold for GUI v2
@@ -323,7 +335,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Toolkit-agnostic view contracts for GUI surfaces
 - `batch_operations_contract.py`: Toolkit-neutral session for the Queue/History "Batches" view (PR-BATCH-OPS-201)
-- `config_source_contract.py`: Truthful wording for the Pipeline's settings sources, actions and empty states (PR-GUI-UX-500, PR-GUI-UX-520)
+- `config_source_contract.py`: Truthful wording for the Pipeline's settings sources, actions and empty states (PR-GUI-UX-500, PR-GUI-UX-520,…
 - `edit_work_runner.py`: Keyed, latest-wins background work for the Edit workspaces (Review and Photo Optimize), PR-GUI-UX-580
 - `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
 - `form_section_contract.py`: Form section contract independent of widget framework
@@ -429,6 +441,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `asset_readiness_view.py`: Toolkit-neutral session and row projection for the read-only asset readiness view (PR-ASSET-130)
 - `controlnet_guidance.py`: Toolkit-neutral guidance and local readiness for ordered ControlNet units (PR-GUI-UX-550)
 - `effective_settings.py`: Read-only "Effective Settings" projection of compiled preview jobs (PR-GUI-UX-520)
+- `generation_profile_projection.py`: Toolkit-neutral projection of the model's generation profiles for the Base Generation panel (PR-IMG-PROFILE-6…
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
 - `history_iterate_model.py`: Toolkit-neutral eligibility for "Iterate from History" (PR-HISTORY-610A)
 - `lora_authoring_view.py`: Toolkit-neutral presentation of a selected LoRA inside the Prompt tab (GUI-540)
@@ -522,7 +535,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_variant.py`: Deterministic LoRA-strength variants for controlled Learning experiments
 - `model_capabilities.py`: Pure stage/model intersection
 - `model_comparison.py`: Learning's explicit target-envelope study: plan once, materialize frozen arms
-- `model_defaults_resolver.py`: Model/profile defaults resolver for SD models and GUI helpers
 - `model_evidence_readiness.py`: Worker-only readiness for selected runtime checkpoints, using AssetRegistry
 - `model_policy_service.py`: Learning policy validation and compile delegation; never an execution authority
 - `model_profiles.py`: Model Profiles & Style-Aware Defaults (V2-P1)

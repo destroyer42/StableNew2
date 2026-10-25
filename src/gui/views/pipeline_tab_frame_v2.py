@@ -351,6 +351,13 @@ class PipelineTabFrame(ttk.Frame):
                 controller.restore_last_run()
             except Exception:
                 pass
+            # Saved startup defaults win over the last run; they only fill the working controls (no scan, no launch).
+            restore_startup = getattr(controller, "restore_startup_defaults", None)
+            if callable(restore_startup):
+                try:
+                    restore_startup()
+                except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError, tk.TclError):
+                    logger.warning("startup defaults could not be restored", exc_info=True)
 
         # PR-GUI-D: ScrollableFrame already handles mouse wheel; remove redundant calls
         attach_tooltip(self.sidebar, "Pipeline controls and prompt packs.")
