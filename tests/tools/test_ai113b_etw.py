@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -79,8 +79,14 @@ def test_sessions_are_transient_unique_and_use_perf_clock(tmp_path: Path) -> Non
     )
     start, stop, convert = commands
     for tool in (start[0], stop[0], convert[0]):
-        assert Path(tool).is_absolute(), "the OS tools are never resolved through PATH or the cwd"
-    assert [Path(start[0]).name, Path(stop[0]).name, Path(convert[0]).name] == [
+        assert PureWindowsPath(tool).is_absolute(), (
+            "the OS tools are never resolved through PATH or the cwd"
+        )
+    assert [
+        PureWindowsPath(start[0]).name,
+        PureWindowsPath(stop[0]).name,
+        PureWindowsPath(convert[0]).name,
+    ] == [
         "logman.exe",
         "logman.exe",
         "tracerpt.exe",
