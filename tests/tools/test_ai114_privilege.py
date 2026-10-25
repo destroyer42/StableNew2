@@ -177,6 +177,9 @@ def test_a_trace_that_cannot_start_launches_nothing_and_leaves_no_session(tmp_pa
     )
     assert outcome.launch_error and not marker.exists()
     assert set(backend.started) <= set(backend.stopped), "a half-started window is rolled back"
+    # the OS tool's own message is kept next to the verdict, so a denied provider can be told from a missing right
+    assert monitor.records[-1].provider_errors, monitor.records[-1].as_json()
+    assert all(m.startswith("EtwError:") for m in monitor.records[-1].provider_errors.values())
     assert monitor.records[-1].violations == [
         "provider_failed:connections",
         "provider_failed:files",

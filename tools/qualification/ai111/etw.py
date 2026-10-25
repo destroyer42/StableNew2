@@ -710,6 +710,11 @@ def main(argv: list[str] | None = None) -> int:
         "harness_elevated": tokens.current_process_elevated(),
         "performance_log_users": tokens.in_performance_log_users(),
         "trace_sessions_left_running": leaked,
+        "provider_errors": {
+            channel: message
+            for record in monitor.records
+            for channel, message in record.provider_errors.items()
+        },
     }
     (args.evidence_dir / "etw-canary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"

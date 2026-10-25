@@ -211,6 +211,8 @@ class RequestOwnership:
     #: ``False``: the live child's token was read and is not elevated. ``None``: not read (the child ended before the first
     #: poll, or the probe could not open it). ``True`` is a violation and cancels the request.
     child_token_elevated: bool | None = None
+    #: Why a provider failed (channel -> the OS tool's own message, truncated). Diagnostic only; the violation stays the verdict.
+    provider_errors: dict[str, str] = field(default_factory=dict)
 
     def as_json(self) -> dict[str, Any]:
         return {
@@ -224,6 +226,7 @@ class RequestOwnership:
             "violations": self.violations,
             "canary": self.canary,
             "child_token_elevated": self.child_token_elevated,
+            "provider_errors": self.provider_errors,
         }
 
 
@@ -362,12 +365,14 @@ class OwnedSessionMonitor:
         outer_cancel = kwargs.get("cancel")
         started = self._clock()
         failures: list[str] = []
+        errors: dict[str, str] = {}
         executable, digest = _executable_identity(command)  # before launch: what is about to run
         for provider in self.providers:
             try:
                 provider.begin()
-            except Exception:  # noqa: BLE001 - a provider that cannot open its window cannot be trusted
+            except Exception as exc:  # noqa: BLE001 - a provider that cannot open its window cannot be trusted
                 failures.append(f"provider_failed:{provider.channel}")
+                errors[provider.channel] = _error_text(exc)
         if failures:
             # Nothing is launched while any channel is not being watched.
             refused = RequestOwnership(
@@ -380,6 +385,7 @@ class OwnedSessionMonitor:
                 foreign_events=0,
                 violations=sorted(set(failures)),
                 canary=canary,
+                provider_errors=errors,
             )
             self.records.append(refused)
             self._write(refused)
@@ -453,8 +459,9 @@ class OwnedSessionMonitor:
         for provider in self.providers:
             try:
                 events = provider.end(frozenset(windows))
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 record.violations.append(f"provider_failed:{provider.channel}")
+                record.provider_errors[provider.channel] = _error_text(exc)
                 continue
             owned, foreign, ambiguous = attribute(events, windows)
             record.foreign_events += foreign
@@ -688,6 +695,12 @@ _CANARY_SCRIPT = (
     "import ctypes\n"
     "print(done.stdout.strip(), int(bool(ctypes.windll.shell32.IsUserAnAdmin())) if os.name == 'nt' else 0)\n"
 )
+
+
+def _error_text(exc: BaseException) -> str:
+    """The failure's own message (an OS tool's stderr), bounded; never a path or secret the harness did not already log."""
+
+    return f"{type(exc).__name__}: {exc}"[:400]
 
 
 def _int_or_none(text: str) -> int | None:
