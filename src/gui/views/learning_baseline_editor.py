@@ -47,7 +47,10 @@ class LearningBaselineEditor(ttk.Frame):
         confirm: Callable[[tk.Misc], bool] = _confirm_replace,
     ) -> None:
         super().__init__(master)
-        self._controller = controller
+        # A stand-in controller without the baseline API leaves the editor inert instead of failing.
+        self._controller = (
+            controller if callable(getattr(controller, "authoring_baseline", None)) else None
+        )
         self._stage_provider = stage_provider
         self._variable_provider = variable_provider
         self._input_image_provider = input_image_provider

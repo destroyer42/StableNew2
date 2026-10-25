@@ -24,5 +24,12 @@ def get_shared_tk_root() -> tk.Tk | None:
             _tk_root.withdraw()
         except Exception:
             _tk_root = None
+    else:
+        # Events a previous test queued for widgets it destroyed (for example a Treeview selection) can be
+        # delivered to a new widget that reuses the native window id; drain them before the next test starts.
+        try:
+            _tk_root.update()
+        except tk.TclError:
+            pass
 
     return _tk_root
