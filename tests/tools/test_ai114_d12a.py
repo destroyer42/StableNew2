@@ -117,6 +117,7 @@ def _run(tmp_path: Path, monitor: FakeMonitor, files=None, **overrides):
         authorization_text="owner D12a",
         intent=intent,
         authorized_member_sha256=overrides.pop("member_sha", _sha(CLI)),
+        passive_manifest_sha256=overrides.pop("manifest_sha", None),
         **overrides,
     )
 
@@ -228,6 +229,66 @@ def test_model_like_member_refuses(tmp_path: Path) -> None:
         bundle.writestr("weights.gguf", b"x")
     with pytest.raises(d12a.D12aRefused, match="model-like"):
         d12a.verify_archive_members(archive, {})
+
+
+def test_the_passive_manifest_itself_is_pinned(tmp_path: Path) -> None:
+    with pytest.raises(d12a.D12aRefused, match="not the recorded one"):
+        _run(tmp_path, FakeMonitor([]), manifest_sha="0" * 64)
+    assert not (tmp_path / "run" / "d12a").exists()
+
+
+def test_the_recorded_manifest_pin_matches_the_real_passive_evidence_when_present() -> None:
+    real = Path(
+        "C:/Users/rob/projects/StableNew-main/reports/ai111/downloads-reverified-20261023/binary-entry-hashes.json"
+    )
+    if not real.is_file():
+        pytest.skip("passive evidence not on this host")
+    assert _sha(real.read_bytes()) == d12a.PASSIVE_MANIFEST_SHA256
+
+
+def test_a_loadable_file_in_the_working_directory_stops_before_launch(tmp_path: Path) -> None:
+    class Planting(FakeMonitor):
+        def bind_roots(self, *, read_roots, write_roots) -> None:
+            super().bind_roots(read_roots=read_roots, write_roots=write_roots)
+            (write_roots[0] / "ggml-cpu-evil.dll").write_bytes(b"x")
+
+    monitor = Planting([_ok("v"), _ok(HELP_FULL)])
+    result = _run(tmp_path, monitor)
+    assert result["verdict"] == "FAIL" and monitor.launched == []
+    assert "working directory" in result["stopped"]
+
+
+def test_a_loadable_file_appearing_during_a_command_is_a_violation(tmp_path: Path) -> None:
+    class Dropping(FakeMonitor):
+        def runner(self):
+            inner = super().runner()
+
+            def run(command, **kwargs):
+                outcome = inner(command, **kwargs)
+                (Path(kwargs["cwd"]) / "ggml-cpu-evil.dll").write_bytes(b"x")
+                return outcome
+
+            return run
+
+    result = _run(tmp_path, Dropping([_ok("v"), _ok(HELP_FULL)]))
+    assert result["verdict"] == "FAIL"
+    assert "loadable_file_in_working_directory" in result["stopped"]
+
+
+def test_output_over_the_cap_is_inconclusive_not_a_compatibility_failure(tmp_path: Path) -> None:
+    cut = ProcessOutcome(
+        returncode=1, stdout=HELP_FULL.encode()[:40], output_truncated=True, contained=True
+    )
+    result = _run(tmp_path, FakeMonitor([_ok("v"), cut]))
+    assert result["verdict"] == "INCONCLUSIVE", result
+    assert "authorized" in result["stopped"]
+    assert result["compatibility"]["help_truncated_at_cap"] is True
+
+
+def test_the_result_names_the_member_and_archive_it_covers(tmp_path: Path) -> None:
+    result = _run(tmp_path, FakeMonitor([_ok("v"), _ok(HELP_FULL)]))
+    assert result["member"] == "llama-cli.exe" and result["member_sha256"] == _sha(CLI)
+    assert len(result["archive_sha256"]) == 64
 
 
 def test_extraction_tamper_is_caught_before_the_next_launch(tmp_path: Path) -> None:

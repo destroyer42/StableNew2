@@ -22,6 +22,11 @@ PLAN = plan_module.frozen_plan()
 CASES = report.rederive_cases(PLAN)
 BY_ID = {c.case_id: c for c in CASES}
 MODELS = [m["model_id"] for m in PLAN["models"]]
+D12A = {
+    "verdict": "PASS",
+    "member": "llama-cli.exe",
+    "archive_sha256": PLAN["runtime_intent"]["sha256"],
+}
 
 
 def _row(
@@ -84,6 +89,7 @@ def _evidence(tmp_path: Path, *, probes: bool = True, mutate=None, abort: str = 
                 "plan_sha256": plan_module.digest(PLAN),
                 "corpus_sha256": corpus_digest(CASES),
                 "run_id": "test",
+                "executable": "llama-cli.exe",
                 "executed_sha": "x",
                 "source_dirty": False,
             }
@@ -144,13 +150,13 @@ def _evidence(tmp_path: Path, *, probes: bool = True, mutate=None, abort: str = 
 
 
 def test_the_stage_a_case_list_is_rederived_and_matches_the_recorded_digest(tmp_path: Path) -> None:
-    result = report.build_report(_evidence(tmp_path), {"verdict": "PASS"})
+    result = report.build_report(_evidence(tmp_path), D12A)
     assert result["attribution_problems"] == []
     assert len(CASES) == 30 and set(result["models"]) == set(MODELS)
 
 
 def test_a_clean_fast_model_advances_only_with_every_axis_passing(tmp_path: Path) -> None:
-    result = report.build_report(_evidence(tmp_path), {"verdict": "PASS"})
+    result = report.build_report(_evidence(tmp_path), D12A)
     for arm in MODELS:
         judgement = result["models"][arm]["judgement"]
         assert judgement["recommendation"] == "ADVANCE", judgement
@@ -162,9 +168,7 @@ def test_a_clean_fast_model_advances_only_with_every_axis_passing(tmp_path: Path
 
 
 def test_missing_lifecycle_probes_or_d12a_cannot_yield_advance(tmp_path: Path) -> None:
-    no_probes = report.build_report(
-        _evidence(_mk(tmp_path / "a"), probes=False), {"verdict": "PASS"}
-    )
+    no_probes = report.build_report(_evidence(_mk(tmp_path / "a"), probes=False), D12A)
     assert all(
         m["judgement"]["recommendation"] == "INCONCLUSIVE" for m in no_probes["models"].values()
     )
@@ -183,7 +187,7 @@ def test_slow_model_is_inconclusive_with_the_missed_threshold_listed(tmp_path: P
     def slow(rows):
         return [{**r, "elapsed_ms": 45000} if r["arm"] == MODELS[2] else r for r in rows]
 
-    result = report.build_report(_evidence(tmp_path, mutate=slow), {"verdict": "PASS"})
+    result = report.build_report(_evidence(tmp_path, mutate=slow), D12A)
     judgement = result["models"][MODELS[2]]["judgement"]
     assert judgement["recommendation"] == "INCONCLUSIVE"
     assert any("median latency" in m for m in judgement["measured_thresholds_missed"])
@@ -209,7 +213,7 @@ def test_a_protected_token_change_is_a_hard_reject(tmp_path: Path) -> None:
         assert changed
         return out
 
-    result = report.build_report(_evidence(tmp_path, mutate=break_tokens), {"verdict": "PASS"})
+    result = report.build_report(_evidence(tmp_path, mutate=break_tokens), D12A)
     judgement = result["models"][MODELS[0]]["judgement"]
     assert judgement["recommendation"] == "REJECT"
     assert "accepted_protected_token_changes" in judgement["hard_gates_failed"]
@@ -232,11 +236,30 @@ def test_a_model_whose_child_never_runs_is_rejected_but_a_host_stop_is_not(tmp_p
             for r in rows
         ]
 
-    broken = report.build_report(_evidence(_mk(tmp_path / "a"), mutate=exits), {"verdict": "PASS"})
+    broken = report.build_report(_evidence(_mk(tmp_path / "a"), mutate=exits), D12A)
     assert broken["models"][MODELS[1]]["judgement"]["recommendation"] == "REJECT"
     assert broken["models"][MODELS[1]]["judgement"]["compatibility"] == "FAIL"
-    host = report.build_report(_evidence(_mk(tmp_path / "b"), mutate=starved), {"verdict": "PASS"})
+    host = report.build_report(_evidence(_mk(tmp_path / "b"), mutate=starved), D12A)
     assert host["models"][MODELS[1]]["judgement"]["recommendation"] == "INCONCLUSIVE"
+
+
+def test_a_d12a_record_for_another_executable_cannot_support_a_recommendation(
+    tmp_path: Path,
+) -> None:
+    covered = D12A
+    evidence = _evidence(tmp_path)
+    manifest = json.loads((evidence / "execution-manifest.json").read_text())
+    manifest["executable"] = "llama-completion.exe"
+    (evidence / "execution-manifest.json").write_text(json.dumps(manifest))
+    result = report.build_report(evidence, covered)
+    assert result["attribution_problems"] and result["binary_compatibility"] == "NOT TESTED"
+    assert all(
+        m["judgement"]["recommendation"] == "INCONCLUSIVE" for m in result["models"].values()
+    )
+    assert "Attribution problems" in report.render_markdown(result)
+    manifest["executable"] = "llama-cli.exe"
+    (evidence / "execution-manifest.json").write_text(json.dumps(manifest))
+    assert report.build_report(evidence, covered)["attribution_problems"] == []
 
 
 def test_records_for_other_cases_or_a_different_corpus_are_an_attribution_problem(
@@ -246,20 +269,20 @@ def test_records_for_other_cases_or_a_different_corpus_are_an_attribution_proble
     manifest = json.loads((evidence / "execution-manifest.json").read_text())
     manifest["corpus_sha256"] = "0" * 64
     (evidence / "execution-manifest.json").write_text(json.dumps(manifest))
-    assert report.build_report(evidence, {"verdict": "PASS"})["attribution_problems"]
+    assert report.build_report(evidence, D12A)["attribution_problems"]
 
 
 def test_an_arm_that_never_ran_is_inconclusive_not_absent(tmp_path: Path) -> None:
     def drop(rows):
         return [r for r in rows if r["arm"] != MODELS[3]]
 
-    result = report.build_report(_evidence(tmp_path, mutate=drop), {"verdict": "PASS"})
+    result = report.build_report(_evidence(tmp_path, mutate=drop), D12A)
     assert result["models"][MODELS[3]]["judgement"]["recommendation"] == "INCONCLUSIVE"
     assert result["models"][MODELS[3]]["metrics"] is None
 
 
 def test_the_markdown_states_the_limits_and_never_the_word_qualified(tmp_path: Path) -> None:
-    text = report.render_markdown(report.build_report(_evidence(tmp_path), {"verdict": "PASS"}))
+    text = report.render_markdown(report.build_report(_evidence(tmp_path), D12A))
     assert "Limits of this evidence" in text and "operator-attested" in text
     assert "qualified=true" not in text and "promot" not in text.lower()
 

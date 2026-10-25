@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
@@ -34,7 +35,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from src.ai_assist.argv import ALLOWED_FLAGS, FORBIDDEN_FLAGS, build_environment
-from src.ai_assist.manifests import hash_file
 from src.utils.managed_process import OwnedChildObservation, ProcessOutcome
 from tools.qualification.ai111 import plan as plan_module
 from tools.qualification.ai111.ownership import OwnedSessionMonitor, OwnershipPolicy
@@ -42,6 +42,9 @@ from tools.qualification.ai111.ownership import OwnedSessionMonitor, OwnershipPo
 MEMBER = "llama-cli.exe"
 #: The one member the owner authorized (D12a request in ``PR-AI-111_Offline_Qualification.md``): its frozen SHA-256.
 AUTHORIZED_MEMBER_SHA256 = "c84a4604db9a01cb64ece64c7da5ace4c83c44dfb63f55a9c8d2270b685c0ee7"
+#: SHA-256 of the passive member-hash manifest recorded before any extraction. The manifest names its own archive, which
+#: alone would let a forged manifest vouch for a swapped archive; pinning the manifest itself closes that.
+PASSIVE_MANIFEST_SHA256 = "f15151047cc3dcb3e093cffce3273a2b6f8c5acf4830a4e981174871475e8a9e"
 COMMANDS: tuple[tuple[str, ...], ...] = (("--version",), ("--help",))
 TIMEOUT_SECONDS = 10.0
 STDOUT_CAP_BYTES = 64 * 1024
@@ -80,9 +83,13 @@ def sha256_file(path: Path) -> str:
 
 
 def load_passive_manifest(path: Path, archive_sha256: str) -> dict[str, tuple[str, int]]:
+    return load_passive_manifest_bytes(path.read_bytes(), archive_sha256)
+
+
+def load_passive_manifest_bytes(raw: bytes, archive_sha256: str) -> dict[str, tuple[str, int]]:
     """Member name -> (SHA-256, bytes) from the passive evidence that was recorded without extracting anything."""
 
-    document = json.loads(path.read_text(encoding="utf-8"))
+    document = json.loads(raw.decode("utf-8"))
     if document.get("archive_sha256") != archive_sha256:
         raise D12aRefused("passive member manifest is for a different archive")
     members = document.get("members")
@@ -105,7 +112,7 @@ def _member_problem(name: str) -> str | None:
 
 
 def verify_archive_members(
-    archive: Path, manifest: dict[str, tuple[str, int]]
+    archive: Path | io.BytesIO, manifest: dict[str, tuple[str, int]]
 ) -> dict[str, tuple[str, int]]:
     """Hash every archive file member from the zip itself and require it to equal the passive manifest.
 
@@ -154,7 +161,7 @@ def verify_archive_members(
     return seen
 
 
-def extract_archive(archive: Path, target: Path) -> None:
+def extract_archive(archive: Path | io.BytesIO, target: Path) -> None:
     """Unpack into a new empty directory; member paths were already confined by :func:`verify_archive_members`."""
 
     target.mkdir(parents=True)
@@ -284,6 +291,7 @@ def run_d12a(
     runner_clock: Callable[[], float] | None = None,
     intent: dict[str, Any] | None = None,
     authorized_member_sha256: str = AUTHORIZED_MEMBER_SHA256,
+    passive_manifest_sha256: str | None = PASSIVE_MANIFEST_SHA256,
 ) -> dict[str, Any]:
     """Run D12a once into a new ``<evidence_root>/d12a`` directory. Returns the result record (also written)."""
 
@@ -296,11 +304,19 @@ def run_d12a(
     not_ready = monitor.provider_problems()
     if not_ready:
         raise D12aRefused("monitoring not ready: " + "; ".join(not_ready))
-    sha, size = hash_file(archive)
+    # The archive is read once; the very bytes that were hashed are the ones verified and extracted.
+    data = archive.read_bytes()
+    sha, size = hashlib.sha256(data).hexdigest(), len(data)
     if size != intent["bytes"] or sha != intent["sha256"]:
         raise D12aRefused("runtime archive does not match the frozen size/SHA-256")
-    manifest = load_passive_manifest(passive_manifest, intent["sha256"])
-    members = verify_archive_members(archive, manifest)
+    manifest_bytes = passive_manifest.read_bytes()
+    if (
+        passive_manifest_sha256 is not None
+        and hashlib.sha256(manifest_bytes).hexdigest() != passive_manifest_sha256
+    ):
+        raise D12aRefused("passive member manifest is not the recorded one")
+    manifest = load_passive_manifest_bytes(manifest_bytes, intent["sha256"])
+    members = verify_archive_members(io.BytesIO(data), manifest)
     if MEMBER not in members or members[MEMBER][0] != authorized_member_sha256:
         raise D12aRefused(f"{MEMBER} is not the authorized member")
 
@@ -321,7 +337,7 @@ def run_d12a(
     )
     runtime_dir = evidence / "runtime"
     scratch = evidence / "scratch"
-    extract_archive(archive, runtime_dir)
+    extract_archive(io.BytesIO(data), runtime_dir)
     scratch.mkdir()
     pre_problems = verify_extracted(runtime_dir, members, manifest)
     write_new_json(
@@ -350,12 +366,19 @@ def run_d12a(
     results: list[dict[str, Any]] = []
     captured: dict[str, str] = {}
     stopped = ""
+    truncated_stop = False
     run = monitor.runner()
     for args in COMMANDS:
         # Re-hash the whole extracted tree immediately before each launch: nothing may have changed since the last check.
         again = verify_extracted(runtime_dir, members, manifest)
         if again:
             stopped = "tree changed before launch: " + "; ".join(again[:3])
+            break
+        loose = _loadable_files(scratch)
+        if loose:
+            stopped = "loadable file in the child's working directory before launch: " + ", ".join(
+                loose[:3]
+            )
             break
         trace = _CommandTrace()
         holder: list[OwnedChildObservation] = []
@@ -388,13 +411,21 @@ def run_d12a(
             "total_processes": record.process.get("total_processes"),
         }
         results.append(result)
+        planted = _loadable_files(scratch) + [
+            entry for entry in record.files if _loadable_access_in(entry, scratch)
+        ]
+        if planted:
+            result["ownership"]["loadable_in_working_directory"] = planted
+            record.violations.append("loadable_file_in_working_directory")
         label = "version" if args == ("--version",) else "help"
         captured[label] = outcome.stdout.decode("utf-8", "replace")
         (evidence / f"{label}.stdout.txt").write_bytes(outcome.stdout)
         (evidence / f"{label}.stderr.txt").write_bytes(outcome.stderr)
         if outcome.stderr and label == "help" and not outcome.stdout:
             captured[label] = outcome.stderr.decode("utf-8", "replace")
-        if outcome.launch_error or outcome.timed_out or outcome.returncode != 0:
+        if (
+            outcome.launch_error or outcome.timed_out or outcome.returncode != 0
+        ) and not outcome.output_truncated:
             stopped = f"{' '.join(args)}: launch failure, timeout or nonzero exit"
             break
         if record.violations or record.connections:
@@ -405,6 +436,13 @@ def run_d12a(
             or record.process.get("active_after_teardown") != 0
         ):
             stopped = f"{' '.join(args)}: teardown not proven"
+            break
+        if outcome.output_truncated:
+            # The runner kills a child that exceeds the authorized cap, so the text is a prefix: judge it, never widen the cap.
+            stopped = (
+                f"{' '.join(args)}: output exceeded the authorized {STDOUT_CAP_BYTES}-byte cap"
+            )
+            truncated_stop = True
             break
 
     post_problems = verify_extracted(runtime_dir, members, manifest)
@@ -421,13 +459,20 @@ def run_d12a(
         write_new_json(evidence / "compatibility.json", compat)
     version_text = captured.get("version", "").strip()
     summary = monitor.summary()
-    if stopped or post_problems:
+    if truncated_stop and not post_problems:
+        verdict = "INCONCLUSIVE"  # a cut help text neither proves nor disproves a flag
+    elif stopped or post_problems:
         verdict = "FAIL"
     elif compat is None:
         verdict = "INCONCLUSIVE"
     else:
         verdict = compat["verdict"]
     body = {
+        "member": MEMBER,
+        "member_sha256": members[MEMBER][0],
+        "archive_sha256": sha,
+        "priority_note": "below-normal is a creation flag set by run_bounded; a command shorter than the 50 ms poll may "
+        "exit before any read-back, so per-command priority_verified can be null",
         "stopped": stopped,
         "post_run_problems": post_problems,
         "version_first_line": version_text.splitlines()[0] if version_text else "",
@@ -439,6 +484,30 @@ def run_d12a(
         ],
     }
     return _finish(evidence, verdict, body)
+
+
+_LOADABLE = frozenset({".dll", ".exe", ".sys", ".drv", ".ocx", ".pyd", ".bat", ".cmd", ".ps1"})
+
+
+def _loadable_files(directory: Path) -> list[str]:
+    """Any loadable or scriptable file below ``directory`` (the child's working directory must never hold one)."""
+
+    return sorted(
+        p.relative_to(directory).as_posix()
+        for p in directory.rglob("*")
+        if p.is_file() and p.suffix.lower() in _LOADABLE
+    )
+
+
+def _loadable_access_in(entry: str, directory: Path) -> bool:
+    """A file event (``mode:path``) that touched a loadable file under ``directory``."""
+
+    path = Path(entry.partition(":")[2])
+    try:
+        inside = directory.resolve() in path.resolve().parents
+    except OSError:
+        return False
+    return inside and path.suffix.lower() in _LOADABLE
 
 
 def _sample(child: OwnedChildObservation, trace: _CommandTrace) -> None:

@@ -45,6 +45,7 @@ from src.ai_assist.manifests import (
     record_active,
     verify_installation,
 )
+from src.ai_assist.paths import runtime_dir
 from src.ai_assist.runtime import AiRuntime, default_command
 from src.ai_assist.service import AiAssistService, ServicePolicy
 from tools.qualification.ai111 import plan as plan_module
@@ -68,6 +69,13 @@ _ACTIVE_SUFFIXES = frozenset(
     {".exe", ".dll", ".bat", ".cmd", ".ps1", ".py", ".sh", ".so", ".dylib"}
 )
 _EXECUTABLE_PREFERENCE = ("llama-completion.exe", "llama-cli.exe")
+#: The only archive members a physical session may launch, pinned by SHA-256 (from the passive member-hash manifest).
+#: ``llama-cli.exe`` is the member D12a authorizes; ``llama-completion.exe`` is the one-shot launcher and needs its own
+#: recorded owner authorization and compatibility run before a session may name it.
+LAUNCHABLE_MEMBERS = {
+    "llama-cli.exe": "c84a4604db9a01cb64ece64c7da5ace4c83c44dfb63f55a9c8d2270b685c0ee7",
+    "llama-completion.exe": "b36b1ef84a047542f72dca924616052efde7e380c2a12562d459f5febf5cab72",
+}
 _BUSY_PATTERNS = ("stable-diffusion-webui", "comfyui", "run_pr_gate", "pytest", "forge")
 
 
@@ -109,6 +117,10 @@ def derive_runtime_build(
     if executable is not None:
         if executable not in files:
             raise ImportRefused("requested_executable_not_in_archive")
+        if executable not in LAUNCHABLE_MEMBERS:
+            raise ImportRefused("requested_executable_not_launchable")
+        if files[executable] != LAUNCHABLE_MEMBERS[executable]:
+            raise ImportRefused("requested_executable_hash_mismatch")
     else:
         executable = next((name for name in _EXECUTABLE_PREFERENCE if name in files), None)
     if executable is None:
@@ -607,12 +619,27 @@ def _now() -> str:
 
 
 def _deep_problems(ai_root: Path, build: RuntimeBuild, entry: Any) -> list[str]:
-    """Re-hash every pinned runtime file and the model file; any difference from the frozen identity is a stop."""
+    """Re-hash every pinned runtime file and the model file; any difference from the frozen identity is a stop.
+
+    The runtime directory must also hold no loadable file beyond the pinned set (the runtime loads backend DLLs by
+    scanning its own directory), and no scratch directory may hold one."""
 
     result = verify_installation(
         ai_root, RuntimeManifest((build,)), ModelRegistry((entry,)), deep=True, allow_candidate=True
     )
-    return [] if result.ok else [result.reason]
+    problems = [] if result.ok else [result.reason]
+    runtime_root = runtime_dir(ai_root, build.build_id)
+    pinned = {name.lower() for name in build.files}
+    for base, label in ((runtime_root, "runtime"), (ai_root / "work", "scratch")):
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in _ACTIVE_SUFFIXES:
+                continue
+            relative = path.relative_to(base).as_posix().lower()
+            if label == "scratch" or relative not in pinned:
+                problems.append(f"unpinned loadable file in {label}: {relative}")
+    return problems
 
 
 def _arm_preconditions(
@@ -723,12 +750,36 @@ def _sha_of_sibling(name: str) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
+def _git_command() -> list[str] | None:
+    """An absolute git, found on PATH without consulting the current directory (this process may be elevated), with
+    repository-configured helpers disabled."""
+
+    cwd = Path.cwd().resolve()
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if not entry:
+            continue
+        directory = Path(entry)
+        try:
+            resolved = directory.resolve()
+        except OSError:
+            continue
+        if resolved == cwd or cwd in resolved.parents:
+            continue
+        candidate = directory / "git.exe"
+        if candidate.is_file():
+            return [str(candidate), "-c", "core.fsmonitor=false", "-c", "core.hooksPath=NUL"]
+    return None
+
+
 def _git_dirty() -> bool | None:
     """Whether tracked source differs from HEAD (evidence from a modified tree is labelled, not hidden)."""
 
+    git = _git_command()
+    if git is None:
+        return None
     try:
         status = subprocess.check_output(
-            ["git", "status", "--porcelain", "--untracked-files=no"], text=True, timeout=30
+            [*git, "status", "--porcelain", "--untracked-files=no"], text=True, timeout=30
         )
     except Exception:  # noqa: BLE001
         return None
@@ -736,8 +787,11 @@ def _git_dirty() -> bool | None:
 
 
 def _git_head() -> str:
+    git = _git_command()
+    if git is None:
+        return "unknown"
     try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, timeout=10).strip()
+        return subprocess.check_output([*git, "rev-parse", "HEAD"], text=True, timeout=10).strip()
     except Exception:  # noqa: BLE001
         return "unknown"
 
@@ -750,11 +804,23 @@ def extra_root_refusal(root: Path) -> str:
         return "not an existing directory"
     if resolved == Path(resolved.anchor):
         return "a drive root"
-    home = Path.home().resolve()
-    protected = [home, *(home / name for name in ("Documents", "Desktop", "Downloads", "Pictures"))]
-    if any(resolved == p or resolved in p.parents for p in protected):
-        return "a user profile directory or one of its ancestors"
+    for prefix, why in _refused_prefixes():
+        if resolved == prefix or prefix in resolved.parents or resolved in prefix.parents:
+            return why
     return ""
+
+
+def _refused_prefixes() -> list[tuple[Path, str]]:
+    """Directories an additional read root may never be, contain or sit under."""
+
+    drive = Path(os.environ.get("SystemDrive", "C:") + "\\")
+    system = Path(os.environ.get("SystemRoot", str(drive / "Windows")))
+    return [
+        (drive / "Users", "user profile data (anything under the Users directory)"),
+        (Path.home(), "the user's profile"),
+        (plan_module.REPO_ROOT, "the source repository"),
+        (system / "Temp", "a user-writable system directory"),
+    ]
 
 
 def nvidia_smi_probe(
@@ -817,7 +883,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--executable",
-        help="the runtime archive member to launch; default is the first of the preference list",
+        required=True,
+        choices=sorted(LAUNCHABLE_MEMBERS),
+        help="the runtime archive member to launch (pinned by SHA-256); it must be the member the D12a record covers",
     )
     parser.add_argument("--run-id", default="", help="unique run identity recorded in the evidence")
     parser.add_argument(

@@ -48,6 +48,10 @@ LIMITATIONS = (
     "Prefill and decode throughput are not measurable under the closed flag vocabulary (no timing or log flag is allowed); "
     "only wall-clock latency and output characters per second are reported.",
     "Cold means the first request of a model's arm; the OS file cache state is not controlled.",
+    "The DNS-Client provider is enabled but the canary does not exercise it, and an attempt blocked at the firewall layer "
+    "may produce no Kernel-Network event; neither is shown to be covered.",
+    "The monitored child runs with the harness's own (elevated) token; monitoring cannot constrain a binary that tries to "
+    "evade it, and processes Windows starts outside the job are not attributed.",
     "Stage A has 30 cases per arm; rates have coarse granularity and the formal gates (>= min scored answers, 100 blind "
     "preference judgments) cannot be met here.",
 )
@@ -303,6 +307,16 @@ def build_report(
     for row in records:
         by_arm[row["arm"]].append(row)
     compat_verdict = (d12a_result or {}).get("verdict", "NOT TESTED")
+    ran_member = (manifest or {}).get("executable")
+    if d12a_result is not None and (
+        d12a_result.get("member") != ran_member
+        or d12a_result.get("archive_sha256") != plan["runtime_intent"]["sha256"]
+    ):
+        problems.append(
+            f"D12a covered {d12a_result.get('member')!r}, but the session launched {ran_member!r}; "
+            "binary compatibility is not shown for the executable that ran"
+        )
+        compat_verdict = "NOT TESTED"
     baselines = {
         arm: {
             k: summaries[arm][k]
@@ -350,6 +364,13 @@ def build_report(
                 compatibility_verdict=compat_verdict,
             ),
         }
+    if problems:
+        # Rows that cannot be attributed to the frozen cases and binary cannot support any recommendation.
+        for entry in models.values():
+            entry["judgement"]["recommendation"] = "INCONCLUSIVE"
+            entry["judgement"]["measured_thresholds_missed"].append(
+                "attribution problems; see report"
+            )
     return {
         "scope": "Stage A screening only; not qualification, not a production GO",
         "attribution_problems": problems,
@@ -371,6 +392,13 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"# Stage A screening report ({report.get('run_id')})",
         "",
         f"Scope: {report['scope']}. Binary compatibility (D12a): **{report['binary_compatibility']}**.",
+        *(
+            [
+                f"**Attribution problems (all recommendations forced to INCONCLUSIVE):** {report['attribution_problems']}"
+            ]
+            if report["attribution_problems"]
+            else []
+        ),
         f"Session: teardown verified={report['session']['teardown_verified']}, "
         f"abort='{report['session']['abort_reason']}', violations={report['session']['violations']}.",
         "",
