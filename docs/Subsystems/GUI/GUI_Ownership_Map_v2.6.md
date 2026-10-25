@@ -77,6 +77,20 @@ The Pipeline sidebar keeps these things apart, and `view_contracts/config_source
 
 The Pipeline preview thumbnail shows a saved image of the previewed job (the last of the previewed jobs) or says why there is none: no job, no image saved yet, or hidden by the content-visibility setting. Ticking "Show media" never generates an image.
 
+### Controller presentation-state seam (GUI-SEAM-700)
+
+`AppStateV2` carries the toolkit-neutral, ephemeral projection controllers need for Pipeline stage enablement
+(`get_pipeline_stage_flags`, `set_pipeline_stage_enabled`) and the retained legacy prompt/upscale readers
+(`get/set_pipeline_prompt_text`, `get/set_pipeline_upscale_params`). The projection is not a dataclass field, is never
+persisted and is never execution authority. `PipelineTabFrame` owns the Tk variables: it publishes them into `AppStateV2` and
+projects subscribed `pipeline_stage_enabled` changes back onto them. `AppController` neither reads nor writes Pipeline Tk
+variables.
+
+UI-thread delivery is the `UiDispatcher` protocol (`src/controller/ports/ui_dispatcher.py`: `schedule`, `invoke_later`,
+`run_on_ui_thread`). Tk implements it with `TkInvoker` (`src/gui/gui_invoker.py`; `GuiInvoker` is a compatibility alias) and
+`TkUiDispatcher` (`src/gui/ui_dispatcher.py`, which keeps `invoke`). `AppStateV2` depends on the protocol only. Composition
+ownership is unchanged: `src/app_factory.py` stays the Tk composition path and `MainWindowV2` still creates its own invoker.
+
 ### Shared media inspection
 
 `view_contracts/media_inspector_contract.py` owns ephemeral visibility, eligibility, selection revisions, zoom and dock state.

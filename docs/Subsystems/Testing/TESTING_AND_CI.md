@@ -48,7 +48,7 @@ Local classification: `python tools/ci/validation_plan.py --files a.md b.py` pri
 
 ## 4. The `required` gate, step by step
 
-`python tools/ci/run_pr_gate.py` runs these nine steps in this fail-fast order and CI runs the same scripts as separate steps (`GATE_STEPS`). It first preflights `mypy`, `pytest` (importable) and `ruff` (on `PATH`); a missing tool exits 2 with `TOOLING BLOCKER`, a failing step exits with its code and prints `SOURCE/TEST FAILURE at <step>` [V].
+`python tools/ci/run_pr_gate.py` runs these ten steps in this fail-fast order and CI runs the same scripts as separate steps (`GATE_STEPS`). It first preflights `mypy`, `pytest` (importable) and `ruff` (on `PATH`); a missing tool exits 2 with `TOOLING BLOCKER`, a failing step exits with its code and prints `SOURCE/TEST FAILURE at <step>` [V].
 
 | # | Step | Script / command | What it enforces |
 |---|---|---|---|
@@ -59,10 +59,11 @@ Local classification: `python tools/ci/validation_plan.py --files a.md b.py` pri
 | 5 | mypy ratchet | `tools/ci/run_mypy_ratchet.py` | Per-file error count over all of `src` may not exceed `tools/ci/mypy_baseline.json`. |
 | 6 | Ruff ratchets | `tools/ci/run_ruff_ratchets.py` | Formatting (files `ruff format` would change) and per-file counts of `BLE001`, `S110`, `S112` in `src`, against `tools/ci/ruff_ratchet_baseline.json`. |
 | 7 | Architecture ratchets | `tools/ci/run_architecture_ratchets.py` | AST counts per `src` file for `daemon_threads`, `raw_threads`, `utils_upward_imports`, `controller_gui_imports` and `ai_assist_forbidden_imports` (`src/ai_assist` may import only `ai_assist`, `utils` and `prompting`; baseline 0), against `tools/ci/architecture_baseline.json`. |
-| 8 | Isolated collection | `tools/ci/run_collection_gate.py` | `pytest --collect-only` of `tests/` (minus the four excluded trees) in a temp cwd; fails on any collection error or repository change. |
-| 9 | Required smoke | `tools/ci/run_required_smoke.py` | Pytest `-x -q` over the positive lists `REQUIRED_SMOKE_TARGETS` and `CONTRACT_GATE_TARGETS` (below). |
+| 8 | Controller Tk import boundary | `tools/ci/check_controller_tk_boundary.py` | Zero-tolerance AST check: no `src/controller` module's import-time transitive closure reaches `tkinter` (section 7a). |
+| 9 | Isolated collection | `tools/ci/run_collection_gate.py` | `pytest --collect-only` of `tests/` (minus the four excluded trees) in a temp cwd; fails on any collection error or repository change. |
+| 10 | Required smoke | `tools/ci/run_required_smoke.py` | Pytest `-x -q` over the positive lists `REQUIRED_SMOKE_TARGETS` and `CONTRACT_GATE_TARGETS` (below). |
 
-CI then fails the job if `git diff --exit-code` or `git status --porcelain --untracked-files=all` is non-empty. Ignored files are invisible to that check, which is why steps 8, 9 and the Windows lane also fingerprint `GUARDED_RUNTIME_PATHS` (section 9).
+CI then fails the job if `git diff --exit-code` or `git status --porcelain --untracked-files=all` is non-empty. Ignored files are invisible to that check, which is why steps 9, 10 and the Windows lane also fingerprint `GUARDED_RUNTIME_PATHS` (section 9).
 
 `REQUIRED_SMOKE_TARGETS` is repository truth, current-architecture guards and the production run path: `tests/system/` (completeness, architecture enforcement, CI truth, controller-surface ratchet, `test_pr_gate`, runtime constraints), runtime-state hygiene, workspace paths and output routing, the SQLite repository and importer, `tests/controller/test_core_run_path_v2.py`, the operator-journey harness and `TestQueuedModeExecution` / `TestQueueErrorHandling` in `tests/queue/test_job_service_pipeline_integration_v2.py`. `CONTRACT_GATE_TARGETS` is the small always-run cross-boundary suite, grouped by invariant: construction identity (`tests/system/test_construction_identity_contract.py`), image-backend contract and foreign backend/profile fail-closed, replay gets a new identity with parent lineage, runtime ownership (only owned runtimes are mutated), ambiguous generation POSTs are never replayed, and the CI policy tests (`tests/tools/test_ci_validation_plan.py`, `test_ci_census_summary.py`, `test_ci_previous_evidence.py`). Entries are explicit node IDs; a new test joins the smoke only by editing the tuple. Keep it small; feature behavior belongs to the census.
 
@@ -103,6 +104,15 @@ A ratchet lets recorded debt shrink and never grow. For the mypy, ruff and archi
 Policy [V: script messages, `AGENTS.md` section 4]: `--update` is for deliberate improvements. When a count regresses, fix the code ("do not raise the baseline"). Raising a controller ceiling needs explicit architecture approval. A split that only moves lines into a new file is not decomposition (audit C5) [A].
 
 Pinned-tool traps: the mypy and ruff numbers are only reproducible with the pinned versions (`requirements-dev.txt`); a different mypy or ruff changes counts and makes a clean tree look regressed or improved. Run the ratchets from the repository root with the project interpreter. `run_pr_gate.py` looks for `ruff` on `PATH` for step 3 but the ruff ratchets call `python -m ruff`, so the active environment must provide both.
+
+### 7a. Controller-to-Tk import boundary
+
+`python tools/ci/check_controller_tk_boundary.py` walks the static module-import graph of `src` and fails when any
+`src/controller` module can reach `tkinter` at import time. It ignores imports inside functions and classes and imports under
+`TYPE_CHECKING`, because neither runs when the module is imported; package `__init__` modules and `try`/`if` branches count
+conservatively. It is separate from the `controller_gui_imports` ratchet: that ratchet measures controller-to-GUI layering
+debt (any import, anywhere in the AST), this gate prevents Tk from entering the controller import closure.
+`--inventory-tk` prints every `src` module with a direct import-time `tkinter` import.
 
 ## 8. The `ci_truth` guard and documentation checks
 
