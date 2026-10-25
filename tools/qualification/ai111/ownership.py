@@ -247,6 +247,24 @@ def _process_summary(evidence: OwnedTreeEvidence) -> dict[str, Any]:
     }
 
 
+def policy_violations(
+    policy: OwnershipPolicy, connections: Sequence[str], files: Sequence[str]
+) -> list[str]:
+    """The file and egress rules, applied to attributed ``connections`` and ``mode:path`` ``files`` entries."""
+
+    found: list[str] = []
+    if connections and not policy.allow_connections:
+        found.append("egress_attempt_observed")
+    for entry in files:
+        mode, _, path = entry.partition(":")
+        # Only an access a provider positively reports as a read may use the read roots; anything else is a write.
+        roots = (*policy.read_roots, *policy.write_roots) if mode == "read" else policy.write_roots
+        if not _within(path, roots):
+            found.append("file_access_outside_policy")
+            break
+    return found
+
+
 def _executable_identity(command: Sequence[str]) -> tuple[str, str | None]:
     exe = Path(str(command[0])) if command else Path("")
     try:
@@ -476,9 +494,21 @@ class OwnedSessionMonitor:
         if self._pending:
             record.violations.append(self._pending)
         record.violations = sorted(set(record.violations))
+        self._on_request(record, evidence, windows, started, self._clock())
         self.records.append(record)
         self._write(record)
         return outcome
+
+    def _on_request(
+        self,
+        record: RequestOwnership,
+        evidence: OwnedTreeEvidence | None,
+        windows: dict[int, OwnedWindow],
+        started_ns: int,
+        ended_ns: int,
+    ) -> None:
+        """A finished request's record is about to be stored. The default does nothing; the retrospective monitor logs the
+        owned process windows here so a later analysis can attribute a separately captured trace to this request."""
 
     def _poll(self, child: OwnedChildObservation, canary: bool) -> str:
         try:
@@ -500,21 +530,7 @@ class OwnedSessionMonitor:
         return findings[0] if findings else ""
 
     def _policy_violations(self, record: RequestOwnership) -> list[str]:
-        found: list[str] = []
-        if record.connections and not self.policy.allow_connections:
-            found.append("egress_attempt_observed")
-        for entry in record.files:
-            mode, _, path = entry.partition(":")
-            # Only an access a provider positively reports as a read may use the read roots; anything else is a write.
-            roots = (
-                (*self.policy.read_roots, *self.policy.write_roots)
-                if mode == "read"
-                else self.policy.write_roots
-            )
-            if not _within(path, roots):
-                found.append("file_access_outside_policy")
-                break
-        return found
+        return policy_violations(self.policy, record.connections, record.files)
 
     def bind_evidence(self, directory: Path) -> None:
         """Point evidence output (and any provider that keeps raw capture files) at the session's own directory."""

@@ -10,9 +10,10 @@ built, and no other member is launched.
   (recorded before any extraction), the archive is unpacked with confined member paths, and every extracted file is hashed
   again from disk immediately before launch (and again after the last command).
 * Both commands go through the ownership monitor and therefore through ``run_bounded``: the bounded runner remains the only
-  process lifecycle owner. The monitor (ETW; the harness holds the delegated trace-control right and runs under a
-  standard-user token, so the child is never elevated) must be canary-proven before anything is launched, and any
-  connection attempt, file access outside the stated roots, unexpected descendant or unverified teardown stops the run.
+  process lifecycle owner. The harness and every child run under a standard-user token; the ETW capture is started and
+  stopped by the operator from an Administrator terminal (PR-AI-QUAL-114E), so the file and connection findings are
+  retrospective: they come from the post-capture analysis and the run is not verified until that analysis passes. In real
+  time the monitor still stops an unexpected descendant, an elevated child or an unverified teardown.
 * The help text of each member is compared with the closed flag vocabulary of ``src/ai_assist/argv.py`` (the flags
   ``build_argv`` actually emits for the inference path). A missing flag is a compatibility finding for that member, never a
   reason to substitute another spelling, another executable or to weaken the restrictions.
@@ -473,6 +474,7 @@ def run_d12a(
         "stopped_by_member": stop_notes,
         "post_run_problems": post_problems,
         "monitoring": monitor.summary(),
+        "finalized": not monitor.summary().get("capture_analysis_required", False),
         "file_access_events_by_request": [
             {"number": r.number, "files": sorted(set(r.files))} for r in monitor.session_records()
         ],
@@ -657,22 +659,35 @@ def main(argv: list[str] | None = None) -> int:
         help="the operator's own statement that an outbound restriction covers the extracted executable (recorded, "
         "never verified by StableNew)",
     )
+    parser.add_argument("--run-id", required=True, help="the run id the operator gave the capture")
+    parser.add_argument(
+        "--capture-dir",
+        type=Path,
+        required=True,
+        help="the operator's ACTIVE capture; it must be <evidence-root>/capture",
+    )
+    parser.add_argument(
+        "--canary-proof",
+        type=Path,
+        required=True,
+        help="analysis.json of a prior canary capture that passed",
+    )
     args = parser.parse_args(argv)
     from tools.qualification.ai111 import tokens
-    from tools.qualification.ai111.etw import can_control_traces, etw_host_monitor
+    from tools.qualification.ai111.capture_session import CaptureAdmission, RetrospectiveMonitor
 
     if tokens.current_process_elevated() is not False:
         print(
             "This process is elevated or unreadable: use an ordinary terminal. Nothing was started."
         )
         return 2
-    if not can_control_traces():
-        print(
-            "This account cannot control trace sessions (Performance Log Users). Nothing was started."
-        )
+    if args.capture_dir.resolve() != (args.evidence_root / "capture").resolve():
+        print("The capture must be this run's own <evidence-root>/capture. Nothing was started.")
         return 2
-    args.evidence_root.mkdir(parents=True, exist_ok=True)
-    monitor = etw_host_monitor(OwnershipPolicy(), args.evidence_root / "d12a-ownership")
+    admission = CaptureAdmission(
+        capture_dir=args.capture_dir, run_id=args.run_id, proof_path=args.canary_proof
+    )
+    monitor = RetrospectiveMonitor(OwnershipPolicy(), admission)
     try:
         result = run_d12a(
             archive=args.archive,
@@ -686,12 +701,17 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"verdict": "NOT TESTED", "refused": str(exc)}, indent=2))
         return 1
     finally:
-        leaked = monitor.close_and_report(args.evidence_root / "d12a")
-    if leaked:
-        print(json.dumps({"verdict": "FAIL", "trace_sessions_left_running": leaked}, indent=2))
-        return 1
+        monitor.close_and_report(args.evidence_root / "d12a")
     print(json.dumps({k: result[k] for k in ("verdict", "stopped") if k in result}, indent=2))
-    return 0 if result["verdict"] == "PASS" else 1
+    print(
+        "Not final: stop the capture (Administrator terminal), then run capture_analysis analyze; "
+        "the result counts only with a PASS analysis."
+    )
+    if result["verdict"] != "PASS":
+        return 1
+    return (
+        0 if result.get("finalized") else 3
+    )  # 3: passed in real time, final only after the capture analysis
 
 
 if __name__ == "__main__":

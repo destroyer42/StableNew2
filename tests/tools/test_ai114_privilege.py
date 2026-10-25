@@ -1,13 +1,12 @@
-"""PR-AI-QUAL-114 privilege boundary: the harness and every child are standard-user; tracing failures stop execution.
+"""PR-AI-QUAL-114 privilege boundary: the harness and every child are standard-user.
 
-Process evidence is real (the bounded runner and its job object); the ETW layer is the fake backend of the AI-113B tests,
-and elevation/token answers are injected where a test must simulate the privileged case. Nothing here needs, or can
-create, a privileged process.
+Process evidence is real (the bounded runner and its job object); elevation/token answers are injected where a test must
+simulate the privileged case. Nothing here needs, or can create, a privileged process. Capture start/stop/cleanup is covered
+by test_ai114e_capture_control.py.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -20,10 +19,8 @@ sys.path.insert(0, str(ROOT))
 from src.ai_assist.host import HostMemory  # noqa: E402
 from src.ai_assist.manifests import load_model_registry  # noqa: E402
 from tests.ai_assist.ai113_support import CANARY, JournalProvider  # noqa: E402
-from tests.tools import test_ai113b_etw as etw_tests  # noqa: E402
 from tools.qualification.ai111 import d12a, physical, tokens  # noqa: E402
 from tools.qualification.ai111 import plan as plan_module  # noqa: E402
-from tools.qualification.ai111.etw import EtwError, etw_host_monitor  # noqa: E402
 from tools.qualification.ai111.ownership import OwnedSessionMonitor, OwnershipPolicy  # noqa: E402
 
 windows_only = pytest.mark.skipif(os.name != "nt", reason="job objects and tokens are Windows-only")
@@ -154,88 +151,6 @@ def test_a_real_unelevated_child_token_is_read_and_recorded(tmp_path: Path) -> N
     )
     record = monitor.records[-1]
     assert record.child_token_elevated is False and "child_token_elevated" not in record.violations
-
-
-# -- tracing failures prevent execution; nothing is leaked --------------------------------------------------------------
-
-
-@windows_only
-def test_a_trace_that_cannot_start_launches_nothing_and_leaves_no_session(tmp_path: Path) -> None:
-    backend = etw_tests.FakeBackend()
-    backend.fail_start_at = 1  # the OS refuses the second session (for example, access denied)
-    monitor = etw_host_monitor(
-        OwnershipPolicy(),
-        tmp_path / "ev",
-        capture=etw_tests.capture(tmp_path, backend),
-        self_elevated=lambda: False,
-    )
-    marker = tmp_path / "launched.txt"
-    outcome = monitor.runner()(
-        [PYTHON, "-I", "-c", f"open({str(marker)!r}, 'w').write('x')"],
-        timeout_seconds=30.0,
-        max_stdout_bytes=1024,
-    )
-    assert outcome.launch_error and not marker.exists()
-    assert set(backend.started) <= set(backend.stopped), "a half-started window is rolled back"
-    # the OS tool's own message is kept next to the verdict, so a denied provider can be told from a missing right
-    assert monitor.records[-1].provider_errors, monitor.records[-1].as_json()
-    assert all(m.startswith("EtwError:") for m in monitor.records[-1].provider_errors.values())
-    assert monitor.records[-1].violations == [
-        "provider_failed:connections",
-        "provider_failed:files",
-    ] or any(v.startswith("provider_failed") for v in monitor.records[-1].violations)
-
-
-def test_the_account_without_trace_rights_makes_every_channel_unavailable(tmp_path: Path) -> None:
-    backend = etw_tests.FakeBackend()
-    monitor = etw_host_monitor(
-        OwnershipPolicy(),
-        tmp_path / "ev",
-        capture=etw_tests.capture(tmp_path, backend, elevated=False),
-        self_elevated=lambda: False,
-    )
-    problems = monitor.provider_problems()
-    assert any(p.startswith("connections: no lifetime_complete provider") for p in problems)
-    with pytest.raises(EtwError, match="trace-control rights"):
-        monitor.providers[0].begin()
-    assert backend.started == []
-
-
-def test_close_reports_and_records_leaked_sessions(tmp_path: Path) -> None:
-    backend = etw_tests.FakeBackend()
-    monitor = etw_host_monitor(
-        OwnershipPolicy(),
-        tmp_path / "ev",
-        capture=etw_tests.capture(tmp_path, backend),
-        self_elevated=lambda: False,
-    )
-    where = tmp_path / "evidence"
-    where.mkdir()
-    assert monitor.close_and_report(where) == []
-    assert (
-        json.loads((where / "trace-teardown.json").read_text())["trace_sessions_left_running"] == []
-    )
-    backend.live = ["StableNewAi113-aaaaaaaaaaaa"]
-    other = tmp_path / "evidence2"
-    other.mkdir()
-    assert monitor.close_and_report(other) == ["StableNewAi113-aaaaaaaaaaaa"]
-    assert json.loads((other / "trace-teardown.json").read_text())["trace_sessions_left_running"]
-
-
-def test_an_unreadable_session_list_is_a_finding_not_a_pass(tmp_path: Path) -> None:
-    backend = etw_tests.FakeBackend()
-
-    def broken() -> list[str]:
-        raise EtwError("logman query failed")
-
-    backend.live_sessions = broken  # type: ignore[method-assign]
-    monitor = etw_host_monitor(
-        OwnershipPolicy(),
-        tmp_path / "ev",
-        capture=etw_tests.capture(tmp_path, backend),
-        self_elevated=lambda: False,
-    )
-    assert monitor.leaked_traces() == ["session list unreadable"]
 
 
 # -- D12a attestation and the resource gate ----------------------------------------------------------------------------

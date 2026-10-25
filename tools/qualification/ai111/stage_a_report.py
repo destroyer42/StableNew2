@@ -43,6 +43,9 @@ HARD_FAIL_KEYS = (
 #: What the evidence cannot show, copied into every report so a PASS is never read as absolute coverage.
 LIMITATIONS = (
     "ETW file evidence classes a plain open as a read; a truncate or memory-mapped write of an existing file is not seen.",
+    "File and egress findings are retrospective (read from the operator-run ETW capture after it was stopped): a violation "
+    "found there invalidates the run but was not stopped in real time. The independent barrier against egress is the "
+    "operator-managed outbound firewall restriction.",
     "Only members of the owned job object are attributed; a process Windows starts outside the job is not.",
     "Outbound restriction is operator-attested and not verified by StableNew; absence of observed attempts is not proof of denial.",
     "Prefill and decode throughput are not measurable under the closed flag vocabulary (no timing or log flag is allowed); "
@@ -271,8 +274,30 @@ def judge_arm(
     }
 
 
+RETROSPECTIVE = "retrospective_capture"
+
+
+def _capture_gap(
+    monitoring: Mapping[str, Any], analysis: Mapping[str, Any] | None, expected_kind: str
+) -> str | None:
+    """Why a retrospective run's findings cannot be used yet. ``None`` when the analysis covers exactly this capture."""
+
+    if analysis is None:
+        return "the run's file and egress findings are retrospective and no capture analysis was supplied"
+    if (
+        analysis.get("capture_id") != monitoring.get("capture_id")
+        or analysis.get("kind") != expected_kind
+    ):
+        return "the supplied capture analysis does not belong to this run's capture"
+    return None
+
+
 def build_report(
-    evidence: Path, d12a_result: Mapping[str, Any] | None, plan: Mapping[str, Any] | None = None
+    evidence: Path,
+    d12a_result: Mapping[str, Any] | None,
+    plan: Mapping[str, Any] | None = None,
+    capture_analysis: Mapping[str, Any] | None = None,
+    d12a_capture_analysis: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     plan = plan or plan_module.frozen_plan()
     manifest = _json(evidence / "execution-manifest.json")
@@ -304,6 +329,29 @@ def build_report(
         )
         and bool(monitoring.get("channel_coverage")),
     }
+    if monitoring.get("mode") == RETROSPECTIVE:
+        gap = _capture_gap(monitoring, capture_analysis, "qualification_capture")
+        if gap:
+            problems.append(gap)
+            session["channels_lifetime_complete"] = False
+        elif capture_analysis is not None:
+            session["capture_analysis_verdict"] = capture_analysis.get("verdict")
+            found = sorted(
+                {
+                    v
+                    for row in capture_analysis.get("requests", [])
+                    if not row.get("canary")
+                    for v in row.get("violations", [])
+                    if v != "ambiguous_attribution"
+                }
+            )
+            session["violations"] = sorted({*session["violations"], *found})
+            # Findings are usable when the capture was sound (PASS) or when it proved a violation (FAIL); INCONCLUSIVE
+            # leaves the channels unproven.
+            session["channels_lifetime_complete"] = capture_analysis.get("verdict") in (
+                "PASS",
+                "FAIL",
+            )
     by_arm: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in records:
         by_arm[row["arm"]].append(row)
@@ -319,6 +367,15 @@ def build_report(
             )
         else:
             compat_verdict = str(covered.get("verdict", "NOT TESTED"))
+            d12a_monitoring = d12a_result.get("monitoring") or {}
+            if d12a_monitoring.get("mode") == RETROSPECTIVE:
+                gap = _capture_gap(d12a_monitoring, d12a_capture_analysis, "qualification_capture")
+                if gap is None and d12a_capture_analysis is not None:
+                    if d12a_capture_analysis.get("verdict") != "PASS":
+                        gap = f"the D12a capture analysis is {d12a_capture_analysis.get('verdict')}, not PASS"
+                if gap:
+                    problems.append(f"D12a: {gap}")
+                    compat_verdict = "NOT TESTED"
     baselines = {
         arm: {
             k: summaries[arm][k]
@@ -435,9 +492,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", type=Path, required=True, help="the physical-A directory")
     parser.add_argument("--d12a", type=Path, help="the D12a result.json")
+    parser.add_argument(
+        "--capture-analysis", type=Path, help="analysis.json of this run's stopped ETW capture"
+    )
+    parser.add_argument(
+        "--d12a-capture-analysis", type=Path, help="analysis.json of the D12a run's capture"
+    )
     args = parser.parse_args(argv)
     d12a = _json(args.d12a) if args.d12a else None
-    report = build_report(args.evidence, d12a)
+    capture = _json(args.capture_analysis) if args.capture_analysis else None
+    d12a_capture = _json(args.d12a_capture_analysis) if args.d12a_capture_analysis else None
+    report = build_report(args.evidence, d12a, None, capture, d12a_capture)
     with (args.evidence / "stage-a-report.json").open("x", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, sort_keys=True)
     (args.evidence / "stage-a-report.md").write_text(render_markdown(report), encoding="utf-8")

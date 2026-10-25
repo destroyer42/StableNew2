@@ -132,7 +132,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 - Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs resource and
   fault clearance first (`docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md`).
 - Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized.
-- Offline AI Assist has application-owned queue observation/shutdown and Prompt-tab Suggest/review/explicit rewrite acceptance; Suggest remains disabled without a qualified installation. Nothing is installed or physically executed, all models are NOT TESTED, and qualification remains held on lifetime-complete connection/file telemetry and D12b (`docs/Subsystems/AiAssist/AI_ASSIST.md`, `PR-AI-111_Offline_Qualification.md`).
+- Offline AI Assist has application-owned queue observation/shutdown and Prompt-tab Suggest/review/explicit rewrite acceptance; Suggest remains disabled without a qualified installation. Nothing is installed or physically executed, all models are NOT TESTED, and qualification remains held on a live operator-run ETW canary capture (`docs/runbooks/ai_qualification_etw_capture.md`; not yet run) and D12b (`docs/Subsystems/AiAssist/AI_ASSIST.md`, `PR-AI-111_Offline_Qualification.md`).
 - Never push to `main`, merge, publish or mutate secrets without explicit owner approval (`AGENTS.md`).
 
 ## Known debt

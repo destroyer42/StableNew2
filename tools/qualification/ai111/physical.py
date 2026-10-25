@@ -318,7 +318,7 @@ def preflight(
 
 
 def run_session(**kwargs: Any) -> dict[str, Any]:
-    """Run one physical session; whatever the monitor's providers hold open (an ETW trace) is released on every path."""
+    """Run one physical session; the monitor's closing bracket (canary and beacon) runs on every path that began."""
 
     monitor = kwargs.get("monitor")
     result: dict[str, Any] | None = None
@@ -399,6 +399,10 @@ def _run_session(
             "lifecycle_probes": lifecycle_probes,
             "extra_read_roots": [str(r) for r in extra_read_roots],
             "etw_sha256": _sha_of_sibling("etw.py"),
+            "capture_sha256": {
+                name: _sha_of_sibling(f"{name}.py")
+                for name in ("capture_control", "capture_session", "capture_analysis")
+            },
         },
     )
     busy = (busy_provider or quiet_host_refusals)() if plan["safety"]["quiet_host_required"] else []
@@ -889,7 +893,7 @@ def nvidia_smi_probe(
 ) -> Callable[[], list[str]]:
     """Read-only GPU guard: the GPU must stay queryable and unused by anyone else while the CPU-only runtime works."""
 
-    from tools.qualification.ai111.etw import bounded_tool
+    from tools.qualification.ai111.tool_runner import bounded_tool
 
     root = os.environ.get("SystemRoot", "C:\\Windows")
     tool = str(Path(root) / "System32" / "nvidia-smi.exe")
@@ -948,7 +952,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=sorted(LAUNCHABLE_MEMBERS),
         help="the runtime archive member to launch (pinned by SHA-256); it must be the member the D12a record covers",
     )
-    parser.add_argument("--run-id", default="", help="unique run identity recorded in the evidence")
+    parser.add_argument(
+        "--run-id",
+        required=True,
+        help="unique run identity; it must equal the run id the operator gave the capture",
+    )
     parser.add_argument(
         "--lifecycle-probes",
         action="store_true",
@@ -962,11 +970,16 @@ def main(argv: list[str] | None = None) -> int:
         help="a directory the runtime was shown to need (from the D12a record); never a profile or drive root",
     )
     parser.add_argument(
-        "--provider",
-        choices=("sampled", "etw"),
-        default="etw",
-        help="connection/file telemetry: 'etw' needs an unelevated process holding the trace-control right and a passed "
-        "canary; 'sampled' always refuses",
+        "--capture-dir",
+        type=Path,
+        required=True,
+        help="the operator's ACTIVE ETW capture; it must be <evidence-root>/capture (PR-AI-QUAL-114E)",
+    )
+    parser.add_argument(
+        "--canary-proof",
+        type=Path,
+        required=True,
+        help="analysis.json of a prior canary capture that passed",
     )
     args = parser.parse_args(argv)
     plan = plan_module.frozen_plan()
@@ -984,13 +997,16 @@ def main(argv: list[str] | None = None) -> int:
         cases = stage_a_subset(cases, plan["stages"]["A"]["cases_per_arm"], plan["corpus"]["seed"])
     files = {e.model_id: args.model_dir / e.filename for e in registry.entries}
     paths = SessionPaths(args.evidence_root, args.runtime_archive, files, args.operator_corpus)
-    monitor = None
-    if args.provider == "etw":
-        from tools.qualification.ai111.etw import etw_host_monitor
+    from tools.qualification.ai111.capture_session import CaptureAdmission, RetrospectiveMonitor
 
-        monitor = etw_host_monitor(
-            OwnershipPolicy(), args.evidence_root / f"ownership-{args.stage}"
-        )
+    if args.capture_dir.resolve() != (args.evidence_root / "capture").resolve():
+        raise SystemExit("The capture must be this run's own <evidence-root>/capture")
+    monitor = RetrospectiveMonitor(
+        OwnershipPolicy(),
+        CaptureAdmission(
+            capture_dir=args.capture_dir, run_id=args.run_id, proof_path=args.canary_proof
+        ),
+    )
     result = run_session(
         plan=plan,
         paths=paths,
@@ -1009,7 +1025,11 @@ def main(argv: list[str] | None = None) -> int:
         run_id=args.run_id,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["verdict"] == "PASS" else 1
+    if result["verdict"] != "PASS":
+        return 1
+    return (
+        0 if not (result.get("monitoring") or {}).get("capture_analysis_required") else 3
+    )  # 3: final only after the capture analysis
 
 
 if __name__ == "__main__":

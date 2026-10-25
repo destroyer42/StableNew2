@@ -90,7 +90,7 @@ and fewer than 100 decisive judgments. Empty physical records produce NOT TESTED
 ## Physical boundary and remaining authorizations
 
 The marker-only session egress/teardown diagnostics are replaced (PR-AI-QUAL-113) by the owned container's process-tree and teardown record.
-Connection and file-access channels need a lifetime-complete provider proven by the canary: unprivileged providers are sampled, and the elevated ETW provider (PR-AI-QUAL-113B) passed its canary on the target host on 2026-10-25 (elevated terminal; it has traced only the canary child).
+Connection and file-access channels need a lifetime-complete provider proven by the canary: unprivileged providers are sampled, and the evidence comes from an operator-run, session-level ETW capture (PR-AI-QUAL-114E; operator procedure `docs/runbooks/ai_qualification_etw_capture.md`) because a standard-user token cannot start the kernel providers. The earlier per-request elevated provider (PR-AI-QUAL-113B) passed its canary on 2026-10-25 but required running the harness elevated, which is not allowed; the new path is NOT TESTED live.
 A real `run_session` therefore refuses before creating evidence, importing or launching. The injected Python-child seam stays testable.
 The physical harness is not ready for model use: no owner-approved D12 package exists.
 
@@ -108,7 +108,7 @@ model access, connection attempt or unexpected persistent process. Do not fetch 
 
 **D12b (not granted):** model import and CPU inference need a separate owner-approved package naming verified artifacts,
 frozen plan/corpus digests, arms, stage, host resource/egress/teardown requirements and evidence location.
-The elevated ETW canary has passed; the package must also state the session read/write roots for the runtime and run from an elevated terminal (`--provider etw`).
+A passing live canary capture (operator-started, analyzed as `canary_capture` PASS) is required before a session; the package must also state the session read/write roots for the runtime. The session itself runs in an ordinary terminal with `--capture-dir` and `--canary-proof`.
 No Stage A/B run, blind preference session, GPU generation, promotion, `qualified=true`, or merge is authorized.
 
 ## Validation and publication

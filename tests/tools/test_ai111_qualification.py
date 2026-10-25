@@ -446,6 +446,14 @@ def test_the_physical_entry_point_refuses_a_digest_that_is_not_the_frozen_plan(
                 str(tmp_path),
                 "--evidence-root",
                 str(tmp_path / "ev"),
+                "--executable",
+                "llama-cli.exe",
+                "--run-id",
+                "r",
+                "--capture-dir",
+                str(tmp_path / "ev" / "capture"),
+                "--canary-proof",
+                str(tmp_path / "proof.json"),
             ]
         )
     assert not (tmp_path / "ev").exists()
