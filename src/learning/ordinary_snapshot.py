@@ -41,6 +41,12 @@ def ordinary_snapshot(
         "model_policy_context": model_context,
     }
     snapshot.update(authored or {})
+    # Cached registry/executable identity only: never hash or scan checkpoints here.
+    # Absence is retained as absence; publication must not backfill historical evidence.
+    from src.generation_profiles.identity import ModelIdentityResolver
+
+    target = ModelIdentityResolver().resolve((model_context or {}).get("selected_model"))
+    snapshot["model_identity"] = target.identity.to_dict()
     return snapshot
 
 

@@ -80,3 +80,31 @@ def atomic_write_json(path: str | os.PathLike[str], payload: Any, **dumps_kwargs
     """Serialize first (a non-serializable payload never touches the file), then publish atomically."""
 
     return atomic_write_text(path, json.dumps(payload, **dumps_kwargs))
+
+
+def atomic_publish_json(path: str | os.PathLike[str], payload: Any, **dumps_kwargs: Any) -> Path:
+    """Publish a complete new immutable file, refusing an existing destination atomically.
+
+    Windows no-replace rename, or a POSIX same-directory hard link, exposes the fully
+    fsynced staging file in one operation and fails if another publisher won.
+    """
+    target = Path(path)
+    text = json.dumps(payload, **dumps_kwargs)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f"{target.name}.", suffix=".tmp", dir=target.parent
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if os.name == "nt":
+            # Windows rename is atomic and refuses an existing target (POSIX rename replaces it).
+            os.rename(temporary, target)
+        else:
+            os.link(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return target

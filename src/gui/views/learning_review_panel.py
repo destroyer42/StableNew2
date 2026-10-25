@@ -191,6 +191,13 @@ class LearningReviewPanel(ttk.Frame):
         )
         self.analytics_button.pack(side="left", padx=2)
 
+        from src.gui.views.learning_profile_publication import LearningProfilePublicationPanel
+
+        self.profile_publication = LearningProfilePublicationPanel(
+            self.recommendations_frame, controller_getter=lambda: self.learning_controller
+        )
+        self.profile_publication.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+
         # Image display section
         self.image_frame = ttk.LabelFrame(self.preview_column, text="Images", padding=5)
         self.image_frame.grid(row=1, column=0, sticky="nsew")

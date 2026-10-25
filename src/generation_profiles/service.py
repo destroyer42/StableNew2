@@ -40,6 +40,7 @@ from src.generation_profiles.identity import (
     ModelIdentityResolver,
     ResolvedModel,
     match_identity,
+    match_learning_identity,
 )
 from src.generation_profiles.research import research_profiles
 from src.generation_profiles.startup import (
@@ -51,6 +52,12 @@ from src.generation_profiles.startup import (
 from src.generation_profiles.store import GenerationProfileStore, ProfileStoreError
 
 logger = logging.getLogger(__name__)
+
+
+def _profile_match(profile: GenerationProfile, identity: ModelIdentity) -> IdentityMatch:
+    return (match_learning_identity if profile.kind == KIND_LEARNING else match_identity)(
+        profile.model, identity
+    )
 
 
 @dataclass(frozen=True)
@@ -121,7 +128,7 @@ class GenerationProfileService:
         favorite = self._store.favorite_for(identity.key)
         options = []
         for profile in self._catalog():
-            match = match_identity(profile.model, identity)
+            match = _profile_match(profile, identity)
             if match.applies:
                 is_fav = bool(
                     favorite
@@ -144,7 +151,7 @@ class GenerationProfileService:
         missing: ProfileRef | None = None
         if favorite is not None:
             profile = self.get(favorite)
-            if profile is not None and match_identity(profile.model, identity).applies:
+            if profile is not None and _profile_match(profile, identity).applies:
                 return profile.ref, None
             missing = favorite
         options = [o for o in self.options_for(identity) if o.profile.kind == KIND_RESEARCH]
@@ -206,7 +213,7 @@ class GenerationProfileService:
         else:
             plan = plan_application(
                 profile=profile,
-                match=match_identity(profile.model, resolved.identity),
+                match=_profile_match(profile, resolved.identity),
                 working=working,
                 policy=resolved.policy,
                 catalogs=catalogs,
@@ -231,7 +238,7 @@ class GenerationProfileService:
         profile = self.get(ref)
         plan = plan_application(
             profile=profile,
-            match=match_identity(profile.model, resolved.identity) if profile else None,
+            match=_profile_match(profile, resolved.identity) if profile else None,
             working=working,
             policy=resolved.policy,
             catalogs=catalogs,
@@ -322,7 +329,7 @@ class GenerationProfileService:
         identity = self.resolve(model_name).identity
         if ref is not None:
             profile = self.get(ref)
-            if profile is None or not match_identity(profile.model, identity).applies:
+            if profile is None or not _profile_match(profile, identity).applies:
                 raise ProfileError("That profile does not apply to the selected model.")
             # A favorite follows the latest Custom/Learning revision; Research is pinned to its revision.
             ref = ProfileRef(
@@ -387,6 +394,10 @@ class GenerationProfileService:
         )
         if plan.model_name is not None and defaults.profile is not None:
             profile = self.get(defaults.profile)
+            if profile is not None and profile.kind == KIND_LEARNING:
+                match = _profile_match(profile, self.resolve(defaults.model_name).identity)
+                if not match.applies:
+                    return defaults, StartupRestorePlan(None, issues=(match.reason,))
             if profile is not None:
                 self._selected[defaults.model.key] = profile.ref
                 self._selected[self.resolve(defaults.model_name).identity.key] = profile.ref
