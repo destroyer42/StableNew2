@@ -33,6 +33,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 |---|---|
 | Frozen preview and admission | `experiment_execution.py` (`freeze_snapshot`, `thaw_snapshot`, `snapshot_digest`, `ExperimentAdmissionService`); `experiment_freeze.py` (`freeze_prompt_pack_source`, `freeze_seed_policy`, `apply_frozen_seed_policy`, `seed_vector_matches`); `ordinary_prompt_freeze.py` (`freeze_ordinary_prompt_source`, `freeze_preview_global_policy`, `validate_ordinary_prompt_snapshot`, `apply_executor_base_prompts`) |
 | Controlled prompt slots | `prompt_slot_experiment.py` (typed authoring, canonical substitution/adaptation, frozen candidate proof, readback and local conclusion); `learning_controller_services/prompt_slot.py` (snapshot/ordinary NJR coordination); `src/gui/views/prompt_slot_design_frame.py` (ordered authoring) |
+| Controlled LoRA composition | `lora_composition.py` (`learning_lora_composition/1`: typed design, operation rules, canonical structured-intent freeze, asset admission, full-set readback, rating metadata, local conclusion); `lora_inventory.py` (registry/discovery identity and compatibility projection, browse rows); `learning_controller_services/lora_composition.py` (snapshot/ordinary NJR coordination, run-time asset preflight); `src/gui/views/lora_composition_design_frame.py` (thin authoring adapter over the existing LoRA discovery worker pattern) |
 | Model/profile validation | `model_policy_service.py` (`validate_experiment`, `compile_variant`, `frozen_definition`, `recommendation_query`, `validate_recommendation_apply`); `model_capabilities.py` (`policy_context`, `project_learning_capabilities`, `compatible_context`). Canonical `ModelPolicy` (`src/image_backends/model_policy.py`) owns every capability fact; Learning only projects it |
 | Stage and variable catalogue | `stage_capabilities.py` (`get_stage_capability`, `list_supported_stages`: txt2img, img2img, adetailer, upscale); `variable_metadata.py` (`VariableMetadata`, `get_variable_metadata`: config path, type, resource key); `variable_selection_contract.py` (stable internal values vs display labels); `resource_access.py` (reads the live `AppStateV2.resources` projection, never the WebUI); `lora_variant.py`, `lora_variable_service.py` (LoRA strength/identity variants, executed-prompt proof) |
 | Independent baseline (PR-LEARN-STAGE-650) | `baseline_authoring.py` (per-stage `FieldSpec` tables, `seed_from_pipeline`, `baseline_problems`, `finalize_for_stage`, `variant_projection`, `parity_mismatches`, alias alignment); `baseline_draft.py` (the editable draft's lifecycle over `LearningState.baseline_draft`); `ordinary_snapshot.py` (snapshot layout); `ordinary_njr.py` (`materialize_njr`: the txt2img and single-stage reprocess NJR construction, strict vs legacy). The Tk editor is `src/gui/views/learning_baseline_editor.py` |
@@ -245,6 +246,50 @@ or universal optimum is claimed. Prompt Slot is deliberately outside the executa
 variable registry; the recommendation engine additionally excludes its study type, Apply
 returns no parameter recommendations and generation-profile publication remains ineligible.
 
+### 3.12 Controlled LoRA Composition experiments
+
+Design offers **LoRA Composition** beside the study selector (target: registry-verified SDXL
+txt2img, one frozen Learning baseline, optimizer and Style Consistency off). One experiment tests
+**one designated LoRA position**; every other LoRA, the prompt text (trigger words included),
+negative prompt, settings and seed cohort stay fixed. Operations: **Add / Remove** (one LoRA at
+different strengths, including *No LoRA*; strength 0 means absent, never `<lora:x:0>`),
+**Replace** (the baseline's *original* LoRA is the control arm; every other arm removes it and holds
+the replacement at the same strength) and **Compare Candidates** (No LoRA and/or several LoRAs at
+one common strength). Two to eight distinct candidates, 1-3 images each (maximum 24). The existing
+LoRA Strength sweep and the exploratory Two-Axis Grid are separate paths and are unchanged.
+
+`effective_loras = fixed_loras + tested_slot_assignment`. The source (custom prompt or one native
+PromptPack row; Matrix slots need explicit fixed values) is split into structured LoRA declarations
+(row `loras` plus inline `<lora:...>` tokens), reconciled with baseline stage LoRA settings, and
+rendered through the canonical `resolve_pack_intent` / `adapt_pack_intent` / `render_pack_intent`.
+The tested contribution keeps the original's execution position (or is appended). Duplicate names
+across sources (even identical or differently cased), a candidate already fixed in the prompt, an
+original absent from the baseline, stage settings naming a tested LoRA, LyCORIS tags, malformed
+tags and any adaptation that changes the set refuse Preview; nothing is silently deduplicated.
+Trigger text is never inserted or removed.
+
+Asset identity comes from `AssetRegistry` evidence: the explicitly refreshed in-memory discovery
+(a tracked background read-only scan) if present, else the cache-only registry snapshot. Every LoRA
+in any effective set must be available, unambiguous, compatible-or-uncertain (never filename-hint
+only; uncertain is disclosed) and carry a verified SHA-256; `ModelPolicy` support and its LoRA
+limit apply to the whole effective set. Hashing/scans never run on the Tk thread. Run re-resolves
+every frozen asset and refuses (admitting nothing) if identity changed or vanished.
+
+The frozen section (`lora_composition`, sealed by a digest inside the schema-2 snapshot) holds
+operation, original, position, fixed set, ordered candidates with stable A-H labels, expected
+ordered LoRA lists and multiset digests, asset identities, structured intent/adaptation and
+expected execution prompts. NJR LoRA provenance and `txt2img.lora_strengths` equal the expected
+set; Run compiles every variant against sealed digests, then `JobService.submit_njrs` admits once.
+
+Completion extends seed/job/launch reconciliation with full-set prompt readback. A variant is
+**uncontrolled** when readback is missing, an excluded/replaced LoRA is present, an unexpected or
+duplicate token appears, a fixed or candidate strength differs, or the full execution prompt differs.
+Readback proves the requested LoRA intent only; it is not independent proof that the backend
+loaded the intended LoRA bytes, and no runtime-load evidence is fabricated. Ratings carry typed
+`lora_composition` metadata; the conclusion is experiment-local (unique highest rating among
+saved controlled samples, ties and drafts give no winner, no universal LoRA claim). The study is
+excluded from `RecommendationEngine`, Apply and profile publication.
+
 ## 4. Data and persistence
 
 | Data | Location | Writer | Atomic |
@@ -294,6 +339,7 @@ Because both layers stay in the compiler, the invariant "randomization never hap
 4. `ModelPolicy` is the only source of model/profile applicability. Learning must not detect families by name or duplicate LoRA compatibility rules; fixed/restricted controls are not variables.
 5. Evidence is gated: controlled data may recommend only the field the frozen experiment varied; `experiment_strong` needs two distinct values and three controlled ratings in one durable experiment; observational evidence is manual-only; insufficient evidence returns no recommendation.
 6. Model Comparison ratings never feed ordinary recommendations or automatic Model selection; they claim preference under each frozen envelope, not causality.
+6b. LoRA Composition ratings are experiment-local: record kind `learning_experiment_rating` with `study_type` `lora_composition`, excluded from `RecommendationEngine`, Apply and profile publication. Preview refuses (never deduplicates or truncates) any design whose only difference is not the one designated LoRA position, and readback proves the whole expected LoRA set or the variant is uncontrolled.
 6a. Two-Axis Grid ratings are exploratory and descriptive: record kind `learning_grid_rating`, excluded from `RecommendationEngine`, `LearningAnalytics.get_experiment_summary`, any winner/conclusion and Apply to Pipeline. A grid is refused whole rather than admitted with a dropped, clamped or overwritten axis, and cell identity comes from the frozen `cell_id`, never job or file order.
 7. Uncontrolled results (seed read-back missing or mismatched, tested LoRA not executed, backend restart boundary) are excluded from inference, not repaired.
 8. A rating shown as saved must be saved: do not ignore the `append_record` result.

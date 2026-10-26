@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.learning.experiment_execution import thaw_snapshot
+from src.learning.lora_composition import OPERATION_LABELS, preview_details
 from src.learning.model_comparison import STUDY_TYPE as MODEL_COMPARISON
 from src.learning.two_axis_grid import variant_label
 
@@ -21,6 +22,7 @@ STUDY_LABELS = {
     MODEL_COMPARISON: "Model Comparison",
     "two_axis_grid": "Two-Axis Grid",
     "prompt_slot": "Prompt Slot",
+    "lora_composition": "LoRA Composition",
 }
 
 
@@ -60,6 +62,12 @@ def _model_text(context: Mapping[str, Any]) -> str:
 
 
 def _prompt_text(source: Mapping[str, Any]) -> str:
+    if source.get("prompt_source") == "lora_composition":
+        return (
+            f"Native PromptPack row {int(source.get('row_index', 0)) + 1} (frozen)"
+            if source.get("kind") == "pack"
+            else "Custom prompt (frozen)"
+        )
     if source.get("prompt_source") == "prompt_slot":
         return (
             f"Native PromptPack row {int(source.get('row_index', 0)) + 1} (frozen)"
@@ -216,6 +224,19 @@ def build_preview_summary(
         rows.append(("Values", _values_text(list(snapshot.get("variant_values") or []))))
         rows.append(("Model", _model_text(context)))
         rows.extend(_baseline_rows(snapshot))
+        if study == "lora_composition":
+            section = snapshot["lora_composition"]
+            rows.append(("LoRA operation", OPERATION_LABELS.get(section["operation"], "")))
+            fixed = section["fixed"]
+            rows.append(
+                (
+                    "Fixed LoRAs",
+                    ", ".join(f"{item['name']} @ {item['weight']:g}" for item in fixed)
+                    if show_model_names
+                    else f"{len(fixed)} fixed (names hidden by content visibility)",
+                )
+            )
+            warnings.extend(section["compatibility_notes"] if show_model_names else ())
     rows.extend(
         [
             ("Prompt", _prompt_text(source)),
@@ -253,6 +274,8 @@ def build_preview_summary(
                 for candidate in snapshot["prompt_slot"]["candidates"]
             )
             if study == "prompt_slot" and show_model_names
+            else preview_details(snapshot["lora_composition"])
+            if study == "lora_composition" and show_model_names
             else ""
         ),
     )
