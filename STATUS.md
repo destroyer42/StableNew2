@@ -138,7 +138,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 ## Known debt
 
 - The ratchet baselines above; the audit findings not yet scheduled (god objects `AppController` 7,307 lines and the executor,
-  NJR construction at several sites, model-family branches in generic code, untyped stage configuration; the executor's aesthetic-embedding injection still emits the `<embedding:>` notation the pinned Forge strips; it needs a separate repair, and Prompt x Model Matrix refuses aesthetic conditioning at Preview so it never reaches that path).
+  NJR construction at several sites, model-family branches in generic code, untyped stage configuration).
 - 64 modules unreachable from any entry point (~8.7k lines) await a verified deletion pass; the retained qualification harnesses
   (inventory in `tools/qualification/README.md`) remain the bulk of `tools/`.
 - Two Tcl callback-noise messages appear after an otherwise clean shutdown; no thread error or leak was observed.
