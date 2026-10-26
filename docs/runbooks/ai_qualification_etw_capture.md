@@ -10,7 +10,7 @@ Kernel-Network and Kernel-File trace sessions cannot be started by a standard-us
 | --- | --- | --- | --- |
 | one-time setup | **Administrator** (`powershell -NoProfile`) | OS commands only (below) | a system-wide Python and a protected copy of `capture_control.py` |
 | start / stop / cleanup | **Administrator** | the protected copy of `tools/qualification/ai111/capture_control.py` (the entire elevated surface) | `logman -ets` start/stop/query on three session names derived from one validated capture id; one fresh directory under `<repo>/reports`; small create-new JSON state files |
-| status | any | `capture_control status` | none (read-only) |
+| status | ordinary only (never from an Administrator terminal on an unprotected interpreter) | `capture_control status` | none (read-only) |
 | canary, qualification, D12a | ordinary | `capture_session.py`, `physical.py`, `d12a.py` | none; they refuse an elevated or unreadable token |
 | analysis | ordinary | `capture_analysis.py` | none; converts the stopped ETL with `tracerpt` as the standard user |
 
@@ -21,13 +21,22 @@ configuration) or stay resident. `capture_control.py` imports only the standard 
 ## Why the elevated Python must be protected
 
 An administrator token that runs code a standard-user process can edit is not a privilege boundary: a same-user process could
-change the script, the interpreter or the standard library between your review and your run. So every elevated command first
-proves its own runtime (`runtime_trust_problems`) and **refuses, before starting or stopping anything**, unless:
+change the script, the interpreter or the standard library between your review and your run. The control is the **setup below**
+(a protected copy on a system-wide interpreter, hash-compared). The self-check is a guard against a *misconfigured* runtime, not
+a detector of tampering: it runs inside the interpreter after that interpreter and its standard library have already executed,
+so it cannot expose a runtime that was already altered. Run it from an ordinary terminal before you ever open an elevated one:
+
+```powershell
+& <py> -I -B -c "import importlib.util as u, sys; s=u.spec_from_file_location('cc', r'<protected copy>'); m=u.module_from_spec(s); sys.modules['cc']=m; s.loader.exec_module(m); r=m.runtime_trust_problems(); print('\n'.join(r) or 'protected')"
+```
+
+Every elevated command (`start`, `stop`, `cleanup`) runs the same check first and **refuses before starting or stopping
+anything**, unless:
 
 * it was started `python -I -B ...` (isolated, no bytecode) and is not a virtual environment;
 * the script, the interpreter, `os.py`, the Python base prefix, every `sys.path` entry and the directory of every loaded
   module are owned by Administrators, SYSTEM or TrustedInstaller and grant no write/replace/re-permission right
-  (`F M W D WD AD DC WDAC WO GA GW`) to anyone else, and no ancestor directory lets a non-administrator delete, rename or
+  (`F M W D DE WD AD DC WDAC WO GA GW MA`) to anyone else, and no ancestor directory lets a non-administrator delete, rename or
   re-permission them (creating a child is fine); and
 * no module was loaded from outside the script's directory or the base prefix.
 
@@ -86,7 +95,8 @@ roughly `(0.9 x cap - 32 MiB) / rate - 60 s`: about 7 minutes at 256 MB and abou
 **Stage A sizing:** one capture per model arm, `--max-mb 1024` (512 only for an arm of 10 minutes or less), `--minutes` = the arm's
 planned duration + 15, started just before the arm and stopped right after it, a start and an end canary inside each capture and a
 separate analysis per capture. Never widen a cap to rescue a failed window; the zero-loss rule stays.
-The 1024 MB gate needs 36 GiB free for the conversion.
+The 1024 MB gate needs 36 GiB free for the conversion. At the floor rate one 1024 MB capture holds about 38 minutes in total, so an arm
+longer than about 35 minutes cannot finish inside one capture and needs an owner decision on splitting it (never a bigger cap past 1024).
 
 ## Live canary (no downloaded executable, no model)
 
@@ -121,7 +131,7 @@ interpreter (for example `C:\Program Files\Python314\python.exe`).
 A `PASS` analysis (kind `canary_capture`) is the proof a qualification session needs (`--canary-proof analysis.json`). The proof
 must come from a *different* capture, the same host, the same `capture_control.py`, provider configuration, `capture_analysis.py`
 and analyzer version, and be under 24 h old; **any other analysis of that capture that is FAIL or unreadable voids it** (an
-earlier INCONCLUSIVE does not). A qualification capture is the same four steps with `physical.py` / `d12a.py` in step 2,
+earlier INCONCLUSIVE does not); the other analyses are looked up beside the proof file, so keep the proof inside its capture directory. A qualification capture is the same four steps with `physical.py` / `d12a.py` in step 2,
 followed by `stage_a_report --capture-analysis`.
 
 ## When something goes wrong
@@ -168,7 +178,7 @@ seen, and activity outside the owned job is not attributed.
 
 An owned pid's window runs from the request launch to the runner's observed exit, which is after the real exit. An event is
 **owned** when its measured clock interval (zero slack) lies inside exactly one window and nothing else touches it; **ambiguous**
-when the slack-widened interval touches a window edge, there is no timestamp or clock, or several windows qualify; **recycled**
+when the slack-widened interval touches the edge of a window it is not wholly inside, there is no timestamp or clock, or several windows qualify; **recycled**
 (counted as foreign) when it is clearly outside every window of that pid; the verdict is FAIL on any hard violation, otherwise
 INCONCLUSIVE on any capture problem or ambiguity, otherwise PASS. Beacon offsets must intersect (they may miss by at most one
 timestamp slack, 5 ms, and the interval then spans the gap). The first live capture's 195 recycled-pid events preceded the
