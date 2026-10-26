@@ -135,17 +135,17 @@ def _materialize(
         filename_template=controller._resolve_learning_filename_template(config),
         strict=True,
     )
-    from src.utils.embedding_prompt_utils import render_embedding_reference
+    from src.utils.embedding_prompt_utils import render_embedding_invocation
 
     return replace(
         record,
         provenance=replace(
             record.provenance,
             positive_embeddings=tuple(
-                render_embedding_reference(*entry) for entry in intent.positive_embeddings
+                render_embedding_invocation(*entry) for entry in intent.positive_embeddings
             ),
             negative_embeddings=tuple(
-                render_embedding_reference(*entry) for entry in intent.negative_embeddings
+                render_embedding_invocation(*entry) for entry in intent.negative_embeddings
             ),
         ),
     )

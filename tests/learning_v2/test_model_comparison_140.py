@@ -379,7 +379,7 @@ def test_njr_audit_and_actual_atomic_jobservice_boundary(tmp_path, models):
     from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
     from src.learning.execution_controller import LearningExecutionController
     from src.pipeline.job_models_v2 import CURRENT_NJR_SCHEMA_VERSION
-    from src.utils.embedding_prompt_utils import render_embedding_reference
+    from src.utils.embedding_prompt_utils import render_embedding_invocation
 
     exp = experiment(tmp_path, models=models, loras=[["adapter", 0.7]])
     original = (tmp_path / "pack.json").read_bytes()
@@ -408,10 +408,10 @@ def test_njr_audit_and_actual_atomic_jobservice_boundary(tmp_path, models):
         assert record.base_model == arm["effective_config"]["txt2img"]["model"]
         assert record.backend_options == arm["effective_backend_options"]
         assert record.positive_embeddings == tuple(
-            render_embedding_reference(*p) for p in arm["effective_positive_embeddings"]
+            render_embedding_invocation(*p) for p in arm["effective_positive_embeddings"]
         )
         assert record.negative_embeddings == tuple(
-            render_embedding_reference(*p) for p in arm["effective_negative_embeddings"]
+            render_embedding_invocation(*p) for p in arm["effective_negative_embeddings"]
         )
         assert [(t.name, t.weight) for t in record.lora_tags] == [
             tuple(p) for p in arm["effective_lora_tags"]

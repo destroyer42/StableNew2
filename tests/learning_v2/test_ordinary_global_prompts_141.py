@@ -74,8 +74,8 @@ def selected_ui_plan(tmp_path, *, negative="bad", embeddings=(), enabled=True):
         ("bad", [], "bad"),
         ("bad, ugly\nwrong", [], "bad, ugly, wrong"),
         ("bad, bad", [], "bad, bad"),
-        ("", [["negative_embed", 0.7]], "(<embedding:negative_embed>:0.7)"),
-        ("bad, wrong", [["negative_embed", 1]], "<embedding:negative_embed>, bad, wrong"),
+        ("", [["negative_embed", 0.7]], "(negative_embed:0.7)"),
+        ("bad, wrong", [["negative_embed", 1]], "negative_embed, bad, wrong"),
     ],
 )
 def test_ui_selected_row_negative_owned_once_at_dispatch(

@@ -330,7 +330,13 @@ class RecommendationEngine:
 
         for record in records:
             metadata = record.get("metadata", {})
-            excluded_studies = ("model_comparison", "two_axis_grid", "prompt_slot", "lora_composition")
+            excluded_studies = (
+                "model_comparison",
+                "two_axis_grid",
+                "prompt_slot",
+                "lora_composition",
+                "embedding_experiment",
+            )
             if (metadata.get("study_type") in excluded_studies or
                 ((metadata.get("frozen_experiment") or {}).get("snapshot") or {}).get("study_type") in excluded_studies):
                 continue

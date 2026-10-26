@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from src.learning import embedding_experiment
 from src.learning.experiment_execution import thaw_snapshot
 from src.learning.lora_composition import OPERATION_LABELS, preview_details
 from src.learning.model_comparison import STUDY_TYPE as MODEL_COMPARISON
@@ -23,6 +24,7 @@ STUDY_LABELS = {
     "two_axis_grid": "Two-Axis Grid",
     "prompt_slot": "Prompt Slot",
     "lora_composition": "LoRA Composition",
+    "embedding_experiment": "Embedding",
 }
 
 
@@ -62,7 +64,7 @@ def _model_text(context: Mapping[str, Any]) -> str:
 
 
 def _prompt_text(source: Mapping[str, Any]) -> str:
-    if source.get("prompt_source") == "lora_composition":
+    if source.get("prompt_source") in ("lora_composition", "embedding_experiment"):
         return (
             f"Native PromptPack row {int(source.get('row_index', 0)) + 1} (frozen)"
             if source.get("kind") == "pack"
@@ -237,6 +239,26 @@ def build_preview_summary(
                 )
             )
             warnings.extend(section["compatibility_notes"] if show_model_names else ())
+        if study == "embedding_experiment":
+            section = snapshot["embedding_experiment"]
+            rows.append(
+                (
+                    "Embedding experiment",
+                    f"{embedding_experiment.OPERATION_LABELS.get(section['operation'], '')}, "
+                    f"{embedding_experiment.CHANNEL_LABELS.get(section['channel'], '')}",
+                )
+            )
+            rows.append(
+                (
+                    "Fixed embeddings",
+                    embedding_experiment.fixed_text(section, visible=show_model_names),
+                )
+            )
+            warnings.append(
+                embedding_experiment.CONSUMPTION_LABELS[
+                    embedding_experiment.CONSUMPTION_REQUEST_ONLY
+                ]
+            )
     rows.extend(
         [
             ("Prompt", _prompt_text(source)),
@@ -276,6 +298,8 @@ def build_preview_summary(
             if study == "prompt_slot" and show_model_names
             else preview_details(snapshot["lora_composition"])
             if study == "lora_composition" and show_model_names
+            else embedding_experiment.preview_details(snapshot["embedding_experiment"])
+            if study == "embedding_experiment" and show_model_names
             else ""
         ),
     )

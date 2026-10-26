@@ -60,6 +60,7 @@ from src.prompting.prompt_splitter import split_prompt_chunks
 from src.prompting.prompt_types import PromptOptimizationPairResult
 from src.prompting.stage_policy_engine import StagePolicyEngine
 from src.refinement.prompt_patcher import apply_prompt_patch
+from src.utils.embedding_prompt_utils import textual_inversion_report
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 from src.utils.process_inspector_v2 import collect_gpu_snapshot, collect_process_risk_snapshot
 from src.utils.webui_resource_names import canonicalize_vae_lookup_key, normalize_vae_config_value
@@ -2245,6 +2246,7 @@ class Pipeline:
             "subseed": info.get("subseed"),
             "all_seeds": info.get("all_seeds"),
             "all_subseeds": info.get("all_subseeds"),
+            "backend_textual_inversion": textual_inversion_report(info),
         }
 
     def _build_seed_metadata(
@@ -5200,6 +5202,7 @@ class Pipeline:
                 "all_seeds": gen_info.get("all_seeds"),
                 "requested_subseed": payload.get("subseed", -1),
                 "all_subseeds": gen_info.get("all_subseeds"),
+                "backend_textual_inversion": gen_info.get("backend_textual_inversion"),
                 "model": model_name,
                 "vae": vae_name,
                 "pressure_assessment": pressure_assessment,
@@ -5378,6 +5381,7 @@ class Pipeline:
                     "requested_subseed": payload.get("subseed", -1),
                     "actual_subseed": gen_info.get("subseed"),
                     "all_subseeds": gen_info.get("all_subseeds"),
+                    "backend_textual_inversion": gen_info.get("backend_textual_inversion"),
                     "config": self._clean_metadata_payload(payload),
                     "output_path": str(image_path),
                     "path": str(image_path),
