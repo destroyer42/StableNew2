@@ -91,6 +91,26 @@ UI-thread delivery is the `UiDispatcher` protocol (`src/controller/ports/ui_disp
 `TkUiDispatcher` (`src/gui/ui_dispatcher.py`, which keeps `invoke`). `AppStateV2` depends on the protocol only. Composition
 ownership is unchanged: `src/app_factory.py` stays the Tk composition path and `MainWindowV2` still creates its own invoker.
 
+### Controller presentation actions (GUI-SEAM-710)
+
+`src/controller/ports/presentation_actions.py` defines the toolkit-neutral `PresentationActions` port for Debug Hub,
+Job Explanation, structured errors and image/recorded-bundle handoffs to Video Workflow and Movie Clips. `AppController`
+keeps its public commands, history selection, source validation, lineage and operator messages; it sends intent and payloads
+through the port. `src/gui/presentation_actions.py` implements those effects using the existing dialogs and
+`controllers/video_workspace_handoff.py`. The window owns the structured-error instance; Debug Hub retains its existing
+singleton behavior and Job Explanation retains its multiple-window behavior.
+
+`MainWindowV2.attach_controller_actions` owns the selected header and legacy pack-list bindings formerly performed by
+`AppController._attach_to_gui`. Attachment precedes the existing `connect_controller` toolbar phase, preserving callback
+identity and replacement order. Repeated attachment reuses the active port and replaces listbox bindings rather than
+adding listeners; the V2 pack-loader compatibility surface keeps its own bindings.
+
+The adapter uses the window's existing `UiDispatcher` (`TkInvoker`), with inline delivery on the GUI thread and queued
+delivery from workers. Navigation returns the accepted source payload; missing/unsupported destinations raise immediately.
+Queued handoffs snapshot payload order and lineage. Every delivered callback checks its attachment, shutdown state and
+root lifetime on the GUI thread. Detach, window replacement, shutdown and Tk cleanup fence pending requests without
+creating another dispatcher, navigation authority or execution path. Owner decision 11 remains open.
+
 ### Shared media inspection
 
 `view_contracts/media_inspector_contract.py` owns ephemeral visibility, eligibility, selection revisions, zoom and dock state.
