@@ -8,6 +8,7 @@ result. They prove the analyzer's logic on tracerpt-shaped XML; the live canary 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import timedelta
 from pathlib import Path
@@ -37,6 +38,9 @@ from tests.tools.ai114e_support import (  # noqa: E402
 from tools.qualification.ai111 import capture_analysis as analysis  # noqa: E402
 from tools.qualification.ai111 import capture_control as control  # noqa: E402
 from tools.qualification.ai111.ownership import ChannelEvent  # noqa: E402
+
+# The synthetic traces spell Windows drive-letter paths and the analyzer normalises them with Windows rules.
+pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows path semantics")
 
 ALLOWED_READ = "C:\\ai\\root\\input.txt"
 ALLOWED_WRITE = "C:\\ai\\root\\work\\out.bin"

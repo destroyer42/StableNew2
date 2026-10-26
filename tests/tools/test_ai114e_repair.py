@@ -353,6 +353,7 @@ def test_a_checkout_link_for_reports_is_refused(tmp_path: Path) -> None:
 # -- F2: beacons must intersect --------------------------------------------------------------------------------------------
 
 
+@windows_only
 def test_beacons_that_miss_each_other_by_more_than_a_timestamp_are_unusable(tmp_path: Path) -> None:
     result, _, _ = run_analysis(
         tmp_path, lambda t, d: canary_scenario(t, d, beacon_trace_shift={2: 8_000_000})
@@ -362,6 +363,7 @@ def test_beacons_that_miss_each_other_by_more_than_a_timestamp_are_unusable(tmp_
     assert result["clock"] is None
 
 
+@windows_only
 def test_beacons_that_miss_by_less_than_one_slack_widen_the_interval(tmp_path: Path) -> None:
     result, _, _ = run_analysis(
         tmp_path, lambda t, d: canary_scenario(t, d, beacon_trace_shift={2: 3_000_000})
@@ -381,6 +383,7 @@ def test_beacons_that_miss_by_less_than_one_slack_widen_the_interval(tmp_path: P
         ({"BuffersLost": "many"}, "BuffersLost is unreadable"),
     ],
 )
+@windows_only
 def test_a_header_that_reports_loss_is_inconclusive(
     tmp_path: Path, extra: dict, fragment: str
 ) -> None:
@@ -391,6 +394,7 @@ def test_a_header_that_reports_loss_is_inconclusive(
     assert any(fragment in p for p in result["capture_problems"])
 
 
+@windows_only
 def test_a_header_that_reports_zero_loss_passes(tmp_path: Path) -> None:
     result, _, _ = run_analysis(
         tmp_path,
@@ -412,6 +416,7 @@ def test_a_live_session_that_does_not_report_buffers_lost_is_not_admitted(tmp_pa
 # -- F4: beacon paths ------------------------------------------------------------------------------------------------------
 
 
+@windows_only
 def test_a_beacon_path_is_rebuilt_under_the_validated_directory(tmp_path: Path) -> None:
     good = f"beacon-001-{'a' * 8}.tmp"
     expected = str(tmp_path / "beacons" / good)
@@ -422,6 +427,7 @@ def test_a_beacon_path_is_rebuilt_under_the_validated_directory(tmp_path: Path) 
     assert analysis.beacon_path(tmp_path, {}) == ""
 
 
+@windows_only
 def test_a_log_whose_beacon_names_no_beacon_file_is_inconclusive(tmp_path: Path) -> None:
     def tamper(target: Path) -> None:
         text = (target / "windows.jsonl").read_text(encoding="utf-8").splitlines()
@@ -467,6 +473,7 @@ def test_unresolved_events_in_one_second_are_not_collapsed_but_exact_repeats_are
 # -- F6: the capture directory and the window log -------------------------------------------------------------------------
 
 
+@windows_only
 def test_an_entry_this_tool_chain_does_not_create_makes_the_analysis_inconclusive(
     tmp_path: Path,
 ) -> None:
@@ -479,6 +486,7 @@ def test_an_entry_this_tool_chain_does_not_create_makes_the_analysis_inconclusiv
     assert any("does not create" in p and "note.txt" in p for p in result["capture_problems"])
 
 
+@windows_only
 def test_a_stray_file_in_the_beacons_directory_is_reported(tmp_path: Path) -> None:
     def plant(target: Path) -> None:
         (target / "beacons").mkdir()
@@ -489,6 +497,7 @@ def test_a_stray_file_in_the_beacons_directory_is_reported(tmp_path: Path) -> No
     assert any("beacons directory holds unexpected" in p for p in result["capture_problems"])
 
 
+@windows_only
 def test_a_clean_directory_has_no_inventory_problem(tmp_path: Path) -> None:
     result, target, _ = run_analysis(tmp_path, lambda t, d: canary_scenario(t, d))
     assert result["verdict"] == "PASS", result["capture_problems"]
@@ -602,6 +611,7 @@ def test_earlier_analyses_are_listed_in_the_next_result(tmp_path: Path) -> None:
     ]
 
 
+@windows_only
 def test_a_result_carries_the_analyzer_hash_and_the_earlier_analyses(tmp_path: Path) -> None:
     result, _, _ = run_analysis(tmp_path, lambda t, d: canary_scenario(t, d))
     assert result["analyzer_sha256"] == analysis.analyzer_sha256()

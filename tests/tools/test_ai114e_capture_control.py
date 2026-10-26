@@ -155,6 +155,7 @@ def test_two_captures_get_distinct_identities() -> None:
     assert control.new_capture_id(FIXED_NOW) != control.new_capture_id(FIXED_NOW)
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows system directory")
 def test_logman_is_resolved_by_absolute_path_never_through_path() -> None:
     logman = FakeLogman()
     control.TraceTools(logman.run).live()
