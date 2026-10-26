@@ -122,7 +122,6 @@ from src.controller.webui_connection_controller import (
 )
 from src.gui.app_state_projection_sink import AppStateProjectionSink
 from src.gui.app_state_v2 import AppStateV2
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.photo_optimize import get_photo_optimize_store
 from src.pipeline.config_contract_v26 import (
     validate_svd_native_execution_config,
@@ -147,6 +146,7 @@ from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
+from src.review.workflow_adapter import ReviewWorkflowAdapter
 from src.services.duration_stats_service import DurationStatsService
 from src.state.workspace_paths import workspace_paths
 from src.utils import (

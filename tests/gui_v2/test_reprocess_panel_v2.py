@@ -8,7 +8,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff
 from src.gui.panels_v2.reprocess_panel_v2 import ReprocessPanelV2
 from src.gui.theme_v2 import BACKGROUND_DARK
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
@@ -18,6 +17,7 @@ from src.pipeline.reprocess_builder import (
 )
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
+from src.review.workflow_adapter import ReviewWorkspaceHandoff
 from src.utils.image_metadata import ReadPayloadResult
 
 

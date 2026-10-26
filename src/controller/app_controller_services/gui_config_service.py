@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from src.gui.config_adapter_v26 import GuiConfigAdapterV26
+from src.gui_v2.adapters.config_adapter_v26 import GuiConfigAdapterV26
 
 
 class GuiConfigService:

@@ -11,7 +11,6 @@ from typing import Any
 from PIL import Image
 
 from src.curation.curation_manifest import build_review_chunk_lineage_block
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.image_backends.operation_compatibility import (
     OperationAssessment,
     OperationNotSupportedError,
@@ -19,6 +18,7 @@ from src.image_backends.operation_compatibility import (
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
+from src.review.workflow_adapter import ReviewWorkflowAdapter
 from src.utils.image_metadata import (
     ImageMetadataContractV26,
     extract_embedded_metadata,

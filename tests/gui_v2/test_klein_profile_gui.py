@@ -10,10 +10,10 @@ import pytest
 from PIL import Image
 
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui_v2.model_policy_projection import project_model_selection
 from src.image_backends.forge_klein_profile import KLEIN_EDIT_METADATA_KEY
+from src.review.workflow_adapter import ReviewWorkflowAdapter
 
 KLEIN = "flux-2-klein-4b-fp8.safetensors"
 

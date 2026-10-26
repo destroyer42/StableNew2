@@ -544,6 +544,14 @@ and runner lifecycle. Controllers remain thin adapters between GUI events and
 application services. GUI state may cache display projections but may not become
 a second source of execution truth.
 
+Shared presentation policy is independent of the Tk host: content visibility
+lives in `src/state/content_visibility.py`, Review workflow policy and its data
+contracts in `src/review/workflow_adapter.py`, and configuration projection in
+`src/gui_v2/adapters/config_adapter_v26.py` against `ConfigProjectionState`.
+These modules import no Tk-owned GUI modules; the config adapter projects the
+existing draft-state owner and delegates config-layer semantics to the pipeline
+contract. Rendering, dialogs and event handling remain in `src/gui/`.
+
 The MVP remains a single-process desktop application. Threaded work must marshal
 UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 

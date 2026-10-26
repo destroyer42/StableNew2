@@ -737,13 +737,13 @@ class LearningReviewPanel(ttk.Frame):
             self.metadata_text.insert(tk.END, metadata)
             study = (getattr(experiment, "metadata", {}) or {}).get("study_type")
             if study in ("prompt_slot", "lora_composition"):
-                from src.gui.content_visibility import (
-                    ContentVisibilityMode,
-                    normalize_content_visibility_mode,
-                )
                 from src.learning.lora_composition import candidate_caption as lora_caption
                 from src.learning.prompt_slot_experiment import candidate_caption
                 from src.learning.resource_access import resolve_app_state
+                from src.state.content_visibility import (
+                    ContentVisibilityMode,
+                    normalize_content_visibility_mode,
+                )
 
                 state = resolve_app_state(self._get_learning_controller())
                 visible = normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW
@@ -822,12 +822,12 @@ class LearningReviewPanel(ttk.Frame):
         if result.get("study_type") in ("prompt_slot", "lora_composition"):
             self.slot_conclusion_text.grid()
             lora = result["study_type"] == "lora_composition"
-            from src.gui.content_visibility import (
+            from src.learning.lora_composition import candidate_label_text
+            from src.learning.resource_access import resolve_app_state
+            from src.state.content_visibility import (
                 ContentVisibilityMode,
                 normalize_content_visibility_mode,
             )
-            from src.learning.lora_composition import candidate_label_text
-            from src.learning.resource_access import resolve_app_state
 
             state = resolve_app_state(self._get_learning_controller())
             visible = normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW

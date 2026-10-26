@@ -9,7 +9,6 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
 from src.gui.view_contracts.photo_baseline_save_contract import (
     BaselineDraft,
@@ -21,6 +20,7 @@ from src.photo_optimize.settings import (
     normalize_settings,
     resolve_geometry,
 )
+from src.review.workflow_adapter import ReviewWorkflowAdapter
 
 from .photo_optimize_handoff import PhotoOptimizeHandoffMixin
 from .photo_optimize_layout import PhotoOptimizeLayoutMixin

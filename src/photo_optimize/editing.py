@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
+from src.review.workflow_adapter import ReviewWorkflowAdapter
 
 from .models import PhotoOptimizeAsset
 from .settings import (

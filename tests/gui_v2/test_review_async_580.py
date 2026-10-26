@@ -92,7 +92,7 @@ def test_sfw_inspection_waits_for_selected_image_metadata(tk_root, tmp_path, mon
 
 def _handoff(path: Path, **overrides):
     from src.gui.controllers.history_iterate_service import HISTORY_ITERATE_SOURCE
-    from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff
+    from src.review.workflow_adapter import ReviewWorkspaceHandoff
 
     fields = {
         "source": HISTORY_ITERATE_SOURCE,

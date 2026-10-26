@@ -20,12 +20,12 @@ if "src.state.output_routing" not in sys.modules:
     sys.modules["src.state.output_routing"] = stub
 
 from src.gui.app_state_v2 import AppStateV2
-from src.gui.content_visibility import (
+from src.services.ui_state_store import UIStateStore
+from src.state.content_visibility import (
     ContentVisibilityMode,
     ContentVisibilitySettings,
     normalize_content_visibility_mode,
 )
-from src.services.ui_state_store import UIStateStore
 
 
 def test_normalize_content_visibility_mode_defaults_to_nsfw_for_unknown_values() -> None:

@@ -217,8 +217,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `base_generation_panel_v2.py`: Base generation panel for GUI V2
 - `batch_operations_panel_v2.py`: Tk "Batches" view inside the Queue/History operator workflow (PR-BATCH-OPS-201)
 - `batch_retry_dialog.py`: Modal review of a selected retry (PR-BATCH-OPS-201)
-- `config_adapter_v26.py`: (no docstring)
-- `content_visibility.py`: (no docstring)
 - `controller.py`: GUI compatibility export for the controller-owned base pipeline controller
 - `design_system_v2.py`: Design tokens and primitive helpers for the StableNew V2 GUI
 - `dropdown_loader_v2.py`: (no docstring)
@@ -274,7 +272,6 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_controller.py`: (no docstring)
 - `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
-- `review_workflow_adapter.py`: Non-render review workflow logic for Review tab
 - `video_workspace_handoff.py`: (no docstring)
 
 ## src/gui/dialogs/
@@ -472,6 +469,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/adapters/
 
 - `__init__.py`: Namespace for Tk-free GUI v2 adapters
+- `config_adapter_v26.py`: (no docstring)
 - `learning_adapter_v2.py`: Tk-free helpers for GUI v2 learning hooks
 - `randomizer_adapter_v2.py`: Tk-free randomizer adapter for GUI v2
 
@@ -732,6 +730,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `adetailer_outcome.py`: Operator before/after review of an ADetailer output (PR-REFINE-160), carried by the existing Review feedback…
 - `artifact_metadata_inspector.py`: Read-only artifact metadata inspection payload builder
 - `review_metadata_service.py`: Portable review metadata stamping for reviewed image artifacts
+- `workflow_adapter.py`: Non-render review workflow logic for Review tab
 - `workspace_io.py`: Worker-side file work for the Review workspace (PR-GUI-UX-580)
 
 ## src/review/assist/
@@ -761,6 +760,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/state/
 
 - `__init__.py`: Runtime-state and workspace-path helpers for StableNew
+- `content_visibility.py`: (no docstring)
 - `output_routing.py`: (no docstring)
 - `workspace_paths.py`: Centralized paths for mutable StableNew workspace data
 

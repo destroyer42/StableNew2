@@ -111,6 +111,23 @@ Queued handoffs snapshot payload order and lineage. Every delivered callback che
 root lifetime on the GUI thread. Detach, window replacement, shutdown and Tk cleanup fence pending requests without
 creating another dispatcher, navigation authority or execution path. Owner decision 11 remains open.
 
+### Shared presentation policy
+
+`src/state/content_visibility.py` owns the one visibility enum, normalization and serialized settings payload.
+Controllers and Tk consumers import those same types; application visibility still takes precedence over local Show/Hide.
+`src/review/workflow_adapter.py` owns `ReviewWorkflowAdapter`, `ReviewPromptDiff` and `ReviewWorkspaceHandoff`: prompt
+deltas, feedback, curation handoffs, readiness and effective-settings projections. Review, Photo Optimize, History and
+Learning presentation consumers share that implementation; widgets, selection events, dialogs and tab routing remain in Tk.
+
+`src/gui_v2/adapters/config_adapter_v26.py` owns the toolkit-neutral config facade against `ConfigProjectionState` (the four
+writable config projection dictionaries, plus optional pack-context attributes read by the existing fallback rules).
+`AppStateV2.config_adapter` remains the single state's facade, and `GuiConfigService` can still adapt legacy state objects
+without a preexisting adapter. Canonical layering remains `src/pipeline/config_contract_v26.py`; no settings owner or
+persistence format is added. The obsolete Tk policy paths are removed; all repository importers use the canonical homes.
+
+`tests/tools/test_presentation_policy_boundary_720.py` checks import-time closures, every local/type-only policy import,
+and representative operations in a subprocess that refuses both `tkinter` and `src.gui` imports.
+
 ### Shared media inspection
 
 `view_contracts/media_inspector_contract.py` owns ephemeral visibility, eligibility, selection revisions, zoom and dock state.
