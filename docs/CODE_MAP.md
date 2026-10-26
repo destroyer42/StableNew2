@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-598 of 753 modules have a docstring.
+600 of 755 modules have a docstring.
 
 ## src/
 
@@ -181,6 +181,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Controller-owned runtime port adapters and protocol definitions
 - `default_runtime_ports.py`: Default controller-owned adapters for image and video runtime ports
+- `presentation_actions.py`: Toolkit-neutral presentation effects requested by application commands
 - `runtime_ports.py`: Protocol definitions for controller-owned runtime wiring seams
 - `ui_dispatcher.py`: Toolkit-neutral UI scheduling contract
 
@@ -243,6 +244,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `outpaint_dialog.py`: Review's Extend Canvas dialog
 - `output_settings_panel_v2.py`: Output settings panel for GUI V2
 - `pipeline_panel_v2.py`: Pipeline panel composed of modular stage cards and prompt pack summary
+- `presentation_actions.py`: Tk-owned dialogs, controller command bindings and workspace handoffs
 - `preview_panel_v2.py`: Preview panel for GUI v2 (PR-CORE1-A3: NJR-only display)
 - `prompt_adaptation_dialog.py`: Read-only Tk dialog for the explicit "Adapt for Target" preview (PR-IMG-130C)
 - `prompt_ai_suggestions.py`: Prompt-tab AI coordination: snapshot, queued completion, read-only review and explicit stale-safe editing

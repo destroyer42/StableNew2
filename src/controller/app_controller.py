@@ -101,6 +101,7 @@ from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
+from src.controller.ports.presentation_actions import PresentationActions
 from src.controller.ports.runtime_ports import ImageRuntimePorts
 from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
@@ -395,6 +396,7 @@ class AppController:
         ui_scheduler: Callable[[Callable[[], None]], None] = None,
         runtime_ports: ImageRuntimePorts | None = None,
         optional_dependency_snapshot: OptionalDependencySnapshot | None = None,
+        presentation_actions: PresentationActions | None = None,
     ) -> None:
         import threading
         import time
@@ -441,6 +443,7 @@ class AppController:
         self._runtime_status_min_interval_ms = 250
 
         self.main_window = main_window
+        self.presentation_actions = presentation_actions
         self.app_state = getattr(main_window, "app_state", None)
         if self.app_state is None:
             self.app_state = AppStateV2()
@@ -539,7 +542,6 @@ class AppController:
         self._diagnostics_heavy_snapshot_ts = 0.0
         self._diagnostics_heavy_snapshot_refresh_in_progress = False
         self._last_error_envelope: UnifiedErrorEnvelope | None = None
-        self._error_modal: Any | None = None
         self._original_excepthook = sys.excepthook
         self._original_threading_excepthook = getattr(threading, "excepthook", None)
         self._original_tk_report_callback_exception: Callable[..., Any] | None = None
@@ -708,6 +710,7 @@ class AppController:
 
     def shutdown(self) -> None:
         """Stop owned services, watchdog and tracked threads; close only a quiescent repository."""
+        self.detach_presentation_actions()
         logger.info("[controller] shutdown(): Stopping system watchdog...")
         if hasattr(self, "_system_watchdog") and self._system_watchdog:
             try:
@@ -2371,6 +2374,8 @@ class AppController:
 
     def set_main_window(self, main_window: Any) -> None:
         """Set the main window and wire GUI callbacks."""
+        if main_window is not getattr(self, "main_window", None):
+            self.detach_presentation_actions()
         previous_state = getattr(self, "app_state", None)
         previous_listener = getattr(self, "_app_state_visibility_listener", None)
         if (
@@ -2423,43 +2428,31 @@ class AppController:
         mw = self.main_window
         if mw is None:
             return
-        missing = [
-            name for name in ("header_zone", "left_zone", "bottom_zone") if not hasattr(mw, name)
-        ]
-        if missing:
-            logger.debug(
-                f"AppController._attach_to_gui: main_window missing zones {missing}; deferring wiring"
-            )
+        attach = getattr(mw, "attach_controller_actions", None)
+        if not callable(attach):
             return
-
-        header = mw.header_zone
-        left = mw.left_zone
-
-        # Header events
-        header.run_button.configure(command=self.run_txt2img_once)
-        header.stop_button.configure(command=self.on_stop_clicked)
-        header.preview_button.configure(command=self.on_preview_clicked)
-        header.settings_button.configure(command=self.on_open_settings)
-        header.help_button.configure(command=self.on_help_clicked)
-
-        # Left zone events
-        if hasattr(left, "load_config_button"):
-            # New V2 _PackLoaderCompat - buttons are already wired in the UI class
-            pass
-        elif left is not None:
-            # Legacy LeftZone wiring
-            if hasattr(left, "load_pack_button"):
-                left.load_pack_button.configure(command=self.on_load_pack)
-            if hasattr(left, "edit_pack_button"):
-                left.edit_pack_button.configure(command=self.on_edit_pack)
-            if hasattr(left, "packs_list"):
-                left.packs_list.bind("<<ListboxSelect>>", self._on_pack_list_select)
-
+        actions = attach(self)
+        if actions is None:
+            return
+        self.presentation_actions = actions
         self._update_webui_state("disconnected")
 
         # Flush deferred status if any
         if getattr(self, "_pending_status_text", None):
             self._update_status(self._pending_status_text)
+
+    def detach_presentation_actions(self) -> None:
+        actions = getattr(self, "presentation_actions", None)
+        if actions is not None:
+            actions.detach()
+        self.presentation_actions = None
+
+    def _require_presentation_actions(self) -> PresentationActions:
+        self._require_main_window()
+        actions: PresentationActions | None = getattr(self, "presentation_actions", None)
+        if actions is None:
+            raise RuntimeError("Presentation actions are not available")
+        return actions
 
     # ------------------------------------------------------------------
     # Queue & JobService helpers (PR-039B)
@@ -3279,14 +3272,9 @@ class AppController:
     def open_debug_hub(self) -> None:
         """Primary entrypoint for the Unified Debug Hub."""
         try:
-            from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
-
-            DebugHubPanelV2.open(
-                master=self.main_window.root if self.main_window else None,
-                controller=self,
-                app_state=self.app_state,
-                log_handler=self.gui_log_handler,
-            )
+            actions = getattr(self, "presentation_actions", None)
+            if actions is not None:
+                actions.open_debug_hub()
         except Exception as exc:
             self._append_log(f"[controller] Failed to open Debug Hub: {exc!r}")
 
@@ -3295,13 +3283,9 @@ class AppController:
         if not job_id:
             return
         try:
-            from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
-
-            JobExplanationPanelV2(
-                job_id,
-                master=self.main_window.root if self.main_window else None,
-                controller=self,
-            )
+            actions = getattr(self, "presentation_actions", None)
+            if actions is not None:
+                actions.explain_job(job_id)
         except Exception as exc:
             self._append_log(f"[controller] Failed to explain job {job_id}: {exc!r}")
 
@@ -3432,28 +3416,12 @@ class AppController:
         )
 
     def _show_structured_error_modal(self, envelope: UnifiedErrorEnvelope) -> None:
-        if self.main_window is None:
-            return
-        if self._error_modal and getattr(self._error_modal, "winfo_exists", lambda: False)():
-            try:
-                self._error_modal.lift()
-            except Exception:
-                pass
-            return
         try:
-            from src.gui.views.error_modal_v2 import ErrorModalV2
-
-            modal_parent = getattr(self.main_window, "root", None) or self.main_window
-            self._error_modal = ErrorModalV2(
-                modal_parent,
-                envelope=envelope,
-                on_close=self._clear_error_modal,
-            )
+            actions = getattr(self, "presentation_actions", None)
+            if actions is not None:
+                actions.show_structured_error(envelope)
         except Exception:
             logger.exception("Failed to show structured error modal")
-
-    def _clear_error_modal(self) -> None:
-        self._error_modal = None
 
     def _handle_uncaught_exception(
         self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback
@@ -4493,6 +4461,7 @@ class AppController:
             logger.info("[controller] shutdown_app: Already shutting down, skipping")
             return
         self._is_shutting_down = True
+        self.detach_presentation_actions()
         label = reason or "shutdown"
         logger.info("[controller] ===== SHUTDOWN_APP CALLED (%s) =====", label)
 
@@ -6428,11 +6397,7 @@ class AppController:
         path = Path(image_path)
         if not path.exists():
             raise FileNotFoundError(f"Video workflow source image does not exist: {path}")
-        main_window = self._require_main_window()
-        from src.gui.controllers.video_workspace_handoff import route_image_to_video_workflow
-
-        route_image_to_video_workflow(
-            main_window=main_window,
+        self._require_presentation_actions().image_to_video_workflow(
             image_path=str(path),
             status_message=f"Loaded into Video Workflow tab: {path.name}",
             lineage=lineage,
@@ -6461,10 +6426,7 @@ class AppController:
             raise ValueError(f"History job not found: {job_id}")
         bundle = self._get_history_video_bundle(entry)
         if bundle:
-            from src.gui.controllers.video_workspace_handoff import route_bundle_to_video_workflow
-
-            best_path = route_bundle_to_video_workflow(
-                main_window=self._require_main_window(),
+            best_path = self._require_presentation_actions().bundle_to_video_workflow(
                 bundle=dict(bundle),
                 status_message="Loaded video output into Video Workflow tab.",
             )
@@ -6486,14 +6448,11 @@ class AppController:
         entry = self._get_history_entry_by_job_id(job_id)
         if entry is None:
             raise ValueError(f"History job not found: {job_id}")
-        main_window = self._require_main_window()
+        actions = self._require_presentation_actions()
 
         bundle = self._get_history_video_bundle(entry)
         if bundle:
-            from src.gui.controllers.video_workspace_handoff import route_bundle_to_movie_clips
-
-            route_bundle_to_movie_clips(
-                main_window=main_window,
+            actions.bundle_to_movie_clips(
                 bundle=dict(bundle),
                 status_message="Loaded history output into Movie Clips.",
             )
@@ -6506,10 +6465,7 @@ class AppController:
         if image_path is None:
             raise ValueError(f"History job {job_id} has no usable output available for Movie Clips")
 
-        from src.gui.controllers.video_workspace_handoff import route_image_to_movie_clips
-
-        route_image_to_movie_clips(
-            main_window=main_window,
+        actions.image_to_movie_clips(
             image_path=image_path,
             status_message=f"Loaded {Path(image_path).name} into Movie Clips.",
         )

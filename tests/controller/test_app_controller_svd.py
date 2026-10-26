@@ -11,6 +11,8 @@ from src.controller.app_controller import AppController
 from src.controller.app_controller_services.application_runtime_coordinator import (
     ApplicationRuntimeCoordinator,
 )
+from src.controller.ports.ui_dispatcher import ImmediateUiDispatcher
+from src.gui.presentation_actions import TkPresentationActions
 from src.queue.job_history_store import JobHistoryEntry, JobStatus
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 from src.video.svd_config import SVDConfig
@@ -280,6 +282,10 @@ def test_send_history_job_image_to_video_workflow_selects_workflow_tab(tmp_path)
     controller.main_window = SimpleNamespace(
         video_workflow_tab=workflow_tab, center_notebook=notebook
     )
+    controller.main_window.root = Mock(winfo_exists=Mock(return_value=True))
+    controller.presentation_actions = TkPresentationActions(
+        controller.main_window, controller, ImmediateUiDispatcher()
+    )
     controller._append_log = lambda *_args, **_kwargs: None
 
     routed = controller.send_history_job_image_to_video_workflow("job-456")
@@ -359,6 +365,10 @@ def test_send_history_video_bundle_to_video_workflow_uses_bundle_handoff(tmp_pat
     )
     controller.main_window = SimpleNamespace(
         video_workflow_tab=workflow_tab, center_notebook=notebook
+    )
+    controller.main_window.root = Mock(winfo_exists=Mock(return_value=True))
+    controller.presentation_actions = TkPresentationActions(
+        controller.main_window, controller, ImmediateUiDispatcher()
     )
     controller._append_log = lambda *_args, **_kwargs: None
 
@@ -671,10 +681,12 @@ def test_show_structured_error_modal_uses_tk_root_parent(monkeypatch) -> None:
             return True
 
     controller = AppController.__new__(AppController)
-    controller.main_window = SimpleNamespace(root="tk-root")
-    controller._error_modal = None
+    controller.main_window = SimpleNamespace(root=Mock(winfo_exists=Mock(return_value=True)))
+    controller.presentation_actions = TkPresentationActions(
+        controller.main_window, controller, ImmediateUiDispatcher()
+    )
 
-    # AppController imports the modal lazily from its view module.
+    # The Tk owner resolves the dialog; the controller only sends the envelope.
     monkeypatch.setattr("src.gui.views.error_modal_v2.ErrorModalV2", _FakeModal)
 
     controller._show_structured_error_modal(
@@ -690,4 +702,4 @@ def test_show_structured_error_modal_uses_tk_root_parent(monkeypatch) -> None:
         )
     )
 
-    assert created["parent"] == "tk-root"
+    assert created["parent"] is controller.main_window.root

@@ -390,8 +390,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1286,
-      "S110": 505,
+      "BLE001": 1285,
+      "S110": 504,
       "S112": 37
     },
     "counts": {
@@ -427,8 +427,8 @@
         "BLE001": 18
       },
       "src/controller/app_controller.py": {
-        "BLE001": 133,
-        "S110": 50,
+        "BLE001": 132,
+        "S110": 49,
         "S112": 4
       },
       "src/controller/app_controller_services/application_runtime_coordinator.py": {

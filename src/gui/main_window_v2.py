@@ -10,6 +10,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.api.webui_process_manager import WebUIProcessManager, build_default_webui_process_config
+from src.controller.ports.presentation_actions import PresentationActions
 from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.content_visibility import ContentVisibilitySettings
@@ -23,6 +24,7 @@ from src.gui.panels_v2.operator_readiness_panel_v2 import (
     format_product_support_label,
     is_intro_dismissed,
 )
+from src.gui.presentation_actions import TkPresentationActions
 from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
 from src.gui.view_contracts.task_navigation_contract import (
@@ -240,6 +242,8 @@ class MainWindowV2:
         self.pipeline_controller = pipeline_controller
         self.gui_log_handler = gui_log_handler
         self._invoker = TkInvoker(self.root)
+        self._presentation_actions: TkPresentationActions | None = None
+        self._structured_error_modal: Any | None = None
         self.app_state.set_invoker(self._invoker)
 
         self.root.title("StableNew")
@@ -490,6 +494,8 @@ class MainWindowV2:
         # Provide delegation helpers expected by controllers/tests
         self.after = self.root.after  # type: ignore[attr-defined]
 
+        if self.app_controller is not None:
+            self.app_controller.presentation_actions = self.attach_controller_actions(self.app_controller)
         self._wire_toolbar_callbacks()
         self._wire_status_bar()
 
@@ -923,8 +929,30 @@ class MainWindowV2:
 
         self.root.after(250, _tick)
 
+    def attach_controller_actions(self, controller: Any) -> PresentationActions | None:
+        """Attach selected commands before connect_controller's existing toolbar wiring."""
+        if self._disposed or self._close_in_progress or any(
+            not hasattr(self, zone) for zone in ("header_zone", "left_zone", "bottom_zone")
+        ):
+            return None
+        actions = self._presentation_actions
+        if actions is None or not actions.is_attached_to(controller):
+            if actions is not None:
+                actions.detach()
+            actions = self._presentation_actions = TkPresentationActions(self, controller, self._invoker)
+        actions.bind_commands()
+        return actions
+
+    def _detach_presentation_actions(self) -> None:
+        actions = getattr(self, "_presentation_actions", None)
+        if actions is not None:
+            actions.detach()
+
     # Compatibility hook for controllers
     def connect_controller(self, controller) -> None:
+        actions = self._presentation_actions
+        if actions is None or not actions.is_attached_to(controller):
+            controller.presentation_actions = self.attach_controller_actions(controller)
         self.controller = controller
         if self.app_controller is None:
             self.app_controller = controller
@@ -1388,6 +1416,7 @@ class MainWindowV2:
         self._trigger_graceful_exit("window-close")
 
     def _trigger_graceful_exit(self, reason: str) -> None:
+        self._detach_presentation_actions()
         handler = getattr(self, "_graceful_exit_handler", None)
         if handler:
             try:
@@ -1432,6 +1461,7 @@ class MainWindowV2:
     def _on_destroy(self, event) -> None:
         if event is not None and getattr(event, "widget", None) not in {None, self.root}:
             return
+        self._detach_presentation_actions()
         if not self._close_in_progress:
             self._trigger_graceful_exit("destroy")
 
@@ -1440,6 +1470,7 @@ class MainWindowV2:
         if self._disposed:
             return
         self._disposed = True
+        self._detach_presentation_actions()
 
         # PR-PERSIST-001: Save UI state before cleanup
         try:
