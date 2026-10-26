@@ -25,6 +25,7 @@ The harness never starts, stops or sweeps a trace session, so it can leak none: 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -35,6 +36,7 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable, Sequence
+from ctypes import wintypes
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -44,7 +46,7 @@ from src.utils.managed_process import ProcessOutcome, run_bounded
 from src.utils.process_observation import OwnedTreeEvidence
 from tools.qualification.ai111 import capture_control as control
 from tools.qualification.ai111 import tokens
-from tools.qualification.ai111.capture_analysis import ANALYZER_VERSION
+from tools.qualification.ai111.capture_analysis import ANALYZER_VERSION, analyzer_sha256
 from tools.qualification.ai111.ownership import (
     CHANNELS,
     ChannelEvent,
@@ -61,6 +63,13 @@ RETROSPECTIVE = "retrospective_capture"
 PROOF_MAX_AGE = timedelta(hours=24)
 #: A capture whose per-session file is this full is close to its size cap, where events begin to be lost.
 SIZE_WARN_FRACTION = 0.9
+#: What may still be written after the last request ends: the buffers ``logman stop`` flushes (the session's minimum buffers).
+STOP_FLUSH_BYTES = control.BUFFERS_MIN * control.BUFFER_KB * 1024
+#: Slack added to every request's timeout for the operator's stop and the harness's closing canary.
+STOP_MARGIN_SECONDS = 60.0
+#: Lowest write rate (bytes per second) assumed for a session until its own measured average is higher. Measured on the target
+#: host (2026-10-25, idle desktop): Kernel-File about 62.9 MB in 171 s, Kernel-Network 19.9 MB, DNS-Client 9.4 MB, with margin.
+RATE_FLOOR_BYTES_PER_SECOND = {"file": 400_000, "network": 160_000, "dns": 80_000}
 _QUERY_TTL_SECONDS = 2.0
 
 
@@ -71,18 +80,75 @@ class CaptureNotActive(RuntimeError):
 # -- the window log -----------------------------------------------------------------------------------------------------
 
 
+def _open_append_deny_write(path: Path) -> int:
+    """Open ``path`` for appending with a share mode that lets others read but not write it, for as long as it stays open.
+
+    Windows only; the share mode is what keeps another process from rewriting the window log while the session runs."""
+
+    import msvcrt  # noqa: PLC0415 - Windows only
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    handle = kernel32.CreateFileW(
+        str(path),
+        _GENERIC_WRITE,
+        _FILE_SHARE_READ,
+        None,
+        _OPEN_ALWAYS,
+        _FILE_ATTRIBUTE_NORMAL,
+        None,
+    )
+    if handle is None or handle == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    return msvcrt.open_osfhandle(handle, os.O_APPEND | os.O_BINARY | os.O_WRONLY)
+
+
+_GENERIC_WRITE = 0x40000000
+_FILE_SHARE_READ = 0x1
+_OPEN_ALWAYS = 4
+_FILE_ATTRIBUTE_NORMAL = 0x80
+
+
 class WindowLog:
-    """Append-only JSON lines, flushed and synced per line, so a crash leaves a readable prefix and no line is rewritten."""
+    """Append-only JSON lines, flushed and synced per line, so a crash leaves a readable prefix and no line is rewritten.
+
+    On Windows the file is held open with a deny-write share mode from the first line until ``close()``, so no other process
+    can open it for writing while the session runs."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._fd: int | None = None
 
     def write(self, value: dict[str, Any]) -> None:
-        line = json.dumps(value, sort_keys=True, allow_nan=False)
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(line + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        line = (json.dumps(value, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
+        if self._fd is None:
+            self._fd = (
+                _open_append_deny_write(self.path)
+                if os.name == "nt"
+                else os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+            )
+        os.write(self._fd, line)
+        os.fsync(self._fd)
+
+    def close(self) -> None:
+        fd, self._fd = self._fd, None
+        if fd is not None:
+            os.close(fd)
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except OSError:
+            pass
 
 
 # -- admission ----------------------------------------------------------------------------------------------------------
@@ -102,6 +168,8 @@ class CaptureAdmission:
     monotonic: Callable[[], float] = time.monotonic
     _cache: tuple[float, list[str]] | None = field(default=None, init=False, repr=False)
     manifest: dict[str, Any] | None = field(default=None, init=False, repr=False)
+    #: The timeout of the request about to be launched, set by the monitor so admission can project capacity and the deadline.
+    pending_timeout: float | None = field(default=None, init=False, repr=False)
 
     def static_problems(self) -> list[str]:
         """Directory, manifest, tool version, provider configuration, run identity and the canary proof."""
@@ -168,8 +236,10 @@ class CaptureAdmission:
                 problems.append(f"{spec.kind}: {exc}")
                 continue
             problems += control.verify_session(info, spec, etl, max_mb)
-            if info.get("buffers_lost") not in (0, None):
-                problems.append(f"{spec.kind}: the session has already lost buffers")
+            if info.get("buffers_lost") != 0:  # an unreadable counter is not "no loss"
+                problems.append(
+                    f"{spec.kind}: the session reports buffers lost = {info.get('buffers_lost')!r}, not 0"
+                )
             try:
                 size = etl.stat().st_size
             except OSError:
@@ -180,8 +250,50 @@ class CaptureAdmission:
                 )
         return problems
 
+    def projection_problems(self, timeout_seconds: float | None) -> list[str]:
+        """Whether a request that may run for ``timeout_seconds`` can finish, and the capture be stopped, before the deadline
+        and before any session file passes its size warning fraction.
+
+        Uncached: it reads the live file sizes. Each file's projected final size is its size now, plus the larger of its own
+        measured average rate and the measured floor rate for that session, over the request timeout and the stop margin,
+        plus what ``logman stop`` still flushes. A request that cannot be shown to fit is refused, not hoped about."""
+
+        try:
+            directory = control.validate_existing_directory(self.capture_dir, self.reports_root)
+        except control.CaptureRefused:
+            return []  # reported by static_problems
+        manifest = control._read_json(directory / "capture.json")
+        if manifest is None:
+            return []
+        now = self.now()
+        horizon = (timeout_seconds or 0.0) + STOP_MARGIN_SECONDS
+        problems: list[str] = []
+        deadline = control._parse_utc(manifest.get("deadline_utc"))
+        if timeout_seconds is not None and deadline is not None:
+            if now + timedelta(seconds=horizon) > deadline:
+                problems.append(
+                    f"a request of up to {timeout_seconds:.0f} s plus the stop margin would outlive the capture deadline"
+                )
+        created = control._parse_utc(manifest.get("created_utc"))
+        elapsed = max(1.0, (now - created).total_seconds()) if created else 1.0
+        max_mb = int(manifest.get("max_mb_per_session", control.DEFAULT_MAX_MB))
+        limit = max_mb * 1024 * 1024 * SIZE_WARN_FRACTION
+        for spec in control.SESSIONS:
+            try:
+                size = (directory / f"{spec.kind}.etl").stat().st_size
+            except OSError:
+                size = 0
+            rate = max(size / elapsed, RATE_FLOOR_BYTES_PER_SECOND[spec.kind])
+            projected = size + rate * horizon + STOP_FLUSH_BYTES
+            if projected > limit:
+                problems.append(
+                    f"{spec.kind}: projected size {projected / 1048576:.0f} MB at the end of this request and the stop "
+                    f"exceeds {SIZE_WARN_FRACTION:.0%} of the {max_mb} MB cap"
+                )
+        return problems
+
     def problems(self) -> list[str]:
-        return self.static_problems() + self.live_problems()
+        return self.static_problems() + self.live_problems() + self.projection_problems(None)
 
     def _proof_problems(self, manifest: dict[str, Any]) -> list[str]:
         if self.proof_path is None:
@@ -197,6 +309,8 @@ class CaptureAdmission:
             problems.append(f"the canary proof verdict is {proof.get('verdict')!r}, not PASS")
         if proof.get("analyzer_version") != ANALYZER_VERSION:
             problems.append("the canary proof was produced by a different analyzer version")
+        if proof.get("analyzer_sha256") != analyzer_sha256():
+            problems.append("the canary proof was produced by a different capture_analysis.py")
         if proof.get("provider_config_sha256") != control.provider_config_sha256():
             problems.append("the canary proof used a different provider configuration")
         if proof.get("tool_sha256") != control.tool_sha256():
@@ -207,6 +321,14 @@ class CaptureAdmission:
             problems.append(
                 "the canary proof is this capture's own; a prior canary capture is required"
             )
+        # Re-analysing a capture must not launder it: any other analysis of the proof's capture that failed (or cannot be
+        # read) voids the proof, whichever file the operator hands over. An earlier INCONCLUSIVE alone does not.
+        for sibling in sorted(self.proof_path.parent.glob("analysis*.json")):
+            other = control._read_json(sibling)
+            if other is None or other.get("verdict") == "FAIL":
+                problems.append(
+                    f"{sibling.name} in the proof's capture is {'unreadable' if other is None else 'FAIL'}"
+                )
         try:
             finished = datetime.fromisoformat(str(proof.get("finished_utc")))
             finished = finished if finished.tzinfo else finished.replace(tzinfo=UTC)
@@ -228,7 +350,9 @@ class CaptureWindowProvider:
         self._admission = admission
 
     def begin(self) -> None:
-        problems = self._admission.live_problems()
+        problems = self._admission.live_problems() + self._admission.projection_problems(
+            self._admission.pending_timeout
+        )
         if problems:
             raise CaptureNotActive("; ".join(problems))
 
@@ -315,7 +439,14 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
         # prove was captured. When the capture is not active nothing is written and the request is refused below.
         if not self._begun and not self.admission.live_problems():
             self._ensure_begun()
-        return super()._run(inner, command, kwargs, canary)
+        timeout = kwargs.get("timeout_seconds")
+        self.admission.pending_timeout = (
+            float(timeout) if isinstance(timeout, int | float) else None
+        )
+        try:
+            return super()._run(inner, command, kwargs, canary)
+        finally:
+            self.admission.pending_timeout = None
 
     def _ensure_begun(self) -> None:
         if self._begun:
@@ -357,7 +488,7 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
             "n": self._beacons,
             "tag": tag,
             "pid": os.getpid(),
-            "path": str(path),
+            "file": f"beacons/{path.name}",  # relative: the analyzer rebuilds the trace path under the validated directory
             "before_ns": before,
             "after_ns": after,
         }
@@ -502,6 +633,7 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
                 self.log.write(
                     {"type": "end_failed", "error": f"{type(exc).__name__}: {exc}"[:300]}
                 )
+        self.log.close()
         self.close()
         return []
 

@@ -56,14 +56,14 @@ def run_analysis(
 ):
     logman = FakeLogman()
     if stop_minutes:
-        target, report, _env = started_capture(tmp_path, logman, minutes=minutes)
+        target, report, _env = started_capture(tmp_path, logman, minutes=minutes, max_mb=64)
         stop_env = make_env(
             tmp_path, logman, now=lambda: FIXED_NOW + timedelta(minutes=stop_minutes)
         )
         control.stop_capture(report["capture_id"], evidence_dir=target, env=stop_env)
         env = stop_env
     else:
-        target, report, env = stopped_capture(tmp_path, logman, minutes=minutes)
+        target, report, env = stopped_capture(tmp_path, logman, minutes=minutes, max_mb=64)
     scenario = build(tmp_path, target)
     for key, value in scenario_overrides.items():
         setattr(scenario, key, value)

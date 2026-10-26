@@ -15,9 +15,15 @@ create-new JSON state files inside the directory it just created. The harness, e
 all analysis run in a standard-user token (``capture_session.py``, ``capture_analysis.py``).
 
 This file imports **only the standard library**, so the file an operator reviews and pins by SHA-256 is everything that runs
-with the administrator token. Run it as ``python -I -B tools/qualification/ai111/capture_control.py ...``: isolated mode keeps
-the user-writable working directory, ``PYTHONPATH`` and user site-packages out of the elevated interpreter, and ``-B`` keeps it
-from reading or writing ``.pyc`` files in the checkout.
+with the administrator token. Run it as ``python -I -B <protected copy>/capture_control.py --repo-root <checkout> ...``:
+isolated mode keeps the working directory, ``PYTHONPATH`` and user site-packages out of the elevated interpreter, and ``-B``
+keeps it from reading or writing ``.pyc`` files.
+
+An administrator token that executes code a standard-user process can edit is not a privilege boundary, so before any elevated
+command does anything it proves its own runtime is protected (``runtime_trust_problems``): the script, the interpreter, the
+standard library and every other location Python imports from are owned by an administrator-class principal and grant no
+write/replace right to anyone else, and this is not a virtual environment. A user-writable Python install or checkout therefore
+refuses; the runbook describes the protected copy and the system-wide interpreter that satisfy it.
 
 Two OS facts shape the design. ``logman -ets`` cannot take a run-for time, so a session has no OS-enforced lifetime: it is
 bounded by a *size cap* (sequential file mode stops writing at ``-max``; circular overwrite is never used), by a recorded
@@ -57,7 +63,10 @@ _LIST_ROW = re.compile(
     + re.escape(CAPTURE_PREFIX)
     + r"\d{8}T\d{6}Z-[0-9a-f]{8}-(?:network|file|dns))\s+Trace\s+(\w+)"
 )
-REPORTS_ROOT = Path(__file__).resolve().parents[3] / "reports"
+_HERE = Path(__file__).resolve()
+#: A protected copy lives outside any checkout, where there is no ``parents[3]``; it must be told ``--repo-root``.
+REPORTS_ROOT = _HERE.parents[3] / "reports" if len(_HERE.parents) > 3 else _HERE.parent / "reports"
+_TOOL_RELATIVE = Path("tools") / "qualification" / "ai111" / "capture_control.py"
 DEFAULT_MAX_MB = 256
 MAX_MB_LIMIT = 1024
 DEFAULT_MINUTES = 30
@@ -169,11 +178,28 @@ def session_names(capture_id: str) -> dict[str, str]:
     return {spec.kind: f"{CAPTURE_PREFIX}{capture_id}-{spec.kind}" for spec in SESSIONS}
 
 
+def system_directory() -> Path:
+    """The Windows system directory as the OS reports it (``GetSystemDirectoryW``), never from an environment variable."""
+
+    if os.name != "nt":
+        return Path(os.environ.get("SystemRoot") or "C:\\Windows") / "System32"
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetSystemDirectoryW.argtypes = [wintypes.LPWSTR, wintypes.UINT]
+        kernel32.GetSystemDirectoryW.restype = wintypes.UINT
+        buffer = ctypes.create_unicode_buffer(260)
+        length = kernel32.GetSystemDirectoryW(buffer, 260)
+    except Exception as exc:  # noqa: BLE001 - an unresolved system directory is a refusal, never a guess
+        raise CaptureRefused("the Windows system directory could not be resolved") from exc
+    if length == 0 or length >= 260:
+        raise CaptureRefused("the Windows system directory could not be resolved")
+    return Path(buffer.value)
+
+
 def system_tool(name: str) -> str:
     """Absolute path of an OS tool, so an elevated process never resolves ``logman`` through PATH or the working directory."""
 
-    root = os.environ.get("SystemRoot") or "C:\\Windows"
-    return str(Path(root) / "System32" / f"{name}.exe")
+    return str(system_directory() / f"{name}.exe")
 
 
 Run = Callable[[Sequence[str]], tuple[int, str]]
@@ -196,7 +222,7 @@ def run_tool(command: Sequence[str]) -> tuple[int, str]:
             capture_output=True,
             timeout=_TOOL_TIMEOUT_SECONDS,
             stdin=subprocess.DEVNULL,
-            cwd=os.environ.get("SystemRoot") or "C:\\Windows",
+            cwd=str(system_directory()),
             creationflags=_CREATE_NO_WINDOW if os.name == "nt" else 0,
             check=False,
         )
@@ -250,9 +276,15 @@ def process_elevated() -> bool | None:
 def broad_principal_names() -> frozenset[str]:
     """The English names plus this machine's own names for the broad well-known SIDs (so a localized Windows matches too)."""
 
-    names = set(BROAD_PRINCIPALS)
+    return frozenset(BROAD_PRINCIPALS | _account_names(_BROAD_SIDS))
+
+
+def _account_names(sids: Sequence[str]) -> set[str]:
+    """This machine's own ``DOMAIN\\name`` and bare ``name`` (lower case) for each well-known SID; empty off Windows."""
+
+    names: set[str] = set()
     if os.name != "nt":
-        return frozenset(names)
+        return names
     try:
         advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -270,7 +302,7 @@ def broad_principal_names() -> frozenset[str]:
             ctypes.POINTER(wintypes.DWORD),
         ]
         kernel32.LocalFree.argtypes = [ctypes.c_void_p]
-        for text in _BROAD_SIDS:
+        for text in sids:
             sid = ctypes.c_void_p()
             if not advapi32.ConvertStringSidToSidW(text, ctypes.byref(sid)):
                 continue
@@ -296,9 +328,9 @@ def broad_principal_names() -> frozenset[str]:
                     names.add(name.value.lower())
             finally:
                 kernel32.LocalFree(sid)
-    except Exception:  # noqa: BLE001 - the English names remain
+    except Exception:  # noqa: BLE001 - the caller's English names remain
         pass
-    return frozenset(names)
+    return names
 
 
 class TraceTools:
@@ -543,6 +575,258 @@ def acl_problems(
     return sorted(set(problems))
 
 
+# -- the elevated runtime must itself be protected ----------------------------------------------------------------------------
+
+#: Administrators, SYSTEM, TrustedInstaller: the only principals that may own what the elevated interpreter loads.
+_OWNER_SIDS = frozenset(
+    {
+        "S-1-5-18",
+        "S-1-5-32-544",
+        "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464",
+    }
+)
+#: Owners plus CREATOR OWNER (an inherit-only placeholder in protected trees): principals whose grants are not a finding.
+_TRUSTED_SIDS = (*sorted(_OWNER_SIDS), "S-1-3-0")
+_TRUSTED_FALLBACK = frozenset(
+    {
+        "nt authority\\system",
+        "system",
+        "builtin\\administrators",
+        "administrators",
+        "nt service\\trustedinstaller",
+        "trustedinstaller",
+        "creator owner",
+    }
+)
+#: ``icacls`` right tokens that let a principal replace, add to or re-permission what the elevated interpreter loads.
+_REPLACE_RIGHTS = frozenset(
+    {"F", "M", "W", "D", "DE", "WD", "AD", "DC", "WDAC", "WO", "GA", "GW", "MA"}
+)
+#: On a directory above the loaded code, creating a child is harmless; deleting or renaming one, or re-permissioning, is not.
+_ANCESTOR_RIGHTS = frozenset({"F", "M", "D", "DE", "DC", "WDAC", "WO", "GA", "MA"})
+
+
+def trusted_principal_names() -> frozenset[str]:
+    return frozenset(
+        _TRUSTED_FALLBACK | _account_names(_TRUSTED_SIDS) | {s.lower() for s in _TRUSTED_SIDS}
+    )
+
+
+def write_grant_problems(
+    icacls_text: str, path: Path, trusted: frozenset[str], rights: frozenset[str]
+) -> list[str]:
+    """Principals outside ``trusted`` that an ``icacls`` listing of ``path`` lets modify it (deny and inherit-only entries are
+    skipped, so a denied principal is still reported: the safe direction). A listing with no entry at all is a problem."""
+
+    problems: list[str] = []
+    entries = 0
+    prefix = str(path).lower()
+    for line in icacls_text.splitlines():
+        entry = line.strip()
+        if ":(" not in entry:
+            continue
+        before, _, rest = entry.partition(":(")
+        if before.lower().startswith(prefix):
+            before = before[len(prefix) :]
+        principal = before.strip().lower()
+        flags = {
+            token.strip()
+            for group in re.findall(r"\(([^)]*)\)", f"({rest}")
+            for token in group.upper().split(",")
+        }
+        entries += 1
+        if "DENY" in flags or "IO" in flags or principal in trusted:
+            continue
+        hit = sorted(flags & rights)
+        if hit:
+            problems.append(f"{principal or '?'} can modify {path} ({','.join(hit)})")
+    if not entries:
+        problems.append(f"the ACL of {path} could not be read")
+    return problems
+
+
+def file_owner_sid(path: Path) -> str | None:
+    """The owner SID of a file or directory as a string, or ``None`` when it cannot be read (never a pass)."""
+
+    if os.name != "nt":
+        return None
+    try:
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        void_p = ctypes.c_void_p
+        advapi32.GetNamedSecurityInfoW.argtypes = [
+            wintypes.LPCWSTR,
+            ctypes.c_int,
+            wintypes.DWORD,
+            ctypes.POINTER(void_p),
+            ctypes.POINTER(void_p),
+            ctypes.POINTER(void_p),
+            ctypes.POINTER(void_p),
+            ctypes.POINTER(void_p),
+        ]
+        advapi32.GetNamedSecurityInfoW.restype = wintypes.DWORD
+        advapi32.ConvertSidToStringSidW.argtypes = [void_p, ctypes.POINTER(wintypes.LPWSTR)]
+        kernel32.LocalFree.argtypes = [void_p]
+        owner, descriptor = void_p(), void_p()
+        if advapi32.GetNamedSecurityInfoW(
+            str(path), 1, 1, ctypes.byref(owner), None, None, None, ctypes.byref(descriptor)
+        ):
+            return None
+        try:
+            text = wintypes.LPWSTR()
+            if not advapi32.ConvertSidToStringSidW(owner, ctypes.byref(text)):
+                return None
+            try:
+                return str(text.value)
+            finally:
+                kernel32.LocalFree(ctypes.cast(text, void_p))
+        finally:
+            kernel32.LocalFree(descriptor)
+    except Exception:  # noqa: BLE001 - unreadable is "unknown", which every caller treats as a refusal
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeFacts:
+    """What this interpreter is running from; injectable so the trust rules are tested without touching the host."""
+
+    script: Path
+    executable: Path
+    stdlib_file: Path
+    base_prefix: Path
+    sys_path_dirs: tuple[Path, ...]
+    sys_path_files: tuple[Path, ...]
+    module_files: tuple[Path, ...]
+    isolated: bool
+    bytecode_disabled: bool
+    in_venv: bool
+
+    @classmethod
+    def current(cls) -> RuntimeFacts:
+        dirs: list[Path] = []
+        files: list[Path] = []
+        for entry in sys.path:
+            if not entry:
+                continue
+            path = Path(entry).resolve(strict=False)
+            if path.is_dir():
+                dirs.append(path)
+            elif path.is_file():
+                files.append(path)
+        modules = [
+            Path(name).resolve(strict=False)
+            for module in list(sys.modules.values())
+            if isinstance(name := getattr(module, "__file__", None), str) and name
+        ]
+        return cls(
+            script=Path(__file__).resolve(),
+            executable=Path(sys.executable).resolve(),
+            stdlib_file=Path(os.__file__).resolve(),
+            base_prefix=Path(sys.base_prefix).resolve(),
+            sys_path_dirs=tuple(dirs),
+            sys_path_files=tuple(files),
+            module_files=tuple(modules),
+            isolated=bool(sys.flags.isolated),
+            bytecode_disabled=bool(sys.flags.dont_write_bytecode),
+            in_venv=Path(sys.prefix).resolve() != Path(sys.base_prefix).resolve(),
+        )
+
+
+def runtime_trust_problems(
+    facts: RuntimeFacts | None = None,
+    *,
+    acl_reader: Callable[[Path], str] | None = None,
+    owner_reader: Callable[[Path], str | None] = file_owner_sid,
+    trusted: frozenset[str] | None = None,
+) -> list[str]:
+    """Why this interpreter-and-script pair is not safe to run with an administrator token (empty list: it is).
+
+    Every file or directory the interpreter takes code from must be owned by an administrator-class principal and grant
+    no write/replace right to anyone else; each ancestor must not let a non-administrator delete or re-permission it. The
+    scan covers the script, the interpreter, the standard library file and directory, the base prefix, every ``sys.path``
+    entry and the directory of every module already loaded, and refuses a module loaded from anywhere else. It does not walk
+    every file in the install; a protected install (a system-wide ``Program Files`` Python) is what makes that sound."""
+
+    facts = facts or RuntimeFacts.current()
+    reader = acl_reader or (lambda p: run_tool([system_tool("icacls"), str(p)])[1])
+    names = trusted if trusted is not None else trusted_principal_names()
+    problems: list[str] = []
+    if not facts.isolated:
+        problems.append("the interpreter was not started with -I (isolated mode)")
+    if not facts.bytecode_disabled:
+        problems.append("the interpreter was not started with -B (no bytecode files)")
+    if facts.in_venv:
+        problems.append(
+            "this is a virtual environment; use a system-wide Python outside every user-writable location"
+        )
+    roots = (facts.script.parent, facts.base_prefix)
+    for module in facts.module_files:
+        if not any(root == module or root in module.parents for root in roots):
+            problems.append(f"a module was loaded from outside the protected locations: {module}")
+    strong_files = {facts.script, facts.executable, facts.stdlib_file, *facts.sys_path_files}
+    strong_dirs = {
+        facts.script.parent,
+        facts.executable.parent,
+        facts.stdlib_file.parent,
+        facts.base_prefix,
+        *facts.sys_path_dirs,
+        *(m.parent for m in facts.module_files),
+    }
+    strong = strong_files | strong_dirs
+    ancestors = {a for p in strong for a in p.parents} - strong
+    for path in sorted(strong, key=str):
+        problems += _path_problems(path, reader, owner_reader, names, _REPLACE_RIGHTS)
+    for path in sorted(ancestors, key=str):
+        problems += _path_problems(path, reader, owner_reader, names, _ANCESTOR_RIGHTS)
+    return sorted(set(problems))
+
+
+def _path_problems(
+    path: Path,
+    reader: Callable[[Path], str],
+    owner_reader: Callable[[Path], str | None],
+    trusted: frozenset[str],
+    rights: frozenset[str],
+) -> list[str]:
+    try:
+        found = write_grant_problems(reader(path), path, trusted, rights)
+    except (CaptureRefused, OSError) as exc:
+        found = [f"the ACL of {path} could not be read: {exc}"]
+    owner = owner_reader(path)
+    if owner is None:
+        found.append(f"the owner of {path} could not be read")
+    elif owner not in _OWNER_SIDS:
+        found.append(f"{path} is owned by {owner}, not an administrator-class principal")
+    return found
+
+
+def resolve_reports_root(repo_root: Path | None) -> Path:
+    """The ``reports`` directory this command may write under. A protected copy outside any checkout must be told which
+    checkout, and the checkout's ``capture_control.py`` must be byte-identical to the running one, so the SHA-256 the analysis
+    and admission compare is the SHA-256 of what actually ran."""
+
+    if repo_root is None:
+        if len(_HERE.parents) > 3 and (_HERE.parents[3] / _TOOL_RELATIVE).is_file():
+            return _HERE.parents[3] / "reports"
+        raise CaptureRefused(
+            "this capture_control.py is not inside a StableNew checkout; pass --repo-root <checkout>"
+        )
+    if not repo_root.is_absolute():
+        raise CaptureRefused("--repo-root must be an absolute path")
+    root = repo_root.resolve()
+    pinned = root / _TOOL_RELATIVE
+    if not pinned.is_file():
+        raise CaptureRefused(
+            f"{root} has no {_TOOL_RELATIVE.as_posix()}; it is not a StableNew checkout"
+        )
+    if hashlib.sha256(pinned.read_bytes()).hexdigest() != tool_sha256():
+        raise CaptureRefused(
+            "the checkout's capture_control.py differs from the copy being run; copy it again and compare SHA-256"
+        )
+    _require_plain_chain(root / "reports", root)
+    return root / "reports"
+
+
 def write_new_json(path: Path, value: Any) -> None:
     with path.open(
         "x", encoding="utf-8"
@@ -571,6 +855,7 @@ class Environment:
     free_bytes: Callable[[Path], int] = lambda p: shutil.disk_usage(p).free
     acl_reader: Callable[[Path], str] = lambda p: run_tool([system_tool("icacls"), str(p)])[1]
     reports_root: Path = REPORTS_ROOT
+    runtime_check: Callable[[], list[str]] = runtime_trust_problems
 
 
 def _require_elevated(env: Environment) -> None:
@@ -578,6 +863,15 @@ def _require_elevated(env: Environment) -> None:
         raise CaptureRefused(
             "trace-control commands need an Administrator terminal; nothing was started. The qualification harness "
             "itself must never run elevated."
+        )
+    untrusted = env.runtime_check()
+    if untrusted:
+        shown = "; ".join(untrusted[:6]) + (
+            f"; and {len(untrusted) - 6} more" if len(untrusted) > 6 else ""
+        )
+        raise CaptureRefused(
+            "the elevated Python runtime is not protected, so nothing was started or stopped: "
+            f"{shown}. Run the protected copy on a system-wide interpreter (see the runbook)."
         )
 
 
@@ -638,6 +932,12 @@ def start_capture(
         "provider_config": provider_config(),
         "tool_sha256": tool_sha256(),
         "elevated_start": True,
+        "runtime": {
+            "script": str(Path(__file__).resolve()),
+            "executable": str(Path(sys.executable).resolve()),
+            "python": sys.version.split()[0],
+            "protection_verified": True,
+        },
         "free_bytes_at_start": free,
         "free_bytes_required": need,
     }
@@ -889,6 +1189,11 @@ def capture_status(evidence_dir: Path, *, env: Environment | None = None) -> dic
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        help="the StableNew checkout whose reports/ directory holds the evidence (required for a protected copy)",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     start = sub.add_parser("start", help="start the capture (Administrator terminal)")
     start.add_argument("--evidence-dir", type=Path, required=True)
@@ -904,16 +1209,21 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--evidence-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        env = Environment(TraceTools(), reports_root=resolve_reports_root(args.repo_root))
         if args.command == "start":
             report = start_capture(
-                args.evidence_dir, run_id=args.run_id, max_mb=args.max_mb, minutes=args.minutes
+                args.evidence_dir,
+                run_id=args.run_id,
+                max_mb=args.max_mb,
+                minutes=args.minutes,
+                env=env,
             )
         elif args.command == "stop":
-            report = stop_capture(args.capture_id, evidence_dir=args.evidence_dir)
+            report = stop_capture(args.capture_id, evidence_dir=args.evidence_dir, env=env)
         elif args.command == "cleanup":
-            report = stop_capture(args.capture_id)
+            report = stop_capture(args.capture_id, env=env)
         else:
-            report = capture_status(args.evidence_dir)
+            report = capture_status(args.evidence_dir, env=env)
     except CaptureRefused as exc:
         print(json.dumps({"state": "REFUSED", "refused": str(exc)}, indent=2))
         return 2

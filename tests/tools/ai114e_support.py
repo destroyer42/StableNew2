@@ -37,7 +37,7 @@ class FakeLogman:
         self.stuck: set[str] = set()  # names whose stop is refused
         self.list_fails = False
         self.query_override: dict[str, str] = {}
-        self.buffers_lost = 0
+        self.buffers_lost: int | None = 0
 
     # the injected ``Run`` -------------------------------------------------------------------------------------------------
     def run(self, command) -> tuple[int, str]:
@@ -106,8 +106,9 @@ class FakeLogman:
         return 0, query_text(name, config, buffers_lost=self.buffers_lost)
 
 
-def query_text(name: str, config: dict[str, Any], *, buffers_lost: int = 0) -> str:
+def query_text(name: str, config: dict[str, Any], *, buffers_lost: int | None = 0) -> str:
     folder = str(PureWindowsPath(config["etl"]).parent)
+    lost_line = "" if buffers_lost is None else f"Buffers Lost:         {buffers_lost}\n"
     return (
         f"\nName:                 {name}\n"
         f"Status:               {config['status']}\n"
@@ -122,7 +123,7 @@ def query_text(name: str, config: dict[str, Any], *, buffers_lost: int = 0) -> s
         f"Circular:             {config['circular']}\n"
         "Overwrite:            Off\n"
         "Buffer Size:          1024\n"
-        f"Buffers Lost:         {buffers_lost}\n"
+        f"{lost_line}"
         "Buffers Written:      1\n"
         "Buffer Flush Timer:   0\n"
         f"Clock Type:           {config['clock']}\n"
@@ -157,6 +158,7 @@ def make_env(
         free_bytes=lambda path: free,
         acl_reader=lambda path: acl.replace("{dir}", str(path)),
         reports_root=root,
+        runtime_check=lambda: [],
     )
 
 
@@ -167,7 +169,7 @@ def started_capture(
     run_id: str = "run-1",
     name: str = "capture",
     minutes: int = 30,
-    max_mb: int = 64,
+    max_mb: int = 1024,
 ) -> tuple[Path, dict[str, Any], control.Environment]:
     env = make_env(tmp_path, logman)
     target = env.reports_root / "ai114" / run_id / name
@@ -203,13 +205,16 @@ def event_xml(provider: str, event_id: int, pid: int, epoch_ns: int | None, **da
     )
 
 
-def header_xml(session_name: str, etl: str, epoch_ns: int) -> str:
+def header_xml(
+    session_name: str, etl: str, epoch_ns: int, extra: dict[str, str] | None = None
+) -> str:
+    more = "".join(f'<Data Name="{k}">{v}</Data>' for k, v in (extra or {}).items())
     return (
         f'<Event xmlns="{NS}"><System><Provider Guid="{{9e814aad-3204-11d2-9a82-006008a86939}}"/>'
         f'<EventID>0</EventID><TimeCreated SystemTime="{iso(epoch_ns)}"/>'
         '<Execution ProcessID="4" ThreadID="1"/></System><EventData>'
         f'<Data Name="SessionNameString">{session_name}</Data><Data Name="LogFileNameString">{etl}</Data>'
-        "</EventData></Event>"
+        f"{more}</EventData></Event>"
     )
 
 
@@ -258,6 +263,7 @@ class Scenario:
     ended: bool = True
     lost: int = 0
     header_session: dict[str, str] = field(default_factory=dict)
+    header_extra: dict[str, dict[str, str]] = field(default_factory=dict)
     skip_beacon_in_trace: set[int] = field(default_factory=set)
     beacon_trace_shift: dict[int, int] = field(default_factory=dict)
     convert_error: dict[str, str] = field(default_factory=dict)
@@ -280,7 +286,7 @@ def add_beacon(scenario: Scenario, tag: str, directory: Path) -> dict[str, Any]:
         "n": n,
         "tag": tag,
         "pid": scenario.harness_pid,
-        "path": str(path),
+        "file": f"beacons/{path.name}",
         "before_ns": before,
         "after_ns": after,
     }
@@ -546,7 +552,9 @@ def write_capture(
 
             raise EtwError(scenario.convert_error[kind])
         header_names = scenario.header_session
-        head = header_xml(header_names.get(kind, names[kind]), str(etl), EPOCH0)
+        head = header_xml(
+            header_names.get(kind, names[kind]), str(etl), EPOCH0, scenario.header_extra.get(kind)
+        )
         body = [head, *scenario.events.get(kind, [])]
         if kind == "network" and not any(NET in e for e in body):
             body.append(event_xml(NET, 99, 4, EPOCH0 + 1))  # the provider has spoken at least once

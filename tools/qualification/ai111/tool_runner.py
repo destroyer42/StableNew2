@@ -16,9 +16,11 @@ _TOOL_TIMEOUT_SECONDS = 60.0
 _TOOL_OUTPUT_BYTES = 256 * 1024
 
 
-def bounded_tool(command: Sequence[str]) -> tuple[int, str]:
+def bounded_tool(
+    command: Sequence[str], *, timeout_seconds: float = _TOOL_TIMEOUT_SECONDS
+) -> tuple[int, str]:
     outcome: ProcessOutcome = run_bounded(
-        command, timeout_seconds=_TOOL_TIMEOUT_SECONDS, max_stdout_bytes=_TOOL_OUTPUT_BYTES
+        command, timeout_seconds=timeout_seconds, max_stdout_bytes=_TOOL_OUTPUT_BYTES
     )
     if outcome.launch_error:
         raise CaptureRefused(f"{Path(command[0]).name}: {outcome.launch_error}")

@@ -35,6 +35,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import sys
 from collections import defaultdict
@@ -69,12 +70,21 @@ from tools.qualification.ai111.ownership import (
 )
 from tools.qualification.ai111.tool_runner import bounded_tool
 
-ANALYZER_VERSION = "2"  # 2: an event is owned on the measured clock interval alone; slack only guards the "outside" test
+# 2: an event is owned on the measured clock interval alone; slack only guards the "outside" test
+# 3: beacon offsets must intersect (within one slack), header loss counters, directory inventory, exact-time unresolved events
+ANALYZER_VERSION = "3"
 SCHEMA = 1
-#: Counter/trace offsets from different beacons may differ by at most this much before the clocks are declared inconsistent.
-DRIFT_TOLERANCE_NS = 50_000_000
 #: Trace timestamp granularity and scheduling skew, added to the offset interval on each side of every event.
 SLACK_NS = 5_000_000
+#: Beacon offset intervals must overlap; they may miss each other by at most this much (timestamp granularity). A larger gap
+#: is drift or a clock-domain mismatch, which no single offset interval can represent honestly.
+DRIFT_TOLERANCE_NS = SLACK_NS
+_BEACON_FILE = re.compile(r"^beacon-\d{3}-[0-9a-f]{8}\.tmp$")
+#: Entries the capture directory may hold; anything else was put there by something that is not this tool chain.
+_EXPECTED_ENTRY = re.compile(
+    r"^(capture\.json|windows\.jsonl|verification\.json|beacons|state-\d{2}-[a-z]+\.json"
+    r"|analysis(-\d+)?\.json|(network|file|dns)\.(etl|xml|summary\.txt))$"
+)
 PROVIDER_GUIDS = {
     "network": "7dd42a49-5329-4832-8dfd-43d979153a88",
     "file": "edd08927-9cc4-4e65-b970-c2560fb5c289",
@@ -161,12 +171,23 @@ class ClockMap:
         return trace_ns + a - slack_ns, trace_ns + b + slack_ns
 
 
+def beacon_path(directory: Path, beacon: dict[str, Any]) -> str:
+    """The trace path of a logged beacon, rebuilt under the validated capture directory.
+
+    The log carries a relative ``file`` (older logs an absolute ``path``); only its final name is used, and only if it has the
+    beacon shape, so a log can never point the clock calibration at some other file."""
+
+    name = Path(str(beacon.get("file") or beacon.get("path") or "")).name
+    return str(directory / "beacons" / name) if _BEACON_FILE.fullmatch(name) else ""
+
+
 def calibrate(
     beacons: list[dict[str, Any]], trace_ts: dict[str, list[int]]
 ) -> tuple[ClockMap | None, list[str]]:
     """The offset interval from every beacon whose file operations were found in the trace (path -> trace timestamps).
 
-    Each trace event of a beacon's file happened between the counter readings taken around it, so each one bounds the offset."""
+    Each trace event of a beacon's file happened between the counter readings taken around it, so each one bounds the offset.
+    Each beacon dict carries the path to look up in ``path``."""
 
     problems: list[str] = []
     lows: list[int] = []
@@ -359,6 +380,15 @@ def _read_converted(
     except (EtwError, OSError) as exc:
         out.problems.append(f"{kind}: {exc}")
         return out
+    for counter in ("EventsLost", "BuffersLost"):
+        if counter in header:
+            try:
+                lost = int(str(header[counter]).strip(), 0)
+            except ValueError:
+                out.problems.append(f"{kind}: the trace header's {counter} is unreadable")
+                continue
+            if lost:
+                out.problems.append(f"{kind}: the trace header reports {counter} = {lost}")
     expected_log = os.path.normcase(os.path.normpath(str(etl)))
     if header.get("SessionNameString") != session_name:
         out.problems.append(
@@ -436,6 +466,51 @@ def _request_row(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def analyzer_sha256() -> str:
+    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+def directory_problems(directory: Path) -> list[str]:
+    """Anything in the capture directory that this tool chain does not create (checked before the analysis writes its own)."""
+
+    problems: list[str] = []
+    try:
+        entries = sorted(directory.iterdir(), key=lambda p: p.name)
+    except OSError as exc:
+        return [f"the capture directory could not be listed: {exc}"]
+    strange = [p.name for p in entries if not _EXPECTED_ENTRY.fullmatch(p.name)]
+    linked = [p.name for p in entries if control._is_reparse(p)]
+    if strange:
+        problems.append(
+            f"the capture directory holds {len(strange)} entries this tool chain does not create: {strange[:5]}"
+        )
+    if linked:
+        problems.append(f"the capture directory holds links or reparse points: {linked[:5]}")
+    beacons = directory / "beacons"
+    if beacons.is_dir() and not control._is_reparse(beacons):
+        odd = [p.name for p in beacons.iterdir() if not _BEACON_FILE.fullmatch(p.name)]
+        if odd:
+            problems.append(f"the beacons directory holds unexpected entries: {odd[:5]}")
+    return problems
+
+
+def earlier_analyses(directory: Path) -> list[dict[str, Any]]:
+    """Every analysis already written for this capture (file, verdict, analyzer), so a re-run cannot hide an earlier result."""
+
+    rows: list[dict[str, Any]] = []
+    for path in sorted(directory.glob("analysis*.json")):
+        value = control._read_json(path)
+        rows.append(
+            {
+                "file": path.name,
+                "verdict": (value or {}).get("verdict", "UNREADABLE"),
+                "analyzer_version": (value or {}).get("analyzer_version"),
+                "finished_utc": (value or {}).get("finished_utc"),
+            }
+        )
+    return rows
+
+
 def analyze(
     capture_dir: Path,
     *,
@@ -456,7 +531,7 @@ def analyze(
     result: dict[str, Any] = {
         "schema": SCHEMA,
         "analyzer_version": ANALYZER_VERSION,
-        "analyzer_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "analyzer_sha256": analyzer_sha256(),
         "host": platform.node(),
         "finished_utc": None,
         "verdict": "INCONCLUSIVE",
@@ -468,6 +543,8 @@ def analyze(
         problems.append("capture.json is missing or unreadable")
         return _finish(directory, result, write=False)
     capture_id = str(manifest.get("capture_id", ""))
+    problems += directory_problems(directory)
+    result["earlier_analyses"] = earlier_analyses(directory)
     result.update(
         {
             "capture_id": capture_id,
@@ -525,7 +602,9 @@ def analyze(
     needed = [r for r in requests if r.get("canary")]
     if not needed:
         problems.append("the session logged no canary request")
-    beacons = log.beacons
+    beacons = [{**b, "path": beacon_path(directory, b)} for b in log.beacons]
+    if any(not b["path"] for b in beacons):
+        problems.append("a logged beacon does not name a beacon file inside the capture directory")
     if len(beacons) < 2 or {b.get("tag") for b in beacons} < {"start", "end"}:
         problems.append("the start and end beacons are not both present")
 
@@ -583,6 +662,7 @@ def analyze(
             "offset_low_ns": clock.low,
             "offset_high_ns": clock.high,
             "uncertainty_ms": round(clock.spread_ns / 1e6, 3),
+            "intersection_gap_ms": round(max(0, clock.low - clock.high) / 1e6, 3),
             "beacons_used": clock.beacons_used,
             "slack_ms": SLACK_NS / 1e6,
         }

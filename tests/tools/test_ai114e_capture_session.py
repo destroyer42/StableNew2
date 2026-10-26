@@ -41,6 +41,7 @@ def make_proof(tmp_path: Path, **override) -> Path:
         "kind": "canary_capture",
         "verdict": "PASS",
         "analyzer_version": analysis.ANALYZER_VERSION,
+        "analyzer_sha256": analysis.analyzer_sha256(),
         "provider_config_sha256": control.provider_config_sha256(),
         "tool_sha256": control.tool_sha256(),
         "host": platform.node(),
@@ -225,7 +226,7 @@ def test_buffers_already_lost_refuse_admission(tmp_path: Path) -> None:
     logman = FakeLogman()
     target, _report, env = started_capture(tmp_path, logman)
     logman.buffers_lost = 4
-    assert any("lost buffers" in p for p in admission_for(target, env, tmp_path).live_problems())
+    assert any("buffers lost" in p for p in admission_for(target, env, tmp_path).live_problems())
 
 
 def test_a_trace_file_near_its_cap_refuses_admission(tmp_path: Path) -> None:

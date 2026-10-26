@@ -382,6 +382,7 @@ def test_a_failed_cleanup_after_a_failed_start_is_cleanup_required_with_instruct
         free_bytes=env.free_bytes,
         acl_reader=env.acl_reader,
         reports_root=env.reports_root,
+        runtime_check=env.runtime_check,
     )
     report = control.start_capture(env.reports_root / "ai114" / "r" / "c", run_id="r", env=env)
     assert report["state"] == "CLEANUP_REQUIRED"
@@ -411,6 +412,7 @@ def test_a_session_that_comes_up_misconfigured_is_stopped_and_the_capture_fails(
         free_bytes=env.free_bytes,
         acl_reader=env.acl_reader,
         reports_root=env.reports_root,
+        runtime_check=env.runtime_check,
     )
     report = control.start_capture(env.reports_root / "ai114" / "r" / "c", run_id="r", env=env)
     assert report["state"] == "FAILED"
@@ -450,6 +452,7 @@ def test_an_unreadable_session_list_after_failure_is_never_read_as_clean(tmp_pat
         free_bytes=env.free_bytes,
         acl_reader=env.acl_reader,
         reports_root=env.reports_root,
+        runtime_check=env.runtime_check,
     )
     report = control.start_capture(env.reports_root / "ai114" / "r" / "c", run_id="r", env=env)
     assert report["state"] == "CLEANUP_REQUIRED"
@@ -720,6 +723,7 @@ def test_a_pre_seeded_trace_file_is_refused_before_logman_is_asked_to_write_it(
         free_bytes=plant,
         acl_reader=base.acl_reader,
         reports_root=base.reports_root,
+        runtime_check=base.runtime_check,
     )
     report = control.start_capture(env.reports_root / "ai114" / "r" / "c", run_id="r", env=env)
     assert report["state"] == "FAILED" and any("already exists" in p for p in report["problems"])

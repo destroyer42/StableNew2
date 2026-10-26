@@ -42,11 +42,30 @@ class EtwError(RuntimeError):
 Run = Callable[[Sequence[str]], tuple[int, str]]
 
 
-def convert_trace(etl: Path, xml: Path, summary: Path, run: Run = bounded_tool) -> None:
+#: ``tracerpt`` seconds budgeted per MB of ETL on top of the base timeout, so a large capture is converted, not abandoned.
+CONVERT_SECONDS_PER_MB = 2.0
+CONVERT_BASE_SECONDS = 60.0
+
+
+def conversion_timeout(etl: Path) -> float:
+    try:
+        megabytes = etl.stat().st_size / (1024 * 1024)
+    except OSError:
+        megabytes = 0.0
+    return CONVERT_BASE_SECONDS + CONVERT_SECONDS_PER_MB * megabytes
+
+
+def convert_trace(etl: Path, xml: Path, summary: Path, run: Run | None = None) -> None:
     """``tracerpt`` one stopped ETL into XML and a summary. A stale output is removed first, never read as this run's."""
 
     for stale in (xml, summary):
         stale.unlink(missing_ok=True)
+    if run is None:
+        timeout = conversion_timeout(etl)
+
+        def run(command: Sequence[str]) -> tuple[int, str]:
+            return bounded_tool(command, timeout_seconds=timeout)
+
     code, text = run(
         [
             system_tool("tracerpt"),
@@ -282,9 +301,10 @@ def file_events(
     unresolved: set[tuple[int, int, int | None]] = set()
 
     def note_unresolved(pid: int, event_id: int, ts_ns: int | None) -> None:
-        # One report per (process, kind, second): in a long window the same pid number can recur, and a later occurrence
-        # must not be swallowed by an earlier one.
-        key = (pid, event_id, None if ts_ns is None else ts_ns // 1_000_000_000)
+        # Only an exact repeat (same process, kind and instant) is collapsed. This runs before attribution, so a coarser key
+        # would let an event of a recycled pid number swallow an owned process's event in the same second and the owned one
+        # would then be dropped with it.
+        key = (pid, event_id, ts_ns)
         if key not in unresolved:
             unresolved.add(key)
             out.append(
