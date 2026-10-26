@@ -15,7 +15,12 @@ from typing import Any
 from src.generation_profiles.application import ApplicationPlan
 from src.generation_profiles.contract import ProfileError, ProfileRef
 from src.generation_profiles.service import GenerationProfileService, SelectionState
-from src.generation_profiles.startup import STAGE_NAMES, StartupRestorePlan
+from src.generation_profiles.startup import (
+    STAGE_NAMES,
+    StartupRestorePlan,
+    available_model_names,
+    restored_generation_values,
+)
 from src.generation_profiles.store import GenerationProfileStore
 from src.gui_v2.generation_profile_projection import (
     StripView,
@@ -151,18 +156,7 @@ class GenerationProfileController:
 
     def _available_models(self) -> set[str] | None:
         resources = getattr(getattr(self._host, "app_state", None), "resources", None)
-        entries = resources.get("models") if isinstance(resources, Mapping) else None
-        if not isinstance(entries, (list, tuple)) or not entries:
-            return None  # the runtime has not published its list; nothing to validate against (and nothing is scanned)
-        names: set[str] = set()
-        for entry in entries:
-            for attr in ("name", "display_name"):
-                value = getattr(entry, attr, None)
-                if value:
-                    names.add(str(value))
-            if isinstance(entry, str):
-                names.add(entry)
-        return names
+        return available_model_names(resources)
 
     def _apply_to_panel(self, changes: Mapping[str, Any]) -> None:
         panel = self._panel()
@@ -363,10 +357,7 @@ class GenerationProfileController:
         if not plan.restores_anything or defaults is None:
             self._changed()
             return plan
-        values = {k: v for k, v in plan.generation.items() if k in _PANEL_TO_SETTING.values()}
-        values["model"] = plan.model_name
-        self._apply_to_panel(values)
-        self.note_model(plan.model_name or "")
+        values = restored_generation_values(plan, self.working_values())
         stage_config = dict(plan.stage_settings)
         pipeline = dict(stage_config.get("pipeline") or {})
         for stage, enabled in plan.stage_flags.items():
@@ -376,6 +367,8 @@ class GenerationProfileController:
             apply = getattr(self._host, "_apply_last_run_payload", None)
             if callable(apply):
                 apply(stage_config, None)
+        self._apply_to_panel(values)
+        self.note_model(plan.model_name or "")
         sidebar = self._host._get_sidebar_panel()
         marker = getattr(sidebar, "set_settings_source", None)
         if callable(marker):
@@ -390,16 +383,29 @@ class GenerationProfileController:
 
         if self._startup_model is None or not isinstance(resources, Mapping):
             return
-        models = self._available_models()
-        if models is not None and self._startup_model not in models:
-            message = (
-                f"Saved startup model '{self._startup_model}' is not offered by the runtime; "
-                "your current selection was kept."
-            )
-            self._startup_issues = (*self._startup_issues, message)
-            self._log(message)
-        self._startup_model = None
-        self._changed()
+        models = available_model_names(resources)
+        if models is None:
+            return
+        startup_model = self._startup_model
+
+        def validate() -> None:
+            if self._startup_model != startup_model:
+                return
+            if startup_model not in models:
+                message = (
+                    f"Saved startup model '{startup_model}' is not offered by the runtime; "
+                    "your current selection was kept."
+                )
+                self._startup_issues = (*self._startup_issues, message)
+                self._log(message)
+            self._startup_model = None
+            self._changed()
+
+        dispatch = getattr(self._host, "_run_in_gui_thread", None)
+        if callable(dispatch):
+            dispatch(validate)
+        else:
+            validate()
 
     @property
     def startup_issues(self) -> tuple[str, ...]:

@@ -173,6 +173,37 @@ class StartupRestorePlan:
         return self.model_name is not None
 
 
+def restored_generation_values(
+    plan: StartupRestorePlan, working: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Final shared Base Generation overlay after stage restoration.
+
+    Rejected saved values retain the pre-restore working value, never the unchecked
+    duplicate in stage settings or the stage loader's default.
+    """
+    return {
+        **{key: value for key, value in working.items() if key in SETTING_KEYS},
+        **plan.generation,
+        "model": plan.model_name,
+    }
+
+
+def available_model_names(resources: Mapping[str, Any] | None) -> set[str] | None:
+    """Names from this resource snapshot; None until a usable model list arrives."""
+    entries = resources.get("models") if isinstance(resources, Mapping) else None
+    if not isinstance(entries, (list, tuple)) or not entries:
+        return None
+    names: set[str] = set()
+    for entry in entries:
+        for attr in ("name", "display_name"):
+            value = getattr(entry, attr, None)
+            if value:
+                names.add(str(value))
+        if isinstance(entry, str) and entry:
+            names.add(entry)
+    return names or None
+
+
 def plan_startup_restore(
     defaults: StartupDefaults,
     *,
@@ -230,7 +261,9 @@ __all__ = [
     "STARTUP_SCHEMA",
     "StartupDefaults",
     "StartupRestorePlan",
+    "available_model_names",
     "build_startup_defaults",
     "plan_startup_restore",
+    "restored_generation_values",
     "sanitize_stage_settings",
 ]

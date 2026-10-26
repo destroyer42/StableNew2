@@ -11,6 +11,7 @@ from src.generation_profiles.application import ApplicationPlan
 from src.generation_profiles.contract import SOURCE_OFFICIAL, SOURCE_STABLENEW_TESTED
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
 from src.gui.generation_profile_strip import GenerationProfileStrip
+from src.gui.stage_cards_v2.advanced_txt2img_stage_card_v2 import AdvancedTxt2ImgStageCardV2
 from src.gui_v2.generation_profile_projection import (
     NO_MODEL_TEXT,
     NO_PROFILE_LABEL,
@@ -241,3 +242,50 @@ def test_a_failing_profile_controller_never_blocks_model_selection(tk_root) -> N
         tk_root, controller=SimpleNamespace(generation_profiles=Broken()), include_vae=True
     )
     panel._on_model_chosen()
+
+
+@pytest.mark.parametrize("available_sampler", ["DPM++ 2M", "Euler"])
+def test_startup_restore_keeps_validated_values_after_shared_stage_load(
+    tk_root, tmp_path, available_sampler
+):
+    saver = FakeHost(FakePanel(steps=22, width=832, height=1216), tmp_path)
+    saver.stage_configs["txt2img"].update(
+        model=SDXL_MODEL,
+        vae="sdxl_vae.safetensors",
+        sampler_name="DPM++ 2M",
+        scheduler="Karras",
+        steps=22,
+        cfg_scale=7.0,
+        width=832,
+        height=1216,
+        seed=456,
+        denoising_strength=0.41,
+    )
+    saver.flags["adetailer"] = True
+    assert saver.profiles.save_startup_defaults()[0]
+    stored = (tmp_path / "profiles" / "startup_defaults.json").read_bytes()
+
+    runtime = FakeHost(FakePanel(), tmp_path, models=[SDXL_MODEL])
+    panel = BaseGenerationPanelV2(tk_root, controller=None, include_vae=True)
+    panel.apply_profile_values({"model": "previous.safetensors", "sampler_name": "Euler"})
+    runtime.panel = runtime.sidebar.panel = panel
+    card = AdvancedTxt2ImgStageCardV2(tk_root, base_generation_panel=panel)
+    runtime.app_state.resources["samplers"] = [available_sampler]
+
+    def load_stages(config, _snapshot):
+        runtime.restored.append(config)
+        card.load_from_config(config)
+
+    runtime._apply_last_run_payload = load_stages
+    plan = runtime.profiles.restore_startup_defaults()
+    assert plan is not None and plan.restores_anything
+    working = panel.get_overrides()
+    assert working["model"] == SDXL_MODEL
+    assert working["sampler"] == available_sampler
+    assert (working["steps"], working["width"], working["height"]) == (22, 832, 1216)
+    assert working["seed"] == 456
+    assert runtime.restored[0]["pipeline"]["adetailer_enabled"] is True
+    assert (tmp_path / "profiles" / "startup_defaults.json").read_bytes() == stored
+    assert not runtime.client_calls
+    if available_sampler == "Euler":
+        assert any("not offered" in issue for issue in plan.issues)

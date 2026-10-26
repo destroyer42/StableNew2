@@ -18,7 +18,12 @@ from src.gui_v2.effective_settings import EffectiveContext, project_effective_se
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 from src.utils.config import ConfigManager
-from tests.controller.test_generation_profile_controller_630 import KLEIN, FakeHost, FakePanel
+from tests.controller.test_generation_profile_controller_630 import (
+    KLEIN,
+    FakeHost,
+    FakePanel,
+    _compat,
+)
 
 PACK_SETTINGS = {
     "txt2img": {
@@ -204,3 +209,87 @@ def test_changing_the_checkpoint_after_adding_packs_does_not_rewrite_the_draft_o
     assert not svc.submitted
     notices = host.profiles.draft_notices()
     assert any("model or generation profile changed" in notice for notice in notices)
+
+
+def test_explicit_published_learning_profile_reaches_next_sqlite_njr(env, tmp_path):
+    """Compose the existing publication, selection, compiler and real admission owners."""
+    from src.controller.generation_profile_controller import GenerationProfileController
+    from src.controller.job_service import JobService
+    from src.generation_profiles.service import GenerationProfileService
+    from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
+    from src.queue.job_queue import JobQueue
+    from src.queue.job_repository import JobRepository
+    from tests.controller.test_job_service_unit import FakeRunner
+    from tests.learning_v2.test_profile_publication_660 import make_publication, records
+
+    controller, _manager, _service, host, pack = env
+    controller._prompt_pack_builder = PromptPackNormalizedJobBuilder(
+        config_manager=_manager,
+        job_builder=controller._job_builder,
+        packs_dir=_manager.packs_dir,
+        model_family_lookup=lambda name: _compat("sdxl") if name == "test.safetensors" else None,
+    )
+    pack_bytes = pack.read_bytes()
+    publication = make_publication(tmp_path)
+    rows = records(publication)
+    proposed = publication.evaluate(rows, "test.safetensors", experiment_id="experiment-1")
+    published = publication.publish(
+        proposed, rows, "test.safetensors", name="Qualified settings", confirmed=True
+    )
+    profile_bytes = next(publication.store.root.glob("profiles/learning/*/r0001.json")).read_bytes()
+    host.profiles = GenerationProfileController(
+        host, GenerationProfileService(publication.store, publication.resolver)
+    )
+    host.panel.values.update(
+        model="test.safetensors",
+        sampler="Euler",
+        scheduler="Normal",
+        steps=12,
+        width=1024,
+        height=1024,
+        vae="",
+    )
+    host.override_pack_config_enabled = True
+    repository = JobRepository(tmp_path / "jobs.sqlite3")
+    controller._job_service = JobService(
+        JobQueue(repository=repository), runner=FakeRunner(), require_normalized_records=True
+    )
+
+    def preview_and_admit():
+        snapshot = _snapshot_from_panel(host.panel)
+        snapshot["txt2img"].update(vae="", seed=4242)
+        [preview] = _add_to_draft(controller, host, snapshot, {"txt2img": True})
+        # Repository snapshots use the NJR's canonical read/write representation
+        # (for example an empty stage VAE becomes None); compare every field.
+        expected = NormalizedJobRecord.from_dict(preview.to_dict()).to_dict()
+        assert controller.enqueue_draft_jobs() == 1
+        assert repository.get_job(preview.job_id).snapshot["normalized_job"] == preview.to_dict()
+        stored = repository.get_job_model(preview.job_id)._normalized_record
+        assert stored.to_dict() == expected
+        assert stored.provenance.metadata["prompt_adaptation"]["family"] == "sdxl"
+        effective = project_effective_settings(
+            [stored], EffectiveContext(override_pack_config=True)
+        )
+        assert effective.value_of("Model") == "test.safetensors"
+        assert [stage.stage_type for stage in stored.stage_chain if stage.enabled] == ["txt2img"]
+        assert stored.config["seed"] == 4242
+        return stored
+
+    previous = preview_and_admit()
+    previous_bytes = previous.to_dict()
+    assert previous.config["steps"] == 12
+    plan = host.profiles.on_profile_selected(published.ref)
+    assert plan.changes == {"steps": 30}
+    assert host.profiles.state().selected == published.ref
+    following = preview_and_admit()
+    assert following.config["steps"] == 30
+    assert following.job_id != previous.job_id
+    assert repository.get_job_model(previous.job_id)._normalized_record.to_dict() == previous_bytes
+    assert len(repository.list_job_models()) == 2
+    assert (
+        next(publication.store.root.glob("profiles/learning/*/r0001.json")).read_bytes()
+        == profile_bytes
+    )
+    assert pack.read_bytes() == pack_bytes
+    assert publication.store.favorite_for(published.model.key) is None
+    assert publication.store.load_startup_document() is None
