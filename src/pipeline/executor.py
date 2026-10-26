@@ -60,7 +60,11 @@ from src.prompting.prompt_splitter import split_prompt_chunks
 from src.prompting.prompt_types import PromptOptimizationPairResult
 from src.prompting.stage_policy_engine import StagePolicyEngine
 from src.refinement.prompt_patcher import apply_prompt_patch
-from src.utils.embedding_prompt_utils import textual_inversion_report
+from src.utils.embedding_prompt_utils import (
+    is_invocable_embedding_name,
+    render_embedding_invocation,
+    textual_inversion_report,
+)
 from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 from src.utils.process_inspector_v2 import collect_gpu_snapshot, collect_process_risk_snapshot
 from src.utils.webui_resource_names import canonicalize_vae_lookup_key, normalize_vae_config_value
@@ -3133,7 +3137,16 @@ class Pipeline:
 
             embedding = aesthetic_cfg.get("embedding")
             if embedding and embedding != "None":
-                prompt = append_phrase(prompt, f"<embedding:{embedding}>")
+                if not isinstance(embedding, str) or not is_invocable_embedding_name(embedding):
+                    raise PipelineStageError(
+                        GenerateError(
+                            code=GenerateErrorCode.PAYLOAD_VALIDATION,
+                            message=f"Aesthetic embedding {embedding!r} cannot be invoked safely; "
+                            "select a name without prompt syntax or surrounding whitespace.",
+                        )
+                    )
+                if not re.search(rf"(?<![\w.:-]){re.escape(embedding)}(?![\w.-])", prompt):
+                    prompt = append_phrase(prompt, render_embedding_invocation(embedding))
 
         return prompt, negative
 
