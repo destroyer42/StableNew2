@@ -260,6 +260,9 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
     variable_reason = validate_executed_lora(
         getattr(variant, "executed_config", None), final_prompt
     )
+    from src.learning.prompt_slot_experiment import prompt_readback_reason
+
+    variable_reason = variable_reason or prompt_readback_reason(snapshot, variant, prompt_readback)
     launch_profile = str(
         (variant_payload.get("runtime_admission") or {}).get("launch_profile") or ""
     )

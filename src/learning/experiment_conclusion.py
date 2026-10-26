@@ -11,6 +11,10 @@ def build_experiment_conclusion(
     *, study_type: str = "controlled_variable"
 ) -> dict[str, Any]:
     """Summarize persisted sample evidence without creating a second rating."""
+    if study_type == "prompt_slot":
+        from src.learning.prompt_slot_experiment import conclusion
+
+        return conclusion(plan, rating_details, review_drafts)
     rows: list[dict[str, Any]] = []
     controlled = True
     saved_total = 0

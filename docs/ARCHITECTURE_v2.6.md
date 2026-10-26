@@ -459,11 +459,15 @@ recommendation inference.
 
 The requested seed is frozen before NJR admission; actual backend seed vectors
 are established from the first successful variant and must match subsequently
-before ratings count as controlled evidence. PromptPack experiments inspect
+before ratings count as controlled evidence. Ordinary PromptPack experiments inspect
 canonical Matrix tokens in the selected row, resolve only referenced slots, and
 freeze the first canonical combination without mutating or fanning out the pack;
 pack Matrix configuration is recorded as unused when the row references no
-tokens. Learning-only filenames are
+tokens. Explicit Prompt Slot experiments instead freeze operator-selected fixed slot values
+and one ordered text alternative at a time through the same canonical token/intent machinery.
+They materialize ordinary Learning NJRs and require observed execution prompt proof for
+controlled conclusions; their text ratings cannot become executable-setting recommendations
+or generation profiles. Learning-only filenames are
 bounded presentation labels with source, row, model, timestamp, variant, and
 sample identity.
 

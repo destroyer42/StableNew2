@@ -12,6 +12,7 @@ from src.gui.ui_tokens import TOKENS
 from src.gui.views.grid_design_frame import TwoAxisDesignFrame
 from src.gui.views.learning_baseline_editor import LearningBaselineEditor
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
+from src.image_backends.model_policy import ModelPolicy
 from src.learning import baseline_authoring as authoring
 from src.learning.design_estimate import estimate_design
 from src.learning.experiment_naming import build_experiment_identity
@@ -40,6 +41,11 @@ def _call(panel: Any, name: str, *args: Any) -> None:
         method(*args)
 
 
+def _prompt_slot(panel: Any) -> bool:
+    variable = getattr(panel, "study_type_var", None)
+    return variable is not None and variable.get() == "Prompt Slot"
+
+
 def _speak(panel: Any, text: str, *, ok: bool = False) -> None:
     panel.feedback_var.set(text)
     label = getattr(panel, "feedback_label", None)
@@ -48,6 +54,7 @@ def _speak(panel: Any, text: str, *, ok: bool = False) -> None:
 
 
 STUDY_HINTS = {
+    "Prompt Slot": "Compare alternatives for one named prompt slot with the other inputs fixed.",
     "Controlled Variable": "Test several values for one setting while keeping the other settings consistent.",
     "Model Comparison": (
         "Compare several models, each with its own validated settings and prompt. "
@@ -78,7 +85,7 @@ class ExperimentDesignPanel(ttk.Frame):
         self._packs_dir = Path(packs_dir) if packs_dir is not None else None
         self._name_auto_generated = True
         self._description_auto_generated = True
-        self._target_policy = None
+        self._target_policy: ModelPolicy | None = None
         self._learning_capabilities = None
         self._suspend_identity_tracking = False
         self._comparison_readiness_busy = False
@@ -166,9 +173,10 @@ class ExperimentDesignPanel(ttk.Frame):
         ttk.Label(study_body, text="Study Type:").grid(row=0, column=0, sticky="w")
         self.study_type_var = tk.StringVar(value="Controlled Variable")
         self.study_type_combo = ttk.Combobox(study_body, textvariable=self.study_type_var,
-                                             values=("Controlled Variable", "Model Comparison", "Two-Axis Grid"), state="readonly")
+                                             values=("Controlled Variable", "Prompt Slot", "Model Comparison", "Two-Axis Grid"), state="readonly")
         self.study_type_combo.grid(row=0, column=1, sticky="ew")
         self.study_type_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_study_type_changed())
+        ttk.Button(study_frame, text="Prompt Slot Experiment", command=self._choose_prompt_slot).grid(row=0, column=1, padx=4)
         ttk.Label(study_frame, text="Target Stage:").grid(row=2, column=0, sticky="w")
         self.stage_var = tk.StringVar(value="txt2img")
         self.stage_combo = ttk.Combobox(
@@ -315,6 +323,13 @@ class ExperimentDesignPanel(ttk.Frame):
             images_provider=lambda: int(self.images_var.get()),
         )
         self.grid_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
+        from src.gui.views.prompt_slot_design_frame import PromptSlotDesignFrame
+
+        self.prompt_slot_frame = PromptSlotDesignFrame(
+            self, template=self._get_prompt_preview_text, changed=self._notify_design_changed,
+            visible=self._comparison_show_names)
+        self.prompt_slot_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
+        self.prompt_slot_frame.grid_remove()
         self.grid_frame.grid_remove()
         self.images_var.trace_add("write", lambda *_: self._on_grid_design_changed())
 
@@ -448,6 +463,8 @@ class ExperimentDesignPanel(ttk.Frame):
         self._refresh_estimate()
 
     def _on_prompt_source_changed(self) -> None:
+        if getattr(self, "prompt_slot_frame", None) is not None:
+            self.prompt_slot_frame.clear_frozen_source()
         use_pack = self.prompt_source_var.get() == "pack"
         self.prompt_pack_combo.config(state="readonly" if use_pack else "disabled")
         self.prompt_item_combo.config(state="readonly" if use_pack else "disabled")
@@ -472,6 +489,13 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _is_grid(self) -> bool:
         return self.study_type_var.get() == "Two-Axis Grid"
+
+    def _is_prompt_slot(self) -> bool:
+        return self.study_type_var.get() == "Prompt Slot"
+
+    def _choose_prompt_slot(self) -> None:
+        self.study_type_var.set("Prompt Slot")
+        self._on_study_type_changed()
 
     def _grid_lora_choices(self) -> list[str]:
         known = getattr(self.learning_controller, "known_loras", None)
@@ -534,12 +558,34 @@ class ExperimentDesignPanel(ttk.Frame):
         from src.learning.variable_metadata import get_variable_metadata
 
         previous = self._study_mode
-        self._study_mode = "grid" if self._is_grid() else "comparison" if self._is_model_comparison() else "controlled"
+        self._study_mode = "prompt_slot" if _prompt_slot(self) else "grid" if self._is_grid() else "comparison" if self._is_model_comparison() else "controlled"
+        if self._study_mode != "prompt_slot":
+            self.prompt_slot_frame.grid_remove()
+            self.custom_prompt_text.tag_remove("slot_hidden", "1.0", tk.END)
         if self._study_mode != "grid":
             self.grid_frame.grid_remove()
         if previous == "controlled" and self._study_mode != "controlled":
             self._controlled_design = (self.stage_var.get(), self.variable_var.get(), self.prompt_source_var.get())
-        if self._study_mode == "grid":
+        if self._study_mode == "prompt_slot":
+            self.stage_var.set("txt2img")
+            self.stage_combo.configure(values=("txt2img",), state="disabled")
+            self.input_image_frame.grid_remove()
+            self.variable_label.grid_remove()
+            self.variable_combo.grid_remove()
+            self.variable_var.set("Prompt Slot")
+            for frame in (self.value_frame, self.checklist_frame, self.lora_frame):
+                frame.grid_remove()
+            self.prompt_source_combo.configure(state="readonly")
+            if self.prompt_source_var.get() not in ("pack", "custom"):
+                self.prompt_source_var.set("custom")
+            self.prompt_slot_frame.grid()
+            self._on_prompt_source_changed()
+            self.prompt_slot_frame.refresh_slots()
+            self._on_comparison_visibility_changed()
+            self.name_var.set("Prompt Slot experiment")
+            self._name_auto_generated = False
+            self.model_target_var.set("One prompt slot; registry-verified SDXL txt2img. Disable the prompt optimizer in the Learning baseline.")
+        elif self._study_mode == "grid":
             self._enter_grid_mode()
         elif self._is_model_comparison():
             self.stage_var.set("txt2img")
@@ -691,6 +737,8 @@ class ExperimentDesignPanel(ttk.Frame):
         selected_pack = self.prompt_pack_var.get().strip()
         pack_path = self._prompt_pack_paths.get(selected_pack)
         payloads = self._load_prompt_payloads_for_pack(pack_path) if pack_path else []
+        if _prompt_slot(self) and not self._comparison_show_names():
+            payloads = [{**payload, "label": f"Prompt {payload['prompt_index'] + 1}"} for payload in payloads]
         labels = [payload["label"] for payload in payloads]
         self._prompt_option_payloads = {payload["label"]: payload for payload in payloads}
         self.prompt_item_combo.configure(values=labels)
@@ -743,7 +791,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """Handle build preview button click."""
         if getattr(self, "_comparison_readiness_busy", False):
             return
-        if not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
+        if not _prompt_slot(self) and not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -760,7 +808,8 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Collect form data
         experiment_data = {
-            "study_type": "model_comparison" if self._is_model_comparison() else "two_axis_grid" if self._is_grid() else "controlled_variable",
+            "study_type": "prompt_slot" if _prompt_slot(self) else "model_comparison" if self._is_model_comparison() else "two_axis_grid" if self._is_grid() else "controlled_variable",
+            "prompt_slot": self.prompt_slot_frame.spec() if _prompt_slot(self) else None,
             "grid": self.grid_frame.spec() if self._is_grid() else None,
             "selected_models": [choice for choice, var in self.choice_vars.items() if var.get()] if self._is_model_comparison() else [],
             "name": self.name_var.get().strip(),
@@ -899,7 +948,7 @@ class ExperimentDesignPanel(ttk.Frame):
                 repr(get_projected_resources(self.learning_controller).get("models", [])),
                 self._comparison_show_names())
 
-    def _comparison_show_names(self):
+    def _comparison_show_names(self) -> bool:
         from src.gui.content_visibility import (
             ContentVisibilityMode,
             normalize_content_visibility_mode,
@@ -908,8 +957,19 @@ class ExperimentDesignPanel(ttk.Frame):
         state = self._resource_state
         return normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW
 
-    def _on_comparison_visibility_changed(self):
+    def _on_comparison_visibility_changed(self) -> None:
         self._cancel_comparison_evidence()
+        if _prompt_slot(self):
+            current = self._get_selected_prompt_payload() or {}
+            self.prompt_slot_frame.refresh_visibility()
+            self.custom_prompt_text.tag_configure("slot_hidden", elide=not self._comparison_show_names())
+            self.custom_prompt_text.tag_add("slot_hidden", "1.0", tk.END)
+            self._refresh_prompt_choices()
+            for label, payload in self._prompt_option_payloads.items():
+                if payload.get("prompt_index") == current.get("prompt_index"):
+                    self.prompt_item_var.set(label)
+                    break
+            return
         if not self._is_model_comparison():
             return
         self.feedback_var.set("Content visibility changed; rebuild Preview if evidence work was interrupted")
@@ -1043,6 +1103,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self.prompt_source_var.get(), self.prompt_pack_var.get(), self.prompt_item_var.get(), custom,
             tuple(sorted(name for name, var in self.choice_vars.items() if get(var))),
             lora, loras, self.grid_frame.signature() if self._is_grid() else None,
+            self.prompt_slot_frame.signature() if _prompt_slot(self) else None,
             getattr(self, "_target_model", None), self._baseline_signature(),
         )
 
@@ -1077,6 +1138,11 @@ class ExperimentDesignPanel(ttk.Frame):
 
         get = self._safe_get
         images = get(self.images_var, 1) or 1
+        if _prompt_slot(self):
+            count = len(self.prompt_slot_frame.spec()["candidates"])
+            self.estimate_var.set(f"{count} candidates x {images} images = {count * int(images)} requested images (maximum 24)")
+            self._update_policy_buttons()
+            return
         grid_cells = None
         if self._is_grid():
             from src.learning.two_axis_grid import plan_summary
@@ -1133,7 +1199,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self._say("The grid design changed after Preview; Build Preview again before Run.")
             self._update_policy_buttons()
             return 0
-        if not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
+        if not _prompt_slot(self) and not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -1195,6 +1261,8 @@ class ExperimentDesignPanel(ttk.Frame):
                 return str(exc)
             return None
 
+        if data.get("study_type") == "prompt_slot":
+            return self.prompt_slot_frame.validation_error(int(data.get("images_per_value", 0))) or None
         if data.get("study_type") == "two_axis_grid":
             from src.learning.two_axis_grid import plan_summary
 
@@ -1280,7 +1348,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """
         from src.learning.variable_metadata import get_variable_metadata
 
-        if self._is_model_comparison() or self._is_grid():
+        if _prompt_slot(self) or self._is_model_comparison() or self._is_grid():
             return
 
         variable_name = self.variable_var.get()
@@ -1404,6 +1472,12 @@ class ExperimentDesignPanel(ttk.Frame):
             self._target_model = model
 
     def _refresh_model_capabilities(self) -> None:
+        if _prompt_slot(self):
+            self._ensure_baseline()
+            self._sync_target_from_baseline()
+            self.baseline_editor.refresh()
+            self._update_policy_buttons()
+            return
         if self._is_grid():
             self._on_grid_design_changed()
             return
@@ -1461,6 +1535,25 @@ class ExperimentDesignPanel(ttk.Frame):
         if getattr(self, "_comparison_readiness_busy", False):
             self.build_button.configure(state="disabled")
             self.run_button.configure(state="disabled")
+            return
+        if _prompt_slot(self):
+            from src.learning.prompt_slot_experiment import require_target
+
+            try:
+                policy = self._target_policy
+                controller = self.learning_controller
+                if policy is None or controller is None:
+                    raise ValueError("Select a supported Learning baseline first")
+                require_target(policy, controller.authoring_baseline())
+                valid = not self.prompt_slot_frame.validation_error(int(self.images_var.get())) and not self._baseline_blockers()
+            except (AttributeError, TypeError, ValueError, tk.TclError):
+                valid = False
+            self.build_button.configure(state="normal" if valid else "disabled")
+            experiment = self._current_experiment()
+            from src.learning.model_comparison import study_type
+
+            frozen = bool(getattr(experiment, "execution_snapshot_json", "")) and study_type(experiment) == "prompt_slot"
+            self.run_button.configure(state="normal" if frozen and not self.preview_is_stale() else "disabled")
             return
         if self._is_grid():
             self.build_button.configure(state="normal" if self.grid_frame.validation_error() is None else "disabled")
@@ -1680,13 +1773,16 @@ class ExperimentDesignPanel(ttk.Frame):
         self._refresh_identity_preview()
 
     def _on_prompt_text_edited(self) -> None:
+        if _prompt_slot(self):
+            self.custom_prompt_text.tag_configure("slot_hidden", elide=not self._comparison_show_names())
+            self.custom_prompt_text.tag_add("slot_hidden", "1.0", tk.END)
         self._refresh_identity_preview()
         self._on_grid_design_changed()
         self._notify_design_changed()
 
     def _get_prompt_preview_text(self) -> str:
         if self.prompt_source_var.get() == "custom":
-            return self.custom_prompt_text.get("1.0", tk.END).strip()
+            return self.custom_prompt_text.get("1.0", "end-1c") if _prompt_slot(self) else self.custom_prompt_text.get("1.0", tk.END).strip()
         selected_prompt = self._get_selected_prompt_payload()
         if selected_prompt:
             return str(selected_prompt.get("prompt_text", "") or "")
@@ -1707,6 +1803,8 @@ class ExperimentDesignPanel(ttk.Frame):
         return "", ""
 
     def _refresh_identity_preview(self) -> None:
+        if _prompt_slot(self):
+            return
         model, vae = self._current_model_vae()
         identity = build_experiment_identity(
             stage=self.stage_var.get(),
@@ -2062,7 +2160,7 @@ class ExperimentDesignPanel(ttk.Frame):
         from src.learning.model_comparison import study_type
 
         self.study_type_var.set(
-            {"model_comparison": "Model Comparison", "two_axis_grid": "Two-Axis Grid"}.get(
+            {"model_comparison": "Model Comparison", "two_axis_grid": "Two-Axis Grid", "prompt_slot": "Prompt Slot"}.get(
                 study_type(experiment), "Controlled Variable"
             )
         )
@@ -2099,8 +2197,18 @@ class ExperimentDesignPanel(ttk.Frame):
         if self.prompt_source_var.get() == "pack":
             self._on_prompt_source_changed()
         self._on_variable_changed()
-        if self._is_model_comparison() or self._is_grid():
+        if _prompt_slot(self) or self._is_model_comparison() or self._is_grid():
             self._on_study_type_changed()
+        if _prompt_slot(self):
+            from src.learning.experiment_execution import thaw_snapshot
+
+            frozen = (thaw_snapshot(experiment.execution_snapshot_json).get("prompt_slot")
+                      if getattr(experiment, "execution_snapshot_json", "") else None)
+            spec = dict(metadata.get("prompt_slot") or {})
+            if frozen:
+                spec.update(slot=frozen["slot"], fixed_slots=frozen["fixed_slots"],
+                            candidates=[candidate["value"] for candidate in frozen["candidates"]])
+            self.prompt_slot_frame.load(spec, frozen_template=frozen["template"] if frozen and prompt_source == "pack" else None)
         if self._is_grid():
             self.grid_frame.load(metadata.get("grid"))
             self._grid_preview_signature = (
@@ -2112,6 +2220,7 @@ class ExperimentDesignPanel(ttk.Frame):
             var.set(item in selected_items)
         self._name_auto_generated = False
         self._description_auto_generated = False
+        self.name_var.set(str(getattr(experiment, "name", "") or ""))
         self._refresh_model_capabilities()
         self._refresh_identity_preview()
         self._sync_study_presentation()

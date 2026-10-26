@@ -6,6 +6,7 @@ from __future__ import annotations
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
 from src.gui.learning_state import LearningVariant
@@ -16,6 +17,7 @@ from src.gui.widgets.media_inspector import MediaInspector as ImageThumbnail
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui_v2.recommendation_targets import describe_apply_changes
 from src.learning.guided_workflow import RatingProgress, build_rating_progress
+from src.learning.prompt_slot_experiment import visibility_prompt
 from src.learning.rating_schema import blend_rating, get_active_categories
 from src.learning.recommendation_summary import build_recommendation_summary
 from src.learning.review_workspace import build_review_projection
@@ -111,7 +113,7 @@ class LearningReviewPanel(ttk.Frame):
         self.metadata_frame = ttk.LabelFrame(self.side_column, text="Metadata", padding=5)
         self.metadata_frame.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 
-        self.metadata_text = tk.Text(
+        self.metadata_text = ScrolledText(
             self.metadata_frame,
             height=4,
             width=32,
@@ -190,6 +192,9 @@ class LearningReviewPanel(ttk.Frame):
             command=self._on_view_analytics,
         )
         self.analytics_button.pack(side="left", padx=2)
+        self.slot_conclusion_text = ScrolledText(self.recommendations_frame, height=5, wrap="word", state="disabled")
+        self.slot_conclusion_text.grid(row=7, column=0, sticky="ew", pady=4)
+        self.slot_conclusion_text.grid_remove()
 
         from src.gui.views.learning_profile_publication import LearningProfilePublicationPanel
 
@@ -711,7 +716,7 @@ class LearningReviewPanel(ttk.Frame):
                 thumbnail.grid(row=1, column=0, sticky="nsew")
                 thumbnail.set_image_reference(image_path, subject={
                     "name": image_path,
-                    "prompt": str(getattr(self.current_experiment, "prompt_text", "") or ""),
+                    "prompt": visibility_prompt(self.current_experiment),
                 })
             except Exception as exc:
                 ttk.Label(frame, text=f"Unable to load\n{Path(image_path).name}\n{exc}").grid(
@@ -730,6 +735,17 @@ class LearningReviewPanel(ttk.Frame):
             metadata += f"Stage: {getattr(experiment, 'stage', 'txt2img')}\n"
             metadata += f"Images: {variant.completed_images}/{variant.planned_images}\n"
             self.metadata_text.insert(tk.END, metadata)
+            if (getattr(experiment, "metadata", {}) or {}).get("study_type") == "prompt_slot":
+                from src.gui.content_visibility import (
+                    ContentVisibilityMode,
+                    normalize_content_visibility_mode,
+                )
+                from src.learning.prompt_slot_experiment import candidate_caption
+                from src.learning.resource_access import resolve_app_state
+
+                state = resolve_app_state(self._get_learning_controller())
+                visible = normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW
+                self.metadata_text.insert(tk.END, candidate_caption(experiment, variant.param_value, visible=visible) + "\n")
         else:
             self.metadata_text.insert(tk.END, "No experiment data available")
 
@@ -790,8 +806,25 @@ class LearningReviewPanel(ttk.Frame):
     def _current_visibility_subject(self) -> dict[str, str]:
         return {
             "name": self._get_selected_image_path() or "",
-            "prompt": str(getattr(self.current_experiment, "prompt_text", "") or ""),
+            "prompt": visibility_prompt(self.current_experiment),
         }
+
+    def on_content_visibility_mode_changed(self, _mode: Any = None) -> None:
+        if self.current_variant is not None:
+            self._update_metadata(self.current_variant, self.current_experiment)
+
+    def set_prompt_slot_conclusion(self, result: dict[str, Any]) -> None:
+        self.slot_conclusion_text.configure(state="normal")
+        self.slot_conclusion_text.delete("1.0", tk.END)
+        if result.get("study_type") == "prompt_slot":
+            self.slot_conclusion_text.grid()
+            self.slot_conclusion_text.insert("1.0", result["message"] + "\n" + "\n".join(
+                f"Candidate {row['value']}: {row['sample_count']} completed, {row['saved_count']} valid rated; "
+                f"mean {row['average_overall']}, variability {row['rating_stddev']}; "
+                + ("controlled" if row["controlled"] else "uncontrolled/unverified") for row in result["values"]))
+        else:
+            self.slot_conclusion_text.grid_remove()
+        self.slot_conclusion_text.configure(state="disabled")
 
 
     def _extract_filename(self, path: str) -> str:

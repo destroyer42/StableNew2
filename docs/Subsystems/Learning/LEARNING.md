@@ -32,6 +32,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | Concern | Module (key symbols) |
 |---|---|
 | Frozen preview and admission | `experiment_execution.py` (`freeze_snapshot`, `thaw_snapshot`, `snapshot_digest`, `ExperimentAdmissionService`); `experiment_freeze.py` (`freeze_prompt_pack_source`, `freeze_seed_policy`, `apply_frozen_seed_policy`, `seed_vector_matches`); `ordinary_prompt_freeze.py` (`freeze_ordinary_prompt_source`, `freeze_preview_global_policy`, `validate_ordinary_prompt_snapshot`, `apply_executor_base_prompts`) |
+| Controlled prompt slots | `prompt_slot_experiment.py` (typed authoring, canonical substitution/adaptation, frozen candidate proof, readback and local conclusion); `learning_controller_services/prompt_slot.py` (snapshot/ordinary NJR coordination); `src/gui/views/prompt_slot_design_frame.py` (ordered authoring) |
 | Model/profile validation | `model_policy_service.py` (`validate_experiment`, `compile_variant`, `frozen_definition`, `recommendation_query`, `validate_recommendation_apply`); `model_capabilities.py` (`policy_context`, `project_learning_capabilities`, `compatible_context`). Canonical `ModelPolicy` (`src/image_backends/model_policy.py`) owns every capability fact; Learning only projects it |
 | Stage and variable catalogue | `stage_capabilities.py` (`get_stage_capability`, `list_supported_stages`: txt2img, img2img, adetailer, upscale); `variable_metadata.py` (`VariableMetadata`, `get_variable_metadata`: config path, type, resource key); `variable_selection_contract.py` (stable internal values vs display labels); `resource_access.py` (reads the live `AppStateV2.resources` projection, never the WebUI); `lora_variant.py`, `lora_variable_service.py` (LoRA strength/identity variants, executed-prompt proof) |
 | Independent baseline (PR-LEARN-STAGE-650) | `baseline_authoring.py` (per-stage `FieldSpec` tables, `seed_from_pipeline`, `baseline_problems`, `finalize_for_stage`, `variant_projection`, `parity_mismatches`, alias alignment); `baseline_draft.py` (the editable draft's lifecycle over `LearningState.baseline_draft`); `ordinary_snapshot.py` (snapshot layout); `ordinary_njr.py` (`materialize_njr`: the txt2img and single-stage reprocess NJR construction, strict vs legacy). The Tk editor is `src/gui/views/learning_baseline_editor.py` |
@@ -197,6 +198,52 @@ evidence before the store call, drops stale callbacks and closes callbacks with 
 `GenerationProfileStore.publish_learning_profile` alone writes the new immutable revision.
 Its same-lineage no-replace publication cannot overwrite a competing revision. Repeated identical
 findings are refused. No ratings, experiment state, jobs, favorites or startup defaults are written.
+
+### 3.11 Controlled Prompt Slot experiments
+
+Design offers **Prompt Slot Experiment** beside the existing study selector. The initial
+target is registry-verified SDXL txt2img. Choose Custom Template or a native PromptPack row,
+refresh its named slots, choose exactly one to vary and explicitly fill every other slot.
+Repeated occurrences and normalized aliases of the selected slot share one candidate value.
+Add, replace, remove or reorder 2–8 distinct candidates; choose 1–3 images each (maximum 24).
+The independent Learning baseline owns all fixed settings. The optional prompt optimizer
+must be disabled; Preview refuses it rather than changing Pipeline settings.
+
+`learning_prompt_slot/1` is an additive experiment extension inside the existing schema-2
+snapshot, not a PromptPack schema or a new database. It freezes source/row identity, template,
+fixed slot selections, ordered candidate labels/values, authored intent, canonical structured
+intent/adaptation, compiled executor-base prompts, expected execution prompts, negative
+channel, model/policy and seed/subseed cohort. Compact digests seal each executable input
+projection and the complete ordered plan; full per-candidate configurations are not duplicated.
+Canonical Matrix substitution and structured adaptation/rendering remain authoritative;
+there is no Cartesian expansion. Unsupported features, structural directives introduced by
+candidates, unresolved slots, malformed placeholders and collapsed effective alternatives
+refuse Preview. This target slice does not add exact-profile or cross-model support.
+
+Build Preview queues nothing. Run reads only the frozen plan, verifies ordinary NJRs against
+it and compiles every variant before one `JobService.submit_njrs` admission. A changed or
+deleted PromptPack cannot affect Run. Editor, candidate order or explicit fixed-slot edits
+make an unpublished Preview stale. Ordinary Matrix experiments keep their first canonical
+vector. Native row negatives/embeddings remain row-owned; the selected negative display
+is not a second contribution. Global Positive/Negative policy is frozen and executor-owned.
+
+Completion extends existing seed, exact-job and launch-profile reconciliation with positive
+**and** negative execution prompt readback. The recorded executed config must match its
+frozen digest and observed prompts must match the frozen expected strings. Requested authored,
+compiled and observed prompts remain distinct evidence. Missing/contradictory readback leaves
+images available for manual review/rating but makes causal evidence uncontrolled/unverified.
+No observed prompt is fabricated from the NJR. Existing recovery preserves job IDs, artifacts,
+drafts, saved ratings, selection and Requires Attention without recompiling or resubmitting.
+
+Compare/Rate retain the existing inspectors and rating controls. Candidate captions and the
+scrollable frozen prompt details respect content visibility. Labels A–H remain safe summary
+identities; private candidate text is kept in the frozen contract and typed rating metadata.
+The local conclusion shows completed/valid rated counts, means, variability and evidence
+status. Only saved explicitly controlled ratings support a unique **Highest rated in this
+experiment** candidate; ties, drafts or unverified results produce no winner. No significance
+or universal optimum is claimed. Prompt Slot is deliberately outside the executable-setting
+variable registry; the recommendation engine additionally excludes its study type, Apply
+returns no parameter recommendations and generation-profile publication remains ineligible.
 
 ## 4. Data and persistence
 

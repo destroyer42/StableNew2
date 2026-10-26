@@ -20,6 +20,7 @@ STUDY_LABELS = {
     "controlled_variable": "Controlled Variable",
     MODEL_COMPARISON: "Model Comparison",
     "two_axis_grid": "Two-Axis Grid",
+    "prompt_slot": "Prompt Slot",
 }
 
 
@@ -31,6 +32,7 @@ class PreviewSummary:
     images_per_variant: int
     total_images: int
     submissions: int
+    prompt_details: str = ""
 
     @property
     def headline(self) -> str:
@@ -58,6 +60,12 @@ def _model_text(context: Mapping[str, Any]) -> str:
 
 
 def _prompt_text(source: Mapping[str, Any]) -> str:
+    if source.get("prompt_source") == "prompt_slot":
+        return (
+            f"Native PromptPack row {int(source.get('row_index', 0)) + 1} (frozen)"
+            if source.get("kind") == "pack"
+            else "Custom slot template (frozen)"
+        )
     if str(source.get("prompt_source") or "") == "pack":
         name = str(source.get("selected_prompt_pack_name") or "").strip() or "PromptPack"
         return f"{name}, row {int(source.get('selected_prompt_index', 0) or 0) + 1} (frozen)"
@@ -232,6 +240,21 @@ def build_preview_summary(
         images_per_variant=images,
         total_images=total,
         submissions=variants,
+        prompt_details=(
+            "Tested slot: "
+            + str(snapshot["prompt_slot"]["slot"])
+            + "\nTemplate: "
+            + str(snapshot["prompt_slot"]["template"])
+            + "\n\n"
+            + "\n\n".join(
+                f"Candidate {candidate['label']}: {candidate['value']}\nAuthored: {candidate['authored']}\n"
+                f"Compiled base: {candidate['positive']}\nExpected execution: {candidate['expected_positive']}\n"
+                f"Fixed negative: {candidate['expected_negative']}"
+                for candidate in snapshot["prompt_slot"]["candidates"]
+            )
+            if study == "prompt_slot" and show_model_names
+            else ""
+        ),
     )
 
 

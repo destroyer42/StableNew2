@@ -264,6 +264,7 @@ class LearningController:
             "selected_prompt_negative_text": negative_prompt_text,
             "selected_prompt_loras": list(experiment_data.get("selected_prompt_loras", []) or []),
             "grid": experiment_data.get("grid"),
+            "prompt_slot": copy.deepcopy(experiment_data.get("prompt_slot")),
         }
 
         # Create LearningExperiment from form data
@@ -592,6 +593,11 @@ class LearningController:
 
         from src.learning.model_comparison import study_type
 
+        if study_type(experiment) == "prompt_slot":
+            from src.learning.learning_controller_services.prompt_slot import build_plan
+
+            build_plan(self, experiment)
+            return
         if study_type(experiment) == "model_comparison":
             self._build_model_comparison_plan(experiment, evidence=comparison_evidence)
             return
@@ -1208,6 +1214,10 @@ class LearningController:
         experiment = frozen_definition(experiment)
         from src.learning.model_comparison import materialize_njr, study_type
 
+        if study_type(experiment) == "prompt_slot":
+            from src.learning.learning_controller_services.prompt_slot import build_variant
+
+            return build_variant(self, experiment, variant)
         if study_type(experiment) == "two_axis_grid":
             from src.learning.two_axis_grid import materialize_njr as materialize_grid_njr
 
@@ -2241,6 +2251,7 @@ class LearningController:
         snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
         base_config = dict(executed_config or snapshot.get("baseline_config") or {})
         from src.learning.model_comparison import rating_classification
+        from src.learning.prompt_slot_experiment import rating_metadata
 
         if snapshot.get("study_type") == "two_axis_grid":
             from src.learning.two_axis_grid import rating_classification as grid_classification
@@ -2289,6 +2300,7 @@ class LearningController:
                 "user_rating_raw": rating,
                 "user_notes": notes,
                 **classification,
+                **rating_metadata(snapshot, target_variant),
                 **ordinary_rating_prompt_evidence(snapshot, target_variant.execution_metadata),
                 "rating_schema_version": 2,
                 "rating_context": context_flags,
@@ -2430,6 +2442,10 @@ class LearningController:
 
     def get_recommendations_for_current_prompt(self) -> Any | None:
         """Get recommendations for the current prompt and stage."""
+        from src.learning.model_comparison import study_type
+
+        if self.learning_state.current_experiment and study_type(self.learning_state.current_experiment) == "prompt_slot":
+            return None
         if not self._recommendation_engine:
             return None
 
