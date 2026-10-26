@@ -16,8 +16,10 @@ from typing import Any
 from PIL import Image
 
 from src.controller.app_controller import AppController
+from src.controller.ports.ui_dispatcher import ImmediateUiDispatcher
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.video_workflow_controller import VideoWorkflowController
+from src.gui.presentation_actions import TkPresentationActions
 
 TI2V_ID = "wan22_ti2v_5b_i2v_v1"
 ANIMATE2_ID = "wan_animate2_drive_i2v_v1"
@@ -74,6 +76,7 @@ _BORROWED = (
     "send_history_job_image_to_video_workflow",
     "send_history_job_image_to_svd",
     "_require_main_window",
+    "_require_presentation_actions",
     "_get_history_entry_by_job_id",
     "_get_history_image_path",
     "_get_history_video_bundle",
@@ -88,6 +91,11 @@ class HandoffApp:
 
     def __init__(self, main_window: Any, history_items: list[Any] | None = None) -> None:
         self.main_window = main_window
+        if not hasattr(main_window, "root"):
+            main_window.root = SimpleNamespace(winfo_exists=lambda: True)
+        self.presentation_actions = TkPresentationActions(
+            main_window, self, ImmediateUiDispatcher()
+        )
         self.app_state = SimpleNamespace(history_items=list(history_items or []))
         self.log: list[str] = []
 

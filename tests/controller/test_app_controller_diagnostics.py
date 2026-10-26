@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from src.app.optional_dependency_probes import (
     OPTIONAL_DEPENDENCY_SCHEMA_V1,
@@ -12,6 +13,7 @@ from src.app.optional_dependency_probes import (
     OptionalDependencySnapshot,
 )
 from src.controller.app_controller import AppController
+from src.controller.ports.presentation_actions import PresentationActions
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
 from src.queue.job_repository import JobRepository
@@ -82,19 +84,13 @@ def test_load_history_entries_prefers_recent_jobs_api() -> None:
     assert entries[0].job_id == "job-recent"
 
 
-def test_open_debug_hub_uses_app_controller_as_controller(monkeypatch) -> None:
-    recorded: dict[str, object] = {}
-
-    def fake_open(**kwargs: object) -> object:
-        recorded.update(kwargs)
-        return object()
-
-    monkeypatch.setattr("src.gui.panels_v2.debug_hub_panel_v2.DebugHubPanelV2.open", fake_open)
-
+def test_open_debug_hub_delegates_to_presentation_port() -> None:
+    actions = Mock(spec=PresentationActions)
     controller = AppController(
         None,
         pipeline_runner=DummyPipelineRunner(),
         job_service=DummyJobService(),
+        presentation_actions=actions,
     )
     controller.pipeline_controller = object()
     controller.app_state = object()
@@ -102,7 +98,7 @@ def test_open_debug_hub_uses_app_controller_as_controller(monkeypatch) -> None:
 
     controller.open_debug_hub()
 
-    assert recorded["controller"] is controller
+    actions.open_debug_hub.assert_called_once_with()
 
 
 def test_manual_diagnostics_bundle_triggers_builder(monkeypatch, tmp_path: Path) -> None:
