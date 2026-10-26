@@ -35,6 +35,7 @@ from typing import Any, Protocol
 
 from src.utils.managed_process import OwnedChildObservation, ProcessOutcome, run_bounded
 from src.utils.process_observation import OwnedTreeEvidence, ProcessLifecycleEvent
+from tools.qualification.ai111 import tokens
 
 COMPLETE = "lifetime_complete"
 SAMPLED = "sampled"
@@ -207,6 +208,11 @@ class RequestOwnership:
     foreign_events: int
     violations: list[str]
     canary: bool = False
+    #: ``False``: the live child's token was read and is not elevated. ``None``: not read (the child ended before the first
+    #: poll, or the probe could not open it). ``True`` is a violation and cancels the request.
+    child_token_elevated: bool | None = None
+    #: Why a provider failed (channel -> the OS tool's own message, truncated). Diagnostic only; the violation stays the verdict.
+    provider_errors: dict[str, str] = field(default_factory=dict)
 
     def as_json(self) -> dict[str, Any]:
         return {
@@ -219,6 +225,8 @@ class RequestOwnership:
             "events_not_attributed_to_the_owned_tree": self.foreign_events,
             "violations": self.violations,
             "canary": self.canary,
+            "child_token_elevated": self.child_token_elevated,
+            "provider_errors": self.provider_errors,
         }
 
 
@@ -237,6 +245,24 @@ def _process_summary(evidence: OwnedTreeEvidence) -> dict[str, Any]:
         },
         "events": [[e.kind, e.pid, e.image] for e in evidence.events],
     }
+
+
+def policy_violations(
+    policy: OwnershipPolicy, connections: Sequence[str], files: Sequence[str]
+) -> list[str]:
+    """The file and egress rules, applied to attributed ``connections`` and ``mode:path`` ``files`` entries."""
+
+    found: list[str] = []
+    if connections and not policy.allow_connections:
+        found.append("egress_attempt_observed")
+    for entry in files:
+        mode, _, path = entry.partition(":")
+        # Only an access a provider positively reports as a read may use the read roots; anything else is a write.
+        roots = (*policy.read_roots, *policy.write_roots) if mode == "read" else policy.write_roots
+        if not _within(path, roots):
+            found.append("file_access_outside_policy")
+            break
+    return found
 
 
 def _executable_identity(command: Sequence[str]) -> tuple[str, str | None]:
@@ -261,7 +287,16 @@ class OwnedSessionMonitor:
         evidence_dir: Path | None = None,
         clock: Callable[[], int] = time.perf_counter_ns,
         canary_script: str | None = None,
+        forbid_elevation: bool = False,
+        self_elevated: Callable[[], bool | None] = tokens.current_process_elevated,
+        token_probe: Callable[[int], bool | None] = tokens.process_token_elevated,
     ) -> None:
+        #: The privilege boundary: with this set, an elevated harness is refused before anything runs, and a child whose
+        #: token is read as elevated is stopped through the runner's cancel path.
+        self.forbid_elevation = forbid_elevation
+        self._self_elevated = self_elevated
+        self._token_probe = token_probe
+        self._child_token: bool | None = None
         self.policy = policy
         self._canary_script = canary_script or _CANARY_SCRIPT
         self.providers = list(providers)
@@ -290,6 +325,13 @@ class OwnedSessionMonitor:
             problems.append(
                 "ownership evidence requires the Windows job object; this host has none"
             )
+        if self.forbid_elevation:
+            elevated = self._self_elevated()
+            if elevated is not False:
+                problems.append(
+                    "privilege: the harness token is elevated or unreadable; the runtime import and every child must run "
+                    "under a standard-user token"
+                )
         for channel in CHANNELS:
             mine = [p for p in self.providers if p.channel == channel]
             if not mine:
@@ -313,6 +355,8 @@ class OwnedSessionMonitor:
                     problems.append(
                         f"{channel}: the canary did not show this channel detecting a known event"
                     )
+            if self.forbid_elevation and self.canary_report["saw"].get("standard_user") is not True:
+                problems.append("privilege: the canary child did not report a non-elevated token")
             if not self.canary_report["saw"]["descendant"]:
                 problems.append(
                     "process: the canary's short-lived descendant was not in the owned record"
@@ -333,17 +377,20 @@ class OwnedSessionMonitor:
         self, inner: Runner, command: Sequence[str], kwargs: dict[str, Any], canary: bool
     ) -> ProcessOutcome:
         self._pending = ""
+        self._child_token = None
         observation: list[OwnedChildObservation] = []
         outer_observe = kwargs.get("observe")
         outer_cancel = kwargs.get("cancel")
         started = self._clock()
         failures: list[str] = []
+        errors: dict[str, str] = {}
         executable, digest = _executable_identity(command)  # before launch: what is about to run
         for provider in self.providers:
             try:
                 provider.begin()
-            except Exception:  # noqa: BLE001 - a provider that cannot open its window cannot be trusted
+            except Exception as exc:  # noqa: BLE001 - a provider that cannot open its window cannot be trusted
                 failures.append(f"provider_failed:{provider.channel}")
+                errors[provider.channel] = _error_text(exc)
         if failures:
             # Nothing is launched while any channel is not being watched.
             refused = RequestOwnership(
@@ -356,6 +403,7 @@ class OwnedSessionMonitor:
                 foreign_events=0,
                 violations=sorted(set(failures)),
                 canary=canary,
+                provider_errors=errors,
             )
             self.records.append(refused)
             self._write(refused)
@@ -410,6 +458,7 @@ class OwnedSessionMonitor:
             foreign_events=0,
             violations=list(failures),
             canary=canary,
+            child_token_elevated=self._child_token,
         )
         windows: dict[int, OwnedWindow] = {}
         if evidence is None:
@@ -428,8 +477,9 @@ class OwnedSessionMonitor:
         for provider in self.providers:
             try:
                 events = provider.end(frozenset(windows))
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 record.violations.append(f"provider_failed:{provider.channel}")
+                record.provider_errors[provider.channel] = _error_text(exc)
                 continue
             owned, foreign, ambiguous = attribute(events, windows)
             record.foreign_events += foreign
@@ -444,9 +494,21 @@ class OwnedSessionMonitor:
         if self._pending:
             record.violations.append(self._pending)
         record.violations = sorted(set(record.violations))
+        self._on_request(record, evidence, windows, started, self._clock())
         self.records.append(record)
         self._write(record)
         return outcome
+
+    def _on_request(
+        self,
+        record: RequestOwnership,
+        evidence: OwnedTreeEvidence | None,
+        windows: dict[int, OwnedWindow],
+        started_ns: int,
+        ended_ns: int,
+    ) -> None:
+        """A finished request's record is about to be stored. The default does nothing; the retrospective monitor logs the
+        owned process windows here so a later analysis can attribute a separately captured trace to this request."""
 
     def _poll(self, child: OwnedChildObservation, canary: bool) -> str:
         try:
@@ -455,6 +517,11 @@ class OwnedSessionMonitor:
             findings = [] if canary else descendant_findings(events, child.pid, self.policy)
         except Exception:  # noqa: BLE001 - an unreadable owned record stops the request
             return "ownership_unreadable"
+        if self.forbid_elevation and self._child_token is None:
+            # Read once, while the owned child is alive. An elevated child is stopped; an unreadable token is not guessed.
+            self._child_token = self._token_probe(child.pid)
+            if self._child_token is True:
+                return "child_token_elevated"
         for provider in self.providers:
             try:
                 provider.poll(pids)
@@ -463,21 +530,7 @@ class OwnedSessionMonitor:
         return findings[0] if findings else ""
 
     def _policy_violations(self, record: RequestOwnership) -> list[str]:
-        found: list[str] = []
-        if record.connections and not self.policy.allow_connections:
-            found.append("egress_attempt_observed")
-        for entry in record.files:
-            mode, _, path = entry.partition(":")
-            # Only an access a provider positively reports as a read may use the read roots; anything else is a write.
-            roots = (
-                (*self.policy.read_roots, *self.policy.write_roots)
-                if mode == "read"
-                else self.policy.write_roots
-            )
-            if not _within(path, roots):
-                found.append("file_access_outside_policy")
-                break
-        return found
+        return policy_violations(self.policy, record.connections, record.files)
 
     def bind_evidence(self, directory: Path) -> None:
         """Point evidence output (and any provider that keeps raw capture files) at the session's own directory."""
@@ -487,6 +540,33 @@ class OwnedSessionMonitor:
             binder = getattr(provider, "bind_directory", None)
             if binder is not None:
                 binder(directory)
+
+    def close_and_report(self, directory: Path | None) -> list[str]:
+        """Close the providers, then record which trace sessions (if any) are still live. Returns the leaked sessions."""
+
+        self.close()
+        leaked = self.leaked_traces()
+        if directory is not None and directory.is_dir():
+            path = directory / "trace-teardown.json"
+            if not path.exists():
+                with path.open("x", encoding="utf-8") as handle:
+                    json.dump({"trace_sessions_left_running": leaked}, handle, indent=2)
+                    handle.write("\n")
+        return leaked
+
+    def leaked_traces(self) -> list[str]:
+        """After ``close``: trace sessions a provider reports still live. A provider that cannot say is reported as such."""
+
+        found: list[str] = []
+        for provider in self.providers:
+            checker = getattr(provider, "leaked", None)
+            if checker is None:
+                continue
+            try:
+                found += list(checker())
+            except Exception:  # noqa: BLE001 - an unreadable session list is itself a finding
+                found.append("session list unreadable")
+        return sorted(set(found))
 
     def close(self) -> None:
         """Release whatever a provider holds open (an ETW trace session outlives its process unless stopped)."""
@@ -566,10 +646,15 @@ class OwnedSessionMonitor:
                 True,
             )
             record = self.records[-1]
-            grandchild = _int_or_none(outcome.stdout.decode("utf-8", "replace").strip())
+            reported = outcome.stdout.decode("utf-8", "replace").split()
+            grandchild = _int_or_none(reported[0]) if reported else None
+            # The canary reports its own token (0 = standard user) after the descendant's pid; absent means "not shown".
+            canary_elevated = _int_or_none(reported[1]) if len(reported) > 1 else None
             evidence_pids = {e[1] for e in record.process.get("events", []) if e[0] == "new"}
             seen = {
                 "descendant": grandchild is not None and grandchild in evidence_pids,
+                "standard_user": (not self.forbid_elevation)
+                or (canary_elevated == 0 and record.child_token_elevated is not True),
                 "files": any(
                     _norm(marker) == _norm(entry.partition(":")[2]) for entry in record.files
                 ),
@@ -623,8 +708,15 @@ _CANARY_SCRIPT = (
     "s.close()\n"
     "done = subprocess.run([sys.executable, '-I', '-c', 'import os; print(os.getpid())'],\n"
     "                      capture_output=True, text=True)\n"
-    "print(done.stdout.strip())\n"
+    "import ctypes\n"
+    "print(done.stdout.strip(), int(bool(ctypes.windll.shell32.IsUserAnAdmin())) if os.name == 'nt' else 0)\n"
 )
+
+
+def _error_text(exc: BaseException) -> str:
+    """The failure's own message (an OS tool's stderr), bounded; never a path or secret the harness did not already log."""
+
+    return f"{type(exc).__name__}: {exc}"[:400]
 
 
 def _int_or_none(text: str) -> int | None:
