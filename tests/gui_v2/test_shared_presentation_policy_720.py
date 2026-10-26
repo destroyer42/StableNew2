@@ -282,3 +282,26 @@ def test_tk_state_and_controller_share_the_canonical_visibility_identity(payload
     assert state.set_content_visibility_mode(settings.mode) is settings.mode
     assert ContentVisibilityResolver(state.content_visibility_mode).mode is settings.mode
     assert type(settings.mode) is ContentVisibilityMode
+
+
+@pytest.mark.parametrize("mode", ["sfw", "nsfw"])
+def test_embedding_review_captions_and_conclusions_use_shared_visibility(tk_root, tmp_path, mode):
+    from src.gui.views.learning_review_panel import LearningReviewPanel
+    from src.learning.embedding_experiment import conclusion
+    from tests.learning_v2.test_embedding_experiment_700 import A, _golden
+
+    bench = _golden(tmp_path)
+    experiment = bench.state.current_experiment
+    bench.controller.app_state = NS(resources={}, content_visibility_mode=mode)
+    panel = LearningReviewPanel(tk_root)
+    try:
+        panel.learning_controller = bench.controller
+        panel.current_experiment = experiment
+        panel._update_metadata(bench.state.plan[1], experiment)
+        panel.set_prompt_slot_conclusion(conclusion(bench.state.plan, {}, {}))
+        for text in (panel.metadata_text, panel.slot_conclusion_text):
+            rendered = text.get("1.0", "end-1c")
+            assert (A in rendered) is (mode == "nsfw")
+        assert "Candidate B" in panel.metadata_text.get("1.0", "end-1c")
+    finally:
+        panel.destroy()

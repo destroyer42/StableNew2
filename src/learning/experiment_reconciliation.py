@@ -266,6 +266,14 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
     from src.learning.lora_composition import readback_reason
 
     variable_reason = variable_reason or readback_reason(snapshot, variant, prompt_readback)
+    from src.learning import embedding_experiment
+
+    ti_report = variant_payload.get("backend_textual_inversion") or metadata.get(
+        "backend_textual_inversion"
+    )
+    variable_reason = variable_reason or embedding_experiment.readback_reason(
+        snapshot, variant, prompt_readback, ti_report
+    )
     launch_profile = str(
         (variant_payload.get("runtime_admission") or {}).get("launch_profile") or ""
     )
@@ -284,6 +292,7 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
         "executed_final_prompt": str(final_prompt or ""),
         "runtime_prompt_readback": prompt_readback,
         "runtime_launch_profile": launch_profile,
+        **embedding_experiment.execution_evidence(snapshot, variant, ti_report),
         "requested_seed_policy": dict(policy or {}),
         "actual_all_seeds": actual_vector,
         "actual_all_subseeds": actual_subseed_vector,

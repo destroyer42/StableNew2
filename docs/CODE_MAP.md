@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-600 of 755 modules have a docstring.
+606 of 761 modules have a docstring.
 
 ## src/
 
@@ -375,6 +375,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `diagnostics_dashboard_v2.py`: Diagnostics dashboard for StableNew V2
 - `discovered_review_inbox_panel.py`: DiscoveredReviewInboxPanel — lists discovered groups with status controls
 - `discovered_review_table.py`: DiscoveredReviewTable — shows all items in a discovered group for comparison
+- `embedding_experiment_design_frame.py`: Embedding experiment authoring inside the existing scrollable Learning Design surface
 - `error_modal_v2.py`: Modal that presents structured error envelopes to the user
 - `experiment_design_panel.py`: (no docstring)
 - `grid_design_frame.py`: (no docstring)
@@ -511,6 +512,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `automation_modes.py`: Learning automation modes: names, labels, the default, and how a persisted choice is read back
 - `baseline_authoring.py`: Learning's independently authored experiment baseline (toolkit-neutral)
 - `baseline_draft.py`: The editable Learning baseline draft: lifecycle rules over ``LearningState.baseline_draft``
+- `controlled_study_display.py`: Presentation dispatch for the controlled single-position studies (Prompt Slot, LoRA Composition, Embedding)
 - `dataset_builder.py`: Dataset aggregation utilities for learning groundwork
 - `design_estimate.py`: How much work a design would create, before any Preview is built
 - `discovered_grouping.py`: Grouping engine for discovered-review candidate selection
@@ -518,6 +520,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `discovered_review_store.py`: DiscoveredReviewStore — persists groups, items, and the scan index
 - `discovered_scan_service.py`: Scan -> group -> persist orchestration with truthful scan-index dispositions
 - `draft_commit.py`: Turn rated review drafts into saved ratings, without ever overriding a rating that is already saved
+- `embedding_experiment.py`: Controlled textual-inversion experiments: one designated embedding position varies, every other input is froz…
+- `embedding_inventory.py`: Registry-backed embedding identity and compatibility projection for Learning embedding experiments
 - `evidence_progress.py`: How far an experiment is from the evidence a recommendation needs, in the engine's own thresholds
 - `execution_controller.py`: Learning admission and reconciliation through the existing JobService callback owner
 - `experiment_conclusion.py`: Derived, read-only conclusion projection for one designed experiment
@@ -578,6 +582,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/learning/learning_controller_services/
 
 - `__init__.py`: learning_controller_services — extracted service helpers for LearningController
+- `controlled_studies.py`: Dispatch for the controlled single-position studies; each owns its own snapshot, NJR and evidence service
+- `embedding_experiment.py`: Embedding experiment coordination over existing snapshot, ordinary NJR and Learning state owners
 - `experiment_persistence.py`: experiment_persistence — pure serialisation helpers for LearningController resume state
 - `lora_composition.py`: LoRA Composition coordination over existing snapshot, ordinary NJR and Learning state owners
 - `prompt_slot.py`: Prompt Slot coordination over existing snapshot, ordinary NJR and Learning state owners

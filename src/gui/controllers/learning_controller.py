@@ -57,6 +57,15 @@ from src.learning.experiment_freeze import (
     apply_frozen_seed_policy,
     freeze_seed_policy,
 )
+from src.learning.learning_controller_services.controlled_studies import (
+    LOCAL_ONLY_STUDIES,
+)
+from src.learning.learning_controller_services.controlled_studies import (
+    rating_metadata as controlled_rating_metadata,
+)
+from src.learning.learning_controller_services.controlled_studies import (
+    service_for as controlled_study_service,
+)
 from src.learning.learning_controller_services.experiment_persistence import (
     build_resume_payload,
     extract_workflow_state,
@@ -144,6 +153,7 @@ class LearningController:
     ) -> None:
         self.learning_state = learning_state
         self.lora_inventory: dict[str, Any] = {}  # last explicit LoRA discovery (LoRA Composition identity)
+        self.embedding_inventory: dict[str, Any] = {}  # last explicit embedding discovery (Embedding identity)
         self.prompt_workspace_state = prompt_workspace_state
         self.pipeline_state = pipeline_state
 
@@ -267,6 +277,7 @@ class LearningController:
             "grid": experiment_data.get("grid"),
             "prompt_slot": copy.deepcopy(experiment_data.get("prompt_slot")),
             "lora_composition": copy.deepcopy(experiment_data.get("lora_composition")),
+            "embedding_experiment": copy.deepcopy(experiment_data.get("embedding_experiment")),
         }
 
         # Create LearningExperiment from form data
@@ -595,15 +606,9 @@ class LearningController:
 
         from src.learning.model_comparison import study_type
 
-        if study_type(experiment) == "prompt_slot":
-            from src.learning.learning_controller_services.prompt_slot import build_plan
-
-            build_plan(self, experiment)
-            return
-        if study_type(experiment) == "lora_composition":
-            from src.learning.learning_controller_services.lora_composition import build_plan
-
-            build_plan(self, experiment)
+        service = controlled_study_service(study_type(experiment))
+        if service is not None:
+            service.build_plan(self, experiment)
             return
         if study_type(experiment) == "model_comparison":
             self._build_model_comparison_plan(experiment, evidence=comparison_evidence)
@@ -1221,14 +1226,9 @@ class LearningController:
         experiment = frozen_definition(experiment)
         from src.learning.model_comparison import materialize_njr, study_type
 
-        if study_type(experiment) == "prompt_slot":
-            from src.learning.learning_controller_services.prompt_slot import build_variant
-
-            return build_variant(self, experiment, variant)
-        if study_type(experiment) == "lora_composition":
-            from src.learning.learning_controller_services.lora_composition import build_variant
-
-            return build_variant(self, experiment, variant)
+        service = controlled_study_service(study_type(experiment))
+        if service is not None:
+            return service.build_variant(self, experiment, variant)
         if study_type(experiment) == "two_axis_grid":
             from src.learning.two_axis_grid import materialize_njr as materialize_grid_njr
 
@@ -2261,7 +2261,6 @@ class LearningController:
         snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
         snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
         base_config = dict(executed_config or snapshot.get("baseline_config") or {})
-        from src.learning.lora_composition import rating_metadata as lora_rating_metadata
         from src.learning.model_comparison import rating_classification
         from src.learning.prompt_slot_experiment import rating_metadata
 
@@ -2313,7 +2312,7 @@ class LearningController:
                 "user_notes": notes,
                 **classification,
                 **rating_metadata(snapshot, target_variant),
-                **lora_rating_metadata(snapshot, target_variant),
+                **controlled_rating_metadata(snapshot, target_variant),
                 **ordinary_rating_prompt_evidence(snapshot, target_variant.execution_metadata),
                 "rating_schema_version": 2,
                 "rating_context": context_flags,
@@ -2457,7 +2456,7 @@ class LearningController:
         """Get recommendations for the current prompt and stage."""
         from src.learning.model_comparison import study_type
 
-        if self.learning_state.current_experiment and study_type(self.learning_state.current_experiment) in {"prompt_slot", "lora_composition"}:
+        if self.learning_state.current_experiment and study_type(self.learning_state.current_experiment) in LOCAL_ONLY_STUDIES:
             return None
         if not self._recommendation_engine:
             return None

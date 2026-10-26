@@ -88,7 +88,7 @@ from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 from src.training.lora_manager import LoRAManager
 from src.training.style_lora_manager import StyleLoRAManager
 from src.utils.config import ConfigManager
-from src.utils.embedding_prompt_utils import render_embedding_reference
+from src.utils.embedding_prompt_utils import render_embedding_invocation
 from src.utils.prompt_pack_utils import pack_json_path
 
 _logger = logging.getLogger(__name__)
@@ -544,11 +544,11 @@ class PromptPackNormalizedJobBuilder:
                 max(0, matrix_variant_index) * inner_variant_total + record.variant_index
             )
             positive_embeddings = tuple(
-                render_embedding_reference(name, weight)
+                render_embedding_invocation(name, weight)
                 for name, weight in prompt_resolution.positive_embeddings
             )
             negative_embeddings = tuple(
-                render_embedding_reference(name, weight)
+                render_embedding_invocation(name, weight)
                 for name, weight in prompt_resolution.negative_embeddings
             )
             lora_tags = tuple(

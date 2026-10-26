@@ -34,6 +34,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | Frozen preview and admission | `experiment_execution.py` (`freeze_snapshot`, `thaw_snapshot`, `snapshot_digest`, `ExperimentAdmissionService`); `experiment_freeze.py` (`freeze_prompt_pack_source`, `freeze_seed_policy`, `apply_frozen_seed_policy`, `seed_vector_matches`); `ordinary_prompt_freeze.py` (`freeze_ordinary_prompt_source`, `freeze_preview_global_policy`, `validate_ordinary_prompt_snapshot`, `apply_executor_base_prompts`) |
 | Controlled prompt slots | `prompt_slot_experiment.py` (typed authoring, canonical substitution/adaptation, frozen candidate proof, readback and local conclusion); `learning_controller_services/prompt_slot.py` (snapshot/ordinary NJR coordination); `src/gui/views/prompt_slot_design_frame.py` (ordered authoring) |
 | Controlled LoRA composition | `lora_composition.py` (`learning_lora_composition/1`: typed design, operation rules, canonical structured-intent freeze, asset admission, full-set readback, rating metadata, local conclusion); `lora_inventory.py` (registry/discovery identity and compatibility projection, browse rows); `learning_controller_services/lora_composition.py` (snapshot/ordinary NJR coordination, run-time asset preflight); `src/gui/views/lora_composition_design_frame.py` (thin authoring adapter over the existing LoRA discovery worker pattern) |
+| Controlled embedding experiments | `embedding_experiment.py` (`learning_embedding/1`: typed design, operation rules, canonical structured-intent freeze, asset admission, readback, backend `TI` consumption evidence, rating metadata, local conclusion); `embedding_inventory.py` (registry identity plus header-only safetensors compatibility, browse rows, worker-only discovery); `controlled_study_display.py` (review captions); `learning_controller_services/embedding_experiment.py` and `controlled_studies.py` (snapshot/NJR coordination, study dispatch); `src/gui/views/embedding_experiment_design_frame.py` (thin authoring adapter) |
 | Model/profile validation | `model_policy_service.py` (`validate_experiment`, `compile_variant`, `frozen_definition`, `recommendation_query`, `validate_recommendation_apply`); `model_capabilities.py` (`policy_context`, `project_learning_capabilities`, `compatible_context`). Canonical `ModelPolicy` (`src/image_backends/model_policy.py`) owns every capability fact; Learning only projects it |
 | Stage and variable catalogue | `stage_capabilities.py` (`get_stage_capability`, `list_supported_stages`: txt2img, img2img, adetailer, upscale); `variable_metadata.py` (`VariableMetadata`, `get_variable_metadata`: config path, type, resource key); `variable_selection_contract.py` (stable internal values vs display labels); `resource_access.py` (reads the live `AppStateV2.resources` projection, never the WebUI); `lora_variant.py`, `lora_variable_service.py` (LoRA strength/identity variants, executed-prompt proof) |
 | Independent baseline (PR-LEARN-STAGE-650) | `baseline_authoring.py` (per-stage `FieldSpec` tables, `seed_from_pipeline`, `baseline_problems`, `finalize_for_stage`, `variant_projection`, `parity_mismatches`, alias alignment); `baseline_draft.py` (the editable draft's lifecycle over `LearningState.baseline_draft`); `ordinary_snapshot.py` (snapshot layout); `ordinary_njr.py` (`materialize_njr`: the txt2img and single-stage reprocess NJR construction, strict vs legacy). The Tk editor is `src/gui/views/learning_baseline_editor.py` |
@@ -290,6 +291,66 @@ loaded the intended LoRA bytes, and no runtime-load evidence is fabricated. Rati
 saved controlled samples, ties and drafts give no winner, no universal LoRA claim). The study is
 excluded from `RecommendationEngine`, Apply and profile publication.
 
+### 3.13 Controlled Textual Inversion Embedding experiments
+
+Design offers **Embedding** beside the study selector (target: registry-verified SDXL txt2img on
+the Forge backend, one frozen Learning baseline, optimizer and Style Consistency off). One
+experiment tests **one designated embedding position** in **one channel** (positive or negative);
+every other embedding, the prompt text, the other channel, settings and seed cohort stay fixed.
+Operations: **Presence** (exactly *No embedding* versus the embedding present), **Weight** (one
+embedding at several attention weights, optionally with an absent control) and **Identity** (a
+native row's *original* embedding, or several embeddings, at one common weight, with at most one
+*No embedding* control). Two to eight distinct candidates, 1-3 images each (maximum 24). Weight is
+bounded to 0-1.5 and rounded to two decimals; 0 means absent. The existing Prompt Slot, LoRA
+Composition, aesthetic-embedding and Two-Axis Grid paths are separate and unchanged.
+
+*Invocation is not the authoring notation.* The pinned Forge Neo removes every unregistered
+`<name:args>` tag from the positive prompt before tokenization (only `lora` is registered), so
+`<embedding:Name>` never reaches the text encoder. A textual inversion is invoked by its filename
+token and weighted with ordinary prompt attention. `render_embedding_invocation` renders `Name` at
+weight 1 and `(Name:w)` otherwise; every PromptPack and Learning compile path uses it.
+`render_embedding_reference` (`<embedding:Name>`) remains the PromptPack TXT/JSON authoring and
+storage notation, parsed unchanged. Names that prompt syntax would split (`:,()[]{}<>|\`) cannot be
+tested or fixed. Weight 0 does not remove an embedding in Forge, so an absent candidate omits the
+token entirely.
+
+`effective_embeddings = fixed_embeddings + tested_slot_assignment` per channel. The source (a
+custom prompt or one native PromptPack row; Matrix slots need explicit fixed values) is rendered
+through the canonical `resolve_pack_intent` / `adapt_pack_intent` / `render_pack_intent`. The
+tested contribution keeps the original's execution position (or is appended). Preview refuses
+(nothing is deduplicated or truncated) inline `<embedding:>` references, a candidate already fixed
+or present in the opposite channel, duplicate declarations, a name that also appears in ordinary
+prompt text, conditioned rows, any adaptation that changes the set, an opposite channel or other
+prompt text that differs between candidates, and candidates that collapse to the same executable
+prompt.
+
+Asset identity comes from `AssetRegistry` evidence plus a header-only safetensors inspection
+(`embedding_inventory.py`): the explicitly refreshed in-memory discovery (a tracked background
+read-only scan, never persisted) if present, else the cache-only registry snapshot, which can
+prove identity but never structure. `.pt`/`.bin` files are never deserialized, so they stay
+*unverified*; filenames never decide compatibility. Every embedding in any effective set must be
+available, unambiguous, structurally SDXL (`clip_l` + `clip_g`) and carry a verified SHA-256. Run
+re-resolves every frozen asset and refuses (admitting nothing) if identity changed.
+
+The frozen section (`embedding_experiment`, sealed by a digest inside the schema-2 snapshot) holds
+operation, channel, original, position, fixed set, ordered candidates (A-H) with expected
+embedding multisets, asset identities, structured intent/adaptation and expected execution
+prompts; `compiled_embedding_plan` seals the compiled NJR inputs. NJR provenance embeddings equal
+the expected set; Run compiles every variant against the sealed digests, then
+`JobService.submit_njrs` admits once.
+
+*Evidence has three separate levels.* (1) Authored: the design and frozen intent. (2) Request
+verified: the observed final prompts contain exactly the expected embedding set (readback); a
+mismatch makes the variant **uncontrolled**. (3) Consumption reported by name: the backend's
+`extra_generation_params["TI"]` lists the embedding names it used, captured by the executor as
+`backend_textual_inversion`. The backend reports names only (no hash, polarity or applied
+weight), and an absent or empty report proves nothing because conditioning can be served from the
+backend's cache, so it stays "request verified; consumption unverified". Only a report that names
+embeddings and disagrees with the expectation contradicts the variant. Ratings carry typed
+`embedding_experiment` metadata; the conclusion is experiment-local and is worded as an
+*exploratory preference* unless every variant is controlled **and** reported its embeddings by name.
+The study is excluded from `RecommendationEngine`, Apply and profile publication.
+
 ## 4. Data and persistence
 
 | Data | Location | Writer | Atomic |
@@ -340,6 +401,7 @@ Because both layers stay in the compiler, the invariant "randomization never hap
 5. Evidence is gated: controlled data may recommend only the field the frozen experiment varied; `experiment_strong` needs two distinct values and three controlled ratings in one durable experiment; observational evidence is manual-only; insufficient evidence returns no recommendation.
 6. Model Comparison ratings never feed ordinary recommendations or automatic Model selection; they claim preference under each frozen envelope, not causality.
 6b. LoRA Composition ratings are experiment-local: record kind `learning_experiment_rating` with `study_type` `lora_composition`, excluded from `RecommendationEngine`, Apply and profile publication. Preview refuses (never deduplicates or truncates) any design whose only difference is not the one designated LoRA position, and readback proves the whole expected LoRA set or the variant is uncontrolled.
+6c. Embedding experiment ratings are experiment-local (`study_type` `embedding_experiment`), excluded from `RecommendationEngine`, Apply and profile publication. A textual inversion is invoked by name and attention weight, never by the `<embedding:>` authoring notation; readback proves the requested embedding set only, and "consumption" is claimed solely from the backend's by-name `TI` report.
 6a. Two-Axis Grid ratings are exploratory and descriptive: record kind `learning_grid_rating`, excluded from `RecommendationEngine`, `LearningAnalytics.get_experiment_summary`, any winner/conclusion and Apply to Pipeline. A grid is refused whole rather than admitted with a dropped, clamped or overwritten axis, and cell identity comes from the frozen `cell_id`, never job or file order.
 7. Uncontrolled results (seed read-back missing or mismatched, tested LoRA not executed, backend restart boundary) are excluded from inference, not repaired.
 8. A rating shown as saved must be saved: do not ignore the `append_record` result.

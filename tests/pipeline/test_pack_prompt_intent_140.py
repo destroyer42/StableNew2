@@ -23,7 +23,7 @@ from src.pipeline.resolution_layer import (
     resolve_pack_intent,
 )
 from src.prompting.prompt_adaptation import KIND_ACTOR, KIND_PACK, KIND_STYLE
-from src.utils.embedding_prompt_utils import render_embedding_reference
+from src.utils.embedding_prompt_utils import render_embedding_invocation
 
 
 def _legacy_resolve_from_pack(
@@ -52,7 +52,7 @@ def _legacy_resolve_from_pack(
     lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in merged_lora_tags)
     positive_parts: list[str] = []
     if pack_row.embeddings:
-        positive_parts.extend(render_embedding_reference(name, weight) for name, weight in pack_row.embeddings)
+        positive_parts.extend(render_embedding_invocation(name, weight) for name, weight in pack_row.embeddings)
     if actor_trigger_phrases:
         positive_parts.append(", ".join(actor_trigger_phrases))
     if quality:
@@ -74,7 +74,7 @@ def _legacy_resolve_from_pack(
         negative_parts.append(pack_negative.strip())
     if pack_row.negative_embeddings:
         negative_parts.extend(
-            render_embedding_reference(name, weight) for name, weight in pack_row.negative_embeddings
+            render_embedding_invocation(name, weight) for name, weight in pack_row.negative_embeddings
         )
     negative_parts.extend(phrase for phrase in pack_row.negative_phrases if phrase)
     if resolver._safety_negative:
@@ -164,7 +164,7 @@ def test_embedding_and_negative_component_order_is_preserved() -> None:
     assert intent.positive_embeddings == (("styleA", 0.8), ("styleB", 1.0))
     assert render_pack_intent(intent).negative == (
         "global, pack noise, " + ", ".join(
-            [render_embedding_reference("bad_hands", 1.2), render_embedding_reference("neg2", 1.0), "blurry", "extra fingers", "safe"]
+            [render_embedding_invocation("bad_hands", 1.2), render_embedding_invocation("neg2", 1.0), "blurry", "extra fingers", "safe"]
         )
     )
 

@@ -25,11 +25,11 @@ def test_resolve_from_pack_row_substitutes_matrix_tokens() -> None:
     assert result.negative_embeddings == (("neg_hands", 1.0),)
     assert ("detail", 0.6) in result.lora_tags
     assert result.positive.endswith("<lora:detail:0.6>")
-    assert result.negative.startswith("global hush, pack noise, <embedding:neg_hands>")
+    assert result.negative.startswith("global hush, pack noise, neg_hands")
 
 
 def test_resolve_from_pack_row_weighted_embeddings_render_in_prompt() -> None:
-    """Weighted embeddings should appear as (<embedding:name>:weight) in the final prompt."""
+    """Weighted embeddings render as the backend invocation (name:weight) in the final prompt."""
     row = PackRow(
         embeddings=(("styleA", 0.8), ("styleB", 1.0)),
         quality_line="cinematic quality",
@@ -44,9 +44,10 @@ def test_resolve_from_pack_row_weighted_embeddings_render_in_prompt() -> None:
         pack_negative="",
         global_negative="",
     )
-    assert "(<embedding:styleA>:0.8)" in result.positive
-    assert "<embedding:styleB>" in result.positive
-    assert "(<embedding:bad_hands>:1.2)" in result.negative
+    assert "(styleA:0.8)" in result.positive
+    assert "styleB" in result.positive
+    assert "<embedding:" not in result.positive
+    assert "(bad_hands:1.2)" in result.negative
 
 
 def test_resolve_from_pack_row_accepts_hyphenated_slot_aliases() -> None:

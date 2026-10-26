@@ -166,6 +166,7 @@ def test_advanced_study_types_stay_reachable_and_keep_their_own_forms(tab_and_se
         "Controlled Variable",
         "Prompt Slot",
         "LoRA Composition",
+        "Embedding",
         "Model Comparison",
         "Two-Axis Grid",
     ]

@@ -329,19 +329,15 @@ def test_injected_memory_probe_reaches_admission_and_session_sampling(world):
 
 @windows_only
 def test_unreadable_injected_memory_still_refuses_model_requests(world):
+    # PR-AI-QUAL-114: the same rule is now applied once up front, so nothing is imported or launched; the per-request
+    # admission refusal itself is covered by the service tests.
     result = _run(world, [_case(i) for i in range(4)], memory_probe=lambda: None)
     evidence = world["paths"].evidence_root / "physical-A"
-    rows = [
-        json.loads(line)
-        for line in (evidence / "records.jsonl").read_text(encoding="utf-8").splitlines()
-    ]
-    model_rows = [row for row in rows if row["arm"] == world["entry"].model_id]
-    assert len(model_rows) == 3
-    assert all(
-        row["outcome"] == "resource_insufficient" and row["reason"] == "memory_unreadable"
-        for row in model_rows
+    assert result["verdict"] == "INCONCLUSIVE" and "memory could not be read" in str(
+        result["refused"]
     )
-    assert result["abort_reason"] == "3 consecutive infrastructure failures"
+    assert not (evidence / "records.jsonl").exists()
+    assert not (evidence / "ai-root" / "models").exists()
 
 
 # -- PR-AI-QUAL-113: ownership monitoring is part of the session contract ----------------------------------------------

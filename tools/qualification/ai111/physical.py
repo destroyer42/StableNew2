@@ -16,21 +16,23 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import os
+import platform
 import shutil
 import subprocess
 import sys
 import threading
 import zipfile
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from src.ai_assist.argv import RunLimits, Sampling
 from src.ai_assist.attestation import read_attestation
-from src.ai_assist.contracts import OutcomeCode
+from src.ai_assist.contracts import AiCancelToken, OutcomeCode
 from src.ai_assist.host import GenerationActivity, MemoryProbe, read_host_memory
 from src.ai_assist.manifests import (
     ImportRefused,
@@ -42,7 +44,9 @@ from src.ai_assist.manifests import (
     import_runtime,
     load_model_registry,
     record_active,
+    verify_installation,
 )
+from src.ai_assist.paths import runtime_dir
 from src.ai_assist.runtime import AiRuntime, default_command
 from src.ai_assist.service import AiAssistService, ServicePolicy
 from tools.qualification.ai111 import plan as plan_module
@@ -62,10 +66,20 @@ from tools.qualification.ai111.ownership import (
 )
 from tools.qualification.ai111.scoring import evaluate_gates, summarize_arm
 
+logger = logging.getLogger(__name__)
+
 _ACTIVE_SUFFIXES = frozenset(
     {".exe", ".dll", ".bat", ".cmd", ".ps1", ".py", ".sh", ".so", ".dylib"}
 )
 _EXECUTABLE_PREFERENCE = ("llama-completion.exe", "llama-cli.exe")
+#: The only archive members a physical session may launch, pinned by SHA-256 (from the passive member-hash manifest).
+#: D12a covers both (``d12a.AUTHORIZED_MEMBERS``: the owner's AI-114 runtime-executable decision added the one-shot
+#: ``llama-completion.exe`` to the original ``llama-cli.exe``). A session may name either, but a recommendation counts only
+#: the D12a verdict of the member that actually ran.
+LAUNCHABLE_MEMBERS = {
+    "llama-cli.exe": "c84a4604db9a01cb64ece64c7da5ace4c83c44dfb63f55a9c8d2270b685c0ee7",
+    "llama-completion.exe": "b36b1ef84a047542f72dca924616052efde7e380c2a12562d459f5febf5cab72",
+}
 _BUSY_PATTERNS = ("stable-diffusion-webui", "comfyui", "run_pr_gate", "pytest", "forge")
 
 
@@ -84,8 +98,12 @@ def append_jsonl(path: Path, value: Any) -> None:
         os.fsync(handle.fileno())
 
 
-def derive_runtime_build(archive: Path, intent: dict[str, Any]) -> RuntimeBuild:
-    """Verify the archive against the frozen digest, then hash every loadable member so it can be pinned and imported."""
+def derive_runtime_build(
+    archive: Path, intent: dict[str, Any], executable: str | None = None
+) -> RuntimeBuild:
+    """Verify the archive against the frozen digest, then hash every loadable member so it can be pinned and imported.
+
+    ``executable`` names the member to run; without it the first of ``_EXECUTABLE_PREFERENCE`` present is used."""
 
     sha, size = hash_file(archive)
     if size != intent["bytes"] or sha != intent["sha256"]:
@@ -100,7 +118,15 @@ def derive_runtime_build(archive: Path, intent: dict[str, Any]) -> RuntimeBuild:
                 while chunk := source.read(1024 * 1024):
                     digest.update(chunk)
             files[info.filename] = digest.hexdigest()
-    executable = next((name for name in _EXECUTABLE_PREFERENCE if name in files), None)
+    if executable is not None:
+        if executable not in files:
+            raise ImportRefused("requested_executable_not_in_archive")
+        if executable not in LAUNCHABLE_MEMBERS:
+            raise ImportRefused("requested_executable_not_launchable")
+        if files[executable] != LAUNCHABLE_MEMBERS[executable]:
+            raise ImportRefused("requested_executable_hash_mismatch")
+    else:
+        executable = next((name for name in _EXECUTABLE_PREFERENCE if name in files), None)
     if executable is None:
         raise ImportRefused("no_inference_executable_in_archive")
     return RuntimeBuild(
@@ -199,6 +225,51 @@ class _Sampler:
                 break
 
 
+#: The service's own admission rule (model file + this margin, in GiB, for BOTH available RAM and commit headroom), applied
+#: once up front for the largest requested model so a session does not import 19 GB before discovering it cannot run.
+PREFERRED_AVAILABLE_GIB = 12.0
+
+
+def resource_check(
+    memory_probe: MemoryProbe, registry: ModelRegistry, arms: list[str]
+) -> tuple[dict[str, Any], list[str]]:
+    """Readings, per-arm requirements and refusals. The preferred 12 GiB is advisory and only recorded as a warning."""
+
+    from src.ai_assist.service import MEMORY_MARGIN_GIB
+
+    needs = {
+        e.model_id: e.bytes / 1024**3 + MEMORY_MARGIN_GIB
+        for e in registry.entries
+        if e.model_id in arms
+    }
+    memory = memory_probe()
+    report: dict[str, Any] = {
+        "per_arm_requirement_gib": {k: round(v, 3) for k, v in needs.items()},
+        "preferred_available_gib": PREFERRED_AVAILABLE_GIB,
+        "warnings": [],
+    }
+    if memory is None:
+        return report, ["memory could not be read"]
+    report["available_gib"] = round(memory.available_gib, 3)
+    report["commit_headroom_gib"] = round(memory.commit_headroom_gib, 3)
+    problems: list[str] = []
+    for model_id, need in sorted(needs.items()):
+        if memory.available_gib < need:
+            problems.append(
+                f"available RAM {memory.available_gib:.2f} GiB is below {model_id}'s requirement {need:.2f} GiB"
+            )
+        if memory.commit_headroom_gib < need:
+            problems.append(
+                f"commit headroom {memory.commit_headroom_gib:.2f} GiB is below {model_id}'s requirement {need:.2f} GiB"
+            )
+    if needs and memory.available_gib < PREFERRED_AVAILABLE_GIB:
+        report["warnings"].append(
+            f"available RAM {memory.available_gib:.2f} GiB is under the preferred {PREFERRED_AVAILABLE_GIB:.0f} GiB "
+            "for the full screening session"
+        )
+    return report, problems
+
+
 def preflight(
     plan: dict[str, Any],
     paths: SessionPaths,
@@ -247,14 +318,23 @@ def preflight(
 
 
 def run_session(**kwargs: Any) -> dict[str, Any]:
-    """Run one physical session; whatever the monitor's providers hold open (an ETW trace) is released on every path."""
+    """Run one physical session; the monitor's closing bracket (canary and beacon) runs on every path that began."""
 
     monitor = kwargs.get("monitor")
+    result: dict[str, Any] | None = None
     try:
-        return _run_session(**kwargs)
+        result = _run_session(**kwargs)
+        return result
     finally:
         if monitor is not None:
-            monitor.close()
+            where = monitor.evidence_dir.parent if monitor.evidence_dir is not None else None
+            leaked = monitor.close_and_report(where)
+            if result is not None:
+                result["trace_sessions_left_running"] = leaked
+                if leaked and result.get("verdict") == "PASS":
+                    result["verdict"] = "INCONCLUSIVE"
+            if leaked:
+                logger.error("Trace sessions left running after the session: %s", leaked)
 
 
 def _run_session(
@@ -272,6 +352,12 @@ def _run_session(
     attest: str | None = None,
     memory_probe: MemoryProbe = read_host_memory,
     monitor: OwnedSessionMonitor | None = None,
+    executable: str | None = None,
+    gpu_probe: Callable[[], list[str]] | None = None,
+    lifecycle_probes: bool = False,
+    extra_read_roots: tuple[Path, ...] = (),
+    run_id: str = "",
+    probe_case: Case | None = None,
 ) -> dict[str, Any]:
     # Process, connection and file evidence comes only from the ownership monitor, which reads the bounded runner's own
     # container record. A session with no monitor, or one whose channels are not lifetime-complete and canary-proven,
@@ -306,6 +392,17 @@ def _run_session(
             ).hexdigest(),
             "monitor_kind": monitor.kind,
             "executed_sha": _git_head(),
+            "source_dirty": _git_dirty(),
+            "run_id": run_id,
+            "host": platform.node(),
+            "executable": executable or "(first of the preference list)",
+            "lifecycle_probes": lifecycle_probes,
+            "extra_read_roots": [str(r) for r in extra_read_roots],
+            "etw_sha256": _sha_of_sibling("etw.py"),
+            "capture_sha256": {
+                name: _sha_of_sibling(f"{name}.py")
+                for name in ("capture_control", "capture_session", "capture_analysis")
+            },
         },
     )
     busy = (busy_provider or quiet_host_refusals)() if plan["safety"]["quiet_host_required"] else []
@@ -324,6 +421,9 @@ def _run_session(
         authorization_text=authorization_text,
         busy=busy,
     )
+    resources, resource_problems = resource_check(memory_probe, registry, arms)
+    write_new_json(evidence / "resource-preflight.json", resources)
+    problems += resource_problems
     if problems:
         write_new_json(evidence / "preflight-refusal.json", problems)
         return {"verdict": "INCONCLUSIVE", "refused": problems}
@@ -332,7 +432,11 @@ def _run_session(
     # short-lived descendant of its own trusted canary child. Any shortfall refuses the whole session.
     monitor.bind_evidence(evidence / "ownership")
     monitor.bind_roots(
-        read_roots=(ai_root, Path(os.environ.get("SystemRoot", "C:\\Windows"))),
+        read_roots=(
+            ai_root,
+            Path(os.environ.get("SystemRoot", "C:\\Windows")),
+            *extra_read_roots,
+        ),
         write_roots=(ai_root / "work",),
     )
     monitor.run_canary()
@@ -347,7 +451,7 @@ def _run_session(
             "refused": [f"monitoring not ready: {problem}" for problem in monitor_problems],
         }
 
-    build = derive_runtime_build(paths.runtime_archive, plan["runtime_intent"])
+    build = derive_runtime_build(paths.runtime_archive, plan["runtime_intent"], executable)
     write_new_json(
         evidence / "derived-runtime-build.json",
         {
@@ -388,6 +492,16 @@ def _run_session(
         for model_id in model_arms:
             entry = next(e for e in registry.entries if e.model_id == model_id)
             record_active(ai_root, build, entry)
+            arm_problems = _arm_preconditions(
+                plan, ai_root, build, entry, busy_provider, gpu_probe, strict_offline
+            )
+            append_jsonl(
+                evidence / "arm-integrity.jsonl",
+                {"arm": model_id, "phase": "before", "problems": arm_problems, "utc": _now()},
+            )
+            if arm_problems:
+                abort = f"arm precondition failed for {model_id}: " + "; ".join(arm_problems)
+                break
             service = AiAssistService(
                 root=ai_root,
                 runtime_manifest=RuntimeManifest((build,)),
@@ -409,6 +523,7 @@ def _run_session(
                     abort = sampler.abort_reason
                     break
                 monitored_before = len(monitor.records)
+                started_utc = _now()
                 outcome = service.run(
                     case.request(f"{model_id[:24].replace('.', '_')}-{number:04d}")
                 )
@@ -430,6 +545,11 @@ def _run_session(
                     "choice": getattr(suggestion, "target", None)
                     or getattr(suggestion, "workflow", None),
                     "details": details,
+                    "started_utc": started_utc,
+                    "ended_utc": _now(),
+                    "arm_request_index": number,
+                    "phase": "cold" if number == 1 else "warm",
+                    "input_chars": case.request("probe").input_chars(),
                 }
                 records.setdefault(model_id, []).append(row)
                 append_jsonl(records_path, row)
@@ -443,6 +563,9 @@ def _run_session(
                 if details["ownership_violations"]:
                     abort = "ownership violation: " + ", ".join(details["ownership_violations"])
                     break
+                if outcome.reason in _UNTRUSTWORTHY_OBSERVATION:
+                    abort = f"observation no longer trustworthy: {outcome.reason}"
+                    break
                 infra = outcome.code in (
                     OutcomeCode.TIMEOUT,
                     OutcomeCode.UNAVAILABLE,
@@ -453,6 +576,34 @@ def _run_session(
                 if consecutive_infra >= plan["safety"]["consecutive_infrastructure_failures_abort"]:
                     abort = f"{consecutive_infra} consecutive infrastructure failures"
                     break
+            if not abort:
+                after = _deep_problems(ai_root, build, entry)
+                append_jsonl(
+                    evidence / "arm-integrity.jsonl",
+                    {"arm": model_id, "phase": "after", "problems": after, "utc": _now()},
+                )
+                if after:
+                    abort = f"identity changed during {model_id}: " + "; ".join(after)
+            if not abort and lifecycle_probes:
+                lifecycle_rows = _lifecycle_probes(
+                    probe_case or cases[0],
+                    model_id,
+                    ai_root,
+                    build,
+                    entry,
+                    monitor,
+                    memory_probe,
+                    sampling,
+                    limits,
+                    command_factory,
+                    strict_offline,
+                )
+                for row in lifecycle_rows:
+                    append_jsonl(evidence / "lifecycle-probes.jsonl", row)
+                if any(
+                    not r["teardown_verified"] or r["ownership_violations"] for r in lifecycle_rows
+                ):
+                    abort = f"lifecycle probe for {model_id} left unverified teardown or violations"
             if abort:
                 break
     finally:
@@ -518,6 +669,138 @@ def _run_session(
     return result
 
 
+_UNTRUSTWORTHY_OBSERVATION = frozenset(
+    {
+        "process_priority_unverified",
+        "process_observation_invalid",
+        "process_memory_unreadable",
+        "child_not_observable",
+    }
+)
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _deep_problems(ai_root: Path, build: RuntimeBuild, entry: Any) -> list[str]:
+    """Re-hash every pinned runtime file and the model file; any difference from the frozen identity is a stop.
+
+    The runtime directory must also hold no loadable file beyond the pinned set (the runtime loads backend DLLs by
+    scanning its own directory), and no scratch directory may hold one."""
+
+    result = verify_installation(
+        ai_root, RuntimeManifest((build,)), ModelRegistry((entry,)), deep=True, allow_candidate=True
+    )
+    problems = [] if result.ok else [result.reason]
+    runtime_root = runtime_dir(ai_root, build.build_id)
+    pinned = {name.lower() for name in build.files}
+    for base, label in ((runtime_root, "runtime"), (ai_root / "work", "scratch")):
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in _ACTIVE_SUFFIXES:
+                continue
+            relative = path.relative_to(base).as_posix().lower()
+            if label == "scratch" or relative not in pinned:
+                problems.append(f"unpinned loadable file in {label}: {relative}")
+    return problems
+
+
+def _arm_preconditions(
+    plan: dict[str, Any],
+    ai_root: Path,
+    build: RuntimeBuild,
+    entry: Any,
+    busy_provider: Callable[[], list[str]] | None,
+    gpu_probe: Callable[[], list[str]] | None,
+    strict_offline: bool,
+) -> list[str]:
+    """Before each model arm: the identity is still the frozen one, the host is still quiet and the GPU is as found."""
+
+    problems = _deep_problems(ai_root, build, entry)
+    if strict_offline and read_attestation(ai_root) is None:
+        problems.append("operator attestation missing")
+    if plan["safety"]["quiet_host_required"]:
+        problems += (busy_provider or quiet_host_refusals)()
+    if gpu_probe is not None:
+        problems += gpu_probe()
+    return problems
+
+
+def _lifecycle_probes(
+    case: Case,
+    model_id: str,
+    ai_root: Path,
+    build: RuntimeBuild,
+    entry: Any,
+    monitor: OwnedSessionMonitor,
+    memory_probe: MemoryProbe,
+    sampling: Sampling,
+    limits: RunLimits,
+    command_factory: Callable[..., Any] | None,
+    strict_offline: bool,
+) -> list[dict[str, Any]]:
+    """Real-model timeout and cancellation: a deliberately short deadline, and a cancel fired while the model loads.
+
+    These are lifecycle measurements, kept apart from the scored cases. Each records whether the probe really stopped the
+    child (a model that finishes inside the deadline did not exercise the path) and whether teardown was proven."""
+
+    rows: list[dict[str, Any]] = []
+    for kind in ("timeout", "cancel"):
+        probe_limits = RunLimits(
+            **{**asdict(limits), "timeout_seconds": 2.0 if kind == "timeout" else 60.0}
+        )
+        service = AiAssistService(
+            root=ai_root,
+            runtime_manifest=RuntimeManifest((build,)),
+            registry=ModelRegistry((entry,)),
+            activity_provider=lambda: GenerationActivity(),
+            memory_probe=memory_probe,
+            runtime=AiRuntime(
+                ai_root,
+                command_factory=command_factory or default_command,
+                runner=monitor.runner(),
+            ),
+            policy=ServicePolicy(allow_candidate=True, strict_offline=strict_offline),
+            limits=probe_limits,
+            sampling=sampling,
+        )
+        token = AiCancelToken()
+        timer = threading.Timer(1.0, token.cancel) if kind == "cancel" else None
+        before = len(monitor.records)
+        started = _now()
+        if timer is not None:
+            timer.start()
+        try:
+            outcome = service.run(case.request(f"{model_id[:20].replace('.', '_')}-{kind}"), token)
+        finally:
+            if timer is not None:
+                timer.cancel()
+        new = monitor.records[before:]
+        expected = OutcomeCode.TIMEOUT if kind == "timeout" else OutcomeCode.CANCELLED
+        rows.append(
+            {
+                "arm": model_id,
+                "probe": kind,
+                "outcome": outcome.code.value,
+                "reason": outcome.reason,
+                "elapsed_ms": outcome.elapsed_ms,
+                "stopped_as_intended": outcome.code == expected,
+                "teardown_verified": bool(new)
+                and all(
+                    r.process.get("complete") is True
+                    and r.process.get("active_after_teardown") == 0
+                    for r in new
+                ),
+                "ownership_violations": sorted({v for r in new for v in r.violations}),
+                "started_utc": started,
+                "ended_utc": _now(),
+            }
+        )
+    return rows
+
+
 def _baseline_fields(arm: str, case: Case) -> dict[str, Any]:
     produced = BASELINE_FUNCTIONS[arm](case)
     return {
@@ -527,11 +810,114 @@ def _baseline_fields(arm: str, case: Case) -> dict[str, Any]:
     }
 
 
-def _git_head() -> str:
+def _sha_of_sibling(name: str) -> str | None:
+    path = Path(__file__).with_name(name)
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+
+def _git_command() -> list[str] | None:
+    """An absolute git, found on PATH without consulting the current directory (this process may be elevated), with
+    repository-configured helpers disabled."""
+
+    cwd = Path.cwd().resolve()
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if not entry:
+            continue
+        directory = Path(entry)
+        try:
+            resolved = directory.resolve()
+        except OSError:
+            continue
+        if resolved == cwd or cwd in resolved.parents:
+            continue
+        candidate = directory / "git.exe"
+        if candidate.is_file():
+            return [str(candidate), "-c", "core.fsmonitor=false", "-c", "core.hooksPath=NUL"]
+    return None
+
+
+def _git_dirty() -> bool | None:
+    """Whether tracked source differs from HEAD (evidence from a modified tree is labelled, not hidden)."""
+
+    git = _git_command()
+    if git is None:
+        return None
     try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, timeout=10).strip()
+        status = subprocess.check_output(
+            [*git, "status", "--porcelain", "--untracked-files=no"], text=True, timeout=30
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    return bool(status.strip())
+
+
+def _git_head() -> str:
+    git = _git_command()
+    if git is None:
+        return "unknown"
+    try:
+        return subprocess.check_output([*git, "rev-parse", "HEAD"], text=True, timeout=10).strip()
     except Exception:  # noqa: BLE001
         return "unknown"
+
+
+def extra_root_refusal(root: Path) -> str:
+    """Why an additional read root is not acceptable. Access is never widened to a user profile or a whole drive."""
+
+    resolved = root.resolve()
+    if not resolved.is_dir():
+        return "not an existing directory"
+    if resolved == Path(resolved.anchor):
+        return "a drive root"
+    for prefix, why in _refused_prefixes():
+        if resolved == prefix or prefix in resolved.parents or resolved in prefix.parents:
+            return why
+    return ""
+
+
+def _refused_prefixes() -> list[tuple[Path, str]]:
+    """Directories an additional read root may never be, contain or sit under."""
+
+    drive = Path(os.environ.get("SystemDrive", "C:") + "\\")
+    system = Path(os.environ.get("SystemRoot", str(drive / "Windows")))
+    return [
+        (drive / "Users", "user profile data (anything under the Users directory)"),
+        (Path.home(), "the user's profile"),
+        (plan_module.REPO_ROOT, "the source repository"),
+        (system / "Temp", "a user-writable system directory"),
+    ]
+
+
+def nvidia_smi_probe(
+    max_utilization_percent: float = 40.0, max_memory_growth_mib: float = 2048.0
+) -> Callable[[], list[str]]:
+    """Read-only GPU guard: the GPU must stay queryable and unused by anyone else while the CPU-only runtime works."""
+
+    from tools.qualification.ai111.tool_runner import bounded_tool
+
+    root = os.environ.get("SystemRoot", "C:\\Windows")
+    tool = str(Path(root) / "System32" / "nvidia-smi.exe")
+    baseline: list[float] = []
+
+    def probe() -> list[str]:
+        try:
+            code, text = bounded_tool(
+                [tool, "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits"]
+            )
+            utilization, memory = (float(part) for part in text.strip().splitlines()[0].split(","))
+        except Exception:  # noqa: BLE001 - a GPU that cannot be read is a stop, not a pass
+            return ["gpu: nvidia-smi could not be read"]
+        if code != 0:
+            return ["gpu: nvidia-smi failed"]
+        baseline.append(memory)
+        problems = []
+        if utilization > max_utilization_percent:
+            problems.append(f"gpu: utilization {utilization:.0f}% (another workload is running)")
+        if memory - baseline[0] > max_memory_growth_mib:
+            problems.append("gpu: memory use grew since the session started")
+        return problems
+
+    return probe
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -557,15 +943,52 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--operator-corpus", type=Path)
     parser.add_argument("--strict-offline", action="store_true")
     parser.add_argument(
-        "--provider",
-        choices=("sampled", "etw"),
-        default="sampled",
-        help="connection/file telemetry: 'etw' needs an elevated process and a passed canary; 'sampled' always refuses",
+        "--attest",
+        help="the operator's own statement that an outbound restriction exists (recorded, never verified by StableNew)",
+    )
+    parser.add_argument(
+        "--executable",
+        required=True,
+        choices=sorted(LAUNCHABLE_MEMBERS),
+        help="the runtime archive member to launch (pinned by SHA-256); it must be the member the D12a record covers",
+    )
+    parser.add_argument(
+        "--run-id",
+        required=True,
+        help="unique run identity; it must equal the run id the operator gave the capture",
+    )
+    parser.add_argument(
+        "--lifecycle-probes",
+        action="store_true",
+        help="after each model's cases, run one real timeout probe and one real cancellation probe",
+    )
+    parser.add_argument(
+        "--extra-read-root",
+        type=Path,
+        action="append",
+        default=[],
+        help="a directory the runtime was shown to need (from the D12a record); never a profile or drive root",
+    )
+    parser.add_argument(
+        "--capture-dir",
+        type=Path,
+        required=True,
+        help="the operator's ACTIVE ETW capture; it must be <evidence-root>/capture (PR-AI-QUAL-114E)",
+    )
+    parser.add_argument(
+        "--canary-proof",
+        type=Path,
+        required=True,
+        help="analysis.json of a prior canary capture that passed",
     )
     args = parser.parse_args(argv)
     plan = plan_module.frozen_plan()
     if args.authorize_plan != plan_module.digest(plan):
         raise SystemExit("Authorization does not match the frozen plan digest")
+    for root in args.extra_read_root:
+        refusal = extra_root_refusal(root)
+        if refusal:
+            raise SystemExit(f"--extra-read-root {root}: {refusal}")
     registry = load_model_registry(plan_module.REGISTRY_PATH)
     cases = build_corpus(plan["corpus"]["seed"], plan["corpus"]["counts"])
     if args.operator_corpus:
@@ -574,13 +997,16 @@ def main(argv: list[str] | None = None) -> int:
         cases = stage_a_subset(cases, plan["stages"]["A"]["cases_per_arm"], plan["corpus"]["seed"])
     files = {e.model_id: args.model_dir / e.filename for e in registry.entries}
     paths = SessionPaths(args.evidence_root, args.runtime_archive, files, args.operator_corpus)
-    monitor = None
-    if args.provider == "etw":
-        from tools.qualification.ai111.etw import etw_host_monitor
+    from tools.qualification.ai111.capture_session import CaptureAdmission, RetrospectiveMonitor
 
-        monitor = etw_host_monitor(
-            OwnershipPolicy(), args.evidence_root / f"ownership-{args.stage}"
-        )
+    if args.capture_dir.resolve() != (args.evidence_root / "capture").resolve():
+        raise SystemExit("The capture must be this run's own <evidence-root>/capture")
+    monitor = RetrospectiveMonitor(
+        OwnershipPolicy(),
+        CaptureAdmission(
+            capture_dir=args.capture_dir, run_id=args.run_id, proof_path=args.canary_proof
+        ),
+    )
     result = run_session(
         plan=plan,
         paths=paths,
@@ -591,9 +1017,19 @@ def main(argv: list[str] | None = None) -> int:
         registry=registry,
         strict_offline=args.strict_offline,
         monitor=monitor,
+        attest=args.attest,
+        executable=args.executable,
+        gpu_probe=nvidia_smi_probe(),
+        lifecycle_probes=args.lifecycle_probes,
+        extra_read_roots=tuple(args.extra_read_root),
+        run_id=args.run_id,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result["verdict"] == "PASS" else 1
+    if result["verdict"] != "PASS":
+        return 1
+    return (
+        0 if not (result.get("monitoring") or {}).get("capture_analysis_required") else 3
+    )  # 3: final only after the capture analysis
 
 
 if __name__ == "__main__":
