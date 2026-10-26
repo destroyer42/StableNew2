@@ -10,8 +10,7 @@ from typing import TYPE_CHECKING, Any
 from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
 from src.contracts import CurrentConfig, JobDraft, JobDraftPart, PackJobEntry
 from src.controller.ports.ui_dispatcher import UiDispatcher
-from src.gui.config_adapter_v26 import GuiConfigAdapterV26
-from src.gui.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
+from src.gui_v2.adapters.config_adapter_v26 import GuiConfigAdapterV26
 from src.pipeline.job_models_v2 import (
     JobLifecycleLogEvent,
     NormalizedJobRecord,
@@ -19,6 +18,7 @@ from src.pipeline.job_models_v2 import (
     UnifiedJobSummary,
 )
 from src.queue.job_history_store import JobHistoryEntry
+from src.state.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
 from src.utils.config import LoraRuntimeConfig
 from src.utils.prompt_pack_utils import pack_json_path, same_pack_file
 

@@ -8,10 +8,6 @@ from typing import Any
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
-from src.gui.controllers.review_workflow_adapter import (
-    ReviewWorkflowAdapter,
-    ReviewWorkspaceHandoff,
-)
 from src.gui.help_text.workflow_guidance_v2 import (
     REVIEW_DEFAULT_WORKFLOW_HINT,
     build_review_action_guidance,
@@ -47,6 +43,10 @@ from src.review.adetailer_outcome import (
     AdetailerPair,
     build_review_context,
     resolve_adetailer_pair,
+)
+from src.review.workflow_adapter import (
+    ReviewWorkflowAdapter,
+    ReviewWorkspaceHandoff,
 )
 from src.review.workspace_io import (
     MAX_FOLDER_IMAGES,

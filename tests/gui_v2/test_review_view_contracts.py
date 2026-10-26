@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.view_contracts.feedback_panel_contract import update_feedback_state
 from src.gui.view_contracts.form_section_contract import update_form_section
 from src.gui.view_contracts.selection_list_contract import update_selection_list
+from src.review.workflow_adapter import ReviewWorkflowAdapter
 
 
 def test_review_adapter_prompt_diff_contract() -> None:

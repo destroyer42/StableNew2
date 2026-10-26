@@ -4,7 +4,7 @@
     "daemon_threads": 14,
     "raw_threads": 9,
     "utils_upward_imports": 18,
-    "controller_gui_imports": 10,
+    "controller_gui_imports": 6,
     "ai_assist_forbidden_imports": 0
   },
   "counts": {
@@ -13,13 +13,7 @@
     },
     "src/controller/app_controller.py": {
       "daemon_threads": 1,
-      "controller_gui_imports": 5
-    },
-    "src/controller/app_controller_services/gui_config_service.py": {
-      "controller_gui_imports": 1
-    },
-    "src/controller/content_visibility_resolver.py": {
-      "controller_gui_imports": 1
+      "controller_gui_imports": 4
     },
     "src/controller/core_pipeline_controller.py": {
       "controller_gui_imports": 1
@@ -28,9 +22,6 @@
       "raw_threads": 1
     },
     "src/controller/prompt_pack_preflight.py": {
-      "controller_gui_imports": 1
-    },
-    "src/controller/review_batch_service.py": {
       "controller_gui_imports": 1
     },
     "src/gui/model_comparison_readiness.py": {

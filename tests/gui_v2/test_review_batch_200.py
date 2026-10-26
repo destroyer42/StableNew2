@@ -18,7 +18,6 @@ from src.controller.app_controller_services.background_task_coordinator import (
 )
 from src.controller.job_service import JobService
 from src.controller.review_batch_service import prepare_review_batch
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.review_batch_dialog import ReviewBatchDialog
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.image_backends.forge_zimage_profile import ZIMAGE_PROFILE_V1
@@ -28,6 +27,7 @@ from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
+from src.review.workflow_adapter import ReviewWorkflowAdapter
 from src.utils.image_metadata import (
     ImageMetadataContractV26,
     build_contract_kv,

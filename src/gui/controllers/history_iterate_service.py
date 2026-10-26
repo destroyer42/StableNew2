@@ -20,13 +20,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff
 from src.gui.controllers.video_workspace_handoff import (
     route_history_handoff_to_review,
     show_queue_view,
 )
 from src.gui_v2.history_iterate_model import IterateAssessment, assess_history_iterate
 from src.pipeline.history_variation_compiler import HistoryVariationDraft
+from src.review.workflow_adapter import ReviewWorkspaceHandoff
 
 ConfirmReplace = Callable[[str, str], bool]
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
 from src.pipeline.config_contract_v26 import (
     CONFIG_CONTRACT_SCHEMA_V26,
@@ -10,8 +10,18 @@ from src.pipeline.config_contract_v26 import (
     build_config_layers,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
-    from src.gui.app_state_v2 import AppStateV2
+
+class ConfigProjectionState(Protocol):
+    """Writable projections on the existing draft-state owner, never a new store.
+
+    Optional selected_prompt_pack_id and job_draft attributes supply context;
+    legacy state objects may omit them, as the adapter's getattr readers allow.
+    """
+
+    run_config: dict[str, Any]
+    intent_config: dict[str, Any]
+    execution_config: dict[str, Any]
+    backend_options: dict[str, Any]
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -28,7 +38,7 @@ class GuiConfigAdapterV26:
     `intent_config`, `execution_config`, and `backend_options` as canonical.
     """
 
-    def __init__(self, app_state: AppStateV2) -> None:
+    def __init__(self, app_state: ConfigProjectionState) -> None:
         self._app_state = app_state
 
     def get_run_config_projection(self) -> dict[str, Any]:
@@ -216,4 +226,4 @@ class GuiConfigAdapterV26:
         return derived.to_dict()
 
 
-__all__ = ["GuiConfigAdapterV26"]
+__all__ = ["ConfigProjectionState", "GuiConfigAdapterV26"]

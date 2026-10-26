@@ -16,13 +16,13 @@ from src.api.webui_runtime_identity import (
     resolve_effective_webui_base_url,
 )
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
-from src.gui.content_visibility import normalize_content_visibility_mode
 from src.gui.tooltip import attach_tooltip
 from src.gui_v2.prompt_optimizer_view import (
     LORA_POSITION_HELP,
     LORA_POSITION_LABEL,
     UNKNOWN_POSITION_HELP,
 )
+from src.state.content_visibility import normalize_content_visibility_mode
 from src.utils.config import ConfigManager
 from src.video.comfy_process_manager import read_comfy_launch_facts
 from src.video.comfy_runtime_setup import (

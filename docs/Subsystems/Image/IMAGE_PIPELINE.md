@@ -257,7 +257,7 @@ Compile-time seams in `model_policy.py`:
 
 ### 4.3 Cross-workflow compatibility preflight
 
-`src/image_backends/operation_compatibility.py` answers "can this requested operation run on that resolved target?" from `ModelPolicy` alone (`assess_operation`, `assess_njr`, `require_njr_operation`; codes such as `backend_mismatch`, `stage_chain_unsupported`, `source_image_count`, `geometry_unsupported`). It is a projection, not an authority. Consumers: `src/controller/reprocess_admission.py`, `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/gui/controllers/review_workflow_adapter.py`, `src/prompting/pack_target_readiness.py` (PromptPack editor readiness). A target without an exact profile (ordinary SDXL, unknown families) is never narrowed here.
+`src/image_backends/operation_compatibility.py` answers "can this requested operation run on that resolved target?" from `ModelPolicy` alone (`assess_operation`, `assess_njr`, `require_njr_operation`; codes such as `backend_mismatch`, `stage_chain_unsupported`, `source_image_count`, `geometry_unsupported`). It is a projection, not an authority. Consumers: `src/controller/reprocess_admission.py`, `src/controller/review_batch_service.py`, `src/controller/batch_operations_service.py`, `src/review/workflow_adapter.py`, `src/prompting/pack_target_readiness.py` (PromptPack editor readiness). A target without an exact profile (ordinary SDXL, unknown families) is never narrowed here.
 
 ### 4.4 Prompt compatibility and adaptation (`src/prompting/`)
 

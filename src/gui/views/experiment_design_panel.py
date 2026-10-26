@@ -1049,7 +1049,7 @@ class ExperimentDesignPanel(ttk.Frame):
                 self._comparison_show_names())
 
     def _comparison_show_names(self) -> bool:
-        from src.gui.content_visibility import (
+        from src.state.content_visibility import (
             ContentVisibilityMode,
             normalize_content_visibility_mode,
         )

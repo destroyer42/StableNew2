@@ -5,7 +5,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from src.gui.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
+from src.state.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
 
 CONTENT_VISIBILITY_SCHEMA = "stablenew.content-visibility.v1"
 CONTENT_RATING_SFW = "sfw"

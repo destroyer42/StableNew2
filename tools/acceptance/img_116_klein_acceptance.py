@@ -147,7 +147,7 @@ def run_review_handler(source: Path, service: Any, output_dir: Path) -> list[Any
     from unittest.mock import Mock, patch
 
     from src.controller.app_controller import AppController
-    from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
+    from src.review.workflow_adapter import ReviewWorkflowAdapter
 
     with patch("src.controller.app_controller.AppController.__init__", return_value=None):
         controller = AppController.__new__(AppController)

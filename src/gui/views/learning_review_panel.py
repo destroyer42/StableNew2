@@ -737,12 +737,12 @@ class LearningReviewPanel(ttk.Frame):
             self.metadata_text.insert(tk.END, metadata)
             study = (getattr(experiment, "metadata", {}) or {}).get("study_type")
             if study in DISPLAYED_STUDIES:
-                from src.gui.content_visibility import (
+                from src.learning.controlled_study_display import candidate_caption
+                from src.learning.resource_access import resolve_app_state
+                from src.state.content_visibility import (
                     ContentVisibilityMode,
                     normalize_content_visibility_mode,
                 )
-                from src.learning.controlled_study_display import candidate_caption
-                from src.learning.resource_access import resolve_app_state
 
                 state = resolve_app_state(self._get_learning_controller())
                 visible = normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW
@@ -820,12 +820,12 @@ class LearningReviewPanel(ttk.Frame):
         if result.get("study_type") in DISPLAYED_STUDIES:
             self.slot_conclusion_text.grid()
             named = result["study_type"] != "prompt_slot"
-            from src.gui.content_visibility import (
+            from src.learning.controlled_study_display import candidate_label_text
+            from src.learning.resource_access import resolve_app_state
+            from src.state.content_visibility import (
                 ContentVisibilityMode,
                 normalize_content_visibility_mode,
             )
-            from src.learning.controlled_study_display import candidate_label_text
-            from src.learning.resource_access import resolve_app_state
 
             state = resolve_app_state(self._get_learning_controller())
             visible = normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW

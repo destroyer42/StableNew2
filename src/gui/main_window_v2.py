@@ -13,7 +13,6 @@ from src.api.webui_process_manager import WebUIProcessManager, build_default_web
 from src.controller.ports.presentation_actions import PresentationActions
 from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.app_state_v2 import AppStateV2
-from src.gui.content_visibility import ContentVisibilitySettings
 from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from src.gui.engine_settings_dialog import EngineSettingsDialog
 from src.gui.gui_invoker import TkInvoker
@@ -61,6 +60,7 @@ from src.services.operator_readiness_service import (
     product_support_surfaces,
 )
 from src.services.ui_state_store import get_ui_state_store
+from src.state.content_visibility import ContentVisibilitySettings
 from src.utils import InMemoryLogHandler
 from src.utils.config import ConfigManager
 

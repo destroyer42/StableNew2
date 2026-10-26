@@ -62,7 +62,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | Analytics window | `learning_analytics_panel.py` opened from the review panel's View Analytics |
 | Recommendation target map | `src/gui_v2/recommendation_targets.py` (`recommendation_target`, `checkpoint_for_stage`, `prepare_recommendation_patch`) |
 | Curation domain | `src/curation/` (`models.py`, `curation_workflow_builder.py`, `curation_manifest.py`, `workflow_summary.py`, `learning_bridge.py`: `CurationLearningBridge` turns a `SelectionEvent` into a `staged_curation_event` record) |
-| Review tab entry | `src/gui/views/review_tab_frame_v2.py` calls `save_review_feedback`/`undo_review_feedback` on the learning controller; `src/gui/controllers/review_workflow_adapter.py` hands curation selections to Review |
+| Review tab entry | `src/gui/views/review_tab_frame_v2.py` calls `save_review_feedback`/`undo_review_feedback` on the learning controller; `src/review/workflow_adapter.py` hands curation selections to Review |
 | Completion routing | `src/controller/app_controller_services/learning_completion_router.py` |
 
 ## 3. Workflows

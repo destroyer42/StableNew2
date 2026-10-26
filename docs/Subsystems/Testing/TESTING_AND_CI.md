@@ -114,6 +114,12 @@ conservatively. It is separate from the `controller_gui_imports` ratchet: that r
 debt (any import, anywhere in the AST), this gate prevents Tk from entering the controller import closure.
 `--inventory-tk` prints every `src` module with a direct import-time `tkinter` import.
 
+Shared policy boundaries are covered by `tests/tools/test_presentation_policy_boundary_720.py`: the visibility, Review
+workflow and config-projection modules have no import-time path to `tkinter` or `src.gui`; their own local/type-only
+imports cannot hide a GUI dependency. A fresh subprocess refuses host imports while executing the parent-captured policy
+contracts in `tests/gui_v2/test_shared_presentation_policy_720.py`. Configuration uses a structural state interface rather
+than importing `AppStateV2`; no checker counting rules change.
+
 ## 8. The `ci_truth` guard and documentation checks
 
 `python tools/ci/ci_truth.py` (no flags, standard library only) exits 1 and prints each problem. It runs on the docs-only cheap path and, through `tests/system/test_ci_truth_sync_v2.py` and `tests/system/test_status_contract.py`, inside the required smoke or the census. It enforces [V]:

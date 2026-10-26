@@ -29,10 +29,6 @@ from src.curation.workflow_summary import (
     build_workflow_summary,
     find_latest_derived_descendant,
 )
-from src.gui.controllers.review_workflow_adapter import (
-    ReviewWorkflowAdapter,
-    ReviewWorkspaceHandoff,
-)
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.prompt_workspace_state import PromptWorkspaceState
@@ -125,6 +121,10 @@ from src.review.review_metadata_service import (
     INTERNAL_REVIEW_SUMMARY_SCHEMA,
     PortableReviewSummary,
     ReviewMetadataService,
+)
+from src.review.workflow_adapter import (
+    ReviewWorkflowAdapter,
+    ReviewWorkspaceHandoff,
 )
 from src.state.output_routing import get_output_root, resolve_output_artifact_path
 from src.utils.config import ConfigManager

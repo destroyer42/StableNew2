@@ -11,9 +11,9 @@ from PIL import Image
 
 import src.controller.reprocess_admission as admission_module
 from src.controller.app_controller import AppController
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.image_backends.forge_zimage_profile import ZIMAGE_PROFILE_V1 as ZP
 from src.image_backends.operation_compatibility import OperationNotSupportedError
+from src.review.workflow_adapter import ReviewWorkflowAdapter
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service_with_queue
 
 ZIMAGE = ZP.transformer.filename

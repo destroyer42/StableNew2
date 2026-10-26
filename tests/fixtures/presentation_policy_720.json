@@ -1,0 +1,590 @@
+{
+  "config": [
+    {
+      "before": {
+        "layers": {
+          "backend_options": {},
+          "execution_config": {},
+          "intent_config": {},
+          "schema": "stablenew.config.v2.6"
+        },
+        "projection": {
+          "config_layers": {
+            "backend_options": {},
+            "execution_config": {},
+            "intent_artifact_schema": "stablenew.intent-artifact.v1",
+            "intent_artifact_version": "1.0",
+            "intent_config": {},
+            "intent_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "schema": "stablenew.config.v2.6"
+          },
+          "config_schema": "stablenew.config.v2.6"
+        }
+      },
+      "changed": true,
+      "layers": {
+        "backend_options": {},
+        "execution_config": {
+          "max_variants": 4,
+          "model": "sdxl",
+          "randomization_enabled": true,
+          "steps": 22,
+          "txt2img": {
+            "steps": 14
+          }
+        },
+        "intent_config": {},
+        "schema": "stablenew.config.v2.6"
+      },
+      "repeat_changed": false,
+      "submission": {
+        "config_layers": {
+          "backend_options": {},
+          "execution_config": {
+            "max_variants": 4,
+            "model": "sdxl",
+            "randomization_enabled": true,
+            "steps": 22,
+            "txt2img": {
+              "steps": 14
+            }
+          },
+          "intent_artifact_schema": "stablenew.intent-artifact.v1",
+          "intent_artifact_version": "1.0",
+          "intent_config": {},
+          "intent_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "schema": "stablenew.config.v2.6"
+        },
+        "config_schema": "stablenew.config.v2.6",
+        "lora_strengths": [
+          {
+            "name": "detail",
+            "strength": 0.8
+          }
+        ],
+        "max_variants": 4,
+        "model": "sdxl",
+        "prompt_optimizer": {
+          "enabled": true
+        },
+        "randomization_enabled": true,
+        "steps": 22,
+        "txt2img": {
+          "steps": 14
+        }
+      }
+    },
+    {
+      "before": {
+        "layers": {
+          "backend_options": {
+            "image": {
+              "backend_id": "forge_webui"
+            }
+          },
+          "execution_config": {
+            "steps": 12
+          },
+          "intent_config": {
+            "source": "pack"
+          },
+          "schema": "stablenew.config.v2.6"
+        },
+        "projection": {
+          "steps": 33
+        }
+      },
+      "changed": true,
+      "layers": {
+        "backend_options": {},
+        "execution_config": {
+          "max_variants": 4,
+          "model": "sdxl",
+          "randomization_enabled": true,
+          "steps": 22,
+          "txt2img": {
+            "steps": 14
+          }
+        },
+        "intent_config": {},
+        "schema": "stablenew.config.v2.6"
+      },
+      "repeat_changed": false,
+      "submission": {
+        "config_layers": {
+          "backend_options": {},
+          "execution_config": {
+            "max_variants": 4,
+            "model": "sdxl",
+            "randomization_enabled": true,
+            "steps": 22,
+            "txt2img": {
+              "steps": 14
+            }
+          },
+          "intent_artifact_schema": "stablenew.intent-artifact.v1",
+          "intent_artifact_version": "1.0",
+          "intent_config": {},
+          "intent_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "schema": "stablenew.config.v2.6"
+        },
+        "config_schema": "stablenew.config.v2.6",
+        "lora_strengths": [
+          {
+            "name": "detail",
+            "strength": 0.8
+          }
+        ],
+        "max_variants": 4,
+        "model": "sdxl",
+        "prompt_optimizer": {
+          "enabled": true
+        },
+        "randomization_enabled": true,
+        "steps": 22,
+        "txt2img": {
+          "steps": 14
+        }
+      }
+    }
+  ],
+  "contexts": [
+    [
+      "manual",
+      ""
+    ],
+    [
+      "pack",
+      "selected"
+    ],
+    [
+      "pack",
+      "draft"
+    ],
+    [
+      "pack",
+      "entry"
+    ]
+  ],
+  "feedback": [
+    {
+      "after_negative_prompt": "",
+      "after_prompt": "portrait, cinematic",
+      "base_negative_prompt": "blurry",
+      "base_prompt": "portrait",
+      "cfg_scale": 7,
+      "image_path": "image.png",
+      "model": "sdxl",
+      "negative_prompt_delta": "-blurry",
+      "negative_prompt_mode": "modify",
+      "notes": "unchanged",
+      "prompt_delta": "cinematic",
+      "prompt_mode": "append",
+      "quality_label": "good",
+      "rating": 4,
+      "sampler": "Euler",
+      "scheduler": "",
+      "stages": [
+        "adetailer"
+      ],
+      "steps": 20,
+      "subscores": {
+        "anatomy": 3,
+        "composition": 4,
+        "prompt_adherence": 5
+      }
+    },
+    {
+      "after_negative_prompt": "faded",
+      "after_prompt": "final, cinematic",
+      "base_negative_prompt": "faded",
+      "base_prompt": "final",
+      "cfg_scale": null,
+      "image_path": "image.png",
+      "model": "",
+      "negative_prompt_delta": "-blurry",
+      "negative_prompt_mode": "modify",
+      "notes": "unchanged",
+      "prompt_delta": "cinematic",
+      "prompt_mode": "append",
+      "quality_label": "good",
+      "rating": 4,
+      "sampler": "",
+      "scheduler": "Beta",
+      "stages": [
+        "adetailer"
+      ],
+      "steps": null,
+      "subscores": {
+        "anatomy": 3,
+        "composition": 4,
+        "prompt_adherence": 5
+      }
+    },
+    {
+      "after_negative_prompt": "-blurry",
+      "after_prompt": "cinematic",
+      "base_negative_prompt": "",
+      "base_prompt": "",
+      "cfg_scale": null,
+      "image_path": "image.png",
+      "model": "",
+      "negative_prompt_delta": "-blurry",
+      "negative_prompt_mode": "modify",
+      "notes": "unchanged",
+      "prompt_delta": "cinematic",
+      "prompt_mode": "append",
+      "quality_label": "good",
+      "rating": 4,
+      "sampler": "",
+      "scheduler": "",
+      "stages": [
+        "adetailer"
+      ],
+      "steps": null,
+      "subscores": {
+        "anatomy": 3,
+        "composition": 4,
+        "prompt_adherence": 5
+      }
+    }
+  ],
+  "handoff": {
+    "base_negative_prompt": "negative",
+    "base_prompt": "baseline",
+    "direct_queue_preview": {
+      "default_source_label": "built-in defaults",
+      "effective_model": "sdxl",
+      "fallback_source_label": "staged curation queue baseline",
+      "metadata_source_label": "source artifact metadata",
+      "negative_prompt_behavior": "inherited",
+      "positive_prompt_behavior": "inherited",
+      "source_baseline_label": "staged curation source baseline",
+      "source_model": "sdxl",
+      "source_stage": "txt2img",
+      "source_vae": "Automatic",
+      "stage_settings": [
+        {
+          "cfg_scale": 4.0,
+          "cfg_scale_source": "staged curation queue baseline",
+          "denoise": 0.3,
+          "denoise_source": "built-in defaults",
+          "sampler": "Euler a",
+          "sampler_source": "built-in defaults",
+          "scheduler": null,
+          "scheduler_source": null,
+          "stage": "img2img",
+          "steps": 11,
+          "steps_source": "staged curation queue baseline"
+        }
+      ],
+      "target_stages": [
+        "img2img"
+      ]
+    },
+    "image_paths": [
+      "<repo>/__parity_inputs__/b.png",
+      "<repo>/__parity_inputs__/a.png"
+    ],
+    "negative_prompt_delta": "",
+    "negative_prompt_mode": "append",
+    "prompt_delta": "",
+    "prompt_mode": "append",
+    "source": "staged_curation",
+    "source_candidate_ids": [
+      "c0",
+      "c1",
+      "c2"
+    ],
+    "source_metadata_by_path": {
+      "<repo>/__parity_inputs__/a.png": {
+        "curation_candidate": {
+          "candidate_id": "c1",
+          "config_fingerprint": "config-hash",
+          "model_name": "sdxl",
+          "parent_candidate_id": "parent",
+          "prompt_fingerprint": "prompt-hash",
+          "root_candidate_id": "root",
+          "schema": "stablenew.curation.v2.6",
+          "source_decision": "advanced_to_refine",
+          "stage": "scout",
+          "workflow_id": "workflow"
+        },
+        "curation_selection_event": {
+          "actor": "user",
+          "candidate_id": "c1",
+          "decision": "advanced_to_refine",
+          "event_id": "event1",
+          "notes": null,
+          "reason_tags": [],
+          "schema": "stablenew.selection_event.v2.6",
+          "stage": "scout",
+          "timestamp": "2026-10-25T00:00:00Z",
+          "workflow_id": "workflow"
+        },
+        "curation_source_selection": {
+          "candidate_id": "c1",
+          "decision": "advanced_to_refine",
+          "face_triage_tier": "light",
+          "model_name": "sdxl",
+          "parent_candidate_id": "parent",
+          "root_candidate_id": "root",
+          "source_stage": "txt2img",
+          "workflow_id": "workflow"
+        }
+      },
+      "<repo>/__parity_inputs__/b.png": {
+        "curation_candidate": {
+          "candidate_id": "c2",
+          "config_fingerprint": "config-hash",
+          "model_name": "sdxl",
+          "parent_candidate_id": "parent",
+          "prompt_fingerprint": "prompt-hash",
+          "root_candidate_id": "root",
+          "schema": "stablenew.curation.v2.6",
+          "source_decision": "advanced_to_refine",
+          "stage": "scout",
+          "workflow_id": "workflow"
+        },
+        "curation_selection_event": {
+          "actor": "user",
+          "candidate_id": "c2",
+          "decision": "advanced_to_refine",
+          "event_id": "event2",
+          "notes": null,
+          "reason_tags": [],
+          "schema": "stablenew.selection_event.v2.6",
+          "stage": "scout",
+          "timestamp": "2026-10-25T00:00:00Z",
+          "workflow_id": "workflow"
+        },
+        "curation_source_selection": {
+          "candidate_id": "c2",
+          "decision": "advanced_to_refine",
+          "face_triage_tier": "light",
+          "model_name": "sdxl",
+          "parent_candidate_id": "parent",
+          "root_candidate_id": "root",
+          "source_stage": "txt2img",
+          "workflow_id": "workflow"
+        }
+      }
+    },
+    "stage_adetailer": false,
+    "stage_img2img": true,
+    "stage_upscale": false,
+    "target_stage": "refine",
+    "workflow_title": "Workflow"
+  },
+  "klein": {
+    "metadata": {
+      "<repo>/__parity_inputs__/a.png": {
+        "klein_single_reference_edit": true
+      },
+      "<repo>/__parity_inputs__/b.png": {
+        "klein_single_reference_edit": true,
+        "source_job_id": "job0"
+      }
+    },
+    "readiness": {
+      "exact_profile": true,
+      "problems": [],
+      "target": "FLUX.2 Klein 4B FP8"
+    }
+  },
+  "prompts": [
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "Portrait, Blue Eyes, blue eyes, cinematic",
+      "after_text": "After +: Portrait, Blue Eyes, blue eyes, cinematic\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: Portrait, Blue Eyes\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "-blurry, bad hands",
+      "after_prompt": "blue eyes, cinematic",
+      "after_text": "After +: blue eyes, cinematic\nAfter -: -blurry, bad hands",
+      "before_text": "Before +: Portrait, Blue Eyes\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "extra fingers, bad hands",
+      "after_prompt": "blue eyes, cinematic",
+      "after_text": "After +: blue eyes, cinematic\nAfter -: extra fingers, bad hands",
+      "before_text": "Before +: Portrait, Blue Eyes\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "Portrait, Blue Eyes, blue eyes, cinematic",
+      "after_text": "After +: Portrait, Blue Eyes, blue eyes, cinematic\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: Portrait, Blue Eyes\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "portrait, smiling, blue eyes, SMILING -> laughing, -blue eyes, cinematic",
+      "after_text": "After +: portrait, smiling, blue eyes, SMILING -> laughing, -blue eyes, cinematic\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: portrait, smiling, blue eyes\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "-blurry, bad hands",
+      "after_prompt": "SMILING -> laughing, -blue eyes, cinematic",
+      "after_text": "After +: SMILING -> laughing, -blue eyes, cinematic\nAfter -: -blurry, bad hands",
+      "before_text": "Before +: portrait, smiling, blue eyes\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "extra fingers, bad hands",
+      "after_prompt": "portrait, laughing, cinematic",
+      "after_text": "After +: portrait, laughing, cinematic\nAfter -: extra fingers, bad hands",
+      "before_text": "Before +: portrait, smiling, blue eyes\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "portrait, smiling, blue eyes, SMILING -> laughing, -blue eyes, cinematic",
+      "after_text": "After +: portrait, smiling, blue eyes, SMILING -> laughing, -blue eyes, cinematic\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: portrait, smiling, blue eyes\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "A, a, B, +a, -B, C -> D",
+      "after_text": "After +: A, a, B, +a, -B, C -> D\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: A, a, B\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "-blurry, bad hands",
+      "after_prompt": "+a, -B, C -> D",
+      "after_text": "After +: +a, -B, C -> D\nAfter -: -blurry, bad hands",
+      "before_text": "Before +: A, a, B\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "extra fingers, bad hands",
+      "after_prompt": "A, a, D",
+      "after_text": "After +: A, a, D\nAfter -: extra fingers, bad hands",
+      "before_text": "Before +: A, a, B\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "A, a, B, +a, -B, C -> D",
+      "after_text": "After +: A, a, B, +a, -B, C -> D\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: A, a, B\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "",
+      "after_text": "After +: (empty)\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: (empty)\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "-blurry, bad hands",
+      "after_prompt": "",
+      "after_text": "After +: (empty)\nAfter -: -blurry, bad hands",
+      "before_text": "Before +: (empty)\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "extra fingers, bad hands",
+      "after_prompt": "",
+      "after_text": "After +: (empty)\nAfter -: extra fingers, bad hands",
+      "before_text": "Before +: (empty)\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "",
+      "after_text": "After +: (empty)\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: (empty)\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "",
+      "after_text": "After +: (empty)\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: (empty)\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "-blurry, bad hands",
+      "after_prompt": "",
+      "after_text": "After +: (empty)\nAfter -: -blurry, bad hands",
+      "before_text": "Before +: (empty)\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "extra fingers, bad hands",
+      "after_prompt": "",
+      "after_text": "After +: (empty)\nAfter -: extra fingers, bad hands",
+      "before_text": "Before +: (empty)\nBefore -: blurry, extra fingers"
+    },
+    {
+      "after_negative_prompt": "blurry, extra fingers, -blurry, bad hands",
+      "after_prompt": "",
+      "after_text": "After +: (empty)\nAfter -: blurry, extra fingers, -blurry, bad hands",
+      "before_text": "Before +: (empty)\nBefore -: blurry, extra fingers"
+    }
+  ],
+  "randomizer": [
+    {
+      "max_variants": 8,
+      "randomization_enabled": true
+    },
+    {
+      "max_variants": 1,
+      "randomization_enabled": true
+    },
+    {
+      "max_variants": 1,
+      "randomization_enabled": true
+    },
+    {
+      "max_variants": 1,
+      "randomization_enabled": true
+    },
+    {
+      "max_variants": 3,
+      "randomization_enabled": true
+    }
+  ],
+  "summary": "Source: stage=txt2img | model=sdxl | vae=Automatic\nTargets: img2img\nWhy these values are active: source artifact metadata overrides stage baseline; built-in defaults fill any remaining gaps.\nPositive prompt: append [explicit edit]\nNegative prompt: inherited [source artifact baseline]\nimg2img | sampler=Euler a [built-in defaults] | scheduler=n/a [active resolution] | steps=9 [source artifact metadata] | cfg=7.0 [stage baseline] | denoise=0.3 [built-in defaults]\nReadiness: Unclassified model - ready\n\nDirect Queue Now baseline:\nSource: stage=txt2img | model=sdxl | vae=Automatic\nTargets: img2img\nimg2img | sampler=Euler a [built-in defaults] | scheduler=n/a [active resolution] | steps=11 [staged curation queue baseline] | cfg=4.0 [staged curation queue baseline] | denoise=0.3 [built-in defaults]",
+  "visibility": [
+    {
+      "normalized": "nsfw",
+      "settings": {
+        "mode": "nsfw"
+      }
+    },
+    {
+      "normalized": "nsfw",
+      "settings": {
+        "mode": "nsfw"
+      }
+    },
+    {
+      "normalized": "sfw",
+      "settings": {
+        "mode": "nsfw"
+      }
+    },
+    {
+      "normalized": "nsfw",
+      "settings": {
+        "mode": "nsfw"
+      }
+    },
+    {
+      "normalized": "nsfw",
+      "settings": {
+        "mode": "nsfw"
+      }
+    },
+    {
+      "normalized": "nsfw",
+      "settings": {
+        "mode": "nsfw"
+      }
+    },
+    {
+      "normalized": "nsfw",
+      "settings": {
+        "mode": "nsfw"
+      }
+    },
+    {
+      "normalized": "nsfw",
+      "settings": {
+        "mode": "sfw"
+      }
+    }
+  ]
+}
