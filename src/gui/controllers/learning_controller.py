@@ -275,9 +275,7 @@ class LearningController:
             "selected_prompt_negative_text": negative_prompt_text,
             "selected_prompt_loras": list(experiment_data.get("selected_prompt_loras", []) or []),
             "grid": experiment_data.get("grid"),
-            "prompt_slot": copy.deepcopy(experiment_data.get("prompt_slot")),
-            "lora_composition": copy.deepcopy(experiment_data.get("lora_composition")),
-            "embedding_experiment": copy.deepcopy(experiment_data.get("embedding_experiment")),
+            **{key: copy.deepcopy(experiment_data.get(key)) for key in ("prompt_slot", "lora_composition", "embedding_experiment", "prompt_model_matrix")},
         }
 
         # Create LearningExperiment from form data
@@ -608,7 +606,7 @@ class LearningController:
 
         service = controlled_study_service(study_type(experiment))
         if service is not None:
-            service.build_plan(self, experiment)
+            service.build_plan(self, experiment, **({} if comparison_evidence is None else {"comparison_evidence": comparison_evidence}))
             return
         if study_type(experiment) == "model_comparison":
             self._build_model_comparison_plan(experiment, evidence=comparison_evidence)
@@ -2264,7 +2262,7 @@ class LearningController:
         from src.learning.model_comparison import rating_classification
         from src.learning.prompt_slot_experiment import rating_metadata
 
-        if snapshot.get("study_type") == "two_axis_grid":
+        if snapshot.get("study_type") in ("two_axis_grid", "prompt_model_matrix"):
             from src.learning.two_axis_grid import rating_classification as grid_classification
 
             classification = grid_classification(

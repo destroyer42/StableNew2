@@ -108,7 +108,7 @@ class LearningProfilePublicationCoordinator:
         ):
             self.show(
                 "error",
-                "Model Comparison and Two-Axis Grid cannot publish Base Generation settings.",
+                "Model Comparison, Two-Axis Grid and Prompt x Model Matrix cannot publish Base Generation settings.",
             )
             return
         catalogs = self.catalogs()

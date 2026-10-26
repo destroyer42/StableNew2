@@ -203,6 +203,10 @@ def _text(value: int | float) -> str:
 
 
 def variant_label(value: Any) -> str:
+    if isinstance(value, Mapping) and "prompt_label" in value:
+        from src.learning.prompt_model_matrix import variant_label as matrix_label
+
+        return matrix_label(value)
     if isinstance(value, Mapping) and "x_variable" in value:
         return f"{value['x_variable']} {_text(value['x_value'])} | {value['y_variable']} {_text(value['y_value'])}"
     return str(value)
@@ -210,6 +214,10 @@ def variant_label(value: Any) -> str:
 
 def filename_label(value: Any) -> str:
     """Filesystem-safe cell label for artifact prefixes."""
+    if isinstance(value, Mapping) and "prompt_label" in value:
+        from src.learning.prompt_model_matrix import filename_label as matrix_label
+
+        return matrix_label(value)
     if not (isinstance(value, Mapping) and "x_variable" in value):
         return ""
     parts = [
@@ -631,6 +639,12 @@ def rating_classification(
     image_refs: list[str] | None = None,
 ) -> dict[str, Any]:
     """Grid evidence is exploratory: its own record kind, never the one-variable causal kind."""
+    if snapshot.get("study_type") == "prompt_model_matrix":
+        from src.learning.prompt_model_matrix import rating_classification as matrix_classification
+
+        return matrix_classification(
+            snapshot, value, execution_metadata, image_ref=image_ref, image_refs=image_refs
+        )
     if snapshot.get("study_type") != STUDY_TYPE:
         raise ValueError("Not a Two-Axis Grid snapshot")
     metadata = dict(execution_metadata or {})

@@ -89,7 +89,7 @@ class LearningAnalytics:
         parameter_name = ""
         for record in records:
             metadata = record.get("metadata", {}) or {}
-            if metadata.get("study_type") == "two_axis_grid":
+            if metadata.get("study_type") in ("two_axis_grid", "prompt_model_matrix"):
                 # Two varying settings cannot yield a best/worst single value; grid ratings stay descriptive.
                 continue
             parameter_name = parameter_name or str(

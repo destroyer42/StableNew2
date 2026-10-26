@@ -10,7 +10,10 @@ if TYPE_CHECKING:
 
 
 class ControlledStudyService(Protocol):
-    """The two entry points every controlled-study coordination module provides."""
+    """The two entry points every controlled-study coordination module provides.
+
+    ``prompt_model_matrix.build_plan`` additionally accepts the worker-prepared ``comparison_evidence``.
+    """
 
     def build_plan(self, controller: Any, experiment: Any) -> None: ...
 
@@ -23,6 +26,7 @@ _SERVICES = {
     "prompt_slot": "prompt_slot",
     "lora_composition": "lora_composition",
     "embedding_experiment": "embedding_experiment",
+    "prompt_model_matrix": "prompt_model_matrix",
 }
 #: Studies whose ratings stay experiment-local: no recommendations, Apply or profile publication.
 LOCAL_ONLY_STUDIES = frozenset(_SERVICES)

@@ -9,7 +9,12 @@ from src.learning import embedding_experiment, lora_composition
 from src.learning.prompt_slot_experiment import candidate_caption as slot_caption
 
 #: Studies whose review captions and experiment-local conclusion text are shown beside the ratings.
-DISPLAYED_STUDIES = ("prompt_slot", "lora_composition", embedding_experiment.STUDY_TYPE)
+DISPLAYED_STUDIES = (
+    "prompt_slot",
+    "lora_composition",
+    embedding_experiment.STUDY_TYPE,
+    "prompt_model_matrix",
+)
 
 
 def _frozen_study(experiment: Any) -> str:
@@ -27,10 +32,18 @@ def visibility_prompt(experiment: Any) -> str:
     """Private input to the existing visibility classifier, never a presentation caption."""
     if _frozen_study(experiment) == embedding_experiment.STUDY_TYPE:
         return embedding_experiment.visibility_prompt(experiment)
+    if _frozen_study(experiment) == "prompt_model_matrix":
+        from src.learning.prompt_model_matrix import visibility_prompt as matrix_visibility
+
+        return matrix_visibility(experiment)
     return lora_composition.visibility_prompt(experiment)
 
 
-def candidate_caption(study: str, experiment: Any, label: str, *, visible: bool) -> str:
+def candidate_caption(study: str, experiment: Any, label: Any, *, visible: bool) -> str:
+    if study == "prompt_model_matrix":
+        from src.learning.prompt_model_matrix import candidate_caption as matrix_caption
+
+        return matrix_caption(experiment, label, visible=visible)
     if study == embedding_experiment.STUDY_TYPE:
         return embedding_experiment.candidate_caption(experiment, label, visible=visible)
     if study == "lora_composition":

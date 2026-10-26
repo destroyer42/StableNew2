@@ -819,6 +819,13 @@ class LearningReviewPanel(ttk.Frame):
         self.slot_conclusion_text.delete("1.0", tk.END)
         if result.get("study_type") in DISPLAYED_STUDIES:
             self.slot_conclusion_text.grid()
+            if result["study_type"] == "prompt_model_matrix":
+                self.slot_conclusion_text.insert("1.0", result["message"] + "\n" + "\n".join(
+                    f"Prompt {row['prompt_label']} x {row['model_label']}: {row['sample_count']} completed, "
+                    f"{row['saved_count']} valid rated; mean {row['average_overall']}, variability {row['rating_stddev']}; "
+                    + ("controlled" if row["controlled"] else "uncontrolled/unverified") for row in result["values"]))
+                self.slot_conclusion_text.configure(state="disabled")
+                return
             named = result["study_type"] != "prompt_slot"
             from src.gui.content_visibility import (
                 ContentVisibilityMode,

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-606 of 761 modules have a docstring.
+610 of 765 modules have a docstring.
 
 ## src/
 
@@ -400,6 +400,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `photo_optimize_scope.py`: Photo editing/review orchestration in the existing view and worker seams
 - `photo_optimize_tab_frame_v2.py`: (no docstring)
 - `pipeline_tab_frame_v2.py`: (no docstring)
+- `prompt_model_matrix_design_frame.py`: Prompt x Model Matrix authoring: the Prompt Slot candidate editor with the matrix's own bounds and shared-set…
 - `prompt_slot_design_frame.py`: Ordered Prompt Slot authoring inside the existing scrollable Learning Design surface
 - `prompt_tab_frame_v2.py`: Prompt Tab Frame v2.6 - Main prompt editing interface with matrix integration
 - `review_tab_frame_v2.py`: (no docstring)
@@ -565,6 +566,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `output_scanner.py`: OutputScanner — manifest-first artifact scanner
 - `preview_summary.py`: Structured, read-only summary of what a frozen Preview would submit
 - `profile_publication.py`: Field-specific controlled evidence -> advisory profile; no execution or rating authority
+- `prompt_model_matrix.py`: Bounded Prompt x Model study: plan once, freeze every cell, materialize ordinary immutable NJRs
+- `prompt_model_matrix_results.py`: Toolkit-neutral Prompt x Model results: the same ``GridModel`` the Two-Axis Grid view and contact sheet render
 - `prompt_slot_experiment.py`: Controlled, frozen one-slot prompt intent; canonical Matrix/adaptation remain authoritative
 - `rating_schema.py`: (no docstring)
 - `recommendation_engine.py`: Automated Parameter Recommendation Engine (APRE)
@@ -588,6 +591,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `embedding_experiment.py`: Embedding experiment coordination over existing snapshot, ordinary NJR and Learning state owners
 - `experiment_persistence.py`: experiment_persistence — pure serialisation helpers for LearningController resume state
 - `lora_composition.py`: LoRA Composition coordination over existing snapshot, ordinary NJR and Learning state owners
+- `prompt_model_matrix.py`: Prompt x Model Matrix coordination over the existing snapshot, ordinary NJR and Learning state owners
 - `prompt_slot.py`: Prompt Slot coordination over existing snapshot, ordinary NJR and Learning state owners
 
 ## src/migrations/
