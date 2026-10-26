@@ -127,7 +127,7 @@ def is_grid_experiment(experiment: Any) -> bool:
     if not raw:
         return False
     try:
-        return thaw_snapshot(raw).get("study_type") == STUDY_TYPE
+        return thaw_snapshot(raw).get("study_type") in (STUDY_TYPE, "prompt_model_matrix")
     except ValueError:
         return False
 
@@ -141,6 +141,10 @@ def build_grid_model(
 ) -> GridModel:
     snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
     snapshot = thaw_snapshot(snapshot_json)
+    if snapshot.get("study_type") == "prompt_model_matrix":
+        from src.learning.prompt_model_matrix_results import build_matrix_model
+
+        return build_matrix_model(experiment, plan, rating_details, visibility_mode=visibility_mode)
     if snapshot.get("study_type") != STUDY_TYPE:
         raise ValueError("The current experiment is not a Two-Axis Grid")
     grid = snapshot["two_axis_grid"]

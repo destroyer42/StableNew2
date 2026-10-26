@@ -134,7 +134,8 @@ class LearningGridView(ttk.Frame):
             experiment = getattr(
                 self.learning_controller.learning_state, "current_experiment", None
             )
-            if "two_axis_grid" in str(getattr(experiment, "execution_snapshot_json", "") or ""):
+            saved = str(getattr(experiment, "execution_snapshot_json", "") or "")
+            if "two_axis_grid" in saved or "prompt_model_matrix" in saved:
                 self._model_error = f"The saved grid cannot be shown: {exc}"
             return None
 

@@ -15,6 +15,10 @@ def build_experiment_conclusion(
         from src.learning.prompt_slot_experiment import conclusion
 
         return conclusion(plan, rating_details, review_drafts)
+    if study_type == "prompt_model_matrix":
+        from src.learning.prompt_model_matrix import conclusion as matrix_conclusion
+
+        return matrix_conclusion(plan, rating_details, review_drafts)
     if study_type == "embedding_experiment":
         from src.learning.embedding_experiment import conclusion as embedding_conclusion
 

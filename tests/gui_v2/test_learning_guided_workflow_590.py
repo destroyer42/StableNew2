@@ -169,6 +169,7 @@ def test_advanced_study_types_stay_reachable_and_keep_their_own_forms(tab_and_se
         "Embedding",
         "Model Comparison",
         "Two-Axis Grid",
+        "Prompt x Model Matrix",
     ]
     panel.study_type_var.set("Model Comparison")
     panel._on_study_type_changed()

@@ -22,6 +22,7 @@ STUDY_LABELS = {
     "controlled_variable": "Controlled Variable",
     MODEL_COMPARISON: "Model Comparison",
     "two_axis_grid": "Two-Axis Grid",
+    "prompt_model_matrix": "Prompt x Model Matrix",
     "prompt_slot": "Prompt Slot",
     "lora_composition": "LoRA Composition",
     "embedding_experiment": "Embedding",
@@ -177,9 +178,11 @@ def build_preview_summary(
         study = MODEL_COMPARISON
     elif "two_axis_grid" in snapshot:
         study = "two_axis_grid"
+    elif "prompt_model_matrix" in snapshot:
+        study = "prompt_model_matrix"
     variants = len(snapshot.get("variant_values") or plan)
     images = max(1, int(snapshot.get("images_per_value") or 1))
-    grid = snapshot.get("two_axis_grid") or {}
+    grid = snapshot.get("two_axis_grid") or snapshot.get("prompt_model_matrix") or {}
     total = int(grid.get("total_images") or variants * images)
     context = snapshot.get("model_policy_context") or {}
     source = snapshot.get("prompt_source") or {}
@@ -206,6 +209,26 @@ def build_preview_summary(
                 "Each model keeps its own validated settings and prompt adaptation; not a one-variable test.",
             )
         )
+    elif study == "prompt_model_matrix":
+        matrix = snapshot["prompt_model_matrix"]
+        rows.append(
+            (
+                "Prompts (rows)",
+                f"{len(matrix['prompts'])} candidates for slot [[{matrix['slot']}]]"
+                if show_model_names
+                else f"{len(matrix['prompts'])} candidates (text hidden by content visibility)",
+            )
+        )
+        rows.append(
+            (
+                "Models (columns)",
+                _values_text([m["selected_model"] for m in matrix["models"]])
+                if show_model_names
+                else f"{len(matrix['models'])} models (names hidden by content visibility)",
+            )
+        )
+        rows.append(("Comparison", matrix["settings_notice"] + " Not a one-variable test."))
+        rows.append(("Seed meaning", matrix["seed_interpretation"]))
     elif study == "two_axis_grid":
         x_axis, y_axis = grid.get("x_axis") or {}, grid.get("y_axis") or {}
         rows.append(
@@ -296,6 +319,14 @@ def build_preview_summary(
                 for candidate in snapshot["prompt_slot"]["candidates"]
             )
             if study == "prompt_slot" and show_model_names
+            else "Tested slot: "
+            + str(snapshot["prompt_model_matrix"]["slot"])
+            + "\n\n"
+            + "\n\n".join(
+                f"Prompt {prompt['label']}: {prompt['value']}"
+                for prompt in snapshot["prompt_model_matrix"]["prompts"]
+            )
+            if study == "prompt_model_matrix" and show_model_names
             else preview_details(snapshot["lora_composition"])
             if study == "lora_composition" and show_model_names
             else embedding_experiment.preview_details(snapshot["embedding_experiment"])

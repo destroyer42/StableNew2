@@ -56,6 +56,11 @@ def _embedding(panel: Any) -> bool:
     return variable is not None and variable.get() == "Embedding"
 
 
+def _matrix(panel: Any) -> bool:
+    variable = getattr(panel, "study_type_var", None)
+    return variable is not None and variable.get() == "Prompt x Model Matrix"
+
+
 def _special(panel: Any) -> bool:
     """Studies authored by their own design frame instead of the one-variable value controls."""
     return _prompt_slot(panel) or _lora_composition(panel) or _embedding(panel)
@@ -72,6 +77,10 @@ STUDY_HINTS = {
     "Embedding": "Test one designated textual-inversion embedding position (presence, weight or identity) with every other input fixed.",
     "LoRA Composition": "Add, remove, replace or compare one designated LoRA position with every other input fixed.",
     "Prompt Slot": "Compare alternatives for one named prompt slot with the other inputs fixed.",
+    "Prompt x Model Matrix": (
+        "Compare 2-4 alternatives for one named prompt slot across 2-4 models, each with its own validated "
+        "settings. A preference within this study, not a one-variable test."
+    ),
     "Controlled Variable": "Test several values for one setting while keeping the other settings consistent.",
     "Model Comparison": (
         "Compare several models, each with its own validated settings and prompt. "
@@ -190,7 +199,7 @@ class ExperimentDesignPanel(ttk.Frame):
         ttk.Label(study_body, text="Study Type:").grid(row=0, column=0, sticky="w")
         self.study_type_var = tk.StringVar(value="Controlled Variable")
         self.study_type_combo = ttk.Combobox(study_body, textvariable=self.study_type_var,
-                                             values=("Controlled Variable", "Prompt Slot", "LoRA Composition", "Embedding", "Model Comparison", "Two-Axis Grid"), state="readonly")
+                                             values=("Controlled Variable", "Prompt Slot", "LoRA Composition", "Embedding", "Model Comparison", "Two-Axis Grid", "Prompt x Model Matrix"), state="readonly")
         self.study_type_combo.grid(row=0, column=1, sticky="ew")
         self.study_type_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_study_type_changed())
         ttk.Button(study_frame, text="Prompt Slot Experiment", command=self._choose_prompt_slot).grid(row=0, column=1, padx=4)
@@ -349,6 +358,14 @@ class ExperimentDesignPanel(ttk.Frame):
             visible=self._comparison_show_names)
         self.prompt_slot_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
         self.prompt_slot_frame.grid_remove()
+        from src.gui.views.prompt_model_matrix_design_frame import PromptModelMatrixDesignFrame
+
+        self.matrix_frame = PromptModelMatrixDesignFrame(
+            self, template=self._get_prompt_preview_text, changed=self._notify_design_changed,
+            visible=self._comparison_show_names,
+            models=lambda: sum(bool(var.get()) for var in self.choice_vars.values()))
+        self.matrix_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
+        self.matrix_frame.grid_remove()
         from src.gui.views.lora_composition_design_frame import LoraCompositionDesignFrame
 
         self.lora_composition_frame = LoraCompositionDesignFrame(
@@ -504,6 +521,8 @@ class ExperimentDesignPanel(ttk.Frame):
     def _on_prompt_source_changed(self) -> None:
         if getattr(self, "prompt_slot_frame", None) is not None:
             self.prompt_slot_frame.clear_frozen_source()
+        if getattr(self, "matrix_frame", None) is not None:
+            self.matrix_frame.clear_frozen_source()
         if getattr(self, "embedding_frame", None) is not None and _embedding(self):
             self.embedding_frame.sync_baseline()
         use_pack = self.prompt_source_var.get() == "pack"
@@ -634,19 +653,49 @@ class ExperimentDesignPanel(ttk.Frame):
             "exploratory comparison, not one-variable causal evidence."
         )
 
+    def _enter_matrix_mode(self) -> None:
+        from src.learning.prompt_model_matrix import SETTINGS_NOTICE
+        from src.learning.variable_metadata import get_variable_metadata
+
+        self.stage_var.set("txt2img")
+        self.stage_combo.configure(values=("txt2img",), state="disabled")
+        self.input_image_frame.grid_remove()
+        self.variable_label.grid_remove()
+        self.variable_combo.grid_remove()
+        self.variable_var.set("Prompt x Model")
+        for frame in (self.value_frame, self.lora_frame):
+            frame.grid_remove()
+        self.prompt_source_combo.configure(state="readonly")
+        if self.prompt_source_var.get() not in ("pack", "custom"):
+            self.prompt_source_var.set("custom")
+        self.matrix_frame.grid()
+        self._on_prompt_source_changed()
+        self.matrix_frame.refresh_slots()
+        self._show_checklist_widget(get_variable_metadata("Model"))
+        self.checklist_frame.configure(text="Models to Compare (2-4)")
+        self._on_comparison_visibility_changed()
+        self.name_var.set("Prompt x Model Matrix experiment")
+        self._name_auto_generated = False
+        self.model_target_var.set(
+            f"{SETTINGS_NOTICE} Requested seed and geometry are shared; no LoRAs, embeddings, aesthetic "
+            "conditioning or extra stages. Not one-variable causal evidence."
+        )
+
     def _on_study_type_changed(self) -> None:
         self._cancel_comparison_evidence()
         from src.learning.variable_metadata import get_variable_metadata
 
         previous = self._study_mode
-        self._study_mode = "embedding" if _embedding(self) else "lora_composition" if _lora_composition(self) else "prompt_slot" if _prompt_slot(self) else "grid" if self._is_grid() else "comparison" if self._is_model_comparison() else "controlled"
+        self._study_mode = "embedding" if _embedding(self) else "lora_composition" if _lora_composition(self) else "prompt_slot" if _prompt_slot(self) else "grid" if self._is_grid() else "comparison" if self._is_model_comparison() else "matrix" if _matrix(self) else "controlled"
+        if self._study_mode != "matrix":
+            self.matrix_frame.grid_remove()
         if self._study_mode != "prompt_slot":
             self.prompt_slot_frame.grid_remove()
         if self._study_mode != "lora_composition":
             self.lora_composition_frame.grid_remove()
         if self._study_mode != "embedding":
             self.embedding_frame.grid_remove()
-        if self._study_mode not in ("prompt_slot", "lora_composition", "embedding"):
+        if self._study_mode not in ("prompt_slot", "lora_composition", "embedding", "matrix"):
             self.custom_prompt_text.tag_remove("slot_hidden", "1.0", tk.END)
         if self._study_mode != "grid":
             self.grid_frame.grid_remove()
@@ -683,6 +732,8 @@ class ExperimentDesignPanel(ttk.Frame):
             self.model_target_var.set(
                 f"{position}; registry-verified SDXL txt2img. Disable the prompt optimizer in the Learning baseline."
             )
+        elif self._study_mode == "matrix":
+            self._enter_matrix_mode()
         elif self._study_mode == "grid":
             self._enter_grid_mode()
         elif self._is_model_comparison():
@@ -835,7 +886,7 @@ class ExperimentDesignPanel(ttk.Frame):
         selected_pack = self.prompt_pack_var.get().strip()
         pack_path = self._prompt_pack_paths.get(selected_pack)
         payloads = self._load_prompt_payloads_for_pack(pack_path) if pack_path else []
-        if _special(self) and not self._comparison_show_names():
+        if (_special(self) or _matrix(self)) and not self._comparison_show_names():
             payloads = [{**payload, "label": f"Prompt {payload['prompt_index'] + 1}"} for payload in payloads]
         labels = [payload["label"] for payload in payloads]
         self._prompt_option_payloads = {payload["label"]: payload for payload in payloads}
@@ -889,7 +940,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """Handle build preview button click."""
         if getattr(self, "_comparison_readiness_busy", False):
             return
-        if not _special(self) and not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
+        if not _special(self) and not self._is_model_comparison() and not _matrix(self) and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -906,12 +957,13 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Collect form data
         experiment_data = {
-            "study_type": "embedding_experiment" if _embedding(self) else "lora_composition" if _lora_composition(self) else "prompt_slot" if _prompt_slot(self) else "model_comparison" if self._is_model_comparison() else "two_axis_grid" if self._is_grid() else "controlled_variable",
+            "study_type": "embedding_experiment" if _embedding(self) else "lora_composition" if _lora_composition(self) else "prompt_slot" if _prompt_slot(self) else "model_comparison" if self._is_model_comparison() else "prompt_model_matrix" if _matrix(self) else "two_axis_grid" if self._is_grid() else "controlled_variable",
             "prompt_slot": self.prompt_slot_frame.spec() if _prompt_slot(self) else None,
+            "prompt_model_matrix": self.matrix_frame.spec() if _matrix(self) else None,
             "lora_composition": self.lora_composition_frame.spec() if _lora_composition(self) else None,
             "embedding_experiment": self.embedding_frame.spec() if _embedding(self) else None,
             "grid": self.grid_frame.spec() if self._is_grid() else None,
-            "selected_models": [choice for choice, var in self.choice_vars.items() if var.get()] if self._is_model_comparison() else [],
+            "selected_models": [choice for choice, var in self.choice_vars.items() if var.get()] if self._is_model_comparison() or _matrix(self) else [],
             "name": self.name_var.get().strip(),
             "description": self.desc_var.get().strip(),
             "stage": self.stage_var.get(),
@@ -984,7 +1036,7 @@ class ExperimentDesignPanel(ttk.Frame):
             return
         _call(self, "_mark_validation_failed", "")
 
-        if self._is_model_comparison() and hasattr(self.learning_controller, "prepare_model_comparison_evidence"):
+        if (self._is_model_comparison() or _matrix(self)) and hasattr(self.learning_controller, "prepare_model_comparison_evidence"):
             self._start_comparison_evidence(experiment_data)
             return
         self._apply_experiment_preview(experiment_data)
@@ -1018,6 +1070,15 @@ class ExperimentDesignPanel(ttk.Frame):
                     _speak(self, "Model Comparison preview ready", ok=True)
                     self.summary_var.set(preview_summary(thaw_snapshot(
                         self.learning_controller.learning_state.current_experiment.execution_snapshot_json),
+                        show_names=self._comparison_show_names()))
+                    self._update_policy_buttons()
+                if _matrix(self):
+                    from src.learning.experiment_execution import thaw_snapshot
+                    from src.learning.prompt_model_matrix import preview_summary as matrix_summary
+
+                    _speak(self, "Prompt x Model Matrix preview ready; Run queues every cell once.", ok=True)
+                    self.summary_var.set(matrix_summary(thaw_snapshot(
+                        self._current_experiment().execution_snapshot_json),
                         show_names=self._comparison_show_names()))
                     self._update_policy_buttons()
                 if self._is_grid():
@@ -1059,9 +1120,9 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_comparison_visibility_changed(self) -> None:
         self._cancel_comparison_evidence()
-        if _special(self):
+        if _special(self) or _matrix(self):
             current = self._get_selected_prompt_payload() or {}
-            self._special_frame().refresh_visibility()
+            (self.matrix_frame if _matrix(self) else self._special_frame()).refresh_visibility()
             self.custom_prompt_text.tag_configure("slot_hidden", elide=not self._comparison_show_names())
             self.custom_prompt_text.tag_add("slot_hidden", "1.0", tk.END)
             self._refresh_prompt_choices()
@@ -1204,6 +1265,7 @@ class ExperimentDesignPanel(ttk.Frame):
             tuple(sorted(name for name, var in self.choice_vars.items() if get(var))),
             lora, loras, self.grid_frame.signature() if self._is_grid() else None,
             self.prompt_slot_frame.signature() if _prompt_slot(self) else None,
+            self.matrix_frame.signature() if _matrix(self) else None,
             self.lora_composition_frame.signature() if _lora_composition(self) else None,
             self.embedding_frame.signature() if _embedding(self) else None,
             getattr(self, "_target_model", None), self._baseline_signature(),
@@ -1243,6 +1305,18 @@ class ExperimentDesignPanel(ttk.Frame):
         if _special(self):
             count = len(self._special_frame().spec()["candidates"])
             self.estimate_var.set(f"{count} candidates x {images} images = {count * int(images)} requested images (maximum 24)")
+            self._update_policy_buttons()
+            return
+        if _matrix(self):
+            from src.learning.prompt_model_matrix import plan_summary as matrix_plan
+
+            prompts = len(self.matrix_frame.spec()["candidates"])
+            models = sum(bool(get(var)) for var in self.choice_vars.values())
+            try:
+                cells, total = matrix_plan(prompts, models, int(images))
+                self.estimate_var.set(f"{prompts} prompts x {models} models = {cells} cells x {images} images = {total} requested images (maximum 36)")
+            except (ValueError, TypeError) as exc:
+                self.estimate_var.set(str(exc))
             self._update_policy_buttons()
             return
         grid_cells = None
@@ -1301,7 +1375,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self._say("The grid design changed after Preview; Build Preview again before Run.")
             self._update_policy_buttons()
             return 0
-        if not _special(self) and not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
+        if not _special(self) and not self._is_model_comparison() and not _matrix(self) and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -1365,6 +1439,9 @@ class ExperimentDesignPanel(ttk.Frame):
 
         if data.get("study_type") == "prompt_slot":
             return self.prompt_slot_frame.validation_error(int(data.get("images_per_value", 0))) or None
+        if data.get("study_type") == "prompt_model_matrix":
+            return self.matrix_frame.validation_error(
+                int(data.get("images_per_value", 0)), len(data.get("selected_models") or [])) or None
         if data.get("study_type") == "lora_composition":
             return self.lora_composition_frame.validation_error(int(data.get("images_per_value", 0))) or None
         if data.get("study_type") == "embedding_experiment":
@@ -1454,7 +1531,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """
         from src.learning.variable_metadata import get_variable_metadata
 
-        if _special(self) or self._is_model_comparison() or self._is_grid():
+        if _special(self) or self._is_model_comparison() or _matrix(self) or self._is_grid():
             return
 
         variable_name = self.variable_var.get()
@@ -1587,7 +1664,7 @@ class ExperimentDesignPanel(ttk.Frame):
         if self._is_grid():
             self._on_grid_design_changed()
             return
-        if self._is_model_comparison():
+        if self._is_model_comparison() or _matrix(self):
             self._update_policy_buttons()
             return
         self._ensure_baseline()
@@ -1670,6 +1747,17 @@ class ExperimentDesignPanel(ttk.Frame):
 
             frozen = bool(getattr(experiment, "execution_snapshot_json", "")) and study_type(experiment) == (
                 "embedding_experiment" if _embedding(self) else "lora_composition" if _lora_composition(self) else "prompt_slot")
+            self.run_button.configure(state="normal" if frozen and not self.preview_is_stale() else "disabled")
+            return
+        if _matrix(self):
+            try:
+                valid = not self.matrix_frame.validation_error(int(self.images_var.get())) and not self._baseline_blockers()
+            except (AttributeError, TypeError, ValueError, tk.TclError):
+                valid = False
+            self.build_button.configure(state="normal" if valid else "disabled")
+            from src.learning.prompt_model_matrix import is_matrix
+
+            frozen = is_matrix(self._current_experiment())
             self.run_button.configure(state="normal" if frozen and not self.preview_is_stale() else "disabled")
             return
         if self._is_grid():
@@ -1829,7 +1917,7 @@ class ExperimentDesignPanel(ttk.Frame):
             return
         self._cancel_comparison_evidence()
         from src.learning.variable_metadata import get_variable_metadata
-        if self._is_model_comparison():
+        if self._is_model_comparison() or _matrix(self):
             selected = {name for name, value in self.choice_vars.items() if value.get()}
             self._populate_checklist(get_variable_metadata("Model"))
             for name, value in self.choice_vars.items():
@@ -1894,7 +1982,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self.lora_composition_frame.sync_baseline()
         if _embedding(self):
             self.embedding_frame.sync_baseline()
-        if _special(self):
+        if _special(self) or _matrix(self):
             self.custom_prompt_text.tag_configure("slot_hidden", elide=not self._comparison_show_names())
             self.custom_prompt_text.tag_add("slot_hidden", "1.0", tk.END)
         self._refresh_identity_preview()
@@ -1903,7 +1991,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _get_prompt_preview_text(self) -> str:
         if self.prompt_source_var.get() == "custom":
-            return self.custom_prompt_text.get("1.0", "end-1c") if _special(self) else self.custom_prompt_text.get("1.0", tk.END).strip()
+            return self.custom_prompt_text.get("1.0", "end-1c") if _special(self) or _matrix(self) else self.custom_prompt_text.get("1.0", tk.END).strip()
         selected_prompt = self._get_selected_prompt_payload()
         if selected_prompt:
             return str(selected_prompt.get("prompt_text", "") or "")
@@ -1924,7 +2012,7 @@ class ExperimentDesignPanel(ttk.Frame):
         return "", ""
 
     def _refresh_identity_preview(self) -> None:
-        if _special(self):
+        if _special(self) or _matrix(self):
             return
         model, vae = self._current_model_vae()
         identity = build_experiment_identity(
@@ -2281,7 +2369,7 @@ class ExperimentDesignPanel(ttk.Frame):
         from src.learning.model_comparison import study_type
 
         self.study_type_var.set(
-            {"model_comparison": "Model Comparison", "two_axis_grid": "Two-Axis Grid", "prompt_slot": "Prompt Slot", "lora_composition": "LoRA Composition", "embedding_experiment": "Embedding"}.get(
+            {"model_comparison": "Model Comparison", "two_axis_grid": "Two-Axis Grid", "prompt_slot": "Prompt Slot", "lora_composition": "LoRA Composition", "embedding_experiment": "Embedding", "prompt_model_matrix": "Prompt x Model Matrix"}.get(
                 study_type(experiment), "Controlled Variable"
             )
         )
@@ -2318,8 +2406,18 @@ class ExperimentDesignPanel(ttk.Frame):
         if self.prompt_source_var.get() == "pack":
             self._on_prompt_source_changed()
         self._on_variable_changed()
-        if _special(self) or self._is_model_comparison() or self._is_grid():
+        if _special(self) or self._is_model_comparison() or _matrix(self) or self._is_grid():
             self._on_study_type_changed()
+        if _matrix(self):
+            from src.learning.experiment_execution import thaw_snapshot
+
+            frozen = (thaw_snapshot(experiment.execution_snapshot_json).get("prompt_model_matrix")
+                      if getattr(experiment, "execution_snapshot_json", "") else None)
+            spec = dict(metadata.get("prompt_model_matrix") or {})
+            if frozen:
+                spec.update(slot=frozen["slot"], fixed_slots=frozen["fixed_slots"],
+                            candidates=[prompt["value"] for prompt in frozen["prompts"]])
+            self.matrix_frame.load(spec, frozen_template=frozen["template"] if frozen and prompt_source == "pack" else None)
         if _lora_composition(self):
             from src.learning.experiment_execution import thaw_snapshot
 
@@ -2358,7 +2456,7 @@ class ExperimentDesignPanel(ttk.Frame):
                 self._grid_signature() if getattr(experiment, "execution_snapshot_json", "") else None
             )
             self._update_policy_buttons()
-        selected_items = {str(item) for item in metadata.get("selected_models" if self._is_model_comparison() else "selected_items", [])}
+        selected_items = {str(item) for item in metadata.get("selected_models" if self._is_model_comparison() or _matrix(self) else "selected_items", [])}
         for item, var in self.choice_vars.items():
             var.set(item in selected_items)
         self._name_auto_generated = False

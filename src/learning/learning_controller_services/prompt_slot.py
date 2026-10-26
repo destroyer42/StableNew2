@@ -33,11 +33,14 @@ from src.pipeline.njr_core_v26 import NormalizedJobRecord, thaw_json
 from src.pipeline.resolution_layer import pack_prompt_intent_from_dict
 
 
-def _source(experiment: Any) -> tuple[PromptSlotDesign, Any, dict[str, Any]]:
+def source_design(
+    experiment: Any, key: str = STUDY_TYPE
+) -> tuple[PromptSlotDesign, Any, dict[str, Any]]:
+    """The authored one-slot design and its frozen source (custom template or one native PromptPack row)."""
     from src.promptpacks.storage import load_prompt_pack_document, prompt_pack_row_by_index
 
     metadata = experiment.metadata
-    spec = metadata[STUDY_TYPE]
+    spec = metadata[key]
     row = None
     source = {"kind": metadata.get("prompt_source", "custom")}
     template = spec["template"]
@@ -65,6 +68,9 @@ def _source(experiment: Any) -> tuple[PromptSlotDesign, Any, dict[str, Any]]:
         experiment.images_per_value,
     )
     return design, row, source
+
+
+_source = source_design
 
 
 def _config(snapshot: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:

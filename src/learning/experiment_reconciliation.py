@@ -274,6 +274,11 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
     variable_reason = variable_reason or embedding_experiment.readback_reason(
         snapshot, variant, prompt_readback, ti_report
     )
+    from src.learning import prompt_model_matrix
+
+    variable_reason = variable_reason or prompt_model_matrix.readback_reason(
+        snapshot, variant, prompt_readback, variant_payload, metadata
+    )
     launch_profile = str(
         (variant_payload.get("runtime_admission") or {}).get("launch_profile") or ""
     )
@@ -293,6 +298,7 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
         "runtime_prompt_readback": prompt_readback,
         "runtime_launch_profile": launch_profile,
         **embedding_experiment.execution_evidence(snapshot, variant, ti_report),
+        **prompt_model_matrix.execution_evidence(snapshot, variant_payload, metadata),
         "requested_seed_policy": dict(policy or {}),
         "actual_all_seeds": actual_vector,
         "actual_all_subseeds": actual_subseed_vector,
