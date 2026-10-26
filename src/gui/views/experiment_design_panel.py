@@ -46,6 +46,16 @@ def _prompt_slot(panel: Any) -> bool:
     return variable is not None and variable.get() == "Prompt Slot"
 
 
+def _lora_composition(panel: Any) -> bool:
+    variable = getattr(panel, "study_type_var", None)
+    return variable is not None and variable.get() == "LoRA Composition"
+
+
+def _special(panel: Any) -> bool:
+    """Studies authored by their own design frame instead of the one-variable value controls."""
+    return _prompt_slot(panel) or _lora_composition(panel)
+
+
 def _speak(panel: Any, text: str, *, ok: bool = False) -> None:
     panel.feedback_var.set(text)
     label = getattr(panel, "feedback_label", None)
@@ -54,6 +64,7 @@ def _speak(panel: Any, text: str, *, ok: bool = False) -> None:
 
 
 STUDY_HINTS = {
+    "LoRA Composition": "Add, remove, replace or compare one designated LoRA position with every other input fixed.",
     "Prompt Slot": "Compare alternatives for one named prompt slot with the other inputs fixed.",
     "Controlled Variable": "Test several values for one setting while keeping the other settings consistent.",
     "Model Comparison": (
@@ -173,10 +184,11 @@ class ExperimentDesignPanel(ttk.Frame):
         ttk.Label(study_body, text="Study Type:").grid(row=0, column=0, sticky="w")
         self.study_type_var = tk.StringVar(value="Controlled Variable")
         self.study_type_combo = ttk.Combobox(study_body, textvariable=self.study_type_var,
-                                             values=("Controlled Variable", "Prompt Slot", "Model Comparison", "Two-Axis Grid"), state="readonly")
+                                             values=("Controlled Variable", "Prompt Slot", "LoRA Composition", "Model Comparison", "Two-Axis Grid"), state="readonly")
         self.study_type_combo.grid(row=0, column=1, sticky="ew")
         self.study_type_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_study_type_changed())
         ttk.Button(study_frame, text="Prompt Slot Experiment", command=self._choose_prompt_slot).grid(row=0, column=1, padx=4)
+        ttk.Button(study_frame, text="LoRA Composition", command=self._choose_lora_composition).grid(row=1, column=1, padx=4)
         ttk.Label(study_frame, text="Target Stage:").grid(row=2, column=0, sticky="w")
         self.stage_var = tk.StringVar(value="txt2img")
         self.stage_combo = ttk.Combobox(
@@ -330,6 +342,16 @@ class ExperimentDesignPanel(ttk.Frame):
             visible=self._comparison_show_names)
         self.prompt_slot_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
         self.prompt_slot_frame.grid_remove()
+        from src.gui.views.lora_composition_design_frame import LoraCompositionDesignFrame
+
+        self.lora_composition_frame = LoraCompositionDesignFrame(
+            self, prompt=self._get_prompt_preview_text, changed=self._notify_design_changed,
+            visible=self._comparison_show_names, family=self._lora_target_family,
+            mode=self._lora_visibility_mode,
+            loader=getattr(self.learning_controller, "lora_inventory_loader", None),
+            inventory_listener=self._remember_lora_inventory)
+        self.lora_composition_frame.grid(row=11, column=0, sticky="ew", pady=(0, 10))
+        self.lora_composition_frame.grid_remove()
         self.grid_frame.grid_remove()
         self.images_var.trace_add("write", lambda *_: self._on_grid_design_changed())
 
@@ -493,6 +515,25 @@ class ExperimentDesignPanel(ttk.Frame):
     def _is_prompt_slot(self) -> bool:
         return self.study_type_var.get() == "Prompt Slot"
 
+    def _choose_lora_composition(self) -> None:
+        self.study_type_var.set("LoRA Composition")
+        self._on_study_type_changed()
+
+    def _special_frame(self) -> Any:
+        return self.lora_composition_frame if _lora_composition(self) else self.prompt_slot_frame
+
+    def _remember_lora_inventory(self, resources: Any) -> None:
+        """The explicitly refreshed discovery is the identity evidence Preview and Run compare against."""
+        if self.learning_controller is not None:
+            self.learning_controller.lora_inventory = dict(resources)
+
+    def _lora_target_family(self) -> str:
+        policy = self._target_policy
+        return str(getattr(policy, "family", "") or "")
+
+    def _lora_visibility_mode(self) -> str:
+        return "nsfw" if self._comparison_show_names() else "sfw"
+
     def _choose_prompt_slot(self) -> None:
         self.study_type_var.set("Prompt Slot")
         self._on_study_type_changed()
@@ -558,33 +599,45 @@ class ExperimentDesignPanel(ttk.Frame):
         from src.learning.variable_metadata import get_variable_metadata
 
         previous = self._study_mode
-        self._study_mode = "prompt_slot" if _prompt_slot(self) else "grid" if self._is_grid() else "comparison" if self._is_model_comparison() else "controlled"
+        self._study_mode = "lora_composition" if _lora_composition(self) else "prompt_slot" if _prompt_slot(self) else "grid" if self._is_grid() else "comparison" if self._is_model_comparison() else "controlled"
         if self._study_mode != "prompt_slot":
             self.prompt_slot_frame.grid_remove()
+        if self._study_mode != "lora_composition":
+            self.lora_composition_frame.grid_remove()
+        if self._study_mode not in ("prompt_slot", "lora_composition"):
             self.custom_prompt_text.tag_remove("slot_hidden", "1.0", tk.END)
         if self._study_mode != "grid":
             self.grid_frame.grid_remove()
         if previous == "controlled" and self._study_mode != "controlled":
             self._controlled_design = (self.stage_var.get(), self.variable_var.get(), self.prompt_source_var.get())
-        if self._study_mode == "prompt_slot":
+        if self._study_mode in ("prompt_slot", "lora_composition"):
+            slot_mode = self._study_mode == "prompt_slot"
             self.stage_var.set("txt2img")
             self.stage_combo.configure(values=("txt2img",), state="disabled")
             self.input_image_frame.grid_remove()
             self.variable_label.grid_remove()
             self.variable_combo.grid_remove()
-            self.variable_var.set("Prompt Slot")
+            self.variable_var.set("Prompt Slot" if slot_mode else "LoRA Composition")
             for frame in (self.value_frame, self.checklist_frame, self.lora_frame):
                 frame.grid_remove()
             self.prompt_source_combo.configure(state="readonly")
             if self.prompt_source_var.get() not in ("pack", "custom"):
                 self.prompt_source_var.set("custom")
-            self.prompt_slot_frame.grid()
+            self._special_frame().grid()
             self._on_prompt_source_changed()
-            self.prompt_slot_frame.refresh_slots()
+            if slot_mode:
+                self.prompt_slot_frame.refresh_slots()
+            else:
+                self.lora_composition_frame.sync_baseline()
+                self.lora_composition_frame.ensure_inventory()
             self._on_comparison_visibility_changed()
-            self.name_var.set("Prompt Slot experiment")
+            self.name_var.set("Prompt Slot experiment" if slot_mode else "LoRA Composition experiment")
             self._name_auto_generated = False
-            self.model_target_var.set("One prompt slot; registry-verified SDXL txt2img. Disable the prompt optimizer in the Learning baseline.")
+            self.model_target_var.set(
+                "One prompt slot; registry-verified SDXL txt2img. Disable the prompt optimizer in the Learning baseline."
+                if slot_mode
+                else "One LoRA position; registry-verified SDXL txt2img. Disable the prompt optimizer in the Learning baseline."
+            )
         elif self._study_mode == "grid":
             self._enter_grid_mode()
         elif self._is_model_comparison():
@@ -737,7 +790,7 @@ class ExperimentDesignPanel(ttk.Frame):
         selected_pack = self.prompt_pack_var.get().strip()
         pack_path = self._prompt_pack_paths.get(selected_pack)
         payloads = self._load_prompt_payloads_for_pack(pack_path) if pack_path else []
-        if _prompt_slot(self) and not self._comparison_show_names():
+        if _special(self) and not self._comparison_show_names():
             payloads = [{**payload, "label": f"Prompt {payload['prompt_index'] + 1}"} for payload in payloads]
         labels = [payload["label"] for payload in payloads]
         self._prompt_option_payloads = {payload["label"]: payload for payload in payloads}
@@ -791,7 +844,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """Handle build preview button click."""
         if getattr(self, "_comparison_readiness_busy", False):
             return
-        if not _prompt_slot(self) and not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
+        if not _special(self) and not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -808,8 +861,9 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Collect form data
         experiment_data = {
-            "study_type": "prompt_slot" if _prompt_slot(self) else "model_comparison" if self._is_model_comparison() else "two_axis_grid" if self._is_grid() else "controlled_variable",
+            "study_type": "lora_composition" if _lora_composition(self) else "prompt_slot" if _prompt_slot(self) else "model_comparison" if self._is_model_comparison() else "two_axis_grid" if self._is_grid() else "controlled_variable",
             "prompt_slot": self.prompt_slot_frame.spec() if _prompt_slot(self) else None,
+            "lora_composition": self.lora_composition_frame.spec() if _lora_composition(self) else None,
             "grid": self.grid_frame.spec() if self._is_grid() else None,
             "selected_models": [choice for choice, var in self.choice_vars.items() if var.get()] if self._is_model_comparison() else [],
             "name": self.name_var.get().strip(),
@@ -959,9 +1013,9 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_comparison_visibility_changed(self) -> None:
         self._cancel_comparison_evidence()
-        if _prompt_slot(self):
+        if _special(self):
             current = self._get_selected_prompt_payload() or {}
-            self.prompt_slot_frame.refresh_visibility()
+            self._special_frame().refresh_visibility()
             self.custom_prompt_text.tag_configure("slot_hidden", elide=not self._comparison_show_names())
             self.custom_prompt_text.tag_add("slot_hidden", "1.0", tk.END)
             self._refresh_prompt_choices()
@@ -1104,6 +1158,7 @@ class ExperimentDesignPanel(ttk.Frame):
             tuple(sorted(name for name, var in self.choice_vars.items() if get(var))),
             lora, loras, self.grid_frame.signature() if self._is_grid() else None,
             self.prompt_slot_frame.signature() if _prompt_slot(self) else None,
+            self.lora_composition_frame.signature() if _lora_composition(self) else None,
             getattr(self, "_target_model", None), self._baseline_signature(),
         )
 
@@ -1138,8 +1193,8 @@ class ExperimentDesignPanel(ttk.Frame):
 
         get = self._safe_get
         images = get(self.images_var, 1) or 1
-        if _prompt_slot(self):
-            count = len(self.prompt_slot_frame.spec()["candidates"])
+        if _special(self):
+            count = len(self._special_frame().spec()["candidates"])
             self.estimate_var.set(f"{count} candidates x {images} images = {count * int(images)} requested images (maximum 24)")
             self._update_policy_buttons()
             return
@@ -1199,7 +1254,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self._say("The grid design changed after Preview; Build Preview again before Run.")
             self._update_policy_buttons()
             return 0
-        if not _prompt_slot(self) and not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
+        if not _special(self) and not self._is_model_comparison() and not self._is_grid() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -1263,6 +1318,8 @@ class ExperimentDesignPanel(ttk.Frame):
 
         if data.get("study_type") == "prompt_slot":
             return self.prompt_slot_frame.validation_error(int(data.get("images_per_value", 0))) or None
+        if data.get("study_type") == "lora_composition":
+            return self.lora_composition_frame.validation_error(int(data.get("images_per_value", 0))) or None
         if data.get("study_type") == "two_axis_grid":
             from src.learning.two_axis_grid import plan_summary
 
@@ -1348,7 +1405,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """
         from src.learning.variable_metadata import get_variable_metadata
 
-        if _prompt_slot(self) or self._is_model_comparison() or self._is_grid():
+        if _special(self) or self._is_model_comparison() or self._is_grid():
             return
 
         variable_name = self.variable_var.get()
@@ -1472,7 +1529,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self._target_model = model
 
     def _refresh_model_capabilities(self) -> None:
-        if _prompt_slot(self):
+        if _special(self):
             self._ensure_baseline()
             self._sync_target_from_baseline()
             self.baseline_editor.refresh()
@@ -1536,8 +1593,11 @@ class ExperimentDesignPanel(ttk.Frame):
             self.build_button.configure(state="disabled")
             self.run_button.configure(state="disabled")
             return
-        if _prompt_slot(self):
-            from src.learning.prompt_slot_experiment import require_target
+        if _special(self):
+            if _lora_composition(self):
+                from src.learning.lora_composition import require_target
+            else:
+                from src.learning.prompt_slot_experiment import require_target
 
             try:
                 policy = self._target_policy
@@ -1545,14 +1605,15 @@ class ExperimentDesignPanel(ttk.Frame):
                 if policy is None or controller is None:
                     raise ValueError("Select a supported Learning baseline first")
                 require_target(policy, controller.authoring_baseline())
-                valid = not self.prompt_slot_frame.validation_error(int(self.images_var.get())) and not self._baseline_blockers()
+                valid = not self._special_frame().validation_error(int(self.images_var.get())) and not self._baseline_blockers()
             except (AttributeError, TypeError, ValueError, tk.TclError):
                 valid = False
             self.build_button.configure(state="normal" if valid else "disabled")
             experiment = self._current_experiment()
             from src.learning.model_comparison import study_type
 
-            frozen = bool(getattr(experiment, "execution_snapshot_json", "")) and study_type(experiment) == "prompt_slot"
+            frozen = bool(getattr(experiment, "execution_snapshot_json", "")) and study_type(experiment) == (
+                "lora_composition" if _lora_composition(self) else "prompt_slot")
             self.run_button.configure(state="normal" if frozen and not self.preview_is_stale() else "disabled")
             return
         if self._is_grid():
@@ -1773,7 +1834,9 @@ class ExperimentDesignPanel(ttk.Frame):
         self._refresh_identity_preview()
 
     def _on_prompt_text_edited(self) -> None:
-        if _prompt_slot(self):
+        if _lora_composition(self):
+            self.lora_composition_frame.sync_baseline()
+        if _special(self):
             self.custom_prompt_text.tag_configure("slot_hidden", elide=not self._comparison_show_names())
             self.custom_prompt_text.tag_add("slot_hidden", "1.0", tk.END)
         self._refresh_identity_preview()
@@ -1782,7 +1845,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _get_prompt_preview_text(self) -> str:
         if self.prompt_source_var.get() == "custom":
-            return self.custom_prompt_text.get("1.0", "end-1c") if _prompt_slot(self) else self.custom_prompt_text.get("1.0", tk.END).strip()
+            return self.custom_prompt_text.get("1.0", "end-1c") if _special(self) else self.custom_prompt_text.get("1.0", tk.END).strip()
         selected_prompt = self._get_selected_prompt_payload()
         if selected_prompt:
             return str(selected_prompt.get("prompt_text", "") or "")
@@ -1803,7 +1866,7 @@ class ExperimentDesignPanel(ttk.Frame):
         return "", ""
 
     def _refresh_identity_preview(self) -> None:
-        if _prompt_slot(self):
+        if _special(self):
             return
         model, vae = self._current_model_vae()
         identity = build_experiment_identity(
@@ -2160,7 +2223,7 @@ class ExperimentDesignPanel(ttk.Frame):
         from src.learning.model_comparison import study_type
 
         self.study_type_var.set(
-            {"model_comparison": "Model Comparison", "two_axis_grid": "Two-Axis Grid", "prompt_slot": "Prompt Slot"}.get(
+            {"model_comparison": "Model Comparison", "two_axis_grid": "Two-Axis Grid", "prompt_slot": "Prompt Slot", "lora_composition": "LoRA Composition"}.get(
                 study_type(experiment), "Controlled Variable"
             )
         )
@@ -2197,8 +2260,19 @@ class ExperimentDesignPanel(ttk.Frame):
         if self.prompt_source_var.get() == "pack":
             self._on_prompt_source_changed()
         self._on_variable_changed()
-        if _prompt_slot(self) or self._is_model_comparison() or self._is_grid():
+        if _special(self) or self._is_model_comparison() or self._is_grid():
             self._on_study_type_changed()
+        if _lora_composition(self):
+            from src.learning.experiment_execution import thaw_snapshot
+
+            frozen = (thaw_snapshot(experiment.execution_snapshot_json).get("lora_composition")
+                      if getattr(experiment, "execution_snapshot_json", "") else None)
+            spec = dict(metadata.get("lora_composition") or {})
+            if frozen:
+                spec.update(operation=frozen["operation"], original=frozen["original"],
+                            candidates=[{"name": c["name"], "weight": c["weight"]} for c in frozen["candidates"]])
+            self.lora_composition_frame.invalidate()
+            self.lora_composition_frame.load(spec)
         if _prompt_slot(self):
             from src.learning.experiment_execution import thaw_snapshot
 

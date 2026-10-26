@@ -165,6 +165,7 @@ def test_advanced_study_types_stay_reachable_and_keep_their_own_forms(tab_and_se
     assert list(panel.study_type_combo.cget("values")) == [
         "Controlled Variable",
         "Prompt Slot",
+        "LoRA Composition",
         "Model Comparison",
         "Two-Axis Grid",
     ]

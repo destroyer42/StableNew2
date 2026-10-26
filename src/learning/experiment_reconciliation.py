@@ -263,6 +263,9 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
     from src.learning.prompt_slot_experiment import prompt_readback_reason
 
     variable_reason = variable_reason or prompt_readback_reason(snapshot, variant, prompt_readback)
+    from src.learning.lora_composition import readback_reason
+
+    variable_reason = variable_reason or readback_reason(snapshot, variant, prompt_readback)
     launch_profile = str(
         (variant_payload.get("runtime_admission") or {}).get("launch_profile") or ""
     )

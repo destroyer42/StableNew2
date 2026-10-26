@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-594 of 749 modules have a docstring.
+598 of 753 modules have a docstring.
 
 ## src/
 
@@ -388,6 +388,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_review_panel.py`: (no docstring)
 - `learning_tab_frame_v2.py`: (no docstring)
 - `learning_workflow_bar.py`: (no docstring)
+- `lora_composition_design_frame.py`: LoRA Composition authoring inside the existing scrollable Learning Design surface
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
 - `photo_optimize_editors.py`: Scoped Photo Optimize editing and review widgets; no store writes or queue authority
 - `photo_optimize_handoff.py`: Managed Photo Set hand-offs for the Photo Optimize tab (PR-GUI-UX-580)
@@ -542,6 +543,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_record.py`: Learning record models and persistence helpers
 - `learning_record_builder.py`: Helper for constructing LearningRecord instances from pipeline runs
 - `learning_runner.py`: Learning runner stub implementation
+- `lora_composition.py`: Controlled LoRA composition: one designated LoRA position varies, every other input is frozen
+- `lora_inventory.py`: Registry-backed LoRA identity and compatibility projection for Learning composition
 - `lora_variable_service.py`: (no docstring)
 - `lora_variant.py`: Deterministic LoRA-strength variants for controlled Learning experiments
 - `model_capabilities.py`: Pure stage/model intersection
@@ -576,6 +579,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: learning_controller_services — extracted service helpers for LearningController
 - `experiment_persistence.py`: experiment_persistence — pure serialisation helpers for LearningController resume state
+- `lora_composition.py`: LoRA Composition coordination over existing snapshot, ordinary NJR and Learning state owners
 - `prompt_slot.py`: Prompt Slot coordination over existing snapshot, ordinary NJR and Learning state owners
 
 ## src/migrations/
