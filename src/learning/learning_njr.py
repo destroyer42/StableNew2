@@ -47,7 +47,7 @@ def assemble_txt2img_njr(
         StageConfig,
         WorkloadKind,
     )
-    from src.utils.embedding_prompt_utils import render_embedding_reference
+    from src.utils.embedding_prompt_utils import render_embedding_invocation
 
     section = config["txt2img"]
     record = NormalizedJobRecord(
@@ -85,10 +85,10 @@ def assemble_txt2img_njr(
             variant_total=variant_total,
             learning_context=context,
             positive_embeddings=tuple(
-                render_embedding_reference(*item) for item in positive_embeddings
+                render_embedding_invocation(*item) for item in positive_embeddings
             ),
             negative_embeddings=tuple(
-                render_embedding_reference(*item) for item in negative_embeddings
+                render_embedding_invocation(*item) for item in negative_embeddings
             ),
             lora_tags=tuple(LoRATag(name=name, weight=weight) for name, weight in lora_tags),
             metadata=metadata,

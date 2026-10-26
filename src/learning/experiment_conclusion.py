@@ -15,6 +15,10 @@ def build_experiment_conclusion(
         from src.learning.prompt_slot_experiment import conclusion
 
         return conclusion(plan, rating_details, review_drafts)
+    if study_type == "embedding_experiment":
+        from src.learning.embedding_experiment import conclusion as embedding_conclusion
+
+        return embedding_conclusion(plan, rating_details, review_drafts)
     if study_type == "lora_composition":
         from src.learning.lora_composition import conclusion as lora_conclusion
 

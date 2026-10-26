@@ -16,8 +16,8 @@ from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.gui.widgets.media_inspector import MediaInspector as ImageThumbnail
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui_v2.recommendation_targets import describe_apply_changes
+from src.learning.controlled_study_display import DISPLAYED_STUDIES, visibility_prompt
 from src.learning.guided_workflow import RatingProgress, build_rating_progress
-from src.learning.lora_composition import visibility_prompt
 from src.learning.rating_schema import blend_rating, get_active_categories
 from src.learning.recommendation_summary import build_recommendation_summary
 from src.learning.review_workspace import build_review_projection
@@ -736,19 +736,17 @@ class LearningReviewPanel(ttk.Frame):
             metadata += f"Images: {variant.completed_images}/{variant.planned_images}\n"
             self.metadata_text.insert(tk.END, metadata)
             study = (getattr(experiment, "metadata", {}) or {}).get("study_type")
-            if study in ("prompt_slot", "lora_composition"):
+            if study in DISPLAYED_STUDIES:
                 from src.gui.content_visibility import (
                     ContentVisibilityMode,
                     normalize_content_visibility_mode,
                 )
-                from src.learning.lora_composition import candidate_caption as lora_caption
-                from src.learning.prompt_slot_experiment import candidate_caption
+                from src.learning.controlled_study_display import candidate_caption
                 from src.learning.resource_access import resolve_app_state
 
                 state = resolve_app_state(self._get_learning_controller())
                 visible = normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW
-                caption = lora_caption if study == "lora_composition" else candidate_caption
-                self.metadata_text.insert(tk.END, caption(experiment, variant.param_value, visible=visible) + "\n")
+                self.metadata_text.insert(tk.END, candidate_caption(study, experiment, variant.param_value, visible=visible) + "\n")
         else:
             self.metadata_text.insert(tk.END, "No experiment data available")
 
@@ -819,21 +817,21 @@ class LearningReviewPanel(ttk.Frame):
     def set_prompt_slot_conclusion(self, result: dict[str, Any]) -> None:
         self.slot_conclusion_text.configure(state="normal")
         self.slot_conclusion_text.delete("1.0", tk.END)
-        if result.get("study_type") in ("prompt_slot", "lora_composition"):
+        if result.get("study_type") in DISPLAYED_STUDIES:
             self.slot_conclusion_text.grid()
-            lora = result["study_type"] == "lora_composition"
+            named = result["study_type"] != "prompt_slot"
             from src.gui.content_visibility import (
                 ContentVisibilityMode,
                 normalize_content_visibility_mode,
             )
-            from src.learning.lora_composition import candidate_label_text
+            from src.learning.controlled_study_display import candidate_label_text
             from src.learning.resource_access import resolve_app_state
 
             state = resolve_app_state(self._get_learning_controller())
             visible = normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW
             self.slot_conclusion_text.insert("1.0", result["message"] + "\n" + "\n".join(
                 f"Candidate {row['value']}"
-                + (f" ({candidate_label_text(self.current_experiment, row['value'], visible=visible)})" if lora else "")
+                + (f" ({candidate_label_text(result['study_type'], self.current_experiment, row['value'], visible=visible)})" if named else "")
                 + f": {row['sample_count']} completed, {row['saved_count']} valid rated; "
                 f"mean {row['average_overall']}, variability {row['rating_stddev']}; "
                 + ("controlled" if row["controlled"] else "uncontrolled/unverified") for row in result["values"]))
