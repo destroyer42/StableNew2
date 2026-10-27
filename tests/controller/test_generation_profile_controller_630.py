@@ -6,6 +6,7 @@ A fake host and a fake Base Generation panel stand in for Tk. Nothing here build
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Thread, get_ident
 from types import SimpleNamespace
 from typing import Any
 
@@ -363,6 +364,50 @@ def test_a_model_list_that_arrives_later_reveals_a_missing_startup_model(tmp_pat
     late.profiles.on_resources_updated(late.app_state.resources)
     assert any("not offered by the runtime" in issue for issue in late.profiles.startup_issues)
     assert late.panel.values["model"] == SDXL_MODEL  # reported, never swapped silently
+
+
+@pytest.mark.parametrize("early", [{}, {"samplers": ["Euler"]}, {"models": []}])
+def test_partial_resources_do_not_consume_startup_model_validation(tmp_path, early):
+    saver = FakeHost(FakePanel(), tmp_path)
+    assert saver.profiles.save_startup_defaults()[0]
+    runtime = FakeHost(FakePanel(model="current.safetensors"), tmp_path)
+    assert runtime.profiles.restore_startup_defaults().restores_anything
+    runtime.profiles.on_resources_updated(early)
+    # The UI projection may still contain the old snapshot when this callback arrives.
+    runtime.profiles.on_resources_updated({"models": ["current.safetensors"]})
+    issues = runtime.profiles.startup_issues
+    assert any("not offered by the runtime" in issue for issue in issues)
+    assert runtime.panel.values["model"] == SDXL_MODEL
+    runtime.profiles.on_resources_updated({"models": ["current.safetensors"]})
+    assert runtime.profiles.startup_issues == issues
+
+
+def test_startup_validation_uses_incoming_models_before_ui_projection(tmp_path):
+    saver = FakeHost(FakePanel(), tmp_path)
+    assert saver.profiles.save_startup_defaults()[0]
+    runtime = FakeHost(FakePanel(), tmp_path, models=[SDXL_MODEL])
+    assert runtime.profiles.restore_startup_defaults().restores_anything
+    runtime.profiles.on_resources_updated({"models": ["different.safetensors"]})
+    assert any("not offered by the runtime" in issue for issue in runtime.profiles.startup_issues)
+
+
+def test_delayed_startup_validation_notifies_only_on_existing_gui_dispatcher(tmp_path):
+    saver = FakeHost(FakePanel(), tmp_path)
+    assert saver.profiles.save_startup_defaults()[0]
+    runtime = FakeHost(FakePanel(), tmp_path)
+    assert runtime.profiles.restore_startup_defaults().restores_anything
+    pending, notified = [], []
+    runtime._run_in_gui_thread = pending.append
+    runtime.profiles.add_listener(lambda: notified.append(get_ident()))
+    worker = Thread(target=lambda: runtime.profiles.on_resources_updated({"models": ["other"]}))
+    worker.start()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert not notified and not runtime.profiles.startup_issues
+    [deliver] = pending
+    deliver()
+    assert notified == [get_ident()]
+    assert any("not offered by the runtime" in issue for issue in runtime.profiles.startup_issues)
 
 
 # --------------------------------------------------------------------------- draft truth
