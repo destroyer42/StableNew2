@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import threading
 import time
 from collections.abc import Callable
@@ -15,17 +14,6 @@ except ImportError:  # pragma: no cover - optional dependency
 from src.queue.job_model import JobExecutionMetadata
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, wrap_exception
 from src.utils.exceptions_v2 import WatchdogViolationError
-
-
-def _is_test_mode() -> bool:
-    # pytest sets this environment variable while tests run
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        return True
-    # explicit override
-    if os.environ.get("STABLENEW_TEST_MODE") == "1":
-        return True
-    return False
-
 
 WATCHDOG_LOG_PREFIX = "[WATCHDOG]"
 
@@ -47,14 +35,14 @@ class WatchdogViolation:
 
 
 class JobWatchdog(threading.Thread):
-    """Daemon thread that enforces resource caps for a job's external processes."""
+    """Stoppable thread that enforces resource caps for a job's external processes."""
 
     def __init__(
         self,
         job_id: str,
         metadata: JobExecutionMetadata,
         config: WatchdogConfig,
-        violation_callback: Callable[[str, str, dict[str, Any]], None],
+        violation_callback: Callable[[str, UnifiedErrorEnvelope], None],
         *,
         process_provider: Callable[[int], Any] | None = None,
         time_provider: Callable[[], float] | None = None,
@@ -73,7 +61,7 @@ class JobWatchdog(threading.Thread):
         self._idle_since: dict[int, float] = {}
 
     def run(self) -> None:
-        if _is_test_mode():
+        if not self._config.enabled:
             return
         while not self._stop_event.wait(max(0.1, self._config.interval_sec)):
             violation = self.inspect()

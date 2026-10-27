@@ -19,6 +19,9 @@ from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils.logger import StructuredLogger
 from tests.helpers.njr_factory import make_pipeline_njr
+from tests.helpers.runtime_isolation import isolated_image_backends
+
+pytestmark = pytest.mark.usefixtures("forbid_host_runtime_access")
 
 _TINY_PNG = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9"
@@ -94,6 +97,7 @@ def _build_pipeline_runner(
         api_client=client,
         structured_logger=StructuredLogger(output_dir=tmp_path / "logs"),
         runs_base_dir=str(tmp_path / "runs"),
+        image_backend_registry=isolated_image_backends(),
     )
     executor = runner._pipeline
     monkeypatch.setattr(executor, "_ensure_webui_true_ready", lambda: None)
@@ -176,7 +180,8 @@ def test_canonical_txt2img_cancel_interrupts_once_and_persists_cancelled(
             lambda: not any(name.startswith("progress_poll") for name in _production_thread_names())
         )
     finally:
-        service.stop()
+        assert service.stop()
+        repository.close()
 
     assert not any(name.startswith("QueueWorker") for name in _production_thread_names())
 
@@ -228,7 +233,8 @@ def test_canonical_txt2img_completes_once_when_not_cancelled(monkeypatch, tmp_pa
         assert client.post_count == 1
         assert client.interrupt_count == 0
     finally:
-        service.stop()
+        assert service.stop()
+        repository.close()
 
 
 def test_cancelled_token_prevents_txt2img_post_before_dispatch(monkeypatch, tmp_path: Path) -> None:

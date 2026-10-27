@@ -15,7 +15,7 @@
     "src/controller/core_pipeline_controller.py": 7,
     "src/controller/job_execution_controller.py": 5,
     "src/controller/job_history_service.py": 13,
-    "src/controller/job_service.py": 24,
+    "src/controller/job_service.py": 23,
     "src/controller/job_service_outage.py": 2,
     "src/controller/job_service_shutdown.py": 1,
     "src/controller/learning_execution_controller.py": 8,
@@ -163,7 +163,7 @@
     "src/utils/snapshot_builder_v2.py": 2,
     "src/utils/system_info_v2.py": 2,
     "src/utils/thread_registry.py": 1,
-    "src/utils/watchdog_v2.py": 5,
+    "src/utils/watchdog_v2.py": 3,
     "src/utils/webui_discovery.py": 6,
     "src/utils/win_jobobject.py": 5,
     "src/video/comfy_process_manager.py": 2,
@@ -178,5 +178,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1475
+  "total": 1472
 }
