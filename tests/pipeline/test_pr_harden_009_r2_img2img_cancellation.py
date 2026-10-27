@@ -20,6 +20,9 @@ from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils.logger import StructuredLogger
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
+from tests.helpers.runtime_isolation import isolated_image_backends
+
+pytestmark = pytest.mark.usefixtures("forbid_host_runtime_access")
 
 _TINY_PNG = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgWJ9awAAAABJRU5ErkJggg=="
@@ -234,6 +237,7 @@ def test_queue_img2img_cancel_persists_cancelled_and_skips_later_stage(
         api_client=client,
         structured_logger=StructuredLogger(output_dir=tmp_path / "logs"),
         runs_base_dir=str(tmp_path / "runs"),
+        image_backend_registry=isolated_image_backends(),
     )
     executor = pipeline_runner._pipeline
     monkeypatch.setattr(executor, "_ensure_webui_true_ready", lambda: None)
@@ -292,4 +296,5 @@ def test_queue_img2img_cancel_persists_cancelled_and_skips_later_stage(
         assert later_stage_calls == []
         assert not list((tmp_path / "runs").rglob("*.png"))
     finally:
-        service.stop()
+        assert service.stop()
+        repository.close()

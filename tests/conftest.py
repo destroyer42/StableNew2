@@ -149,6 +149,47 @@ def _pin_host_runtime_autostart_off(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _configure_job_watchdog_explicitly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ordinary tests disable job resource monitoring via its production config seam.
+
+    Enforcement tests supply enabled WatchdogConfig instances and safe process/clock
+    providers. No implicit pytest shortcut exists in the production run loop.
+    Restore the cached config through monkeypatch, rather than leaking it to later tests.
+    """
+    from src.config import app_config
+
+    monkeypatch.setenv("STABLENEW_WATCHDOG_ENABLED", "0")
+    monkeypatch.setattr(app_config, "_watchdog_config", None)
+
+
+@pytest.fixture
+def forbid_host_runtime_access(monkeypatch: pytest.MonkeyPatch):
+    """Opt-in tripwire for fake-client tests; owned HTTP-server tests do not use it.
+
+    Record even swallowed failures, so a background dependency cannot silently
+    escape to the host and then turn the refusal into an apparently valid result.
+    Workers must be quiescent before fixture teardown.
+    """
+    attempts = []
+
+    def forbidden(*args, **kwargs):
+        attempts.append((args, kwargs))
+        pytest.fail("fake-client test reached an ambient runtime dependency")
+
+    for target in (
+        "requests.sessions.Session.request",
+        "src.api.healthcheck.probe_webui_endpoint",
+        "src.api.webui_runtime_identity.probe_endpoint_runtime_identity",
+        "src.video.comfy_healthcheck.probe_comfy_endpoint",
+        "src.api.webui_process_manager.get_global_webui_process_manager",
+        "src.video.comfy_process_manager.get_global_comfy_process_manager",
+    ):
+        monkeypatch.setattr(target, forbidden)
+    yield
+    assert attempts == [], "fake-client test attempted ambient runtime access"
+
+
+@pytest.fixture(autouse=True)
 def _never_create_real_process_containers_for_webui_managers(monkeypatch: pytest.MonkeyPatch) -> None:
     """A test-built ``WebUIProcessManager`` must never own a real OS job object / cgroup.
 
