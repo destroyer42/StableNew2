@@ -37,10 +37,8 @@ def _redact(value: Any) -> Any:
     if isinstance(value, str):
         value = re.sub(r"\\\\[^\s\"<>]+", "[local path omitted]", value)
         value = re.sub(r"(?<![:/\w])//[^\s\"<>]+", "[local path omitted]", value)
-        value = re.sub(r"[A-Za-z]:[\\/][^\s\"<>]+", "[local path omitted]", value)
-        value = re.sub(
-            r"(?<![:/\w])/(?:home|Users|tmp|mnt)/[^\s\"<>]+", "[local path omitted]", value
-        )
+        value = re.sub(r"(?<!\w)[A-Za-z]:[\\/][^\s\"<>]+", "[local path omitted]", value)
+        value = re.sub(r"(?<![:/\w])/(?!/)[^\s\"<>]+", "[local path omitted]", value)
     return value
 
 

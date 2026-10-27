@@ -252,6 +252,28 @@ def test_exact_research_preference_preserves_favorites_startup(world, tmp_path, 
     )
 
 
+def test_saved_exact_research_reference_survives_new_catalog_revision(world, tmp_path, monkeypatch):
+    from src.generation_profiles import evidence_catalog as module
+
+    root = tmp_path / "evidence"
+    monkeypatch.setattr(module, "operator_catalog_root", lambda: root)
+    first = EvidenceCatalog((*baseline_catalog().records, exact(world, [claim(value=30)])))
+    module.select_operator_catalog(first, root)
+    store = GenerationProfileStore(tmp_path / "profiles")
+    service = GenerationProfileService(store, world.resolver)
+    original = service.preferred_ref(world.target.identity)[0]
+    service.set_favorite(world.path.name, original)
+    favorite_bytes = (store.root / "favorites.json").read_bytes()
+    second = EvidenceCatalog((*baseline_catalog().records, exact(world, [claim(value=50)])))
+    module.select_operator_catalog(second, root)
+    assert service.get(original).settings["steps"] == 30
+    assert service.preferred_ref(world.target.identity)[0] == original
+    assert any(option.ref == original for option in service.options_for(world.target.identity))
+    labels = [option.label for option in service.options_for(world.target.identity)]
+    assert len(labels) == len(set(labels))
+    assert (store.root / "favorites.json").read_bytes() == favorite_bytes
+
+
 @pytest.mark.parametrize(
     "alternatives,samples,total",
     [((30, 50), 6, 12), ((30, 40, 50), 5, 15), ((30, 40, 50, 60), 5, 20), ((30, 50), 10, 20)],
@@ -273,6 +295,8 @@ def test_missing_resources_and_wrong_control_block_without_substitution(world):
     assert not proposal(world, resources=None).runnable
     with pytest.raises(ValueError, match="Pilot"):
         proposal(world, samples=50)
+    assert not proposal(world, values=(30, 20)).runnable
+    assert not proposal(world, values=(30, 40, 55), samples=5).runnable
 
 
 def test_save_reopen_deduplicate_and_preserve_edited_draft(world, tmp_path):
@@ -364,6 +388,7 @@ def test_report_roundtrip_redacts_paths_and_prompts(world, tmp_path):
     assert validate_report(json.loads(machine.read_text(encoding="utf-8"))) == report
     assert "Model Evidence Catalog" in readable.read_text(encoding="utf-8")
     assert "a lighthouse at dusk" not in machine.read_text(encoding="utf-8")
+    assert "https://huggingface.co/" in machine.read_text(encoding="utf-8")
     assert str(world.root) not in machine.read_text(encoding="utf-8")
     with pytest.raises(ValueError):
         validate_report({**report, "contract": "model_evidence_report/999"})
@@ -482,6 +507,11 @@ def test_unc_export_and_publication_require_reported_proof(world):
     from src.learning.setting_evidence import require_rating_proof
 
     assert "private" not in _redact(r"\\nas\private\rob\model.safetensors")
+    assert "private" not in _redact("/srv/private/model.safetensors")
+    assert (
+        _redact("https://huggingface.co/publisher/model")
+        == "https://huggingface.co/publisher/model"
+    )
     snap = {"evidence_proposal": proposal(world).document, "variable_under_test": "Steps"}
     with pytest.raises(ValueError, match="proof"):
         require_rating_proof({"variant_value": 50}, snap)

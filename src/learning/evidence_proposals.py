@@ -219,6 +219,16 @@ def propose(
         except ValueError as exc:
             reasons.append(str(exc))
         field = meta.config_path.split(".")[-1]
+        if meta.value_type == "numeric":
+            from src.learning.design_estimate import range_values
+
+            planned = range_values(
+                float(values[0]), float(values[-1]), float(values[1]) - float(values[0])
+            )
+            if planned != list(values):
+                reasons.append(
+                    "Alternatives cannot be represented by the existing ascending regular Learning range; no values will be substituted."
+                )
         if field in SETTING_KEYS:
             from src.generation_profiles.contract import validate_settings
 

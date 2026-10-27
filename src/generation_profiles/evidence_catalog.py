@@ -307,7 +307,7 @@ class EvidenceCatalog:
             profile_id=f"research-bytes-{identity.sha256}-{self.revision[:12]}",
             revision=1,
             kind=KIND_RESEARCH,
-            name=f"Exact research: {identity.display_name}",
+            name=f"Exact research: {identity.display_name} (evidence {self.revision[:8]})",
             model=identity,
             settings=settings,
             unavailable=unavailable,
@@ -370,3 +370,41 @@ def catalog_profiles() -> tuple[GenerationProfile, ...]:
         return tuple(p for p in profiles if p is not None)
     except (OSError, ValueError, TypeError, KeyError):
         return ()  # malformed optional research never changes Custom/Learning/defaults
+
+
+def archived_catalog_profile(profile_id: str) -> GenerationProfile | None:
+    """Resolve an explicit saved Research reference from its immutable source revision."""
+    from itertools import islice
+
+    match = re.fullmatch(r"research-bytes-([0-9a-f]{64})-([0-9a-f]{12})", profile_id)
+    if not match:
+        return None
+    sha, prefix = match.groups()
+    try:
+        paths = list(islice(operator_catalog_root().glob(f"{prefix}*.json"), 2))
+        if len(paths) != 1:
+            return None
+        catalog = EvidenceCatalog.load(paths[0])
+        if catalog.revision != paths[0].stem:
+            return None
+        families = {
+            r.family
+            for r in catalog.records
+            if r.scope == "exact" and r.sha256 == sha and r.asset_kind == "checkpoint"
+        }
+        if len(families) != 1:
+            return None
+        family = next(iter(families))
+        profile = catalog.exact_profile(
+            ModelIdentity(
+                IDENTITY_MODEL,
+                f"model:{family}:{sha}",
+                family,
+                display_name=sha[:8],
+                model_key=sha,
+                sha256=sha,
+            )
+        )
+        return profile if profile and profile.profile_id == profile_id else None
+    except (OSError, ValueError, TypeError, KeyError):
+        return None

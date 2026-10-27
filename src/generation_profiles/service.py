@@ -134,7 +134,13 @@ class GenerationProfileService:
     def options_for(self, identity: ModelIdentity) -> tuple[ProfileOption, ...]:
         favorite = self._store.favorite_for(identity.key)
         options = []
-        for profile in self._catalog():
+        catalog = self._catalog()
+        for ref in (favorite, self._selected.get(identity.key)):
+            if ref is not None and ref.kind == KIND_RESEARCH:
+                pinned = self.get(ref)
+                if pinned and not any(p.profile_id == pinned.profile_id for p in catalog):
+                    catalog.append(pinned)
+        for profile in catalog:
             match = _profile_match(profile, identity)
             if match.applies:
                 is_fav = bool(
@@ -157,7 +163,7 @@ class GenerationProfileService:
 
     def get(self, ref: ProfileRef) -> GenerationProfile | None:
         if ref.kind == KIND_RESEARCH:
-            return next(
+            current = next(
                 (
                     p
                     for p in self._catalog()
@@ -165,6 +171,11 @@ class GenerationProfileService:
                 ),
                 None,
             )
+            if current is not None:
+                return current
+            from src.generation_profiles.evidence_catalog import archived_catalog_profile
+
+            return archived_catalog_profile(ref.profile_id) if ref.revision in (None, 1) else None
         return self._store.load(ref)
 
     def preferred_ref(self, identity: ModelIdentity) -> tuple[ProfileRef | None, ProfileRef | None]:
