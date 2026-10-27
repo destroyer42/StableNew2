@@ -236,6 +236,9 @@ class LearningTabFrame(ttk.Frame):
             command=self._on_commit_stored_drafts,
         )
         self.stored_drafts_button.grid(row=1, column=5, columnspan=3, sticky="e", padx=(4, 0), pady=(6, 0))
+        from src.gui.views.model_evidence_window import open_model_evidence
+
+        ttk.Button(self.header_frame, text="Model Evidence Catalog", command=lambda: open_model_evidence(self)).grid(row=2, column=5, columnspan=3, sticky="e", pady=4)
         attach_tooltip(
             self.stored_drafts_button,
             "Save the rated drafts left in other saved experiments as ratings. Shows what it will do first.",

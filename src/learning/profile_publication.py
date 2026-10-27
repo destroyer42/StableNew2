@@ -172,6 +172,11 @@ def _sample(row: Mapping[str, Any], target: ResolvedModel) -> _Sample:
     meta = row["metadata"]
     frozen = meta["frozen_experiment"]
     snapshot = frozen["snapshot"]
+    from src.learning.evidence_proposals import validate_proposal_snapshot
+    from src.learning.setting_evidence import require_rating_proof
+
+    validate_proposal_snapshot(snapshot, current=target.identity)
+    require_rating_proof(meta, snapshot)
     config = frozen["executed_config"]
     experiment = meta["experiment_id"]
     variant = meta["learning_context"]["variant_id"]

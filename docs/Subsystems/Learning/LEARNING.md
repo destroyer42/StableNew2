@@ -367,6 +367,55 @@ A `study_type == "prompt_model_matrix"` experiment (contract `learning_prompt_mo
 
 Limits: physical GPU behaviour of a matrix was not qualified (no generation was run); model readback depends on the request payload the executor records, and its absence makes a cell uncontrolled rather than assumed.
 
+### 3.15 Catalog qualification proposals
+
+The Learning header's **Model Evidence Catalog** opens explicit bounded asset
+observation/identity refresh, source coverage, gaps and saved qualification drafts.
+AssetRegistry remains the sole scanner/hash cache. Legacy `models/embeddings` is
+inactive. Worker progress/results return through Tk polling with cancellation and
+closed/stale-delivery suppression; merely opening the window starts no scan/lookup.
+
+Source lookup requires confirmation of the identifier sent to Civitai or an exact
+Hugging Face repository/commit. Bounded responses become unreviewed candidates,
+never executable recipes. Schema-validated reviewed claims can be imported into
+content-addressed operator catalog revisions. Catalog refresh writes no Custom or
+Learning profile, favorite or startup default. Relative-path JSON/Markdown exports
+retain unknown/conflicting evidence and omit raw prompts and absolute paths.
+
+`src/learning/evidence_proposals.py` ranks P0 identity/compatibility blockers,
+P1 executable recipe gaps, P2 geometry questions, P3 adapters and P4 metadata.
+Within a tier: consequence, weakness and usefulness are ordinal ordering factors
+(1 ordinary, 2 high; accelerator consequence can be 3), then feasibility, estimated
+work and stable variable name. These are not confidence probabilities. Cost
+estimates count images/denoising steps; elapsed time is unknown. Initial ordinary
+SDXL proposals compare CFG, steps, sampler or scheduler against a Learning baseline.
+Unavailable resources block without substitution. VAE pairing, accelerator variants
+and geometry stay blocked pending compatible exact evidence/modes. Unsupported
+families remain metadata research; no execution support or publication rule is added.
+
+Saving an eligible proposal writes an ordinary draft in `LearningExperimentStore`:
+readable name, exact checkpoint bytes, evidence revision, hypothesis, one prompt,
+baseline/control, alternatives, shared requested seed policy, a 12/15/20-image
+budget, rubric and screening criteria. A bounded generated ID owns its directory;
+the full name appears in the Experiment Library. Atomic create-only publication
+prevents repeated saves from replacing edited drafts/results. Opening restores
+Design only. Build Preview and Run remain explicit existing actions, with the
+existing whole-batch compiler, JobService and SQLite admission/reconciliation.
+
+Preview freezes a separately versioned selected context, including operator-edited
+baseline/hypothesis, prompt and seed policy. Changing the tested variable requires
+a new ordinary experiment/proposal. Checkpoint bytes are checked again before
+compilation. **Inspect active experiment** compares frozen Research, selected
+settings, compiled NJR, dispatched request and backend-reported values. An outbound
+request never proves the tested value; absent/mismatched tested-value readback makes
+results uncontrolled. Historical provenance is never reconstructed from today's
+catalog. Existing ratings and explicit publication thresholds remain final, with
+an additional matching tested-setting readback guard for proposal ratings.
+
+The six-pair screening rule (five wins and mean overall improvement of 0.5) supports
+follow-up investigation only. It is not statistical proof, a universal optimum or
+automatic Learning publication. Geometry remains outside publication eligibility.
+
 ## 4. Data and persistence
 
 | Data | Location | Writer | Atomic |

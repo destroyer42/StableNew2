@@ -279,6 +279,11 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
     variable_reason = variable_reason or prompt_model_matrix.readback_reason(
         snapshot, variant, prompt_readback, variant_payload, metadata
     )
+    from src.learning.setting_evidence import completion_evidence as setting_completion_evidence
+
+    settings_proof = setting_completion_evidence(snapshot, variant, variant_payload, metadata)
+    if settings_proof and not settings_proof["qualification_tested_value_verified"]:
+        variable_reason = variable_reason or "tested_setting_readback_unverified"
     launch_profile = str(
         (variant_payload.get("runtime_admission") or {}).get("launch_profile") or ""
     )
@@ -297,6 +302,7 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
         "executed_final_prompt": str(final_prompt or ""),
         "runtime_prompt_readback": prompt_readback,
         "runtime_launch_profile": launch_profile,
+        **settings_proof,
         **embedding_experiment.execution_evidence(snapshot, variant, ti_report),
         **prompt_model_matrix.execution_evidence(snapshot, variant_payload, metadata),
         "requested_seed_policy": dict(policy or {}),

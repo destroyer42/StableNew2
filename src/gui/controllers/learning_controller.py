@@ -275,7 +275,7 @@ class LearningController:
             "selected_prompt_negative_text": negative_prompt_text,
             "selected_prompt_loras": list(experiment_data.get("selected_prompt_loras", []) or []),
             "grid": experiment_data.get("grid"),
-            **{key: copy.deepcopy(experiment_data.get(key)) for key in ("prompt_slot", "lora_composition", "embedding_experiment", "prompt_model_matrix")},
+            **{key: copy.deepcopy(experiment_data.get(key)) for key in ("prompt_slot", "lora_composition", "embedding_experiment", "prompt_model_matrix", "evidence_proposal", "frozen_seed_policy")},
         }
 
         # Create LearningExperiment from form data
@@ -653,7 +653,7 @@ class LearningController:
         negative_prompt = str(
             getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "") or ""
         )
-        if not negative_prompt and self.prompt_workspace_state:
+        if not negative_prompt and self.prompt_workspace_state and not experiment.metadata.get("evidence_proposal"):
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
         baseline = freeze_preview_global_policy(baseline)
         prompt_source = freeze_ordinary_prompt_source(dict(experiment.metadata or {}))

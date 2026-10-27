@@ -38,6 +38,7 @@ from src.config import app_config
 from src.pipeline.adetailer_contract import schema_issues
 from src.pipeline.adetailer_effectiveness import build_effectiveness, response_infotexts
 from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.pipeline.backend_setting_evidence import setting_values
 from src.pipeline.global_prompt_policy import (
     FROZEN_POLICY_SOURCE,
     LEGACY_POLICY_SOURCE,
@@ -2251,6 +2252,7 @@ class Pipeline:
             "all_seeds": info.get("all_seeds"),
             "all_subseeds": info.get("all_subseeds"),
             "backend_textual_inversion": textual_inversion_report(info),
+            "backend_reported_settings": setting_values(info),
         }
 
     def _build_seed_metadata(
@@ -5216,6 +5218,8 @@ class Pipeline:
                 "requested_subseed": payload.get("subseed", -1),
                 "all_subseeds": gen_info.get("all_subseeds"),
                 "backend_textual_inversion": gen_info.get("backend_textual_inversion"),
+                "backend_reported_settings": gen_info.get("backend_reported_settings"),
+                "dispatched_settings": setting_values(payload),
                 "model": model_name,
                 "vae": vae_name,
                 "pressure_assessment": pressure_assessment,
@@ -5395,6 +5399,8 @@ class Pipeline:
                     "actual_subseed": gen_info.get("subseed"),
                     "all_subseeds": gen_info.get("all_subseeds"),
                     "backend_textual_inversion": gen_info.get("backend_textual_inversion"),
+                    "backend_reported_settings": gen_info.get("backend_reported_settings"),
+                    "dispatched_settings": setting_values(payload),
                     "config": self._clean_metadata_payload(payload),
                     "output_path": str(image_path),
                     "path": str(image_path),

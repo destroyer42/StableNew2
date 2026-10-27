@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-610 of 765 modules have a docstring.
+619 of 774 modules have a docstring.
 
 ## src/
 
@@ -66,6 +66,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `component_evidence.py`: Bounded structural evidence for multi-component image models (PR-IMG-MODELS-150)
 - `controlnet_identity.py`: Documented ControlNet model identities and their modality (PR-IMG-CNET-210/220), below both its consumers
 - `controlnet_structure.py`: Bounded safetensors-header evidence for ControlNet weights (PR-IMG-CNET-210)
+- `evidence_census.py`: Bounded operator census over the existing registry; no independent scanner/cache
 - `gguf.py`: Bounded GGUF container inspection for the observational inventory (PR-IMG-MODELS-152)
 - `inventory_report.py`: Deterministic, bounded, redacted operator report over the observational inventory (PR-IMG-MODELS-152)
 - `lora_preview.py`: Bounded, read-only local adapter preview access
@@ -199,6 +200,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Model-aware generation-settings profiles (PR-IMG-PROFILE-630)
 - `application.py`: Deterministic planning of how a profile lands on the working Base Generation settings (PR-IMG-PROFILE-630)
 - `contract.py`: Typed, versioned generation-settings profile contract (PR-IMG-PROFILE-630)
+- `evidence_baseline.py`: Curated research seeds; subtype records never attach by filename hints
+- `evidence_catalog.py`: Versioned, source-cited advisory evidence
+- `evidence_refresh.py`: Explicit, bounded public-source lookups
+- `evidence_report.py`: Portable, informational exports
 - `identity.py`: Resolve which model a selected checkpoint is, and whether a saved profile belongs to it (PR-IMG-PROFILE-630)
 - `research.py`: Built-in Research profiles: sourced starting values for the models StableNew can actually support (PR-IMG-PRO…
 - `service.py`: Tk-free session service for generation-settings profiles (PR-IMG-PROFILE-630)
@@ -389,6 +394,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_tab_frame_v2.py`: (no docstring)
 - `learning_workflow_bar.py`: (no docstring)
 - `lora_composition_design_frame.py`: LoRA Composition authoring inside the existing scrollable Learning Design surface
+- `model_evidence_window.py`: Explicit operator catalog journey
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
 - `photo_optimize_editors.py`: Scoped Photo Optimize editing and review widgets; no store writes or queue authority
 - `photo_optimize_handoff.py`: Managed Photo Set hand-offs for the Photo Optimize tab (PR-GUI-UX-580)
@@ -524,6 +530,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `embedding_experiment.py`: Controlled textual-inversion experiments: one designated embedding position varies, every other input is froz…
 - `embedding_inventory.py`: Registry-backed embedding identity and compatibility projection for Learning embedding experiments
 - `evidence_progress.py`: How far an experiment is from the evidence a recommendation needs, in the engine's own thresholds
+- `evidence_proposals.py`: Deterministic qualification drafts
 - `execution_controller.py`: Learning admission and reconciliation through the existing JobService callback owner
 - `experiment_conclusion.py`: Derived, read-only conclusion projection for one designed experiment
 - `experiment_execution.py`: Frozen experiment preview and one-boundary queue admission helpers
@@ -573,6 +580,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `resource_access.py`: Canonical projected WebUI resource access for Learning surfaces
 - `review_workspace.py`: Pure experiment-wide review projection and navigation rules
 - `run_metadata.py`: Helpers for run metadata capture
+- `setting_evidence.py`: Frozen Research -> selection -> compiled -> dispatch -> reported comparison
 - `stage_capabilities.py`: (no docstring)
 - `staged_recommendations.py`: Non-mutating recommendation patches for staged-curation derived jobs
 - `two_axis_grid.py`: Two-axis (CFG Scale / Steps / LoRA Strength) exploratory comparison: plan once, materialize frozen cells
@@ -617,6 +625,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `adetailer_effectiveness.py`: Versioned ADetailer effectiveness evidence (PR-REFINE-160): what was detected, what ran, what changed, what w…
 - `animatediff_retirement.py`: AnimateDiff execution retirement policy: one predicate, one error, one stable message
 - `artifact_contract.py`: (no docstring)
+- `backend_setting_evidence.py`: Allow-listed values explicitly reported in a generation response or dispatched request
 - `cli_njr_builder.py`: (no docstring)
 - `compile_evidence.py`: One bounded, read-only model/LoRA evidence context per PromptPack build (PR-PROMPT-140)
 - `config_contract_v26.py`: (no docstring)
