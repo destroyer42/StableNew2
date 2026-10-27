@@ -44,5 +44,10 @@ def rating_metadata(snapshot: dict[str, Any], variant: Any) -> dict[str, Any]:
     """Typed rating evidence of the LoRA Composition and Embedding studies (each is {} for any other study)."""
     from src.learning.embedding_experiment import rating_metadata as embedding_metadata
     from src.learning.lora_composition import rating_metadata as lora_metadata
+    from src.learning.setting_evidence import rating_metadata as qualification_metadata
 
-    return {**lora_metadata(snapshot, variant), **embedding_metadata(snapshot, variant)}
+    return {
+        **lora_metadata(snapshot, variant),
+        **embedding_metadata(snapshot, variant),
+        **qualification_metadata(snapshot, variant),
+    }

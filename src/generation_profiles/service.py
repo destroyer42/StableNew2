@@ -55,6 +55,10 @@ logger = logging.getLogger(__name__)
 
 
 def _profile_match(profile: GenerationProfile, identity: ModelIdentity) -> IdentityMatch:
+    if profile.kind == KIND_RESEARCH and profile.model.sha256 and not identity.sha256:
+        return IdentityMatch(
+            "conflict", "Exact Research requires current verified checkpoint bytes."
+        )
     return (match_learning_identity if profile.kind == KIND_LEARNING else match_identity)(
         profile.model, identity
     )
@@ -118,7 +122,10 @@ class GenerationProfileService:
         return self._resolver.resolve(model_name)
 
     def _catalog(self) -> list[GenerationProfile]:
+        from src.generation_profiles.evidence_catalog import catalog_profiles
+
         return [
+            *catalog_profiles(),
             *self._research(),
             *self._store.list_latest(KIND_LEARNING),
             *self._store.list_latest(KIND_CUSTOM),
@@ -137,11 +144,27 @@ class GenerationProfileService:
                 )
                 options.append(ProfileOption(profile, match, is_fav))
         order = {KIND_RESEARCH: 0, KIND_LEARNING: 1, KIND_CUSTOM: 2}
-        return tuple(sorted(options, key=lambda o: (order[o.profile.kind], o.profile.name.lower())))
+        return tuple(
+            sorted(
+                options,
+                key=lambda o: (
+                    order[o.profile.kind],
+                    o.profile.model.kind == IDENTITY_FAMILY,
+                    o.profile.name.lower(),
+                ),
+            )
+        )
 
     def get(self, ref: ProfileRef) -> GenerationProfile | None:
         if ref.kind == KIND_RESEARCH:
-            return next((p for p in self._research() if p.profile_id == ref.profile_id), None)
+            return next(
+                (
+                    p
+                    for p in self._catalog()
+                    if p.kind == KIND_RESEARCH and p.profile_id == ref.profile_id
+                ),
+                None,
+            )
         return self._store.load(ref)
 
     def preferred_ref(self, identity: ModelIdentity) -> tuple[ProfileRef | None, ProfileRef | None]:

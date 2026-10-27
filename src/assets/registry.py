@@ -36,7 +36,13 @@ from src.assets.compatibility import (
     sidecar_metadata_evidence,
     sidecar_metadata_field_present,
 )
-from src.assets.observation import ObservationRoot, ObservationScan, ScanLimits, observe_roots
+from src.assets.observation import (
+    ObservationRoot,
+    ObservationScan,
+    ObservedFile,
+    ScanLimits,
+    observe_roots,
+)
 from src.state.workspace_paths import workspace_paths
 
 _EXTENSIONS = frozenset({".bin", ".ckpt", ".onnx", ".pt", ".pth", ".safetensors"})
@@ -360,7 +366,11 @@ class AssetRegistry:
             ("embedding", self.webui_root / "embeddings", "embeddings"),
             ("embedding", models / "embeddings", "models/embeddings"),
         )
-        return tuple(ObservationRoot(kind, path, label) for kind, path, label in layout)
+        roots = [ObservationRoot(kind, path, label) for kind, path, label in layout]
+        known = {root.path for root in roots}
+        roots.extend(ObservationRoot(kind.value, path, path.relative_to(self.webui_root).as_posix())
+                     for kind, path in self.supported_roots() if path not in known)
+        return tuple(roots)
 
     def verified_sha256(self, path: Path) -> str | None:
         """The cached SHA-256 of one exact file, only while its size/mtime fingerprint still matches; never hashes."""
@@ -416,6 +426,7 @@ class AssetRegistry:
         *,
         kinds: Iterable[AssetKind] | None = None,
         checkpoint_paths: Iterable[Path] | None = None,
+        observed_files: Iterable[ObservedFile] | None = None,
         cancelled: Callable[[], bool] | None = None,
         progress: Callable[[Path, int, int], None] | None = None,
         persist: bool = True,
@@ -434,13 +445,14 @@ class AssetRegistry:
         counters = self.last_refresh = RefreshCounters()
         entries, computed, hits = self._prepare_refresh(
             kinds, checkpoint_paths, cancelled, progress, counters, read_only=not persist,
+            observed_files=observed_files,
         )
         selected = set(kinds) if kinds is not None else set(_DEFAULT_REFRESH_KINDS)
         if persist:
             self._commit_entries(
                 entries,
                 cancelled=cancelled,
-                prune_kinds={item.value for item in selected} if checkpoint_paths is None else None,
+                prune_kinds={item.value for item in selected} if checkpoint_paths is None and observed_files is None else None,
             )
         else:
             # Browsing uses the same identity/evidence reader without modifying user cache files.
@@ -449,7 +461,7 @@ class AssetRegistry:
                 raise InterruptedError("Asset discovery cancelled")
             retained = {
                 key: value for key, value in self._entries.items()
-                if checkpoint_paths is not None or value.get("kind") not in {item.value for item in selected}
+                if checkpoint_paths is not None or observed_files is not None or value.get("kind") not in {item.value for item in selected}
             }
             self._entries = {**retained, **entries}
             self._snapshot = self._make_snapshot()
@@ -627,13 +639,32 @@ class AssetRegistry:
         cancelled: Callable[[], bool] | None,
         progress: Callable[[Path, int, int], None] | None,
         counters: RefreshCounters,
-        *, read_only: bool = False,
+        *, read_only: bool = False, observed_files: Iterable[ObservedFile] | None = None,
     ) -> tuple[dict[str, dict[str, Any]], int, int]:
         selected = set(kinds) if kinds is not None else set(_DEFAULT_REFRESH_KINDS)
         next_entries: dict[str, dict[str, Any]] = {}
         computed = hits = 0
         roots_and_paths: list[tuple[AssetKind, Path, Iterable[Path]]]
-        if checkpoint_paths is not None:
+        if observed_files is not None:
+            if checkpoint_paths is not None:
+                raise ValueError("Choose observed files or checkpoint paths")
+            roots = {r.label: r for r in self.observation_roots() if r.label != "models/embeddings"}
+            roots_and_paths = []
+            for item in observed_files:
+                observation_root = roots.get(item.root_label)
+                if observation_root is None or observation_root.kind != item.kind:
+                    raise ValueError("Unknown observation root")
+                kind = AssetKind(item.kind)  # observation-only components stay provisional
+                path = Path(item.path)
+                if not path.resolve().is_relative_to(observation_root.path.resolve()):
+                    raise ValueError("Asset outside local library")
+                if any(not candidate.resolve().is_relative_to(observation_root.path.resolve()) for candidate in _sidecar_candidates(path)):
+                    raise ValueError("Sidecar outside local library")
+                stat = path.stat()
+                if (stat.st_size, stat.st_mtime_ns) != (item.size, item.mtime_ns):
+                    raise ValueError("Observed asset changed; refresh census")
+                roots_and_paths.append((kind, observation_root.path, (path,)))
+        elif checkpoint_paths is not None:
             roots_and_paths = [
                 (AssetKind.CHECKPOINT, path.parent, (path,))
                 for path in sorted(set(checkpoint_paths), key=str)

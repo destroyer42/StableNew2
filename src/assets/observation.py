@@ -40,7 +40,7 @@ from src.assets.component_evidence import ComponentEvidence, classify_tensor_tab
 from src.assets.gguf import GgufEvidence, inspect_gguf
 
 CONTRACT = "asset_observation/1"
-EXTENSIONS = frozenset({".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin"})
+EXTENSIONS = frozenset({".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin", ".onnx"})
 FORMAT_UNINSPECTED = (
     "FORMAT_UNINSPECTED"  # a pickle-based/unknown container is never deserialized to inventory it
 )

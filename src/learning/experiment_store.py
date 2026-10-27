@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from src.utils.atomic_io import atomic_write_text
+from src.utils.atomic_io import atomic_publish_json, atomic_write_text
 
 
 def _utc_now_iso() -> str:
@@ -48,11 +48,16 @@ class LearningExperimentStore:
         display_name: str,
         payload: dict[str, Any],
         experiment_id: str | None = None,
+        create_only: bool = False,
     ) -> LearningExperimentHandle:
         resolved_id = str(experiment_id or self.create_experiment_id(display_name))
         experiment_dir = self.root / resolved_id
         experiment_dir.mkdir(parents=True, exist_ok=True)
         now = _utc_now_iso()
+        if create_only:
+            atomic_publish_json(
+                experiment_dir / self.SESSION_FILE, payload, indent=2, sort_keys=True
+            )
 
         meta_path = experiment_dir / self.META_FILE
         previous = self._read_json(meta_path) or {}
@@ -65,7 +70,8 @@ class LearningExperimentStore:
             "schema_version": 1,
         }
         self._write_json(meta_path, meta)
-        self._write_json(experiment_dir / self.SESSION_FILE, payload)
+        if not create_only:
+            self._write_json(experiment_dir / self.SESSION_FILE, payload)
 
         index = self._load_index()
         index["last_experiment_id"] = resolved_id

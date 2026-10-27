@@ -47,6 +47,16 @@ def ordinary_snapshot(
 
     target = ModelIdentityResolver().resolve((model_context or {}).get("selected_model"))
     snapshot["model_identity"] = target.identity.to_dict()
+    if getattr(experiment, "metadata", {}).get("evidence_proposal"):
+        from src.learning.evidence_proposals import (
+            freeze_proposal_context,
+            validate_proposal_snapshot,
+        )
+
+        snapshot["evidence_proposal"] = freeze_proposal_context(
+            experiment.metadata["evidence_proposal"], snapshot, experiment.description
+        )
+        validate_proposal_snapshot(snapshot)
     return snapshot
 
 

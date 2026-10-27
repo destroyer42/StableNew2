@@ -236,6 +236,19 @@ def frozen_definition(experiment):
 
 def compile_variant(config, experiment):
     """Validate before this call. Prove canonical normalization preserves the tested value."""
+    if experiment.execution_snapshot_json:
+        from src.generation_profiles.identity import ModelIdentityResolver
+        from src.learning.evidence_proposals import validate_proposal_snapshot
+        from src.learning.experiment_execution import thaw_snapshot
+
+        snapshot = thaw_snapshot(experiment.execution_snapshot_json)
+        if snapshot.get("evidence_proposal"):
+            validate_proposal_snapshot(
+                snapshot,
+                current=ModelIdentityResolver()
+                .resolve(selected_model(config, experiment.stage))
+                .identity,
+            )
     meta = get_variable_metadata(experiment.variable_under_test)
     keys = meta.config_path.split(".")
     if keys[0] == "txt2img" and experiment.stage != "txt2img":

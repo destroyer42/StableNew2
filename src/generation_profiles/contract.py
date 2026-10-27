@@ -279,10 +279,8 @@ class GenerationProfile:
         if overlap or any(key not in SETTING_KEYS for key in self.unavailable):
             raise ProfileError("unavailable must name recommendable settings that have no value")
         if self.kind == KIND_RESEARCH:
-            if self.model.kind == IDENTITY_MODEL:
-                raise ProfileError(
-                    "a research profile binds to an exact profile or a verified family, not one file"
-                )
+            if self.model.kind == IDENTITY_MODEL and not self.model.sha256:
+                raise ProfileError("a model Research profile requires verified SHA-256 identity")
             covered = {name for note in self.evidence for name in note.fields}
             missing = set(clean) - covered
             if missing:

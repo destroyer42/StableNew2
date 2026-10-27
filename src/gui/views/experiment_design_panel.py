@@ -15,6 +15,7 @@ from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.image_backends.model_policy import ModelPolicy
 from src.learning import baseline_authoring as authoring
 from src.learning.design_estimate import estimate_design
+from src.learning.evidence_proposals import proposal_form_fields
 from src.learning.experiment_naming import build_experiment_identity
 from src.learning.model_capabilities import (
     compatible_context,
@@ -957,6 +958,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Collect form data
         experiment_data = {
+            **proposal_form_fields(getattr(getattr(self.learning_controller, "learning_state", None), "current_experiment", None)),
             "study_type": "embedding_experiment" if _embedding(self) else "lora_composition" if _lora_composition(self) else "prompt_slot" if _prompt_slot(self) else "model_comparison" if self._is_model_comparison() else "prompt_model_matrix" if _matrix(self) else "two_axis_grid" if self._is_grid() else "controlled_variable",
             "prompt_slot": self.prompt_slot_frame.spec() if _prompt_slot(self) else None,
             "prompt_model_matrix": self.matrix_frame.spec() if _matrix(self) else None,
