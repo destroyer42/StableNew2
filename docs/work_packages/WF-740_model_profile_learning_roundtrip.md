@@ -1,6 +1,6 @@
 # WF-740 — Model/Profile/Learning End-to-End Assurance and Bounded Repairs
 
-**Type:** Full proposed implementation PR contract. **Status:** unimplemented; requires separately authorized coding session and feature-branch publication. **Priority:** next primary product package in [2026-10-26 roadmap](../audits/2026-10-26_product_capability_roadmap.md).  
+**Type:** Full proposed implementation PR contract. **Status:** unimplemented; requires separately authorized coding session and feature-branch publication. **Priority:** next primary product package in [2026-10-26 roadmap](../audits/2026-10-26_product_capability_roadmap.md).
 **Class:** Standard with lifecycle/persistence sensitivity; stop and reclassify if a material architecture decision appears.
 
 ## Objective
