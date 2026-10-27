@@ -17,8 +17,9 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
+from src.learning.evidence_revision import evidence_revision
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,14 @@ def recommendation_confidence(count: int, stddev: float, context_confidence: flo
     )
 
 
+class _Provenance(TypedDict):
+    controlled_rating_count: int
+    controlled_experiment_count: int
+    qualifying_experiment_count: int
+    evidence_source: str
+    evidence_revision: tuple[int, int, int] | None
+
+
 @dataclass
 class RecommendationSet:
     """Complete set of recommendations for a prompt/stage combination."""
@@ -110,6 +119,11 @@ class RecommendationSet:
     evidence_tier: str = EVIDENCE_TIER_NO_EVIDENCE
     automation_eligible: bool = False
     model_policy_context: dict[str, Any] = field(default_factory=dict)
+    controlled_rating_count: int = 0
+    controlled_experiment_count: int = 0
+    qualifying_experiment_count: int = 0
+    evidence_source: str = ""
+    evidence_revision: tuple[int, int, int] | None = None
 
     def get_best_for_parameter(self, param_name: str) -> ParameterRecommendation | None:
         """Get the best recommendation for a specific parameter."""
@@ -135,13 +149,13 @@ class RecommendationEngine:
         self._cache: dict[str, Any] | None = None
         self._cache_timestamp: float = 0.0
         self._cache_mtime: float = 0.0
+        self._cache_revision: tuple[int, int, int] | None = None
 
     def _should_reload_cache(self) -> bool:
         """Check if cache needs to be reloaded based on file modification time."""
         if not self.records_path.exists():
             return True
-        mtime = self.records_path.stat().st_mtime
-        return mtime > self._cache_mtime
+        return evidence_revision(self.records_path) != self._cache_revision
 
     @staticmethod
     def _prompt_tokens(text: str) -> set[str]:
@@ -843,6 +857,7 @@ class RecommendationEngine:
             height=height,
         )
         if self._should_reload_cache():
+            loaded_revision = evidence_revision(self.records_path)
             records = self._load_records()
             scored_records = self._score_records(records)
             self._cache = {
@@ -855,6 +870,8 @@ class RecommendationEngine:
             self._cache_mtime = (
                 self.records_path.stat().st_mtime if self.records_path.exists() else 0.0
             )
+            # A concurrent append leaves this snapshot stale, so Apply must ask for fresh findings.
+            self._cache_revision = loaded_revision
         scored_records = self._cache.get("scored_records", []) if self._cache else []
         stage_name = str(stage or "txt2img")
         resolver = self._policy_resolver or resolve_policy
@@ -899,6 +916,17 @@ class RecommendationEngine:
             and sum(variants.values()) >= MIN_CONTROLLED_RATINGS
             for variants in controlled_by_experiment.values()
         )
+        provenance: _Provenance = {
+            "controlled_rating_count": len(experiment_records),
+            "controlled_experiment_count": len(controlled_by_experiment),
+            "qualifying_experiment_count": sum(
+                len(variants) >= MIN_CONTROLLED_VARIANTS
+                and sum(variants.values()) >= MIN_CONTROLLED_RATINGS
+                for variants in controlled_by_experiment.values()
+            ),
+            "evidence_source": str(self.records_path.resolve()),
+            "evidence_revision": self._cache_revision,
+        }
         if strong_experiment:
             evidence_records = experiment_records
             evidence_tier = EVIDENCE_TIER_EXPERIMENT_STRONG
@@ -925,6 +953,8 @@ class RecommendationEngine:
                 recommendations=[],
                 evidence_tier=EVIDENCE_TIER_NO_EVIDENCE,
                 automation_eligible=False,
+                model_policy_context=target_context,
+                **provenance,
             )
 
         optimal_settings = self._compute_optimal_settings(
@@ -943,6 +973,7 @@ class RecommendationEngine:
             evidence_tier=evidence_tier,
             automation_eligible=automation_eligible,
             model_policy_context=target_context,
+            **provenance,
         )
 
         # Sort by confidence score (highest first)

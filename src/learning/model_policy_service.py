@@ -330,6 +330,11 @@ def recommendation_applicable(capabilities, parameter):
 def validate_recommendation_apply(controller, recommendations, cards, rec_list):
     """Preflight the entire patch before any Tk variable mutation, including stale provenance."""
     from src.gui_v2.recommendation_targets import checkpoint_for_stage
+    from src.learning.evidence_revision import evidence_revision
+
+    source = getattr(recommendations, "evidence_source", "")
+    if source and evidence_revision(source) != recommendations.evidence_revision:
+        return False
 
     stage = str(getattr(recommendations, "stage", "txt2img") or "txt2img")
     model = checkpoint_for_stage(cards, stage)
@@ -342,6 +347,8 @@ def validate_recommendation_apply(controller, recommendations, cards, rec_list):
     )
     target = json.loads(capabilities.context_json)
     supplied = getattr(recommendations, "model_policy_context", None)
+    if source and supplied != target:
+        return False
     if target["profile_ref"] and (
         not isinstance(supplied, dict) or not compatible_context(target, supplied)
     ):

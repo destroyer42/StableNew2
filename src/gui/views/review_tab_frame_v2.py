@@ -37,6 +37,7 @@ from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
+from src.learning.feedback_save import refresh_saved_feedback
 from src.queue.job_history_store import JobHistoryEntry
 from src.review.adetailer_outcome import (
     OUTCOME_LABELS,
@@ -122,6 +123,9 @@ class ReviewTabFrame(ttk.Frame):
         self._effective_settings_var = tk.StringVar(value="Effective settings: select an image")
         self._prior_review_summary_var = tk.StringVar(value="Prior Review Summary: none")
         self._feedback_undo_stack: list[list[dict[str, str]]] = []
+        self._feedback_status_var = tk.StringVar(
+            value="Feedback has not been saved in this session."
+        )
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path: Path | None = None
@@ -755,6 +759,11 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=self._undo_last_feedback_save,
         ).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        feedback_status = ttk.Label(
+            feedback_box, textvariable=self._feedback_status_var, style="Dark.TLabel"
+        )
+        feedback_status.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        bind_wraplength(feedback_status)
         attach_tooltip(
             feedback_btn,
             "Saves rating and prompt-change context into the Learning records store.",
@@ -2337,13 +2346,30 @@ class ReviewTabFrame(ttk.Frame):
         try:
             record = save(payload)
             run_id = str(getattr(record, "run_id", "") or "")
-            self._feedback_undo_stack.append(
-                [{"run_id": run_id, "image_path": str(self._selected_image_path)}]
-            )
-            self._refresh_prior_review_summary(self._selected_image_path)
-            messagebox.showinfo("Saved", "Review feedback saved to Learning records.")
+            if not run_id:
+                raise OSError("Learning did not confirm a saved record identity.")
         except Exception as exc:
-            messagebox.showerror("Save failed", str(exc))
+            self._feedback_status_var.set(
+                f"Save not confirmed: {exc} Check the log before retrying."
+            )
+            return
+        self._feedback_undo_stack.append(
+            [{"run_id": run_id, "image_path": str(self._selected_image_path)}]
+        )
+        status = (
+            f"Saved 1 feedback record: {self._selected_image_path}. "
+            "Review feedback is observational; use controlled Learning evidence for profile publication."
+        )
+        stamp = record.metadata.get("artifact_review_metadata", {})
+        if stamp.get("success") is False:
+            status += " Artifact annotation failed; the Learning record is saved."
+        selected_image = self._selected_image_path
+        summary_error = refresh_saved_feedback(
+            lambda: self._refresh_prior_review_summary(selected_image)
+        )
+        if record.metadata.get("recommendation_refresh_error") or summary_error:
+            status += " Evidence is saved; refresh Learning recommendations and the Review summary."
+        self._feedback_status_var.set(status)
 
     def _save_feedback_batch(self) -> None:
         learning_controller = self._resolve_learning_controller()
@@ -2371,30 +2397,47 @@ class ReviewTabFrame(ttk.Frame):
 
         tokens: list[dict[str, str]] = []
         failed: list[str] = []
+        annotation_failed: list[str] = []
+        refresh_failed: list[str] = []
         for target in targets:
-            payload = self._build_feedback_payload(target)
-            if payload is None:
-                failed.append(target.name)
-                continue
             try:
+                payload = self._build_feedback_payload(target)
+                if payload is None:
+                    raise ValueError("Unable to build feedback payload.")
                 record = save(payload)
+                run_id = str(getattr(record, "run_id", "") or "")
+                if not run_id:
+                    raise OSError("Learning did not confirm a saved record identity.")
                 tokens.append(
                     {
-                        "run_id": str(getattr(record, "run_id", "") or ""),
+                        "run_id": run_id,
                         "image_path": str(target),
                     }
                 )
+                if record.metadata.get("artifact_review_metadata", {}).get("success") is False:
+                    annotation_failed.append(str(target))
+                if record.metadata.get("recommendation_refresh_error"):
+                    refresh_failed.append(str(target))
             except Exception:
-                failed.append(target.name)
+                failed.append(str(target))
         if tokens:
             self._feedback_undo_stack.append(tokens)
+        status = f"Saved {len(tokens)} feedback record(s); not confirmed {len(failed)}."
+        if tokens:
+            status += " Saved: " + "; ".join(token["image_path"] for token in tokens) + "."
         if failed:
-            messagebox.showwarning(
-                "Partial Save",
-                f"Saved {len(tokens)} feedback record(s); failed {len(failed)}.",
+            status += " Not confirmed: " + "; ".join(failed) + ". Check the log before retrying."
+        if annotation_failed:
+            status += (
+                " Learning saved, artifact annotation failed: " + "; ".join(annotation_failed) + "."
             )
-            return
-        messagebox.showinfo("Saved", f"Saved feedback for {len(tokens)} image(s).")
+        selected_image = self._selected_image_path
+        if tokens and selected_image is not None:
+            if refresh_saved_feedback(lambda: self._refresh_prior_review_summary(selected_image)):
+                refresh_failed.append(str(self._selected_image_path))
+        if refresh_failed:
+            status += " Evidence is saved; refresh Learning recommendations and the Review summary."
+        self._feedback_status_var.set(status)
 
     def _undo_last_feedback_save(self) -> None:
         learning_controller = self._resolve_learning_controller()
@@ -2416,8 +2459,10 @@ class ReviewTabFrame(ttk.Frame):
             if undo(run_id=token.get("run_id"), image_path=token.get("image_path")):
                 undone += 1
         if undone <= 0:
+            self._feedback_status_var.set("Undo removed no matching feedback records.")
             messagebox.showwarning("Undo", "No matching feedback records were removed.")
             return
+        self._feedback_status_var.set(f"Undo removed {undone} feedback record(s).")
         messagebox.showinfo("Undo complete", f"Removed {undone} feedback record(s).")
 
     def _build_feedback_payload(self, image_path: Path) -> dict[str, Any] | None:

@@ -163,6 +163,19 @@ def build_recommendation_summary(
     enabled, note = apply_availability(
         mode, has_recommendations=bool(items), automation_eligible=eligible
     )
+    if hasattr(recommendations, "controlled_rating_count"):
+        counts = (
+            f"{recommendations.controlled_rating_count} usable controlled ratings in "
+            f"{recommendations.controlled_experiment_count} experiments; "
+            f"{recommendations.qualifying_experiment_count} meet the existing evidence threshold."
+        )
+        evidence_message = f"{counts} {evidence_message}".strip()
+    if tier in (EVIDENCE_TIER_REVIEW_ONLY, EVIDENCE_TIER_SPARSE_PLUS_REVIEW):
+        note += " Insufficient for automatic application or profile publication."
+    note += (
+        " Revalidate after records, model or profile version change. "
+        "Review Learning profile findings for missing executed readback or incompatible model exclusions."
+    )
     change_lines = tuple(
         f"{setting} is already {new}"
         if str(old) == str(new)

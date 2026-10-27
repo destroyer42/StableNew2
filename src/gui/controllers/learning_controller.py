@@ -2648,7 +2648,10 @@ class LearningController:
             extract_primary=_extract_primary,
             metadata=metadata,
         )
-        self._learning_record_writer.append_record(record)
+        if self._learning_record_writer.append_record(record) is False:
+            raise OSError(
+                "Review feedback was not confirmed saved to Learning records; see the log before retrying."
+            )
         try:
             stamp_result = self._review_metadata_service.stamp_review_metadata(
                 image_path=image_path,
@@ -2670,7 +2673,9 @@ class LearningController:
                 "sidecar_path": None,
                 "error": str(exc),
             }
-        self.refresh_recommendations()
+        from src.learning.feedback_save import refresh_saved_feedback
+
+        record.metadata["recommendation_refresh_error"] = refresh_saved_feedback(self.refresh_recommendations)
         return record
 
     def undo_review_feedback(
