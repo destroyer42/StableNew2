@@ -81,8 +81,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 
 ## Active and next
 
-Active: the improvement roadmap in `docs/audits/2026-10-16_repo_audit_and_roadmap.md` (read its "Critical assessment" and
-the independent critique adjustments in the PR history before reordering it). Phases 0 and 1 are merged (protection and gates,
+Active: the owner-selected product roadmap is `docs/audits/2026-10-26_product_capability_roadmap.md` (next: WF-740
+after the overlapping embedding repair is adjudicated). The 2026-10-16 audit remains structural history. Phases 0 and 1 are merged (protection and gates,
 process isolation, startup wiring, crash-safe writes, pinned dev environment, Windows lane, ratchets). Phase 2 (docs and
 process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
 `docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done, and the eight living subsystem docs (P2-2) are written;
