@@ -37,6 +37,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 | Crash-safe state files | `src/utils/atomic_io.py` (every persisted JSON/text store goes through it) |
 | Tests, CI and ratchets | `docs/Subsystems/Testing/TESTING_AND_CI.md`; `python tools/ci/run_pr_gate.py`, `.github/workflows/ci.yml`, `tools/ci/`, `docs/StableNew_Coding_and_Testing_v2.6.md` |
 | Offline AI Assist (advisory suggestions) | `docs/Subsystems/AiAssist/AI_ASSIST.md`; composition/activity `src/controller/app_controller_services/ai_assist_integration.py`; Prompt authoring `src/gui/prompt_ai_suggestions.py` -> `src/gui/ai_suggestion_dialog.py`, `src/gui_v2/ai_suggestion_view.py`; `src/ai_assist/contracts.py` -> `validators.py` -> `service.py` -> `runtime.py`, `observe.py` -> `src/utils/managed_process.py`, `process_observation.py`; qualification `tools/qualification/ai111/`; pinned `config/managed_ai_runtime.json`, `config/ai_model_registry.json` |
+| Model Evidence proposal planning | `src/learning/evidence_autopilot.py`, `evidence_proposal_context.py`; `src/gui/controllers/model_evidence_proposals.py`; `src/gui/views/model_evidence_window.py`, `model_evidence_proposals_dialog.py`; Learning section 3.15 |
 | Offline qualification evidence | `tools/qualification/`, `tools/acceptance/` (operator-only; never part of the production path) |
 
 ## Controller decomposition

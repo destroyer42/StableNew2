@@ -10,12 +10,13 @@ import threading
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any
 
+from src.assets.checkpoint_structure import checkpoint_variant_from_metadata
 from src.assets.evidence_census import refresh_census
-from src.assets.registry import AssetRegistry
+from src.assets.registry import AssetKind, AssetRegistry
 from src.generation_profiles.evidence_catalog import (
     EvidenceCatalog,
     load_operator_catalog,
@@ -25,15 +26,26 @@ from src.generation_profiles.evidence_catalog import (
 from src.generation_profiles.evidence_refresh import EvidenceRefresh, Lookup
 from src.generation_profiles.evidence_report import build_report, export_report
 from src.generation_profiles.identity import ModelIdentityResolver, RegistryShaLookup
+from src.gui.controllers.model_evidence_proposals import (
+    capture_resources,
+    preview_selected,
+    save_drafts,
+)
+from src.gui.views.model_evidence_proposals_dialog import (
+    ModelEvidenceProposalsDialog,
+    choose_prompt_context,
+)
+from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import RegistryFamilyLookup
-from src.learning import baseline_authoring as authoring
+from src.learning.evidence_autopilot import (
+    EvidenceProposalPlanner,
+    ProposalPlan,
+    ProposalPlanningContext,
+)
 from src.learning.evidence_proposals import (
     ExperimentProposal,
     evidence_gaps,
-    propose,
-    save_proposal,
 )
-from src.learning.resource_access import get_resource_choices
 from src.learning.setting_evidence import inspect_experiment
 from src.utils.atomic_io import atomic_write_text
 from src.utils.thread_registry import get_thread_registry
@@ -46,7 +58,9 @@ class ModelEvidenceWindow(tk.Toplevel):
         super().__init__(owner)
         self.owner = owner
         self.title("Model Evidence Catalog — research and qualification drafts")
-        self.geometry("1120x780")
+        self.geometry(
+            f"{min(1120, self.winfo_screenwidth() - 24)}x{min(700, self.winfo_screenheight() - 96)}"
+        )
         self.registry = AssetRegistry()
         catalog_error = ""
         try:
@@ -61,6 +75,10 @@ class ModelEvidenceWindow(tk.Toplevel):
         self.census: dict[str, Any] = {}
         self.targets: list[Any] = []
         self.proposals: list[ExperimentProposal] = []
+        self.proposal_plan: ProposalPlan | None = None
+        self.planning_context: ProposalPlanningContext | None = None
+        self._qualification_prompt: tuple[str, str, dict[str, Any]] | None = None
+        self._proposal_dialog: ModelEvidenceProposalsDialog | None = None
         self._rows: dict[str, dict[str, Any]] = {}
         self._events: queue.Queue[tuple[int, str, Any, Any]] = queue.Queue(maxsize=64)
         self._cancel = threading.Event()
@@ -68,6 +86,9 @@ class ModelEvidenceWindow(tk.Toplevel):
         self._lookup = EvidenceRefresh()
         bar = ttk.Frame(self, padding=6)
         bar.pack(fill="x")
+        self.evidence_menu = tk.Menu(bar, tearoff=False)
+        evidence = ttk.Menubutton(bar, text="Evidence…", menu=self.evidence_menu)
+        evidence.pack(side="right")
         for label, command in (
             ("Observe assets", lambda: self._refresh(False)),
             ("Verify identities (bounded)", lambda: self._refresh(True)),
@@ -75,66 +96,57 @@ class ModelEvidenceWindow(tk.Toplevel):
             ("Import reviewed catalog", self._import),
             ("Export report", self._export),
             ("Inspect active experiment", self._inspect_active),
+            ("Look up verified Civitai hash…", self._research),
+            ("Look up exact Hugging Face revision…", self._hf_dialog),
+            ("All cached/observed asset details", lambda: self._show(self.census)),
         ):
-            ttk.Button(bar, text=label, command=command).pack(side="left", padx=2)
+            self.evidence_menu.add_command(label=label, command=command)
+        ttk.Button(bar, text="Experiment Library", command=owner._on_open_experiment_library).pack(
+            side="left"
+        )
         ttk.Label(
             self,
             text="No startup research or generation. Observation is provisional; only fingerprint-verified hashes identify bytes.",
             padding=6,
         ).pack(anchor="w")
         self.status = tk.StringVar(
-            value=catalog_error + "Choose Observe assets or Verify identities. No scan has started."
+            value=catalog_error
+            + "Select a cached checkpoint. Missing identities can be verified through Evidence…. No scan has started."
         )
         ttk.Label(self, textvariable=self.status, wraplength=1050, padding=6).pack(fill="x")
         self.filter = tk.StringVar()
         ttk.Entry(self, textvariable=self.filter).pack(fill="x", padx=6)
         self.filter.trace_add("write", lambda *_: self._render_assets())
-        self.tree = ttk.Treeview(self, columns=("kind", "identity", "family", "size"), height=9)
-        self.tree.heading("#0", text="Relative location (filter above)")
-        self.tree.column("#0", width=600)
-        for key in ("kind", "identity", "family", "size"):
+        self.tree = ttk.Treeview(
+            self, columns=("identity", "family", "coverage", "qualification"), height=12
+        )
+        self.tree.heading("#0", text="Checkpoint (search above)")
+        self.tree.column("#0", width=460)
+        for key in ("identity", "family", "coverage", "qualification"):
             self.tree.heading(key, text=key)
             self.tree.column(key, width=100)
         self.tree.pack(fill="both", expand=True, padx=6)
-        self.tree.bind("<<TreeviewSelect>>", lambda _event: self._inspect_asset())
+        self.tree.bind("<<TreeviewSelect>>", lambda _event: self._selected_model_changed())
         actions = ttk.Frame(self, padding=6)
         actions.pack(fill="x")
-        ttk.Button(
+        self.proposed_button = ttk.Button(
             actions,
-            text="Plan tests for selected checkpoint (Learning baseline, model-owned VAE)",
+            text="Proposed Experiments (select a model)",
             command=self._plan,
-        ).pack(side="left")
-        ttk.Button(
-            actions, text="Look up selected verified hash on Civitai...", command=self._research
-        ).pack(side="left", padx=4)
-        source = ttk.Frame(self, padding=6)
-        source.pack(fill="x")
-        ttk.Label(source, text="HF exact repository / 40-character commit:").pack(side="left")
+            state="disabled",
+        )
+        self.proposed_button.pack(side="left")
+        ttk.Button(actions, text="Evidence Details", command=self._inspect_asset).pack(
+            side="left", padx=4
+        )
         self.repo, self.revision = tk.StringVar(), tk.StringVar()
-        ttk.Entry(source, textvariable=self.repo, width=30).pack(side="left")
-        ttk.Entry(source, textvariable=self.revision, width=44).pack(side="left", padx=4)
-        ttk.Button(source, text="Look up revision...", command=self._research_hf).pack(side="left")
-        self.proposal_list = tk.Listbox(self, height=5, exportselection=False)
-        self.proposal_list.pack(fill="x", padx=6)
-        self.proposal_list.bind("<<ListboxSelect>>", lambda _event: self._show_proposal())
-        proposal_actions = ttk.Frame(self, padding=6)
-        proposal_actions.pack(fill="x")
-        ttk.Button(
-            proposal_actions,
-            text="Save selected proposal to Experiment Library",
-            command=self._save,
-        ).pack(side="left")
-        ttk.Button(
-            proposal_actions, text="Open saved proposal in Learning Design", command=self._open
-        ).pack(side="left", padx=4)
-        ttk.Button(
-            proposal_actions, text="Experiment Library", command=owner._on_open_experiment_library
-        ).pack(side="left")
-        self.details = ScrolledText(self, height=15, wrap="word", state="disabled")
-        self.details.pack(fill="both", expand=True, padx=6, pady=6)
+        self._details_host = ttk.Frame(self)
+        self.details = ScrolledText(self._details_host, height=12, wrap="word", state="disabled")
+        self.details.pack(fill="both", expand=True)
         self.protocol("WM_DELETE_WINDOW", self._close)
         self.bind("<Destroy>", self._on_destroy, add="+")
         self._poll_id = self.after(75, self._poll)
+        self._load_cached_assets()
 
     def _close(self) -> None:
         self._closed = True
@@ -148,6 +160,7 @@ class ModelEvidenceWindow(tk.Toplevel):
             self._cancel.set()
 
     def _show(self, data: Any) -> None:
+        self._details_host.pack(fill="both", expand=True, padx=6, pady=6)
         self.details.configure(state="normal")
         self.details.delete("1.0", "end")
         self.details.insert(
@@ -178,7 +191,7 @@ class ModelEvidenceWindow(tk.Toplevel):
             event: tuple[int, str, Any, Any]
             try:
                 result = action(cancel.is_set, progress)
-                event = (generation, "done", result, success)
+                event = (generation, "cancelled" if cancel.is_set() else "done", result, success)
             except Exception as exc:
                 logger.exception("Model evidence operation failed")
                 event = (generation, "error", f"{type(exc).__name__}: {exc}", None)
@@ -208,6 +221,16 @@ class ModelEvidenceWindow(tk.Toplevel):
                 self._busy = False
                 if kind == "error":
                     self.status.set(value)
+                    if (
+                        "stale" in str(value).casefold()
+                        and self._proposal_dialog is not None
+                        and self._proposal_dialog.winfo_exists()
+                    ):
+                        self._proposal_dialog.refuse_stale()
+                elif kind == "cancelled":
+                    self.status.set(
+                        "Operation cancelled. Any drafts already saved remain in the Experiment Library."
+                    )
                 else:
                     callback(value)
         self._poll_id = self.after(75, self._poll)
@@ -241,6 +264,8 @@ class ModelEvidenceWindow(tk.Toplevel):
         query = self.filter.get().casefold()
         self._rows = {}
         for i, row in enumerate(self.census.get("assets", [])):
+            if row["kind"] != "checkpoint":
+                continue
             if query not in (row["relative"] + " " + row["kind"] + " " + row["family"]).casefold():
                 continue
             key = str(i)
@@ -250,7 +275,7 @@ class ModelEvidenceWindow(tk.Toplevel):
                 "end",
                 iid=key,
                 text=row["relative"],
-                values=(row["kind"], row["identity_status"], row["family"], row["size"]),
+                values=(row["identity_status"], row["family"], "Check selection", "Not planned"),
             )
         if selected and selected[0] in self._rows:
             self.tree.selection_set(selected)
@@ -305,117 +330,282 @@ class ModelEvidenceWindow(tk.Toplevel):
 
         self._work(inspect, self._show)
 
-    def _plan(self) -> None:
+    def _load_cached_assets(self) -> None:
+        rows = []
+        for record in self.registry.cached_snapshot().records_for(AssetKind.CHECKPOINT):
+            for location in record.locations:
+                if location.kind != AssetKind.CHECKPOINT:
+                    continue
+                try:
+                    relative = location.path.relative_to(location.root).as_posix()
+                except ValueError:
+                    continue
+                family = (
+                    record.compatibility.family.value
+                    if record.compatibility and record.compatibility.family
+                    else "unknown"
+                )
+                rows.append(
+                    {
+                        "kind": "checkpoint",
+                        "relative": relative,
+                        "family": family,
+                        "identity_status": "Cached; check selection",
+                        "size": location.byte_size,
+                        "sha256": record.sha256,
+                        "header": {
+                            "checkpoint_variant": checkpoint_variant_from_metadata(
+                                record.embedded_metadata
+                            )
+                        },
+                    }
+                )
+        self.census = {"assets": rows, "complete": False, "errors": []}
+        self._render_assets()
+
+    def _selected_model_changed(self) -> None:
+        self._cancel.set()
+        self._generation += 1
+        self._busy = False
+        self.proposal_plan = self.planning_context = None
+        self.proposals = []
+        if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
+            self._proposal_dialog.refuse_stale()
+        self.proposed_button.configure(text="Proposed Experiments (checking…)", state="disabled")
+        if self._selected() and getattr(self.owner, "learning_controller", None) is not None:
+            self._plan(open_dialog=False)
+
+    def _capture_planning_inputs(self) -> tuple[Any, ...]:
+        row = self._selected()
+        if not row or row["kind"] != "checkpoint":
+            raise ValueError("Select a checkpoint first.")
+        controller = self.owner.learning_controller
+        baseline = copy.deepcopy(
+            controller.authoring_baseline() or controller._get_baseline_config()
+        )
+        getter = getattr(controller.app_controller, "get_current_global_prompt_policy", None)
+        policy = getter() if callable(getter) else None
+        if isinstance(policy, dict):
+            from src.pipeline.global_prompt_policy import apply_global_prompt_policy
+
+            baseline = apply_global_prompt_policy(baseline, **policy)
+        return (
+            copy.deepcopy(row),
+            baseline,
+            capture_resources(controller),
+            self.catalog,
+            self._resolver(),
+        )
+
+    @staticmethod
+    def _context(inputs: tuple[Any, ...]) -> ProposalPlanningContext:
+        row, baseline, resources, catalog, resolver = inputs
+        if load_operator_catalog().revision != catalog.revision:
+            raise ValueError("Evidence catalog changed; reopen the window to revalidate findings.")
+        target = resolver.resolve(Path(row["relative"]).name)
+        baseline = copy.deepcopy(baseline)
+        baseline["backend_options"] = normalize_image_backend_options(
+            baseline.get("backend_options"), model_name=target.identity.display_name
+        )
+        return ProposalPlanningContext(
+            target,
+            catalog,
+            baseline,
+            resources,
+            variant=(row.get("header") or {}).get("checkpoint_variant") or "",
+        )
+
+    def _plan(self, *, open_dialog: bool = True) -> None:
         row = self._selected()
         if not row or row["kind"] != "checkpoint":
             self.status.set("Select a checkpoint first. Accessories receive usage metadata.")
             return
-        controller = self.owner.learning_controller
-        baseline = copy.deepcopy(controller.authoring_baseline())
-        experiment = controller.learning_state.current_experiment
-        prompt = getattr(experiment, "prompt_text", "") or simpledialog.askstring(
-            "Freeze pilot prompt", "One fixed positive prompt for these proposals:", parent=self
-        )
-        if not prompt:
-            return
-        negative = str(
-            (getattr(experiment, "metadata", {}) or {}).get("selected_prompt_negative_text", "")
-        )
-        resources = {
-            key: get_resource_choices(controller, key)[0]
-            for key in ("models", "samplers", "schedulers", "vaes")
-        }
+        inputs = self._capture_planning_inputs()
 
         def planned(
             _cancelled: Callable[[], bool], _progress: Callable[[str], None]
-        ) -> tuple[Any, list[ExperimentProposal]]:
-            target = self._resolver().resolve(Path(row["relative"]).name)
-            config = copy.deepcopy(baseline)
-            config.setdefault("txt2img", {}).update(model=target.identity.display_name, vae="")
-            authoring.align_aliases(config, "txt2img")
-            section = config["txt2img"]
-            alternatives = (
-                ("cfg_scale", 7.0),
-                ("steps", 50),
-                ("sampler", "DPM++ 2M"),
-                ("scheduler", "Karras"),
-            )
-            proposals = []
-            for variable, candidate in alternatives:
-                key = "sampler_name" if variable == "sampler" else variable
-                control = section.get(key)
-                if control is None or control == candidate:
-                    continue
-                proposals.append(
-                    propose(
-                        self.catalog,
-                        target,
-                        config,
-                        variable=variable,
-                        values=(control, candidate),
-                        prompt=prompt,
-                        negative_prompt=negative,
-                        resources=resources,
-                        variant=row["header"].get("checkpoint_variant") or "",
-                    )
-                )
-            return target, proposals
+        ) -> tuple[ProposalPlanningContext, ProposalPlan]:
+            context = self._context(inputs)
+            return context, EvidenceProposalPlanner().plan(context)
 
         def show(result: Any) -> None:
-            target, self.proposals = result
+            self.planning_context, self.proposal_plan = result
+            target = self.planning_context.target
+            self.proposals = list(self.proposal_plan.proposals)
             if not any(t.identity == target.identity for t in self.targets):
                 self.targets.append(target)
-            self.proposal_list.delete(0, "end")
-            for p in self.proposals:
-                self.proposal_list.insert(
-                    "end",
-                    f"{p.document['priority']} {p.document['status'].upper()} — {p.document['name']}",
+            count = sum(p.runnable for p in self.proposals)
+            self.proposed_button.configure(text=f"Proposed Experiments ({count})", state="normal")
+            covered = sum(
+                c.field
+                in ("sampler_name", "scheduler", "steps", "cfg_scale", "width", "height", "vae")
+                and c.status == "recommended"
+                for c in self.catalog.coverage(target.identity)
+            )
+            selected = self.tree.selection()
+            if selected:
+                current_row = self._selected()
+                if current_row is not None and target.identity.sha256:
+                    current_row.update(identity_status="verified", sha256=target.identity.sha256)
+                self.tree.item(
+                    selected[0],
+                    values=(
+                        "Verified" if target.identity.sha256 else "Unavailable",
+                        target.identity.family,
+                        f"{covered}/7",
+                        f"{count} eligible",
+                    ),
                 )
             self.status.set(
-                "Select a proposal to inspect its hypothesis, baseline, evidence and blocked reasons. Saving never runs it."
+                f"{count} eligible experiments; remaining rows explain blockers or metadata. No prompt, network lookup or generation was used."
             )
+            if open_dialog:
+                self._proposal_dialog = ModelEvidenceProposalsDialog(self, self.proposal_plan)
 
         self._work(planned, show)
 
-    def _proposal(self) -> ExperimentProposal | None:
-        selection = self.proposal_list.tk.splitlist(
-            self.proposal_list.tk.call(self.proposal_list, "curselection")
+    def _save_selected(
+        self, dialog: ModelEvidenceProposalsDialog, *, queue_to_learning: bool
+    ) -> None:
+        inputs, ids, accepted = self._capture_planning_inputs(), dialog.selection_ids(), dialog.plan
+        prompt_context = copy.deepcopy(self._qualification_prompt)
+
+        def saved(identities: Any) -> None:
+            self.status.set(
+                f"Saved/preserved {len(identities)} Experiment Library drafts. No jobs admitted."
+            )
+            if dialog.winfo_exists():
+                dialog.status.set(self.status.get())
+            if queue_to_learning:
+                self.owner._on_open_experiment_library()
+
+        self._work(
+            lambda cancelled, _p: save_drafts(
+                accepted,
+                ids,
+                self._context(inputs),
+                self.owner.experiment_store,
+                cancelled=cancelled,
+                prompt_context=prompt_context,
+            ),
+            saved,
         )
-        return self.proposals[int(selection[0])] if selection else None
 
-    def _show_proposal(self) -> None:
-        proposal = self._proposal()
-        if proposal:
-            self._show(dict(proposal.document))
-
-    def _save(self) -> None:
-        proposal = self._proposal()
-        if proposal:
-            self._work(
-                lambda _c, _p: save_proposal(proposal, self.owner.experiment_store),
-                lambda identity: self.status.set(
-                    f"Saved/preserved draft {identity}; open it from the Experiment Library."
-                ),
+    def _choose_qualification_prompt(self, *, change: bool = False) -> Any:
+        if self._qualification_prompt is not None and not change:
+            return self._qualification_prompt
+        panel = getattr(self.owner, "experiment_panel", None)
+        selected = panel._get_selected_prompt_payload() if panel is not None else None
+        if selected and not change:
+            metadata = {
+                "prompt_source": "pack",
+                "selected_prompt_pack_path": selected.get("prompt_pack_path", ""),
+                "selected_prompt_pack_name": selected.get("prompt_pack_name", ""),
+                "selected_prompt_index": selected.get("prompt_index", 0),
+                "selected_prompt_label": selected.get("label", ""),
+            }
+            self._qualification_prompt = (
+                str(selected.get("prompt_text", "")),
+                str(selected.get("negative_prompt_text", "")),
+                metadata,
             )
+        else:
+            experiment = self.owner.learning_controller.learning_state.current_experiment
+            prompt = getattr(experiment, "prompt_text", "") if not change else ""
+            negative = str(
+                (getattr(experiment, "metadata", {}) or {}).get("selected_prompt_negative_text", "")
+            )
+            if not prompt or change:
+                self._qualification_prompt = choose_prompt_context(
+                    self, selected, (prompt, negative)
+                )
+            else:
+                metadata = getattr(experiment, "metadata", {}) or {}
+                source = {
+                    k: copy.deepcopy(v)
+                    for k, v in metadata.items()
+                    if k == "prompt_source" or k.startswith("selected_prompt_")
+                }
+                self._qualification_prompt = (
+                    prompt,
+                    negative,
+                    source
+                    if source.get("prompt_source") == "pack"
+                    else {"prompt_source": "custom"},
+                )
+        return self._qualification_prompt
 
-    def _open(self) -> None:
-        proposal = self._proposal()
-        if proposal:
+    def _preview_selected(self, dialog: ModelEvidenceProposalsDialog) -> None:
+        if self._busy:
+            self.status.set("Wait for the current bounded operation before Preview.")
+            return
+        prompt = self._choose_qualification_prompt()
+        if prompt is None:
+            return
+        inputs, ids, accepted = self._capture_planning_inputs(), dialog.selection_ids(), dialog.plan
+        getter = getattr(
+            getattr(self.owner.learning_controller, "app_controller", None),
+            "get_current_global_prompt_policy",
+            None,
+        )
+        policy = copy.deepcopy(getter()) if callable(getter) else None
 
-            def loaded(payload: Any) -> None:
-                if not payload:
-                    self.status.set("Save the selected runnable proposal first.")
-                elif self.owner._restore_from_store_payload(
-                    payload, experiment_id=proposal.proposal_id
-                ):
-                    self.status.set(
-                        "Opened in Learning Design. Inspect, Build Preview, then explicitly Run."
+        def shown(previews: Any) -> None:
+            if dialog.winfo_exists():
+                dialog.show(
+                    "\n\n".join(
+                        f"{state.current_experiment.name}\n{summary.headline}\n"
+                        + "\n".join(f"{k}: {v}" for k, v in summary.rows)
+                        for state, _records, summary in previews
                     )
+                )
+                dialog.status.set(
+                    f"{len(previews)} canonical Learning Previews compiled; no drafts, jobs, ratings or profiles written."
+                )
 
-            self._work(
-                lambda _c, _p: self.owner.experiment_store.load_session(proposal.proposal_id),
-                loaded,
+        self._work(
+            lambda cancelled, _p: preview_selected(
+                accepted,
+                ids,
+                self._context(inputs),
+                prompt=prompt[0],
+                negative=prompt[1],
+                prompt_metadata=prompt[2],
+                global_policy=policy,
+                cancelled=cancelled,
+            ),
+            shown,
+        )
+
+    def _open_draft(self, dialog: ModelEvidenceProposalsDialog) -> None:
+        selected = dialog.tree.selection()
+        if not selected or selected[0] not in dialog.proposals:
+            return
+        identity = selected[0]
+
+        def loaded(payload: Any) -> None:
+            if not payload:
+                dialog.status.set("Save the highlighted runnable draft first.")
+            elif self.owner._restore_from_store_payload(payload, experiment_id=identity):
+                dialog.status.set(
+                    "Opened in Learning Design. Choose prompt context, Build Preview, then explicitly Run there."
+                )
+
+        self._work(lambda _c, _p: self.owner.experiment_store.load_session(identity), loaded)
+
+    def _hf_dialog(self) -> None:
+        window = tk.Toplevel(self)
+        window.title("Explicit evidence refresh — exact Hugging Face revision")
+        for row, (label, variable) in enumerate(
+            (("Repository", self.repo), ("40-character commit", self.revision))
+        ):
+            ttk.Label(window, text=label).grid(row=row, column=0, padx=6, pady=6)
+            ttk.Entry(window, textvariable=variable, width=50).grid(
+                row=row, column=1, padx=6, pady=6
             )
+        ttk.Button(window, text="Review disclosure and look up…", command=self._research_hf).grid(
+            row=2, column=0, columnspan=2, pady=6
+        )
 
     def _lookup_source(self, lookup: Lookup) -> None:
         if not messagebox.askyesno(
@@ -480,6 +670,7 @@ class ModelEvidenceWindow(tk.Toplevel):
             self.status.set(
                 "Reviewed catalog imported. Existing Custom, Learning, favorites and startup defaults were not written."
             )
+            self._selected_model_changed()
 
         self._work(load, loaded)
 

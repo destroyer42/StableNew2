@@ -19,6 +19,7 @@ from src.learning.model_capabilities import project_learning_capabilities, varia
 from src.learning.variable_metadata import get_variable_by_internal_name
 
 CONTRACT = "qualification_proposal/1"
+CONTRACT_V2 = "qualification_proposal/2"
 RUBRIC = ("overall quality", "prompt adherence", "artifacts", "detail", "variable-specific outcome")
 DECISION = "For a six-pair pilot: at least 5/6 candidate wins and mean overall improvement >= 0.5 on the existing rating scale supports follow-up only. Mixed/small differences are inconclusive. This is a screening rule, not statistical proof or a universal optimum."
 REQUIRED_EVIDENCE = (
@@ -177,6 +178,7 @@ def propose(
     seed: int = 42,
     resources: Mapping[str, Any] | None = None,
     variant: str = "",
+    contract: str = CONTRACT,
 ) -> ExperimentProposal:
     """One factor, one prompt, shared requested seeds; requested seeds still need readback."""
     if (len(values), samples or (6 if len(values) == 2 else 5)) not in (
@@ -188,9 +190,11 @@ def propose(
         raise ValueError("Pilot design must be 2x6, 3x5, 4x5 or explicit 2x10")
     if len({json.dumps(v, sort_keys=True) for v in values}) != len(values):
         raise ValueError("Candidates must be distinct")
+    if contract not in (CONTRACT, CONTRACT_V2):
+        raise ValueError("Unsupported qualification proposal")
     if (
         not isinstance(prompt, str)
-        or not prompt.strip()
+        or (contract == CONTRACT and not prompt.strip())
         or len(prompt) > 16000
         or len(negative_prompt) > 16000
     ):
@@ -219,7 +223,7 @@ def propose(
         except ValueError as exc:
             reasons.append(str(exc))
         field = meta.config_path.split(".")[-1]
-        if meta.value_type == "numeric":
+        if meta.value_type == "numeric" and contract == CONTRACT:
             from src.learning.design_estimate import range_values
 
             planned = range_values(
@@ -263,7 +267,7 @@ def propose(
     name = f"{target.identity.family.upper()} [{target.identity.display_name.rsplit('/', 1)[-1]}@{(target.identity.sha256 or 'pending')[:8]}] — {' vs '.join(map(str, values))} {display} — {count * len(values)}-image paired quality test"
     objective = f"Does changing {display} from {values[0]} to the candidate improve quality under this exact frozen context?"
     doc = {
-        "contract": CONTRACT,
+        "contract": contract,
         "name": name,
         "objective": objective,
         "hypothesis": objective,
@@ -316,8 +320,25 @@ def save_proposal(proposal: ExperimentProposal, store: LearningExperimentStore) 
         raise ValueError("Blocked proposal: " + "; ".join(proposal.document["blocked_reasons"]))
     if store.load_session(proposal.proposal_id) is not None:
         return proposal.proposal_id
+    payload = proposal_payload(proposal)
+    try:
+        store.save_session(
+            display_name=str(proposal.document["name"]),
+            payload=payload,
+            experiment_id=proposal.proposal_id,
+            create_only=True,
+        )
+    except FileExistsError:
+        pass  # Another window won; its draft/results remain untouched.
+    return proposal.proposal_id
+
+
+def proposal_payload(proposal: ExperimentProposal) -> dict[str, Any]:
+    """The existing Learning draft shape, also usable for an unsubmitted Preview."""
     from src.gui.learning_state import LearningExperiment, LearningState
 
+    if not proposal.runnable:
+        raise ValueError("Only a supported draft can enter Learning")
     d = copy.deepcopy(dict(proposal.document))
     meta = get_variable_by_internal_name(d["variable"])
     if meta is None:
@@ -334,6 +355,21 @@ def save_proposal(proposal: ExperimentProposal, store: LearningExperimentStore) 
         "frozen_seed_policy": d["seed_policy"],
         "evidence_proposal": d,
     }
+    if d.get("contract") == CONTRACT_V2:
+        source = d.get("prompt_source_context") or {}
+        metadata.update(
+            {
+                key: copy.deepcopy(source[key])
+                for key in (
+                    "prompt_source",
+                    "selected_prompt_pack_path",
+                    "selected_prompt_pack_name",
+                    "selected_prompt_index",
+                    "selected_prompt_label",
+                )
+                if key in source
+            }
+        )
     state = LearningState()
     authored = authoring.new_authoring(authoring.ORIGIN_LEARNING, source="model_evidence_catalog")
     state.baseline_draft = {"config": d["baseline"], "authoring": authored}
@@ -351,16 +387,7 @@ def save_proposal(proposal: ExperimentProposal, store: LearningExperimentStore) 
     )
     payload = state.to_dict()
     payload.update(workflow_state="designing", learning_enabled=True, resume_schema_version=1)
-    try:
-        store.save_session(
-            display_name=d["name"],
-            payload=payload,
-            experiment_id=proposal.proposal_id,
-            create_only=True,
-        )
-    except FileExistsError:
-        pass  # Another window won; its draft/results remain untouched.
-    return proposal.proposal_id
+    return payload
 
 
 def proposal_form_fields(experiment: Any) -> dict[str, Any]:
@@ -409,7 +436,7 @@ def validate_proposal_snapshot(
     proposal = snapshot.get("evidence_proposal")
     if not proposal:
         return
-    if proposal.get("contract") != CONTRACT or proposal.get("status") != "draft":
+    if proposal.get("contract") not in (CONTRACT, CONTRACT_V2) or proposal.get("status") != "draft":
         raise ValueError("Invalid or blocked qualification proposal")
     if variable_name(snapshot.get("variable_under_test", "")) != proposal["variable"]:
         raise ValueError("Proposal tested variable changed; clone as a new ordinary experiment")

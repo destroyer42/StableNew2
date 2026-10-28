@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-621 of 776 modules have a docstring.
+625 of 780 modules have a docstring.
 
 ## src/
 
@@ -277,6 +277,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_controller.py`: (no docstring)
 - `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
+- `model_evidence_proposals.py`: Proposal draft/Preview adapter; never binds JobService or changes the visible Learning state
 - `video_workspace_handoff.py`: (no docstring)
 
 ## src/gui/dialogs/
@@ -394,6 +395,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_tab_frame_v2.py`: (no docstring)
 - `learning_workflow_bar.py`: (no docstring)
 - `lora_composition_design_frame.py`: LoRA Composition authoring inside the existing scrollable Learning Design surface
+- `model_evidence_proposals_dialog.py`: Operator selection of offline qualification drafts; no execution controls or admission
 - `model_evidence_window.py`: Explicit operator catalog journey
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
 - `photo_optimize_editors.py`: Scoped Photo Optimize editing and review widgets; no store writes or queue authority
@@ -529,7 +531,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `draft_commit.py`: Turn rated review drafts into saved ratings, without ever overriding a rating that is already saved
 - `embedding_experiment.py`: Controlled textual-inversion experiments: one designated embedding position varies, every other input is froz…
 - `embedding_inventory.py`: Registry-backed embedding identity and compatibility projection for Learning embedding experiments
+- `evidence_autopilot.py`: Pure catalog-derived qualification plans; no discovery, prompting, persistence or admission
 - `evidence_progress.py`: How far an experiment is from the evidence a recommendation needs, in the engine's own thresholds
+- `evidence_proposal_context.py`: Read-only revalidation of v2 qualification context before canonical Learning compilation
 - `evidence_proposals.py`: Deterministic qualification drafts
 - `evidence_revision.py`: Read-only revision token for a recommendation's existing JSONL source
 - `execution_controller.py`: Learning admission and reconciliation through the existing JobService callback owner
