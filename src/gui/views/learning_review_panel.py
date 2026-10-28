@@ -500,6 +500,8 @@ class LearningReviewPanel(ttk.Frame):
         scope = [summary.tier_label] if summary.has_recommendations else []
         if summary.applies_to:
             scope.append(f"Applies to {summary.applies_to}")
+        if summary.progress:
+            scope.append(summary.progress)
         self.recommendation_scope_var.set(" | ".join(scope))
         change_text = "".join(f"\n{line}" for line in summary.changes)
         self.apply_note_var.set(summary.apply_note + change_text)
@@ -1256,7 +1258,8 @@ class LearningReviewPanel(ttk.Frame):
                     self.feedback_label.config(
                         text=(
                             "Nothing was changed. Apply is refused when the current model or stage does not match "
-                            "the evidence, a setting has no matching control, or the mode does not allow it."
+                            "the evidence, records or profile version changed, a setting has no matching control, "
+                            "or the mode does not allow it. Refresh recommendations and review findings again."
                         ),
                         foreground="red",
                     )

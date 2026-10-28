@@ -118,6 +118,19 @@ Guided rating behavior (PR-LEARN-UX-590) [V]: saving a rating that is identical 
 
 **Video review evidence is isolated by construction.** `video_workflow_quality_rating` records keep every field inside `metadata.video_quality_review` (schema `stablenew.video-quality-review.v1`) and carry none of the image keys other readers use (`user_rating`, `image_path`, `experiment_id`, `experiment_name`, `learning_context`, `variant_value`, `variable_under_test`), so the recommendation engine (unknown kind), `LearningAnalytics` and the `LearningRecordWriter` per-experiment readers ignore them even at 5 stars. A clip review is identified by `(job_id, artifact_sha256)`, edits append a higher `revision` (readers resolve the latest valid one), an unchanged save appends nothing and a failed write raises (`ReviewSaveError`) so no UI reports a save that did not happen. The rubric separates the overall 1 to 5 rating from the requested-action outcome (achieved, partially, not, cannot assess); a manual preference is the operator's own pick, not a computed winner. Detail: `docs/Subsystems/Video/PR-VID-QUALITY-211_Experiment_Review.md`.
 
+Review Feedback also raises on an unconfirmed append before artifact metadata stamping or
+recommendation refresh. Its inline status reports the exact successful and unconfirmed batch
+paths; only confirmed record identities enter Undo. Artifact annotation failure after a successful
+append is shown separately: the Learning evidence is saved, so repeating Save would append another
+identity rather than repair the annotation. An unconfirmed append is not automatically replayed;
+inspect the log before retrying because a late filesystem error can leave an uncertain append.
+Successful operator repetition appends a fresh identity and preserves earlier rating lines. Existing
+Undo semantics remain scoped to the selected saved identities; no historical migration is performed.
+Recommendation or prior-summary refresh failures after the append remain saved outcomes, retaining
+the identity and Undo entry while advising a refresh. They cannot be counted as failed writes.
+The status reserves no initial workspace height. An outcome reveals it through the existing
+scroll owner so the result is visible without displacing the initial laptop layout.
+
 ### 3.4 Discovered Outputs
 
 `LearningController.trigger_background_scan` runs `OutputScanner.scan_incremental` over the output root in a thread spawned through `get_thread_registry().spawn`, groups artifacts (`GroupingEngine`), and writes groups with `apply_scan` into `DiscoveredReviewStore`. Artifacts that carry a `learning_context.experiment_id` are skipped (they have their own Experiment Review). The completion callback is marshalled to the Tk thread through `app_controller._run_in_gui_thread` (audit B6 is fixed here [V]). Items are rated in the table (`save_discovered_item_rating`); groups can be closed, ignored, reopened, pruned or reset.
@@ -128,7 +141,7 @@ Discovered items, Review selections, History entries or controlled artifacts are
 
 ### 3.6 Recommendations and the Apply path
 
-`RecommendationEngine.recommend(prompt, stage, ...)` reads `learning_records.jsonl` (mtime-cached), filters by stage and compatible frozen model-policy context, computes weighted optimal settings (rating-detail adjustment bounded at +/-0.15, floor 0.05), and tags the set with an evidence tier:
+`RecommendationEngine.recommend(prompt, stage, ...)` reads `learning_records.jsonl` (cached by nanosecond modification/creation time and size), filters by stage and compatible frozen model-policy context, computes weighted optimal settings (rating-detail adjustment bounded at +/-0.15, floor 0.05), and tags the set with an evidence tier:
 
 | Tier | Condition | `automation_eligible` |
 |---|---|---|
@@ -138,6 +151,15 @@ Discovered items, Review selections, History entries or controlled artifacts are
 | `no_evidence` | nothing usable; no recommendation returned | no |
 
 Incomplete historical rows (no durable id, snapshot or executed config) stay readable and are excluded; unknown record kinds are ignored. Exact-profile recommendations need compatible frozen profile evidence (`recommendation_applicable`).
+
+The Recommendations summary shows usable controlled rating and experiment counts, the count of
+experiments meeting the unchanged threshold, tier, stage, model and per-setting samples. Sparse
+and observational suggestions are insufficient for automatic application or profile publication;
+explicit manual Apply retains its existing behavior. Profile findings explain missing executed
+readback and incompatible model/version exclusions. Engine-produced Apply proposals retain the
+source revision and target policy context: changed records, model or profile version require
+fresh recommendations before any setting changes. This revision token detects normal file edits;
+it is not a cryptographic integrity claim about externally rewritten history.
 
 **Apply to Pipeline** (`LearningController.apply_recommendations_to_pipeline`, button in `LearningReviewPanel`): refuses in `suggest_only`; revalidates the whole patch against the current model/stage policy (`validate_recommendation_apply`); resolves every target and rollback value before any Tk mutation (`prepare_recommendation_patch`), rolls back on a setter failure (`rollback_last_recommendation_apply`). It mutates only current Pipeline draft stage cards, never prior jobs, artifacts or PromptPacks. In `auto_micro_experiment` mode it also submits one preview job via `pipeline_controller.submit_preview_jobs_to_queue(source="learning_auto_micro")`, gated by `can_enqueue_learning_jobs` (queue cap), which is still the canonical queue path.
 
@@ -507,7 +529,8 @@ A Learning change should cover persistence/resume, stage capability validation, 
 - Legacy completion router [V]: `AppController` still calls `build_learning_completion_handler` through a widget lookup (audit D3), but `LearningController.on_job_completed_callback` is deliberately inert. Only the existing `LearningExecutionController` JobService `job_finished`/`job_failed` listeners own terminal delivery, preventing the old display-name/index route from bypassing identity or idempotency checks.
 - Plan-table average rating [V by reading]: `_update_variant_ratings` queries `get_average_rating_for_variant(experiment.name, ...)`, but records store the opaque `experiment_id` first, so the average column is likely empty for new experiments. Use `experiment_id`.
 - In-memory job tracking (section 5): restart loses the job-to-variant map.
-- Silent failures [V]: `save_review_feedback` and `record_staged_curation_selection` ignore the `append_record` result (the latter also swallows exceptions); `_persist_learning_session_state` swallows every error; `learning_controller.py` has dozens of `except Exception: pass`. Audit B4 asks write failures to reach the status banner [A].
+- Silent failures [V, narrowed by PR-LEARN-PAYOFF-780]: `save_review_feedback` rejects unconfirmed appends and Review shows inline outcomes. `record_staged_curation_selection` still ignores the append result and swallows exceptions; these other write paths are outside this repair.
+- Steps range publication: ordinary ranges currently produce float values (for example `30.0`), while immutable profile validation requires integer Steps. Such findings refuse publication. The complete synthetic payoff proof uses supported CFG Scale evidence; this package does not normalize historical ratings or broaden profile validation.
 - Dead pipeline-side emitters [V: no callers in `src`]: `PipelineRunner._emit_learning_record`, so records are not produced automatically from runs; `PipelineController.handle_learning_record` is its receiver. Evidence comes only from operator actions in the Learning and Review tabs.
 - Two-Axis Grid limits [V]: txt2img on registry-verified SDXL only; CFG Scale, Steps and one fixed LoRA's strength only; no three-axis sweeps, no automatic best-setting choice, no different-LoRA axis. A cell is one job with N images, so per-sample seeds are the backend's read-back vector (`actual_all_seeds`), shown only when its length equals the image count. Physical GPU behaviour of a grid has not been qualified by this package. Post-run read-back verifies a cell's LoRA only; that CFG and Steps were honoured by the backend is proven at compile time, as for single-variable experiments. `LearningAnalytics.get_overall_summary` still counts grid ratings in its global totals (descriptive only; nothing recommends from it).
 - Aesthetic conditioning [V]: the executor's prompt fallback uses the canonical unweighted embedding invocation (see `IMAGE_PIPELINE.md` section 4.4); Aesthetic Gradients script mode stays separate. Prompt x Model Matrix (section 3.14) continues to refuse aesthetic conditioning for every model; corrected rendering does not widen study eligibility or establish embedding consumption.
