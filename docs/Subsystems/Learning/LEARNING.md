@@ -128,6 +128,8 @@ Successful operator repetition appends a fresh identity and preserves earlier ra
 Undo semantics remain scoped to the selected saved identities; no historical migration is performed.
 Recommendation or prior-summary refresh failures after the append remain saved outcomes, retaining
 the identity and Undo entry while advising a refresh. They cannot be counted as failed writes.
+The status reserves no initial workspace height. An outcome reveals it through the existing
+scroll owner so the result is visible without displacing the initial laptop layout.
 
 ### 3.4 Discovered Outputs
 

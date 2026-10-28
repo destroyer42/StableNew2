@@ -123,9 +123,7 @@ class ReviewTabFrame(ttk.Frame):
         self._effective_settings_var = tk.StringVar(value="Effective settings: select an image")
         self._prior_review_summary_var = tk.StringVar(value="Prior Review Summary: none")
         self._feedback_undo_stack: list[list[dict[str, str]]] = []
-        self._feedback_status_var = tk.StringVar(
-            value="Feedback has not been saved in this session."
-        )
+        self._feedback_status_var = tk.StringVar(value="")
         self._selected_base_prompt = ""
         self._selected_base_negative_prompt = ""
         self._selected_image_path: Path | None = None
@@ -764,6 +762,15 @@ class ReviewTabFrame(ttk.Frame):
         )
         feedback_status.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         bind_wraplength(feedback_status)
+        feedback_status.grid_remove()
+        self._feedback_status_label = feedback_status
+
+        def show_feedback_outcome(*_args: object) -> None:
+            feedback_status.grid()
+            feedback_status.update_idletasks()
+            self._workspace_scroll.reveal(feedback_status)
+
+        self._feedback_status_var.trace_add("write", show_feedback_outcome)
         attach_tooltip(
             feedback_btn,
             "Saves rating and prompt-change context into the Learning records store.",

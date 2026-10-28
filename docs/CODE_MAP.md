@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-619 of 774 modules have a docstring.
+621 of 776 modules have a docstring.
 
 ## src/
 
@@ -531,6 +531,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `embedding_inventory.py`: Registry-backed embedding identity and compatibility projection for Learning embedding experiments
 - `evidence_progress.py`: How far an experiment is from the evidence a recommendation needs, in the engine's own thresholds
 - `evidence_proposals.py`: Deterministic qualification drafts
+- `evidence_revision.py`: Read-only revision token for a recommendation's existing JSONL source
 - `execution_controller.py`: Learning admission and reconciliation through the existing JobService callback owner
 - `experiment_conclusion.py`: Derived, read-only conclusion projection for one designed experiment
 - `experiment_execution.py`: Frozen experiment preview and one-boundary queue admission helpers
@@ -540,6 +541,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `experiment_reconciliation.py`: Exact admitted Learning identity and repository evidence projections; never dispatches
 - `experiment_store.py`: (no docstring)
 - `feedback_manager.py`: Feedback capture helpers for pipeline runs
+- `feedback_save.py`: Post-append projections cannot change the authoritative feedback save outcome
 - `grid_contact_sheet.py`: Labeled PNG contact sheet for a Two-Axis Grid, rendered only from recorded artifacts
 - `grid_results.py`: Toolkit-neutral projection of a Two-Axis Grid experiment: cell coordinates, exact artifacts, placeholders
 - `guided_workflow.py`: Toolkit-neutral guide for the Designed Experiments workflow: Design, Preview, Run, Compare, Rate

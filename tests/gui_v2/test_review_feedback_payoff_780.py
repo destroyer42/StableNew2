@@ -132,3 +132,31 @@ def test_batch_payload_failure_preserves_prior_success_tokens(review, monkeypatc
     assert len(writer.records_path.read_text().splitlines()) == 2
     assert len(frame._feedback_undo_stack[-1]) == 2
     assert "Saved 2 feedback record(s); not confirmed 1" in frame._feedback_status_var.get()
+
+
+def test_feedback_outcome_is_revealed_without_reserving_initial_workspace_height(
+    review, monkeypatch
+):
+    frame, _, writer, _ = review
+    root = frame.winfo_toplevel()
+    root.geometry("1342x672+0+0")
+    root.deiconify()
+    frame.pack(fill="both", expand=True)
+    try:
+        root.update()
+        label = frame._feedback_status_label
+        assert not label.winfo_ismapped()
+        monkeypatch.setattr(writer, "append_record", Mock(return_value=False))
+        frame._save_feedback()
+        root.update_idletasks()
+        assert label.winfo_ismapped()
+        assert "Save not confirmed" in label.cget("text")
+        canvas = frame._workspace_scroll._canvas
+        assert label.winfo_rooty() >= canvas.winfo_rooty()
+        assert (
+            label.winfo_rooty() + label.winfo_height()
+            <= canvas.winfo_rooty() + canvas.winfo_height()
+        )
+        assert frame._feedback_undo_stack == []
+    finally:
+        root.withdraw()

@@ -95,3 +95,22 @@ Independent review, final gate and exact published-SHA CI results are recorded i
   collected 14,450 tests with the repository unchanged. Required smoke initially hit
   sandbox WinError 10013 on its local fake WebUI; rerunning that step with loopback access
   passed 358 tests (one existing lifecycle-thread warning), repository unchanged.
+
+## Bounded CI repair
+
+The first published head's required, Windows and census shard 0 passed. Shard 1 found the
+generated code map stale after the two new helpers; shard 2 found the always-present status
+label displaced Review's initial laptop viewport. Regenerating the map and showing/revealing
+the inline status only after an outcome fixes those package-caused failures. No assertion,
+skip, threshold or persistence contract changed. Independent review passed this repair.
+
+Focused repair verification: 25 tests passed, including five code-map tests; the unchanged
+Review laptop-viewport node passed separately. A combined local invocation hit Windows Tk's
+multiple-root fatal exception; isolated processes passed without altering tests or environment.
+The final canonical Python 3.14 gate passed: 14,451 collected and 358 smoke tests passed,
+repository unchanged. The earlier source/integrity evidence remains applicable.
+
+Updated visible-Tk callback timing (20 saves/version; real temp JSONL, annotation/summary hooks
+stubbed): before median 8.976 ms / maximum 10.304 ms; after median 11.626 ms / maximum 16.295 ms.
+The after measurement includes outcome layout and the existing scroll owner's reveal operation.
+Hosted required/full-suite/windows must accept the new published head before integration.
