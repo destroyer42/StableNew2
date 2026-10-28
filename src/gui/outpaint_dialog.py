@@ -20,7 +20,7 @@ from src.controller.outpaint_edit_service import (
     prepare_outpaint_edit,
 )
 from src.gui.theme_v2 import apply_toplevel_theme
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui_v2.outpaint_canvas_view import render_canvas_view
 from src.pipeline.image_edit_inputs import read_source
@@ -84,7 +84,7 @@ class OutpaintDialog(tk.Toplevel):
         ) as exc:  # shown at Preview, where the service refuses an unusable target
             self.status.set(f"Settings unavailable: {exc}")
         self._build()
-        dispatcher = TkUiDispatcher(self.winfo_toplevel())
+        dispatcher = tk_dispatcher_for(self)
         self._runner = runner or BackgroundWorkRunner(
             spawn=lambda name, target: get_thread_registry().spawn(
                 target=target, name=name, daemon=False, purpose="Review outpaint"

@@ -15,7 +15,7 @@ from PIL import Image, ImageTk
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.masked_edit_service import MaskEditPreview, MaskEditSettings, prepare_mask_edit
 from src.gui.theme_v2 import apply_toplevel_theme
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui_v2.mask_editor_state import MaskDocument, MaskViewport
 from src.pipeline.image_edit_inputs import read_source
@@ -64,7 +64,7 @@ class MaskEditorDialog(tk.Toplevel):
         self.only_masked = tk.BooleanVar(value=True)
         self.status = tk.StringVar(value="Loading source…")
         self._build()
-        dispatcher = TkUiDispatcher(self.winfo_toplevel())
+        dispatcher = tk_dispatcher_for(self)
         self._runner = runner or BackgroundWorkRunner(
             spawn=lambda name, target: get_thread_registry().spawn(
                 target=target, name=name, daemon=False, purpose="Review masked edit"

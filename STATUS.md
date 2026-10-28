@@ -118,8 +118,8 @@ of the roadmap; where they conflict with this file, this file and the repository
 10. Decided 2026-10-20 and implemented: Movie Clips assembly is a queued CPU `movie_assembly` job on the canonical path
    (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows are production video backends and Wan2.2
    TI2V-5B 1.2.0 is promoted; the frames-out 1.3.0 was promoted on 2026-10-21 after real acceptance runs.
-11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a single
-   composition root (P3-2, decision 11), a durable CANCELLING status (decision 12), and moving the executor into `image_backends` (decision 14).
+11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a durable CANCELLING
+   status (decision 12) and moving the executor into `image_backends` (decision 14). Decision 11 (composition root) is accepted for the Tk host only; the P3-2 runtime-stack composition remains open.
 
 ## Holds and safety constraints
 

@@ -16,7 +16,7 @@ from collections.abc import Callable, Mapping
 from tkinter import ttk
 from typing import Any
 
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui.view_contracts.video_motion_prep_contract import (
     MotionPreparationSession,
@@ -191,7 +191,7 @@ class WorkflowMotionPreparationPanel(ttk.LabelFrame):
 
     def _work_runner(self) -> BackgroundWorkRunner:
         if self._runner is None:
-            dispatcher = TkUiDispatcher(self.winfo_toplevel())
+            dispatcher = tk_dispatcher_for(self)
             self._runner = BackgroundWorkRunner(
                 spawn=lambda name, target: get_thread_registry().spawn(
                     target=target,

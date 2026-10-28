@@ -8,7 +8,7 @@ from src.app.bootstrap import build_gui_kernel
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.main_window_v2 import MainWindowV2
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.utils.config import ConfigManager
 
 if TYPE_CHECKING:
@@ -48,54 +48,62 @@ def build_v2_app(
 
     if root is None:
         root = tk.Tk()
-    ui_dispatcher = TkUiDispatcher(root)
+    # The one dispatch owner for this root: the controller scheduler, AppStateV2 notifications and the
+    # window's presentation actions all deliver through it.
+    ui_dispatcher = tk_dispatcher_for(root)
+    try:
+        app_state = AppStateV2()
 
-    app_state = AppStateV2()
+        # Create controller first to get gui_log_handler
+        config_manager = config_manager or ConfigManager()
+        kernel = build_gui_kernel(
+            config_manager=config_manager,
+            structured_logger=None,
+        )
+        app_controller = AppController(
+            None,  # main_window=None for now
+            pipeline_runner=pipeline_runner or kernel.pipeline_runner,
+            threaded=threaded,
+            ui_scheduler=ui_dispatcher.invoke,
+            webui_process_manager=webui_manager,
+            config_manager=kernel.config_manager,
+            job_service=job_service,  # PR-0114C-Ty: DI for tests
+            api_client=kernel.api_client,
+            structured_logger=kernel.structured_logger,
+            runtime_ports=kernel.runtime_ports,
+            optional_dependency_snapshot=kernel.capabilities,
+        )
+        # Ensure pipeline_controller is set before constructing MainWindowV2
+        pipeline_controller = getattr(app_controller, "pipeline_controller", None)
+        window = MainWindowV2(
+            root=root,
+            app_state=app_state,
+            webui_manager=webui_manager,
+            app_controller=app_controller,
+            packs_controller=None,
+            pipeline_controller=pipeline_controller,
+            gui_log_handler=app_controller.get_gui_log_handler(),
+            ui_dispatcher=ui_dispatcher,
+        )
 
-    # Create controller first to get gui_log_handler
-    config_manager = config_manager or ConfigManager()
-    kernel = build_gui_kernel(
-        config_manager=config_manager,
-        structured_logger=None,
-    )
-    app_controller = AppController(
-        None,  # main_window=None for now
-        pipeline_runner=pipeline_runner or kernel.pipeline_runner,
-        threaded=threaded,
-        ui_scheduler=ui_dispatcher.invoke,
-        webui_process_manager=webui_manager,
-        config_manager=kernel.config_manager,
-        job_service=job_service,  # PR-0114C-Ty: DI for tests
-        api_client=kernel.api_client,
-        structured_logger=kernel.structured_logger,
-        runtime_ports=kernel.runtime_ports,
-        optional_dependency_snapshot=kernel.capabilities,
-    )
-    # Ensure pipeline_controller is set before constructing MainWindowV2
-    pipeline_controller = getattr(app_controller, "pipeline_controller", None)
-    window = MainWindowV2(
-        root=root,
-        app_state=app_state,
-        webui_manager=webui_manager,
-        app_controller=app_controller,
-        packs_controller=None,
-        pipeline_controller=pipeline_controller,
-        gui_log_handler=app_controller.get_gui_log_handler(),
-    )
+        # Now set the main_window on controller
+        app_controller.set_main_window(window)
 
-    # Now set the main_window on controller
-    app_controller.set_main_window(window)
+        # --- BEGIN PR-CORE1-D21A: Diagnostics/Watchdog wiring ---
+        # The watchdog observes the Tk heartbeat that MainWindowV2 installs, so it is attached
+        # only once the window (and therefore the heartbeat source) exists. Attaching it earlier
+        # would monitor a heartbeat nobody is producing yet.
+        from pathlib import Path
 
-    # --- BEGIN PR-CORE1-D21A: Diagnostics/Watchdog wiring ---
-    # The watchdog observes the Tk heartbeat that MainWindowV2 installs, so it is attached
-    # only once the window (and therefore the heartbeat source) exists. Attaching it earlier
-    # would monitor a heartbeat nobody is producing yet.
-    from pathlib import Path
+        from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
 
-    from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
-
-    diagnostics_service = DiagnosticsServiceV2(Path("reports") / "diagnostics")
-    app_controller.attach_watchdog(diagnostics_service)
-    # --- END PR-CORE1-D21A ---
+        diagnostics_service = DiagnosticsServiceV2(Path("reports") / "diagnostics")
+        app_controller.attach_watchdog(diagnostics_service)
+        # --- END PR-CORE1-D21A ---
+    except BaseException:
+        # A partially composed application must not leave a live pump on the root; once the window
+        # is attached, window cleanup owns disposal (dispose is idempotent).
+        ui_dispatcher.dispose()
+        raise
 
     return root, app_state, app_controller, window

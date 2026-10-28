@@ -16,7 +16,7 @@ from typing import Any
 
 from src.gui.batch_retry_dialog import BatchRetryDialog
 from src.gui.tooltip import attach_tooltip
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.batch_operations_contract import BatchOperationsSession, BatchViewHooks
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.queue.batch_membership import BatchKey
@@ -92,7 +92,7 @@ class BatchOperationsPanelV2(ttk.Frame):
     # -- construction ----------------------------------------------------------------------------------------
 
     def _default_runner(self) -> BackgroundWorkRunner:
-        dispatcher = TkUiDispatcher(self.winfo_toplevel())
+        dispatcher = tk_dispatcher_for(self)
         return BackgroundWorkRunner(
             spawn=lambda name, target: get_thread_registry().spawn(
                 target=target, name=name, daemon=False, purpose="batch operations"),

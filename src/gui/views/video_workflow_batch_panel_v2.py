@@ -20,7 +20,7 @@ from tkinter import filedialog, ttk
 from typing import Any
 
 from src.gui.theme_v2 import style_text_widget
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_batch_contract import (
     MAX_BATCH_SOURCES,
     BatchPreviewWork,
@@ -363,7 +363,7 @@ class WorkflowBatchPanel(ttk.Frame):
 
     def _work_runner(self) -> BackgroundWorkRunner:
         if self._runner is None:
-            dispatcher = TkUiDispatcher(self.winfo_toplevel())
+            dispatcher = tk_dispatcher_for(self)
             self._runner = BackgroundWorkRunner(
                 spawn=lambda name, target: get_thread_registry().spawn(
                     target=target,
