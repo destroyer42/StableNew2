@@ -357,6 +357,12 @@ class LearningController:
             f"[LearningController] Generating values for {meta.display_name} (type: {meta.value_type})"
         )
 
+        from src.learning.evidence_autopilot import explicit_values
+
+        proposal_values = explicit_values(experiment)
+        if proposal_values is not None:
+            return proposal_values
+
         # Generate values based on type
         if meta.value_type == "numeric":
             # Numeric range - use metadata from experiment
@@ -1209,6 +1215,9 @@ class LearningController:
         Only the frozen snapshot is read here: never a stage card, never the live Pipeline.  The construction
         itself lives in ``src/learning/ordinary_njr.py``.
         """
+        from src.learning.evidence_proposal_context import validate_library_context
+
+        validate_library_context(self, experiment)
         # Direct programmatic callers may bypass the Preview button.  Give
         # them the same stable identity rather than falling back to a name.
         if not experiment.experiment_id:

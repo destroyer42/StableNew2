@@ -391,11 +391,15 @@ Limits: physical GPU behaviour of a matrix was not qualified (no generation was 
 
 ### 3.15 Catalog qualification proposals
 
-The Learning header's **Model Evidence Catalog** opens explicit bounded asset
-observation/identity refresh, source coverage, gaps and saved qualification drafts.
-AssetRegistry remains the sole scanner/hash cache. Legacy `models/embeddings` is
-inactive. Worker progress/results return through Tk polling with cancellation and
-closed/stale-delivery suppression; merely opening the window starts no scan/lookup.
+The Learning header's **Model Evidence Catalog** shows cached checkpoints and a
+primary **Proposed Experiments (N)** action. Selecting a checkpoint derives the
+ordered proposals offline from its matching catalog claims, ModelPolicy, current
+resources and baseline; discovery requires no prompt dialog or network lookup.
+Evidence Details and the advanced Evidence menu retain observation/identity refresh,
+import/export, Civitai/Hugging Face lookup and accessory metadata. AssetRegistry
+remains the sole scanner/hash cache. Legacy `models/embeddings` is inactive. Worker
+progress/results return through Tk polling with cancellation and closed/stale-delivery
+suppression; merely opening the window starts no scan/lookup.
 
 Source lookup requires confirmation of the identifier sent to Civitai or an exact
 Hugging Face repository/commit. Bounded responses become unreviewed candidates,
@@ -415,19 +419,37 @@ Unavailable resources block without substitution. VAE pairing, accelerator varia
 and geometry stay blocked pending compatible exact evidence/modes. Unsupported
 families remain metadata research; no execution support or publication rule is added.
 
-Saving an eligible proposal writes an ordinary draft in `LearningExperimentStore`:
-readable name, exact checkpoint bytes, evidence revision, hypothesis, one prompt,
-baseline/control, alternatives, shared requested seed policy, a 12/15/20-image
-budget, rubric and screening criteria. A bounded generated ID owns its directory;
-the full name appears in the Experiment Library. Atomic create-only publication
-prevents repeated saves from replacing edited drafts/results. Opening restores
-Design only. Build Preview and Run remain explicit existing actions, with the
-existing whole-batch compiler, JobService and SQLite admission/reconciliation.
+`qualification_proposal/2` and `qualification_proposal_plan/1` bind exact identity,
+catalog/resource/policy revisions, baseline and private fixed-execution configuration
+digests. Names/timestamps and delayed prompt selection do not define proposal IDs.
+Highest matching exact/variant/family field scope owns provenance; equal claims on
+other checkpoints cannot become supporting references. Explicit alternatives retain
+their order and integer Steps and must fit existing Learning bounds. Supported P1
+rows default checked; blocked/metadata rows explain their refusal and cannot be selected.
+No absent alternate is replaced by a generic recipe. Existing `/1` proposals remain
+readable unchanged; missing v2 provenance is reported as unavailable.
+
+**Save Drafts** and **Queue to Learning (drafts)** write ordinary drafts in
+`LearningExperimentStore`, with readable name, checkpoint bytes, evidence revision,
+hypothesis, baseline/control, alternatives, shared requested seed policy, a
+12/15/20-image budget, rubric and screening criteria. A bounded generated ID owns
+its directory; atomic create-only publication preserves edited drafts/results.
+Neither action admits jobs or changes the active experiment. Opening restores Design
+only. **Preview Selected** resolves one selected PromptPack row or custom prompt
+context for the group, then uses isolated existing Learning freeze/compiler instances
+without execution bindings or persistence. It does not switch the live experiment.
+Saved drafts may defer prompt selection until Preview; Run requires a nonempty frozen
+context. Adapter-bearing resolved prompts, negative/global text or structured LoRA
+intent are refused for these pilots. Fixed optimizer/output/global intent survives
+explicit Save/Preview without entering public plan serialization. Build Preview and
+Run remain explicit existing actions, using JobService and SQLite admission/reconciliation.
 
 Preview freezes a separately versioned selected context, including operator-edited
 baseline/hypothesis, prompt and seed policy. Changing the tested variable requires
 a new ordinary experiment/proposal. Checkpoint bytes are checked again before
-compilation. **Inspect active experiment** compares frozen Research, selected
+compilation. V2 compilation also revalidates current catalog/resources and the frozen
+proposal's design/context; removing or downgrading mutable metadata cannot bypass it.
+Changed findings require replanning. **Inspect active experiment** compares frozen Research, selected
 settings, compiled NJR, dispatched request and backend-reported values. An outbound
 request never proves the tested value; absent/mismatched tested-value readback makes
 results uncontrolled. Historical provenance is never reconstructed from today's
