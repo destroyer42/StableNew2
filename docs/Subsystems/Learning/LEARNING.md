@@ -513,6 +513,14 @@ Queued jobs remain queued even during GPU quarantine; running jobs show the repo
 
 The execution controller restores only genuine nonterminal callback mappings. One lock serializes reconciliation, admission and terminal updates; reentrant notifications wait for immutable identity validation. Completion evidence is interpreted on disposable variant/experiment copies, then published before presentation/checkpoint callbacks. Malformed structured readback or a rejected interpreter retains job/artifact associations as visibly uncontrolled evidence without publishing provisional seed/profile comparison boundaries. Only a safe terminal projection enters the cache; a rating without an explicit positive evidence result is uncontrolled. A resume-save warning stays distinct from a validation failure and does not reclassify valid execution readback. Repeated restore and duplicate terminal events do not duplicate artifacts, counters or callbacks, stale reads do not downgrade a newer terminal result, and switching experiments retains background mappings without repainting the new visible experiment. The same JobService listener pair is rebound when its Learning owner is recreated, and closing the tab makes queued callbacks inert. Tk callbacks still use JobService's existing application UI dispatcher. Opening Learning never dispatches, retries, replays, clears quarantine or mutates repository lifecycle. The header summarizes actual outcomes and per-variant rows show the status and required action. Resume persistence failures surface in that header instead of reporting success.
 
+Legacy sessions with absent or empty `experiment_id` reopen as unresolved without
+registering a durable tracking session, assigning an ID or dropping saved
+job/variant/artifact associations and review drafts. New work still obtains its
+stable identity at Preview/compilation; admission requires a durable experiment.
+Presentation already on the main thread runs within the existing JobService
+delivery; direct worker/reconciliation presentation uses that same dispatcher
+once, with fresh foreground/closed checks before touching the view.
+
 The unsuffixed-or-`_v2` duplicates `learning_tab_frame.py`, `learning_plan_table_v2.py` and `learning_review_panel_v2.py` were deleted (P3-1); the live files are `learning_tab_frame_v2.py`, `learning_plan_table.py` and `learning_review_panel.py`, despite their names.
 
 ## 6. Randomizer relation

@@ -132,6 +132,8 @@ class LearningExecutionController:
         """Use JobService's existing dispatcher, with a fresh foreground identity check."""
 
         def deliver() -> None:
+            if threading.current_thread() is not threading.main_thread():
+                raise RuntimeError("Learning presentation requires the main UI thread")
             with self._lock:
                 if (
                     self._closed
@@ -145,10 +147,14 @@ class LearningExecutionController:
                     self._on_variant_published(variant, value)
 
         dispatcher = getattr(self.job_service, "_event_dispatcher", None)
-        if callable(dispatcher):
+        if threading.current_thread() is threading.main_thread():
+            # JobService may already have dispatched this completion to Tk.
+            # Present within that delivery rather than scheduling it a second time.
+            deliver()
+        elif callable(dispatcher):
             dispatcher(deliver)
         else:
-            deliver()
+            raise RuntimeError("Learning UI dispatcher unavailable for worker presentation")
 
     def track_session(self, state: LearningState) -> None:
         with self._lock:
@@ -239,6 +245,15 @@ class LearningExecutionController:
             experiment = state.current_experiment
             if self._closed or experiment is None:
                 return ""
+            if not experiment.experiment_id:
+                # Historical sessions remain readable, but names, directory IDs
+                # and today's compiler cannot reconstruct missing lineage.
+                for variant in state.plan:
+                    unresolved(
+                        variant,
+                        "Saved experiment has no durable experiment ID; exact job/artifact associations are retained. No automatic recovery or retry.",
+                    )
+                return reconciliation_summary(state.plan)
             self.track_session(state)
             for job_id, context in list(self._job_contexts.items()):
                 bound_experiment = context.state.current_experiment

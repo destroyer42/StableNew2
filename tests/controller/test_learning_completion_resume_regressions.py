@@ -6,7 +6,7 @@ from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.learning.execution_controller import LearningExecutionController
-from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind
+from src.pipeline.job_models_v2 import LearningJobContext, NormalizedJobRecord, SourceKind
 from tests.helpers.njr_factory import make_pipeline_njr
 
 
@@ -79,7 +79,17 @@ def test_execution_controller_submits_learning_variant_via_submit_njrs() -> None
         learning_state=LearningState(),
         job_service=job_service,
     )
-    variant = LearningVariant(param_value=9.0, planned_images=1)
+    # This precompiled fixture bypasses Build Preview's durable identity allocation.
+    execution.learning_state.current_experiment = LearningExperiment(
+        name="Test", experiment_id="test-experiment", variable_under_test="CFG Scale"
+    )
+    variant = LearningVariant(
+        experiment_id="test-experiment",
+        variant_id="test-experiment:0",
+        param_value=9.0,
+        planned_images=1,
+    )
+    execution.learning_state.plan = [variant]
     record = make_pipeline_njr(
         job_id="learning-job-1",
         config={"txt2img": {"cfg_scale": 9.0}},
@@ -87,6 +97,13 @@ def test_execution_controller_submits_learning_variant_via_submit_njrs() -> None
         base_model="model.safetensors",
         cfg_scale=9.0,
         source_kind=SourceKind.LEARNING.value,
+        learning_context=LearningJobContext(
+            experiment_id="test-experiment",
+            experiment_name="Test",
+            variable_under_test="CFG Scale",
+            variant_index=0,
+            variant_value=9.0,
+        ),
         extra_metadata={"submission_source": "learning"},
     )
 

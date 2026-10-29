@@ -1,5 +1,62 @@
 # LEARN-QUAL-BATCH-810
 
+## PR #231 bounded CI repair
+
+Start `2026-10-29T10:02:10Z`, same primary session. Verified clean
+`codex/learn-qual-batch-810` at `e53b0032abf0b2aaf00d6f95b2260bfd2aa6998e`;
+current remote main `7ccb9a8b8f2c06c69e990715c6303c1000ef0f97`.
+Standard, bounded lifecycle/compatibility repair. Model recommendation: Claude
+Code Sonnet 5.5 XHigh; Codex GPT-6.1 Sol High. Existing context and two understood
+failure classes should avoid rediscovery/retries; expected 5M cache-read / 25k output.
+Controller Surface Assessment: no JobService or large GUI-controller growth;
+retain one Learning callback owner, immediate presentation on the main thread
+and existing dispatcher for workers, plus fresh closed/foreground checks.
+Token-Efficient Validation Plan: reproduce the three exact failures first;
+verify compiler IDs and historical restore, retain the original assertions, add
+deterministic single-delivery/stale/legacy regressions, then relevant Learning,
+controller, persistence and 810 suites. Inspect aggregate diff/ratchets; one
+canonical gate, publish one scoped repair and review hosted required/full-suite/windows.
+No merge, rebase, force-push, physical generation or unrelated changes.
+
+Classification and evidence:
+
+- Both CI wiring fixtures bypass real Preview/compilation (one provides no
+  current experiment; the other stubs `_build_variant_njr`). Their fixture
+  preconditions now include stable experiment/variant identities, with all
+  original assertions retained. Real `build_plan`, ordinary compiler, immutable
+  NJRs and Library restore preserve the same ID in the added integration proof.
+- Historical sessions do **not** universally have stable IDs. The new
+  `track_session` precondition also exposed a genuine supported restore defect:
+  absent/empty legacy IDs raised before the existing unresolved projection.
+  Reconciliation now preserves their exact job/variant/artifact associations and
+  rating drafts, invents no ID and registers no durable session; admission stays
+  strict. Four pending/admitted and absent/empty-ID cases prove this behavior.
+- `JobService._emit` already dispatches live completion to Tk. Unconditional
+  `_present` dispatch added a second delivery, leaving the original Tk assertion
+  unfulfilled after one dispatch. Main-thread presentation is now immediate;
+  workers use the same dispatcher, with thread/closed/foreground checks.
+- Initial exact reproductions: **3 failed**. Repaired focused controller,
+  recovery, Tk and 810 selection: **103 passed in 16.97 s**. Independent review:
+  **PASS**, 20 pure temporary-state identity/delivery/bad-dispatcher probes passed.
+- Broader relevant selection: **1,289 passed, one failed in 58.41 s**. The extra
+  failure is the unchanged media-preview resize test in
+  `test_learning_tab_state_persistence.py:249` (`389 <= 235`). The same selection
+  on a disposable archive of unchanged `e53b0032` reproduced the identical
+  resize failure plus the three original CI defects (**1,270 passed, four failed
+  in 79.59 s**). The resize test passes isolated (**1 passed, 1.95 s**).
+  It is inherited local order/geometry behavior; no media source, assertion,
+  test selection, skip or acceptance rule was changed to hide it.
+- Canonical local gate ran once after repair: **PASS**. All four controller
+  ceilings, completeness, Ruff/mypy/exception/format/architecture ratchets and Tk
+  import boundary passed; isolated collection **14,532 tests**, required smoke
+  **358 passed, one warning in 38.92 s**, repository unchanged. Source evidence
+  is reused for this documentation-only validation record. Hosted checks on the
+  published repair SHA remain the integration verdict.
+- Original run `40812017941` had required/windows PASS and full-suite FAIL on
+  the three reproduced tests. PR review/comment aggregation before publication
+  contained no additional findings. The independent repair review passed without
+  a second edit cycle. No ownership or material architecture change was needed.
+
 ## Execution Profile + Model/Reasoning Recommendation
 
 Standard, high-risk lifecycle/persistence. Base local and remote main:

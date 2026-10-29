@@ -13,6 +13,7 @@ import pytest
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState
 from src.learning.execution_controller import LearningExecutionController
+from src.learning.experiment_store import LearningExperimentStore
 from src.learning.learning_record import LearningRecordWriter
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_repository import JobRepository
@@ -146,6 +147,184 @@ def test_restart_recovers_repository_truth_without_submission(tmp_path, reposito
     assert restored.learning_state.review_drafts == {"keep": {"rating": 4, "notes": "draft"}}
     assert fresh_service.calls == []
     assert len(fresh_service.listeners["job_finished"]) == 1
+
+
+def test_real_preview_compiler_and_library_restore_preserve_allocated_identity(
+    tmp_path, repository
+):
+    exp = LearningExperiment(
+        name="fresh",
+        prompt_text="portrait",
+        variable_under_test="CFG Scale",
+        values=[6.0, 7.0],
+        images_per_value=2,
+    )
+    assert exp.experiment_id == ""
+    controller = controller_for(
+        exp, baseline()
+    )  # Actual Preview assigns identity before compilation.
+    identity = exp.experiment_id
+    assert identity and all(v.experiment_id == identity for v in controller.learning_state.plan)
+    service = RepositoryService(repository)
+    controller.execution_controller = LearningExecutionController(
+        controller.learning_state, service
+    )
+    controller.pipeline_controller = SimpleNamespace(_job_service=service)
+    controller.run_plan()
+    assert all(r.learning_context.experiment_id == identity for r in service.calls[0])
+    payload = controller.export_resume_state()
+    payload["current_experiment"]["name"] = "renamed, same experiment"
+    store = LearningExperimentStore(tmp_path / "experiments")
+    store.save_session(display_name="renamed", payload=payload, experiment_id=identity)
+    restored, fresh_service = recreated(store.load_session(identity), repository)
+    assert restored.learning_state.current_experiment.experiment_id == identity
+    assert [v.job_id for v in restored.learning_state.plan] == [
+        v.job_id for v in controller.learning_state.plan
+    ]
+    assert not fresh_service.calls
+
+
+@pytest.mark.parametrize("missing_field", [False, True])
+@pytest.mark.parametrize("admitted", [False, True])
+def test_legacy_missing_experiment_id_restores_unresolved_without_inventing_lineage(
+    tmp_path, repository, missing_field, admitted
+):
+    controller, _ = planned(tmp_path, repository)
+    if admitted:
+        controller.run_plan()
+    payload = controller.export_resume_state()
+    if missing_field:
+        payload["current_experiment"].pop("experiment_id")
+    else:
+        payload["current_experiment"]["experiment_id"] = ""
+    payload["plan"][0].update(image_refs=[str(tmp_path / "historical.png")], completed_images=1)
+    payload["review_drafts"] = {"historical rating": {"rating": 4}}
+    before = copy.deepcopy(payload)
+    stored_jobs = repository.count()
+    restored, service = recreated(payload, repository)
+    state = restored.learning_state
+    assert state.current_experiment.experiment_id == ""
+    assert [v.job_id for v in state.plan] == [v["job_id"] for v in before["plan"]]
+    assert [v.variant_id for v in state.plan] == [v["variant_id"] for v in before["plan"]]
+    assert state.plan[0].image_refs == before["plan"][0]["image_refs"]
+    assert state.plan[0].completed_images == 1
+    assert state.review_drafts == before["review_drafts"]
+    assert all(v.status == "requires_attention" for v in state.plan)
+    assert all(
+        "no durable experiment ID" in v.execution_metadata["reconciliation_error"]
+        for v in state.plan
+    )
+    assert restored.get_workflow_state() == "action_required"
+    assert not restored.execution_controller._job_to_variant
+    assert "" not in restored.execution_controller._sessions
+    restored.run_plan()
+    assert not service.calls and repository.count() == stored_jobs
+    assert payload == before
+
+
+def test_admission_still_refuses_a_session_without_durable_identity(tmp_path, repository):
+    source, _ = planned(tmp_path, repository)
+    record = source._build_variant_njr(
+        source.learning_state.plan[0], source.learning_state.current_experiment
+    )
+    state = copy.deepcopy(source.learning_state)
+    state.current_experiment.experiment_id = ""
+    service = RepositoryService(repository)
+    execution = LearningExecutionController(state, service)
+    with pytest.raises(ValueError, match="durable Learning experiment"):
+        execution.submit_experiment_jobs([record], [state.plan[0]], "old", "CFG Scale")
+    assert not service.calls and not execution._job_to_variant
+    assert state.current_experiment.experiment_id == "" and not state.plan[0].job_id
+
+
+def presentation_case(tmp_path, repository, event):
+    from src.controller.job_service import JobService
+    from src.queue.job_queue import JobQueue
+    from tests.controller.test_job_service_unit import FakeRunner
+
+    controller, _ = planned(tmp_path, repository)
+    controller.run_plan()
+    controller.execution_controller.close()
+    service = JobService(JobQueue(repository=repository), runner=FakeRunner())
+    execution = LearningExecutionController(controller.learning_state, service)
+    execution.set_completion_callback(controller._apply_variant_completion_evidence)
+    execution.reconcile()
+    status = JobStatus.COMPLETED if event == "job_finished" else JobStatus.FAILED
+    job = transition(
+        repository,
+        controller.learning_state.plan[0].job_id,
+        status,
+        result_for(tmp_path) if status == JobStatus.COMPLETED else None,
+    )
+    return controller, execution, service, job
+
+
+@pytest.mark.parametrize("event", ["job_finished", "job_failed"])
+@pytest.mark.parametrize("route", ["main", "worker_direct", "worker_jobservice"])
+def test_terminal_presentation_uses_exactly_one_main_thread_delivery(
+    tmp_path, repository, event, route
+):
+    controller, execution, service, job = presentation_case(tmp_path, repository, event)
+    pending, seen = [], []
+    service.set_event_dispatcher(pending.append)
+
+    def callback(_variant, _value):
+        seen.append(threading.get_ident())
+
+    execution.set_presentation_callback(callback)
+    execution.set_failure_callback(callback)
+    handler = (
+        execution._handle_job_finished if event == "job_finished" else execution._handle_job_failed
+    )
+    if route == "main":
+        handler(job)
+        assert not pending
+    else:
+        worker = threading.Thread(
+            target=lambda: service._emit(event, job)
+            if route == "worker_jobservice"
+            else handler(job)
+        )
+        worker.start()
+        worker.join(5)
+        assert not worker.is_alive() and not seen
+        assert len(pending) == 1
+        pending.pop()()
+    assert not pending and seen == [threading.get_ident()]
+    handler(job)  # Duplicate terminal events cannot schedule or present again.
+    assert not pending and seen == [threading.get_ident()]
+    assert controller.learning_state.plan[0].status == (
+        "completed" if event == "job_finished" else "failed"
+    )
+    execution.close()
+
+
+@pytest.mark.parametrize("event", ["job_finished", "job_failed"])
+@pytest.mark.parametrize("invalidate", ["switch", "close"])
+def test_queued_terminal_presentation_is_inert_after_switch_or_close(
+    tmp_path, repository, event, invalidate
+):
+    controller, execution, service, job = presentation_case(tmp_path, repository, event)
+    pending, seen = [], []
+    service.set_event_dispatcher(pending.append)
+    execution.set_presentation_callback(lambda *_args: seen.append(True))
+    execution.set_failure_callback(lambda *_args: seen.append(True))
+    handler = (
+        execution._handle_job_finished if event == "job_finished" else execution._handle_job_failed
+    )
+    worker = threading.Thread(target=lambda: handler(job))
+    worker.start()
+    worker.join(5)
+    assert not worker.is_alive() and len(pending) == 1 and not seen
+    if invalidate == "close":
+        execution.close()
+    else:
+        controller.learning_state.current_experiment = LearningExperiment(experiment_id="different")
+        controller.learning_state.plan = []
+    before = copy.deepcopy(controller.learning_state.to_dict())
+    pending.pop()()
+    assert not seen and controller.learning_state.to_dict() == before
+    execution.close()
 
 
 @pytest.mark.parametrize("mode", ["empty", "partial"])
