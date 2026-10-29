@@ -25,6 +25,10 @@ Result: nothing that runs a model is authorized or possible today, for Qwen or L
 
 ## 2. Findings and blockers
 
+The contract lists them in `KNOWN_BLOCKERS`; `readiness_blockers(stage, evidence)` derives what still blocks a stage from
+evidence objects (approval texts, licence record, runtime entry, `--help` report) and counts operator attestations only when
+they are exactly `True`.
+
 **Blocking compatibility facts (physical qualification cannot start until each is cleared):**
 
 1. **The accepted runtime cannot load LFM3.** llama.cpp `b11840` (the pinned Qwen runtime) has no `lfm3` architecture in `src/llama-arch.cpp` (only the older LFM2 family).
@@ -32,21 +36,30 @@ Result: nothing that runs a model is authorized or possible today, for Qwen or L
 2. **The harness is single-runtime, single-sampling.** `physical.py` takes its runtime from `plan["runtime_intent"]` (b11840),
    launchable-member hashes from the b11840 table, one `Sampling(**plan["sampling"])` for every arm and the registry from
    `config/`; the execution manifest stamps the **Qwen plan digest**, so an LFM3 session would carry a misleading identity.
-   Adapting it is a security-sensitive harness change and needs the member hashes first (item 3). Not done here: follow-up
-   package, see section 9.
-3. **b11960 member hashes are unknown.** Only the archive hash is public (GitHub's asset `digest`, not a signature). The per-member
-   SHA-256 needed for `LAUNCHABLE_MEMBERS` requires the archive, so S0 (download) must precede them.
-4. **Licence is not SPDX and has a revenue threshold** (section 3). It needs the owner's recorded acknowledgement (S1).
-5. Protected system Python, protected `capture_control.py` copy, a current canary PASS and the firewall attestation are absent.
+   Adapting it is a security-sensitive harness change and needs the member hashes first (item 3). Follow-up package, section 9.
+3. **`stage_a_report` and `d12a` defaults are Qwen-pinned.** Both default to the Qwen screening plan and the b11840 archive, so
+   an LFM3 run through them would be judged and attributed against the wrong plan.
+4. **Member hashes are unknown and can be skipped.** Only the archive hash is public (GitHub's asset `digest`, not a signature).
+   The per-member SHA-256 needed to pin a launchable executable requires the archive, so S0 (download) must precede it; and the
+   existing `derive_runtime_build` without a named member does not pin the member hash at all.
+5. **Stage B does not fit one capture.** 460 requests at the allowed 20 s median exceed one 1024 MB capture. The split across
+   captures, which request is cold, and how records are merged are undefined; the S4 approval must state them, and no harness
+   supports it yet.
+6. **Infrastructure abort counts four of the ten infrastructure outcome codes** (recorded, not changed).
+7. **Licence is not SPDX and has a revenue threshold** (section 3). It needs the owner's recorded acknowledgement **and** a
+   stated Threshold position (S1).
+8. Protected system Python, protected `capture_control.py` copy, a current canary PASS, the firewall attestation and every owner approval are absent.
 
 **Resolved in scope:** the closed argument vocabulary lacks two flags the vendor sampling needs (`--min-p`, `--repeat-penalty`).
 They exist in `common/arg.cpp` at b11938 and b11960 (static source evidence). The contract owns a closed superset;
 the only production change is a default-preserving `allowed` parameter on `assert_argv_allowed` (Qwen argv is asserted
-byte-identical). D12a for b11960 must still show both flags in the real `--help`.
+byte-identical). D12a for b11960 must still show both flags in the real `--help` (`help_flag_report`: a truncated or empty help
+is INCONCLUSIVE, a missing flag FAIL).
 
-**Not blockers, but unknown (measured by the contract rather than assumed):** whether a template-less raw frame is a fair way to
-drive a chat-tuned model; whether the grammar constrains LFM3 as it does Qwen; how the repetition penalty interacts with
-protected-token copying.
+**Not blockers, but unknown (measured by the contract rather than assumed):** whether a template-less raw frame suits a chat-tuned
+model (both LFM3 and the matched Qwen arm receive it, so the comparison shows relative robustness and cannot isolate the template
+effect); whether the grammar constrains LFM3 as it does Qwen; how the repetition penalty interacts with protected-token copying;
+llama.cpp defaults outside the closed vocabulary (for example the repetition window) are not pinned.
 
 ## 3. Provenance (public metadata only)
 
@@ -59,8 +72,19 @@ protected-token copying.
 | `LFM3-1.7B-Q8_0.gguf` | 1,846,238,496 bytes, `8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6` |
 | Source of hashes | Hugging Face LFS object ids (SHA-256) and sizes from the tree API at the pinned packager commit; **not yet verified against local bytes** |
 | Licence | LFM Open License v1.0 (`LicenseRef-LFM-Open-License-1.0`), `LICENSE` 10,574 bytes, SHA-256 `4d28ca14dedc0b3d0fcc2b3339f0e79931faa33874f3d24f522183a8fc70068c`, identical in both repositories |
-| Licence terms that matter | Commercial Use by a Legal Entity with annual revenue of USD 10,000,000 or more is not licensed (section 5); non-profit research exempt; redistribution must carry the licence; terminates on non-compliance. StableNew ships no weights |
 | Sampling (vendor) | temperature 0.1, top_k 50, repetition penalty 1.1 (model card and `generation_config.json`) |
+
+Licence terms that bind the owner (recorded in the contract as `clauses_that_bind_the_owner`):
+
+- Commercial Use of the Work by a Legal Entity above the Threshold (USD 10,000,000 annual revenue) is not licensed (section 5).
+  The text is internally inconsistent: Section 1 defines the Threshold as revenue of that amount "or more", Section 5(b) says
+  "exceeds"; the stricter reading (at or above) is assumed. A Qualified Non-Profit is exempt for non-commercial or research use.
+- "Legal Entity" aggregates the acting entity with everything that controls it, it controls or shares common control with (Section 1).
+- Commercial Use includes any use for **indirect** commercial advantage (Section 1).
+- Redistribution must carry the licence and notices of modification (Section 4); patent licences end if You sue over the Work (Section 3).
+- The licence terminates automatically on non-compliance and use must cease with every copy deleted (Section 11).
+
+StableNew ships no weights. The owner's S1 acknowledgement must state a position on the Threshold; an empty one blocks.
 
 | llama.cpp tag | Commit | Asset | Bytes | SHA-256 (GitHub asset digest) | LFM3 |
 |---|---|---|---:|---|---|
@@ -68,12 +92,16 @@ protected-token copying.
 | b11938 (evaluated, not selected) | `19cce6919992fdffd92e0ac152caaf1e2b8f254e` | `llama-b11938-bin-win-cpu-x64.zip` | 24,260,998 | `9e2fc62604446d86809ca09094d3c7a7329b723bda636e4bbd23c3ce62cb77dc` | arch commit (#31252), below the stated minimum |
 | b11840 (Qwen runtime) | `36e36e63a54fc8f85b95e9c499a022b597e478dd` | `llama-b11840-bin-win-cpu-x64.zip` | 24,156,518 | `f805935d...da034` | none |
 
-The three releases inspected are marked pre-release upstream (as every build this project has pinned); the llama.cpp licence is MIT. b11938 was not selected because nobody can show that the shipped GGUFs
-load on a build older than the publisher's own floor; it stays a fallback needing its own decision.
+The three releases inspected are marked pre-release upstream (as every build this project has pinned); the llama.cpp licence is MIT.
+b11938 was not selected because nobody can show that the shipped GGUFs load on a build older than the publisher's own floor; it
+stays a fallback needing its own decision. Each runtime candidate carries a `members` map (launchable name to SHA-256) that is empty
+until an authorized download; a launched member must be one of the recorded hashes.
 
 ## 4. The frozen contract
 
-Contract SHA-256 (the digest every approval must quote): `8119804fa062308a11c5bf55c2b9812bc20dff04016eab50b64095781268fad5`.
+Contract SHA-256 (the digest every approval must quote): `b06fe2d76b51a1ec7f53cfe10ae3858fc4260de18c14ee99272b1f2f23fe706b`.
+It is pinned in code as `FROZEN_CONTRACT_SHA256`; `validate_contract` refuses any document that differs, so changing any value
+needs a deliberate second edit and fresh approvals.
 Stage A case-id list SHA-256: `d0bbf7feabc5bd533130d2ab044cbe351218a47b2a0c7dd7edbbc5eb8e97d030` (30 cases of the final corpus, seed 11502).
 
 - **Arms** (all on b11960, so the runtime is not a confounder): `lfm3-1.7b-q4_k_m@lfm3_vendor` vs matched
@@ -84,75 +112,102 @@ Stage A case-id list SHA-256: `d0bbf7feabc5bd533130d2ab044cbe351218a47b2a0c7dd7e
   apply silently; `presence_penalty 0.0`; seed 321.
 - **Structured output:** `ai_assist.frame/1` unchanged, raw frame through `-f` with `--no-conversation` (no chat template, as for
   Qwen), `--json-schema-file` grammar. `--reasoning off` is passed but is inert for a raw frame; the grammar is what excludes
-  thinking text. Stdout must be exactly one JSON object; anything else, a `<think>` block included, is `MALFORMED` and never repaired.
-  A report-only ungrammared probe (10 cases, Stage A) cannot influence a gate.
+  thinking text. `validate_output` accepts exactly one JSON object; other text, a `<think>` block included, is `MALFORMED`
+  (`not_json`) and never repaired, except that text opening like a refusal is classed `REFUSED_BY_MODEL` by the existing rule.
+  An ungrammared probe is not part of this contract.
 - **Limits:** identical to the frozen plan (context 4096, 768 new tokens, 8 threads, 90 s, 256 KiB stdout).
 - **Closed argv:** the production flags plus `--min-p` and `--repeat-penalty`; every forbidden flag stays forbidden.
 
 ## 5. Stage A (compatibility, integrity, monitoring smoke; never a qualification)
 
-**Admission:** S0-S3 approvals each naming the contract digest and artifact hashes; licence acknowledged; D12a for the b11960
-members PASS with launched-member hashes equal to the recorded ones; protected capture runtime and a live canary PASS from a different
-capture under 24 h with unchanged tool hashes; one 1024 MB capture per arm with a start and end canary and analysis v3 PASS with zero
-lost events; quiet host; per-arm memory preflight; firewall attestation recorded in the evidence-local root.
+**Admission:** S0-S3 approvals, each quoting the contract digest and its artifact hashes (the Qwen comparators' included), and the
+licence acknowledgement with the owner's Threshold position; D12a for the b11960 members PASS with launched-member hashes equal to the
+recorded ones; protected capture runtime and a live canary PASS from a different capture under 24 h with unchanged tool hashes;
+one 1024 MB capture per arm with a start and end canary and analysis v3 PASS with zero lost events; quiet host; per-arm memory
+preflight; firewall attestation recorded in the evidence-local root; the previous capture STOPPED and VERIFIED and no
+`StableNewCap` trace session listed before each arm's capture starts.
 
-**Stop immediately on:** any hash mismatch, unpinned loadable file or identity change between arm start and end; any ownership
-violation, connection attempt (loopback included), write outside the write root or read outside the read roots; an owned tree not
-proven gone after a request, or a trace session left running; GPU memory attributable to the owned tree or global VRAM growth above
-the probe limit; three consecutive infrastructure failures, a host-memory abort or the capture deadline; capture analysis
-INCONCLUSIVE or FAIL (a retrospective violation invalidates the arm).
+**Stop criteria**, split by what can actually act on them:
+
+*Real time (the harness stops the arm or session):* owned tree not proven gone after a request; a request hitting its timeout,
+output cap or memory cap (the runner kills the whole tree); identity changed since the arm preconditions or a loadable file beyond
+the pinned set; three consecutive TIMEOUT, UNAVAILABLE, RESOURCE_INSUFFICIENT or YIELDED_TO_GENERATION outcomes; host-memory abort
+(checked between requests) or the capture deadline; global VRAM growth above the probe limit or the GPU unreadable (checked before each arm).
+
+*Retrospective (found only in the stopped capture; invalidates the arm, stops nothing):* any connection attempt (loopback included),
+write outside the write root or read outside the read roots; capture analysis INCONCLUSIVE or FAIL, or a trace session left running.
+The independent barrier against egress is the operator-attested firewall restriction.
 
 **Recommendation:** `stage_a_report.judge_arm` unchanged. REJECT on a hard gate, a security FAIL or a model that never ran;
 ADVANCE only when compatibility, integrity and security all PASS and no measured threshold is missed; otherwise INCONCLUSIVE.
-Stage A can never produce GO. **Sensitivity rule (decided now):** the no-repeat profile replaces the vendor profile for Stage B only
-if the vendor arm records strictly more accepted protected-token changes on the Stage A slice and the no-repeat arm records zero.
+Stage A can never produce GO.
+
+**Sensitivity rule (decided now):** for the Q4_K_M model only, the no-repeat profile replaces the vendor profile for Stage B only if
+the vendor arm records strictly more `MALFORMED` outcomes with reason `protected_tokens_changed` on the Stage A slice and the no-repeat
+arm records zero. (The validator turns a protected-token change into `MALFORMED`, so the accepted-change count is structurally zero
+and cannot decide.) The Q8_0 arm uses the profile chosen for Q4_K_M. Otherwise the vendor profile stands. Not tuned afterwards.
 
 ## 6. Stage B (selection evidence) and monitoring
 
 **GO** needs, per arm: `evaluate_final_gates` over all 460 cases of the frozen corpus (`a89297be...774d5`) with zero hard-gate
-violations; teardown verified, zero egress, no ownership violation and analysis v3 PASS for every capture; at least 100 decisive blind
-judgments versus `B1_engine` with the lower 95% bound above 0.5; every record carrying the contract digest, the arm's sampling
-profile and the runtime asset hash (`record_problems`). **NO-GO:** any hard gate violated or measured threshold missed on complete
-evidence. **INCONCLUSIVE:** incomplete cases, missing capture analysis, fewer than 100 decisive judgments or any abort.
+violations and the coverage minimums met; teardown verified, zero egress, no ownership violation and analysis v3 PASS for every
+capture; at least 100 decisive blind judgments versus `B1_engine` with the lower 95% bound above 0.5; every record attributable
+to the contract digest, the arm's model, sampling profile, runtime asset and a recorded launched-member hash, from a host (not
+hermetic or cooperative) monitor, once per case (`record_problems`). `stage_b_verdict` wraps all of that: any missing proof is
+INCONCLUSIVE and GO only comes from `evaluate_final_gates`. **NO-GO:** any hard gate violated or measured threshold missed on
+complete evidence. **INCONCLUSIVE:** incomplete cases, missing capture analysis, fewer than 100 decisive judgments or any abort.
 LFM3 vs its matched Qwen comparator is a paired blind preference reported separately and never a gate; LFM3 is called preferred only
 with a lower 95% bound above 0.5 over at least 100 decisive judgments. Stage B is never pooled with Stage A, a subset, or a hermetic run.
+
+The capture split for Stage B is undefined (section 2, item 5); until a harness supports it Stage B cannot run.
 
 | Concern | Rule |
 |---|---|
 | ETW read roots | `<evidence>/ai-root` and `<SystemRoot>`; any extra root must be named in the owner approval and recorded |
 | ETW write roots | `<evidence>/ai-root/work` only |
 | Zero egress | zero observed connections, loopback included; scrubbed child environment; `--offline`; the preventive barrier is the operator-attested firewall restriction |
-| Teardown | process record complete and `active_after_teardown == 0` after every request; no `llama-*.exe` survivor and no `StableNewCap` session at session end |
-| VRAM | `-ngl 0`, `CUDA_VISIBLE_DEVICES=-1`, no `ggml-cuda/vulkan/hip/sycl/opencl` member; owned tree holds no GPU memory; global growth under 2048 MiB (existing probe) |
+| Teardown | process record complete and `active_after_teardown == 0` after every request (real time, from the job object); no `llama-*.exe` survivor at session end (harness); trace sessions stopped and proved gone between arms by the operator, because the standard-user harness can neither stop nor prove an elevated session |
+| VRAM | `-ngl 0`, `CUDA_VISIBLE_DEVICES=-1`, no `ggml-cuda/vulkan/hip/sycl/opencl` member. No per-process GPU attribution exists in the repository; the only control is the existing nvidia-smi probe (global growth under 2048 MiB since its first reading, read before each arm; unreadable means stop) |
 | Memory | admission needs model GiB + 4 (RAM and commit); abort below 0.25 GiB RAM or 1 GiB commit headroom for two samples; tree private cap 1.5 x model GiB + 2; peak private/working set and host minima recorded per arm |
 | Latency | median at most 20 s; cold first, warm median, p95, max and output characters per second recorded. Prefill/decode rates are **not** measurable under the closed vocabulary |
 
 ## 7. Approval boundary
 
-Five independent steps, none implied by another: `S0_download` (the three named files only), `S1_license` (acknowledgement and the
-Threshold position), `S2_d12a_b11960`, `S3_stage_a`, `S4_stage_b`. Each approval must name its step, quote the contract digest and
-carry the SHA-256 of every artifact it covers (`approval_problems`); that binds identity, not the owner's intent. Promotion
-(registry/manifest `qualified=true`, enabling Suggest) is outside this contract. `authorization` is all `false` in the frozen document.
+Five independent steps: `S0_download` (the three named files only), `S1_license` (acknowledgement and the Threshold position),
+`S2_d12a_b11960`, `S3_stage_a`, `S4_stage_b`. Each approval must name its step, quote the contract digest and carry the SHA-256 of
+every artifact it covers (`approval_problems`); `S3`/`S4` also cover the two Qwen comparator models they would execute. Each step
+declares its prerequisites, which `readiness_blockers` checks (a later stage needs every earlier approval, not just its own). That
+binds identity, not the owner's intent. Promotion (registry/manifest `qualified=true`, enabling Suggest) is outside this contract.
+`authorization` is all `false` in the frozen document and a document carrying a granted authorization is refused.
 
 ## 8. Critical review
 
-Review of lifecycle escapes, licensing, corpus drift, wrong executable, malformed output and misleading PASS (findings and
-dispositions are kept current by the test file `tests/tools/test_ai115_lfm3_contract.py`):
+An independent review of lifecycle escapes, licensing, corpus drift, wrong executable, malformed output and misleading PASS found ten
+defects in the first draft of the contract; all were repaired before this version and are pinned by the tests in
+`tests/tools/test_ai115_lfm3_contract.py`:
 
 | Risk | Finding | Disposition |
 |---|---|---|
-| Lifecycle escape | No new process path is added; every arm still runs through `run_bounded`'s job object and the owned-session monitor | unchanged; the contract only adds stop rules |
-| Licence | Non-SPDX, revenue-thresholded, termination clause; the registry accepts any free-text `license_spdx` | acknowledgement is a readiness blocker; promotion must add a licence check |
-| Corpus drift | Final plan and corpus reached only through code; Qwen digests asserted in tests; contract digest in every record | enforced by `validate_contract`, `record_problems` |
-| Wrong executable | `LAUNCHABLE_MEMBERS` is b11840-only; with a different archive the harness refuses, and with no member named it would not re-check the member hash | `members_hashed` false blocks S3; harness delta in section 9 |
-| Malformed output | `<think>` or prose is `MALFORMED`; grammar excludes thinking; repetition penalty may disturb token copying | pre-registered sensitivity arm and rule |
-| Misleading PASS | A 30-case slice cannot meet coverage; the execution manifest stamps the Qwen plan digest; sampling or runtime could silently differ | Stage A can never be GO; `record_problems` rejects mismatched digest, sampling or runtime hash; harness delta |
+| Frozen but editable | `validate_contract` did not compare against any anchor, so editing a threshold left the contract "valid" | `FROZEN_CONTRACT_SHA256` anchor; a tamper table in the tests |
+| Wrong executable | A `members_hashed` boolean could be set without any hash; a launched member was not tied to a record | `members` map of name to SHA-256; `record_problems` requires the launched-member hash to be a recorded one |
+| Misleading PASS | Readiness took self-asserted booleans | `readiness_blockers` judges approvals, licence, runtime entry and help report from evidence objects; the rest count only as exactly `True` |
+| Misleading PASS | `record_problems` did not bind the model file, member or monitor kind, or completeness | it checks contract, arm, sampling, runtime asset, model SHA-256, member, `monitor_kind == host`, duplicates and the case list |
+| Stage B GO | GO was not computable from the contract | `stage_b_verdict` returns INCONCLUSIVE on any missing proof and defers GO to `evaluate_final_gates` |
+| Corpus drift | Qwen digests asserted from the module's own copy | independent literal copies in the tests; the real plan, final plan and corpus are recomputed |
+| Malformed output | The sensitivity rule keyed on a count that is structurally zero | rule re-based on `MALFORMED`/`protected_tokens_changed`; validator behaviour pinned by tests that call the real `validate_output` |
+| Licence | Acknowledgement alone did not engage the Threshold; ambiguity and affiliate/indirect clauses were unrecorded | owner Threshold position required; clauses recorded; ambiguity stated |
+| Lifecycle / monitoring | Stop criteria mixed real-time and retrospective, claimed per-process GPU memory and an operator capture check the harness cannot make | stop criteria split; VRAM rule restated to the real probe; capture-state gate added between arms |
+| Comparison | Qwen comparators were not covered by approvals | S3/S4 quote the Qwen model hashes; prerequisites enforced |
+
+Remaining accepted limits: ETW file evidence classes a plain open as a read and sees no truncate or memory-mapped write of an
+existing file; only job-object members are attributed; findings from the capture are retrospective.
 
 ## 9. Next explicit owner decisions
 
-1. Authorize **S0** (download the two LFM3 GGUFs and the b11960 CPU archive, 2,970,274,049 bytes in total) and **S1** (licence position). Or decline LFM3.
-2. A follow-up package (proposed AI-QUAL-115B) to make `physical.py`/`d12a.py` contract-driven: per-arm runtime, sampling and registry,
-   member hashes for b11960, the contract digest in the execution manifest, and `record_problems` enforcement. It needs the S0 hashes.
-3. The operator-side prerequisites that block Qwen as well: system-wide Python, protected `capture_control.py` copy, a fresh canary.
+1. Authorize **S0** (download the two LFM3 GGUFs and the b11960 CPU archive, 2,970,274,049 bytes in total) and **S1** (licence position, including the Threshold). Or decline LFM3.
+2. A follow-up package (proposed AI-QUAL-115B) to make `physical.py`/`d12a.py`/`stage_a_report` contract-driven: per-arm runtime,
+   sampling and registry, member hashes for b11960, the contract digest in the execution manifest, `record_problems` enforcement, and a
+   Stage B capture-split design. It needs the S0 hashes.
+3. The operator-side prerequisites that block Qwen as well: system-wide Python, protected `capture_control.py` copy, a fresh canary, the firewall attestation.
 
 No physical work, promotion or merge is requested or implied.

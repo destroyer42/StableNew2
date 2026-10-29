@@ -31,7 +31,7 @@ from src.ai_assist.manifests import ModelRegistry, load_model_registry
 from tools.qualification.ai111 import plan as plan_module
 from tools.qualification.ai111.corpus import corpus_digest, stage_a_subset
 from tools.qualification.ai111.d12a import flag_in_text
-from tools.qualification.ai111.final_plan import final_corpus, final_plan
+from tools.qualification.ai111.final_plan import evaluate_final_gates, final_corpus, final_plan
 from tools.qualification.ai111.plan import digest, frozen_plan
 
 SCHEMA = "stablenew.ai115.lfm3.v1"
@@ -47,6 +47,10 @@ QWEN_FROZEN: dict[str, str] = {
     "final_corpus_sha256": "a89297beb3ae86246eb25214738d91ba3f24dc1e2cd8a4f7547ae49c68a774d5",
 }
 
+#: The digest of the frozen contract. ``validate_contract`` refuses any document that differs, so editing a value here
+#: needs a deliberate second edit of this constant (and fresh owner approvals, which quote it).
+FROZEN_CONTRACT_SHA256 = "b06fe2d76b51a1ec7f53cfe10ae3858fc4260de18c14ee99272b1f2f23fe706b"
+
 PUBLISHER_REPO = "LiquidAI/LFM3-1.7B"
 PUBLISHER_REVISION = "ac2586a34f1a1c03329dbdcdefabd8b6478ddaa7"
 PACKAGER_REPO = "LiquidAI/LFM3-1.7B-GGUF"
@@ -61,13 +65,22 @@ LICENSE: dict[str, Any] = {
     "identical_in": [PUBLISHER_REPO, PACKAGER_REPO],
     "commercial_use_threshold_usd_annual_revenue": 10_000_000,
     "summary": (
-        "Free use, modification and redistribution, but Commercial Use by a Legal Entity whose annual revenue is at or "
-        "above the Threshold is not licensed (Section 5); a Qualified Non-Profit is exempt for non-commercial or research "
-        "use; redistribution must carry the licence (Section 4); termination on non-compliance (Section 11)."
+        "Free use, modification and redistribution, but Commercial Use of the Work by a Legal Entity above the Threshold "
+        "is not licensed (Section 5). The text is internally inconsistent about the boundary: Section 1 defines the "
+        "Threshold as revenue of USD 10,000,000 'or more' while Section 5(b) says 'exceeds the Threshold'; the stricter "
+        "reading (at or above) is assumed. A Qualified Non-Profit is exempt for non-commercial or research use."
     ),
+    "clauses_that_bind_the_owner": [
+        "Legal Entity aggregates the acting entity with every entity that controls, is controlled by or is under common control with it (Section 1)",
+        "Commercial Use is any use for direct or indirect commercial advantage or monetary compensation (Section 1)",
+        "redistribution must carry the licence and prominent notices of modification (Section 4(a), 4(b))",
+        "patent licences terminate if You sue over the Work (Section 3)",
+        "the licence terminates automatically on non-compliance; use must cease and every copy be deleted (Section 11)",
+    ],
     "redistribution_by_stablenew": "none: weights are operator-imported from local files and are never shipped or committed",
     "owner_acknowledgement_required": True,
     "owner_acknowledged": False,
+    "owner_threshold_position": "",  # the owner's own statement about the Threshold; empty until S1
 }
 
 #: Registry-shaped candidate entries (``load_model_registry`` accepts this shape). Sizes and hashes are the Hugging Face LFS
@@ -130,7 +143,7 @@ RUNTIME_CANDIDATES: dict[str, dict[str, Any]] = {
         "compute": "cpu",
         "source_url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-win-cpu-x64.zip",
         "selected": True,
-        "members_hashed": False,
+        "members": {},  # launchable member name -> SHA-256; unknown until the archive is hashed
         "lfm3_text_support": "yes: the LiquidAI model card names b11960 (v0.8.0) as the minimum for LFM3-1.7B-GGUF",
         "reason": (
             "The publisher's own stated minimum. It also carries the later LFM3-family follow-ups through b11960. "
@@ -149,7 +162,7 @@ RUNTIME_CANDIDATES: dict[str, dict[str, Any]] = {
         "compute": "cpu",
         "source_url": "https://github.com/ggml-org/llama.cpp/releases/download/b11938/llama-b11938-bin-win-cpu-x64.zip",
         "selected": False,
-        "members_hashed": False,
+        "members": {},  # launchable member name -> SHA-256; unknown until the archive is hashed
         "lfm3_text_support": (
             "architecture present: its tag commit is 'model : add LiquidAI/LFM3-1.7B and LiquidAI/LFM3-VL-2B (#31252)', "
             "but it is below the publisher's stated minimum and no one has loaded the shipped GGUFs on it"
@@ -163,6 +176,8 @@ RUNTIME_CANDIDATES: dict[str, dict[str, Any]] = {
 SELECTED_RUNTIME = "b11960"
 
 #: The only comparator pins (read from the committed registry at call time, never edited here).
+#: The archive members the harness may ever launch (names only; their hashes are recorded after S2).
+LAUNCHABLE_NAMES: frozenset[str] = frozenset({"llama-completion.exe", "llama-cli.exe"})
 COMPARATORS: dict[str, str] = {
     "lfm3-1.7b-q4_k_m-liquidai": "qwen3.5-4b-q4_k_m-unsloth",
     "lfm3-1.7b-q8_0-liquidai": "qwen3.5-4b-q8_0-unsloth",
@@ -216,16 +231,17 @@ STRUCTURED_OUTPUT: dict[str, Any] = {
     "frame": "ai_assist.frame/1 unchanged (identical prompt bytes for LFM3 and the matched Qwen arm)",
     "chat_template": "not applied: raw frame through -f with --no-conversation, as for the frozen Qwen arms",
     "reasoning_flag": "--reasoning off is passed but is inert for a raw frame; the grammar is what excludes thinking text",
-    "stdout_rule": "exactly one JSON object; any other text (including a <think> block) is MALFORMED and is never repaired",
-    "ungrammared_probe": {
-        "stage": "A",
-        "cases": 10,
-        "purpose": "report-only: schema-valid rate without the grammar; cannot influence a gate",
-    },
+    "stdout_rule": (
+        "validate_output accepts exactly one JSON object; other text, a <think> block included, is MALFORMED (not_json) "
+        "and never repaired, except that text opening like a refusal is classed REFUSED_BY_MODEL by the existing rule"
+    ),
+    "ungrammared_probe": "not part of this contract: the schema-valid rate without the grammar is not measured here",
     "unknown": [
-        "whether the raw (template-less) frame is a fair way to drive a chat-tuned model: measured by the matched Qwen arm, "
-        "not assumed",
+        "whether a template-less raw frame suits a chat-tuned model: both LFM3 and the matched Qwen arm receive it, so the "
+        "comparison shows relative robustness to it and cannot isolate the template effect",
         "whether the grammar constrains LFM3 as it does Qwen: measured as the schema-valid rate",
+        "the vendor sampling values are chat recommendations applied to a raw frame; llama.cpp defaults outside the closed "
+        "vocabulary (for example the repetition window --repeat-last-n) are not pinned",
     ],
 }
 
@@ -252,15 +268,16 @@ MONITORING: dict[str, Any] = {
         "child_environment": "scrubbed: no proxy variables, HF_HUB_OFFLINE=1, LLAMA_ARG_OFFLINE=1, NO_PROXY=*",
     },
     "teardown": {
-        "after_every_request": "process record complete and active_after_teardown == 0",
-        "session_end": "no llama-*.exe survivor; no StableNewCap trace session left running",
+        "after_every_request": "process record complete and active_after_teardown == 0 (real time, from the job object)",
+        "session_end": "no llama-*.exe survivor, checked by the harness; trace sessions are stopped and proved gone by the operator",
+        "between_arms": "previous capture STOPPED and VERIFIED and 'logman query -ets' lists no StableNewCap session before the next capture starts (operator-checked; the standard-user harness can neither stop nor prove an elevated session)",
         "any_failure": "abort the arm and the session",
     },
     "gpu": {
         "ngl": 0,
         "environment": "CUDA_VISIBLE_DEVICES=-1",
         "runtime_members": "no ggml-cuda, ggml-vulkan, ggml-hip, ggml-sycl or ggml-opencl member may be present",
-        "vram": "owned tree may hold no GPU memory; global memory.used may not grow by more than 2048 MiB (existing probe)",
+        "vram": "no per-process GPU attribution exists in the repository; the only control is the existing nvidia-smi probe (global memory.used growth under 2048 MiB since its first reading, read before each arm; unreadable = stop)",
     },
     "memory": {
         "admission_gib": "model file GiB + 4 (RAM and commit)",
@@ -289,22 +306,39 @@ APPROVAL_STEPS: dict[str, dict[str, Any]] = {
     "S0_download": {
         "grants": "download exactly the three named files into operator staging; no import, extraction or execution",
         "artifacts": ["lfm3-1.7b-q4_k_m-liquidai", "lfm3-1.7b-q8_0-liquidai", "runtime:b11960"],
+        "prerequisites": [],
     },
     "S1_license": {
         "grants": "the owner records acceptance of LFM Open License v1.0 and states the Threshold position",
         "artifacts": ["license"],
+        "prerequisites": [],
     },
     "S2_d12a_b11960": {
         "grants": "extract the CPU archive to an evidence-only directory and run --version and --help of the named members",
         "artifacts": ["runtime:b11960"],
+        "prerequisites": ["S0_download", "S1_license"],
     },
     "S3_stage_a": {
         "grants": "import the verified files into an evidence-local root and run Stage A for the named arms under capture",
-        "artifacts": ["lfm3-1.7b-q4_k_m-liquidai", "lfm3-1.7b-q8_0-liquidai", "runtime:b11960"],
+        "artifacts": [
+            "lfm3-1.7b-q4_k_m-liquidai",
+            "lfm3-1.7b-q8_0-liquidai",
+            "qwen:qwen3.5-4b-q4_k_m-unsloth",
+            "qwen:qwen3.5-4b-q8_0-unsloth",
+            "runtime:b11960",
+        ],
+        "prerequisites": ["S0_download", "S1_license", "S2_d12a_b11960"],
     },
     "S4_stage_b": {
-        "grants": "run the full frozen corpus for the owner-chosen leading arms, then the blind preference session",
-        "artifacts": ["lfm3-1.7b-q4_k_m-liquidai", "lfm3-1.7b-q8_0-liquidai", "runtime:b11960"],
+        "grants": "run the full frozen corpus for the owner-chosen leading arms, then the blind preference session; the approval states how each arm is split across captures",
+        "artifacts": [
+            "lfm3-1.7b-q4_k_m-liquidai",
+            "lfm3-1.7b-q8_0-liquidai",
+            "qwen:qwen3.5-4b-q4_k_m-unsloth",
+            "qwen:qwen3.5-4b-q8_0-unsloth",
+            "runtime:b11960",
+        ],
+        "prerequisites": ["S0_download", "S1_license", "S2_d12a_b11960", "S3_stage_a"],
     },
 }
 PROMOTION = "registry and manifest promotion (qualified=true) and enabling Suggest are outside this contract"
@@ -318,6 +352,10 @@ KNOWN_BLOCKERS: tuple[str, ...] = (
     "live_canary_proof_for_current_tool_hashes_absent",
     "firewall_attestation_absent",
     "owner_approvals_absent",
+    "stage_a_report_and_d12a_defaults_pinned_to_the_qwen_screening_plan_and_b11840",
+    "derive_runtime_build_without_a_named_member_does_not_pin_the_member_hash",
+    "stage_b_arm_exceeds_one_1024mb_capture_and_the_split_and_record_merge_are_undefined",
+    "infrastructure_abort_counts_four_of_the_ten_infrastructure_outcome_codes",
 )
 
 
@@ -393,29 +431,38 @@ def _stages() -> dict[str, Any]:
             "case_ids_sha256": digest(stage_a_case_ids()),
             "corpus": f"stablenew.ai111.final.v2 subset, seed {STAGE_A_SEED}",
             "admission": [
-                "S0-S3 approvals and the license acknowledgement bind this contract's digest",
+                "S0-S3 approvals, each quoting this contract's digest and its artifact hashes (Qwen comparators included), and the licence acknowledgement with the owner's Threshold position",
                 "D12a for the b11960 members: PASS; launched members' hashes equal the recorded ones",
                 "protected capture runtime proven; a live canary PASS from different capture within 24 h",
                 "one 1024 MB capture per arm with a start and end canary; analysis v3 PASS (zero lost events)",
                 "quiet host; memory preflight per arm; firewall attestation recorded in the evidence-local root",
+                "previous capture STOPPED and VERIFIED and no StableNewCap trace session listed before each arm's capture starts",
             ],
-            "stop_criteria": [
-                "any hash mismatch, unpinned loadable file, or identity change between arm start and end",
-                "any ownership violation, connection attempt, write outside the write root, or read outside the read roots",
-                "owned child tree not proven gone after any request, or a trace session left running",
-                "GPU memory attributable to the owned tree, or global VRAM growth above the probe limit",
-                "three consecutive infrastructure failures, host memory abort, or the capture deadline",
-                "capture analysis INCONCLUSIVE or FAIL (a violation found after the fact invalidates the arm)",
-            ],
+            "stop_criteria": {
+                "real_time": [
+                    "owned child tree not proven gone after a request (the arm and the session stop)",
+                    "a request that hits its timeout, output cap or memory cap (the runner kills the whole tree)",
+                    "identity changed since the arm preconditions, or a loadable file beyond the pinned set",
+                    "three consecutive TIMEOUT, UNAVAILABLE, RESOURCE_INSUFFICIENT or YIELDED_TO_GENERATION outcomes",
+                    "host memory abort (checked between requests) or the capture deadline",
+                    "global VRAM growth above the nvidia-smi probe limit, or the GPU unreadable (checked before each arm)",
+                ],
+                "retrospective_invalidation": [
+                    "any connection attempt (loopback included), write outside the write root or read outside the read roots: found only in the stopped capture, it invalidates the arm and stops nothing",
+                    "capture analysis INCONCLUSIVE or FAIL, or a trace session left running",
+                ],
+            },
             "recommendation_rule": (
                 "stage_a_report.judge_arm applied unchanged: REJECT on a hard gate, security FAIL or a model that never "
                 "ran; ADVANCE only when compatibility, integrity and security all PASS and no measured threshold is "
                 "missed; otherwise INCONCLUSIVE. Stage A can never yield GO."
             ),
             "sensitivity_rule": (
-                "The no-repeat arm replaces the vendor profile for Stage B only if the vendor arm records strictly more "
-                "accepted protected-token changes on the Stage A subset and the no-repeat arm records zero. Otherwise "
-                "the vendor profile stands. Decided before any run; not tuned afterwards."
+                "For the Q4_K_M model only: the no-repeat profile replaces the vendor profile for Stage B only if the "
+                "vendor arm records strictly more MALFORMED outcomes with reason protected_tokens_changed on the Stage A "
+                "slice and the no-repeat arm records zero (the validator turns such a change into MALFORMED, so the "
+                "accepted-change count is structurally zero and cannot decide). The Q8_0 arm uses the profile chosen "
+                "for Q4_K_M. Otherwise the vendor profile stands. Decided before any run; not tuned afterwards."
             ),
         },
         "B": {
@@ -427,6 +474,7 @@ def _stages() -> dict[str, Any]:
                 "at least 100 decisive blind judgments versus B1_engine with lower 95% bound above 0.5",
                 "every record carries this contract's digest, the arm's sampling profile and the runtime asset hash",
             ],
+            "capture_split": "undefined: 460 requests at the allowed 20 s median exceed one 1024 MB capture; the S4 approval must state the case blocks per capture, which request is cold, and how records are merged. Until a harness supports it Stage B cannot run (see known_blockers)",
             "no_go": "any hard gate violated or any measured threshold missed on complete evidence",
             "inconclusive": "incomplete cases, missing capture analysis, fewer than 100 decisive judgments, or any abort",
             "head_to_head": (
@@ -544,30 +592,53 @@ def license_problems(record: Mapping[str, Any], *, require_acknowledged: bool) -
         problems.append("licence text hash differs from the recorded LICENSE")
     if record.get("owner_acknowledgement_required") is not True:
         problems.append("licence record must require owner acknowledgement")
-    if require_acknowledged and record.get("owner_acknowledged") is not True:
-        problems.append("licence not acknowledged by the owner")
+    for key in ("spdx", "name", "commercial_use_threshold_usd_annual_revenue"):
+        if record.get(key) != LICENSE[key]:
+            problems.append(f"licence {key} differs from the recorded LICENSE")
+    if require_acknowledged:
+        if record.get("owner_acknowledged") is not True:
+            problems.append("licence not acknowledged by the owner")
+        position = record.get("owner_threshold_position")
+        if not isinstance(position, str) or not position.strip():
+            problems.append("owner has not stated a Threshold position")
     return problems
 
 
 def runtime_problems(entry: Mapping[str, Any], *, require_members: bool) -> list[str]:
+    """Why a runtime entry may not be used: it must equal a pinned candidate, field for field."""
+
+    tag = str(entry.get("tag", ""))
+    known = RUNTIME_CANDIDATES.get(tag)
+    if known is None:
+        return [f"runtime tag is not a pinned candidate: {tag or '(none)'}"]
     problems: list[str] = []
-    if entry.get("compute") != "cpu" or "cuda" in str(entry.get("asset", "")).lower():
-        problems.append("runtime is not the CPU-only asset")
+    for key in (
+        "repository",
+        "commit",
+        "asset",
+        "bytes",
+        "sha256",
+        "license",
+        "compute",
+        "source_url",
+    ):
+        if entry.get(key) != known[key]:
+            problems.append(f"runtime {key} differs from the pinned candidate")
+    if entry.get("asset") != f"llama-{tag}-bin-win-cpu-x64.zip" or entry.get("compute") != "cpu":
+        problems.append("runtime is not the CPU x64 Windows asset of its own tag")
     if not SHA256.match(str(entry.get("sha256", ""))) or not COMMIT.match(
         str(entry.get("commit", ""))
     ):
         problems.append("asset SHA-256 or tag commit is not a full lowercase digest")
     if not isinstance(entry.get("bytes"), int) or entry["bytes"] <= 0:
         problems.append("asset size is not a positive integer")
-    tag = str(entry.get("tag", ""))
-    if (
-        str(entry.get("source_url", ""))
-        != f"{entry.get('repository')}/releases/download/{tag}/{entry.get('asset')}"
+    members = entry.get("members")
+    if not isinstance(members, dict) or any(
+        name not in LAUNCHABLE_NAMES or not SHA256.match(str(value))
+        for name, value in members.items()
     ):
-        problems.append("source_url is not the tag-pinned release asset")
-    if entry.get("license") != "MIT":
-        problems.append("runtime licence is not the recorded MIT")
-    if require_members and entry.get("members_hashed") is not True:
+        problems.append("launchable member map is malformed")
+    elif require_members and not members:
         problems.append("launchable member hashes are not recorded")
     return problems
 
@@ -665,6 +736,10 @@ def _artifact_tokens(artifact: str, document: Mapping[str, Any]) -> list[str]:
         return [document["license"]["text_sha256"]]
     if artifact.startswith("runtime:"):
         return [document["runtime"]["candidates"][artifact.split(":", 1)[1]]["sha256"]]
+    if artifact.startswith("qwen:"):
+        wanted = artifact.split(":", 1)[1]
+        arm = next(a for a in document["arms"] if a.get("model", {}).get("model_id") == wanted)
+        return [arm["model"]["sha256"]]
     entry = next(c for c in document["candidates"] if c["model_id"] == artifact)
     return [entry["sha256"]]
 
@@ -675,6 +750,8 @@ def validate_contract(
     """Structural invariants a contract must hold before any owner is asked to approve it."""
 
     problems: list[str] = []
+    if digest(document) != FROZEN_CONTRACT_SHA256:
+        problems.append("contract differs from the frozen digest")
     production = load_model_registry(registry_path)
     recomputed = {
         "screening_plan_sha256": digest(frozen_plan(registry_path)),
@@ -695,6 +772,10 @@ def validate_contract(
         if (tag == selected) != bool(entry.get("selected")):
             problems.append("exactly the selected runtime must be marked selected")
     problems += license_problems(document["license"], require_acknowledged=False)
+    steps = document["approvals"]
+    for step, spec in steps.items():
+        if not set(spec["prerequisites"]) <= set(steps) - {step}:
+            problems.append(f"{step}: prerequisites name an unknown step")
     if any(e.model_id.startswith(MODEL_PREFIX) for e in production.entries):
         problems.append("an LFM3 entry is present in the production registry")
     if not set(document["argv"]["allowed_flags"]) <= LFM3_ALLOWED_FLAGS:
@@ -719,20 +800,37 @@ def validate_contract(
 # -- record and readiness guards ---------------------------------------------------------------------------------------
 
 
+def _arm_model_sha(document: Mapping[str, Any], arm: Mapping[str, Any]) -> str:
+    if "model" in arm:
+        return str(arm["model"]["sha256"])
+    return str(
+        next(c for c in document["candidates"] if c["model_id"] == arm["model_id"])["sha256"]
+    )
+
+
 def record_problems(
-    rows: Sequence[Mapping[str, Any]], document: Mapping[str, Any], arm_id: str
+    rows: Sequence[Mapping[str, Any]],
+    document: Mapping[str, Any],
+    arm_id: str,
+    case_ids: Sequence[str] | None = None,
 ) -> list[str]:
-    """Every record must be attributable to this contract, this arm's sampling and the selected runtime asset."""
+    """Every record must be attributable to this contract, this arm's model, sampling, runtime and a recorded member.
+
+    With ``case_ids`` the record set must also be exactly that list, once each. Hermetic and cooperative runs carry a
+    different ``monitor_kind`` and are refused."""
 
     arm = next((a for a in document["arms"] if a["arm_id"] == arm_id), None)
     if arm is None or arm["kind"] == "baseline":
         return [f"no executable arm named {arm_id}"]
     runtime = document["runtime"]["candidates"][document["runtime"]["selected"]]
+    members = set(runtime.get("members", {}).values())
     expected = {
         "contract_sha256": digest(document),
         "arm": arm_id,
         "sampling_profile": arm["sampling"],
         "runtime_asset_sha256": runtime["sha256"],
+        "model_sha256": _arm_model_sha(document, arm),
+        "monitor_kind": "host",
     }
     problems = []
     if not rows:
@@ -741,41 +839,104 @@ def record_problems(
         for key, value in expected.items():
             if row.get(key) != value:
                 problems.append(f"record {index}: {key} does not match the contract")
+        if row.get("runtime_member_sha256") not in members:
+            problems.append(f"record {index}: launched member is not a recorded member hash")
+    ids = [row.get("case_id") for row in rows]
+    if len(set(ids)) != len(ids):
+        problems.append("duplicate case records")
+    if case_ids is not None and set(ids) != set(case_ids):
+        problems.append("record set differs from the frozen case list")
     return problems
 
 
-def readiness_blockers(stage: str, evidence: Mapping[str, Any]) -> list[str]:
-    """What still prevents a stage from starting. Any unknown, missing or non-True evidence is a blocker."""
+def stage_b_verdict(
+    rows: Sequence[Mapping[str, Any]],
+    document: Mapping[str, Any],
+    arm_id: str,
+    cases: Sequence[Any],
+    *,
+    teardown_verified: bool,
+    preference: Mapping[str, Any] | None,
+    capture_verdicts: Sequence[str],
+) -> dict[str, Any]:
+    """The one computable form of Stage B ``go_requires``. Any problem is INCONCLUSIVE; GO only from complete evidence."""
 
-    needs = {
-        "S0_download": ("approval_S0_download",),
-        "S2_d12a_b11960": (
-            "approval_S0_download",
-            "approval_S1_license",
-            "approval_S2_d12a_b11960",
-            "artifacts_verified",
-        ),
-        "S3_stage_a": (
-            "approval_S3_stage_a",
-            "license_acknowledged",
-            "d12a_b11960_pass",
-            "member_hashes_recorded",
-            "harness_supports_contract",
-            "protected_runtime",
-            "canary_proof_current",
-            "firewall_attested",
-            "quiet_host",
-        ),
-        "S4_stage_b": (
-            "approval_S4_stage_b",
-            "stage_a_advance",
-            "operator_corpus_or_synthetic_declared",
-            "blind_session_scheduled",
-        ),
-    }
-    if stage not in needs:
+    unmet = record_problems(rows, document, arm_id, [c.case_id for c in cases])
+    if corpus_digest(list(cases)) != document["stages"]["B"]["corpus_sha256"]:
+        unmet.append("cases are not the frozen Stage B corpus")
+    if not capture_verdicts:
+        unmet.append("no capture analysis")
+    unmet += [f"capture analysis is {v}, not PASS" for v in capture_verdicts if v != "PASS"]
+    if unmet:
+        return {"verdict": "INCONCLUSIVE", "unmet": unmet}
+    verdict: dict[str, Any] = evaluate_final_gates(  # type: ignore[no-untyped-call]
+        list(cases), rows, teardown_verified=teardown_verified, preference=preference
+    )
+    return verdict
+
+
+_STAGE_STEPS: dict[str, tuple[str, ...]] = {
+    "S0_download": ("S0_download",),
+    "S2_d12a_b11960": ("S0_download", "S1_license", "S2_d12a_b11960"),
+    "S3_stage_a": ("S0_download", "S1_license", "S2_d12a_b11960", "S3_stage_a"),
+    "S4_stage_b": ("S0_download", "S1_license", "S2_d12a_b11960", "S3_stage_a", "S4_stage_b"),
+}
+_STAGE_FLAGS: dict[str, tuple[str, ...]] = {
+    "S0_download": (),
+    "S2_d12a_b11960": ("artifacts_verified", "harness_supports_contract"),
+    "S3_stage_a": (
+        "d12a_b11960_pass",
+        "harness_supports_contract",
+        "protected_runtime",
+        "canary_proof_current",
+        "firewall_attested",
+        "quiet_host",
+        "capture_state_clear",
+    ),
+    "S4_stage_b": (
+        "d12a_b11960_pass",
+        "harness_supports_contract",
+        "protected_runtime",
+        "canary_proof_current",
+        "firewall_attested",
+        "quiet_host",
+        "capture_state_clear",
+        "stage_a_advance",
+        "stage_b_capture_split_defined",
+        "blind_session_scheduled",
+    ),
+}
+
+
+def readiness_blockers(
+    stage: str, evidence: Mapping[str, Any], document: Mapping[str, Any] | None = None
+) -> list[str]:
+    """What still prevents a stage from starting. Approvals, the licence, the runtime entry and the ``--help`` report are
+    judged here from their evidence objects; the remaining flags are operator attestations and count only as exactly True."""
+
+    if stage not in _STAGE_STEPS:
         return [f"unknown stage: {stage}"]
-    return [key for key in needs[stage] if evidence.get(key) is not True]
+    document = contract() if document is None else document
+    blockers: list[str] = []
+    approvals = evidence.get("approvals")
+    texts = approvals if isinstance(approvals, Mapping) else {}
+    for step in _STAGE_STEPS[stage]:
+        text = texts.get(step)
+        if not isinstance(text, str) or approval_problems(step, text, document):
+            blockers.append(f"approval_{step}")
+    if stage != "S0_download":
+        licence = evidence.get("license")
+        if not isinstance(licence, Mapping) or license_problems(licence, require_acknowledged=True):
+            blockers.append("license_acknowledged")
+    if stage in ("S3_stage_a", "S4_stage_b"):
+        runtime = evidence.get("runtime")
+        if not isinstance(runtime, Mapping) or runtime_problems(runtime, require_members=True):
+            blockers.append("runtime_members_recorded")
+        report = evidence.get("help_report")
+        if not isinstance(report, Mapping) or report.get("verdict") != "PASS":
+            blockers.append("help_lists_every_contract_flag")
+    blockers += [key for key in _STAGE_FLAGS[stage] if evidence.get(key) is not True]
+    return blockers
 
 
 def main(argv: list[str] | None = None) -> int:
