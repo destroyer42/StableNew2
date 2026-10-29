@@ -49,6 +49,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | Discovered outputs | `output_scanner.py` (`OutputScanner.scan_incremental`), `output_scan_models.py`, `discovered_scan_service.py` (`apply_scan`), `discovered_grouping.py` (`GroupingEngine`), `discovered_review_models.py` |
 | Guided workflow presentation (PR-LEARN-UX-590; pure, no Tk, no persistence) | `guided_workflow.py` (`project_guided_workflow`: Design/Preview/Run/Compare/Rate step states, the one primary action and notices, derived each refresh from experiment/plan/rating facts; `build_rating_progress`); `preview_summary.py` (`build_preview_summary`: counts and rows read from the frozen snapshot); `design_estimate.py` (`estimate_design`: variants x images before any Preview); `recommendation_summary.py` (`build_recommendation_summary`, `apply_availability`: setting, scope, tier, confidence and why Apply is or is not offered). They restate facts other modules computed and add no gate |
 | Review and analytics | `review_workspace.py` (`build_review_projection`), `experiment_conclusion.py`, `learning_analytics.py` (`LearningAnalytics`, JSON/CSV export), `experiment_naming.py` |
+| Guided qualification review | `qualification_review.py` (verified artifact/seed pairs and read-only findings), `qualification_followup.py` (explicit create-only follow-up); `src/gui_v2/qualification_review_session.py` (existing rating/draft presenter), `src/gui/views/qualification_review_window.py`, `qualification_rating_card.py`; source validation `src/gui/controllers/qualification_review.py` |
 | Legacy plan runner | `learning_plan.py` (`LearningPlan`, `LearningMode`), `learning_runner.py` (`LearningRunner`, a stub that fabricates pending artifacts), `learning_execution.py` (`LearningExecutionRunner`), `learning_adapter.py`, `learning_contract.py` (placeholder optimizer presets). Not the experiment path; see section 9 |
 | Other | `run_metadata.py` (`write_run_metadata`, called by the runner), `feedback_manager.py` and `learning_feedback.py` (no callers in `src`), `dataset_builder.py` (`build_learning_dataset`; its former `src/ai` consumer was retired) |
 
@@ -483,9 +484,56 @@ results uncontrolled. Historical provenance is never reconstructed from today's
 catalog. Existing ratings and explicit publication thresholds remain final, with
 an additional matching tested-setting readback guard for proposal ratings.
 
-The six-pair screening rule (five wins and mean overall improvement of 0.5) supports
-follow-up investigation only. It is not statistical proof, a universal optimum or
-automatic Learning publication. Geometry remains outside publication eligibility.
+**Compare & Rate**, available in Learning Review after opening a qualification
+experiment from the Library or the Compare step, presents the frozen control and
+selected candidate at the same verified backend-observed seed. Previous Pair,
+Save & Next Pair and Next Unrated Pair keep that identity. Each image uses its own
+existing 1–5 rating, expandable details, confirmed override and recoverable draft.
+Navigation and drafts survive reopen/restart through the existing session metadata;
+individual-image browsing includes excluded/historical outputs. A partial save does
+not advance or claim that both ratings were saved. Unchanged saved ratings are not
+appended again; reverting controls to their saved values clears an obsolete draft.
+Existing media inspection, SFW visibility and bounded worker/dispatcher lifecycle apply.
+
+Pairing never uses filenames or positions in a saved image list. New txt2img
+Learning completions carry `learning_samples/1`: the executor records each successfully
+saved artifact's backend response index, observed seed and job ID while saving that
+response. The same evidence records the existing managed process owner's launch
+identity before and after generation (PID, launch start, readiness epoch, endpoint
+and backend). Completion binds this additive evidence to experiment, variant and
+frozen snapshot identities. This is observation only, with no process adoption or
+lifecycle change. An unowned runtime cannot substantiate same-launch pairing.
+
+The read-only findings projection validates those identities, observed seed vector,
+frozen expected per-variant settings, compiled/dispatched/backend-reported tested
+value, launch/profile continuity and current artifact availability. Duplicate or
+ambiguous associations, unknown/restarted launches, uncontrolled/failed/cancelled
+variants and missing proof are visibly excluded. Historical results lacking the
+association remain readable with **Cannot verify matched pairs**; no historical
+evidence is rewritten or reconstructed from today's catalog.
+
+Findings show per-value saved means, matched-pair differences, win/tie/loss counts,
+descriptive subscore differences and explicit denominators/exclusions. Only an
+intended 2 × 6 pilot with six valid, independently matched pairs and twelve valid
+saved ratings can pass the existing screen: at least **five candidate wins AND mean
+overall improvement ≥ 0.5**. Ties are not wins. The result is **Follow-up supported**,
+never statistical significance, a universal optimum or permission to adopt settings.
+3 × 5, 4 × 5 and 2 × 10 studies remain descriptive without that threshold.
+
+The suggested next action prioritizes execution inspection, then unfinished ratings,
+then further investigation or Proposed Experiments. **Prepare Follow-Up Experiment**
+requires a current catalog-supported original control/candidate comparison, matching
+checkpoint bytes, policy/resources, and an explicitly selected different prompt or
+separate seed cohort. The existing planner and isolated Learning compiler revalidate
+the whole design; sources, parent evidence and resources are checked again before
+create-only Library persistence. A new experiment identity retains additive parent
+snapshot/proposal provenance and a visible explanation of fixed versus changed
+context. Repeated preparation preserves edited/admitted sessions. It opens the
+existing Design/Preview path and submits no jobs. If today's catalog cannot reproduce
+that exact comparison, preparation refuses with guidance to Proposed Experiments.
+Existing RecommendationEngine, publication/default/favorite rules are unchanged;
+geometry remains outside publication eligibility. There is no conclusion cache,
+new evidence database or second rating authority.
 
 ### 3.16 Evidence-driven next test (AI-LEARN-830)
 

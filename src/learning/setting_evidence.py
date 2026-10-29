@@ -146,34 +146,18 @@ def inspect_experiment(
         }
         for v in plan
     ]
-    # Use existing durable ratings, paired by backend-observed seed/index. No rating
-    # writes, imputation or automatic publication occurs here.
-    paired, mean = [], None
-    if len(plan) == 2 and all(e["controlled"] for e in evidence):
-        left, right = plan
-        seeds = evidence[0]["actual_seeds"]
-        if (
-            len(seeds) == 6
-            and seeds == evidence[1]["actual_seeds"]
-            and len(left.image_refs) == len(right.image_refs) == 6
-        ):
-            for a, b in zip(left.image_refs, right.image_refs, strict=True):
-                first, second = ratings.get(a, {}), ratings.get(b, {})
-                av, bv = first.get("overall_rating"), second.get("overall_rating")
-                if (
-                    isinstance(av, (int, float))
-                    and isinstance(bv, (int, float))
-                    and av > 0
-                    and bv > 0
-                ):
-                    paired.append(bv - av)
-    if len(paired) == 6:
-        mean = sum(paired) / 6
-    supported = screening_supported(paired)
+    from src.learning.qualification_review import project_qualification
+
+    findings = project_qualification(experiment, plan, ratings)
+    comparison = findings.comparisons[0] if len(findings.comparisons) == 1 else None
+    paired = list(comparison.differences) if comparison else []
+    mean = comparison.mean_difference if comparison else None
+    supported = findings.outcome == "Follow-up supported"
     return {
         "proposal": proposal,
         "variants": evidence,
         "saved_ratings": len(ratings),
+        "exclusions": findings.exclusions,
         "paired_differences": paired,
         "mean_improvement": mean,
         "conclusion": "Follow-up investigation supported; not statistical proof."
