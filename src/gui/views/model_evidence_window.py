@@ -400,7 +400,9 @@ class ModelEvidenceWindow(tk.Toplevel):
         self.next_button.configure(state="disabled")
         self._next_report = None
         if self._next_dialog is not None and self._next_dialog.winfo_exists():
-            self._next_dialog.mark_stale("The selected model changed. Refresh from the new selection.")
+            self._next_dialog.mark_stale(
+                "The selected model changed. Refresh from the new selection."
+            )
         if self._selected() and getattr(self.owner, "learning_controller", None) is not None:
             self._plan(open_dialog=False)
 
@@ -561,7 +563,9 @@ class ModelEvidenceWindow(tk.Toplevel):
 
         def route(result: Any) -> None:
             if result is None:
-                message = "Evidence changed since this suggestion. Refresh What Should I Test Next?."
+                message = (
+                    "Evidence changed since this suggestion. Refresh What Should I Test Next?."
+                )
                 if self._next_dialog is not None and self._next_dialog.winfo_exists():
                     self._next_dialog.mark_stale(message)
                 self.status.set(message)
@@ -576,12 +580,16 @@ class ModelEvidenceWindow(tk.Toplevel):
             self._plan()
         elif route.workflow == WORKFLOW_DRAFT_PREPARATION and executable:
             self.owner._on_open_experiment_library()
-            self.status.set("Open the saved draft in the Experiment Library; Run stays an explicit step.")
+            self.status.set(
+                "Open the saved draft in the Experiment Library; Run stays an explicit step."
+            )
         elif route.workflow == WORKFLOW_LEARNING_REVIEW and executable:
             identity = route.target_id
 
             def loaded(payload: Any) -> None:
-                if payload and self.owner._restore_from_store_payload(payload, experiment_id=identity):
+                if payload and self.owner._restore_from_store_payload(
+                    payload, experiment_id=identity
+                ):
                     self.status.set("Opened the experiment in Learning. Rate or inspect it there.")
                 else:
                     self.status.set("That saved experiment could not be opened.")

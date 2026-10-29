@@ -114,9 +114,8 @@ def attribute_ratings(
         context = _prompt_context(row)
         try:
             sample = controlled_sample(row, target)
-        except (
-            Exception
-        ) as exc:  # any proof failure means "not controlled evidence", with its reason
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            # A missing or contradictory proof (ProfileError is a ValueError) means "not controlled evidence".
             if _other_model(row, target):
                 outcome, reason = OUTCOME_OTHER_MODEL, "Rated on a different checkpoint."
             else:

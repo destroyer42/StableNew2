@@ -76,9 +76,8 @@ def _publication(sources: IntelligenceSources, problems: list[str]) -> Publicati
             sources.context.target.identity.display_name,
             catalogs=sources.context.resources,
         )
-    except (
-        Exception
-    ) as exc:  # publication is optional context; its failure must stay visible, not fatal
+    except (KeyError, TypeError, ValueError, AttributeError, OSError) as exc:
+        # Publication is optional context; its failure stays visible and is not fatal.
         logger.warning("Publication eligibility unavailable", exc_info=True)
         problems.append(
             f"Recommendation eligibility could not be evaluated ({type(exc).__name__})."
