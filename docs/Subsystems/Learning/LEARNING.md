@@ -42,6 +42,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | Prompt x Model Matrix | `prompt_model_matrix.py` (`learning_prompt_model_matrix/1`: bounds, `build_matrix_snapshot`, `frozen_cell`, `materialize_njr`, aesthetic/excluded-conditioning refusals, per-cell readback, descriptive `conclusion`, `RECORD_KIND`); `prompt_model_matrix_results.py` (`build_matrix_model`, the existing `GridModel`); `learning_controller_services/prompt_model_matrix.py` (plan/variant coordination); `src/gui/views/prompt_model_matrix_design_frame.py`; arm sealing and envelope preparation are the shared helpers in `model_comparison.py` (`prepare_arm_envelope`, `build_arm`, `verify_arm`, `arm_njr`) |
 | Two-Axis Grid | `two_axis_grid.py` (`parse_axis`, `plan_cells`, `build_grid_snapshot`, `frozen_cell`, `materialize_njr`, `rating_classification`, limits); `grid_results.py` (`build_grid_model`: exact cell/job/artifact projection, placeholders, visibility); `grid_contact_sheet.py` (`render_contact_sheet`, `export_contact_sheet`, bounded `load_thumbnail`); `learning_njr.py` (`assemble_txt2img_njr`, the one assembly Model Comparison and the grid share) |
 | Execution tracking and recovery | `execution_controller.py` (`LearningExecutionController`: sole job-to-variant callback owner, admission integrity, serialized restore/completion); `experiment_reconciliation.py` (exact repository lookup, immutable Learning identity/snapshot checks, evidence and status projections) |
+| Evidence intelligence (AI-LEARN-830; read-only) | `evidence_intelligence.py` (`assess`, `load_sources`), `intelligence_contracts.py` (finding/action/report values), `intelligence_sources.py` (tolerant rating-log and experiment loaders), `intelligence_findings.py`, `preference_evidence.py`, `next_actions.py` (classification and ranking), `ai_evidence_summary.py` (bounded AI-facing summary); section 3.16 |
 | Evidence records and ratings | `learning_record.py` (`LearningRecord`, `LearningRecordWriter`, `extract_rating_detail`); `rating_schema.py`; `learning_record_builder.py` (record from a pipeline run result); `learning_profile_sidecar.py` |
 | Recommendations | `recommendation_engine.py` (`RecommendationEngine.recommend`, `RecommendationSet`, evidence tiers); `staged_recommendations.py` (`build_derived_recommendation_patch`, `apply_derived_recommendation_patch`); `model_profiles.py` (style priors, not `ModelPolicy`; the name-substring GUI defaults and `model_defaults_resolver.py` were removed. Generation recommendations now live in `src/generation_profiles/`, whose `GenerationProfileStore.publish_learning_profile` is the narrow seam a later Learning package uses to publish immutable Learning profile revisions) |
 | Persistence | `experiment_store.py` (`LearningExperimentStore`), `discovered_review_store.py` (`DiscoveredReviewStore`), `learning_paths.py`, `learning_controller_services/experiment_persistence.py` (resume payload helpers), `experiment_lifecycle.py` (Draft/Queued/Review Needed/Complete classification) |
@@ -61,6 +62,7 @@ Compile first, then admit once: `ExperimentAdmissionService.compile_all` builds 
 | Two-Axis Grid views | `grid_design_frame.py` (`TwoAxisDesignFrame`: axes, values or ranges, fixed LoRA, live cell/image totals) inside `ExperimentDesignPanel`; `learning_grid_view.py` (`LearningGridView`: the Comparison Grid pane, lazy thumbnails on a tracked worker, Export Contact Sheet) added to the workspace panes by `LearningTabFrame` only while a grid experiment is open |
 | Guided workflow widgets | `LearningWorkflowBar` (`learning_workflow_bar.py`: five step buttons, status, headline, the single primary button) and `LearningPreviewCard` (`learning_preview_card.py`) render the projections above; `LearningTabFrame` owns the tab-local viewed step and the pane layout per step |
 | Analytics window | `learning_analytics_panel.py` opened from the review panel's View Analytics |
+| Next-test surface | `src/gui_v2/next_test_view.py` (view and route), `src/gui/views/next_test_dialog.py`, `src/gui/controllers/model_evidence_next_test.py` (service capture, revalidation); opened from `ModelEvidenceWindow` and the Learning header |
 | Recommendation target map | `src/gui_v2/recommendation_targets.py` (`recommendation_target`, `checkpoint_for_stage`, `prepare_recommendation_patch`) |
 | Curation domain | `src/curation/` (`models.py`, `curation_workflow_builder.py`, `curation_manifest.py`, `workflow_summary.py`, `learning_bridge.py`: `CurationLearningBridge` turns a `SelectionEvent` into a `staged_curation_event` record) |
 | Review tab entry | `src/gui/views/review_tab_frame_v2.py` calls `save_review_feedback`/`undo_review_feedback` on the learning controller; `src/review/workflow_adapter.py` hands curation selections to Review |
@@ -460,6 +462,64 @@ The six-pair screening rule (five wins and mean overall improvement of 0.5) supp
 follow-up investigation only. It is not statistical proof, a universal optimum or
 automatic Learning publication. Geometry remains outside publication eligibility.
 
+### 3.16 Evidence-driven next test (AI-LEARN-830)
+
+For one selected exact checkpoint, StableNew states what it knows, what it does not, how saved ratings relate to the
+model, and the most valuable safe next action. It is a **read-only projection**: no new store, runner, queue, rating or
+profile authority, no AI call, no job admission and no setting change. `evidence_intelligence.assess` is pure over
+loaded inputs; `load_sources` (worker thread only) reads the rating log and saved experiments and never writes.
+
+**Authorities consumed, none replaced.** Identity and `ModelPolicy` through the resolved model; reviewed catalog claims
+(`EvidenceCatalog.coverage`); executable candidates **only** from `EvidenceProposalPlanner` / `evidence_gaps` (the
+sole source: this layer classifies and orders them and never invents one); saved experiments from `LearningExperimentStore`;
+the latest saved `learning_experiment_rating` per image; and the publication rule via `profile_publication.controlled_sample`
+and `ProfilePublicationService.evaluate`, so controlled-evidence eligibility cannot drift from publication.
+
+**Findings** (`EvidenceFinding`) keep four source classes apart: `policy_fact`, `research_claim`, `controlled_observation`,
+`subjective_preference`. Each carries source identity, applicability, a freshness revision token and a named limitation.
+`unknown`, `conflicting`, `insufficient` and `excluded` are statuses of their own; nothing is rounded to a value, and no
+confidence probability, successful execution, unobserved setting or compatibility is fabricated. An experiment's conclusion
+is the existing six-pair screening rule (`setting_evidence.screening_supported`), a follow-up signal and not proof.
+
+**Preference summary** (`preference_evidence.py`). Only ratings that pass the publication controlled-evidence rule, are
+attributed to the exact checkpoint (frozen byte identity) and carry a frozen prompt context are compared, and only within one
+group of setting x prompt context x rating category. Overall rating (`user_rating_raw`) and subscore means are reported
+separately. A value needs `MIN_RATINGS_PER_VALUE` (3) comparable ratings and two values, otherwise the verdict is
+`insufficient`; experiments that disagree are `competing`; a mean gap under `MIN_LEADING_MARGIN` (0.5 rating points) is
+`no_clear_preference`; only otherwise `observed_preference`. There is no "learned" or "best" verdict. Other-model,
+uncontrolled, invalid-rating, unattributed-prompt and unpaired ratings are counted as excluded and never pooled.
+
+**Actions** (`next_actions.py`): complete ratings, investigate execution/readback, resolve identity, review a recommendation,
+run an eligible controlled experiment, repeat an inconclusive result under another prompt context, research missing or
+conflicting information, or "no safe experiment". An equivalent run (same proposal id, or same checkpoint bytes, variable,
+values and fixed-execution digest) that is complete, running, failed or awaiting ratings suppresses the proposal and the
+reason is listed; only an inconclusive controlled result yields a repeat. **Priority rule**, a lexicographic tuple of
+ordinal integers: `(eligibility ready < operator task < blocked, class order above, -evidence severity, -operator
+relevance, bounded image cost (<= 24), planner position, id)`. Finishing already generated, unrated work therefore
+outranks new generation. Each action has an opaque id, target, purpose, reasons and reason codes, the uncertainty it
+addresses, eligibility and blockers, workload (elapsed time stays unknown), the evidence fingerprint and the operator step
+that must still happen. No improvement is promised.
+
+**Staleness.** The fingerprint digests the planner context (identity, catalog revision, baseline, resources, policy), the
+rating revision, the experiment revision, the publication evidence and read problems; every action id includes it. The window
+re-derives the set on its worker before opening anything and refuses an id that is not in the fresh set.
+
+**Corrupt or missing evidence** degrades visibly: damaged log lines, unreadable sessions and a planner failure are reported
+as `problems` in the report, the dialog notice and the AI summary (`degraded`).
+
+**AI-ready summary** (`ai_evidence_summary.py`, `stablenew.learning-evidence-summary.v1`): versioned, deterministic and
+at most 12 KiB. Every string must be a short lowercase token (`validate_ai_summary`), so prompts, notes, paths and image
+names cannot be represented; candidates are opaque (`cand-...`) with reason codes, not prose. It is not a trust grant: an
+AI answer must pass `resolve_ai_candidate` against a freshly derived set. Nothing in `src/` calls it yet; AI Assist
+integration needs its own package and the `src/ai_assist` import rules (`docs/Subsystems/AiAssist/AI_ASSIST.md`) still apply.
+
+**Surface.** **What Should I Test Next?** is in the Model Evidence Catalog (beside Proposed Experiments) and in the Learning
+header (it opens the catalog on the current experiment's checkpoint). `src/gui_v2/next_test_view.py` builds one primary
+action, up to three alternatives, a readiness line and optional evidence details; `src/gui/views/next_test_dialog.py` renders
+it and owns no worker; `ModelEvidenceWindow` reuses its bounded worker, generation and close/cancel handling. Routes use
+existing flows only: Proposed Experiments or the Experiment Library; Learning Review through `_restore_from_store_payload`; the
+Recommendations view (Apply still confirms); and for identity or research, guidance text.
+
 ## 4. Data and persistence
 
 | Data | Location | Writer | Atomic |
@@ -532,6 +592,7 @@ Configuration is `pyproject.toml` only; run focused tests first, then `python to
 | Tab and panel contracts, persistence, model-policy projection | `tests/gui_v2/test_learning_*.py`, `tests/gui_v2/test_discovered_review_inbox.py`, `tests/gui_v2/test_curation_exact_profile_preflight_158.py` | Tk-free where possible |
 | Two-Axis Grid | `tests/learning_v2/test_two_axis_grid_270.py` (planning, frozen compile, admission, restart, ratings isolation, save/reopen), `tests/learning_v2/test_grid_contact_sheet_270.py` (known-pixel sheets, placeholders, visibility, bounds, atomic export), `tests/gui_v2/test_learning_grid_270.py` (real Tk: design, preview staleness, run, select, lazy thumbnails, scroll, stale results, destroy, tab switching) | Fake `JobService` over a temp `JobRepository`; coloured PNG fixtures; no WebUI |
 | Prompt x Model Matrix | `tests/learning_v2/test_prompt_model_matrix_710.py` (freeze, bounds, refusals including the aesthetic prohibition, tamper, admission, reconciliation, ratings, conclusion, isolation), `tests/gui_v2/test_learning_prompt_model_matrix_710.py` (real Tk design mode and results grid) | Real controller over a recording JobService; no WebUI or GPU |
+| Evidence intelligence (AI-LEARN-830) | `tests/learning_v2/test_learning_intelligence_830.py` (fixtures `intelligence_fixtures_830.py`: conflicting claim, identity, unrated, supported and inconclusive results, uncontrolled evidence, duplicates, preference pooling, staleness, determinism, AI-summary privacy, corrupt input), `tests/gui_v2/test_next_test_surface_830.py` (view model, real Tk dialog, worker routing) | Temp stores and fake observations; no backend, model, GPU or network |
 | Curation | `tests/curation/` | In-memory models |
 | Video experiment review evidence | `tests/learning/test_video_quality_review_211.py`, `test_video_review_service_211.py` | Temp record files and a temp `JobRepository`; no `data/learning` |
 | Review metadata and sidecars | `tests/review/` | Temp image dirs |
