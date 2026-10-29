@@ -150,8 +150,10 @@ def build_argv(
     return argv
 
 
-def assert_argv_allowed(argv: list[str]) -> None:
-    """Raise if any flag-shaped token is not in the closed vocabulary (values may be negative numbers or paths)."""
+def assert_argv_allowed(argv: list[str], allowed: frozenset[str] = ALLOWED_FLAGS) -> None:
+    """Raise if any flag-shaped token is not in the closed vocabulary (values may be negative numbers or paths).
+
+    ``allowed`` defaults to the production vocabulary; a qualification contract may pass its own closed superset."""
 
     for token in argv:
         if token in FORBIDDEN_FLAGS:
@@ -160,7 +162,7 @@ def assert_argv_allowed(argv: list[str]) -> None:
     while index < len(argv):
         token = argv[index]
         if token.startswith("-") and not _is_number(token):
-            if token not in ALLOWED_FLAGS:
+            if token not in allowed:
                 raise ValueError(f"runtime flag is not allow-listed: {token}")
             # Every allowed flag except the switches takes exactly one value; skip it so a path is never read as a flag.
             if token not in _SWITCHES:
