@@ -53,7 +53,12 @@ from tools.qualification.ai111.plan import digest, frozen_plan
 from tools.qualification.ai111.scoring import summarize_arm
 
 # Independent literal copies, so editing lfm3_contract.py alone cannot silently move any of these.
-GOLDEN_CONTRACT_SHA256 = "b06fe2d76b51a1ec7f53cfe10ae3858fc4260de18c14ee99272b1f2f23fe706b"
+GOLDEN_CONTRACT_SHA256 = "41e65d6769cd4090dc0e8f978014c97e82fd23c3351261f3ff276efd8a129f60"
+# Measured from the S0 download of llama-b11960-bin-win-cpu-x64.zip (hashed in memory, never extracted).
+GOLDEN_B11960_MEMBERS = {
+    "llama-cli.exe": "02c8fcdbf3e89c0c36757ee0cffb091844181a43d15995699bb6f3400f932de0",
+    "llama-completion.exe": "2b4759ec5f0343d7421cae98fadd6d2de1c9bdae64cb128da52628606ab35090",
+}
 GOLDEN_STAGE_A_IDS_SHA256 = "d0bbf7feabc5bd533130d2ab044cbe351218a47b2a0c7dd7edbbc5eb8e97d030"
 GOLDEN_QWEN = {
     "screening_plan_sha256": "17814e4050049323dc4f5206417bac67f94307d7791ce580af2948e2310df338",
@@ -272,9 +277,42 @@ def test_runtime_selection_is_b11960_and_b11938_is_evaluated_but_not_selected() 
     assert "below the publisher's stated minimum" in candidates["b11938"]["lfm3_text_support"]
     for tag, entry in candidates.items():
         assert lfm3.runtime_problems(entry, require_members=False) == [], tag
-        assert lfm3.runtime_problems(entry, require_members=True) == [
-            "launchable member hashes are not recorded"
-        ]
+    assert lfm3.runtime_problems(candidates["b11960"], require_members=True) == []
+    assert lfm3.runtime_problems(candidates["b11938"], require_members=True) == [
+        "launchable member hashes are not recorded"
+    ]
+
+
+def test_the_two_contracts_are_separate_and_the_runtime_floor_is_b11960_or_later() -> None:
+    assert set(DOC["separation"]) == {"qwen", "lfm3"}
+    assert "b11840" in DOC["separation"]["qwen"] and "only reads them" in DOC["separation"]["qwen"]
+    assert "b11960" in DOC["separation"]["lfm3"]
+    assert DOC["runtime"]["minimum_tag"] == "b11960"
+    assert (
+        "later" in DOC["runtime"]["later_build_rule"]
+        and "new frozen contract" in DOC["runtime"]["later_build_rule"]
+    )
+    assert int(DOC["runtime"]["selected"][1:]) >= int(DOC["runtime"]["minimum_tag"][1:])
+
+
+def test_the_measured_b11960_archive_contents_are_pinned() -> None:
+    entry = DOC["runtime"]["candidates"]["b11960"]
+    assert entry["members"] == GOLDEN_B11960_MEMBERS
+    files = entry["files"]
+    assert len(files) == 51 and all(n.endswith((".exe", ".dll")) and "/" not in n for n in files)
+    assert all(files[n] == h for n, h in GOLDEN_B11960_MEMBERS.items())
+    assert {"llama-cli-impl.dll", "llama-completion-impl.dll", "llama.dll", "ggml.dll"} <= set(
+        files
+    )
+    assert not any(t in n for n in files for t in ("cuda", "vulkan", "hip", "sycl", "opencl"))
+    assert {"ggml-rpc.dll", "ggml-rpc-server.exe"} <= set(
+        files
+    )  # present, so the monitoring rule must name them
+    assert (
+        "ggml-rpc" in DOC["monitoring"]["gpu"]["rpc_backend"]
+        and "--rpc" in DOC["monitoring"]["gpu"]["rpc_backend"]
+    )
+    assert any("ggml_rpc" in b for b in DOC["known_blockers"])
 
 
 @pytest.mark.parametrize(
@@ -296,6 +334,18 @@ def test_runtime_selection_is_b11960_and_b11938_is_evaluated_but_not_selected() 
         lambda e: e.update(members={"evil.exe": "a" * 64}),
         lambda e: e.update(members={"llama-cli.exe": "not-a-hash"}),
         lambda e: e.update(members="yes"),
+        lambda e: e.update(members={"llama-cli.exe": "a" * 64}),  # differs from the measured pin
+        lambda e: e.update(files={}),
+        lambda e: e.update(files="x"),
+        lambda e: e["files"].update(
+            {"evil.exe": "a" * 64}
+        ),  # a loadable file the archive does not hold
+        lambda e: e["files"].update({"notes.txt": "a" * 64}),
+        lambda e: e["files"].update({"llama.dll": "not-a-hash"}),
+        lambda e: e["files"].pop("llama-completion.exe"),
+        lambda e: e["files"].update(
+            {"llama-completion.exe": "e" * 64}
+        ),  # member disagrees with the file map
     ],
 )
 def test_runtime_metadata_fails_closed(mutation: Any) -> None:
@@ -304,10 +354,13 @@ def test_runtime_metadata_fails_closed(mutation: Any) -> None:
     assert lfm3.runtime_problems(entry, require_members=False)
 
 
-def test_launchable_members_must_be_recorded_hashes_of_named_members() -> None:
-    entry = copy.deepcopy(DOC["runtime"]["candidates"]["b11960"])
-    entry["members"] = {"llama-completion.exe": "a" * 64, "llama-cli.exe": "b" * 64}
+def test_a_never_measured_candidate_needs_consistent_member_and_file_maps_before_use() -> None:
+    entry = copy.deepcopy(DOC["runtime"]["candidates"]["b11938"])
+    entry["files"] = {"llama-completion.exe": "a" * 64, "llama.dll": "b" * 64}
+    entry["members"] = {"llama-completion.exe": "a" * 64}
     assert lfm3.runtime_problems(entry, require_members=True) == []
+    entry["members"] = {"llama-completion.exe": "c" * 64}
+    assert lfm3.runtime_problems(entry, require_members=True)
 
 
 # -- closed command line ------------------------------------------------------------------------------------------------------
@@ -448,7 +501,6 @@ def test_an_approval_for_one_step_or_for_qwen_never_satisfies_another() -> None:
 def _ready_evidence(stage: str) -> dict[str, Any]:
     steps = lfm3._STAGE_STEPS[stage]
     runtime = copy.deepcopy(DOC["runtime"]["candidates"]["b11960"])
-    runtime["members"] = {"llama-completion.exe": "a" * 64}
     evidence: dict[str, Any] = {
         "approvals": {step: _approval(step) for step in steps},
         "license": {
@@ -489,7 +541,7 @@ def test_readiness_refuses_each_missing_or_forged_item() -> None:
     assert lfm3.readiness_blockers("S4_stage_b", {**base, "license": DOC["license"]}) == [
         "license_acknowledged"
     ]
-    no_members = {**base, "runtime": DOC["runtime"]["candidates"]["b11960"]}
+    no_members = {**base, "runtime": {**base["runtime"], "members": {}, "files": {}}}
     assert lfm3.readiness_blockers("S4_stage_b", no_members) == ["runtime_members_recorded"]
     short = lfm3.help_flag_report("--offline", truncated=False)
     assert lfm3.readiness_blockers("S4_stage_b", {**base, "help_report": short}) == [
@@ -508,8 +560,8 @@ def test_stage_b_needs_everything_stage_a_needs_and_known_blockers_are_recorded(
         "stage_a_report_and_d12a_defaults_pinned_to_the_qwen_screening_plan_and_b11840",
         "derive_runtime_build_without_a_named_member_does_not_pin_the_member_hash",
         "stage_b_arm_exceeds_one_1024mb_capture_and_the_split_and_record_merge_are_undefined",
-        "license_not_acknowledged",
         "owner_approvals_absent",
+        "b11960_archive_holds_ggml_rpc_dll_and_rpc_server_exe_so_zero_connections_must_be_shown_by_d12a_and_the_capture",
     } <= set(lfm3.KNOWN_BLOCKERS)
 
 
@@ -520,13 +572,11 @@ FULL_BY_ID = {c.case_id: c for c in FULL}
 STAGE_A = [FULL_BY_ID[i] for i in lfm3.stage_a_case_ids()]
 BY_ID = {c.case_id: c for c in STAGE_A}
 ARM = "lfm3-1.7b-q4_k_m-liquidai@lfm3_vendor"
-MEMBER_SHA = "c" * 64
+MEMBER_SHA = GOLDEN_B11960_MEMBERS["llama-completion.exe"]
 
 
 def _doc_with_members() -> dict[str, Any]:
-    document = copy.deepcopy(DOC)
-    document["runtime"]["candidates"]["b11960"]["members"] = {"llama-completion.exe": MEMBER_SHA}
-    return document
+    return copy.deepcopy(DOC)
 
 
 def _row(case: Any, index: int, document: dict[str, Any], **overrides: Any) -> dict[str, Any]:
@@ -667,8 +717,15 @@ def test_records_must_be_attributable_to_contract_arm_model_sampling_runtime_and
     assert lfm3.record_problems(missing, document, ARM)
 
 
-def test_the_frozen_document_has_no_recorded_members_so_no_record_can_be_attributed_yet() -> None:
-    assert any("recorded member" in p for p in lfm3.record_problems(_rows(document=DOC), DOC, ARM))
+def test_a_record_naming_the_other_launchable_member_is_still_a_recorded_member_but_a_foreign_one_is_not() -> (
+    None
+):
+    other = GOLDEN_B11960_MEMBERS["llama-cli.exe"]
+    assert lfm3.record_problems(_rows(document=DOC, runtime_member_sha256=other), DOC, ARM) == []
+    assert any(
+        "recorded member" in p
+        for p in lfm3.record_problems(_rows(document=DOC, runtime_member_sha256="f" * 64), DOC, ARM)
+    )
 
 
 def test_record_sets_must_be_complete_and_unique() -> None:

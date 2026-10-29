@@ -17,7 +17,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from src.ai_assist.argv import (
@@ -49,7 +49,7 @@ QWEN_FROZEN: dict[str, str] = {
 
 #: The digest of the frozen contract. ``validate_contract`` refuses any document that differs, so editing a value here
 #: needs a deliberate second edit of this constant (and fresh owner approvals, which quote it).
-FROZEN_CONTRACT_SHA256 = "b06fe2d76b51a1ec7f53cfe10ae3858fc4260de18c14ee99272b1f2f23fe706b"
+FROZEN_CONTRACT_SHA256 = "41e65d6769cd4090dc0e8f978014c97e82fd23c3351261f3ff276efd8a129f60"
 
 PUBLISHER_REPO = "LiquidAI/LFM3-1.7B"
 PUBLISHER_REVISION = "ac2586a34f1a1c03329dbdcdefabd8b6478ddaa7"
@@ -128,8 +128,70 @@ def _candidate(quantization: str) -> dict[str, Any]:
 
 CANDIDATES: tuple[dict[str, Any], ...] = (_candidate("Q4_K_M"), _candidate("Q8_0"))
 
+#: Every loadable member of the b11960 CPU archive and its SHA-256, hashed in memory from the S0 download (nothing was
+#: extracted or executed) with the rule of ``physical.derive_runtime_build`` (suffix in the active set). Measured
+#: 2026-10-29; the evidence record is outside the repository.
+B11960_FILES: dict[str, str] = {
+    "ggml-base.dll": "200cd9b6f0a7934c2e1c85e55289d5498332713321b03e83eb2ae3da5eeb6137",
+    "ggml-cpu-alderlake.dll": "8ae4c14de9eeb5528e42cff69ed8485e6cd0e3f8601837add873a9d12199ca95",
+    "ggml-cpu-cannonlake.dll": "779a9d0ede6215fba8a00fb680c1295dd62836f9d8a124437d48f9c086fc1f07",
+    "ggml-cpu-cascadelake.dll": "71f6275d8aa7df86545975e02510e10280abfcc274ae419dee898746a5b2ce1b",
+    "ggml-cpu-cooperlake.dll": "c0b3f9445cbd4490504c13d06e89b25bdbe9dea73784fc62c0c10ae7069de6cb",
+    "ggml-cpu-haswell.dll": "0bc8209ebe520b43d8549db7d45ca87382df88c3a8b238f3dda42d96e2af178e",
+    "ggml-cpu-icelake.dll": "81f86f655c82dfe330f9ee269b97a2b21352e5e876bd385d48bc61d9a6ca230b",
+    "ggml-cpu-ivybridge.dll": "52f262a610ac189d0375472c66c46b7b366d618916ed67a2b119e69023c3f943",
+    "ggml-cpu-piledriver.dll": "340c9dc4c5618fa4f89e6311c31f2f472d3277a87858c79b3c44890b0e92d1e7",
+    "ggml-cpu-sandybridge.dll": "6251d2dc50745bad1d0f16ea95a4484ef5d8c7cb49b5a4a33af85d199c08be61",
+    "ggml-cpu-sapphirerapids.dll": "cdfdc20cb7f953f87e61ab90e234c864df4e2c2615f5651bd83a4cf27fdc4e3d",
+    "ggml-cpu-skylakex.dll": "da5c7c86df8409c08fb748ed5596eba65285ead7747581daa124a7fff2f65704",
+    "ggml-cpu-sse42.dll": "00efeb321bb728616cde5719bab06ea575679f7ca4967367faa70fd5ca1c8ba6",
+    "ggml-cpu-x64.dll": "af7233344eec5587d531b4e875ec5bf2b1aa62c2be57b657f69cca503f0db918",
+    "ggml-cpu-zen4.dll": "4ebbee0eb0c5a4e9e3c3b437d7a2876ede8f1d3e00526dad33db50f39f46e831",
+    "ggml-rpc-server.exe": "8dbeb59b8772d101443f11d1fbe230fd59e98b2d4c1e6eb52d8c0e96e2505eef",
+    "ggml-rpc.dll": "c28c2da0de23d39a7aca2dbccf20215087bbab2bd26caea38dc782698f6dc070",
+    "ggml.dll": "d2e63157b90c0fd15f010fb2952d032d9f3296b8406b78ff0950211cc144705b",
+    "libomp.dll": "a12116ba72d1d6820407cf30be23da04ce79d6bb8a71a5ee71759c5a1faa6f1c",
+    "llama-batched-bench-impl.dll": "f826a0ec3f4ea79d19c4c16594bd5e0e1e7941d845b65b6580be926548fff389",
+    "llama-batched-bench.exe": "a2b698b5f78e036324b799036fa9f0bf8cead4c2714f4dbe731edf984b9c569d",
+    "llama-bench-impl.dll": "a2ce853eaae3c165da85643d6cb92c3bb043f1aab4ac3c3da60bacab3871752e",
+    "llama-bench.exe": "b815771c315315b0dd179d5057262112035683308d0cf4eebcf3bf418de39e6c",
+    "llama-cli-impl.dll": "2e4aa4b28dffe02fdc1022621e1ce1955bed33f4b2de96732d01992fbc5ae42f",
+    "llama-cli.exe": "02c8fcdbf3e89c0c36757ee0cffb091844181a43d15995699bb6f3400f932de0",
+    "llama-common.dll": "34370fd48c31112b2ebe4e7bb234747c1a9b39325a29e61302659c525a6049d9",
+    "llama-completion-impl.dll": "db9ea9071f4fa4954a05dd91ebb4c70d6294ff359437a2e2fe639c0b17374601",
+    "llama-completion.exe": "2b4759ec5f0343d7421cae98fadd6d2de1c9bdae64cb128da52628606ab35090",
+    "llama-connect.exe": "9f2bdd778f96971995a80add8d6b2478c156f799933337a19dbf80cdaad21b1d",
+    "llama-fit-params-impl.dll": "afaa9591c4112bcd6cc419a323c6d7aed5ec2134e0a2fcf5abf0915beaead2a9",
+    "llama-fit-params.exe": "e6682185f02e0bbf00121cc33081fdacdb8db2f79307585de33de21fca39a5de",
+    "llama-gemma3-cli.exe": "15c385e5b02617acf9b776d2f376897037e03fc8f94af1b67c8f59fce4e30773",
+    "llama-gguf-split.exe": "bc1e7236104fb7afc8bd2594c3dab583b7f251e81eed6ef2fed3b094435b7ad1",
+    "llama-imatrix.exe": "c61923126281f1abf6f505123761ea344cdedbaff09cac2c15e8250e7a27e476",
+    "llama-llava-cli.exe": "15c385e5b02617acf9b776d2f376897037e03fc8f94af1b67c8f59fce4e30773",
+    "llama-minicpmv-cli.exe": "15c385e5b02617acf9b776d2f376897037e03fc8f94af1b67c8f59fce4e30773",
+    "llama-mtmd-cli.exe": "5073109b15d7d19fd3cc4c23bdbdc2f3dfdae39a6410d80ea6e7b6929eb30b3a",
+    "llama-mtmd-debug.exe": "ee9e0025689fb28a3433e019f98cd57d5eb4f12f97c21795965945cf0a75808d",
+    "llama-perplexity-impl.dll": "c74f4c51d927e626528dc14c1a82e488e408478d2cfe506cb55848aaf863d570",
+    "llama-perplexity.exe": "a5392a06bb9163caa54b6ccae3f17c6868c6279d2d15a2e8114533aeb159a9d8",
+    "llama-quantize-impl.dll": "42a1ac2b1b2d4db4d4cfa389b64e57dc08e3f7f7f0b2bbadf65196696e2b0e9f",
+    "llama-quantize.exe": "3c045bd055736deba6713cd577552917e556e90f4de8757beb42396891cb91d0",
+    "llama-qwen2vl-cli.exe": "f440829cbea406f0911739bc8c506026d21e7903208ec953103bcda06b4555a0",
+    "llama-results.exe": "7b01c2871c209f8e610207bcc6992d551d843603fbc2e78e9117fd4fafc5f23f",
+    "llama-server-impl.dll": "0b329dcfdece6a43f34d0554dec5ca0cc2efe6ee23d5aabd8141c51487668564",
+    "llama-server.exe": "81f65c6681d66099e5d48757aa2c050ba958dc43816e584f0bb4181eb7c910d8",
+    "llama-tokenize.exe": "9b4ab318e9842c08f0a349b7da18108090ff7ee53733b8524df3be0894ff6d90",
+    "llama-tts.exe": "eb76a870d616bfd36a21870efabcb93e34d399ab444d2e4e374e881c9856bf68",
+    "llama.dll": "af13ed8cb1454a80689dbd390310995b6c4b23333e096152453fe6d0fef17356",
+    "llama.exe": "e07130143528e649d08bcbbe191ff630e5f12317b9ea13efd4b95e5c32b627f1",
+    "mtmd.dll": "e82d563ae9dad225a3d15d0f189e046909713e26759ae9a046f89430bc845bd3",
+}
+B11960_MEMBERS: dict[str, str] = {
+    "llama-cli.exe": B11960_FILES["llama-cli.exe"],
+    "llama-completion.exe": B11960_FILES["llama-completion.exe"],
+}
+
 #: llama.cpp CPU x64 Windows builds. ``asset_sha256`` is the GitHub release asset ``digest`` field (computed by GitHub at
-#: upload; it is not a signature or attestation). Per-member hashes need the archive and are therefore NOT recorded.
+#: upload; it is not a signature or attestation). ``files`` maps every loadable archive member to its SHA-256 and ``members``
+#: the launchable subset; both are measured for b11960 only, b11938 was never downloaded.
 RUNTIME_CANDIDATES: dict[str, dict[str, Any]] = {
     "b11960": {
         "repository": "https://github.com/ggml-org/llama.cpp",
@@ -143,7 +205,8 @@ RUNTIME_CANDIDATES: dict[str, dict[str, Any]] = {
         "compute": "cpu",
         "source_url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-win-cpu-x64.zip",
         "selected": True,
-        "members": {},  # launchable member name -> SHA-256; unknown until the archive is hashed
+        "members": B11960_MEMBERS,
+        "files": B11960_FILES,
         "lfm3_text_support": "yes: the LiquidAI model card names b11960 (v0.8.0) as the minimum for LFM3-1.7B-GGUF",
         "reason": (
             "The publisher's own stated minimum. It also carries the later LFM3-family follow-ups through b11960. "
@@ -162,7 +225,8 @@ RUNTIME_CANDIDATES: dict[str, dict[str, Any]] = {
         "compute": "cpu",
         "source_url": "https://github.com/ggml-org/llama.cpp/releases/download/b11938/llama-b11938-bin-win-cpu-x64.zip",
         "selected": False,
-        "members": {},  # launchable member name -> SHA-256; unknown until the archive is hashed
+        "members": {},  # never downloaded, so unmeasured
+        "files": {},
         "lfm3_text_support": (
             "architecture present: its tag commit is 'model : add LiquidAI/LFM3-1.7B and LiquidAI/LFM3-VL-2B (#31252)', "
             "but it is below the publisher's stated minimum and no one has loaded the shipped GGUFs on it"
@@ -174,9 +238,29 @@ RUNTIME_CANDIDATES: dict[str, dict[str, Any]] = {
     },
 }
 SELECTED_RUNTIME = "b11960"
+MINIMUM_RUNTIME_TAG = "b11960"
+LATER_BUILD_RULE = (
+    "b11960 or any later llama.cpp build is acceptable in principle, but only an exact, measured tag is ever run: a later "
+    "build needs its own pinned candidate (archive and per-file hashes) in a new frozen contract version and fresh approvals"
+)
+#: Two contracts, kept apart: the Qwen evidence is never re-pinned or edited by the LFM3 contract.
+SEPARATION: dict[str, str] = {
+    "qwen": (
+        "Frozen and unchanged: the screening plan, the final plan, the 460-case corpus and their digests (qwen_preserved), "
+        "pinned to llama.cpp b11840 and the Qwen sampling. This contract only reads them."
+    ),
+    "lfm3": (
+        "This document: LFM3 candidates and the runtime floor b11960 (or a later pinned build). Every arm it defines, the "
+        "matched Qwen comparators included, runs on the LFM3 runtime so that runtime is not a confounder; that does not "
+        "alter the Qwen contract."
+    ),
+}
 
 #: The only comparator pins (read from the committed registry at call time, never edited here).
 #: The archive members the harness may ever launch (names only; their hashes are recorded after S2).
+_ACTIVE_SUFFIXES = frozenset(
+    {".exe", ".dll", ".bat", ".cmd", ".ps1", ".py", ".sh", ".so", ".dylib"}
+)
 LAUNCHABLE_NAMES: frozenset[str] = frozenset({"llama-completion.exe", "llama-cli.exe"})
 COMPARATORS: dict[str, str] = {
     "lfm3-1.7b-q4_k_m-liquidai": "qwen3.5-4b-q4_k_m-unsloth",
@@ -277,6 +361,11 @@ MONITORING: dict[str, Any] = {
         "ngl": 0,
         "environment": "CUDA_VISIBLE_DEVICES=-1",
         "runtime_members": "no ggml-cuda, ggml-vulkan, ggml-hip, ggml-sycl or ggml-opencl member may be present",
+        "rpc_backend": (
+            "the b11960 archive holds ggml-rpc.dll and ggml-rpc-server.exe, which the backend scan may load from the "
+            "runtime directory: --rpc stays forbidden, the child environment is scrubbed, ggml-rpc-server.exe is never "
+            "launched, and zero connections (loopback included) must be shown by D12a and every capture"
+        ),
         "vram": "no per-process GPU attribution exists in the repository; the only control is the existing nvidia-smi probe (global memory.used growth under 2048 MiB since its first reading, read before each arm; unreadable = stop)",
     },
     "memory": {
@@ -344,9 +433,8 @@ APPROVAL_STEPS: dict[str, dict[str, Any]] = {
 PROMOTION = "registry and manifest promotion (qualified=true) and enabling Suggest are outside this contract"
 
 KNOWN_BLOCKERS: tuple[str, ...] = (
-    "launchable_member_hashes_unrecorded_for_b11960",
     "harness_pinned_to_b11840_single_runtime_single_sampling",
-    "license_not_acknowledged",
+    "b11960_archive_holds_ggml_rpc_dll_and_rpc_server_exe_so_zero_connections_must_be_shown_by_d12a_and_the_capture",
     "d12a_b11960_not_run",
     "protected_system_python_and_capture_control_copy_absent",
     "live_canary_proof_for_current_tool_hashes_absent",
@@ -500,7 +588,10 @@ def contract(registry_path: Path = plan_module.REGISTRY_PATH) -> dict[str, Any]:
         "qwen_preserved": dict(QWEN_FROZEN),
         "license": dict(LICENSE),
         "candidates": [json.loads(json.dumps(c)) for c in CANDIDATES],
+        "separation": SEPARATION,
         "runtime": {
+            "minimum_tag": MINIMUM_RUNTIME_TAG,
+            "later_build_rule": LATER_BUILD_RULE,
             "selected": SELECTED_RUNTIME,
             "candidates": json.loads(json.dumps(RUNTIME_CANDIDATES)),
         },
@@ -632,13 +723,26 @@ def runtime_problems(entry: Mapping[str, Any], *, require_members: bool) -> list
         problems.append("asset SHA-256 or tag commit is not a full lowercase digest")
     if not isinstance(entry.get("bytes"), int) or entry["bytes"] <= 0:
         problems.append("asset size is not a positive integer")
-    members = entry.get("members")
+    members, files = entry.get("members"), entry.get("files")
     if not isinstance(members, dict) or any(
         name not in LAUNCHABLE_NAMES or not SHA256.match(str(value))
         for name, value in members.items()
     ):
         problems.append("launchable member map is malformed")
-    elif require_members and not members:
+        return problems
+    if not isinstance(files, dict) or any(
+        PurePosixPath(str(name)).suffix.lower() not in _ACTIVE_SUFFIXES
+        or not SHA256.match(str(value))
+        for name, value in files.items()
+    ):
+        problems.append("loadable file map is malformed")
+        return problems
+    if any(files.get(name) != value for name, value in members.items()):
+        problems.append("a launchable member is missing from, or differs in, the loadable file map")
+    for key, recorded in (("members", members), ("files", files)):
+        if known[key] and recorded != known[key]:
+            problems.append(f"runtime {key} differ from the measured pinned values")
+    if require_members and (not members or not files):
         problems.append("launchable member hashes are not recorded")
     return problems
 
