@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-636 of 791 modules have a docstring.
+643 of 798 modules have a docstring.
 
 ## src/
 
@@ -279,6 +279,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
 - `model_evidence_next_test.py`: Adapter between the Model Evidence window and the read-only Learning intelligence service
 - `model_evidence_proposals.py`: Proposal draft/Preview adapter; never binds JobService or changes the visible Learning state
+- `qualification_review.py`: Worker-only qualification follow-up validation through existing catalog/compiler seams
 - `video_workspace_handoff.py`: (no docstring)
 
 ## src/gui/dialogs/
@@ -410,6 +411,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_model_matrix_design_frame.py`: Prompt x Model Matrix authoring: the Prompt Slot candidate editor with the matrix's own bounds and shared-set…
 - `prompt_slot_design_frame.py`: Ordered Prompt Slot authoring inside the existing scrollable Learning Design surface
 - `prompt_tab_frame_v2.py`: Prompt Tab Frame v2.6 - Main prompt editing interface with matrix integration
+- `qualification_rating_card.py`: One image's existing overall/details rating controls in guided qualification review
+- `qualification_review_window.py`: Guided Compare & Rate over verified qualification pairs and existing image ratings
 - `review_tab_frame_v2.py`: (no docstring)
 - `stage_cards_panel.py`: (no docstring)
 - `stage_cards_panel_v2.py`: (no docstring)
@@ -475,6 +478,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_adaptation_preview.py`: Toolkit-neutral preview model for the explicit Prompt-tab "Adapt for Target" action (PR-IMG-130C)
 - `prompt_optimizer_view.py`: Read-only optimizer illustrations and frozen-job evidence; no compilation or I/O
 - `prompt_template_view.py`: Toolkit-neutral presentation of the cinematic template editor (GUI-540)
+- `qualification_review_session.py`: Small qualification review presenter over the existing rating/draft writer
 - `recommendation_targets.py`: Toolkit-neutral mapping from Learning parameters to executable operator controls
 - `reference_map_flow.py`: Toolkit-neutral state of the "Create map from image" task (PR-IMG-CNET-230)
 - `style_consistency_view.py`: Toolkit-neutral presentation of the Style Consistency selector (GUI-540)
@@ -591,6 +595,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_model_matrix_results.py`: Toolkit-neutral Prompt x Model results: the same ``GridModel`` the Two-Axis Grid view and contact sheet render
 - `prompt_slot_experiment.py`: Controlled, frozen one-slot prompt intent; canonical Matrix/adaptation remain authoritative
 - `qualification_batch.py`: Whole-selection preflight and bounded coordination over existing Learning admission
+- `qualification_followup.py`: Explicit create-only follow-up drafts through existing proposal and Learning authorities
+- `qualification_review.py`: Read-only qualification pairing and findings from frozen execution and saved ratings
 - `rating_schema.py`: (no docstring)
 - `recommendation_engine.py`: Automated Parameter Recommendation Engine (APRE)
 - `recommendation_summary.py`: Operator-facing reading of a ``RecommendationSet``: what, where, on what evidence, and what Apply may do
@@ -661,6 +667,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `job_models_v2.py`: Job models for V2 queue system
 - `klein_edit_reprocess.py`: FLUX.2 Klein single-reference edit as a normal Review/reprocess job (PR-IMG-116)
 - `last_run_store_v2_5.py`: (no docstring)
+- `learning_sample_evidence.py`: Forward artifact-to-observed-seed association at the existing image-save boundary
 - `matrix_expansion_plan.py`: Pure PromptPack Matrix expansion plan
 - `model_synchronizer.py`: Deterministic A1111 checkpoint synchronization for pipeline execution
 - `njr_core_v26.py`: Immutable eight-part Normalized Job Record contract for StableNew v2.6

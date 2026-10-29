@@ -5151,6 +5151,12 @@ class Pipeline:
             conditioning_config = config if config.get(OPENPOSE_SLOT_FIELD) is not None or config.get("controlnet_units") is not None else txt2img_config
             conditioning_field = "controlnet_units" if conditioning_config.get("controlnet_units") is not None else OPENPOSE_SLOT_FIELD
             wire_payload, conditioning_evidence = apply_conditioning(conditioning_config, payload)
+            from src.pipeline.learning_sample_evidence import managed_runtime_observation
+
+            learning_runtime_before = (
+                managed_runtime_observation(get_global_webui_process_manager())
+                if learning_sample_names else None
+            )
             response = self._generate_images_with_progress(
                 "txt2img",
                 wire_payload,
@@ -5287,6 +5293,15 @@ class Pipeline:
                 image_metadata["name"] = batch_image_name
                 image_metadata["path"] = str(image_path)
                 image_metadata["output_path"] = str(image_path)
+                if learning_sample_names:
+                    from src.pipeline.learning_sample_evidence import observed_sample
+
+                    sample = observed_sample(
+                        str(image_path), batch_idx, gen_info, num_images_received,
+                        str(getattr(self, "_current_job_id", "") or ""),
+                    )
+                    if sample is not None:
+                        image_metadata["learning_sample"] = sample
                 metadata_builder = self._build_image_metadata_builder(
                     image_path=image_path,
                     stage="txt2img",
@@ -5305,6 +5320,8 @@ class Pipeline:
                     continue
 
                 saved_paths.append(actual_path)
+                if image_metadata.get("learning_sample"):
+                    image_metadata["learning_sample"]["path"] = str(actual_path)
                 manifest_dir = output_dir / "manifests"
                 manifest_dir.mkdir(exist_ok=True, parents=True)
                 variant_manifest_path = manifest_dir / f"{actual_path.stem}.json"
@@ -5455,6 +5472,13 @@ class Pipeline:
                 output_paths=[str(path) for path in saved_paths],
             )
 
+            if learning_sample_names:
+                metadata["learning_samples"] = {
+                    "contract": "learning_samples/1",
+                    "runtime_before": learning_runtime_before,
+                    "runtime_after": managed_runtime_observation(get_global_webui_process_manager()),
+                    "samples": [m["learning_sample"] for _, m in saved_variants if m.get("learning_sample")],
+                }
             # Manifests already saved per-variant in the loop above
             self._record_stage_event("txt2img", "exit", 1, 1, False)
             return metadata

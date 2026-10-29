@@ -314,6 +314,21 @@ def _interpret_completion_evidence(variant: Any, experiment: Any, result: dict[s
         "requested_sample_count": sample_count,
         "observed_seed_vector": observed_vector or (actual_vector if controlled else []),
     }
+    # New completions carry explicit per-artifact backend response associations.
+    # Historical vectors/lists are never zipped to invent this proof.
+    samples = (
+        variant_payload.get("learning_samples")
+        or metadata.get("learning_samples")
+        or result.get("learning_samples")
+    )
+    if isinstance(samples, dict) and samples.get("contract") == "learning_samples/1":
+        variant.execution_metadata["qualification_samples"] = {
+            **copy.deepcopy(samples),
+            "experiment_id": experiment.experiment_id,
+            "variant_id": variant.variant_id,
+            "job_id": variant.job_id,
+            "snapshot_sha256": snapshot_digest(snapshot_json),
+        }
     if not has_seed_policy and not variable_reason:
         _logger.debug(
             "Learning seed validation skipped: no frozen policy for experiment=%s",

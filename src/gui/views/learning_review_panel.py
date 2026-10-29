@@ -88,6 +88,10 @@ class LearningReviewPanel(ttk.Frame):
             workspace_actions, text="Compare Selected", command=self._on_compare_selected
         )
         self.compare_button.pack(fill="x", pady=(4, 0))
+        self.qualification_button = ttk.Button(
+            workspace_actions, text="Compare & Rate", command=self._open_qualification_review
+        )
+        self.qualification_button.pack(fill="x", pady=(4, 0))
 
         # Right: rating first. Status and metadata describe the variant while comparing; the recommendations
         # are the outcome of the ratings and sit below them.
@@ -679,6 +683,9 @@ class LearningReviewPanel(ttk.Frame):
 
     def _on_compare_selected(self) -> None:
         """Open a bounded side-by-side comparison for selected variant samples."""
+        if self.current_experiment and self.current_experiment.metadata.get("evidence_proposal"):
+            self._open_qualification_review()
+            return
         selected = self.variant_summary_list.curselection()
         variants = list(getattr(self, "_workspace_variants", []) or [])
         chosen = [variants[index] for index in selected if 0 <= index < len(variants)]
@@ -724,6 +731,21 @@ class LearningReviewPanel(ttk.Frame):
                 ttk.Label(frame, text=f"Unable to load\n{Path(image_path).name}\n{exc}").grid(
                     row=1, column=0, sticky="nsew"
                 )
+
+    def _open_qualification_review(self) -> None:
+        from src.gui.views.qualification_review_window import QualificationReviewWindow
+
+        controller = self._get_learning_controller()
+        experiment = getattr(getattr(controller, "learning_state", None), "current_experiment", None)
+        if experiment is None or not experiment.metadata.get("evidence_proposal"):
+            self.feedback_label.configure(text="Open a qualification experiment from the Library first.")
+            return
+        self._capture_current_draft()
+        window = getattr(self, "_qualification_window", None)
+        if window is None or not window.winfo_exists():
+            self._qualification_window = QualificationReviewWindow(self)
+        else:
+            window.lift()
 
     def _update_metadata(self, variant: LearningVariant, experiment: Any | None) -> None:
         """Update the metadata display."""
