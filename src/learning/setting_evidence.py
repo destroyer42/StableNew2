@@ -110,6 +110,20 @@ def require_rating_proof(metadata: Mapping[str, Any], snapshot: Mapping[str, Any
         raise ValueError("Qualification tested-setting evidence conflicts with its rating")
 
 
+SCREENING_PAIRS = 6
+SCREENING_MIN_WINS = 5
+SCREENING_MIN_MEAN_IMPROVEMENT = 0.5
+
+
+def screening_supported(paired: list[float]) -> bool:
+    """The six-pair screening rule: it supports follow-up investigation only, never a general claim."""
+    return (
+        len(paired) == SCREENING_PAIRS
+        and sum(delta > 0 for delta in paired) >= SCREENING_MIN_WINS
+        and sum(paired) / SCREENING_PAIRS >= SCREENING_MIN_MEAN_IMPROVEMENT
+    )
+
+
 def inspect_experiment(
     experiment: Any, plan: list[Any], ratings: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -155,7 +169,7 @@ def inspect_experiment(
                     paired.append(bv - av)
     if len(paired) == 6:
         mean = sum(paired) / 6
-    supported = mean is not None and sum(delta > 0 for delta in paired) >= 5 and mean >= 0.5
+    supported = screening_supported(paired)
     return {
         "proposal": proposal,
         "variants": evidence,
