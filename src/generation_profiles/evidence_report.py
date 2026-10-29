@@ -28,6 +28,7 @@ def _redact(value: Any) -> Any:
                 "negative_prompt_text",
                 "baseline",
                 "baseline_config",
+                "prompt_source_context",
                 "path",
                 "sidecar_metadata",
             }
@@ -122,10 +123,23 @@ def validate_report(raw: Any) -> dict[str, Any]:
     for proposal in raw["proposals"]:
         if (
             not isinstance(proposal, dict)
-            or proposal.get("contract") != "qualification_proposal/1"
+            or proposal.get("contract")
+            not in {"qualification_proposal/1", "qualification_proposal/2"}
             or not isinstance(proposal.get("name"), str)
-            or proposal.get("status") not in {"draft", "blocked"}
-            or proposal.get("expected_images") not in {12, 15, 20}
+            or proposal.get("status")
+            not in (
+                {"draft", "blocked", "metadata_only"}
+                if proposal.get("contract") == "qualification_proposal/2"
+                else {"draft", "blocked"}
+            )
+            or (
+                proposal.get("expected_images") not in {12, 15, 20}
+                and not (
+                    proposal.get("contract") == "qualification_proposal/2"
+                    and proposal.get("status") in {"blocked", "metadata_only"}
+                    and proposal.get("expected_images") == 0
+                )
+            )
         ):
             raise ValueError("Invalid proposal report")
     if any(not isinstance(outcome, dict) for outcome in raw["outcomes"]) or any(
