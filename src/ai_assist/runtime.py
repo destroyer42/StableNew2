@@ -16,7 +16,14 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.ai_assist.argv import RunLimits, Sampling, build_argv, build_environment
+from src.ai_assist.argv import (
+    ALLOWED_FLAGS,
+    RunLimits,
+    Sampling,
+    assert_argv_allowed,
+    build_argv,
+    build_environment,
+)
 from src.ai_assist.contracts import AssistRequest, OutcomeCode
 from src.ai_assist.framing import FramingError, build_json_schema, render_prompt
 from src.ai_assist.manifests import Verification
@@ -31,6 +38,7 @@ STALE_SCRATCH_SECONDS = 3600.0
 
 CommandFactory = Callable[[Path, list[str]], Sequence[str]]
 Runner = Callable[..., ProcessOutcome]
+ArgvBuilder = Callable[[Path, Path, Path, RunLimits, Sampling], list[str]]
 
 
 def default_command(executable: Path, argv: list[str]) -> Sequence[str]:
@@ -57,12 +65,16 @@ class AiRuntime:
         environ: Mapping[str, str] | None = None,
         runner: Runner = run_bounded,
         clock: Callable[[], float] = time.monotonic,
+        argv_builder: ArgvBuilder = build_argv,
+        allowed_flags: frozenset[str] = ALLOWED_FLAGS,
     ) -> None:
         self._root = root
         self._command_factory = command_factory
         self._environ = os.environ if environ is None else environ
         self._runner = runner
         self._clock = clock
+        self._argv_builder = argv_builder
+        self._allowed_flags = allowed_flags
 
     def run_once(
         self,
@@ -107,7 +119,10 @@ class AiRuntime:
             schema_file.write_text(
                 json.dumps(schema, sort_keys=True), encoding="utf-8", newline="\n"
             )
-            argv = build_argv(verification.model_path, prompt_file, schema_file, limits, sampling)
+            argv = self._argv_builder(
+                verification.model_path, prompt_file, schema_file, limits, sampling
+            )
+            assert_argv_allowed(argv, self._allowed_flags)
             command = self._command_factory(verification.executable, argv)
             runtime_root = runtime_dir(self._root, verification.build.build_id)
             observation_options = {"observe": observe} if observe is not None else {}

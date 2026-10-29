@@ -298,7 +298,14 @@ def build_report(
     plan: Mapping[str, Any] | None = None,
     capture_analysis: Mapping[str, Any] | None = None,
     d12a_capture_analysis: Mapping[str, Any] | None = None,
+    contract_spec: Any = None,
 ) -> dict[str, Any]:
+    if contract_spec is not None and contract_spec.selector == "lfm3-v1":
+        from tools.qualification.ai111.stage_a_contract import build_contract_report
+
+        return build_contract_report(
+            evidence, contract_spec, d12a_result, capture_analysis, d12a_capture_analysis
+        )
     plan = plan or plan_module.frozen_plan()
     manifest = _json(evidence / "execution-manifest.json")
     result = _json(evidence / "result.json") or {}
@@ -490,6 +497,8 @@ def _fmt(value: float | None) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--contract", choices=("qwen-frozen", "lfm3-v1"), default="qwen-frozen")
+    parser.add_argument("--contract-sha256")
     parser.add_argument("--evidence", type=Path, required=True, help="the physical-A directory")
     parser.add_argument("--d12a", type=Path, help="the D12a result.json")
     parser.add_argument(
@@ -502,11 +511,19 @@ def main(argv: list[str] | None = None) -> int:
     d12a = _json(args.d12a) if args.d12a else None
     capture = _json(args.capture_analysis) if args.capture_analysis else None
     d12a_capture = _json(args.d12a_capture_analysis) if args.d12a_capture_analysis else None
-    report = build_report(args.evidence, d12a, None, capture, d12a_capture)
+    from tools.qualification.ai111.execution_contract import select_contract
+
+    spec = select_contract(args.contract, args.contract_sha256)
+    report = build_report(args.evidence, d12a, None, capture, d12a_capture, spec)
     with (args.evidence / "stage-a-report.json").open("x", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, sort_keys=True)
-    (args.evidence / "stage-a-report.md").write_text(render_markdown(report), encoding="utf-8")
-    print(render_markdown(report))
+    rendered = (
+        render_markdown(report)
+        if args.contract == "qwen-frozen"
+        else json.dumps(report, indent=2, sort_keys=True)
+    )
+    (args.evidence / "stage-a-report.md").write_text(rendered, encoding="utf-8")
+    print(rendered)
     return 1 if report["attribution_problems"] else 0
 
 
