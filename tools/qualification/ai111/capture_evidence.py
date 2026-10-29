@@ -10,7 +10,16 @@ from pathlib import Path
 from typing import Any
 
 from tools.qualification.ai111 import capture_control as control
-from tools.qualification.ai111.capture_analysis import ANALYZER_VERSION, analyzer_sha256
+from tools.qualification.ai111.capture_analysis import (
+    ANALYZER_VERSION,
+    analyzer_sha256,
+    read_window_log,
+)
+from tools.qualification.ai111.execution_evidence import (
+    RETROSPECTIVE_HOST,
+    childless_record_problems,
+    prelaunch_only,
+)
 from tools.qualification.ai111.plan import digest
 
 
@@ -43,7 +52,7 @@ def capture_problems(
     expected = {
         "capture_id": capture_id,
         "run_id": run_id,
-        "kind": "qualification_capture",
+        "kind": "canary_capture" if prelaunch_only(rows) else "qualification_capture",
         "verdict": "PASS",
         "analyzer_version": ANALYZER_VERSION,
         "analyzer_sha256": analyzer_sha256(),
@@ -97,16 +106,49 @@ def capture_problems(
     if len(real) != sum(r.get("canary") is False for r in requests):
         problems.append("duplicate capture request number")
     expected_numbers = []
+    log = read_window_log(directory / "windows.jsonl")
+    header = log.header or {}
+    problems += log.problems
+    if not log.ended or log.end_failed:
+        problems.append("capture closing evidence incomplete")
+    if any(
+        header.get(k) != value
+        for k, value in {
+            "capture_id": capture_id,
+            "run_id": run_id,
+            "monitor_implementation": RETROSPECTIVE_HOST,
+            "host": analysis.get("host"),
+            "tool_sha256": control.tool_sha256(),
+            "provider_config_sha256": control.provider_config_sha256(),
+        }.items()
+    ) or not analysis.get("host"):
+        problems.append("retrospective monitor provenance/identity not proved")
+    raw = {r.get("number"): r for r in log.requests if r.get("canary") is False}
+    if set(raw) != set(real):
+        problems.append("analyzer and raw owned windows differ")
     for row in rows:
         elapsed = row.get("elapsed_ms")
         if type(elapsed) not in (int, float) or not math.isfinite(elapsed) or elapsed < 0:
             problems.append("request elapsed measurement missing/invalid")
         numbers = row.get("monitor_request_numbers")
+        if row.get("execution_state") == "not_launched":
+            problems += childless_record_problems(row)
+            if (
+                row.get("monitor_kind") != RETROSPECTIVE_HOST
+                or row.get("synthetic") is True
+                or row.get("capture_id") != capture_id
+                or row.get("run_id") != run_id
+            ):
+                problems.append("childless request capture provenance not proved")
+            continue
         if not isinstance(numbers, list) or len(numbers) != 1:
             problems.append("record has no unique observed execution window")
             continue
         expected_numbers.extend(numbers)
         observed = real.get(numbers[0], {})
+        window = raw.get(numbers[0], {})
+        if not owned_window_verified(window, observed, row):
+            problems.append("raw process ownership or monitored interval incomplete")
         if (
             observed.get("executable_sha256") != row.get("runtime_member_sha256")
             or observed.get("executable") != row.get("executable")
@@ -118,7 +160,7 @@ def capture_problems(
             or row.get("active_after_teardown") != 0
             or row.get("capture_id") != capture_id
             or row.get("run_id") != run_id
-            or row.get("monitor_kind") != "host"
+            or row.get("monitor_kind") != RETROSPECTIVE_HOST
             or row.get("synthetic") is True
         ):
             problems.append("request attribution, zero egress/files or teardown not proved")
@@ -145,3 +187,43 @@ def capture_problems(
     ):
         problems.append("canaries do not bracket the capture")
     return sorted(set(problems))
+
+
+def owned_window_verified(
+    window: Mapping[str, Any], analyzed: Mapping[str, Any], row: Mapping[str, Any]
+) -> bool:
+    """Check the owned-job window independently of the supplied row's labels."""
+    members = window.get("members", [])
+    start, end, root = window.get("start_ns"), window.get("end_ns"), window.get("root_pid")
+    if (
+        type(start) is not int
+        or type(end) is not int
+        or start <= 0
+        or end < start
+        or type(root) is not int
+        or root <= 0
+        or not members
+    ):
+        return False
+    for member in members:
+        a, b, pid = member.get("start_ns"), member.get("end_ns"), member.get("pid")
+        if (
+            type(a) is not int
+            or type(b) is not int
+            or type(pid) is not int
+            or not start <= a <= b <= end
+            or pid <= 0
+        ):
+            return False
+    return (
+        root in {m["pid"] for m in members}
+        and len({m["pid"] for m in members}) == len(members)
+        and window.get("process_complete") is True
+        and window.get("active_after_teardown") == 0
+        and window.get("token_elevated") is False
+        and window.get("realtime_violations") == []
+        and window.get("provider_errors") == {}
+        and analyzed.get("members") == len(members)
+        and window.get("executable_sha256") == row.get("runtime_member_sha256")
+        and Path(str(window.get("executable", ""))).name == row.get("executable")
+    )

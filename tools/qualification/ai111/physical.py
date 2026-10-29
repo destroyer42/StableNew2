@@ -59,6 +59,17 @@ from tools.qualification.ai111.corpus import (
     from_jsonl,
     stage_a_subset,
 )
+from tools.qualification.ai111.execution_evidence import (
+    childless_proof,
+    fence_monitor,
+    observed_fields,
+    ownership_problems,
+    prelaunch_only,
+    record_execution,
+)
+from tools.qualification.ai111.execution_evidence import (
+    monitor_problems as retrospective_monitor_problems,
+)
 from tools.qualification.ai111.ownership import (
     OwnedSessionMonitor,
     OwnershipPolicy,
@@ -430,15 +441,11 @@ def _run_session(
                 expected = [c for c in expected if c.case_id in capture_segment["case_ids"]]
         if corpus_digest(cases) != corpus_digest(expected):
             problems.append("case list differs from selected contract/segment")
-        if (
-            not strict_offline
-            or monitor.kind != "host"
-            or command_factory is not None
-            or gpu_probe is None
-        ):
+        if not strict_offline or command_factory is not None or gpu_probe is None:
             problems.append(
                 "physical contract requires authentic monitor, default command, strict offline and GPU probe"
             )
+        problems += retrospective_monitor_problems(monitor)
         if problems:
             return {"verdict": "NOT TESTED", "refused": problems}
         plan = contract_spec.execution_plan()
@@ -454,6 +461,10 @@ def _run_session(
     # Exclusive claim: a second session of this stage is refused (FileExistsError), never merged into.
     evidence.mkdir(parents=True)
     ai_root = evidence / "ai-root"
+    selected_probe_case = probe_case or next(
+        (c for c in cases if childless_proof(c.case_id) is None), None
+    )
+    run_lifecycle_probes = lifecycle_probes and selected_probe_case is not None
     write_new_json(
         evidence / "execution-manifest.json",
         {
@@ -485,7 +496,11 @@ def _run_session(
             "run_id": run_id,
             "host": platform.node(),
             "executable": executable or "(first of the preference list)",
-            "lifecycle_probes": lifecycle_probes,
+            "lifecycle_probes": run_lifecycle_probes,
+            "lifecycle_probes_requested": lifecycle_probes,
+            "lifecycle_probes_applicability": "applicable"
+            if selected_probe_case is not None
+            else "not_applicable_no_launch_required_cases",
             "extra_read_roots": [str(r) for r in extra_read_roots],
             "etw_sha256": _sha_of_sibling("etw.py"),
             "capture_sha256": {
@@ -631,7 +646,15 @@ def _run_session(
                 suggestion = outcome.suggestion
                 details = dict(outcome.details)
                 new_records = monitor.records[monitored_before:]
-                details["egress_connections"] = sum(len(r.connections) for r in new_records)
+                execution_fields, execution_problems = (
+                    record_execution(case.case_id, outcome.code.value, outcome.reason, new_records)
+                    if contract_spec
+                    else ({}, [])
+                )
+                if contract_spec:
+                    details["egress_status"] = "pending_capture_analysis"
+                else:
+                    details["egress_connections"] = sum(len(r.connections) for r in new_records)
                 details["ownership_violations"] = sorted(
                     {v for r in new_records for v in r.violations}
                 )
@@ -671,10 +694,11 @@ def _run_session(
                     if new_records
                     and all(r.process.get("active_after_teardown") == 0 for r in new_records)
                     else None,
+                    **execution_fields,
                 }
                 records.setdefault(model_id, []).append(row)
                 append_jsonl(records_path, row)
-                if (contract_spec is not None and not new_records) or (
+                if execution_problems or (
                     new_records
                     and not all(
                         r.process.get("complete") is True
@@ -683,6 +707,9 @@ def _run_session(
                     )
                 ):
                     abort = "owned child tree not verified gone after a request"
+                    if execution_problems:
+                        abort += ": " + "; ".join(execution_problems)
+                    fence_monitor(monitor, abort)
                     break
                 if contract_spec is not None:
                     after_request = _deep_problems(ai_root, build, entry)
@@ -698,6 +725,7 @@ def _run_session(
                         break
                 if details["ownership_violations"]:
                     abort = "ownership violation: " + ", ".join(details["ownership_violations"])
+                    fence_monitor(monitor, abort)
                     break
                 if outcome.reason in _UNTRUSTWORTHY_OBSERVATION:
                     abort = f"observation no longer trustworthy: {outcome.reason}"
@@ -720,9 +748,9 @@ def _run_session(
                 )
                 if after:
                     abort = f"identity changed during {model_id}: " + "; ".join(after)
-            if not abort and lifecycle_probes:
+            if not abort and run_lifecycle_probes:
                 lifecycle_rows = _lifecycle_probes(
-                    probe_case or cases[0],
+                    selected_probe_case,
                     model_id,
                     ai_root,
                     build,
@@ -738,22 +766,43 @@ def _run_session(
                 for row in lifecycle_rows:
                     append_jsonl(evidence / "lifecycle-probes.jsonl", row)
                 if any(
-                    not r["teardown_verified"] or r["ownership_violations"] for r in lifecycle_rows
+                    not r["teardown_verified"] or r["ownership_violations"] or r.get("stop_reason")
+                    for r in lifecycle_rows
                 ):
                     abort = f"lifecycle probe for {model_id} left unverified teardown or violations"
+                    fence_monitor(monitor, abort)
             if abort:
                 break
     finally:
         sampler.close()
 
     teardown_verified = monitor.teardown_verified()
+    executable_rows = [r for a in model_arms for r in records.get(a, [])]
+    no_processes_launched = (
+        bool(contract_spec)
+        and not abort
+        and len(executable_rows) == len(cases)
+        and prelaunch_only(executable_rows)
+        and not monitor.session_records()
+    )
+    if no_processes_launched:
+        teardown_verified = None
     cases_by_id = {c.case_id: c for c in cases}
     summaries = {arm: summarize_arm(cases_by_id, rows) for arm, rows in records.items()}
-    verdicts = {
-        arm: evaluate_gates(summaries[arm], plan["thresholds"], teardown_verified=teardown_verified)
-        for arm in model_arms
-        if arm in summaries
-    }
+    verdicts = (
+        {}
+        if contract_spec
+        else {
+            arm: evaluate_gates(
+                summaries[arm], plan["thresholds"], teardown_verified=teardown_verified
+            )
+            for arm in model_arms
+            if arm in summaries
+        }
+    )
+    if contract_spec:
+        for summary in summaries.values():
+            summary["egress_connections_observed"] = None
     write_new_json(evidence / "summary.json", summaries)
     pairs = {}
     for model_id in model_arms:
@@ -795,6 +844,7 @@ def _run_session(
         "verdict": overall,
         "abort_reason": abort,
         "teardown_verified": teardown_verified,
+        "no_processes_launched": no_processes_launched,
         "egress_connections_observed": monitor.connection_attempts(),
         "monitoring": monitor.summary(),
         "arm_verdicts": {
@@ -894,8 +944,24 @@ def _lifecycle_probes(
 
     rows: list[dict[str, Any]] = []
     for kind in ("timeout", "cancel"):
-        if selected_arm is not None and _deep_problems(ai_root, build, entry):
-            break
+        if selected_arm is not None:
+            before_problems = _deep_problems(ai_root, build, entry)
+            if before_problems:
+                reason = "identity changed before lifecycle probe: " + "; ".join(before_problems)
+                fence_monitor(monitor, reason)
+                rows.append(
+                    {
+                        "arm": model_id,
+                        "probe": kind,
+                        "outcome": None,
+                        "executed": False,
+                        "stopped_as_intended": False,
+                        "teardown_verified": None,
+                        "ownership_violations": [],
+                        "stop_reason": reason,
+                    }
+                )
+                break
         probe_limits = RunLimits(
             **{**asdict(limits), "timeout_seconds": 2.0 if kind == "timeout" else 60.0}
         )
@@ -927,6 +993,7 @@ def _lifecycle_probes(
             if timer is not None:
                 timer.cancel()
         new = monitor.records[before:]
+        unsafe = ownership_problems(new)
         expected = OutcomeCode.TIMEOUT if kind == "timeout" else OutcomeCode.CANCELLED
         rows.append(
             {
@@ -959,10 +1026,16 @@ def _lifecycle_probes(
                 "active_after_teardown": 0
                 if new and all(r.process.get("active_after_teardown") == 0 for r in new)
                 else None,
+                **observed_fields(new),
+                "stop_reason": "; ".join(unsafe),
             }
         )
+        if unsafe:
+            fence_monitor(monitor, rows[-1]["stop_reason"])
+            break
         if selected_arm is not None and _deep_problems(ai_root, build, entry):
-            rows[-1]["teardown_verified"] = False
+            rows[-1]["stop_reason"] = "identity changed during lifecycle probe"
+            fence_monitor(monitor, rows[-1]["stop_reason"])
             break
     return rows
 

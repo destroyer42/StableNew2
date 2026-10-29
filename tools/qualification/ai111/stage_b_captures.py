@@ -20,6 +20,10 @@ from tools.qualification.ai111.capture_session import (
 )
 from tools.qualification.ai111.corpus import corpus_digest
 from tools.qualification.ai111.execution_contract import ExecutionSpec, select_contract
+from tools.qualification.ai111.execution_evidence import (
+    session_teardown_problems,
+    verified_contract_rows,
+)
 from tools.qualification.ai111.final_plan import final_corpus
 from tools.qualification.ai111.lfm3_contract import stage_b_verdict
 from tools.qualification.ai111.physical import _baseline_fields, write_new_json
@@ -189,15 +193,19 @@ def execution_segment(
         previous_root = Path(previous["evidence_root"])
         previous_capture = read_json(previous_root / "capture" / "analysis.json")
         previous_rows = read_rows(previous_root / "physical-B" / "records.jsonl")
+        previous_probes = (
+            read_rows(previous_root / "physical-B" / "lifecycle-probes.jsonl")
+            if (previous_root / "physical-B" / "lifecycle-probes.jsonl").exists()
+            else []
+        )
         previous_result = read_json(previous_root / "physical-B" / "result.json")
         if (
             [r.get("case_id") for r in previous_rows] != previous["case_ids"]
-            or previous_result.get("abort_reason") != ""
-            or previous_result.get("teardown_verified") is not True
+            or session_teardown_problems(previous_result, previous_rows)
             or capture_problems(
                 previous_root / "capture",
                 previous_capture,
-                previous_rows,
+                previous_rows + previous_probes,
                 run_id=previous["run_id"],
                 capture_id=previous["capture_id"],
             )
@@ -307,8 +315,7 @@ def aggregate(
                 != plan["manifest_sha256"]
             ):
                 gaps.append("execution not bound to approved capture plan")
-            if result.get("teardown_verified") is not True or result.get("abort_reason") != "":
-                gaps.append("capture aborted or teardown ambiguous")
+            gaps += session_teardown_problems(result, scoped)
             if [r.get("case_id") for r in scoped] != segment["case_ids"] or len(rows) != len(
                 scoped
             ):
@@ -338,7 +345,7 @@ def aggregate(
                     or row.get("capture_request_index") != local_index
                 ):
                     gaps.append("cold/warm chronology reset or missing")
-            rows_by_arm[segment["arm"]].extend(scoped)
+            rows_by_arm[segment["arm"]].extend(verified_contract_rows(scoped, gaps))
             problems += [f"segment {segment['index']}: {p}" for p in gaps]
             captures.append(
                 {

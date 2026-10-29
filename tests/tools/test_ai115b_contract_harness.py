@@ -643,19 +643,19 @@ def test_capture_attribution_positive_simulation_is_distinct_from_synthetic_go(
         run_id=s["run_id"],
         capture_id=s["capture_id"],
     )
-    # Simulate the host-shaped schema solely to test each missing-proof guard;
-    # these modified rows are never persisted or submitted for a physical verdict.
+    # Removing a synthetic marker must not promote self-asserted host labels.
+    # The independent repair suite covers complete raw owned-window provenance.
     for row in rows:
         row.pop("synthetic")
-    assert (
-        capture_problems(
+    assert any(
+        "provenance" in problem
+        for problem in capture_problems(
             root / "capture",
             read_json(root / "capture/analysis.json"),
             rows,
             run_id=s["run_id"],
             capture_id=s["capture_id"],
         )
-        == []
     )
     rows[0].pop("process_complete")
     assert any(

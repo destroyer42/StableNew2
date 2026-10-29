@@ -9,6 +9,7 @@ from typing import Any
 from tools.qualification.ai111.capture_evidence import capture_problems, read_json, read_rows
 from tools.qualification.ai111.corpus import corpus_digest
 from tools.qualification.ai111.execution_contract import ExecutionSpec
+from tools.qualification.ai111.execution_evidence import verified_contract_rows
 from tools.qualification.ai111.lfm3_contract import record_problems
 from tools.qualification.ai111.plan import digest
 from tools.qualification.ai111.readiness import d12a_problems, readiness_problems
@@ -44,13 +45,15 @@ def build_contract_report(
     if any(r.get("arm") not in manifest.get("arms", []) for r in rows):
         problems.append("unknown arm records")
     capture_id = manifest.get("capture_id")
-    problems += capture_problems(
+    capture_gaps = capture_problems(
         evidence.parent / "capture",
         capture,
         [r for r in rows if r.get("arm") != "B1_engine"] + probes,
         run_id=manifest.get("run_id"),
         capture_id=capture_id,
     )
+    problems += capture_gaps
+    rows = verified_contract_rows(rows, capture_gaps)
     try:
         from datetime import datetime
 

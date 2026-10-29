@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.qualification.ai111.execution_contract import ExecutionSpec
+from tools.qualification.ai111.execution_evidence import RETROSPECTIVE_HOST
 
 HOST_MODULES = frozenset({"vcruntime140.dll", "ucrtbase.dll", "ws2_32.dll", "crypt32.dll"})
 
@@ -53,14 +54,21 @@ def d12a_problems(
     problems = []
     compatibility = member.get("compatibility") or {}
     if (
-        result.get("verdict") != "PASS"
+        not (
+            result.get("verdict") == "PASS"
+            or (
+                result.get("verdict") == "INCONCLUSIVE"
+                and result.get("pending_capture_analysis") is True
+                and result.get("realtime_verdict") == "PASS"
+            )
+        )
         or result.get("contract_sha256") != spec.sha256
         or result.get("archive_sha256") != spec.runtime["sha256"]
         or member.get("sha256") != spec.members.get(executable)
         or member.get("verdict") != "PASS"
         or compatibility.get("verdict") != "PASS"
         or compatibility.get("help_truncated_at_cap") is not False
-        or result.get("monitor_kind") != "host"
+        or result.get("monitor_kind") != RETROSPECTIVE_HOST
     ):
         problems.append("D12a for selected contract/executable absent")
     problems += dependency_problems(result.get("host_dependencies"), verify_files=True)

@@ -1,11 +1,11 @@
 # AI-QUAL-115B — contract harness and capture aggregation
 
-**HOLD — incomplete implementation draft, not ready for S2.** The independent
-review confirmed three materially distinct blocking failure classes. The supplied
-package's greater-than-two-class stop condition is met. No functional repair or
-further validation is authorized under this package; a new bounded repair scope
-needs the owner's decision. This document preserves the draft and evidence and
-does not represent implementation acceptance.
+**Original draft HOLD; subsequent safety repair independently verified.** The
+three findings below describe `0a8b795a`. Their owner-authorized bounded repair
+is recorded in [AI_QUAL_115B_R.md](AI_QUAL_115B_R.md): independent security PASS,
+with overall acceptance blocked by the canonical gate's loopback-socket environment
+failure. Original evidence below remains historical. S2 is unapproved and NOT
+TESTED; no physical readiness is inferred.
 
 Execution Profile: Standard, high-risk security/lifecycle and cross-file work.
 Model recommendation: Claude Code Sonnet 5.5 XHigh; Codex GPT-6.1 Sol XHigh.

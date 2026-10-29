@@ -396,6 +396,12 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
         self._canary_expect: dict[str, Any] | None = None
         self._beacons = 0
         self.end_canary_report: dict[str, Any] | None = None
+        self._executable_stop_reason = ""
+
+    def block_executable_work(self, reason: str) -> None:
+        """Latch an unsafe owned interval. No later request or canary may launch."""
+        if not self._executable_stop_reason:
+            self._executable_stop_reason = reason
 
     # -- readiness ----------------------------------------------------------------------------------------------------
 
@@ -435,6 +441,11 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
     def _run(
         self, inner: Runner, command: Sequence[str], kwargs: dict[str, Any], canary: bool
     ) -> ProcessOutcome:
+        if self._executable_stop_reason:
+            return ProcessOutcome(
+                returncode=None,
+                launch_error="owned interval fenced: " + self._executable_stop_reason,
+            )
         # The opening beacon must precede the first child, so a request can never run before the interval the beacons
         # prove was captured. When the capture is not active nothing is written and the request is refused below.
         if not self._begun and not self.admission.live_problems():
@@ -444,7 +455,22 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
             float(timeout) if isinstance(timeout, int | float) else None
         )
         try:
-            return super()._run(inner, command, kwargs, canary)
+            first = len(self.records)
+            outcome = super()._run(inner, command, kwargs, canary)
+            # Provider-open refusals also return early, before _on_request.
+            # Keep every such unverified interval fenced, including canaries.
+            records = self.records[first:]
+            if not records or any(
+                r.process.get("complete") is not True
+                or r.process.get("active_after_teardown") != 0
+                or r.violations
+                for r in records
+            ):
+                self.block_executable_work("ownership or teardown uncertain")
+            return outcome
+        except BaseException:
+            self.block_executable_work("owned runner raised; teardown uncertain")
+            raise
         finally:
             self.admission.pending_timeout = None
 
@@ -467,6 +493,7 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
                 "clock": "perf_counter_ns",
                 "tool_sha256": control.tool_sha256(),
                 "provider_config_sha256": control.provider_config_sha256(),
+                "monitor_implementation": self.kind,
             }
         )
         self.beacon("start")
@@ -504,6 +531,12 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
         ended_ns: int,
     ) -> None:
         self._ensure_begun()
+        if (
+            record.process.get("complete") is not True
+            or record.process.get("active_after_teardown") != 0
+            or record.violations
+        ):
+            self.block_executable_work("ownership or teardown uncertain")
         policy = self.policy
         self.log.write(
             {
@@ -615,6 +648,7 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
                 "capture_id": (self.admission.manifest or {}).get("capture_id"),
                 "file_and_egress_findings": "pending: only the post-capture analysis can judge them",
                 "capture_analysis_required": True,
+                "executable_stop_reason": self._executable_stop_reason,
                 "violations_realtime_only": base.get("violations", []),
             }
         )
@@ -626,7 +660,15 @@ class RetrospectiveMonitor(OwnedSessionMonitor):
         if self._begun and not self._ended:
             self._ended = True
             try:
-                self.end_canary_report = self._canary_child(run_bounded, "end")
+                if self._executable_stop_reason:
+                    self.log.write(
+                        {
+                            "type": "end_failed",
+                            "error": "closing canary not launched: " + self._executable_stop_reason,
+                        }
+                    )
+                else:
+                    self.end_canary_report = self._canary_child(run_bounded, "end")
                 self.beacon("end")
                 self.log.write({"type": "end", "utc": datetime.now(UTC).isoformat()})
             except Exception as exc:  # noqa: BLE001 - a missing closing bracket is recorded, and the analysis refuses it

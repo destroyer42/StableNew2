@@ -295,6 +295,7 @@ def _command_result(
         "output_truncated_at_cap": outcome.output_truncated,
         "contained": outcome.contained,
         "elapsed_seconds": round(elapsed_s, 3),
+        "elapsed_ms": int(elapsed_s * 1000),
         "observation": trace.summary(),
     }
 
@@ -329,8 +330,9 @@ def run_d12a(
         problems = readiness_problems(
             contract_spec, "S2_d12a_b11960", readiness_evidence, executable=executable or ""
         )
-        if monitor.kind != "host" or not getattr(monitor, "admission", None):
-            problems.append("authentic capture monitor required")
+        from tools.qualification.ai111.execution_evidence import monitor_problems
+
+        problems += monitor_problems(monitor)
         if problems:
             raise D12aRefused("; ".join(problems))
         intent = contract_spec.runtime
@@ -553,6 +555,10 @@ def run_d12a(
             )
         if body["host_dependency_problems"] and verdict == "PASS":
             verdict = "INCONCLUSIVE"
+    if contract_spec is not None and body["monitoring"].get("capture_analysis_required"):
+        body["realtime_verdict"] = verdict
+        body["pending_capture_analysis"] = True
+        verdict = "INCONCLUSIVE"
     return _finish(evidence, verdict, body)
 
 
