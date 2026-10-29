@@ -14,7 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.utils.thread_registry import get_thread_registry
 from src.video.video_eval_run import EVAL_OUTPUT_FOLDER
@@ -189,7 +189,7 @@ class VideoEvalPanel(ttk.LabelFrame):
 
     def _work_runner(self) -> BackgroundWorkRunner:
         if self._runner is None:
-            dispatcher = TkUiDispatcher(self.winfo_toplevel())
+            dispatcher = tk_dispatcher_for(self)
             self._runner = BackgroundWorkRunner(
                 spawn=lambda name, target: get_thread_registry().spawn(
                     target=target,

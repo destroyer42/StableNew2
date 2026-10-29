@@ -13,7 +13,7 @@ from PIL import ImageTk
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.tooltip import Tooltip, attach_tooltip
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
 from src.gui.view_contracts.media_image_decode import (
@@ -108,7 +108,7 @@ class MediaInspector(ttk.Frame):
             if app_state is not None:
                 self._app_state = app_state
             owner = getattr(owner, "master", None)
-        self._dispatcher = TkUiDispatcher(self.winfo_toplevel())
+        self._dispatcher = tk_dispatcher_for(self)
         self._policy_callback = lambda: self._dispatcher.invoke(self._policy_changed)
         if callable(getattr(self._app_state, "subscribe", None)):
             self._app_state.subscribe("content_visibility_mode", self._policy_callback)

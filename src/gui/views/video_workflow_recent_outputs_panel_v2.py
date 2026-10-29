@@ -14,7 +14,7 @@ from collections.abc import Callable, Sequence
 from tkinter import ttk
 from typing import Any
 
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.gui.view_contracts.video_recent_outputs_contract import RecentOutputsSession
 from src.gui.widgets.media_inspector import MediaInspector as VideoPreviewWidget
@@ -122,7 +122,7 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
 
     def _work_runner(self) -> BackgroundWorkRunner:
         if self._runner is None:
-            dispatcher = TkUiDispatcher(self.winfo_toplevel())
+            dispatcher = tk_dispatcher_for(self)
             self._runner = BackgroundWorkRunner(
                 spawn=lambda name, target: get_thread_registry().spawn(
                     target=target,

@@ -15,7 +15,6 @@ from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from src.gui.engine_settings_dialog import EngineSettingsDialog
-from src.gui.gui_invoker import TkInvoker
 from src.gui.layout_v2 import configure_root_grid
 from src.gui.log_trace_panel_v2 import LogTracePanelV2
 from src.gui.panels_v2.operator_readiness_panel_v2 import (
@@ -26,6 +25,7 @@ from src.gui.panels_v2.operator_readiness_panel_v2 import (
 from src.gui.presentation_actions import TkPresentationActions
 from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
+from src.gui.ui_dispatcher import TkUiDispatcher, release_tk_dispatcher, tk_dispatcher_for
 from src.gui.view_contracts.task_navigation_contract import (
     DEFAULT_TAB_ID,
     all_tab_ids,
@@ -229,6 +229,7 @@ class MainWindowV2:
         packs_controller=None,
         pipeline_controller=None,
         gui_log_handler: InMemoryLogHandler | None = None,
+        ui_dispatcher: TkUiDispatcher | None = None,
     ) -> None:
         self.root = root
         self._disposed = False
@@ -241,7 +242,12 @@ class MainWindowV2:
         self.packs_controller = packs_controller
         self.pipeline_controller = pipeline_controller
         self.gui_log_handler = gui_log_handler
-        self._invoker = TkInvoker(self.root)
+        # The composition path injects the root's dispatcher; a standalone window resolves the same
+        # per-root owner (so a Tk root never has a second pump), owns it and releases it on cleanup.
+        self._owns_ui_dispatcher = ui_dispatcher is None
+        self._invoker: TkUiDispatcher = (
+            ui_dispatcher if ui_dispatcher is not None else tk_dispatcher_for(self.root)
+        )
         self._presentation_actions: TkPresentationActions | None = None
         self._structured_error_modal: Any | None = None
         self.app_state.set_invoker(self._invoker)
@@ -1486,6 +1492,8 @@ class MainWindowV2:
         try:
             if self._invoker:
                 self._invoker.dispose()
+            if getattr(self, "_owns_ui_dispatcher", False):
+                release_tk_dispatcher(self.root)
         except Exception:
             pass
 

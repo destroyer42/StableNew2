@@ -19,7 +19,7 @@ from typing import Any
 
 from PIL import Image, ImageTk
 
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.gui.view_contracts.video_preview_contract import STATE_PLAYING, VideoPreviewSession
 from src.utils.thread_registry import get_thread_registry
@@ -86,7 +86,7 @@ class VideoPreviewWidget(ttk.Frame):
 
     def _work_runner(self) -> BackgroundWorkRunner:
         if self._runner is None:
-            dispatcher = TkUiDispatcher(self.winfo_toplevel())
+            dispatcher = tk_dispatcher_for(self)
             self._runner = BackgroundWorkRunner(
                 spawn=lambda name, target: get_thread_registry().spawn(
                     target=target,
