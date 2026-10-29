@@ -336,7 +336,9 @@ def test_worker_completion_during_restore_is_delivered_on_ui_dispatch(
     assert state.plan[0].completed_images == 2
 
 
-def test_switch_experiments_discards_old_mapping_and_legacy_delivery(tmp_path, repository):
+def test_switch_experiments_retains_background_mapping_without_mutating_visible_state(
+    tmp_path, repository
+):
     first, _ = planned(tmp_path, repository)
     first.run_plan()
     restored, service = recreated(first.export_resume_state(), repository)
@@ -356,7 +358,9 @@ def test_switch_experiments_discards_old_mapping_and_legacy_delivery(tmp_path, r
     service.finish(job)
     restored.on_job_completed_callback(job, {"success": True})
     assert restored.learning_state.to_dict() == before
-    assert not restored.execution_controller._job_to_variant
+    assert old_job not in restored.execution_controller._job_to_variant
+    assert len(restored.execution_controller._job_to_variant) == len(first.learning_state.plan) - 1
+    assert restored.execution_controller._sessions["recovery"].plan[0].status == "completed"
 
 
 def test_gpu_quarantine_is_read_only_and_interrupted_status_is_visible(tmp_path, repository):

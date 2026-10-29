@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-625 of 780 modules have a docstring.
+626 of 781 modules have a docstring.
 
 ## src/
 
@@ -580,6 +580,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `prompt_model_matrix.py`: Bounded Prompt x Model study: plan once, freeze every cell, materialize ordinary immutable NJRs
 - `prompt_model_matrix_results.py`: Toolkit-neutral Prompt x Model results: the same ``GridModel`` the Two-Axis Grid view and contact sheet render
 - `prompt_slot_experiment.py`: Controlled, frozen one-slot prompt intent; canonical Matrix/adaptation remain authoritative
+- `qualification_batch.py`: Whole-selection preflight and bounded coordination over existing Learning admission
 - `rating_schema.py`: (no docstring)
 - `recommendation_engine.py`: Automated Parameter Recommendation Engine (APRE)
 - `recommendation_summary.py`: Operator-facing reading of a ``RecommendationSet``: what, where, on what evidence, and what Apply may do
