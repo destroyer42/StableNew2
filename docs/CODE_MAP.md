@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-625 of 780 modules have a docstring.
+636 of 791 modules have a docstring.
 
 ## src/
 
@@ -277,6 +277,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_controller.py`: (no docstring)
 - `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
+- `model_evidence_next_test.py`: Adapter between the Model Evidence window and the read-only Learning intelligence service
 - `model_evidence_proposals.py`: Proposal draft/Preview adapter; never binds JobService or changes the visible Learning state
 - `video_workspace_handoff.py`: (no docstring)
 
@@ -398,6 +399,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `model_evidence_proposals_dialog.py`: Operator selection of offline qualification drafts; no execution controls or admission
 - `model_evidence_window.py`: Explicit operator catalog journey
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
+- `next_test_dialog.py`: Compact "What Should I Test Next?" dialog
 - `photo_optimize_editors.py`: Scoped Photo Optimize editing and review widgets; no store writes or queue authority
 - `photo_optimize_handoff.py`: Managed Photo Set hand-offs for the Photo Optimize tab (PR-GUI-UX-580)
 - `photo_optimize_layout.py`: Photo Optimize presentation builders, extracted from the tab without new execution authority
@@ -466,6 +468,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `mask_editor_state.py`: Original-pixel mask editing and viewport transforms; no Tk, files or backend state
 - `matrix_editor_view.py`: Matrix editor wording, counts and bounded examples (PR-GUI-UX-560)
 - `model_policy_projection.py`: Toolkit-neutral projection of a model policy onto the Base Generation controls (PR-IMG-130A)
+- `next_test_view.py`: Toolkit-neutral presentation of "What Should I Test Next?"
 - `openpose_conditioning_view.py`: Toolkit-neutral presentation of a slot's OpenPose conditioning (PR-IMG-CNET-210)
 - `outpaint_canvas_view.py`: Toolkit-neutral view of an outpaint canvas: where the original sits as the margins change
 - `pack_lora_selection_projection.py`: Read-only, visibility-aware reporting of frozen explicit selection evidence
@@ -518,6 +521,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/learning/
 
+- `ai_evidence_summary.py`: Versioned, deterministic, size-bounded evidence summary for a future advisory caller
 - `automation_modes.py`: Learning automation modes: names, labels, the default, and how a persisted choice is read back
 - `baseline_authoring.py`: Learning's independently authored experiment baseline (toolkit-neutral)
 - `baseline_draft.py`: The editable Learning baseline draft: lifecycle rules over ``LearningState.baseline_draft``
@@ -532,6 +536,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `embedding_experiment.py`: Controlled textual-inversion experiments: one designated embedding position varies, every other input is froz…
 - `embedding_inventory.py`: Registry-backed embedding identity and compatibility projection for Learning embedding experiments
 - `evidence_autopilot.py`: Pure catalog-derived qualification plans; no discovery, prompting, persistence or admission
+- `evidence_intelligence.py`: Read-only Learning evidence intelligence for one exact checkpoint
 - `evidence_progress.py`: How far an experiment is from the evidence a recommendation needs, in the engine's own thresholds
 - `evidence_proposal_context.py`: Read-only revalidation of v2 qualification context before canonical Learning compilation
 - `evidence_proposals.py`: Deterministic qualification drafts
@@ -549,6 +554,9 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `grid_contact_sheet.py`: Labeled PNG contact sheet for a Two-Axis Grid, rendered only from recorded artifacts
 - `grid_results.py`: Toolkit-neutral projection of a Two-Axis Grid experiment: cell coordinates, exact artifacts, placeholders
 - `guided_workflow.py`: Toolkit-neutral guide for the Designed Experiments workflow: Design, Preview, Run, Compare, Rate
+- `intelligence_contracts.py`: Toolkit-neutral value types for the read-only Learning evidence intelligence projection
+- `intelligence_findings.py`: Findings and experiment conclusions: every statement carries source, applicability, freshness and a limitation
+- `intelligence_sources.py`: Tolerant, read-only loaders for the evidence intelligence projection
 - `learning_adapter.py`: Learning adapter helpers
 - `learning_analytics.py`: Analytics engine for learning experiments
 - `learning_contract.py`: Stable stub contract for future learning consumers
@@ -570,16 +578,19 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `model_evidence_readiness.py`: Worker-only readiness for selected runtime checkpoints, using AssetRegistry
 - `model_policy_service.py`: Learning policy validation and compile delegation; never an execution authority
 - `model_profiles.py`: Model Profiles & Style-Aware Defaults (V2-P1)
+- `next_actions.py`: Deterministic gap classification and ranking of suggested next actions
 - `ordinary_njr.py`: Materialise one ordinary (single-variable) Learning variant into the canonical NJR
 - `ordinary_prompt_freeze.py`: Ordinary Learning executor-base freeze and explicit saved-preview admission
 - `ordinary_snapshot.py`: The frozen snapshot of an ordinary (single-variable) Learning experiment
 - `output_scan_models.py`: Scan record models — the canonical normalized representation of one scanned image
 - `output_scanner.py`: OutputScanner — manifest-first artifact scanner
+- `preference_evidence.py`: Read-only preference summary from saved Learning ratings
 - `preview_summary.py`: Structured, read-only summary of what a frozen Preview would submit
 - `profile_publication.py`: Field-specific controlled evidence -> advisory profile; no execution or rating authority
 - `prompt_model_matrix.py`: Bounded Prompt x Model study: plan once, freeze every cell, materialize ordinary immutable NJRs
 - `prompt_model_matrix_results.py`: Toolkit-neutral Prompt x Model results: the same ``GridModel`` the Two-Axis Grid view and contact sheet render
 - `prompt_slot_experiment.py`: Controlled, frozen one-slot prompt intent; canonical Matrix/adaptation remain authoritative
+- `qualification_batch.py`: Whole-selection preflight and bounded coordination over existing Learning admission
 - `rating_schema.py`: (no docstring)
 - `recommendation_engine.py`: Automated Parameter Recommendation Engine (APRE)
 - `recommendation_summary.py`: Operator-facing reading of a ``RecommendationSet``: what, where, on what evidence, and what Apply may do

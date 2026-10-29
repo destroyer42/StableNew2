@@ -159,6 +159,19 @@ class LearningTabFrame(ttk.Frame):
             execution_controller=execution_controller,  # PR-LEARN-002: Pass execution controller
         )
         self.bind("<Destroy>", self._on_learning_destroy, add=True)
+        from src.gui.controllers.model_evidence_proposals import compile_qualification_state
+        from src.learning.qualification_batch import QualificationBatchService
+
+        self.qualification_batch = (
+            QualificationBatchService(self.experiment_store, self.learning_controller.execution_controller,
+                                      compile_qualification_state)
+            if self.learning_controller.execution_controller is not None else None
+        )
+        if self.qualification_batch is not None:
+            from src.utils.thread_registry import get_thread_registry
+
+            get_thread_registry().spawn(target=self.qualification_batch.restore,
+                                        name="learning-batch-restore", purpose="reconcile saved Learning batch IDs")
 
         # Configure main layout
         self.columnconfigure(0, weight=1)
@@ -238,7 +251,11 @@ class LearningTabFrame(ttk.Frame):
         self.stored_drafts_button.grid(row=1, column=5, columnspan=3, sticky="e", padx=(4, 0), pady=(6, 0))
         from src.gui.views.model_evidence_window import open_model_evidence
 
-        ttk.Button(self.header_frame, text="Model Evidence Catalog", command=lambda: open_model_evidence(self)).grid(row=2, column=5, columnspan=3, sticky="e", pady=4)
+        evidence_actions = ttk.Frame(self.header_frame)
+        evidence_actions.grid(row=2, column=5, columnspan=3, sticky="e", pady=4)
+        ttk.Button(evidence_actions, text="Model Evidence Catalog", command=lambda: open_model_evidence(self)).pack(side="right")
+        self.test_next_button = ttk.Button(evidence_actions, text="What Should I Test Next?", command=self._on_test_next)
+        self.test_next_button.pack(side="right", padx=(0, 4))
         attach_tooltip(
             self.stored_drafts_button,
             "Save the rated drafts left in other saved experiments as ratings. Shows what it will do first.",
@@ -1262,6 +1279,18 @@ class LearningTabFrame(ttk.Frame):
         self._restore_experiment_panel()
         self._persist_learning_session_state()
         self._follow_recommended_step()
+
+    def _on_test_next(self) -> None:
+        """Open the Model Evidence window on this experiment's checkpoint, showing what to test next."""
+        from src.gui.views.model_evidence_window import open_model_evidence
+        from src.learning.model_policy_service import selected_model
+
+        controller = self.learning_controller
+        experiment = controller.learning_state.current_experiment
+        baseline = controller.authoring_baseline() or getattr(experiment, "baseline_config", {})
+        stage = getattr(experiment, "stage", "txt2img") or "txt2img"
+        window = open_model_evidence(self)
+        window.request_next_test(selected_model(baseline or {}, stage))
 
     def _on_open_experiment_library(self) -> None:
         all_handles = self.experiment_store.list_handles()

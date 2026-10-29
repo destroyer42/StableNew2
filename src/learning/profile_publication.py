@@ -288,6 +288,18 @@ def _sample(row: Mapping[str, Any], target: ResolvedModel) -> _Sample:
     )
 
 
+ControlledSample = _Sample
+
+
+def controlled_sample(row: Mapping[str, Any], target: ResolvedModel) -> ControlledSample:
+    """The publication eligibility rule for one saved rating; raises when it is not controlled evidence.
+
+    Read-only consumers (Learning evidence intelligence) use this so they cannot drift from what
+    publication itself accepts as controlled, attributed evidence.
+    """
+    return _sample(row, target)
+
+
 class ProfilePublicationService:
     """Read-only proposals, then fresh validation and one explicitly confirmed store write."""
 

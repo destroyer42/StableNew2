@@ -143,6 +143,7 @@ def test_worker_completion_dispatches_to_tk_thread_and_destroyed_tab_is_inert(wo
     assert not seen_threads
     pending.pop()()
     root.update_idletasks()
+    assert not pending  # JobService's Tk delivery must not enqueue a second presentation.
     assert seen_threads == [threading.get_ident()]
     assert tab.learning_state.plan[0].status == "completed"
     execution = tab.learning_controller.execution_controller

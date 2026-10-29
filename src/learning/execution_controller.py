@@ -13,9 +13,10 @@ from types import SimpleNamespace
 from typing import Any
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
-from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
+from src.gui.learning_state import LearningState, LearningVariant
 from src.learning.experiment_reconciliation import (
     TERMINAL,
+    completion_evidence,
     completion_result,
     mark_completion_unavailable,
     note_missing_artifacts,
@@ -36,6 +37,7 @@ class LearningJobContext:
     variable_under_test: str
     variant_value: Any
     job_id: str
+    state: LearningState
 
 
 class LearningAdmissionError(RuntimeError):
@@ -59,7 +61,9 @@ class LearningExecutionController:
         self._completing: set[str] = set()
         self._validating: set[str] = set()
         self._deferred: dict[str, tuple[str, Any]] = {}
-        self._experiment_id = ""
+        self._sessions: dict[str, LearningState] = {}
+        self._checkpoint: Callable[[LearningState], None] | None = None
+        self._admission_guard: Callable[[LearningState, list[str]], None] | None = None
         self._closed = False
         self._on_variant_completed: Callable[[LearningVariant, dict[str, Any]], None] | None = None
         self._on_variant_published: Callable[[LearningVariant, dict[str, Any]], None] | None = None
@@ -98,6 +102,7 @@ class LearningExecutionController:
             self._completing.clear()
             self._validating.clear()
             self._deferred.clear()
+            self._sessions.clear()
             self._on_variant_completed = self._on_variant_failed = None
             self._on_variant_published = None
 
@@ -115,25 +120,76 @@ class LearningExecutionController:
         """Present/checkpoint the safe terminal projection, after evidence publication."""
         self._on_variant_published = callback
 
-    def _select_experiment(self) -> LearningExperiment | None:
-        experiment = self.learning_state.current_experiment
-        identity = str(getattr(experiment, "experiment_id", "") or "")
-        if identity != self._experiment_id:
-            self._job_to_variant.clear()
-            self._job_contexts.clear()
-            self._terminal_variants.clear()
-            self._completing.clear()
-            self._validating.clear()
-            self._deferred.clear()
-            self._experiment_id = identity
-        return experiment
+    def bind_checkpoint(self, checkpoint: Callable[[LearningState], None]) -> None:
+        self._checkpoint = checkpoint
+
+    def bind_admission_guard(self, guard: Callable[[LearningState, list[str]], None]) -> None:
+        self._admission_guard = guard
+
+    def _present(
+        self, state: LearningState, variant: LearningVariant, value: Any, *, failed: bool = False
+    ) -> None:
+        """Use JobService's existing dispatcher, with a fresh foreground identity check."""
+
+        def deliver() -> None:
+            if threading.current_thread() is not threading.main_thread():
+                raise RuntimeError("Learning presentation requires the main UI thread")
+            with self._lock:
+                if (
+                    self._closed
+                    or state.current_experiment is not self.learning_state.current_experiment
+                    or not any(item is variant for item in self.learning_state.plan)
+                ):
+                    return
+                if failed and self._on_variant_failed:
+                    self._on_variant_failed(variant, value)
+                elif not failed and self._on_variant_published:
+                    self._on_variant_published(variant, value)
+
+        dispatcher = getattr(self.job_service, "_event_dispatcher", None)
+        if threading.current_thread() is threading.main_thread():
+            # JobService may already have dispatched this completion to Tk.
+            # Present within that delivery rather than scheduling it a second time.
+            deliver()
+        elif callable(dispatcher):
+            dispatcher(deliver)
+        else:
+            raise RuntimeError("Learning UI dispatcher unavailable for worker presentation")
+
+    def track_session(self, state: LearningState) -> None:
+        with self._lock:
+            experiment = state.current_experiment
+            if self._closed or experiment is None or not experiment.experiment_id:
+                raise ValueError("A durable Learning experiment is required")
+            self._sessions[experiment.experiment_id] = state
+
+    def _save_session(self, state: LearningState) -> None:
+        if self._checkpoint is not None:
+            try:
+                self._checkpoint(state)
+            except (OSError, ValueError, RuntimeError) as exc:
+                if state.current_experiment is not None:
+                    state.current_experiment.metadata["resume_persistence_error"] = str(exc)
+                raise
 
     def _track(
-        self, job_id: str, variant: LearningVariant, experiment_name: str, variable_under_test: str
+        self,
+        job_id: str,
+        variant: LearningVariant,
+        experiment_name: str,
+        variable_under_test: str,
+        state: LearningState | None = None,
     ) -> None:
+        if state is None:
+            state = copy.copy(self.learning_state)
         self._job_to_variant[job_id] = variant
         self._job_contexts[job_id] = LearningJobContext(
-            variant, experiment_name, variable_under_test, variant.param_value, job_id
+            variant,
+            experiment_name,
+            variable_under_test,
+            variant.param_value,
+            job_id,
+            state,
         )
 
     def _forget(self, job_id: str) -> None:
@@ -143,38 +199,89 @@ class LearningExecutionController:
     def _current_variant(self, job_id: str) -> LearningVariant | None:
         if self._closed:
             return None
-        self._select_experiment()
         variant = self._job_to_variant.get(job_id)
-        if variant is not None and any(v is variant for v in self.learning_state.plan):
+        context = self._job_contexts.get(job_id)
+        if (
+            variant is not None
+            and context is None
+            and any(v is variant for v in self.learning_state.plan)
+        ):
+            # Preserve the existing explicitly installed synthetic/legacy tracking seam.
+            experiment = self.learning_state.current_experiment
+            self._track(
+                job_id,
+                variant,
+                getattr(experiment, "name", ""),
+                getattr(experiment, "variable_under_test", ""),
+            )
+            context = self._job_contexts[job_id]
+        if (
+            variant is not None
+            and context is not None
+            and any(v is variant for v in context.state.plan)
+        ):
             if not variant.job_id or variant.job_id == job_id:
                 return variant
         self._forget(job_id)
         return None
 
-    def reconcile(self) -> str:
+    def reconcile(self, state: LearningState | None = None) -> str:
         """Bind before reading; newer terminal callbacks cannot be downgraded."""
         with self._lock:
-            experiment = self._select_experiment()
-            self._job_to_variant.clear()
-            self._job_contexts.clear()
+            state = state if state is not None else self.learning_state
+            visible = self.learning_state.current_experiment
+            incoming = state.current_experiment
+            if (
+                visible is not None
+                and incoming is not None
+                and visible.experiment_id == incoming.experiment_id
+                and visible.execution_snapshot_json == incoming.execution_snapshot_json
+                and {(v.variant_id, v.job_id) for v in self.learning_state.plan}
+                == {(v.variant_id, v.job_id) for v in state.plan}
+            ):
+                state = self.learning_state
+            if state is self.learning_state:
+                state = copy.copy(state)
+            experiment = state.current_experiment
             if self._closed or experiment is None:
                 return ""
-            job_counts = Counter(v.job_id for v in self.learning_state.plan if v.job_id)
-            variant_counts = Counter(v.variant_id for v in self.learning_state.plan if v.variant_id)
+            if not experiment.experiment_id:
+                # Historical sessions remain readable, but names, directory IDs
+                # and today's compiler cannot reconstruct missing lineage.
+                for variant in state.plan:
+                    unresolved(
+                        variant,
+                        "Saved experiment has no durable experiment ID; exact job/artifact associations are retained. No automatic recovery or retry.",
+                    )
+                return reconciliation_summary(state.plan)
+            self.track_session(state)
+            for job_id, context in list(self._job_contexts.items()):
+                bound_experiment = context.state.current_experiment
+                if (
+                    bound_experiment is not None
+                    and bound_experiment.experiment_id == experiment.experiment_id
+                ):
+                    self._forget(job_id)
+            job_counts = Counter(v.job_id for v in state.plan if v.job_id)
+            variant_counts = Counter(v.variant_id for v in state.plan if v.variant_id)
             duplicates = {
                 id(v)
-                for v in self.learning_state.plan
+                for v in state.plan
                 if job_counts[v.job_id] > 1 or variant_counts[v.variant_id] > 1
             }
             # Validate every rebound mapping before allowing any completion to
             # act on it, including reentrant notifications during a repository read.
-            for variant in self.learning_state.plan:
+            for variant in state.plan:
                 if variant.job_id and id(variant) not in duplicates:
                     self._track(
-                        variant.job_id, variant, experiment.name, experiment.variable_under_test
+                        variant.job_id,
+                        variant,
+                        experiment.name,
+                        experiment.variable_under_test,
+                        state,
                     )
                     self._validating.add(variant.job_id)
-            for variant in self.learning_state.plan:
+            for variant in state.plan:
                 if id(variant) in duplicates:
                     unresolved(
                         variant,
@@ -240,7 +347,7 @@ class LearningExecutionController:
                 elif status in {"failed", "cancelled"}:
                     self._forget(variant.job_id)
                     self._terminal_variants[variant.job_id] = variant
-            return reconciliation_summary(self.learning_state.plan)
+            return reconciliation_summary(state.plan)
 
     def submit_experiment_jobs(
         self,
@@ -248,6 +355,8 @@ class LearningExecutionController:
         variants: list[LearningVariant],
         experiment_name: str,
         variable_under_test: str,
+        *,
+        state: LearningState | None = None,
     ) -> list[str]:
         if self._closed:
             raise RuntimeError("Learning execution controller is closed")
@@ -259,9 +368,17 @@ class LearningExecutionController:
         if len(set(expected)) != len(expected):
             raise ValueError("compiled NJR identities must be unique")
         with self._lock:
-            experiment = self._select_experiment()
+            state = state if state is not None else self.learning_state
+            if self._admission_guard is not None:
+                self._admission_guard(state, expected)
+            if state is self.learning_state:
+                state = copy.copy(state)
+            experiment = state.current_experiment
+            self.track_session(state)
             for record, variant in zip(records, variants, strict=True):
-                self._track(record.job_id, variant, experiment_name, variable_under_test)
+                variant.job_id = record.job_id
+                self._track(record.job_id, variant, experiment_name, variable_under_test, state)
+                self._validating.add(record.job_id)
             failure = None
             try:
                 returned = self.job_service.submit_njrs(list(records), SubmissionPolicy())
@@ -282,11 +399,23 @@ class LearningExecutionController:
                     variant.job_id = record.job_id
                     if variant.status not in TERMINAL:
                         variant.status = "queued"
+                for record in records:
+                    self._validating.discard(record.job_id)
+                    deferred = self._deferred.pop(record.job_id, None)
+                    if deferred:
+                        kind, value = deferred
+                        if kind == "completed":
+                            self.on_job_completed(record.job_id, value)
+                        elif kind == "failed_job":
+                            self._handle_job_failed(*value)
+                        else:
+                            self.on_job_failed(record.job_id, value)
                 return expected
 
             # A lost/raised response says nothing about a committed transaction.
             for record, variant in zip(records, variants, strict=True):
                 variant.job_id = record.job_id
+                self._validating.discard(record.job_id)
             evidence = [
                 read_job_evidence(self.repository, experiment, variant) for variant in variants
             ]
@@ -300,7 +429,7 @@ class LearningExecutionController:
                 if variant.status not in TERMINAL:
                     unresolved(variant, message)
                 variant.execution_metadata["admission_error"] = message
-            self.reconcile()
+            self.reconcile(state)
             raise LearningAdmissionError(message) from failure
 
     def submit_variant_job(
@@ -343,7 +472,8 @@ class LearningExecutionController:
                 self._deferred.setdefault(job_id, ("completed", copy.deepcopy(result)))
                 return
             before = copy.deepcopy(variant.__dict__)
-            experiment = self.learning_state.current_experiment
+            state = self._job_contexts[job_id].state
+            experiment = state.current_experiment
             before_experiment_metadata = copy.deepcopy(experiment.metadata) if experiment else None
             self._completing.add(job_id)
             variant.job_id = job_id
@@ -355,8 +485,18 @@ class LearningExecutionController:
             note_missing_artifacts(variant)
             completion_images, completion_count = list(variant.image_refs), variant.completed_images
             try:
-                if self._on_variant_completed:
+                if (
+                    experiment is self.learning_state.current_experiment
+                    and self._on_variant_completed
+                    and threading.current_thread() is threading.main_thread()
+                ):
                     self._on_variant_completed(variant, result)
+                else:
+                    evidence = completion_evidence(experiment, variant, result)
+                    variant.status = evidence.status
+                    variant.execution_metadata = evidence.execution_metadata
+                    if experiment is not None and evidence.experiment_metadata is not None:
+                        experiment.metadata = evidence.experiment_metadata
             except Exception as exc:
                 _logger.exception("Learning completion callback rejected evidence for %s", job_id)
                 variant.__dict__.update(before)
@@ -370,9 +510,10 @@ class LearningExecutionController:
                 self._completing.discard(job_id)
             self._forget(job_id)
             self._terminal_variants[job_id] = variant
-            if self._on_variant_published:
+            self._save_session(state)
+            if experiment is self.learning_state.current_experiment and self._on_variant_published:
                 try:
-                    self._on_variant_published(variant, result)
+                    self._present(state, variant, result)
                 except Exception as exc:
                     _logger.exception(
                         "Learning completion presentation/checkpoint failed for %s", job_id
@@ -389,13 +530,18 @@ class LearningExecutionController:
             if job_id in self._validating:
                 self._deferred.setdefault(job_id, ("failed", error))
                 return
+            state = self._job_contexts[job_id].state
             self._forget(job_id)
             self._terminal_variants[job_id] = variant
             variant.job_id = job_id
             variant.status = "cancelled" if variant.status == "cancelled" else "failed"
             variant.execution_metadata["job_error"] = str(error)
-            if self._on_variant_failed:
-                self._on_variant_failed(variant, error)
+            self._save_session(state)
+            if (
+                state.current_experiment is self.learning_state.current_experiment
+                and self._on_variant_failed
+            ):
+                self._present(state, variant, error, failed=True)
 
     def _extract_image_refs(self, result: dict[str, Any]) -> list[str]:
         return [str(path) for path in completion_result(SimpleNamespace(result=result))["images"]]

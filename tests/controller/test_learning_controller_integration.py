@@ -95,6 +95,7 @@ def test_learning_controller_handles_missing_execution_controller():
     learning_state = LearningState()
     experiment = LearningExperiment(
         name="Test",
+        experiment_id="test-experiment",
         stage="txt2img",
         variable_under_test="CFG Scale",
         values=[7.0],
@@ -102,7 +103,12 @@ def test_learning_controller_handles_missing_execution_controller():
     )
     learning_state.current_experiment = experiment
     learning_state.plan = [
-        LearningVariant(experiment_id="Test", param_value=7.0, status="pending"),
+        LearningVariant(
+            experiment_id="test-experiment",
+            variant_id="test-experiment:0",
+            param_value=7.0,
+            status="pending",
+        ),
     ]
 
     # Create mock pipeline controller
@@ -120,6 +126,7 @@ def test_learning_controller_handles_missing_execution_controller():
     )
     # This test is exercising controller construction/wiring, not stage-card
     # compilation.  Supply one already-compiled immutable record.
+    # Production's real compiler assigns these stable IDs before admission.
     controller._build_variant_njr = MagicMock(  # type: ignore[method-assign]
         return_value=type("Record", (), {"job_id": "learning-job-1"})()
     )

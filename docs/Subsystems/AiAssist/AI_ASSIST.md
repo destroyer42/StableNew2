@@ -128,3 +128,7 @@ Visibility changes immediately scrub and close the review even when the tab is u
 explanations enter neither logs nor persisted GUI/usage state. Destruction and shutdown suppress late callbacks.
 Synthetic GUI/integration tests cover the disabled-installation journey, explicit edits, stale contexts, content canaries,
 queued completion, cancellation and quiescence. These tests are not physical-model qualification evidence.
+
+## 12. Learning evidence summary (not yet consumed) [V]
+
+`src/learning/ai_evidence_summary.py` builds a versioned, token-only, size-bounded summary of one model's Learning evidence and its allowed next actions (`docs/Subsystems/Learning/LEARNING.md` section 3.16). Nothing in `src/ai_assist` calls it, and it is not a trust grant: a later advisory caller belongs outside `src/ai_assist` (which may import only `ai_assist`, `utils` and `prompting`), must be its own package, and must revalidate any AI answer with `resolve_ai_candidate` against freshly derived evidence.

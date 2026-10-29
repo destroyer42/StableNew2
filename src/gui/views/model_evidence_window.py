@@ -26,6 +26,11 @@ from src.generation_profiles.evidence_catalog import (
 from src.generation_profiles.evidence_refresh import EvidenceRefresh, Lookup
 from src.generation_profiles.evidence_report import build_report, export_report
 from src.generation_profiles.identity import ModelIdentityResolver, RegistryShaLookup
+from src.gui.controllers.model_evidence_next_test import (
+    assess_model,
+    capture_services,
+    revalidate,
+)
 from src.gui.controllers.model_evidence_proposals import (
     capture_resources,
     preview_selected,
@@ -35,6 +40,8 @@ from src.gui.views.model_evidence_proposals_dialog import (
     ModelEvidenceProposalsDialog,
     choose_prompt_context,
 )
+from src.gui.views.next_test_dialog import NextTestDialog
+from src.gui_v2.next_test_view import build_view, route_for
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import RegistryFamilyLookup
 from src.learning.evidence_autopilot import (
@@ -46,6 +53,14 @@ from src.learning.evidence_proposals import (
     ExperimentProposal,
     evidence_gaps,
 )
+from src.learning.intelligence_contracts import (
+    WORKFLOW_DRAFT_PREPARATION,
+    WORKFLOW_LEARNING_REVIEW,
+    WORKFLOW_PROPOSED_EXPERIMENTS,
+    WORKFLOW_RECOMMENDATION_APPLY,
+    IntelligenceReport,
+)
+from src.learning.qualification_batch import BatchOutcome
 from src.learning.setting_evidence import inspect_experiment
 from src.utils.atomic_io import atomic_write_text
 from src.utils.thread_registry import get_thread_registry
@@ -79,6 +94,9 @@ class ModelEvidenceWindow(tk.Toplevel):
         self.planning_context: ProposalPlanningContext | None = None
         self._qualification_prompt: tuple[str, str, dict[str, Any]] | None = None
         self._proposal_dialog: ModelEvidenceProposalsDialog | None = None
+        self._next_dialog: NextTestDialog | None = None
+        self._next_report: IntelligenceReport | None = None
+        self._next_when_ready = False
         self._rows: dict[str, dict[str, Any]] = {}
         self._events: queue.Queue[tuple[int, str, Any, Any]] = queue.Queue(maxsize=64)
         self._cancel = threading.Event()
@@ -136,6 +154,13 @@ class ModelEvidenceWindow(tk.Toplevel):
             state="disabled",
         )
         self.proposed_button.pack(side="left")
+        self.next_button = ttk.Button(
+            actions,
+            text="What Should I Test Next?",
+            command=self._test_next,
+            state="disabled",
+        )
+        self.next_button.pack(side="left", padx=4)
         ttk.Button(actions, text="Evidence Details", command=self._inspect_asset).pack(
             side="left", padx=4
         )
@@ -150,6 +175,7 @@ class ModelEvidenceWindow(tk.Toplevel):
 
     def _close(self) -> None:
         self._closed = True
+        self._next_when_ready = False
         self._cancel.set()
         self.after_cancel(self._poll_id)
         self.destroy()
@@ -177,6 +203,8 @@ class ModelEvidenceWindow(tk.Toplevel):
             self.status.set("A bounded operation is running; Cancel then wait for its result.")
             return
         self._busy = True
+        if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
+            self._proposal_dialog.set_busy(True)
         self._cancel = threading.Event()
         self._generation += 1
         generation, cancel = self._generation, self._cancel
@@ -191,7 +219,14 @@ class ModelEvidenceWindow(tk.Toplevel):
             event: tuple[int, str, Any, Any]
             try:
                 result = action(cancel.is_set, progress)
-                event = (generation, "cancelled" if cancel.is_set() else "done", result, success)
+                event = (
+                    generation,
+                    "cancelled"
+                    if cancel.is_set() and not isinstance(result, BatchOutcome)
+                    else "done",
+                    result,
+                    success,
+                )
             except Exception as exc:
                 logger.exception("Model evidence operation failed")
                 event = (generation, "error", f"{type(exc).__name__}: {exc}", None)
@@ -219,8 +254,12 @@ class ModelEvidenceWindow(tk.Toplevel):
                 self.status.set(value)
             else:
                 self._busy = False
+                if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
+                    self._proposal_dialog.set_busy(False)
                 if kind == "error":
                     self.status.set(value)
+                    if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
+                        self._proposal_dialog.status.set(value)
                     if (
                         "stale" in str(value).casefold()
                         and self._proposal_dialog is not None
@@ -229,7 +268,7 @@ class ModelEvidenceWindow(tk.Toplevel):
                         self._proposal_dialog.refuse_stale()
                 elif kind == "cancelled":
                     self.status.set(
-                        "Operation cancelled. Any drafts already saved remain in the Experiment Library."
+                        "Operation cancelled. Saved drafts and any confirmed admissions remain in the Experiment Library; inspect exact jobs before retrying."
                     )
                 else:
                     callback(value)
@@ -372,6 +411,12 @@ class ModelEvidenceWindow(tk.Toplevel):
         if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
             self._proposal_dialog.refuse_stale()
         self.proposed_button.configure(text="Proposed Experiments (checking…)", state="disabled")
+        self.next_button.configure(state="disabled")
+        self._next_report = None
+        if self._next_dialog is not None and self._next_dialog.winfo_exists():
+            self._next_dialog.mark_stale(
+                "The selected model changed. Refresh from the new selection."
+            )
         if self._selected() and getattr(self.owner, "learning_controller", None) is not None:
             self._plan(open_dialog=False)
 
@@ -436,6 +481,7 @@ class ModelEvidenceWindow(tk.Toplevel):
                 self.targets.append(target)
             count = sum(p.runnable for p in self.proposals)
             self.proposed_button.configure(text=f"Proposed Experiments ({count})", state="normal")
+            self.next_button.configure(state="normal")
             covered = sum(
                 c.field
                 in ("sampler_name", "scheduler", "steps", "cfg_scale", "width", "height", "vae")
@@ -461,8 +507,117 @@ class ModelEvidenceWindow(tk.Toplevel):
             )
             if open_dialog:
                 self._proposal_dialog = ModelEvidenceProposalsDialog(self, self.proposal_plan)
+            if self._next_when_ready:
+                self._next_when_ready = False
+                self._test_next()
 
         self._work(planned, show)
+
+    def request_next_test(self, model_name: str) -> None:
+        """Entry from Learning results: select the experiment's checkpoint, then open the suggestion."""
+        from src.image_backends.model_readiness_probe import checkpoint_key
+
+        wanted = checkpoint_key(Path(str(model_name or "")).name)
+        key = next(
+            (
+                k
+                for k, row in self._rows.items()
+                if wanted and checkpoint_key(Path(row["relative"]).name) == wanted
+            ),
+            None,
+        )
+        if key is None:
+            self.status.set(
+                "The current model is not in the cached checkpoint list. Select a checkpoint, "
+                "or choose Evidence… > Observe assets first."
+            )
+            return
+        self._next_when_ready = True
+        self.tree.selection_set(key)
+        self.tree.see(key)
+
+    def _test_next(self) -> None:
+        row = self._selected()
+        if not row or row["kind"] != "checkpoint":
+            self.status.set("Select a checkpoint first.")
+            return
+        try:
+            inputs, services = self._capture_planning_inputs(), capture_services(self.owner)
+        except (ValueError, AttributeError) as exc:
+            self.status.set(f"Cannot assess this model yet: {exc}")
+            return
+        self.status.set("Reading saved evidence… no generation, network or AI is used.")
+
+        def assess_work(_cancelled: Callable[[], bool], _progress: Callable[[str], None]) -> Any:
+            return assess_model(self._context(inputs), services)
+
+        def show(report: IntelligenceReport) -> None:
+            self._next_report = report
+            if self._next_dialog is not None and self._next_dialog.winfo_exists():
+                self._next_dialog.close()
+            self._next_dialog = NextTestDialog(
+                self,
+                build_view(report),
+                on_open=self._open_next_action,
+                on_refresh=self._test_next,
+            )
+            self.status.set("What Should I Test Next? is ready. Nothing was started.")
+
+        self._work(assess_work, show)
+
+    def _open_next_action(self, action_id: str) -> None:
+        """Revalidate against current evidence on the worker, then use an existing workflow."""
+        if self._busy:
+            self.status.set("Wait for the current bounded operation, then choose the action again.")
+            return
+        inputs, services = self._capture_planning_inputs(), capture_services(self.owner)
+
+        def check(_cancelled: Callable[[], bool], _progress: Callable[[str], None]) -> Any:
+            return revalidate(action_id, self._context(inputs), services)
+
+        def route(result: Any) -> None:
+            if result is None:
+                message = (
+                    "Evidence changed since this suggestion. Refresh What Should I Test Next?."
+                )
+                if self._next_dialog is not None and self._next_dialog.winfo_exists():
+                    self._next_dialog.mark_stale(message)
+                self.status.set(message)
+                return
+            self._route_next(route_for(result[0]), result[0].executable)
+
+        self._work(check, route)
+
+    def _route_next(self, route: Any, executable: bool) -> None:
+        """Open the existing operator workflow only. No setting changes and no job admission here."""
+        if route.workflow == WORKFLOW_PROPOSED_EXPERIMENTS and executable:
+            self._plan()
+        elif route.workflow == WORKFLOW_DRAFT_PREPARATION and executable:
+            self.owner._on_open_experiment_library()
+            self.status.set(
+                "Open the saved draft in the Experiment Library; Run stays an explicit step."
+            )
+        elif route.workflow == WORKFLOW_LEARNING_REVIEW and executable:
+            identity = route.target_id
+
+            def loaded(payload: Any) -> None:
+                if payload and self.owner._restore_from_store_payload(
+                    payload, experiment_id=identity
+                ):
+                    self.status.set("Opened the experiment in Learning. Rate or inspect it there.")
+                else:
+                    self.status.set("That saved experiment could not be opened.")
+
+            self._work(lambda _c, _p: self.owner.experiment_store.load_session(identity), loaded)
+        elif route.workflow == WORKFLOW_RECOMMENDATION_APPLY and executable:
+            panel = getattr(self.owner, "review_panel", None)
+            if panel is not None:
+                panel.show_recommendations()
+            self.status.set(
+                "Recommendations are shown in Learning. Apply still asks for your confirmation."
+            )
+        else:
+            self.status.set(route.guidance or "Nothing can be opened for this suggestion.")
 
     def _save_selected(
         self, dialog: ModelEvidenceProposalsDialog, *, queue_to_learning: bool
@@ -576,6 +731,71 @@ class ModelEvidenceWindow(tk.Toplevel):
             ),
             shown,
         )
+
+    def _queue_selected(self, dialog: ModelEvidenceProposalsDialog) -> None:
+        if self._busy or dialog._stale:
+            return
+        service = getattr(self.owner, "qualification_batch", None)
+        if service is None:
+            dialog.status.set("Canonical Learning/JobService admission is unavailable.")
+            return
+        inputs, ids, plan = self._capture_planning_inputs(), dialog.selection_ids(), dialog.plan
+
+        def prepared(batch: Any) -> None:
+            if not dialog.winfo_exists() or dialog._stale:
+                return
+            dialog.show(batch.confirmation)
+            if not any(entry.records for entry in batch.experiments):
+                dialog.status.set(
+                    "Every selected experiment already has jobs. Open Experiment Library to review; reruns require a new experiment."
+                )
+                return
+            generation = self._generation
+            if not messagebox.askyesno(
+                "Queue qualification batch", batch.confirmation, parent=dialog
+            ):
+                dialog.status.set(
+                    "Generation not confirmed. Drafts remain saved; zero jobs admitted."
+                )
+                return
+            if (
+                self._closed
+                or generation != self._generation
+                or not dialog.winfo_exists()
+                or dialog._stale
+            ):
+                return
+            fresh_inputs = self._capture_planning_inputs()
+
+            def admitted(outcome: Any) -> None:
+                self.status.set(outcome.describe())
+                if dialog.winfo_exists():
+                    dialog.status.set(outcome.describe())
+                    dialog.show(outcome.describe())
+
+            self._work(
+                lambda cancelled, _p: service.admit(
+                    batch, self._context(fresh_inputs), confirmed=True, cancelled=cancelled
+                ),
+                admitted,
+            )
+
+        def context_ready(saved_prompt: Any) -> None:
+            if not dialog.winfo_exists() or dialog._stale:
+                return
+            if saved_prompt is not None:
+                self._qualification_prompt = saved_prompt
+            prompt_context = self._choose_qualification_prompt()
+            if prompt_context is None:
+                return
+            self._work(
+                lambda cancelled, _p: service.prepare(
+                    plan, ids, self._context(inputs), prompt_context, cancelled=cancelled
+                ),
+                prepared,
+            )
+
+        self._work(lambda _cancelled, _p: service.saved_prompt_context(ids), context_ready)
 
     def _open_draft(self, dialog: ModelEvidenceProposalsDialog) -> None:
         selected = dialog.tree.selection()

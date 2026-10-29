@@ -25,6 +25,34 @@ from src.learning.resource_access import get_resource_choices
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 
+def compile_qualification_state(
+    state: LearningState,
+    context: ProposalPlanningContext,
+    build: bool,
+) -> tuple[tuple[NormalizedJobRecord, ...], Any]:
+    """Isolated existing Learning freeze/compiler; no execution bindings or widgets."""
+    experiment = state.current_experiment
+    if experiment is None:
+        raise ValueError("Qualification experiment unavailable")
+    facade = SimpleNamespace(
+        app_state=SimpleNamespace(resources=copy.deepcopy(dict(context.resources)))
+    )
+    controller = LearningController(state, app_controller=facade)
+    if controller.execution_controller is not None:
+        raise RuntimeError("Qualification compiler must not bind execution")
+    cast(Any, controller)._learning_policy_resolver = lambda _name: context.target.policy
+    cast(Any, controller)._evidence_catalog_provider = lambda: context.catalog
+    cast(Any, controller)._evidence_identity_resolver = lambda _name: context.target
+    if build:
+        controller.build_plan(experiment)
+    records = (
+        ExperimentAdmissionService()
+        .compile_all(state.plan, lambda variant: controller._build_variant_njr(variant, experiment))
+        .records
+    )
+    return records, build_preview_summary(experiment, state.plan, show_model_names=True)
+
+
 def capture_resources(controller: Any) -> dict[str, list[str]]:
     """Capture display-to-runtime projection on the UI thread; no WebUI calls."""
     result = {}
