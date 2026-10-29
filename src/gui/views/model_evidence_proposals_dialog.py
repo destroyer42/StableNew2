@@ -75,7 +75,7 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
     def __init__(self, owner: Any, plan: ProposalPlan) -> None:
         super().__init__(owner)
         self.owner, self.plan = owner, plan
-        self.title("Proposed Experiments — qualification drafts")
+        self.title("Proposed Experiments — qualification batch")
         self.geometry(
             f"{min(1080, self.winfo_screenwidth() - 24)}x{min(700, self.winfo_screenheight() - 96)}"
         )
@@ -85,9 +85,10 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
         self.proposals = {p.proposal_id: p for p in plan.proposals}
         self.checked = {p.proposal_id for p in plan.proposals if p.document["default_selected"]}
         self.status = tk.StringVar()
+        self._stale, self._busy = False, False
         ttk.Label(
             self,
-            text="Choose supported experiments. Queue to Learning saves drafts only; Run remains in Learning.",
+            text="Save Drafts keeps designs. Queue Selected… preflights all selected experiments, then asks before generation.",
             padding=6,
         ).grid(row=0, column=0, sticky="ew")
         ttk.Label(self, textvariable=self.status, padding=6).grid(row=1, column=0, sticky="ew")
@@ -156,14 +157,15 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
         self.tree.bind("<<TreeviewSelect>>", lambda _event: self._describe())
         prompt = ttk.Frame(self, padding=6)
         prompt.grid(row=3, column=0, sticky="ew")
-        ttk.Label(
-            prompt, text="One prompt context is resolved only when Preview is requested."
-        ).pack(side="left")
-        ttk.Button(
+        ttk.Label(prompt, text="One prompt context is shared by the selected experiments.").pack(
+            side="left"
+        )
+        self.prompt_button = ttk.Button(
             prompt,
             text="Change prompt context…",
             command=lambda: owner._choose_qualification_prompt(change=True),
-        ).pack(side="right")
+        )
+        self.prompt_button.pack(side="right")
         self.details = ScrolledText(self, height=12, wrap="word", state="disabled")
         self.details.grid(row=4, column=0, sticky="nsew", padx=6)
         actions = ttk.Frame(self, padding=6)
@@ -180,10 +182,14 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
         self.preview_button.pack(side="left", padx=6)
         self.queue_button = ttk.Button(
             actions,
-            text="Queue to Learning (drafts)",
-            command=lambda: owner._save_selected(self, queue_to_learning=True),
+            text="Queue Selected…",
+            command=lambda: owner._queue_selected(self),
         )
         self.queue_button.pack(side="left")
+        self.select_all_button = ttk.Button(
+            actions, text="Select All Eligible", command=self._select_all
+        )
+        self.select_all_button.pack(side="left", padx=6)
         ttk.Button(
             actions, text="Open highlighted draft", command=lambda: owner._open_draft(self)
         ).pack(side="right")
@@ -200,6 +206,8 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
                 self._toggle()
 
     def _toggle(self) -> str:
+        if self._busy or self._stale:
+            return "break"
         selected = self.tree.selection()
         proposal = self.proposals.get(selected[0]) if selected else None
         if proposal and proposal.runnable:
@@ -215,6 +223,20 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
             self._update_count()
         return "break"
 
+    def _select_all(self) -> None:
+        if self._stale or self._busy:
+            return
+        self.checked = {p.proposal_id for p in self.plan.proposals if p.runnable}
+        for proposal_id in self.checked:
+            self.tree.set(proposal_id, "selected", "Checked")
+        self._update_count()
+
+    def set_busy(self, busy: bool) -> None:
+        self._busy = busy
+        self._update_count()
+        self.select_all_button.configure(state="disabled" if busy or self._stale else "normal")
+        self.prompt_button.configure(state="disabled" if busy or self._stale else "normal")
+
     def _update_count(self) -> None:
         docs = [self.proposals[p].document for p in self.selection_ids()]
         images = sum(d["expected_images"] for d in docs)
@@ -223,7 +245,9 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
             f"Selected: {len(docs)} experiments / {images} images / {work:g} estimated denoising steps. Nothing has been admitted."
         )
         for button in (self.save_button, self.preview_button, self.queue_button):
-            button.configure(state="normal" if docs else "disabled")
+            button.configure(
+                state="normal" if docs and not self._busy and not self._stale else "disabled"
+            )
 
     def show(self, text: str) -> None:
         self.details.configure(state="normal")
@@ -238,6 +262,7 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
             self.show(describe(proposal))
 
     def refuse_stale(self) -> None:
+        self._stale = True
         self.status.set("Findings changed. Close this list and replan before saving or previewing.")
         self.checked.clear()
         for proposal_id, proposal in self.proposals.items():
@@ -245,3 +270,5 @@ class ModelEvidenceProposalsDialog(tk.Toplevel):
                 self.tree.set(proposal_id, "selected", "Unchecked (stale)")
         for button in (self.save_button, self.preview_button, self.queue_button):
             button.configure(state="disabled")
+        self.select_all_button.configure(state="disabled")
+        self.prompt_button.configure(state="disabled")

@@ -159,6 +159,19 @@ class LearningTabFrame(ttk.Frame):
             execution_controller=execution_controller,  # PR-LEARN-002: Pass execution controller
         )
         self.bind("<Destroy>", self._on_learning_destroy, add=True)
+        from src.gui.controllers.model_evidence_proposals import compile_qualification_state
+        from src.learning.qualification_batch import QualificationBatchService
+
+        self.qualification_batch = (
+            QualificationBatchService(self.experiment_store, self.learning_controller.execution_controller,
+                                      compile_qualification_state)
+            if self.learning_controller.execution_controller is not None else None
+        )
+        if self.qualification_batch is not None:
+            from src.utils.thread_registry import get_thread_registry
+
+            get_thread_registry().spawn(target=self.qualification_batch.restore,
+                                        name="learning-batch-restore", purpose="reconcile saved Learning batch IDs")
 
         # Configure main layout
         self.columnconfigure(0, weight=1)

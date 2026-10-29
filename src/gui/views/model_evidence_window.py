@@ -60,6 +60,7 @@ from src.learning.intelligence_contracts import (
     WORKFLOW_RECOMMENDATION_APPLY,
     IntelligenceReport,
 )
+from src.learning.qualification_batch import BatchOutcome
 from src.learning.setting_evidence import inspect_experiment
 from src.utils.atomic_io import atomic_write_text
 from src.utils.thread_registry import get_thread_registry
@@ -202,6 +203,8 @@ class ModelEvidenceWindow(tk.Toplevel):
             self.status.set("A bounded operation is running; Cancel then wait for its result.")
             return
         self._busy = True
+        if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
+            self._proposal_dialog.set_busy(True)
         self._cancel = threading.Event()
         self._generation += 1
         generation, cancel = self._generation, self._cancel
@@ -216,7 +219,14 @@ class ModelEvidenceWindow(tk.Toplevel):
             event: tuple[int, str, Any, Any]
             try:
                 result = action(cancel.is_set, progress)
-                event = (generation, "cancelled" if cancel.is_set() else "done", result, success)
+                event = (
+                    generation,
+                    "cancelled"
+                    if cancel.is_set() and not isinstance(result, BatchOutcome)
+                    else "done",
+                    result,
+                    success,
+                )
             except Exception as exc:
                 logger.exception("Model evidence operation failed")
                 event = (generation, "error", f"{type(exc).__name__}: {exc}", None)
@@ -244,8 +254,12 @@ class ModelEvidenceWindow(tk.Toplevel):
                 self.status.set(value)
             else:
                 self._busy = False
+                if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
+                    self._proposal_dialog.set_busy(False)
                 if kind == "error":
                     self.status.set(value)
+                    if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
+                        self._proposal_dialog.status.set(value)
                     if (
                         "stale" in str(value).casefold()
                         and self._proposal_dialog is not None
@@ -254,7 +268,7 @@ class ModelEvidenceWindow(tk.Toplevel):
                         self._proposal_dialog.refuse_stale()
                 elif kind == "cancelled":
                     self.status.set(
-                        "Operation cancelled. Any drafts already saved remain in the Experiment Library."
+                        "Operation cancelled. Saved drafts and any confirmed admissions remain in the Experiment Library; inspect exact jobs before retrying."
                     )
                 else:
                     callback(value)
@@ -717,6 +731,71 @@ class ModelEvidenceWindow(tk.Toplevel):
             ),
             shown,
         )
+
+    def _queue_selected(self, dialog: ModelEvidenceProposalsDialog) -> None:
+        if self._busy or dialog._stale:
+            return
+        service = getattr(self.owner, "qualification_batch", None)
+        if service is None:
+            dialog.status.set("Canonical Learning/JobService admission is unavailable.")
+            return
+        inputs, ids, plan = self._capture_planning_inputs(), dialog.selection_ids(), dialog.plan
+
+        def prepared(batch: Any) -> None:
+            if not dialog.winfo_exists() or dialog._stale:
+                return
+            dialog.show(batch.confirmation)
+            if not any(entry.records for entry in batch.experiments):
+                dialog.status.set(
+                    "Every selected experiment already has jobs. Open Experiment Library to review; reruns require a new experiment."
+                )
+                return
+            generation = self._generation
+            if not messagebox.askyesno(
+                "Queue qualification batch", batch.confirmation, parent=dialog
+            ):
+                dialog.status.set(
+                    "Generation not confirmed. Drafts remain saved; zero jobs admitted."
+                )
+                return
+            if (
+                self._closed
+                or generation != self._generation
+                or not dialog.winfo_exists()
+                or dialog._stale
+            ):
+                return
+            fresh_inputs = self._capture_planning_inputs()
+
+            def admitted(outcome: Any) -> None:
+                self.status.set(outcome.describe())
+                if dialog.winfo_exists():
+                    dialog.status.set(outcome.describe())
+                    dialog.show(outcome.describe())
+
+            self._work(
+                lambda cancelled, _p: service.admit(
+                    batch, self._context(fresh_inputs), confirmed=True, cancelled=cancelled
+                ),
+                admitted,
+            )
+
+        def context_ready(saved_prompt: Any) -> None:
+            if not dialog.winfo_exists() or dialog._stale:
+                return
+            if saved_prompt is not None:
+                self._qualification_prompt = saved_prompt
+            prompt_context = self._choose_qualification_prompt()
+            if prompt_context is None:
+                return
+            self._work(
+                lambda cancelled, _p: service.prepare(
+                    plan, ids, self._context(inputs), prompt_context, cancelled=cancelled
+                ),
+                prepared,
+            )
+
+        self._work(lambda _cancelled, _p: service.saved_prompt_context(ids), context_ready)
 
     def _open_draft(self, dialog: ModelEvidenceProposalsDialog) -> None:
         selected = dialog.tree.selection()

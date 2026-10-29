@@ -431,12 +431,12 @@ rows default checked; blocked/metadata rows explain their refusal and cannot be 
 No absent alternate is replaced by a generic recipe. Existing `/1` proposals remain
 readable unchanged; missing v2 provenance is reported as unavailable.
 
-**Save Drafts** and **Queue to Learning (drafts)** write ordinary drafts in
+**Save Drafts** writes ordinary drafts in
 `LearningExperimentStore`, with readable name, checkpoint bytes, evidence revision,
 hypothesis, baseline/control, alternatives, shared requested seed policy, a
 12/15/20-image budget, rubric and screening criteria. A bounded generated ID owns
 its directory; atomic create-only publication preserves edited drafts/results.
-Neither action admits jobs or changes the active experiment. Opening restores Design
+Saving admits no jobs and does not change the active experiment. Opening restores Design
 only. **Preview Selected** resolves one selected PromptPack row or custom prompt
 context for the group, then uses isolated existing Learning freeze/compiler instances
 without execution bindings or persistence. It does not switch the live experiment.
@@ -445,6 +445,31 @@ context. Adapter-bearing resolved prompts, negative/global text or structured Lo
 intent are refused for these pilots. Fixed optimizer/output/global intent survives
 explicit Save/Preview without entering public plan serialization. Build Preview and
 Run remain explicit existing actions, using JobService and SQLite admission/reconciliation.
+
+**Select All Eligible** checks runnable proposals and excludes blocked,
+metadata-only and stale rows. **Queue Selected…** resolves one existing or explicitly
+chosen prompt context, preserves edited Library drafts, and preflights the entire
+selection through the existing Learning freeze/compiler before admitting anything.
+One confirmation shows checkpoint bytes, experiments, exact new image count,
+denoising work, prompt source and warnings. Confirmation revalidates every frozen
+experiment, current model/policy/catalog/resources and saved Library revision.
+A failed preflight admits zero jobs. Catalog discovery never starts generation.
+
+`src/learning/qualification_batch.py` coordinates the existing Experiment Library
+and Learning execution owner without switching the visible experiment. Each
+experiment retains atomic `JobService.submit_njrs`/SQLite admission; there is no
+transaction across experiments. A failed or uncertain admission stops subsequent
+submissions and preserves earlier confirmed work. Exact experiment/variant/job
+associations are saved before submission. Uncertain responses reconcile exact IDs
+without retry. Repeated Queue Selected preserves existing work, and the ordinary
+Learning admission boundary fences stale drafts of already-admitted batch IDs;
+reruns require a new experiment. Library writes cannot replace these associations.
+Startup restores all saved batch associations without submission. Completion and
+failure use the same callback owner and evidence interpreter, with foreground
+presentation through JobService's existing dispatcher. Background checkpoints
+preserve newer review drafts and authoring fields. Completed work remains in
+Experiment Library / Learning Review; ratings, recommendations and explicit
+profile publication keep their existing rules.
 
 Preview freezes a separately versioned selected context, including operator-edited
 baseline/hypothesis, prompt and seed policy. Changing the tested variable requires
@@ -546,7 +571,15 @@ Resume after restart: `restore_resume_state` reconstructs the existing schema-1 
 
 Queued jobs remain queued even during GPU quarantine; running jobs show the repository's current state. Startup's existing interrupted-job recovery remains authoritative (`failed`, `INTERRUPTED_RESTART_ACTION_REQUIRED`, no automatic replay). Failed/cancelled jobs retain the recorded error/action. Completed jobs reuse the normal completion and seed/subseed, tested-variable/LoRA and runtime-profile evidence rules. Missing readback stays uncontrolled; existing uncontrolled evidence is never promoted. Recorded paths remain attached when files are missing, with an explicit warning; recovery neither fabricates a file nor writes ratings. Saved ratings, review drafts and the selected variant/image survive restoration. Model Comparison keeps its separate target-envelope evidence semantics.
 
-The execution controller restores only genuine nonterminal callback mappings. One lock serializes reconciliation, admission and terminal updates; reentrant notifications wait for immutable identity validation. Completion evidence is interpreted on disposable variant/experiment copies, then published before presentation/checkpoint callbacks. Malformed structured readback or a rejected interpreter retains job/artifact associations as visibly uncontrolled evidence without publishing provisional seed/profile comparison boundaries. Only a safe terminal projection enters the cache; a rating without an explicit positive evidence result is uncontrolled. A resume-save warning stays distinct from a validation failure and does not reclassify valid execution readback. Repeated restore and duplicate terminal events do not duplicate artifacts, counters or callbacks, stale reads do not downgrade a newer terminal result, and switching experiments discards the old mappings. The same JobService listener pair is rebound when its Learning owner is recreated, and closing the tab makes queued callbacks inert. Tk callbacks still use JobService's existing application UI dispatcher. Opening Learning never dispatches, retries, replays, clears quarantine or mutates repository lifecycle. The header summarizes actual outcomes and per-variant rows show the status and required action. Resume persistence failures surface in that header instead of reporting success.
+The execution controller restores only genuine nonterminal callback mappings. One lock serializes reconciliation, admission and terminal updates; reentrant notifications wait for immutable identity validation. Completion evidence is interpreted on disposable variant/experiment copies, then published before presentation/checkpoint callbacks. Malformed structured readback or a rejected interpreter retains job/artifact associations as visibly uncontrolled evidence without publishing provisional seed/profile comparison boundaries. Only a safe terminal projection enters the cache; a rating without an explicit positive evidence result is uncontrolled. A resume-save warning stays distinct from a validation failure and does not reclassify valid execution readback. Repeated restore and duplicate terminal events do not duplicate artifacts, counters or callbacks, stale reads do not downgrade a newer terminal result, and switching experiments retains background mappings without repainting the new visible experiment. The same JobService listener pair is rebound when its Learning owner is recreated, and closing the tab makes queued callbacks inert. Tk callbacks still use JobService's existing application UI dispatcher. Opening Learning never dispatches, retries, replays, clears quarantine or mutates repository lifecycle. The header summarizes actual outcomes and per-variant rows show the status and required action. Resume persistence failures surface in that header instead of reporting success.
+
+Legacy sessions with absent or empty `experiment_id` reopen as unresolved without
+registering a durable tracking session, assigning an ID or dropping saved
+job/variant/artifact associations and review drafts. New work still obtains its
+stable identity at Preview/compilation; admission requires a durable experiment.
+Presentation already on the main thread runs within the existing JobService
+delivery; direct worker/reconciliation presentation uses that same dispatcher
+once, with fresh foreground/closed checks before touching the view.
 
 The unsuffixed-or-`_v2` duplicates `learning_tab_frame.py`, `learning_plan_table_v2.py` and `learning_review_panel_v2.py` were deleted (P3-1); the live files are `learning_tab_frame_v2.py`, `learning_plan_table.py` and `learning_review_panel.py`, despite their names.
 
