@@ -12,7 +12,7 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import Any
 
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.gui_v2.asset_readiness_view import ReadinessSession, headline, project_rows
 from src.utils.thread_registry import get_thread_registry
@@ -61,7 +61,7 @@ class AssetReadinessTab(ttk.Frame):
             spawn=lambda name, target: get_thread_registry().spawn(
                 target=target, name=name, daemon=False, purpose="Asset readiness check"
             ),
-            dispatch=TkUiDispatcher(self.winfo_toplevel()).invoke,
+            dispatch=tk_dispatcher_for(self).invoke,
         )
         self.session = ReadinessSession(
             self._runner, producer, self._show_report, self._show_error, self._set_busy

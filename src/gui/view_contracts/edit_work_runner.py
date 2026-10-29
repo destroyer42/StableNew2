@@ -15,13 +15,13 @@ from typing import Any, TypeVar
 from src.controller.app_controller_services.background_task_coordinator import (
     BackgroundTaskCoordinator,
 )
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 
 T = TypeVar("T")
 
 
 def _tk_coordinator(widget: tk.Misc) -> BackgroundTaskCoordinator:
-    dispatcher = TkUiDispatcher(widget.winfo_toplevel())
+    dispatcher = tk_dispatcher_for(widget)
     return BackgroundTaskCoordinator(dispatcher=dispatcher.invoke)
 
 

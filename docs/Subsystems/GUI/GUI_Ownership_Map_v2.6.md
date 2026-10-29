@@ -89,7 +89,7 @@ variables.
 UI-thread delivery is the `UiDispatcher` protocol (`src/controller/ports/ui_dispatcher.py`: `schedule`, `invoke_later`,
 `run_on_ui_thread`). Tk implements it with `TkInvoker` (`src/gui/gui_invoker.py`; `GuiInvoker` is a compatibility alias) and
 `TkUiDispatcher` (`src/gui/ui_dispatcher.py`, which keeps `invoke`). `AppStateV2` depends on the protocol only. Composition
-ownership is unchanged: `src/app_factory.py` stays the Tk composition path and `MainWindowV2` still creates its own invoker.
+and dispatcher ownership are described under "Single composition and lifecycle ownership (GUI-SEAM-730)".
 
 ### Controller presentation actions (GUI-SEAM-710)
 
@@ -105,11 +105,39 @@ singleton behavior and Job Explanation retains its multiple-window behavior.
 identity and replacement order. Repeated attachment reuses the active port and replaces listbox bindings rather than
 adding listeners; the V2 pack-loader compatibility surface keeps its own bindings.
 
-The adapter uses the window's existing `UiDispatcher` (`TkInvoker`), with inline delivery on the GUI thread and queued
+The adapter uses the window's `UiDispatcher` (the root's single dispatcher), with inline delivery on the GUI thread and queued
 delivery from workers. Navigation returns the accepted source payload; missing/unsupported destinations raise immediately.
 Queued handoffs snapshot payload order and lineage. Every delivered callback checks its attachment, shutdown state and
 root lifetime on the GUI thread. Detach, window replacement, shutdown and Tk cleanup fence pending requests without
-creating another dispatcher, navigation authority or execution path. Owner decision 11 remains open.
+creating another dispatcher, navigation authority or execution path.
+
+### Single composition and lifecycle ownership (GUI-SEAM-730)
+
+Owner decision 11 is accepted for the Tk production host only: one application composition path, one dispatcher owner per
+Tk root and one coordinated lifecycle, with the existing kernel, queue, repository, `JobService`, `PipelineRunner` and
+process managers authoritative. It does not authorize Qt or a second GUI host, and it is not the full P3-2 runtime-stack
+migration (`AppController` still builds some of its own services).
+
+- **Composition path:** `src/main.py` launches (single-instance lock, `Tk()`, `mainloop`) and calls `build_v2_app`
+  (`src/app_factory.py`), the only place the Tk root's dispatcher, `AppStateV2`, controller, window and watchdog are joined.
+  `src/app/bootstrap.py` keeps the reusable kernel construction. `MainWindowV2` owns views and presentation, not services.
+- **Dispatcher owner:** `tk_dispatcher_for(widget_or_root)` returns the one `TkUiDispatcher` (one `TkInvoker` pump) for a Tk
+  root. The factory passes it to the controller scheduler (`ui_scheduler=dispatcher.invoke`) and to `MainWindowV2`, which gives
+  it to `AppStateV2` and `TkPresentationActions`. Widgets that previously built their own `TkUiDispatcher` resolve the same
+  instance. Widget-scoped `GuiInvoker`s in the LoRA picker and the LoRA/embedding design frames remain deliberately separate:
+  each is disposed when its widget closes.
+- **Standalone windows:** a `MainWindowV2` constructed without a dispatcher (tests, harnesses) resolves the same per-root owner,
+  owns it and `release_tk_dispatcher`s it in `cleanup()`, so a later window on that root starts fresh. This is not a production
+  path.
+- **Disposal:** `TkUiDispatcher.dispose()` is idempotent, drops queued work, cancels delayed work and makes every later
+  `schedule`/`invoke_later`/`run_on_ui_thread` a no-op. A production dispatcher stays registered after disposal, so a closing
+  root is never given a new pump. A failed `build_v2_app` disposes it before re-raising.
+- **Close order (`graceful_exit`, unchanged):** stop GPU session telemetry; `controller.shutdown_app` (admission fence, job
+  cancel, background stop, learning hooks, WebUI stop, queue quiescence, queue-state save, repository close only after
+  quiescence); `window.cleanup()` (detach presentation actions, save UI state, disable notifications, dispose the dispatcher);
+  `root.quit()`/`root.destroy()`; single-instance lock release; `os._exit(0)`. The window's `_trigger_graceful_exit` detaches
+  presentation actions first. The standalone `_perform_legacy_shutdown` (no handler registered) still disposes the dispatcher
+  before the controller shutdown.
 
 ### Shared presentation policy
 

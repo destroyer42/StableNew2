@@ -1,5 +1,42 @@
 # LEARN-QUAL-BATCH-810
 
+## PR #231 conflict resolution and integration
+
+Owner authorized resolving branch conflicts and merging PR #231. Measurement
+starts `2026-10-29T10:33:50Z`, same primary session. Verified clean feature head
+`fe5be38a7863b52925c0b1bf7331e0e3b90f6333` and current remote main
+`ab004dab536513083e1879df149e726f4fac8d02` (AI-LEARN-830, PR #232).
+Merge main into the feature branch without rebase or force-push, preserving both
+histories. Narrow conflict resolution within the accepted architecture.
+Model recommendation: Claude Code Sonnet 5.5 Medium; Codex GPT-6.1 Sol Medium
+for a fresh session; retain the productive current High session to avoid another
+context-acquisition pass. Expected 5M cache-read / 15k output.
+Controller Surface Assessment: import union only in ModelEvidenceWindow; retain
+both batch coordination and read-only next-test routing, with no new controller
+responsibility, callback authority or ceiling increase.
+Token-Efficient Validation Plan: inspect automatic merges plus all four conflict
+files, regenerate CODE_MAP, test both 810 and 830 domain/integration/Tk surfaces,
+run the canonical local gate once, then require hosted required/full-suite/windows
+on the reconciled head before the explicitly authorized merge into main. Reuse
+unchanged accepted lifecycle/security evidence and preserve unrelated work.
+
+Resolved four conflicts: STATUS combines confirmed batch execution and the
+read-only next-test summary; CODEX_MAP retains both routes; generated CODE_MAP
+contains both module sets; ModelEvidenceWindow imports both intelligence contracts
+and BatchOutcome. Automatic LearningTabFrame/window/doc merges were inspected.
+Existing batch service, execution controller, Library store and 810 integration
+test bytes are unchanged from the accepted repaired head. Combined focused
+Learning/controller/recovery/810/830/Tk composition/code-map validation:
+**1,351 passed in 60.81 s**. No new product behavior or architecture choice was
+introduced by conflict resolution.
+Canonical local gate on the reconciled tree: **PASS**, 791 tracked source
+modules, all controller/static/architecture ratchets, **14,604 tests collected**
+and **358 smoke tests passed in 38.96 s**. Full aggregate diff against the
+verified main was inspected; no unresolved index entries or whitespace defects.
+Prior independent lifecycle/security review is reused because those source bytes
+are unchanged. Hosted checks must pass on the new merge-resolution head before
+integration; the earlier green head is not substituted for that evidence.
+
 ## PR #231 bounded CI repair
 
 Start `2026-10-29T10:02:10Z`, same primary session. Verified clean

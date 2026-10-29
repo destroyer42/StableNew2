@@ -18,7 +18,7 @@ from PIL import Image, ImageTk
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.theme_v2 import apply_toplevel_theme
-from src.gui.ui_dispatcher import TkUiDispatcher
+from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui_v2.mask_editor_state import MaskViewport
@@ -144,7 +144,7 @@ class SmartReviewDialog(tk.Toplevel):
             cap: tk.BooleanVar(value=enablement.is_enabled(cap)) for cap in CAPABILITIES
         }
         self._build()
-        dispatcher = TkUiDispatcher(self.winfo_toplevel())
+        dispatcher = tk_dispatcher_for(self)
         self._runner = runner or BackgroundWorkRunner(
             spawn=lambda name, target: _spawn(name, target),
             dispatch=dispatcher.invoke,
