@@ -1,0 +1,798 @@
+"""Frozen AI-QUAL-115 model/runtime qualification contract for LiquidAI/LFM3-1.7B. Pure: no network, model or process.
+
+This is a separately versioned contract. It does not touch the Qwen corpus, plan or digests (``plan.py``, ``final_plan.py``),
+the committed registry or the runtime manifest, and it authorizes nothing: every approval is a separate owner act that must
+name this contract's digest and the exact artifacts it covers. LFM3 candidates live here, never in ``config/``, so no
+unqualified model is added to production.
+
+Every value below was read from public metadata on 2026-10-29 (Hugging Face repository API at the pinned commit SHAs, the
+GitHub release API and tag objects, the model card, ``generation_config.json``, the LICENSE text, and the llama.cpp
+``common/arg.cpp`` source at each tag). Nothing was downloaded beyond those small text files and nothing was executed.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from src.ai_assist.argv import (
+    ALLOWED_FLAGS,
+    FORBIDDEN_FLAGS,
+    RunLimits,
+    Sampling,
+    assert_argv_allowed,
+)
+from src.ai_assist.manifests import ModelRegistry, load_model_registry
+from tools.qualification.ai111 import plan as plan_module
+from tools.qualification.ai111.corpus import corpus_digest, stage_a_subset
+from tools.qualification.ai111.d12a import flag_in_text
+from tools.qualification.ai111.final_plan import final_corpus, final_plan
+from tools.qualification.ai111.plan import digest, frozen_plan
+
+SCHEMA = "stablenew.ai115.lfm3.v1"
+CONTRACT_ID = "AI-QUAL-115"
+MODEL_PREFIX = "lfm3-"
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
+
+#: Qwen evidence that this contract must leave untouched. ``validate_contract`` recomputes all three from the code.
+QWEN_FROZEN: dict[str, str] = {
+    "screening_plan_sha256": "17814e4050049323dc4f5206417bac67f94307d7791ce580af2948e2310df338",
+    "final_plan_sha256": "3017c427c7f5c15bc900e6e5d1ef2d3e86b45c7bbb30d3a9d0a0d2f58b1eccbf",
+    "final_corpus_sha256": "a89297beb3ae86246eb25214738d91ba3f24dc1e2cd8a4f7547ae49c68a774d5",
+}
+
+PUBLISHER_REPO = "LiquidAI/LFM3-1.7B"
+PUBLISHER_REVISION = "ac2586a34f1a1c03329dbdcdefabd8b6478ddaa7"
+PACKAGER_REPO = "LiquidAI/LFM3-1.7B-GGUF"
+PACKAGER_REVISION = "bad5729bba61d076fff20d2548e62526665af215"
+
+LICENSE: dict[str, Any] = {
+    "spdx": "LicenseRef-LFM-Open-License-1.0",  # not an SPDX-listed licence; a custom reference by SPDX syntax
+    "name": "LFM Open License v1.0",
+    "text_path": "LICENSE",
+    "text_bytes": 10574,
+    "text_sha256": "4d28ca14dedc0b3d0fcc2b3339f0e79931faa33874f3d24f522183a8fc70068c",
+    "identical_in": [PUBLISHER_REPO, PACKAGER_REPO],
+    "commercial_use_threshold_usd_annual_revenue": 10_000_000,
+    "summary": (
+        "Free use, modification and redistribution, but Commercial Use by a Legal Entity whose annual revenue is at or "
+        "above the Threshold is not licensed (Section 5); a Qualified Non-Profit is exempt for non-commercial or research "
+        "use; redistribution must carry the licence (Section 4); termination on non-compliance (Section 11)."
+    ),
+    "redistribution_by_stablenew": "none: weights are operator-imported from local files and are never shipped or committed",
+    "owner_acknowledgement_required": True,
+    "owner_acknowledged": False,
+}
+
+#: Registry-shaped candidate entries (``load_model_registry`` accepts this shape). Sizes and hashes are the Hugging Face LFS
+#: object ids (SHA-256) and sizes at the packager commit; they are NOT yet verified against local bytes.
+_CANDIDATE_FILES: dict[str, dict[str, Any]] = {
+    "Q4_K_M": {
+        "filename": "LFM3-1.7B-Q4_K_M.gguf",
+        "bytes": 1099627808,
+        "sha256": "3793e1e6e2266919d6e015287221b41100175a98eddaba92e111aed3b05c93c4",
+    },
+    "Q8_0": {
+        "filename": "LFM3-1.7B-Q8_0.gguf",
+        "bytes": 1846238496,
+        "sha256": "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6",
+    },
+}
+
+
+def _candidate(quantization: str) -> dict[str, Any]:
+    file = _CANDIDATE_FILES[quantization]
+    return {
+        "model_id": f"lfm3-1.7b-{quantization.lower()}-liquidai",
+        "display_name": f"LFM3-1.7B {quantization} (Liquid AI GGUF)",
+        "license_spdx": LICENSE["spdx"],
+        "architecture": "lfm3",
+        "quantization": quantization,
+        "filename": file["filename"],
+        "bytes": file["bytes"],
+        "sha256": file["sha256"],
+        "max_context": 8192,
+        "capabilities": ["prompt_rewrite", "target_fit_advice", "workflow_choice"],
+        "qualified": False,
+        "provenance": {
+            "publisher_repo": PUBLISHER_REPO,
+            "publisher_revision": PUBLISHER_REVISION,
+            "packager_repo": PACKAGER_REPO,
+            "packager_revision": PACKAGER_REVISION,
+            "converter": "Liquid AI GGUF export (converter build is not stated in the repository metadata)",
+            "source_url": (
+                f"https://huggingface.co/{PACKAGER_REPO}/resolve/{PACKAGER_REVISION}/{file['filename']}"
+            ),
+        },
+    }
+
+
+CANDIDATES: tuple[dict[str, Any], ...] = (_candidate("Q4_K_M"), _candidate("Q8_0"))
+
+#: llama.cpp CPU x64 Windows builds. ``asset_sha256`` is the GitHub release asset ``digest`` field (computed by GitHub at
+#: upload; it is not a signature or attestation). Per-member hashes need the archive and are therefore NOT recorded.
+RUNTIME_CANDIDATES: dict[str, dict[str, Any]] = {
+    "b11960": {
+        "repository": "https://github.com/ggml-org/llama.cpp",
+        "tag": "b11960",
+        "commit": "8642541b255bfb5dc39cd351a178be09013a55d6",
+        "published_utc": "2026-10-28T12:45:39Z",
+        "asset": "llama-b11960-bin-win-cpu-x64.zip",
+        "bytes": 24407745,
+        "sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287",
+        "license": "MIT",
+        "compute": "cpu",
+        "source_url": "https://github.com/ggml-org/llama.cpp/releases/download/b11960/llama-b11960-bin-win-cpu-x64.zip",
+        "selected": True,
+        "members_hashed": False,
+        "lfm3_text_support": "yes: the LiquidAI model card names b11960 (v0.8.0) as the minimum for LFM3-1.7B-GGUF",
+        "reason": (
+            "The publisher's own stated minimum. It also carries the later LFM3-family follow-ups through b11960. "
+            "Pre-releases are the only kind this project publishes (every tag is marked prerelease)."
+        ),
+    },
+    "b11938": {
+        "repository": "https://github.com/ggml-org/llama.cpp",
+        "tag": "b11938",
+        "commit": "19cce6919992fdffd92e0ac152caaf1e2b8f254e",
+        "published_utc": "2026-10-27T23:57:45Z",
+        "asset": "llama-b11938-bin-win-cpu-x64.zip",
+        "bytes": 24260998,
+        "sha256": "9e2fc62604446d86809ca09094d3c7a7329b723bda636e4bbd23c3ce62cb77dc",
+        "license": "MIT",
+        "compute": "cpu",
+        "source_url": "https://github.com/ggml-org/llama.cpp/releases/download/b11938/llama-b11938-bin-win-cpu-x64.zip",
+        "selected": False,
+        "members_hashed": False,
+        "lfm3_text_support": (
+            "architecture present: its tag commit is 'model : add LiquidAI/LFM3-1.7B and LiquidAI/LFM3-VL-2B (#31252)', "
+            "but it is below the publisher's stated minimum and no one has loaded the shipped GGUFs on it"
+        ),
+        "reason": (
+            "Evaluated and not selected: the earliest build that contains the LFM3 text architecture, older than the "
+            "publisher-documented floor. Kept only as a fallback that would need its own owner decision."
+        ),
+    },
+}
+SELECTED_RUNTIME = "b11960"
+
+#: The only comparator pins (read from the committed registry at call time, never edited here).
+COMPARATORS: dict[str, str] = {
+    "lfm3-1.7b-q4_k_m-liquidai": "qwen3.5-4b-q4_k_m-unsloth",
+    "lfm3-1.7b-q8_0-liquidai": "qwen3.5-4b-q8_0-unsloth",
+}
+
+#: Vendor sampling (model card + ``generation_config.json``: temperature 0.1, top_k 50, repetition_penalty 1.1). ``top_p`` and
+#: ``min_p`` are pinned explicitly because llama.cpp's own defaults (0.95 and 0.05) would otherwise apply silently while the
+#: vendor's transformers settings leave both neutral.
+SAMPLING_PROFILES: dict[str, dict[str, Any]] = {
+    "lfm3_vendor": {
+        "temperature": 0.1,
+        "top_k": 50,
+        "top_p": 1.0,
+        "min_p": 0.0,
+        "repeat_penalty": 1.1,
+        "presence_penalty": 0.0,
+        "seed": 321,
+        "basis": f"{PUBLISHER_REPO}@{PUBLISHER_REVISION} generation_config.json and model card",
+    },
+    "lfm3_no_repeat": {
+        "temperature": 0.1,
+        "top_k": 50,
+        "top_p": 1.0,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "presence_penalty": 0.0,
+        "seed": 321,
+        "basis": "pre-registered Stage A sensitivity arm: a repetition penalty can discourage verbatim token copying",
+    },
+}
+QWEN_SAMPLING_PROFILE = "qwen_frozen"
+
+#: Flags the LFM3 argv may use: the production vocabulary plus the two sampling flags that vocabulary lacks. Both exist in
+#: ``common/arg.cpp`` at b11938 and b11960 (static source evidence only; D12a must still show them in the binary's help).
+EXTRA_FLAGS: frozenset[str] = frozenset({"--min-p", "--repeat-penalty"})
+LFM3_ALLOWED_FLAGS: frozenset[str] = ALLOWED_FLAGS | EXTRA_FLAGS
+
+_PROFILE_FIELDS = (
+    "temperature",
+    "top_k",
+    "top_p",
+    "min_p",
+    "repeat_penalty",
+    "presence_penalty",
+    "seed",
+)
+
+STRUCTURED_OUTPUT: dict[str, Any] = {
+    "mode": "json_schema_grammar",
+    "schema_flag": "--json-schema-file",
+    "frame": "ai_assist.frame/1 unchanged (identical prompt bytes for LFM3 and the matched Qwen arm)",
+    "chat_template": "not applied: raw frame through -f with --no-conversation, as for the frozen Qwen arms",
+    "reasoning_flag": "--reasoning off is passed but is inert for a raw frame; the grammar is what excludes thinking text",
+    "stdout_rule": "exactly one JSON object; any other text (including a <think> block) is MALFORMED and is never repaired",
+    "ungrammared_probe": {
+        "stage": "A",
+        "cases": 10,
+        "purpose": "report-only: schema-valid rate without the grammar; cannot influence a gate",
+    },
+    "unknown": [
+        "whether the raw (template-less) frame is a fair way to drive a chat-tuned model: measured by the matched Qwen arm, "
+        "not assumed",
+        "whether the grammar constrains LFM3 as it does Qwen: measured as the schema-valid rate",
+    ],
+}
+
+#: Same bounds as the frozen plan so the matched comparison has one resource envelope.
+LIMITS: dict[str, Any] = asdict(RunLimits())
+
+STAGE_A_CASES = 30
+STAGE_A_SEED = 11502
+
+MONITORING: dict[str, Any] = {
+    "read_roots": ["<evidence>/ai-root", "<SystemRoot>"],
+    "write_roots": ["<evidence>/ai-root/work"],
+    "extra_read_roots": "none expected; any addition must be named in the owner approval and is recorded in the manifest",
+    "capture": {
+        "analyzer_version": "3",
+        "per_arm_capture": True,
+        "max_mb": 1024,
+        "canary_proof": "a different capture, same host, same tool hashes, under 24 h old, from a protected interpreter",
+    },
+    "egress": {
+        "observed_connections_allowed": 0,
+        "includes_loopback": True,
+        "preventive_barrier": "operator-attested outbound firewall restriction (never created or verified by StableNew)",
+        "child_environment": "scrubbed: no proxy variables, HF_HUB_OFFLINE=1, LLAMA_ARG_OFFLINE=1, NO_PROXY=*",
+    },
+    "teardown": {
+        "after_every_request": "process record complete and active_after_teardown == 0",
+        "session_end": "no llama-*.exe survivor; no StableNewCap trace session left running",
+        "any_failure": "abort the arm and the session",
+    },
+    "gpu": {
+        "ngl": 0,
+        "environment": "CUDA_VISIBLE_DEVICES=-1",
+        "runtime_members": "no ggml-cuda, ggml-vulkan, ggml-hip, ggml-sycl or ggml-opencl member may be present",
+        "vram": "owned tree may hold no GPU memory; global memory.used may not grow by more than 2048 MiB (existing probe)",
+    },
+    "memory": {
+        "admission_gib": "model file GiB + 4 (RAM and commit)",
+        "abort": "available RAM < 0.25 GiB or commit headroom < 1 GiB for two consecutive samples",
+        "tree_private_cap_gib": "1.5 x model file GiB + 2",
+        "recorded": [
+            "peak_tree_private_gib",
+            "peak_tree_working_set_gib",
+            "host available/commit minima per arm",
+        ],
+    },
+    "latency": {
+        "median_seconds_max": 20.0,
+        "recorded": [
+            "cold first request",
+            "warm median",
+            "p95",
+            "max",
+            "output characters per second",
+        ],
+        "not_measurable": "prefill/decode tokens per second (no timing flag is in the closed vocabulary)",
+    },
+}
+
+APPROVAL_STEPS: dict[str, dict[str, Any]] = {
+    "S0_download": {
+        "grants": "download exactly the three named files into operator staging; no import, extraction or execution",
+        "artifacts": ["lfm3-1.7b-q4_k_m-liquidai", "lfm3-1.7b-q8_0-liquidai", "runtime:b11960"],
+    },
+    "S1_license": {
+        "grants": "the owner records acceptance of LFM Open License v1.0 and states the Threshold position",
+        "artifacts": ["license"],
+    },
+    "S2_d12a_b11960": {
+        "grants": "extract the CPU archive to an evidence-only directory and run --version and --help of the named members",
+        "artifacts": ["runtime:b11960"],
+    },
+    "S3_stage_a": {
+        "grants": "import the verified files into an evidence-local root and run Stage A for the named arms under capture",
+        "artifacts": ["lfm3-1.7b-q4_k_m-liquidai", "lfm3-1.7b-q8_0-liquidai", "runtime:b11960"],
+    },
+    "S4_stage_b": {
+        "grants": "run the full frozen corpus for the owner-chosen leading arms, then the blind preference session",
+        "artifacts": ["lfm3-1.7b-q4_k_m-liquidai", "lfm3-1.7b-q8_0-liquidai", "runtime:b11960"],
+    },
+}
+PROMOTION = "registry and manifest promotion (qualified=true) and enabling Suggest are outside this contract"
+
+KNOWN_BLOCKERS: tuple[str, ...] = (
+    "launchable_member_hashes_unrecorded_for_b11960",
+    "harness_pinned_to_b11840_single_runtime_single_sampling",
+    "license_not_acknowledged",
+    "d12a_b11960_not_run",
+    "protected_system_python_and_capture_control_copy_absent",
+    "live_canary_proof_for_current_tool_hashes_absent",
+    "firewall_attestation_absent",
+    "owner_approvals_absent",
+)
+
+
+def _qwen_entry(registry: ModelRegistry, model_id: str) -> dict[str, Any]:
+    entry = next((e for e in registry.entries if e.model_id == model_id), None)
+    if entry is None:
+        raise ValueError(f"comparator is not in the committed registry: {model_id}")
+    return {
+        "model_id": entry.model_id,
+        "bytes": entry.bytes,
+        "sha256": entry.sha256,
+        "quantization": entry.quantization,
+        "publisher_revision": entry.provenance.publisher_revision,
+        "packager_revision": entry.provenance.packager_revision,
+    }
+
+
+def _arms(registry: ModelRegistry) -> list[dict[str, Any]]:
+    arms: list[dict[str, Any]] = [
+        {
+            "arm_id": "B1_engine",
+            "kind": "baseline",
+            "note": "deterministic engine; free; the preference reference for every model arm",
+        }
+    ]
+    for lfm, qwen in COMPARATORS.items():
+        arms.append(
+            {
+                "arm_id": f"{lfm}@lfm3_vendor",
+                "kind": "candidate",
+                "model_id": lfm,
+                "sampling": "lfm3_vendor",
+                "runtime": SELECTED_RUNTIME,
+                "stages": ["A", "B"],
+                "matched_comparator": f"{qwen}@{QWEN_SAMPLING_PROFILE}",
+            }
+        )
+        arms.append(
+            {
+                "arm_id": f"{qwen}@{QWEN_SAMPLING_PROFILE}",
+                "kind": "comparator",
+                "model": _qwen_entry(registry, qwen),
+                "sampling": QWEN_SAMPLING_PROFILE,
+                "runtime": SELECTED_RUNTIME,
+                "stages": ["A", "B"],
+                "note": "frozen Qwen sampling, re-run on the LFM3 runtime so the runtime is not a confounder",
+            }
+        )
+    arms.append(
+        {
+            "arm_id": "lfm3-1.7b-q4_k_m-liquidai@lfm3_no_repeat",
+            "kind": "sensitivity",
+            "model_id": "lfm3-1.7b-q4_k_m-liquidai",
+            "sampling": "lfm3_no_repeat",
+            "runtime": SELECTED_RUNTIME,
+            "stages": ["A"],
+            "note": "Stage A only. Stage B uses the vendor profile unless the pre-registered rule below picks this one.",
+        }
+    )
+    return arms
+
+
+def stage_a_case_ids() -> list[str]:
+    return [c.case_id for c in stage_a_subset(final_corpus(), STAGE_A_CASES, STAGE_A_SEED)]
+
+
+def _stages() -> dict[str, Any]:
+    thresholds = frozen_plan()["thresholds"]
+    return {
+        "A": {
+            "purpose": "compatibility, integrity and monitoring smoke; never a qualification",
+            "cases_per_arm": STAGE_A_CASES,
+            "case_ids_sha256": digest(stage_a_case_ids()),
+            "corpus": f"stablenew.ai111.final.v2 subset, seed {STAGE_A_SEED}",
+            "admission": [
+                "S0-S3 approvals and the license acknowledgement bind this contract's digest",
+                "D12a for the b11960 members: PASS; launched members' hashes equal the recorded ones",
+                "protected capture runtime proven; a live canary PASS from different capture within 24 h",
+                "one 1024 MB capture per arm with a start and end canary; analysis v3 PASS (zero lost events)",
+                "quiet host; memory preflight per arm; firewall attestation recorded in the evidence-local root",
+            ],
+            "stop_criteria": [
+                "any hash mismatch, unpinned loadable file, or identity change between arm start and end",
+                "any ownership violation, connection attempt, write outside the write root, or read outside the read roots",
+                "owned child tree not proven gone after any request, or a trace session left running",
+                "GPU memory attributable to the owned tree, or global VRAM growth above the probe limit",
+                "three consecutive infrastructure failures, host memory abort, or the capture deadline",
+                "capture analysis INCONCLUSIVE or FAIL (a violation found after the fact invalidates the arm)",
+            ],
+            "recommendation_rule": (
+                "stage_a_report.judge_arm applied unchanged: REJECT on a hard gate, security FAIL or a model that never "
+                "ran; ADVANCE only when compatibility, integrity and security all PASS and no measured threshold is "
+                "missed; otherwise INCONCLUSIVE. Stage A can never yield GO."
+            ),
+            "sensitivity_rule": (
+                "The no-repeat arm replaces the vendor profile for Stage B only if the vendor arm records strictly more "
+                "accepted protected-token changes on the Stage A subset and the no-repeat arm records zero. Otherwise "
+                "the vendor profile stands. Decided before any run; not tuned afterwards."
+            ),
+        },
+        "B": {
+            "purpose": "selection evidence on the frozen 460-case corpus",
+            "corpus_sha256": final_plan()["corpus_sha256"],
+            "go_requires": [
+                "evaluate_final_gates over all 460 cases per arm, including zero hard-gate violations",
+                "teardown verified, zero egress, no ownership violation, analysis v3 PASS for every capture",
+                "at least 100 decisive blind judgments versus B1_engine with lower 95% bound above 0.5",
+                "every record carries this contract's digest, the arm's sampling profile and the runtime asset hash",
+            ],
+            "no_go": "any hard gate violated or any measured threshold missed on complete evidence",
+            "inconclusive": "incomplete cases, missing capture analysis, fewer than 100 decisive judgments, or any abort",
+            "head_to_head": (
+                "LFM3 versus its matched Qwen comparator is reported with a paired blind preference; LFM3 is described as "
+                "preferred only if the lower 95% bound exceeds 0.5 over at least 100 decisive judgments. It is never a "
+                "gate for either model."
+            ),
+            "never": "pooled with Stage A records; a subset; a hermetic or cooperative-journal run",
+        },
+        "thresholds": dict(thresholds),
+    }
+
+
+def contract(registry_path: Path = plan_module.REGISTRY_PATH) -> dict[str, Any]:
+    registry = load_model_registry(registry_path)
+    if registry.problems:
+        raise ValueError("model registry has problems: " + "; ".join(registry.problems))
+    return {
+        "schema": SCHEMA,
+        "contract_id": CONTRACT_ID,
+        "status": "FROZEN_PROPOSAL_UNAPPROVED",
+        "execution": "none: this document authorizes no download, import, extraction, inference or promotion",
+        "qwen_preserved": dict(QWEN_FROZEN),
+        "license": dict(LICENSE),
+        "candidates": [json.loads(json.dumps(c)) for c in CANDIDATES],
+        "runtime": {
+            "selected": SELECTED_RUNTIME,
+            "candidates": json.loads(json.dumps(RUNTIME_CANDIDATES)),
+        },
+        "arms": _arms(registry),
+        "sampling": {
+            **json.loads(json.dumps(SAMPLING_PROFILES)),
+            QWEN_SAMPLING_PROFILE: asdict(Sampling()),
+        },
+        "limits": dict(LIMITS),
+        "argv": {
+            "allowed_flags": sorted(LFM3_ALLOWED_FLAGS),
+            "extra_flags_beyond_production": sorted(EXTRA_FLAGS),
+            "forbidden_flags": sorted(FORBIDDEN_FLAGS),
+            "help_must_list": sorted(LFM3_ALLOWED_FLAGS),
+        },
+        "structured_output": json.loads(json.dumps(STRUCTURED_OUTPUT)),
+        "monitoring": json.loads(json.dumps(MONITORING)),
+        "stages": _stages(),
+        "approvals": json.loads(json.dumps(APPROVAL_STEPS)),
+        "promotion": PROMOTION,
+        "known_blockers": list(KNOWN_BLOCKERS),
+        "authorization": dict.fromkeys(APPROVAL_STEPS, False),
+    }
+
+
+def contract_digest(document: Mapping[str, Any] | None = None) -> str:
+    return digest(contract() if document is None else document)
+
+
+# -- fail-closed validators --------------------------------------------------------------------------------------------
+
+
+def candidate_problems(entry: Mapping[str, Any], production: ModelRegistry) -> list[str]:
+    """Why a LFM3 candidate entry may not be used. Empty means only that its metadata is internally consistent."""
+
+    problems: list[str] = []
+    document = json.dumps({"schema_version": 1, "models": [dict(entry)]})
+    parsed = load_model_registry(document)
+    if parsed.problems or len(parsed.entries) != 1:
+        return [f"registry parser: {p}" for p in parsed.problems] or [
+            "registry parser: entry dropped"
+        ]
+    model = parsed.entries[0]
+    if model.qualified:
+        problems.append("a candidate may not claim qualified=true")
+    if not model.model_id.startswith(MODEL_PREFIX):
+        problems.append("candidate id is outside the lfm3- namespace")
+    if model.architecture != "lfm3":
+        problems.append("architecture is not lfm3")
+    provenance = model.provenance
+    if (provenance.publisher_repo, provenance.packager_repo) != (PUBLISHER_REPO, PACKAGER_REPO):
+        problems.append("publisher/packager repository is not the pinned Liquid AI pair")
+    for label, revision in (
+        ("publisher_revision", provenance.publisher_revision),
+        ("packager_revision", provenance.packager_revision),
+    ):
+        if not COMMIT.match(revision):
+            problems.append(f"{label} is not an immutable 40-hex commit")
+    expected_url = f"https://huggingface.co/{PACKAGER_REPO}/resolve/{provenance.packager_revision}/{model.filename}"
+    if provenance.source_url != expected_url:
+        problems.append("source_url is not the revision-pinned resolve URL of the filename")
+    if model.license_spdx != LICENSE["spdx"]:
+        problems.append("licence identifier does not name the recorded LFM Open License v1.0")
+    pinned = next((f for f in _CANDIDATE_FILES.values() if f["filename"] == model.filename), None)
+    if pinned is None:
+        problems.append("filename is not one of the two pinned quantizations")
+    elif (model.bytes, model.sha256) != (pinned["bytes"], pinned["sha256"]):
+        problems.append("size or SHA-256 differs from the pinned LFS values")
+    if any(e.sha256 == model.sha256 or e.model_id == model.model_id for e in production.entries):
+        problems.append("candidate collides with a production registry entry")
+    return problems
+
+
+def license_problems(record: Mapping[str, Any], *, require_acknowledged: bool) -> list[str]:
+    problems: list[str] = []
+    for key in (
+        "spdx",
+        "name",
+        "text_sha256",
+        "text_bytes",
+        "commercial_use_threshold_usd_annual_revenue",
+    ):
+        if not record.get(key):
+            problems.append(f"licence record lacks {key}")
+    if (
+        record.get("text_sha256") != LICENSE["text_sha256"]
+        or record.get("text_bytes") != LICENSE["text_bytes"]
+    ):
+        problems.append("licence text hash differs from the recorded LICENSE")
+    if record.get("owner_acknowledgement_required") is not True:
+        problems.append("licence record must require owner acknowledgement")
+    if require_acknowledged and record.get("owner_acknowledged") is not True:
+        problems.append("licence not acknowledged by the owner")
+    return problems
+
+
+def runtime_problems(entry: Mapping[str, Any], *, require_members: bool) -> list[str]:
+    problems: list[str] = []
+    if entry.get("compute") != "cpu" or "cuda" in str(entry.get("asset", "")).lower():
+        problems.append("runtime is not the CPU-only asset")
+    if not SHA256.match(str(entry.get("sha256", ""))) or not COMMIT.match(
+        str(entry.get("commit", ""))
+    ):
+        problems.append("asset SHA-256 or tag commit is not a full lowercase digest")
+    if not isinstance(entry.get("bytes"), int) or entry["bytes"] <= 0:
+        problems.append("asset size is not a positive integer")
+    tag = str(entry.get("tag", ""))
+    if (
+        str(entry.get("source_url", ""))
+        != f"{entry.get('repository')}/releases/download/{tag}/{entry.get('asset')}"
+    ):
+        problems.append("source_url is not the tag-pinned release asset")
+    if entry.get("license") != "MIT":
+        problems.append("runtime licence is not the recorded MIT")
+    if require_members and entry.get("members_hashed") is not True:
+        problems.append("launchable member hashes are not recorded")
+    return problems
+
+
+def lfm3_argv(
+    profile: str,
+    model_path: Path,
+    prompt_file: Path,
+    schema_file: Path,
+    limits: RunLimits | None = None,
+) -> list[str]:
+    """Closed argv for one LFM3 completion. The production prefix, then the profile's sampling; no other path exists."""
+
+    if profile not in SAMPLING_PROFILES:
+        raise ValueError(f"unknown LFM3 sampling profile: {profile}")
+    values = SAMPLING_PROFILES[profile]
+    limits = limits or RunLimits()
+    argv = [
+        "--offline",
+        "-ngl",
+        "0",
+        "--log-disable",
+        "--no-display-prompt",
+        "--no-conversation",
+        "--reasoning",
+        "off",
+        "--prio",
+        "-1",
+        "-m",
+        str(model_path),
+        "-f",
+        str(prompt_file),
+        "--json-schema-file",
+        str(schema_file),
+        "-c",
+        str(limits.context_tokens),
+        "-n",
+        str(limits.max_new_tokens),
+        "-t",
+        str(limits.threads),
+        "--temp",
+        repr(float(values["temperature"])),
+        "--top-k",
+        str(int(values["top_k"])),
+        "--top-p",
+        repr(float(values["top_p"])),
+        "--min-p",
+        repr(float(values["min_p"])),
+        "--repeat-penalty",
+        repr(float(values["repeat_penalty"])),
+        "--presence-penalty",
+        repr(float(values["presence_penalty"])),
+        "--seed",
+        str(int(values["seed"])),
+    ]
+    assert_argv_allowed(argv, LFM3_ALLOWED_FLAGS)
+    return argv
+
+
+def help_flag_report(help_text: str, *, truncated: bool) -> dict[str, Any]:
+    """Flag spellings the contract needs, against a runtime's ``--help`` text (syntax evidence only)."""
+
+    missing = sorted(f for f in LFM3_ALLOWED_FLAGS if not flag_in_text(f, help_text))
+    if not help_text.strip() or (missing and truncated):
+        verdict = "INCONCLUSIVE"
+    else:
+        verdict = "FAIL" if missing else "PASS"
+    return {"verdict": verdict, "missing": missing, "truncated": truncated}
+
+
+def approval_problems(step: str, text: str, document: Mapping[str, Any] | None = None) -> list[str]:
+    """Identity binding of an owner approval to this contract. It checks names, never the owner's intent."""
+
+    document = contract() if document is None else document
+    steps = document["approvals"]
+    if step not in steps:
+        return [f"unknown approval step: {step}"]
+    lowered = text.lower()
+    problems: list[str] = []
+    if not text.strip():
+        return ["empty approval"]
+    if step.lower() not in lowered:
+        problems.append("approval does not name its step")
+    if digest(document) not in lowered:
+        problems.append("approval does not quote this contract's digest")
+    for artifact in steps[step]["artifacts"]:
+        for token in _artifact_tokens(artifact, document):
+            if token not in lowered:
+                problems.append(f"approval does not name {artifact}: {token[:16]}...")
+    return problems
+
+
+def _artifact_tokens(artifact: str, document: Mapping[str, Any]) -> list[str]:
+    if artifact == "license":
+        return [document["license"]["text_sha256"]]
+    if artifact.startswith("runtime:"):
+        return [document["runtime"]["candidates"][artifact.split(":", 1)[1]]["sha256"]]
+    entry = next(c for c in document["candidates"] if c["model_id"] == artifact)
+    return [entry["sha256"]]
+
+
+def validate_contract(
+    document: Mapping[str, Any], registry_path: Path = plan_module.REGISTRY_PATH
+) -> list[str]:
+    """Structural invariants a contract must hold before any owner is asked to approve it."""
+
+    problems: list[str] = []
+    production = load_model_registry(registry_path)
+    recomputed = {
+        "screening_plan_sha256": digest(frozen_plan(registry_path)),
+        "final_plan_sha256": digest(final_plan()),
+        "final_corpus_sha256": corpus_digest(final_corpus()),
+    }
+    if document.get("qwen_preserved") != QWEN_FROZEN or recomputed != QWEN_FROZEN:
+        problems.append("Qwen plan, corpus or digests changed")
+    if document.get("schema") != SCHEMA or document.get("status") != "FROZEN_PROPOSAL_UNAPPROVED":
+        problems.append("contract schema or status is wrong")
+    if any(document.get("authorization", {}).values()) or not document.get("authorization"):
+        problems.append("a contract may not carry a granted authorization")
+    for entry in document.get("candidates", []):
+        problems += [f"{entry.get('model_id')}: {p}" for p in candidate_problems(entry, production)]
+    selected = document["runtime"]["selected"]
+    for tag, entry in document["runtime"]["candidates"].items():
+        problems += [f"runtime {tag}: {p}" for p in runtime_problems(entry, require_members=False)]
+        if (tag == selected) != bool(entry.get("selected")):
+            problems.append("exactly the selected runtime must be marked selected")
+    problems += license_problems(document["license"], require_acknowledged=False)
+    if any(e.model_id.startswith(MODEL_PREFIX) for e in production.entries):
+        problems.append("an LFM3 entry is present in the production registry")
+    if not set(document["argv"]["allowed_flags"]) <= LFM3_ALLOWED_FLAGS:
+        problems.append("argv vocabulary exceeds the closed LFM3 set")
+    if set(document["argv"]["allowed_flags"]) & FORBIDDEN_FLAGS:
+        problems.append("argv vocabulary contains a forbidden flag")
+    arm_ids = [a["arm_id"] for a in document["arms"]]
+    if len(set(arm_ids)) != len(arm_ids):
+        problems.append("duplicate arm id")
+    for arm in document["arms"]:
+        if arm["kind"] == "baseline":
+            continue
+        if arm["runtime"] != selected:
+            problems.append(
+                f"{arm['arm_id']}: runtime differs from the selected one (confounded comparison)"
+            )
+        if arm["sampling"] not in document["sampling"]:
+            problems.append(f"{arm['arm_id']}: unknown sampling profile")
+    return problems
+
+
+# -- record and readiness guards ---------------------------------------------------------------------------------------
+
+
+def record_problems(
+    rows: Sequence[Mapping[str, Any]], document: Mapping[str, Any], arm_id: str
+) -> list[str]:
+    """Every record must be attributable to this contract, this arm's sampling and the selected runtime asset."""
+
+    arm = next((a for a in document["arms"] if a["arm_id"] == arm_id), None)
+    if arm is None or arm["kind"] == "baseline":
+        return [f"no executable arm named {arm_id}"]
+    runtime = document["runtime"]["candidates"][document["runtime"]["selected"]]
+    expected = {
+        "contract_sha256": digest(document),
+        "arm": arm_id,
+        "sampling_profile": arm["sampling"],
+        "runtime_asset_sha256": runtime["sha256"],
+    }
+    problems = []
+    if not rows:
+        problems.append("no records")
+    for index, row in enumerate(rows):
+        for key, value in expected.items():
+            if row.get(key) != value:
+                problems.append(f"record {index}: {key} does not match the contract")
+    return problems
+
+
+def readiness_blockers(stage: str, evidence: Mapping[str, Any]) -> list[str]:
+    """What still prevents a stage from starting. Any unknown, missing or non-True evidence is a blocker."""
+
+    needs = {
+        "S0_download": ("approval_S0_download",),
+        "S2_d12a_b11960": (
+            "approval_S0_download",
+            "approval_S1_license",
+            "approval_S2_d12a_b11960",
+            "artifacts_verified",
+        ),
+        "S3_stage_a": (
+            "approval_S3_stage_a",
+            "license_acknowledged",
+            "d12a_b11960_pass",
+            "member_hashes_recorded",
+            "harness_supports_contract",
+            "protected_runtime",
+            "canary_proof_current",
+            "firewall_attested",
+            "quiet_host",
+        ),
+        "S4_stage_b": (
+            "approval_S4_stage_b",
+            "stage_a_advance",
+            "operator_corpus_or_synthetic_declared",
+            "blind_session_scheduled",
+        ),
+    }
+    if stage not in needs:
+        return [f"unknown stage: {stage}"]
+    return [key for key in needs[stage] if evidence.get(key) is not True]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+    document = contract()
+    problems = validate_contract(document)
+    if problems:
+        raise SystemExit("contract is invalid: " + "; ".join(problems))
+    args.out.mkdir(parents=True)
+    (args.out / "contract.json").write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(json.dumps({"contract_sha256": digest(document)}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
