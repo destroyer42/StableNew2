@@ -110,8 +110,13 @@ No new blocking findings, source edits or additional review cycle.
 pass; no further batch admission, callbacks or queue work is required for 820.
 Remote main later advanced to `b374f631e6c5d9eb1a6368b0a5351e9554731121` (AI-QUAL-115,
 PR #233). Its source changes are outside Learning; shared STATUS/map edits are
-separate capability entries. This package retains its verified base, without rebase
-or integration into main. Compatibility inspection is separate from hosted CI.
+separate capability entries. An initial read-only merge-tree preview found one
+adjacent task-map edit conflict. The documentation-only closeout moves the 820
+pointer into the existing Learning row, retaining the original proposal-planning
+row and avoiding the concurrent AI entry. Source/test bytes and accepted gate/review
+evidence are unchanged; no repeated CI. This package retains its verified base,
+without rebase or integration into main. Compatibility inspection is separate
+from hosted CI.
 
 Historical results cannot acquire per-artifact proof retroactively. External/unowned
 runtimes cannot prove same-launch pairing; their images remain accessible. Multi-value
