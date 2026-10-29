@@ -161,7 +161,8 @@ def _prompt_context(snapshot: Mapping[str, Any]) -> str:
 
 
 def _variant(raw: Mapping[str, Any]) -> VariantView:
-    meta = raw.get("execution_metadata") if isinstance(raw.get("execution_metadata"), dict) else {}
+    raw_meta = raw.get("execution_metadata")
+    meta: Mapping[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
     controlled = meta.get("controlled_evidence_valid")
     seeds = meta.get("actual_all_seeds")
     return VariantView(
@@ -196,7 +197,8 @@ def project_experiment(experiment_id: str, payload: Mapping[str, Any]) -> Experi
         raise ValueError("no experiment definition")
     snapshot_json = current.get("execution_snapshot_json") or ""
     snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
-    meta = current.get("metadata") if isinstance(current.get("metadata"), dict) else {}
+    raw_meta = current.get("metadata")
+    meta: Mapping[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
     proposal = snapshot.get("evidence_proposal") or meta.get("evidence_proposal") or {}
     identity = snapshot.get("model_identity") or proposal.get("identity") or {}
     variants = tuple(_variant(v) for v in (payload.get("plan") or []) if isinstance(v, dict))

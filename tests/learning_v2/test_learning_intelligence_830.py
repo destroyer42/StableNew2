@@ -304,7 +304,7 @@ def test_no_safe_experiment_when_nothing_is_eligible(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "change", ["catalog", "resources", "baseline", "identity", "ratings", "experiments"]
+    "change", ["catalog", "resources", "baseline", "identity", "policy", "ratings", "experiments"]
 )
 def test_changed_evidence_invalidates_dependent_action_identifiers(tmp_path, change):
     context = make_context()
@@ -323,6 +323,10 @@ def test_changed_evidence_invalidates_dependent_action_identifiers(tmp_path, cha
         new_sources = replace(sources, context=replace(context, baseline=baseline))
     elif change == "identity":
         new_sources = replace(sources, context=make_context(sha="c" * 64))
+    elif change == "policy":
+        target = context.target
+        other = replace(target, policy=replace(target.policy, policy_id="a-different-policy"))
+        new_sources = replace(sources, context=replace(context, target=other))
     elif change == "ratings":
         write_log(tmp_path / "learning_records.jsonl", rating_rows("exp-late"))
         new_sources = load_sources(

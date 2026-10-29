@@ -197,7 +197,8 @@ def _matches(view: ExperimentView, document: Mapping[str, Any], sha: str) -> boo
     if view.proposal_id and view.proposal_id == document.get("proposal_id"):
         return True
     return bool(
-        view.model_sha == sha
+        sha
+        and view.model_sha == sha
         and view.variable == document.get("variable")
         and list(view.values) == list(document.get("values") or ())
         and fixed
@@ -220,7 +221,7 @@ def _coverage_severity(document: Mapping[str, Any]) -> tuple[int, str]:
 def _plan_actions(
     inputs: ActionInputs, applicable: list[ExperimentView]
 ) -> tuple[list[tuple[int, NextAction]], list[tuple[str, str]], list[str]]:
-    sha = inputs.target.identity.sha256
+    sha = inputs.target.identity.sha256 or ""
     found: list[tuple[int, NextAction]] = []
     suppressed: list[tuple[str, str]] = []
     blockers: list[str] = []

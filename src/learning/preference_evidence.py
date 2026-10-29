@@ -100,24 +100,18 @@ def attribute_ratings(
             continue
         meta = row["metadata"]
         overall = _overall(meta)
-        base = {"experiment": identity[0], "image": identity[2], "overall": overall}
+        experiment, image = identity[0], identity[2]
         if valid_rating(meta.get("user_rating")) is None or overall is None:
             result.append(
                 RatingAttribution(
-                    identity[0],
-                    identity[2],
-                    OUTCOME_INVALID,
-                    "No valid 1-5 rating is saved.",
-                    None,
+                    experiment, image, OUTCOME_INVALID, "No valid 1-5 rating is saved.", None
                 )
             )
             continue
         detail = LearningRecord.extract_rating_detail(meta)
-        extra = {
-            "subscores": tuple(sorted(detail["subscores"].items())),
-            "category": _category(detail["context_flags"]),
-            "prompt_context": _prompt_context(row),
-        }
+        subscores = tuple(sorted(detail["subscores"].items()))
+        category = _category(detail["context_flags"])
+        context = _prompt_context(row)
         try:
             sample = controlled_sample(row, target)
         except (
@@ -130,10 +124,24 @@ def attribute_ratings(
                 reason = (
                     f"Missing execution evidence: {exc}." if isinstance(exc, KeyError) else str(exc)
                 )
-            result.append(RatingAttribution(**base, **extra, outcome=outcome, reason=reason))
+            result.append(
+                RatingAttribution(
+                    experiment, image, outcome, reason, overall, subscores, category, context
+                )
+            )
             continue
         result.append(
-            RatingAttribution(**base, **extra, outcome=OUTCOME_CONTROLLED, reason="", sample=sample)
+            RatingAttribution(
+                experiment,
+                image,
+                OUTCOME_CONTROLLED,
+                "",
+                overall,
+                subscores,
+                category,
+                context,
+                sample,
+            )
         )
     return tuple(sorted(result, key=lambda a: (a.experiment, a.image)))
 
