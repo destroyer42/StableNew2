@@ -1227,10 +1227,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     from tools.qualification.ai111.execution_contract import select_contract
 
-    spec = select_contract(args.contract, args.authorize_plan)
-    plan = spec.execution_plan()
+    spec = select_contract(args.contract)
     if args.authorize_plan != spec.sha256:
         raise SystemExit("Authorization does not match the frozen plan digest")
+    plan = spec.execution_plan()
     for root in args.extra_read_root:
         refusal = extra_root_refusal(root)
         if refusal:

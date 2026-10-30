@@ -11,7 +11,7 @@ import pytest
 
 from src.ai_assist.argv import RunLimits, Sampling
 from src.ai_assist.contracts import OutcomeCode
-from tools.qualification.ai111 import capture_control, d12a, physical, readiness
+from tools.qualification.ai111 import capture_control, capture_session, d12a, physical, readiness
 from tools.qualification.ai111.capture_analysis import ANALYZER_VERSION, analyzer_sha256
 from tools.qualification.ai111.capture_evidence import capture_problems
 from tools.qualification.ai111.capture_session import CaptureAdmission, RetrospectiveMonitor
@@ -40,7 +40,17 @@ def monitor_for(tmp_path, monkeypatch):
     return monitor
 
 
-def test_authentic_retrospective_monitor_reaches_d12a_preflight(tmp_path, monkeypatch):
+@pytest.fixture
+def windows_capture_host(monkeypatch):
+    # Simulate only this module's host platform; the real shared os module stays intact.
+    monkeypatch.setattr(
+        capture_session, "os", SimpleNamespace(**{**vars(capture_session.os), "name": "nt"})
+    )
+
+
+def test_authentic_retrospective_monitor_reaches_d12a_preflight(
+    tmp_path, monkeypatch, windows_capture_host
+):
     monitor = monitor_for(tmp_path, monkeypatch)
     monkeypatch.setattr(readiness, "readiness_problems", lambda *a, **k: [])
 
@@ -338,13 +348,34 @@ def test_retrospective_proof_cannot_promote_missing_or_invalid_evidence(tmp_path
     assert verified_contract_rows([row], problems)[0]["monitor_kind"] == row["monitor_kind"]
 
 
-def test_host_label_or_cooperative_provider_is_not_monitor_authority(tmp_path, monkeypatch):
+def test_host_label_or_cooperative_provider_is_not_monitor_authority(
+    tmp_path, monkeypatch, windows_capture_host
+):
     assert monitor_problems(SimpleNamespace(kind="host", admission=True))
     assert monitor_problems(SimpleNamespace(kind="host_retrospective", admission=True))
     authentic = monitor_for(tmp_path, monkeypatch)
     assert monitor_problems(authentic) == []
     authentic.providers[0].coverage = "cooperative"
     assert monitor_problems(authentic)
+
+
+@pytest.mark.parametrize(
+    "host_name,elevated,expected",
+    [
+        ("posix", False, "Windows job object"),
+        ("nt", True, "elevated or unreadable"),
+        ("nt", None, "elevated or unreadable"),
+    ],
+)
+def test_authentic_monitor_still_requires_windows_and_standard_user(
+    tmp_path, monkeypatch, host_name, elevated, expected
+):
+    monitor = monitor_for(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        capture_session, "os", SimpleNamespace(**{**vars(capture_session.os), "name": host_name})
+    )
+    monkeypatch.setattr(monitor, "_self_elevated", lambda: elevated)
+    assert any(expected in problem for problem in monitor_problems(monitor))
 
 
 def test_childless_frozen_cases_are_independently_prelaunch_rejected(tmp_path):

@@ -426,12 +426,15 @@ def test_the_offline_freeze_writes_evidence_to_a_new_directory_with_no_network(
         freeze.main(["--out", str(out)])
 
 
+@pytest.mark.parametrize("contract", [None, "qwen-frozen", "lfm3-v1"])
 def test_the_physical_entry_point_refuses_a_digest_that_is_not_the_frozen_plan(
     tmp_path: Path,
+    contract: str | None,
 ) -> None:
     with pytest.raises(SystemExit, match="frozen plan"):
         physical.main(
-            [
+            (["--contract", contract] if contract is not None else [])
+            + [
                 "--authorize-plan",
                 "0" * 64,
                 "--authorization-text",
