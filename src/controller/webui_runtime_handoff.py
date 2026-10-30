@@ -233,6 +233,13 @@ class WebUIRuntimeHandoff:
                 f"autostart in the engine settings or start {name} yourself with Launch; {name} jobs stay queued "
                 "and independent video jobs continue.",
             )
+        conflict = self._transition.external_comfy_blocker()
+        if conflict is not None:
+            return RuntimeAssessment(
+                AssessmentState.BLOCKED,
+                REASON_EXTERNAL_RUNTIME,
+                f"{name} cannot be started: {conflict}",
+            )
         return None
 
     @staticmethod

@@ -523,14 +523,104 @@ def test_external_comfy_blocks_the_launch_and_is_never_touched(make_stack):
     world.comfy_up = True
     stack = make_stack(world)
     stack.submit(forge("F1"))
+    before = dict(stack.queue.get_job("F1").snapshot)
     stack.start()
-    settle(0.5)
+    wait_for(lambda: stack.coordinator.snapshot()["status"] == WebUIHealth.ACTION_REQUIRED.value)
 
     assert stack.status("F1") is JobStatus.QUEUED and world.launches == 0 and world.posts == []
     assert stack.comfy_manager.stops == 0 and world.comfy_up is True
+    assert stack.queue.get_job("F1").snapshot == before
     snapshot = stack.coordinator.snapshot()
     assert snapshot["status"] == WebUIHealth.ACTION_REQUIRED.value
     assert "comfy" in snapshot["message"].lower() and "will not" in snapshot["message"].lower()
+
+
+@pytest.mark.parametrize("arrival", ["before_assessment", "before_start"])
+def test_external_comfy_status_is_stable_across_polls_and_recovers_without_a_forge_epoch(
+    make_stack, monkeypatch, arrival
+):
+    world = World(forge_up=False)
+    world.comfy_up = world.comfy_external = arrival == "before_assessment"
+    stack = make_stack(world)
+    stack.submit(forge("F1"))
+    before = dict(stack.queue.get_job("F1").snapshot)
+    epoch = stack.manager.ready_epoch
+    if arrival == "before_start":
+        start = stack.handoff.start
+
+        def conflict_arrives(target, *, abort):
+            world.comfy_up = world.comfy_external = True
+            return start(target, abort=abort)
+
+        monkeypatch.setattr(stack.handoff, "start", conflict_arrives)
+    assert stack.coordinator.prepare_next_dispatch() in {"held", "failed"}
+    snapshot = stack.coordinator.snapshot()
+    assert snapshot["status"] == WebUIHealth.ACTION_REQUIRED.value
+    assert "comfy" in snapshot["message"].lower() and "will not" in snapshot["message"].lower()
+    attempts = snapshot["runtime_handoff"]["attempts"]
+    transitions = []
+    gate = stack.coordinator._gate
+    set_status = gate._set_status
+
+    def observe_status(health, incident, reason):
+        set_status(health, incident, reason)
+        transitions.append(stack.coordinator.snapshot()["status"])
+
+    monkeypatch.setattr(gate, "_set_status", observe_status)
+    for _ in range(16):
+        assert stack.coordinator.prepare_next_dispatch() == "held"
+        assert stack.coordinator.snapshot()["status"] == WebUIHealth.ACTION_REQUIRED.value
+    # Capture every projection write, including an adversarial reader inside the writer.
+    assert transitions and set(transitions) == {WebUIHealth.ACTION_REQUIRED.value}
+    assert stack.coordinator.snapshot()["runtime_handoff"]["attempts"] == attempts
+    assert stack.status("F1") is JobStatus.QUEUED and stack.queue.get_job("F1").snapshot == before
+    assert world.launches == 0 and world.posts == [] and stack.comfy_manager.stops == 0
+    assert world.comfy_up and stack.manager.ready_epoch == epoch
+
+    # Explicit retry still reassesses the conflict and leaves it untouched.
+    assert stack.coordinator.prepare_next_dispatch(force=True) == "held"
+    assert world.launches == 0 and stack.comfy_manager.stops == 0
+    if arrival == "before_start":
+        monkeypatch.setattr(stack.handoff, "start", start)
+    world.comfy_up = world.comfy_external = False
+    assert stack.manager.ready_epoch == epoch
+    assert stack.coordinator.prepare_next_dispatch() == "started"
+    assert world.launches == 1 and world.posts == [] and stack.comfy_manager.stops == 0
+    assert stack.queue.get_job("F1").snapshot == before
+    stack.start()
+    wait_for(lambda: all_completed(stack, "F1"))
+    assert world.posts == ["F1"]
+
+
+def test_cold_assessment_does_not_release_owned_comfy(make_stack):
+    world = World(forge_up=False)
+    world.comfy_up = True
+    stack = make_stack(world)
+    stack.submit(forge("F1"))
+    assert stack.coordinator.prepare_next_dispatch(allow_launch=False) == "launch_needed"
+    assert world.comfy_up and stack.comfy_manager.stops == 0 and world.launches == 0
+    assert stack.coordinator.prepare_next_dispatch() == "started"
+    assert stack.comfy_manager.stops == 1 and world.launches == 1
+
+
+@pytest.mark.parametrize("manager_available", [False, True])
+def test_external_comfy_endpoint_without_owned_process_blocks_read_only_and_can_clear(
+    make_stack, manager_available
+):
+    world = World(forge_up=False)
+    world.comfy_external = True  # occupied endpoint, no live managed process handle
+    stack = make_stack(world)
+    if not manager_available:
+        stack.transition.comfy_manager_getter = lambda: None
+    stack.submit(forge("F1"))
+    for _ in range(4):
+        assert stack.coordinator.prepare_next_dispatch() == "held"
+        assert stack.coordinator.snapshot()["status"] == WebUIHealth.ACTION_REQUIRED.value
+    assert stack.coordinator.snapshot()["runtime_handoff"]["attempts"] == 0
+    assert world.launches == 0 and world.posts == [] and stack.comfy_manager.stops == 0
+    world.comfy_external = False
+    assert stack.coordinator.prepare_next_dispatch() == "started"
+    assert world.launches == 1 and stack.comfy_manager.stops == 0
 
 
 def test_an_external_matching_forge_is_used_without_adoption_or_launch(make_stack):
