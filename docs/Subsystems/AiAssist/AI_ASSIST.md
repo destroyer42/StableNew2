@@ -67,6 +67,15 @@ The file is a true **append-only** JSON-lines log, not a rewritten file (`src/ut
 
 ## 7. Qualification criteria for PR-AI-111 [P: D11, D5]
 
+Qualification evidence keeps the raw retrospective monitor identity. Contract
+`host` identity is derived only after stopped-capture analysis and complete owned
+interval checks; pending analysis remains INCONCLUSIVE. Frozen deterministic
+prelaunch refusals retain their original INVALID_REQUEST outcome and case identity,
+with explicit no-child evidence. An entirely childless segment records teardown
+as not applicable. Uncertain ownership or teardown fences all subsequent executable
+work, including closing canaries. These source behaviors do not establish S2
+readiness, model qualification or production approval.
+
 Not run yet [U]; a separately versioned, unapproved LFM3-1.7B model/runtime contract (`lfm3_contract.py`, summary in `PR-AI-115_LFM3_Qualification_Contract.md`) leaves the Qwen plan, corpus and digests unchanged and keeps LFM3 out of `config/`; the frozen plan, corpus, scorer and session driver are in `tools/qualification/ai111/` and the authorization request is in `PR-AI-111_Offline_Qualification.md`. A model is selected only from the frozen offline corpus, never from public benchmarks, and is compared pairwise against the deterministic baseline.
 
 - **Baseline arms:** identity (authored text), the deterministic engine only, a trivial heuristic, then candidate models (initially Qwen3.5-9B and Qwen3.5-4B; GLM-4.7-Flash only with owned runtimes released because of its resident size).

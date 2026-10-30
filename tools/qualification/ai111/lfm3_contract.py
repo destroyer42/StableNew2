@@ -806,7 +806,7 @@ def help_flag_report(help_text: str, *, truncated: bool) -> dict[str, Any]:
     """Flag spellings the contract needs, against a runtime's ``--help`` text (syntax evidence only)."""
 
     missing = sorted(f for f in LFM3_ALLOWED_FLAGS if not flag_in_text(f, help_text))
-    if not help_text.strip() or (missing and truncated):
+    if not help_text.strip() or truncated:
         verdict = "INCONCLUSIVE"
     else:
         verdict = "FAIL" if missing else "PASS"
@@ -917,6 +917,8 @@ def record_problems(
     document: Mapping[str, Any],
     arm_id: str,
     case_ids: Sequence[str] | None = None,
+    *,
+    stage_a_disposition: Mapping[str, Any] | None = None,
 ) -> list[str]:
     """Every record must be attributable to this contract, this arm's model, sampling, runtime and a recorded member.
 
@@ -937,6 +939,27 @@ def record_problems(
         "monitor_kind": "host",
     }
     problems = []
+    if stage_a_disposition is not None:
+        counts = stage_a_disposition.get("protected_token_malformed", {})
+        vendor = "lfm3-1.7b-q4_k_m-liquidai@lfm3_vendor"
+        sensitivity = "lfm3-1.7b-q4_k_m-liquidai@lfm3_no_repeat"
+        valid_counts = all(
+            type(counts.get(k)) is int and counts[k] >= 0 for k in (vendor, sensitivity)
+        )
+        chosen = (
+            "lfm3_no_repeat"
+            if valid_counts and counts[vendor] > counts[sensitivity] == 0
+            else "lfm3_vendor"
+        )
+        if (
+            stage_a_disposition.get("contract_sha256") != digest(document)
+            or stage_a_disposition.get("advance") is not True
+            or not valid_counts
+            or stage_a_disposition.get("sampling_profile") != chosen
+        ):
+            problems.append("Stage B sampling lacks the preregistered Stage A disposition")
+        elif arm["sampling"].startswith("lfm3_"):
+            expected["sampling_profile"] = chosen
     if not rows:
         problems.append("no records")
     for index, row in enumerate(rows):
@@ -962,10 +985,13 @@ def stage_b_verdict(
     teardown_verified: bool,
     preference: Mapping[str, Any] | None,
     capture_verdicts: Sequence[str],
+    stage_a_disposition: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The one computable form of Stage B ``go_requires``. Any problem is INCONCLUSIVE; GO only from complete evidence."""
 
-    unmet = record_problems(rows, document, arm_id, [c.case_id for c in cases])
+    unmet = record_problems(
+        rows, document, arm_id, [c.case_id for c in cases], stage_a_disposition=stage_a_disposition
+    )
     if corpus_digest(list(cases)) != document["stages"]["B"]["corpus_sha256"]:
         unmet.append("cases are not the frozen Stage B corpus")
     if not capture_verdicts:

@@ -882,9 +882,12 @@ def start_capture(
     max_mb: int = DEFAULT_MAX_MB,
     minutes: int = DEFAULT_MINUTES,
     env: Environment | None = None,
+    capture_id: str | None = None,
 ) -> dict[str, Any]:
     env = env or Environment(TraceTools())
     _require_elevated(env)
+    if capture_id is not None:
+        session_names(capture_id)  # Same closed name grammar as stop/cleanup.
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", run_id or ""):
         raise CaptureRefused(
             "--run-id must be 1-64 characters of letters, digits, dot, dash or underscore"
@@ -912,7 +915,7 @@ def start_capture(
     if exposed:
         _discard_empty(target)
         raise CaptureRefused("; ".join(exposed))
-    capture_id = new_capture_id(env.now())
+    capture_id = capture_id or new_capture_id(env.now())
     names = session_names(capture_id)
     started = env.now()
     deadline = started + timedelta(minutes=minutes)
@@ -1198,6 +1201,7 @@ def main(argv: list[str] | None = None) -> int:
     start = sub.add_parser("start", help="start the capture (Administrator terminal)")
     start.add_argument("--evidence-dir", type=Path, required=True)
     start.add_argument("--run-id", required=True)
+    start.add_argument("--capture-id", help="optional exact identity from an approved capture plan")
     start.add_argument("--max-mb", type=int, default=DEFAULT_MAX_MB)
     start.add_argument("--minutes", type=int, default=DEFAULT_MINUTES)
     for name in ("stop", "cleanup"):
@@ -1217,6 +1221,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_mb=args.max_mb,
                 minutes=args.minutes,
                 env=env,
+                capture_id=args.capture_id,
             )
         elif args.command == "stop":
             report = stop_capture(args.capture_id, evidence_dir=args.evidence_dir, env=env)

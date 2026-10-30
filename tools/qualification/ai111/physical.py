@@ -59,6 +59,17 @@ from tools.qualification.ai111.corpus import (
     from_jsonl,
     stage_a_subset,
 )
+from tools.qualification.ai111.execution_evidence import (
+    childless_proof,
+    fence_monitor,
+    observed_fields,
+    ownership_problems,
+    prelaunch_only,
+    record_execution,
+)
+from tools.qualification.ai111.execution_evidence import (
+    monitor_problems as retrospective_monitor_problems,
+)
 from tools.qualification.ai111.ownership import (
     OwnedSessionMonitor,
     OwnershipPolicy,
@@ -99,7 +110,7 @@ def append_jsonl(path: Path, value: Any) -> None:
 
 
 def derive_runtime_build(
-    archive: Path, intent: dict[str, Any], executable: str | None = None
+    archive: Path, intent: dict[str, Any], executable: str | None = None, *, spec: Any = None
 ) -> RuntimeBuild:
     """Verify the archive against the frozen digest, then hash every loadable member so it can be pinned and imported.
 
@@ -109,6 +120,18 @@ def derive_runtime_build(
     if size != intent["bytes"] or sha != intent["sha256"]:
         raise ImportRefused("runtime_archive_mismatch")
     files: dict[str, str] = {}
+    if spec is not None:
+        if intent != spec.runtime or executable not in spec.members:
+            raise ImportRefused("contract_runtime_or_executable_mismatch")
+        from tools.qualification.ai111.d12a import verify_archive_members
+
+        # Sizes are checked against the ZIP headers by the shared verifier. The
+        # archive's exact hash binds those headers; file digests come from the contract.
+        with zipfile.ZipFile(archive) as bundle:
+            pinned = {
+                name: (sha, bundle.getinfo(name).file_size) for name, sha in intent["files"].items()
+            }
+        verify_archive_members(archive, pinned)
     with zipfile.ZipFile(archive) as bundle:
         for info in bundle.infolist():
             if info.is_dir() or PurePosixPath(info.filename).suffix.lower() not in _ACTIVE_SUFFIXES:
@@ -121,12 +144,17 @@ def derive_runtime_build(
     if executable is not None:
         if executable not in files:
             raise ImportRefused("requested_executable_not_in_archive")
-        if executable not in LAUNCHABLE_MEMBERS:
+        allowed_members = spec.members if spec is not None else LAUNCHABLE_MEMBERS
+        if executable not in allowed_members:
             raise ImportRefused("requested_executable_not_launchable")
-        if files[executable] != LAUNCHABLE_MEMBERS[executable]:
+        if files[executable] != allowed_members[executable]:
             raise ImportRefused("requested_executable_hash_mismatch")
     else:
         executable = next((name for name in _EXECUTABLE_PREFERENCE if name in files), None)
+        if intent == plan_module.RUNTIME_INTENT and (
+            executable is None or files[executable] != LAUNCHABLE_MEMBERS[executable]
+        ):
+            raise ImportRefused("default_executable_hash_mismatch")
     if executable is None:
         raise ImportRefused("no_inference_executable_in_archive")
     return RuntimeBuild(
@@ -358,12 +386,70 @@ def _run_session(
     extra_read_roots: tuple[Path, ...] = (),
     run_id: str = "",
     probe_case: Case | None = None,
+    contract_spec: Any = None,
+    readiness_evidence: dict[str, Any] | None = None,
+    capture_segment: dict[str, Any] | None = None,
+    capture_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     # Process, connection and file evidence comes only from the ownership monitor, which reads the bounded runner's own
     # container record. A session with no monitor, or one whose channels are not lifetime-complete and canary-proven,
     # refuses before anything is imported or launched. ``command_factory`` is the hermetic Python-child test seam.
     if monitor is None:
         monitor = default_host_monitor(OwnershipPolicy())
+    arm_specs = {}
+    if contract_spec is not None:
+        from tools.qualification.ai111.readiness import bind_capture_evidence, readiness_problems
+
+        readiness_evidence = bind_capture_evidence(readiness_evidence, monitor)
+        problems = readiness_problems(
+            contract_spec,
+            "S3_stage_a" if stage == "A" else "S4_stage_b",
+            readiness_evidence,
+            executable=executable or "",
+        )
+        model_arms = [a for a in arms if a not in plan_module.BASELINE_ARMS]
+        if len(model_arms) != 1 or len(set(arms)) != len(arms):
+            problems.append("one executable arm per capture required")
+        if any(a in plan_module.BASELINE_ARMS and a != "B1_engine" for a in arms):
+            problems.append("only B1_engine is the LFM3 reference")
+        for arm in model_arms:
+            arm_specs[arm] = contract_spec.arm(arm)
+        expected = list(contract_spec.cases(stage))
+        if stage == "B":
+            if capture_plan is None:
+                problems.append("approved Stage B capture segment absent")
+            else:
+                from tools.qualification.ai111.stage_b_captures import (
+                    execution_segment,
+                    selected_arm,
+                )
+
+                capture_segment = execution_segment(
+                    capture_plan,
+                    contract_spec,
+                    (capture_segment or {}).get("index", -1),
+                    run_id,
+                    paths.evidence_root,
+                    readiness_evidence or {},
+                )
+                if model_arms != [capture_segment["arm"]] or arms != model_arms:
+                    problems.append("Stage B capture must contain only its planned arm")
+                for arm in model_arms:
+                    arm_specs[arm] = selected_arm(
+                        contract_spec, arm, capture_plan["stage_a_disposition"]
+                    )
+                expected = [c for c in expected if c.case_id in capture_segment["case_ids"]]
+        if corpus_digest(cases) != corpus_digest(expected):
+            problems.append("case list differs from selected contract/segment")
+        if not strict_offline or command_factory is not None or gpu_probe is None:
+            problems.append(
+                "physical contract requires authentic monitor, default command, strict offline and GPU probe"
+            )
+        problems += retrospective_monitor_problems(monitor)
+        if problems:
+            return {"verdict": "NOT TESTED", "refused": problems}
+        plan = contract_spec.execution_plan()
+        registry = contract_spec.registry(model_arms)
     static_problems = monitor.provider_problems()
     if static_problems:
         return {
@@ -375,15 +461,29 @@ def _run_session(
     # Exclusive claim: a second session of this stage is refused (FileExistsError), never merged into.
     evidence.mkdir(parents=True)
     ai_root = evidence / "ai-root"
+    selected_probe_case = probe_case or next(
+        (c for c in cases if childless_proof(c.case_id) is None), None
+    )
+    run_lifecycle_probes = lifecycle_probes and selected_probe_case is not None
     write_new_json(
         evidence / "execution-manifest.json",
         {
             "plan_sha256": plan_module.digest(plan),
+            "contract_sha256": contract_spec.sha256 if contract_spec else plan_module.digest(plan),
+            "contract_selector": contract_spec.selector if contract_spec else "qwen-frozen",
+            "capture_id": getattr(getattr(monitor, "admission", None), "manifest", {}).get(
+                "capture_id"
+            )
+            if getattr(getattr(monitor, "admission", None), "manifest", None)
+            else None,
+            "capture_segment": capture_segment,
+            "arm_identities": {a: s.identity(executable) for a, s in arm_specs.items()},
             "stage": stage,
             "arms": arms,
             "cases": len(cases),
             "corpus_sha256": corpus_digest(cases),
             "owner_authorization": authorization_text,
+            "readiness_evidence": readiness_evidence,
             "strict_offline": strict_offline,
             "started_utc": datetime.now(UTC).isoformat(),
             "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -396,7 +496,11 @@ def _run_session(
             "run_id": run_id,
             "host": platform.node(),
             "executable": executable or "(first of the preference list)",
-            "lifecycle_probes": lifecycle_probes,
+            "lifecycle_probes": run_lifecycle_probes,
+            "lifecycle_probes_requested": lifecycle_probes,
+            "lifecycle_probes_applicability": "applicable"
+            if selected_probe_case is not None
+            else "not_applicable_no_launch_required_cases",
             "extra_read_roots": [str(r) for r in extra_read_roots],
             "etw_sha256": _sha_of_sibling("etw.py"),
             "capture_sha256": {
@@ -411,17 +515,18 @@ def _run_session(
 
         ai_root.mkdir(parents=True, exist_ok=True)
         record_attestation(ai_root, attest)
+    model_ids = [arm_specs[a].model.model_id if a in arm_specs else a for a in arms]
     problems = preflight(
         plan,
         paths,
         registry,
-        arms,
+        model_ids,
         strict_offline=strict_offline,
         ai_root=ai_root,
         authorization_text=authorization_text,
         busy=busy,
     )
-    resources, resource_problems = resource_check(memory_probe, registry, arms)
+    resources, resource_problems = resource_check(memory_probe, registry, model_ids)
     write_new_json(evidence / "resource-preflight.json", resources)
     problems += resource_problems
     if problems:
@@ -451,7 +556,9 @@ def _run_session(
             "refused": [f"monitoring not ready: {problem}" for problem in monitor_problems],
         }
 
-    build = derive_runtime_build(paths.runtime_archive, plan["runtime_intent"], executable)
+    build = derive_runtime_build(
+        paths.runtime_archive, plan["runtime_intent"], executable, spec=contract_spec
+    )
     write_new_json(
         evidence / "derived-runtime-build.json",
         {
@@ -463,7 +570,8 @@ def _run_session(
     )
     import_runtime(paths.runtime_archive, build, ai_root)
     model_arms = [a for a in arms if a not in plan_module.BASELINE_ARMS]
-    for model_id in model_arms:
+    for arm_id in model_arms:
+        model_id = arm_specs[arm_id].model.model_id if arm_id in arm_specs else arm_id
         entry = next(e for e in registry.entries if e.model_id == model_id)
         import_model(paths.model_files[model_id], entry, ai_root)
 
@@ -490,7 +598,9 @@ def _run_session(
                 records.setdefault(arm, []).append(row)
                 append_jsonl(records_path, row)
         for model_id in model_arms:
-            entry = next(e for e in registry.entries if e.model_id == model_id)
+            selected_arm = arm_specs.get(model_id)
+            entry_id = selected_arm.model.model_id if selected_arm else model_id
+            entry = next(e for e in registry.entries if e.model_id == entry_id)
             record_active(ai_root, build, entry)
             arm_problems = _arm_preconditions(
                 plan, ai_root, build, entry, busy_provider, gpu_probe, strict_offline
@@ -512,6 +622,7 @@ def _run_session(
                     ai_root,
                     command_factory=command_factory or default_command,
                     runner=monitor.runner(),
+                    **_argv_options(selected_arm),
                 ),
                 policy=ServicePolicy(allow_candidate=True, strict_offline=strict_offline),
                 limits=limits,
@@ -522,6 +633,11 @@ def _run_session(
                 if sampler.abort_reason:
                     abort = sampler.abort_reason
                     break
+                if contract_spec is not None:
+                    before = _deep_problems(ai_root, build, entry)
+                    if before:
+                        abort = "identity changed before request: " + "; ".join(before)
+                        break
                 monitored_before = len(monitor.records)
                 started_utc = _now()
                 outcome = service.run(
@@ -530,7 +646,15 @@ def _run_session(
                 suggestion = outcome.suggestion
                 details = dict(outcome.details)
                 new_records = monitor.records[monitored_before:]
-                details["egress_connections"] = sum(len(r.connections) for r in new_records)
+                execution_fields, execution_problems = (
+                    record_execution(case.case_id, outcome.code.value, outcome.reason, new_records)
+                    if contract_spec
+                    else ({}, [])
+                )
+                if contract_spec:
+                    details["egress_status"] = "pending_capture_analysis"
+                else:
+                    details["egress_connections"] = sum(len(r.connections) for r in new_records)
                 details["ownership_violations"] = sorted(
                     {v for r in new_records for v in r.violations}
                 )
@@ -547,21 +671,61 @@ def _run_session(
                     "details": details,
                     "started_utc": started_utc,
                     "ended_utc": _now(),
-                    "arm_request_index": number,
-                    "phase": "cold" if number == 1 else "warm",
+                    "arm_request_index": number + (capture_segment or {}).get("offset", 0),
+                    "capture_request_index": number,
+                    "capture_phase": "cold" if number == 1 else "warm",
+                    "phase": "cold"
+                    if number + (capture_segment or {}).get("offset", 0) == 1
+                    else "warm",
                     "input_chars": case.request("probe").input_chars(),
+                    **(selected_arm.identity(build.executable) if selected_arm else {}),
+                    "monitor_kind": monitor.kind,
+                    "stage": stage,
+                    "run_id": run_id,
+                    "capture_id": getattr(getattr(monitor, "admission", None), "manifest", {}).get(
+                        "capture_id"
+                    )
+                    if getattr(getattr(monitor, "admission", None), "manifest", None)
+                    else None,
+                    "monitor_request_numbers": [r.number for r in new_records],
+                    "process_complete": bool(new_records)
+                    and all(r.process.get("complete") is True for r in new_records),
+                    "active_after_teardown": 0
+                    if new_records
+                    and all(r.process.get("active_after_teardown") == 0 for r in new_records)
+                    else None,
+                    **execution_fields,
                 }
                 records.setdefault(model_id, []).append(row)
                 append_jsonl(records_path, row)
-                if new_records and not all(
-                    r.process.get("complete") is True
-                    and r.process.get("active_after_teardown") == 0
-                    for r in new_records
+                if execution_problems or (
+                    new_records
+                    and not all(
+                        r.process.get("complete") is True
+                        and r.process.get("active_after_teardown") == 0
+                        for r in new_records
+                    )
                 ):
                     abort = "owned child tree not verified gone after a request"
+                    if execution_problems:
+                        abort += ": " + "; ".join(execution_problems)
+                    fence_monitor(monitor, abort)
                     break
+                if contract_spec is not None:
+                    after_request = _deep_problems(ai_root, build, entry)
+                    if (
+                        after_request
+                        or outcome.code == OutcomeCode.TIMEOUT
+                        or outcome.reason in ("output_too_large", "process_memory_cap")
+                    ):
+                        abort = (
+                            "request interval invalid or stopped at resource/output/time limit: "
+                            + "; ".join(after_request)
+                        )
+                        break
                 if details["ownership_violations"]:
                     abort = "ownership violation: " + ", ".join(details["ownership_violations"])
+                    fence_monitor(monitor, abort)
                     break
                 if outcome.reason in _UNTRUSTWORTHY_OBSERVATION:
                     abort = f"observation no longer trustworthy: {outcome.reason}"
@@ -584,9 +748,9 @@ def _run_session(
                 )
                 if after:
                     abort = f"identity changed during {model_id}: " + "; ".join(after)
-            if not abort and lifecycle_probes:
+            if not abort and run_lifecycle_probes:
                 lifecycle_rows = _lifecycle_probes(
-                    probe_case or cases[0],
+                    selected_probe_case,
                     model_id,
                     ai_root,
                     build,
@@ -597,26 +761,48 @@ def _run_session(
                     limits,
                     command_factory,
                     strict_offline,
+                    selected_arm,
                 )
                 for row in lifecycle_rows:
                     append_jsonl(evidence / "lifecycle-probes.jsonl", row)
                 if any(
-                    not r["teardown_verified"] or r["ownership_violations"] for r in lifecycle_rows
+                    not r["teardown_verified"] or r["ownership_violations"] or r.get("stop_reason")
+                    for r in lifecycle_rows
                 ):
                     abort = f"lifecycle probe for {model_id} left unverified teardown or violations"
+                    fence_monitor(monitor, abort)
             if abort:
                 break
     finally:
         sampler.close()
 
     teardown_verified = monitor.teardown_verified()
+    executable_rows = [r for a in model_arms for r in records.get(a, [])]
+    no_processes_launched = (
+        bool(contract_spec)
+        and not abort
+        and len(executable_rows) == len(cases)
+        and prelaunch_only(executable_rows)
+        and not monitor.session_records()
+    )
+    if no_processes_launched:
+        teardown_verified = None
     cases_by_id = {c.case_id: c for c in cases}
     summaries = {arm: summarize_arm(cases_by_id, rows) for arm, rows in records.items()}
-    verdicts = {
-        arm: evaluate_gates(summaries[arm], plan["thresholds"], teardown_verified=teardown_verified)
-        for arm in model_arms
-        if arm in summaries
-    }
+    verdicts = (
+        {}
+        if contract_spec
+        else {
+            arm: evaluate_gates(
+                summaries[arm], plan["thresholds"], teardown_verified=teardown_verified
+            )
+            for arm in model_arms
+            if arm in summaries
+        }
+    )
+    if contract_spec:
+        for summary in summaries.values():
+            summary["egress_connections_observed"] = None
     write_new_json(evidence / "summary.json", summaries)
     pairs = {}
     for model_id in model_arms:
@@ -658,6 +844,7 @@ def _run_session(
         "verdict": overall,
         "abort_reason": abort,
         "teardown_verified": teardown_verified,
+        "no_processes_launched": no_processes_launched,
         "egress_connections_observed": monitor.connection_attempts(),
         "monitoring": monitor.summary(),
         "arm_verdicts": {
@@ -677,6 +864,14 @@ _UNTRUSTWORTHY_OBSERVATION = frozenset(
         "child_not_observable",
     }
 )
+
+
+def _argv_options(arm: Any) -> dict[str, Any]:
+    if arm is None:
+        return {}
+    from tools.qualification.ai111.lfm3_contract import LFM3_ALLOWED_FLAGS
+
+    return {"argv_builder": arm.argv, "allowed_flags": LFM3_ALLOWED_FLAGS}
 
 
 def _now() -> str:
@@ -740,6 +935,7 @@ def _lifecycle_probes(
     limits: RunLimits,
     command_factory: Callable[..., Any] | None,
     strict_offline: bool,
+    selected_arm: Any = None,
 ) -> list[dict[str, Any]]:
     """Real-model timeout and cancellation: a deliberately short deadline, and a cancel fired while the model loads.
 
@@ -748,6 +944,24 @@ def _lifecycle_probes(
 
     rows: list[dict[str, Any]] = []
     for kind in ("timeout", "cancel"):
+        if selected_arm is not None:
+            before_problems = _deep_problems(ai_root, build, entry)
+            if before_problems:
+                reason = "identity changed before lifecycle probe: " + "; ".join(before_problems)
+                fence_monitor(monitor, reason)
+                rows.append(
+                    {
+                        "arm": model_id,
+                        "probe": kind,
+                        "outcome": None,
+                        "executed": False,
+                        "stopped_as_intended": False,
+                        "teardown_verified": None,
+                        "ownership_violations": [],
+                        "stop_reason": reason,
+                    }
+                )
+                break
         probe_limits = RunLimits(
             **{**asdict(limits), "timeout_seconds": 2.0 if kind == "timeout" else 60.0}
         )
@@ -761,6 +975,7 @@ def _lifecycle_probes(
                 ai_root,
                 command_factory=command_factory or default_command,
                 runner=monitor.runner(),
+                **_argv_options(selected_arm),
             ),
             policy=ServicePolicy(allow_candidate=True, strict_offline=strict_offline),
             limits=probe_limits,
@@ -778,6 +993,7 @@ def _lifecycle_probes(
             if timer is not None:
                 timer.cancel()
         new = monitor.records[before:]
+        unsafe = ownership_problems(new)
         expected = OutcomeCode.TIMEOUT if kind == "timeout" else OutcomeCode.CANCELLED
         rows.append(
             {
@@ -796,8 +1012,31 @@ def _lifecycle_probes(
                 "ownership_violations": sorted({v for r in new for v in r.violations}),
                 "started_utc": started,
                 "ended_utc": _now(),
+                **(selected_arm.identity(build.executable) if selected_arm else {}),
+                "monitor_kind": monitor.kind,
+                "run_id": getattr(getattr(monitor, "admission", None), "run_id", None),
+                "capture_id": getattr(getattr(monitor, "admission", None), "manifest", {}).get(
+                    "capture_id"
+                )
+                if getattr(getattr(monitor, "admission", None), "manifest", None)
+                else None,
+                "monitor_request_numbers": [r.number for r in new],
+                "process_complete": bool(new)
+                and all(r.process.get("complete") is True for r in new),
+                "active_after_teardown": 0
+                if new and all(r.process.get("active_after_teardown") == 0 for r in new)
+                else None,
+                **observed_fields(new),
+                "stop_reason": "; ".join(unsafe),
             }
         )
+        if unsafe:
+            fence_monitor(monitor, rows[-1]["stop_reason"])
+            break
+        if selected_arm is not None and _deep_problems(ai_root, build, entry):
+            rows[-1]["stop_reason"] = "identity changed during lifecycle probe"
+            fence_monitor(monitor, rows[-1]["stop_reason"])
+            break
     return rows
 
 
@@ -922,6 +1161,10 @@ def nvidia_smi_probe(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--contract", choices=("qwen-frozen", "lfm3-v1"), default="qwen-frozen")
+    parser.add_argument("--readiness-evidence", type=Path)
+    parser.add_argument("--capture-plan", type=Path)
+    parser.add_argument("--segment", type=int)
     parser.add_argument(
         "--authorize-plan", required=True, help="the exact plan digest the owner accepted"
     )
@@ -982,9 +1225,12 @@ def main(argv: list[str] | None = None) -> int:
         help="analysis.json of a prior canary capture that passed",
     )
     args = parser.parse_args(argv)
-    plan = plan_module.frozen_plan()
-    if args.authorize_plan != plan_module.digest(plan):
+    from tools.qualification.ai111.execution_contract import select_contract
+
+    spec = select_contract(args.contract)
+    if args.authorize_plan != spec.sha256:
         raise SystemExit("Authorization does not match the frozen plan digest")
+    plan = spec.execution_plan()
     for root in args.extra_read_root:
         refusal = extra_root_refusal(root)
         if refusal:
@@ -995,6 +1241,28 @@ def main(argv: list[str] | None = None) -> int:
         cases += from_jsonl(args.operator_corpus.read_text(encoding="utf-8"))
     if args.stage == "A":
         cases = stage_a_subset(cases, plan["stages"]["A"]["cases_per_arm"], plan["corpus"]["seed"])
+    segment = None
+    capture_plan = None
+    readiness = (
+        json.loads(args.readiness_evidence.read_text(encoding="utf-8"))
+        if args.readiness_evidence
+        else None
+    )
+    if args.contract == "lfm3-v1":
+        if args.operator_corpus:
+            parser.error("LFM3 uses only the frozen case corpus")
+        cases = list(spec.cases(args.stage))
+        registry = spec.registry([a for a in args.arms if a not in plan_module.BASELINE_ARMS])
+        if args.stage == "B":
+            from tools.qualification.ai111.stage_b_captures import execution_segment
+
+            if args.capture_plan is None or args.segment is None:
+                parser.error("Stage B requires --capture-plan and --segment")
+            capture_plan = json.loads(args.capture_plan.read_text(encoding="utf-8"))
+            segment = execution_segment(
+                capture_plan, spec, args.segment, args.run_id, args.evidence_root, readiness or {}
+            )
+            cases = [c for c in cases if c.case_id in segment["case_ids"]]
     files = {e.model_id: args.model_dir / e.filename for e in registry.entries}
     paths = SessionPaths(args.evidence_root, args.runtime_archive, files, args.operator_corpus)
     from tools.qualification.ai111.capture_session import CaptureAdmission, RetrospectiveMonitor
@@ -1023,6 +1291,10 @@ def main(argv: list[str] | None = None) -> int:
         lifecycle_probes=args.lifecycle_probes,
         extra_read_roots=tuple(args.extra_read_root),
         run_id=args.run_id,
+        contract_spec=spec if args.contract == "lfm3-v1" else None,
+        readiness_evidence=readiness,
+        capture_segment=segment,
+        capture_plan=capture_plan,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     if result["verdict"] != "PASS":

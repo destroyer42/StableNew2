@@ -136,6 +136,20 @@ followed by `stage_a_report --capture-analysis`.
 
 ## When something goes wrong
 
+An uncertain owned interval, runner exception, unsafe canary or failed observation
+fences further executable work. The harness preserves partial evidence and omits
+the closing canary; a missing closing bracket remains INCONCLUSIVE. The operator
+still stops and verifies the operator-owned sessions. Do not retry or advance a
+segment from unresolved teardown.
+
+Frozen deterministic prelaunch refusals record no launched process. A segment
+containing only those cases has explicit N/A model teardown and may be analyzed
+as `canary_capture`, since only its trusted bracketing canaries ran. Qualification
+aggregation still requires its exact contract, arm and complete case identities,
+valid stopped capture and no unexplained real execution windows. Such a segment
+does not manufacture a successful child observation or waive proof for any child
+that actually launched.
+
 * A command prints `REFUSED ... runtime is not protected`: nothing was started or stopped. Fix the named path (or use the protected
   copy and the system-wide interpreter) and run it again.
 * `start` reports `FAILED`: nothing is left running; read `problems` and `state-02-failed.json`. Fix the cause (usually free

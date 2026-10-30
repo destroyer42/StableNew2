@@ -228,15 +228,17 @@ def flag_in_text(flag: str, text: str) -> bool:
     return re.search(r"(?<![\w-])" + re.escape(flag) + r"(?![\w-])", text) is not None
 
 
-def analyze_help(help_text: str, *, truncated: bool) -> dict[str, Any]:
+def analyze_help(
+    help_text: str, *, truncated: bool, required_flags: frozenset[str] = REQUIRED_FLAGS
+) -> dict[str, Any]:
     """Compare help text with the closed vocabulary. Presence in the help is syntax evidence only, not behaviour."""
 
-    present = sorted(f for f in REQUIRED_FLAGS if flag_in_text(f, help_text))
-    missing = sorted(REQUIRED_FLAGS - set(present))
+    present = sorted(f for f in required_flags if flag_in_text(f, help_text))
+    missing = sorted(required_flags - set(present))
     forbidden_documented = sorted(f for f in FORBIDDEN_FLAGS if flag_in_text(f, help_text))
     if not help_text.strip():
         verdict = "INCONCLUSIVE"
-    elif missing and truncated:
+    elif truncated:
         verdict = "INCONCLUSIVE"  # the cut text may simply not have reached the missing flags
     elif missing:
         verdict = "FAIL"
@@ -293,6 +295,7 @@ def _command_result(
         "output_truncated_at_cap": outcome.output_truncated,
         "contained": outcome.contained,
         "elapsed_seconds": round(elapsed_s, 3),
+        "elapsed_ms": int(elapsed_s * 1000),
         "observation": trace.summary(),
     }
 
@@ -309,12 +312,32 @@ def run_d12a(
     intent: dict[str, Any] | None = None,
     authorized_members: Mapping[str, str] = AUTHORIZED_MEMBERS,
     passive_manifest_sha256: str | None = PASSIVE_MANIFEST_SHA256,
+    contract_spec: Any = None,
+    readiness_evidence: dict[str, Any] | None = None,
+    executable: str | None = None,
 ) -> dict[str, Any]:
     """Run D12a once into a new ``<evidence_root>/d12a`` directory. Returns the result record (also written)."""
 
     import time
 
     clock = runner_clock or time.monotonic
+    required_flags = REQUIRED_FLAGS
+    if contract_spec is not None:
+        from tools.qualification.ai111.lfm3_contract import LFM3_ALLOWED_FLAGS
+        from tools.qualification.ai111.readiness import bind_capture_evidence, readiness_problems
+
+        readiness_evidence = bind_capture_evidence(readiness_evidence, monitor)
+        problems = readiness_problems(
+            contract_spec, "S2_d12a_b11960", readiness_evidence, executable=executable or ""
+        )
+        from tools.qualification.ai111.execution_evidence import monitor_problems
+
+        problems += monitor_problems(monitor)
+        if problems:
+            raise D12aRefused("; ".join(problems))
+        intent = contract_spec.runtime
+        authorized_members = {executable: contract_spec.members[executable]}
+        required_flags = LFM3_ALLOWED_FLAGS
     intent = intent or plan_module.RUNTIME_INTENT
     if not authorization_text.strip():
         raise D12aRefused("no owner authorization statement was supplied")
@@ -328,13 +351,20 @@ def run_d12a(
     sha, size = hashlib.sha256(data).hexdigest(), len(data)
     if size != intent["bytes"] or sha != intent["sha256"]:
         raise D12aRefused("runtime archive does not match the frozen size/SHA-256")
-    manifest_bytes = passive_manifest.read_bytes()
+    manifest_bytes = passive_manifest.read_bytes() if contract_spec is None else b""
     if (
-        passive_manifest_sha256 is not None
+        contract_spec is None
+        and passive_manifest_sha256 is not None
         and hashlib.sha256(manifest_bytes).hexdigest() != passive_manifest_sha256
     ):
         raise D12aRefused("passive member manifest is not the recorded one")
-    manifest = load_passive_manifest_bytes(manifest_bytes, intent["sha256"])
+    if contract_spec is None:
+        manifest = load_passive_manifest_bytes(manifest_bytes, intent["sha256"])
+    else:
+        with zipfile.ZipFile(io.BytesIO(data)) as bundle:
+            manifest = {
+                name: (pin, bundle.getinfo(name).file_size) for name, pin in intent["files"].items()
+            }
     members = verify_archive_members(io.BytesIO(data), manifest)
     for name, pinned in authorized_members.items():
         if name not in members or members[name][0] != pinned:
@@ -446,7 +476,9 @@ def run_d12a(
             if r["command"][1:] == ["--help"]
         )
         compat = (
-            analyze_help(captured.get("help", ""), truncated=help_truncated)
+            analyze_help(
+                captured.get("help", ""), truncated=help_truncated, required_flags=required_flags
+            )
             if "help" in captured
             else None
         )
@@ -466,6 +498,32 @@ def run_d12a(
     verdict = _overall_verdict([e["verdict"] for e in per_member.values()])
     stop_notes = {m: e["stopped"] for m, e in per_member.items() if e["stopped"]}
     body = {
+        "evidence": str(evidence.resolve()),
+        "contract_sha256": contract_spec.sha256
+        if contract_spec
+        else plan_module.digest(plan_module.frozen_plan()),
+        "monitor_kind": getattr(monitor, "kind", "test"),
+        "capture_id": getattr(getattr(monitor, "admission", None), "manifest", {}).get("capture_id")
+        if getattr(getattr(monitor, "admission", None), "manifest", None)
+        else None,
+        "run_id": getattr(getattr(monitor, "admission", None), "run_id", None),
+        "host_dependencies": (readiness_evidence or {}).get(
+            "host_dependencies",
+            {
+                "status": "UNMEASURED",
+                "modules": [
+                    {
+                        "name": n,
+                        "path": None,
+                        "version": None,
+                        "sha256": None,
+                        "evidence_source": "actual loaded-module evidence unavailable",
+                    }
+                    for n in ("vcruntime140.dll", "ucrtbase.dll", "ws2_32.dll", "crypt32.dll")
+                ],
+                "source": "actual loaded-module evidence unavailable",
+            },
+        ),
         "members": per_member,
         "archive_sha256": sha,
         "priority_note": "below-normal is a creation flag set by run_bounded; a command shorter than the 50 ms poll may "
@@ -479,6 +537,28 @@ def run_d12a(
             {"number": r.number, "files": sorted(set(r.files))} for r in monitor.session_records()
         ],
     }
+    if contract_spec is not None:
+        from tools.qualification.ai111.readiness import dependency_problems
+
+        body["host_dependency_problems"] = dependency_problems(
+            body["host_dependencies"], verify_files=True
+        )
+        deps = body["host_dependencies"]
+        numbers = [c["ownership"]["number"] for m in per_member.values() for c in m["commands"]]
+        if (
+            deps.get("capture_id") != body["capture_id"]
+            or deps.get("request_numbers") != numbers
+            or deps.get("runtime_member_sha256") != contract_spec.members[executable]
+        ):
+            body["host_dependency_problems"].append(
+                "dependency provenance not bound to every executed command"
+            )
+        if body["host_dependency_problems"] and verdict == "PASS":
+            verdict = "INCONCLUSIVE"
+    if contract_spec is not None and body["monitoring"].get("capture_analysis_required"):
+        body["realtime_verdict"] = verdict
+        body["pending_capture_analysis"] = True
+        verdict = "INCONCLUSIVE"
     return _finish(evidence, verdict, body)
 
 
@@ -548,6 +628,7 @@ def _run_member(
         result = _command_result(member, outcome, trace, clock() - started, args)
         record = monitor.records[-1]
         result["ownership"] = {
+            "number": record.number,
             "violations": record.violations,
             "connection_attempts": record.connections,
             "file_events": len(record.files),
@@ -555,6 +636,9 @@ def _run_member(
             "active_after_teardown": record.process.get("active_after_teardown"),
             "total_processes": record.process.get("total_processes"),
         }
+        result["monitor_request_numbers"] = [record.number]
+        result["process_complete"] = record.process.get("complete")
+        result["active_after_teardown"] = record.process.get("active_after_teardown")
         entry["commands"].append(result)
         planted = _loadable_files(scratch) + [
             entry_ for entry_ in record.files if _loadable_access_in(entry_, scratch)
@@ -650,7 +734,11 @@ def _finish(evidence: Path, verdict: str, body: dict[str, Any]) -> dict[str, Any
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, required=True)
-    parser.add_argument("--passive-manifest", type=Path, required=True)
+    parser.add_argument("--passive-manifest", type=Path)
+    parser.add_argument("--contract", choices=("qwen-frozen", "lfm3-v1"), default="qwen-frozen")
+    parser.add_argument("--contract-sha256")
+    parser.add_argument("--readiness-evidence", type=Path)
+    parser.add_argument("--executable", choices=sorted(AUTHORIZED_MEMBERS))
     parser.add_argument("--evidence-root", type=Path, required=True, help="a NEW run directory")
     parser.add_argument("--authorization-text", required=True)
     parser.add_argument(
@@ -673,6 +761,13 @@ def main(argv: list[str] | None = None) -> int:
         help="analysis.json of a prior canary capture that passed",
     )
     args = parser.parse_args(argv)
+    from tools.qualification.ai111.execution_contract import select_contract
+
+    spec = select_contract(args.contract, args.contract_sha256)
+    if args.contract == "qwen-frozen" and args.passive_manifest is None:
+        parser.error("legacy Qwen requires --passive-manifest")
+    if args.contract == "lfm3-v1" and (not args.contract_sha256 or not args.executable):
+        parser.error("LFM3 requires --contract-sha256 and --executable")
     from tools.qualification.ai111 import tokens
     from tools.qualification.ai111.capture_session import CaptureAdmission, RetrospectiveMonitor
 
@@ -696,6 +791,11 @@ def main(argv: list[str] | None = None) -> int:
             monitor=monitor,
             authorization_text=args.authorization_text,
             attestation=args.attest,
+            contract_spec=spec if args.contract == "lfm3-v1" else None,
+            readiness_evidence=json.loads(args.readiness_evidence.read_text(encoding="utf-8"))
+            if args.readiness_evidence
+            else None,
+            executable=args.executable,
         )
     except D12aRefused as exc:
         print(json.dumps({"verdict": "NOT TESTED", "refused": str(exc)}, indent=2))

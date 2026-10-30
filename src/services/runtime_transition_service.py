@@ -232,6 +232,16 @@ class RuntimeTransitionCoordinator:
     webui_endpoint_identity: Callable[[], str] = field(default=_default_webui_endpoint_identity)
     comfy_endpoint_present: Callable[[], bool] = field(default=_default_comfy_endpoint_presence)
 
+    def external_comfy_blocker(self) -> str | None:
+        """Observe a conflicting Comfy runtime without releasing any owned residency."""
+
+        try:
+            manager = self._get_manager(RUNTIME_COMFY)
+        except Exception as exc:  # noqa: BLE001 - unreadable ownership cannot authorize a launch
+            return f"comfy: could not verify runtime state ({type(exc).__name__}: {exc})"
+        state, blocker = self._observe_managed_runtime(RUNTIME_COMFY, manager)
+        return blocker if state is RuntimeOwnershipState.EXTERNAL else None
+
     def prepare_for(self, target: str) -> RuntimeTransitionResult:
         """Release conflicting StableNew-owned runtime residency ahead of dispatching ``target``.
 
@@ -382,29 +392,9 @@ class RuntimeTransitionCoordinator:
         self, runtime_id: str
     ) -> tuple[RuntimeOwnershipState, list[str], list[str], str | None]:
         manager = self._get_manager(runtime_id)
-        if manager is None:
-            return self._classify_unmanaged_endpoint(runtime_id, absent=True)
-        try:
-            is_running = bool(manager.is_running())
-        except Exception as exc:  # noqa: BLE001 - a broken probe blocks, it does not mutate
-            return (
-                RuntimeOwnershipState.EXTERNAL,
-                [],
-                [],
-                f"{runtime_id}: could not verify runtime state ({type(exc).__name__}: {exc})",
-            )
-        if not is_running:
-            return self._classify_unmanaged_endpoint(runtime_id, absent=False)
-        owns_process = bool(getattr(manager, "owns_process", False))
-        if not owns_process:
-            return (
-                RuntimeOwnershipState.EXTERNAL,
-                [],
-                [],
-                f"{runtime_id}: an external/ambiguous process is running and holding resources. "
-                f"StableNew did not launch it and will not stop it; close it yourself (or free "
-                f"its resources) before this job can proceed.",
-            )
+        state, blocker = self._observe_managed_runtime(runtime_id, manager)
+        if state is not RuntimeOwnershipState.OWNED:
+            return state, [], [], blocker
         try:
             self._stop_managed_runtime(runtime_id, manager)
             released = not bool(manager.is_running())
@@ -423,6 +413,34 @@ class RuntimeTransitionCoordinator:
                 f"{runtime_id}: StableNew-owned process did not stop within its own shutdown bound",
             )
         return RuntimeOwnershipState.OWNED, [runtime_id], [runtime_id], None
+
+    def _observe_managed_runtime(
+        self, runtime_id: str, manager: Any
+    ) -> tuple[RuntimeOwnershipState, str | None]:
+        """The shared read-only ownership observation used before any managed release."""
+
+        if manager is None:
+            state, _, _, blocker = self._classify_unmanaged_endpoint(runtime_id, absent=True)
+            return state, blocker
+        try:
+            is_running = bool(manager.is_running())
+        except Exception as exc:  # noqa: BLE001 - a broken probe blocks, it does not mutate
+            return (
+                RuntimeOwnershipState.EXTERNAL,
+                f"{runtime_id}: could not verify runtime state ({type(exc).__name__}: {exc})",
+            )
+        if not is_running:
+            state, _, _, blocker = self._classify_unmanaged_endpoint(runtime_id, absent=False)
+            return state, blocker
+        owns_process = bool(getattr(manager, "owns_process", False))
+        if not owns_process:
+            return (
+                RuntimeOwnershipState.EXTERNAL,
+                f"{runtime_id}: an external/ambiguous process is running and holding resources. "
+                f"StableNew did not launch it and will not stop it; close it yourself (or free "
+                f"its resources) before this job can proceed.",
+            )
+        return RuntimeOwnershipState.OWNED, None
 
     def _classify_unmanaged_endpoint(
         self, runtime_id: str, *, absent: bool
