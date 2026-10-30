@@ -1,0 +1,3044 @@
+{
+  "runtime_parent": {
+    "pid": 19084,
+    "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+    "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+    "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+    "base_prefix": "C:\\Users\\rob\\Python314",
+    "platform": "Windows-11-10.0.26100-SP0",
+    "machine": "AMD64",
+    "gil_enabled": true,
+    "gil_disabled_build": 0
+  },
+  "source_sha": "d68b477ba89ae6c5b88fe2e985defed35fcc9196",
+  "source_files": {
+    "__init__.py": "22cb0c1f2b586218164f6927efc608f0d572a1f5ab32b3e9dcb3b872dd4de5b6",
+    "common.py": "fc26feeb6c23c03ae22207442016e7865cd309add2081507a064046ec9c413ff",
+    "qt_child.py": "b0a76c2f561307974fe3f97ac7d2edac69b93a26203816851ceb4501084ba280",
+    "qt_dispatcher.py": "b2e3e6fbcae95796e62f0ffb775387b2322d3d48bda048d9c87e8319ca53aa7b",
+    "run.py": "35c85b2eaacb7a267161c4160cbdef62aaac51f3a8337792353da3ed531f2d7d",
+    "tk_child.py": "044bc5f6b15118eefb2a7636d91c5ce1d04feadea34e928b013986a3b3756675"
+  },
+  "dataset": {
+    "rows_per_table": 500,
+    "tables": 2,
+    "burst": 2000
+  },
+  "runs": [
+    {
+      "toolkit": "qt",
+      "label": "contracts",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447551691291900,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447552301642000,
+          "status": "PASS",
+          "checks": {
+            "imports_core_gui_widgets": true,
+            "qapplication_qwidget_qmainwindow": true,
+            "visible_painted": true,
+            "navigation": true,
+            "inline_ui_semantics": true,
+            "schedule_ui_is_queued": true,
+            "callback_error_does_not_stop_pump": true,
+            "worker_affinity": true,
+            "native_timer_pending_before_destruction": true,
+            "worker_dispose_waits_for_active_callback": true,
+            "worker_delay_affinity": true,
+            "delay_elapsed_ms": 35.15499999048188,
+            "actual_appstate_notifications": true,
+            "subscription_cleanup": true,
+            "concurrent_disposal_completed": true,
+            "dispose_destroyed_receiver_no_late_mutation": true,
+            "delayed_not_early": true,
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [
+            {
+              "type": "ValueError",
+              "message": "intentional synthetic callback failure"
+            }
+          ],
+          "runtime": {
+            "pid": 18052,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 752.1594000281766,
+            "median": 752.1594000281766,
+            "p95": 752.1594000281766,
+            "max": 752.1594000281766
+          },
+          "import_closures": {
+            "src.controller.ports.presentation_actions": {
+              "status": "PASS",
+              "module": "src.controller.ports.presentation_actions"
+            },
+            "src.gui.app_state_v2": {
+              "status": "PASS",
+              "module": "src.gui.app_state_v2"
+            },
+            "src.gui.ui_tokens": {
+              "status": "BLOCKED",
+              "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\rob\\qual\\StableNew-gui-port740\\tools\\qualification\\gui_port_740\\common.py\", line 93, in import_probe\n    imported = importlib.import_module(module)\n  File \"C:\\Users\\rob\\Python314\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1406, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1371, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1342, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 938, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 763, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 491, in _call_with_frames_removed\n  File \"C:\\Users\\rob\\qual\\StableNew-gui-port740\\src\\gui\\ui_tokens.py\", line 7, in <module>\n    from src.gui import design_system_v2 as design_system\n  File \"C:\\Users\\rob\\qual\\StableNew-gui-port740\\src\\gui\\design_system_v2.py\", line 5, in <module>\n    import tkinter as tk\n  File \"C:\\Users\\rob\\qual\\StableNew-gui-port740\\tools\\qualification\\gui_port_740\\common.py\", line 23, in find_spec\n    raise ImportError(\"GUI-PORT-740 forbids tkinter in this process\")\nImportError: GUI-PORT-740 forbids tkinter in this process\n"
+            },
+            "src.review.workflow_adapter": {
+              "status": "PASS",
+              "module": "src.review.workflow_adapter"
+            },
+            "src.state.content_visibility": {
+              "status": "PASS",
+              "module": "src.state.content_visibility"
+            }
+          },
+          "idle_memory": {
+            "working_set": 139268096,
+            "peak_working_set": 139284480,
+            "native_threads": 38
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.002400018274784088,
+            "median": 3.016700007719919,
+            "p95": 3.1491999980062246,
+            "max": 3.162000037264079
+          },
+          "peak_backlog": 1984,
+          "update_memory": {
+            "working_set": 140861440,
+            "peak_working_set": 140881920,
+            "native_threads": 38
+          },
+          "populate_ms": 17.514500010292977,
+          "heartbeat_ms": {
+            "n": 100,
+            "min": 1.9385999767109752,
+            "median": 5.0059499917551875,
+            "p95": 5.694699997548014,
+            "max": 52.670400007627904
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 17.423300014343113,
+          "close_started_ns": 447552298823700
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447552301642000,
+        "status": "PASS",
+        "checks": {
+          "imports_core_gui_widgets": true,
+          "qapplication_qwidget_qmainwindow": true,
+          "visible_painted": true,
+          "navigation": true,
+          "inline_ui_semantics": true,
+          "schedule_ui_is_queued": true,
+          "callback_error_does_not_stop_pump": true,
+          "worker_affinity": true,
+          "native_timer_pending_before_destruction": true,
+          "worker_dispose_waits_for_active_callback": true,
+          "worker_delay_affinity": true,
+          "delay_elapsed_ms": 35.15499999048188,
+          "actual_appstate_notifications": true,
+          "subscription_cleanup": true,
+          "concurrent_disposal_completed": true,
+          "dispose_destroyed_receiver_no_late_mutation": true,
+          "delayed_not_early": true,
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [
+          {
+            "type": "ValueError",
+            "message": "intentional synthetic callback failure"
+          }
+        ],
+        "runtime": {
+          "pid": 18052,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 752.1594000281766,
+          "median": 752.1594000281766,
+          "p95": 752.1594000281766,
+          "max": 752.1594000281766
+        },
+        "import_closures": {
+          "src.controller.ports.presentation_actions": {
+            "status": "PASS",
+            "module": "src.controller.ports.presentation_actions"
+          },
+          "src.gui.app_state_v2": {
+            "status": "PASS",
+            "module": "src.gui.app_state_v2"
+          },
+          "src.gui.ui_tokens": {
+            "status": "BLOCKED",
+            "traceback": "Traceback (most recent call last):\n  File \"C:\\Users\\rob\\qual\\StableNew-gui-port740\\tools\\qualification\\gui_port_740\\common.py\", line 93, in import_probe\n    imported = importlib.import_module(module)\n  File \"C:\\Users\\rob\\Python314\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1406, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1371, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1342, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 938, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 763, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 491, in _call_with_frames_removed\n  File \"C:\\Users\\rob\\qual\\StableNew-gui-port740\\src\\gui\\ui_tokens.py\", line 7, in <module>\n    from src.gui import design_system_v2 as design_system\n  File \"C:\\Users\\rob\\qual\\StableNew-gui-port740\\src\\gui\\design_system_v2.py\", line 5, in <module>\n    import tkinter as tk\n  File \"C:\\Users\\rob\\qual\\StableNew-gui-port740\\tools\\qualification\\gui_port_740\\common.py\", line 23, in find_spec\n    raise ImportError(\"GUI-PORT-740 forbids tkinter in this process\")\nImportError: GUI-PORT-740 forbids tkinter in this process\n"
+          },
+          "src.review.workflow_adapter": {
+            "status": "PASS",
+            "module": "src.review.workflow_adapter"
+          },
+          "src.state.content_visibility": {
+            "status": "PASS",
+            "module": "src.state.content_visibility"
+          }
+        },
+        "idle_memory": {
+          "working_set": 139268096,
+          "peak_working_set": 139284480,
+          "native_threads": 38
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.002400018274784088,
+          "median": 3.016700007719919,
+          "p95": 3.1491999980062246,
+          "max": 3.162000037264079
+        },
+        "peak_backlog": 1984,
+        "update_memory": {
+          "working_set": 140861440,
+          "peak_working_set": 140881920,
+          "native_threads": 38
+        },
+        "populate_ms": 17.514500010292977,
+        "heartbeat_ms": {
+          "n": 100,
+          "min": 1.9385999767109752,
+          "median": 5.0059499917551875,
+          "p95": 5.694699997548014,
+          "max": 52.670400007627904
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 17.423300014343113,
+        "close_started_ns": 447552298823700
+      },
+      "peak_sampled_working_set": 160444416,
+      "startup_ms": 1471.4826,
+      "close_to_exit_ms": 96.3742,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          7856,
+          1793401209.6241643
+        ],
+        [
+          18052,
+          1793401209.6362567
+        ]
+      ],
+      "descendant_quiescence_ms": 0.09820004925131798,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "close-repeat",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447553889266700,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447554112436700,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 27668,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 757.8313999692909,
+            "median": 757.8313999692909,
+            "p95": 757.8313999692909,
+            "max": 757.8313999692909
+          },
+          "idle_memory": {
+            "working_set": 136101888,
+            "peak_working_set": 136101888,
+            "native_threads": 36
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.002500019036233425,
+            "median": 3.1747499597258866,
+            "p95": 3.289500018581748,
+            "max": 3.319100011140108
+          },
+          "peak_backlog": 1986,
+          "update_memory": {
+            "working_set": 137318400,
+            "peak_working_set": 137351168,
+            "native_threads": 36
+          },
+          "populate_ms": 15.210599987767637,
+          "heartbeat_ms": {
+            "n": 39,
+            "min": 0.6547999801114202,
+            "median": 4.996500036213547,
+            "p95": 7.954100030474365,
+            "max": 10.074599995277822
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 19.22519999789074,
+          "close_started_ns": 447554109685200
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447554112436700,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 27668,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 757.8313999692909,
+          "median": 757.8313999692909,
+          "p95": 757.8313999692909,
+          "max": 757.8313999692909
+        },
+        "idle_memory": {
+          "working_set": 136101888,
+          "peak_working_set": 136101888,
+          "native_threads": 36
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.002500019036233425,
+          "median": 3.1747499597258866,
+          "p95": 3.289500018581748,
+          "max": 3.319100011140108
+        },
+        "peak_backlog": 1986,
+        "update_memory": {
+          "working_set": 137318400,
+          "peak_working_set": 137351168,
+          "native_threads": 36
+        },
+        "populate_ms": 15.210599987767637,
+        "heartbeat_ms": {
+          "n": 39,
+          "min": 0.6547999801114202,
+          "median": 4.996500036213547,
+          "p95": 7.954100030474365,
+          "max": 10.074599995277822
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 19.22519999789074,
+        "close_started_ns": 447554109685200
+      },
+      "peak_sampled_working_set": 157642752,
+      "startup_ms": 1493.2541,
+      "close_to_exit_ms": 71.0633,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          4244,
+          1793401211.7979808
+        ],
+        [
+          27668,
+          1793401211.8098207
+        ]
+      ],
+      "descendant_quiescence_ms": 0.13669999316334724,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "close-quit",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447555732957500,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447555957717900,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 36136,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 826.1980999959633,
+            "median": 826.1980999959633,
+            "p95": 826.1980999959633,
+            "max": 826.1980999959633
+          },
+          "idle_memory": {
+            "working_set": 135991296,
+            "peak_working_set": 135991296,
+            "native_threads": 37
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.0025999615900218487,
+            "median": 2.9618499684147537,
+            "p95": 3.027700004167855,
+            "max": 3.0427000019699335
+          },
+          "peak_backlog": 1986,
+          "update_memory": {
+            "working_set": 137211904,
+            "peak_working_set": 137224192,
+            "native_threads": 37
+          },
+          "populate_ms": 14.808400010224432,
+          "heartbeat_ms": {
+            "n": 40,
+            "min": 0.6758000236004591,
+            "median": 5.003049998776987,
+            "p95": 5.676099972333759,
+            "max": 9.836699988227338
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 17.453700012993068,
+          "close_started_ns": 447555954117100
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447555957717900,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 36136,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 826.1980999959633,
+          "median": 826.1980999959633,
+          "p95": 826.1980999959633,
+          "max": 826.1980999959633
+        },
+        "idle_memory": {
+          "working_set": 135991296,
+          "peak_working_set": 135991296,
+          "native_threads": 37
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.0025999615900218487,
+          "median": 2.9618499684147537,
+          "p95": 3.027700004167855,
+          "max": 3.0427000019699335
+        },
+        "peak_backlog": 1986,
+        "update_memory": {
+          "working_set": 137211904,
+          "peak_working_set": 137224192,
+          "native_threads": 37
+        },
+        "populate_ms": 14.808400010224432,
+        "heartbeat_ms": {
+          "n": 40,
+          "min": 0.6758000236004591,
+          "median": 5.003049998776987,
+          "p95": 5.676099972333759,
+          "max": 9.836699988227338
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 17.453700012993068,
+        "close_started_ns": 447555954117100
+      },
+      "peak_sampled_working_set": 156643328,
+      "startup_ms": 1551.4852,
+      "close_to_exit_ms": 87.7424,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          31032,
+          1793401213.5851986
+        ],
+        [
+          36136,
+          1793401213.5968935
+        ]
+      ],
+      "descendant_quiescence_ms": 0.12059998698532581,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "close-delete",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447557518712900,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447557740963900,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 14568,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 755.3081000223756,
+            "median": 755.3081000223756,
+            "p95": 755.3081000223756,
+            "max": 755.3081000223756
+          },
+          "idle_memory": {
+            "working_set": 135651328,
+            "peak_working_set": 135651328,
+            "native_threads": 36
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.08559995330870152,
+            "median": 3.0408500169869512,
+            "p95": 3.099700028542429,
+            "max": 3.111800004262477
+          },
+          "peak_backlog": 1992,
+          "update_memory": {
+            "working_set": 137674752,
+            "peak_working_set": 137674752,
+            "native_threads": 36
+          },
+          "populate_ms": 14.918200031388551,
+          "heartbeat_ms": {
+            "n": 38,
+            "min": 0.7690999773330986,
+            "median": 4.997099982574582,
+            "p95": 6.065899971872568,
+            "max": 10.176000010687858
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 18.75590003328398,
+          "close_started_ns": 447557735150500
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447557740963900,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 14568,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 755.3081000223756,
+          "median": 755.3081000223756,
+          "p95": 755.3081000223756,
+          "max": 755.3081000223756
+        },
+        "idle_memory": {
+          "working_set": 135651328,
+          "peak_working_set": 135651328,
+          "native_threads": 36
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.08559995330870152,
+          "median": 3.0408500169869512,
+          "p95": 3.099700028542429,
+          "max": 3.111800004262477
+        },
+        "peak_backlog": 1992,
+        "update_memory": {
+          "working_set": 137674752,
+          "peak_working_set": 137674752,
+          "native_threads": 36
+        },
+        "populate_ms": 14.918200031388551,
+        "heartbeat_ms": {
+          "n": 38,
+          "min": 0.7690999773330986,
+          "median": 4.997099982574582,
+          "p95": 6.065899971872568,
+          "max": 10.176000010687858
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 18.75590003328398,
+        "close_started_ns": 447557735150500
+      },
+      "peak_sampled_working_set": 156172288,
+      "startup_ms": 1476.1049,
+      "close_to_exit_ms": 78.0064,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          14568,
+          1793401215.458474
+        ],
+        [
+          20304,
+          1793401215.4459877
+        ]
+      ],
+      "descendant_quiescence_ms": 0.07559999357908964,
+      "pass": true
+    },
+    {
+      "toolkit": "tk",
+      "label": "warmup",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447558455128900,
+          "visible": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447559723197300,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "qt_absent": true
+          },
+          "toolkit": "tk",
+          "runtime": {
+            "pid": 19556,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "tk": "9.0.4",
+          "populate_ms": 5.375699955038726,
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 9.930700005497783,
+            "median": 9.930700005497783,
+            "p95": 9.930700005497783,
+            "max": 9.930700005497783
+          },
+          "idle_memory": {
+            "working_set": 88514560,
+            "peak_working_set": 88514560,
+            "native_threads": 31
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 8.140999998431653,
+            "median": 531.9089000113308,
+            "p95": 986.8883000453934,
+            "max": 1033.1037000287324
+          },
+          "update_memory": {
+            "working_set": 90361856,
+            "peak_working_set": 90361856,
+            "native_threads": 31
+          },
+          "heartbeat_ms": {
+            "n": 83,
+            "min": 0.16369996592402458,
+            "median": 15.538200037553906,
+            "p95": 16.145500005222857,
+            "max": 16.58779999706894
+          },
+          "dpi": 96,
+          "tk_scaling": 1.3339898243886428,
+          "peak_backlog": 2000,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 23.776100017130375,
+          "close_started_ns": 447559717773400
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447559723197300,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "qt_absent": true
+        },
+        "toolkit": "tk",
+        "runtime": {
+          "pid": 19556,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "tk": "9.0.4",
+        "populate_ms": 5.375699955038726,
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 9.930700005497783,
+          "median": 9.930700005497783,
+          "p95": 9.930700005497783,
+          "max": 9.930700005497783
+        },
+        "idle_memory": {
+          "working_set": 88514560,
+          "peak_working_set": 88514560,
+          "native_threads": 31
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 8.140999998431653,
+          "median": 531.9089000113308,
+          "p95": 986.8883000453934,
+          "max": 1033.1037000287324
+        },
+        "update_memory": {
+          "working_set": 90361856,
+          "peak_working_set": 90361856,
+          "native_threads": 31
+        },
+        "heartbeat_ms": {
+          "n": 83,
+          "min": 0.16369996592402458,
+          "median": 15.538200037553906,
+          "p95": 16.145500005222857,
+          "max": 16.58779999706894
+        },
+        "dpi": 96,
+        "tk_scaling": 1.3339898243886428,
+        "peak_backlog": 2000,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 23.776100017130375,
+        "close_started_ns": 447559717773400
+      },
+      "peak_sampled_working_set": 106606592,
+      "startup_ms": 641.2535,
+      "close_to_exit_ms": 58.0699,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          19556,
+          1793401217.2277193
+        ],
+        [
+          34480,
+          1793401217.2157393
+        ]
+      ],
+      "descendant_quiescence_ms": 0.03570003900676966,
+      "pass": true
+    },
+    {
+      "toolkit": "tk",
+      "label": "sample-1",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447560413338900,
+          "visible": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447561726948600,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "qt_absent": true
+          },
+          "toolkit": "tk",
+          "runtime": {
+            "pid": 35396,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "tk": "9.0.4",
+          "populate_ms": 5.280099983792752,
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 9.262499981559813,
+            "median": 9.262499981559813,
+            "p95": 9.262499981559813,
+            "max": 9.262499981559813
+          },
+          "idle_memory": {
+            "working_set": 88764416,
+            "peak_working_set": 88764416,
+            "native_threads": 31
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 1.6275000525638461,
+            "median": 532.3123499983922,
+            "p95": 1024.8926999629475,
+            "max": 1072.5281999912113
+          },
+          "update_memory": {
+            "working_set": 90652672,
+            "peak_working_set": 90652672,
+            "native_threads": 31
+          },
+          "heartbeat_ms": {
+            "n": 87,
+            "min": 0.1689000055193901,
+            "median": 15.541200002189726,
+            "p95": 16.827200015541166,
+            "max": 19.556699960958213
+          },
+          "dpi": 96,
+          "tk_scaling": 1.3339898243886428,
+          "peak_backlog": 2000,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 27.515799971297383,
+          "close_started_ns": 447561722179500
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447561726948600,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "qt_absent": true
+        },
+        "toolkit": "tk",
+        "runtime": {
+          "pid": 35396,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "tk": "9.0.4",
+        "populate_ms": 5.280099983792752,
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 9.262499981559813,
+          "median": 9.262499981559813,
+          "p95": 9.262499981559813,
+          "max": 9.262499981559813
+        },
+        "idle_memory": {
+          "working_set": 88764416,
+          "peak_working_set": 88764416,
+          "native_threads": 31
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 1.6275000525638461,
+          "median": 532.3123499983922,
+          "p95": 1024.8926999629475,
+          "max": 1072.5281999912113
+        },
+        "update_memory": {
+          "working_set": 90652672,
+          "peak_working_set": 90652672,
+          "native_threads": 31
+        },
+        "heartbeat_ms": {
+          "n": 87,
+          "min": 0.1689000055193901,
+          "median": 15.541200002189726,
+          "p95": 16.827200015541166,
+          "max": 19.556699960958213
+        },
+        "dpi": 96,
+        "tk_scaling": 1.3339898243886428,
+        "peak_backlog": 2000,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 27.515799971297383,
+        "close_started_ns": 447561722179500
+      },
+      "peak_sampled_working_set": 106381312,
+      "startup_ms": 636.753,
+      "close_to_exit_ms": 63.3307,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          35396,
+          1793401219.1887207
+        ],
+        [
+          37660,
+          1793401219.1765816
+        ]
+      ],
+      "descendant_quiescence_ms": 0.13449997641146183,
+      "pass": true
+    },
+    {
+      "toolkit": "tk",
+      "label": "sample-2",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447562424540500,
+          "visible": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447563668494000,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "qt_absent": true
+          },
+          "toolkit": "tk",
+          "runtime": {
+            "pid": 17964,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "tk": "9.0.4",
+          "populate_ms": 5.268300010357052,
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 9.774600039236248,
+            "median": 9.774600039236248,
+            "p95": 9.774600039236248,
+            "max": 9.774600039236248
+          },
+          "idle_memory": {
+            "working_set": 88641536,
+            "peak_working_set": 88641536,
+            "native_threads": 31
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 1.5729000442661345,
+            "median": 504.88699998822995,
+            "p95": 958.8646999909543,
+            "max": 1005.4369999561459
+          },
+          "update_memory": {
+            "working_set": 90542080,
+            "peak_working_set": 90542080,
+            "native_threads": 31
+          },
+          "heartbeat_ms": {
+            "n": 82,
+            "min": 0.16880000475794077,
+            "median": 15.449500031536445,
+            "p95": 16.350299993064255,
+            "max": 16.827000014018267
+          },
+          "dpi": 96,
+          "tk_scaling": 1.3339898243886428,
+          "peak_backlog": 2000,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 23.74440000858158,
+          "close_started_ns": 447563662266900
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447563668494000,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "qt_absent": true
+        },
+        "toolkit": "tk",
+        "runtime": {
+          "pid": 17964,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "tk": "9.0.4",
+        "populate_ms": 5.268300010357052,
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 9.774600039236248,
+          "median": 9.774600039236248,
+          "p95": 9.774600039236248,
+          "max": 9.774600039236248
+        },
+        "idle_memory": {
+          "working_set": 88641536,
+          "peak_working_set": 88641536,
+          "native_threads": 31
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 1.5729000442661345,
+          "median": 504.88699998822995,
+          "p95": 958.8646999909543,
+          "max": 1005.4369999561459
+        },
+        "update_memory": {
+          "working_set": 90542080,
+          "peak_working_set": 90542080,
+          "native_threads": 31
+        },
+        "heartbeat_ms": {
+          "n": 82,
+          "min": 0.16880000475794077,
+          "median": 15.449500031536445,
+          "p95": 16.350299993064255,
+          "max": 16.827000014018267
+        },
+        "dpi": 96,
+        "tk_scaling": 1.3339898243886428,
+        "peak_backlog": 2000,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 23.74440000858158,
+        "close_started_ns": 447563662266900
+      },
+      "peak_sampled_working_set": 106274816,
+      "startup_ms": 638.1533,
+      "close_to_exit_ms": 56.0175,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          17964,
+          1793401221.1987927
+        ],
+        [
+          22520,
+          1793401221.186708
+        ]
+      ],
+      "descendant_quiescence_ms": 0.11389999417588115,
+      "pass": true
+    },
+    {
+      "toolkit": "tk",
+      "label": "sample-3",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447564330762000,
+          "visible": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447565605826900,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "qt_absent": true
+          },
+          "toolkit": "tk",
+          "runtime": {
+            "pid": 47432,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "tk": "9.0.4",
+          "populate_ms": 5.45669998973608,
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 9.489100018981844,
+            "median": 9.489100018981844,
+            "p95": 9.489100018981844,
+            "max": 9.489100018981844
+          },
+          "idle_memory": {
+            "working_set": 88809472,
+            "peak_working_set": 88809472,
+            "native_threads": 31
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 1.8603000207804143,
+            "median": 523.9799500268418,
+            "p95": 989.294399973005,
+            "max": 1039.4880999810994
+          },
+          "update_memory": {
+            "working_set": 90648576,
+            "peak_working_set": 90648576,
+            "native_threads": 31
+          },
+          "heartbeat_ms": {
+            "n": 84,
+            "min": 0.19350001821294427,
+            "median": 15.415100002428517,
+            "p95": 16.6173999896273,
+            "max": 18.635000044014305
+          },
+          "dpi": 96,
+          "tk_scaling": 1.3339898243886428,
+          "peak_backlog": 2000,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 25.410100002773106,
+          "close_started_ns": 447565600714400
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447565605826900,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "qt_absent": true
+        },
+        "toolkit": "tk",
+        "runtime": {
+          "pid": 47432,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "tk": "9.0.4",
+        "populate_ms": 5.45669998973608,
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 9.489100018981844,
+          "median": 9.489100018981844,
+          "p95": 9.489100018981844,
+          "max": 9.489100018981844
+        },
+        "idle_memory": {
+          "working_set": 88809472,
+          "peak_working_set": 88809472,
+          "native_threads": 31
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 1.8603000207804143,
+          "median": 523.9799500268418,
+          "p95": 989.294399973005,
+          "max": 1039.4880999810994
+        },
+        "update_memory": {
+          "working_set": 90648576,
+          "peak_working_set": 90648576,
+          "native_threads": 31
+        },
+        "heartbeat_ms": {
+          "n": 84,
+          "min": 0.19350001821294427,
+          "median": 15.415100002428517,
+          "p95": 16.6173999896273,
+          "max": 18.635000044014305
+        },
+        "dpi": 96,
+        "tk_scaling": 1.3339898243886428,
+        "peak_backlog": 2000,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 25.410100002773106,
+        "close_started_ns": 447565600714400
+      },
+      "peak_sampled_working_set": 106586112,
+      "startup_ms": 611.6427,
+      "close_to_exit_ms": 64.3817,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          22420,
+          1793401223.1192062
+        ],
+        [
+          47432,
+          1793401223.1308873
+        ]
+      ],
+      "descendant_quiescence_ms": 0.09699998190626502,
+      "pass": true
+    },
+    {
+      "toolkit": "tk",
+      "label": "sample-4",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447566288581900,
+          "visible": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447567579305700,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "qt_absent": true
+          },
+          "toolkit": "tk",
+          "runtime": {
+            "pid": 4992,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "tk": "9.0.4",
+          "populate_ms": 5.364199983887374,
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 9.191300021484494,
+            "median": 9.191300021484494,
+            "p95": 9.191300021484494,
+            "max": 9.191300021484494
+          },
+          "idle_memory": {
+            "working_set": 88924160,
+            "peak_working_set": 88924160,
+            "native_threads": 31
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 1.5681000077165663,
+            "median": 510.49635000526905,
+            "p95": 978.4803000511602,
+            "max": 1026.394699991215
+          },
+          "update_memory": {
+            "working_set": 90857472,
+            "peak_working_set": 90857472,
+            "native_threads": 31
+          },
+          "heartbeat_ms": {
+            "n": 84,
+            "min": 0.16489997506141663,
+            "median": 15.520949993515387,
+            "p95": 16.588800004683435,
+            "max": 36.87389998231083
+          },
+          "dpi": 96,
+          "tk_scaling": 1.3339898243886428,
+          "peak_backlog": 2000,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 28.13590003643185,
+          "close_started_ns": 447567574395600
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447567579305700,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "qt_absent": true
+        },
+        "toolkit": "tk",
+        "runtime": {
+          "pid": 4992,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "tk": "9.0.4",
+        "populate_ms": 5.364199983887374,
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 9.191300021484494,
+          "median": 9.191300021484494,
+          "p95": 9.191300021484494,
+          "max": 9.191300021484494
+        },
+        "idle_memory": {
+          "working_set": 88924160,
+          "peak_working_set": 88924160,
+          "native_threads": 31
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 1.5681000077165663,
+          "median": 510.49635000526905,
+          "p95": 978.4803000511602,
+          "max": 1026.394699991215
+        },
+        "update_memory": {
+          "working_set": 90857472,
+          "peak_working_set": 90857472,
+          "native_threads": 31
+        },
+        "heartbeat_ms": {
+          "n": 84,
+          "min": 0.16489997506141663,
+          "median": 15.520949993515387,
+          "p95": 16.588800004683435,
+          "max": 36.87389998231083
+        },
+        "dpi": 96,
+        "tk_scaling": 1.3339898243886428,
+        "peak_backlog": 2000,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 28.13590003643185,
+        "close_started_ns": 447567574395600
+      },
+      "peak_sampled_working_set": 106610688,
+      "startup_ms": 622.6388,
+      "close_to_exit_ms": 54.2507,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          824,
+          1793401225.065725
+        ],
+        [
+          4992,
+          1793401225.0778954
+        ]
+      ],
+      "descendant_quiescence_ms": 0.10799994925037026,
+      "pass": true
+    },
+    {
+      "toolkit": "tk",
+      "label": "sample-5",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447568244482400,
+          "visible": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447569502756500,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "qt_absent": true
+          },
+          "toolkit": "tk",
+          "runtime": {
+            "pid": 22476,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "tk": "9.0.4",
+          "populate_ms": 5.523300031200051,
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 9.000500023830682,
+            "median": 9.000500023830682,
+            "p95": 9.000500023830682,
+            "max": 9.000500023830682
+          },
+          "idle_memory": {
+            "working_set": 88506368,
+            "peak_working_set": 88506368,
+            "native_threads": 31
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 1.7033999902196229,
+            "median": 503.4752999781631,
+            "p95": 958.9265999966301,
+            "max": 1006.2937999609858
+          },
+          "update_memory": {
+            "working_set": 90320896,
+            "peak_working_set": 90329088,
+            "native_threads": 31
+          },
+          "heartbeat_ms": {
+            "n": 80,
+            "min": 0.16120000509545207,
+            "median": 15.4917000036221,
+            "p95": 16.247499966993928,
+            "max": 26.103199983481318
+          },
+          "dpi": 96,
+          "tk_scaling": 1.3339898243886428,
+          "peak_backlog": 2000,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 24.151200021151453,
+          "close_started_ns": 447569497801400
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447569502756500,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "qt_absent": true
+        },
+        "toolkit": "tk",
+        "runtime": {
+          "pid": 22476,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "tk": "9.0.4",
+        "populate_ms": 5.523300031200051,
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 9.000500023830682,
+          "median": 9.000500023830682,
+          "p95": 9.000500023830682,
+          "max": 9.000500023830682
+        },
+        "idle_memory": {
+          "working_set": 88506368,
+          "peak_working_set": 88506368,
+          "native_threads": 31
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 1.7033999902196229,
+          "median": 503.4752999781631,
+          "p95": 958.9265999966301,
+          "max": 1006.2937999609858
+        },
+        "update_memory": {
+          "working_set": 90320896,
+          "peak_working_set": 90329088,
+          "native_threads": 31
+        },
+        "heartbeat_ms": {
+          "n": 80,
+          "min": 0.16120000509545207,
+          "median": 15.4917000036221,
+          "p95": 16.247499966993928,
+          "max": 26.103199983481318
+        },
+        "dpi": 96,
+        "tk_scaling": 1.3339898243886428,
+        "peak_backlog": 2000,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 24.151200021151453,
+        "close_started_ns": 447569497801400
+      },
+      "peak_sampled_working_set": 106295296,
+      "startup_ms": 614.8979,
+      "close_to_exit_ms": 62.9735,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          22476,
+          1793401227.0425649
+        ],
+        [
+          26860,
+          1793401227.0300543
+        ]
+      ],
+      "descendant_quiescence_ms": 0.1039999770000577,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "warmup",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447571054061500,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447571286949300,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 21000,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 2,
+            "min": 7.053900044411421,
+            "median": 380.445700022392,
+            "p95": 753.8375000003725,
+            "max": 753.8375000003725
+          },
+          "idle_memory": {
+            "working_set": 136257536,
+            "peak_working_set": 136257536,
+            "native_threads": 36
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.002300017513334751,
+            "median": 3.2757500011939555,
+            "p95": 3.3177000004798174,
+            "max": 3.325600002426654
+          },
+          "peak_backlog": 1984,
+          "update_memory": {
+            "working_set": 137977856,
+            "peak_working_set": 138002432,
+            "native_threads": 36
+          },
+          "populate_ms": 15.081799996551126,
+          "heartbeat_ms": {
+            "n": 40,
+            "min": 1.5423999866470695,
+            "median": 4.963500017765909,
+            "p95": 6.226400029845536,
+            "max": 14.114799967501312
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 19.23850004095584,
+          "close_started_ns": 447571284095500
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447571286949300,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 21000,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 2,
+          "min": 7.053900044411421,
+          "median": 380.445700022392,
+          "p95": 753.8375000003725,
+          "max": 753.8375000003725
+        },
+        "idle_memory": {
+          "working_set": 136257536,
+          "peak_working_set": 136257536,
+          "native_threads": 36
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.002300017513334751,
+          "median": 3.2757500011939555,
+          "p95": 3.3177000004798174,
+          "max": 3.325600002426654
+        },
+        "peak_backlog": 1984,
+        "update_memory": {
+          "working_set": 137977856,
+          "peak_working_set": 138002432,
+          "native_threads": 36
+        },
+        "populate_ms": 15.081799996551126,
+        "heartbeat_ms": {
+          "n": 40,
+          "min": 1.5423999866470695,
+          "median": 4.963500017765909,
+          "p95": 6.226400029845536,
+          "max": 14.114799967501312
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 19.23850004095584,
+        "close_started_ns": 447571284095500
+      },
+      "peak_sampled_working_set": 157442048,
+      "startup_ms": 1492.3969,
+      "close_to_exit_ms": 85.2452,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          21000,
+          1793401228.9750712
+        ],
+        [
+          26412,
+          1793401228.9634013
+        ]
+      ],
+      "descendant_quiescence_ms": 0.10499998461455107,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "sample-1",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447572900344800,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447573126236000,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 35424,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 767.3511000466533,
+            "median": 767.3511000466533,
+            "p95": 767.3511000466533,
+            "max": 767.3511000466533
+          },
+          "idle_memory": {
+            "working_set": 135852032,
+            "peak_working_set": 135852032,
+            "native_threads": 36
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.0034999684430658817,
+            "median": 3.0965000041760504,
+            "p95": 3.1834999681450427,
+            "max": 3.1980000203475356
+          },
+          "peak_backlog": 1989,
+          "update_memory": {
+            "working_set": 138014720,
+            "peak_working_set": 138014720,
+            "native_threads": 36
+          },
+          "populate_ms": 15.15819999622181,
+          "heartbeat_ms": {
+            "n": 38,
+            "min": 0.6698999786749482,
+            "median": 4.991549998521805,
+            "p95": 7.5026999693363905,
+            "max": 13.176400039810687
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 18.309200007934123,
+          "close_started_ns": 447573123398900
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447573126236000,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 35424,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 767.3511000466533,
+          "median": 767.3511000466533,
+          "p95": 767.3511000466533,
+          "max": 767.3511000466533
+        },
+        "idle_memory": {
+          "working_set": 135852032,
+          "peak_working_set": 135852032,
+          "native_threads": 36
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.0034999684430658817,
+          "median": 3.0965000041760504,
+          "p95": 3.1834999681450427,
+          "max": 3.1980000203475356
+        },
+        "peak_backlog": 1989,
+        "update_memory": {
+          "working_set": 138014720,
+          "peak_working_set": 138014720,
+          "native_threads": 36
+        },
+        "populate_ms": 15.15819999622181,
+        "heartbeat_ms": {
+          "n": 38,
+          "min": 0.6698999786749482,
+          "median": 4.991549998521805,
+          "p95": 7.5026999693363905,
+          "max": 13.176400039810687
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 18.309200007934123,
+        "close_started_ns": 447573123398900
+      },
+      "peak_sampled_working_set": 153899008,
+      "startup_ms": 1530.0343,
+      "close_to_exit_ms": 74.5993,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          17872,
+          1793401230.7702875
+        ],
+        [
+          35424,
+          1793401230.7819123
+        ]
+      ],
+      "descendant_quiescence_ms": 0.10529998689889908,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "sample-2",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447574678118400,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447574912057700,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 14144,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 2,
+            "min": 6.87470001867041,
+            "median": 378.3261500066146,
+            "p95": 749.7775999945588,
+            "max": 749.7775999945588
+          },
+          "idle_memory": {
+            "working_set": 135798784,
+            "peak_working_set": 135798784,
+            "native_threads": 36
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.003500026650726795,
+            "median": 2.9463999962899834,
+            "p95": 3.0651999986730516,
+            "max": 3.0749000143259764
+          },
+          "peak_backlog": 1985,
+          "update_memory": {
+            "working_set": 137457664,
+            "peak_working_set": 137457664,
+            "native_threads": 36
+          },
+          "populate_ms": 14.880000031553209,
+          "heartbeat_ms": {
+            "n": 40,
+            "min": 1.947099983226508,
+            "median": 4.989349981769919,
+            "p95": 6.045800051651895,
+            "max": 15.387499995995313
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 19.814700004644692,
+          "close_started_ns": 447574908496400
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447574912057700,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 14144,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 2,
+          "min": 6.87470001867041,
+          "median": 378.3261500066146,
+          "p95": 749.7775999945588,
+          "max": 749.7775999945588
+        },
+        "idle_memory": {
+          "working_set": 135798784,
+          "peak_working_set": 135798784,
+          "native_threads": 36
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.003500026650726795,
+          "median": 2.9463999962899834,
+          "p95": 3.0651999986730516,
+          "max": 3.0749000143259764
+        },
+        "peak_backlog": 1985,
+        "update_memory": {
+          "working_set": 137457664,
+          "peak_working_set": 137457664,
+          "native_threads": 36
+        },
+        "populate_ms": 14.880000031553209,
+        "heartbeat_ms": {
+          "n": 40,
+          "min": 1.947099983226508,
+          "median": 4.989349981769919,
+          "p95": 6.045800051651895,
+          "max": 15.387499995995313
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 19.814700004644692,
+        "close_started_ns": 447574908496400
+      },
+      "peak_sampled_working_set": 157282304,
+      "startup_ms": 1479.0793,
+      "close_to_exit_ms": 87.3183,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          14144,
+          1793401232.6177175
+        ],
+        [
+          18648,
+          1793401232.6058168
+        ]
+      ],
+      "descendant_quiescence_ms": 0.11260004248470068,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "sample-3",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447576519033500,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447576725073300,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 37296,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 750.648999994155,
+            "median": 750.648999994155,
+            "p95": 750.648999994155,
+            "max": 750.648999994155
+          },
+          "idle_memory": {
+            "working_set": 136413184,
+            "peak_working_set": 136413184,
+            "native_threads": 39
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.0022999593056738377,
+            "median": 2.9952999902889132,
+            "p95": 3.0826000147499144,
+            "max": 3.0901000136509538
+          },
+          "peak_backlog": 1980,
+          "update_memory": {
+            "working_set": 138047488,
+            "peak_working_set": 138047488,
+            "native_threads": 39
+          },
+          "populate_ms": 15.479399997275323,
+          "heartbeat_ms": {
+            "n": 37,
+            "min": 0.6781000411137938,
+            "median": 4.964000021573156,
+            "p95": 5.773700017016381,
+            "max": 9.950700041372329
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 18.335799977649003,
+          "close_started_ns": 447576721517900
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447576725073300,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 37296,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 750.648999994155,
+          "median": 750.648999994155,
+          "p95": 750.648999994155,
+          "max": 750.648999994155
+        },
+        "idle_memory": {
+          "working_set": 136413184,
+          "peak_working_set": 136413184,
+          "native_threads": 39
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.0022999593056738377,
+          "median": 2.9952999902889132,
+          "p95": 3.0826000147499144,
+          "max": 3.0901000136509538
+        },
+        "peak_backlog": 1980,
+        "update_memory": {
+          "working_set": 138047488,
+          "peak_working_set": 138047488,
+          "native_threads": 39
+        },
+        "populate_ms": 15.479399997275323,
+        "heartbeat_ms": {
+          "n": 37,
+          "min": 0.6781000411137938,
+          "median": 4.964000021573156,
+          "p95": 5.773700017016381,
+          "max": 9.950700041372329
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 18.335799977649003,
+        "close_started_ns": 447576721517900
+      },
+      "peak_sampled_working_set": 157384704,
+      "startup_ms": 1522.2147,
+      "close_to_exit_ms": 80.7987,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          3636,
+          1793401234.3966854
+        ],
+        [
+          37296,
+          1793401234.4091337
+        ]
+      ],
+      "descendant_quiescence_ms": 0.03890000516548753,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "sample-4",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447578328956700,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447578537173200,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 32908,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 2,
+            "min": 7.285600004252046,
+            "median": 382.551050017355,
+            "p95": 757.816500030458,
+            "max": 757.816500030458
+          },
+          "idle_memory": {
+            "working_set": 136278016,
+            "peak_working_set": 136278016,
+            "native_threads": 39
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.010300020221620798,
+            "median": 3.2515999919269234,
+            "p95": 3.3178000012412667,
+            "max": 3.3418999519199133
+          },
+          "peak_backlog": 1993,
+          "update_memory": {
+            "working_set": 137920512,
+            "peak_working_set": 137920512,
+            "native_threads": 39
+          },
+          "populate_ms": 15.6814000220038,
+          "heartbeat_ms": {
+            "n": 36,
+            "min": 0.6318999803625047,
+            "median": 4.976249998435378,
+            "p95": 8.964800043031573,
+            "max": 9.49269998818636
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 18.218800018075854,
+          "close_started_ns": 447578533728200
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447578537173200,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 32908,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 2,
+          "min": 7.285600004252046,
+          "median": 382.551050017355,
+          "p95": 757.816500030458,
+          "max": 757.816500030458
+        },
+        "idle_memory": {
+          "working_set": 136278016,
+          "peak_working_set": 136278016,
+          "native_threads": 39
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.010300020221620798,
+          "median": 3.2515999919269234,
+          "p95": 3.3178000012412667,
+          "max": 3.3418999519199133
+        },
+        "peak_backlog": 1993,
+        "update_memory": {
+          "working_set": 137920512,
+          "peak_working_set": 137920512,
+          "native_threads": 39
+        },
+        "populate_ms": 15.6814000220038,
+        "heartbeat_ms": {
+          "n": 36,
+          "min": 0.6318999803625047,
+          "median": 4.976249998435378,
+          "p95": 8.964800043031573,
+          "max": 9.49269998818636
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 18.218800018075854,
+        "close_started_ns": 447578533728200
+      },
+      "peak_sampled_working_set": 154681344,
+      "startup_ms": 1525.5443,
+      "close_to_exit_ms": 73.359,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          16776,
+          1793401236.20325
+        ],
+        [
+          32908,
+          1793401236.2149336
+        ]
+      ],
+      "descendant_quiescence_ms": 0.2429999876767397,
+      "pass": true
+    },
+    {
+      "toolkit": "qt",
+      "label": "sample-5",
+      "exit_code": 0,
+      "stderr": "",
+      "timeout": false,
+      "contained": true,
+      "events": [
+        {
+          "event": "first_visible",
+          "clock_ns": 447580087918800,
+          "visible": true,
+          "exposed": true
+        },
+        {
+          "event": "result",
+          "clock_ns": 447580316834800,
+          "status": "PASS",
+          "checks": {
+            "projection_add_remove_status_and_selection": true,
+            "burst_no_loss_duplicate_or_wrong_thread": true,
+            "no_python_worker_leak": true,
+            "no_late_shutdown_mutation": true,
+            "event_loop_exit": true,
+            "callback_faults_accounted": true,
+            "tkinter_absent": true,
+            "optional_qt_modules_unused": true
+          },
+          "errors": [],
+          "expected_callback_errors": [],
+          "runtime": {
+            "pid": 13452,
+            "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+            "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+            "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+            "base_prefix": "C:\\Users\\rob\\Python314",
+            "platform": "Windows-11-10.0.26100-SP0",
+            "machine": "AMD64",
+            "gil_enabled": true,
+            "gil_disabled_build": 0
+          },
+          "toolkit": "qt",
+          "qt": "6.12.0",
+          "pyside": "6.12.0",
+          "platform_plugin": "windows",
+          "screens": [
+            {
+              "name": "\\\\.\\DISPLAY1",
+              "dpr": 1.0,
+              "logical_dpi": 96.0,
+              "size": [
+                2560,
+                1440
+              ]
+            }
+          ],
+          "startup_heartbeat_ms": {
+            "n": 1,
+            "min": 756.2945000245236,
+            "median": 756.2945000245236,
+            "p95": 756.2945000245236,
+            "max": 756.2945000245236
+          },
+          "idle_memory": {
+            "working_set": 136708096,
+            "peak_working_set": 136708096,
+            "native_threads": 36
+          },
+          "latency_ms": {
+            "n": 2000,
+            "min": 0.0024999608285725117,
+            "median": 3.4196000196971,
+            "p95": 3.5289000370539725,
+            "max": 3.5459999926388264
+          },
+          "peak_backlog": 1988,
+          "update_memory": {
+            "working_set": 137981952,
+            "peak_working_set": 137981952,
+            "native_threads": 36
+          },
+          "populate_ms": 15.560200030449778,
+          "heartbeat_ms": {
+            "n": 41,
+            "min": 0.7264000014401972,
+            "median": 5.000899953301996,
+            "p95": 5.7132000220008194,
+            "max": 10.258099995553493
+          },
+          "dpi": 96,
+          "warm_visible_rendered": true,
+          "warm_shell_first_paint_ms": 17.90799997979775,
+          "close_started_ns": 447580313756600
+        }
+      ],
+      "result": {
+        "event": "result",
+        "clock_ns": 447580316834800,
+        "status": "PASS",
+        "checks": {
+          "projection_add_remove_status_and_selection": true,
+          "burst_no_loss_duplicate_or_wrong_thread": true,
+          "no_python_worker_leak": true,
+          "no_late_shutdown_mutation": true,
+          "event_loop_exit": true,
+          "callback_faults_accounted": true,
+          "tkinter_absent": true,
+          "optional_qt_modules_unused": true
+        },
+        "errors": [],
+        "expected_callback_errors": [],
+        "runtime": {
+          "pid": 13452,
+          "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+          "executable": "C:\\Users\\rob\\qual\\gui-port740-env\\Scripts\\python.exe",
+          "prefix": "C:\\Users\\rob\\qual\\gui-port740-env",
+          "base_prefix": "C:\\Users\\rob\\Python314",
+          "platform": "Windows-11-10.0.26100-SP0",
+          "machine": "AMD64",
+          "gil_enabled": true,
+          "gil_disabled_build": 0
+        },
+        "toolkit": "qt",
+        "qt": "6.12.0",
+        "pyside": "6.12.0",
+        "platform_plugin": "windows",
+        "screens": [
+          {
+            "name": "\\\\.\\DISPLAY1",
+            "dpr": 1.0,
+            "logical_dpi": 96.0,
+            "size": [
+              2560,
+              1440
+            ]
+          }
+        ],
+        "startup_heartbeat_ms": {
+          "n": 1,
+          "min": 756.2945000245236,
+          "median": 756.2945000245236,
+          "p95": 756.2945000245236,
+          "max": 756.2945000245236
+        },
+        "idle_memory": {
+          "working_set": 136708096,
+          "peak_working_set": 136708096,
+          "native_threads": 36
+        },
+        "latency_ms": {
+          "n": 2000,
+          "min": 0.0024999608285725117,
+          "median": 3.4196000196971,
+          "p95": 3.5289000370539725,
+          "max": 3.5459999926388264
+        },
+        "peak_backlog": 1988,
+        "update_memory": {
+          "working_set": 137981952,
+          "peak_working_set": 137981952,
+          "native_threads": 36
+        },
+        "populate_ms": 15.560200030449778,
+        "heartbeat_ms": {
+          "n": 41,
+          "min": 0.7264000014401972,
+          "median": 5.000899953301996,
+          "p95": 5.7132000220008194,
+          "max": 10.258099995553493
+        },
+        "dpi": 96,
+        "warm_visible_rendered": true,
+        "warm_shell_first_paint_ms": 17.90799997979775,
+        "close_started_ns": 447580313756600
+      },
+      "peak_sampled_working_set": 157323264,
+      "startup_ms": 1479.5576,
+      "close_to_exit_ms": 78.4086,
+      "surviving_descendants": [],
+      "observed_descendants": [
+        [
+          6908,
+          1793401238.0085492
+        ],
+        [
+          13452,
+          1793401238.0203903
+        ]
+      ],
+      "descendant_quiescence_ms": 0.10629999451339245,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "tk": {
+      "startup_ms": {
+        "n": 5,
+        "min": 611.6427,
+        "median": 622.6388,
+        "p95": 638.1533,
+        "max": 638.1533
+      },
+      "close_to_exit_ms": {
+        "n": 5,
+        "min": 54.2507,
+        "median": 62.9735,
+        "p95": 64.3817,
+        "max": 64.3817
+      },
+      "peak_sampled_working_set": {
+        "n": 5,
+        "min": 106274816,
+        "median": 106381312,
+        "p95": 106610688,
+        "max": 106610688
+      },
+      "populate_ms": {
+        "n": 5,
+        "min": 5.268300010357052,
+        "median": 5.364199983887374,
+        "p95": 5.523300031200051,
+        "max": 5.523300031200051
+      },
+      "warm_shell_first_paint_ms": {
+        "n": 5,
+        "min": 23.74440000858158,
+        "median": 25.410100002773106,
+        "p95": 28.13590003643185,
+        "max": 28.13590003643185
+      }
+    },
+    "qt": {
+      "startup_ms": {
+        "n": 5,
+        "min": 1479.0793,
+        "median": 1522.2147,
+        "p95": 1530.0343,
+        "max": 1530.0343
+      },
+      "close_to_exit_ms": {
+        "n": 5,
+        "min": 73.359,
+        "median": 78.4086,
+        "p95": 87.3183,
+        "max": 87.3183
+      },
+      "peak_sampled_working_set": {
+        "n": 5,
+        "min": 153899008,
+        "median": 157282304,
+        "p95": 157384704,
+        "max": 157384704
+      },
+      "populate_ms": {
+        "n": 5,
+        "min": 14.880000031553209,
+        "median": 15.479399997275323,
+        "p95": 15.6814000220038,
+        "max": 15.6814000220038
+      },
+      "warm_shell_first_paint_ms": {
+        "n": 5,
+        "min": 17.90799997979775,
+        "median": 18.309200007934123,
+        "p95": 19.814700004644692,
+        "max": 19.814700004644692
+      }
+    }
+  },
+  "status": "PASS"
+}
