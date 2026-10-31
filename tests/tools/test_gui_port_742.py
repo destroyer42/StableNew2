@@ -763,3 +763,22 @@ def test_timing_dependent_counts_are_never_part_of_the_parity_compared_outcome()
     stream = steps["worker_status_stream"]
     assert "deliveries" not in stream.observed and "deliveries" not in stream.semantic()["observed"]
     assert "updates delivered" in stream.note
+
+
+def test_tk_heartbeat_stopped_chain_never_feeds_the_next_run() -> None:
+    """A pending ``after`` from a stopped heartbeat must not double the rate of the next one (loaded-gap bias)."""
+
+    from types import SimpleNamespace
+
+    from tools.qualification.gui_port_742.tk_view import TkWorkspace
+
+    pending: list = []
+    view = SimpleNamespace(toplevel=SimpleNamespace(after=lambda _ms, fn: pending.append(fn)))
+    TkWorkspace.start_heartbeat(view)
+    stale = pending.pop()
+    TkWorkspace.stop_heartbeat(view)
+    TkWorkspace.start_heartbeat(view)  # the second run begins before the first run's timer fires
+    stale()
+    assert view._gaps == [] and len(pending) == 1  # the stale callback neither records nor reschedules
+    pending.pop()()
+    assert len(view._gaps) == 1 and len(pending) == 1

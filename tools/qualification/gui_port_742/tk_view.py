@@ -624,12 +624,13 @@ class TkWorkspace:
             return len(invoker._pending)
 
     def start_heartbeat(self, interval_ms: int = 5) -> None:
+        # A token per run: a still-pending ``after`` from a stopped run must never feed (or extend) the next run.
         self._gaps: list[float] = []
-        self._beating = True
+        self._beat_token = token = object()
         self._last = time.perf_counter()
 
         def beat() -> None:
-            if not self._beating:
+            if self._beat_token is not token:
                 return
             now = time.perf_counter()
             self._gaps.append((now - self._last) * 1000)
@@ -639,7 +640,7 @@ class TkWorkspace:
         self.toplevel.after(interval_ms, beat)
 
     def stop_heartbeat(self) -> list[float]:
-        self._beating = False
+        self._beat_token = None
         return self._gaps
 
     def second_window(self, count: int) -> dict[str, Any]:
