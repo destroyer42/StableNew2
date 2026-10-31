@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-643 of 798 modules have a docstring.
+644 of 799 modules have a docstring.
 
 ## src/
 
@@ -223,7 +223,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `batch_operations_panel_v2.py`: Tk "Batches" view inside the Queue/History operator workflow (PR-BATCH-OPS-201)
 - `batch_retry_dialog.py`: Modal review of a selected retry (PR-BATCH-OPS-201)
 - `controller.py`: GUI compatibility export for the controller-owned base pipeline controller
-- `design_system_v2.py`: Design tokens and primitive helpers for the StableNew V2 GUI
+- `design_system_v2.py`: Tk/ttk style registration and primitive helpers for the StableNew V2 GUI
 - `dropdown_loader_v2.py`: (no docstring)
 - `engine_settings_dialog.py`: Modern engine settings dialog for GUI V2
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
@@ -462,6 +462,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `ai_suggestion_view.py`: Toolkit-neutral AI suggestion review: immutable source identity and content-free outcome copy
 - `asset_readiness_view.py`: Toolkit-neutral session and row projection for the read-only asset readiness view (PR-ASSET-130)
 - `controlnet_guidance.py`: Toolkit-neutral guidance and local readiness for ordered ControlNet units (PR-GUI-UX-550)
+- `design_values.py`: Toolkit-neutral design values for StableNew: the single source of the raw palette, spacing, type and radii
 - `effective_settings.py`: Read-only "Effective Settings" projection of compiled preview jobs (PR-GUI-UX-520)
 - `generation_profile_projection.py`: Toolkit-neutral projection of the model's generation profiles for the Base Generation panel (PR-IMG-PROFILE-6…
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
