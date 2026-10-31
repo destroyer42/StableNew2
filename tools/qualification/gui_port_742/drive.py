@@ -222,7 +222,7 @@ def run_benchmark(view, build_info: dict[str, Any], memory, count: int = 500) ->
 
 # ----- matrix -------------------------------------------------------------------------------------------------------
 def step_dicts(steps) -> list[dict[str, Any]]:
-    return [s.semantic() | {"ms": s.ms} for s in steps]
+    return [s.semantic() | {"ms": s.ms, "note": s.note} for s in steps]
 
 
 def run_matrix(

@@ -436,9 +436,11 @@ def run_scenario(driver: Driver, *, count: int = 500) -> list[StepRecord]:
         {"last": last, "ui_thread_only": True, "monotonic": True},
         {
             "last": driver.observe().status_line,
-            "deliveries": len(delivered),
             "ui_thread_only": all(th == 1 for _i, th in delivered),
+            "monotonic": indexes == sorted(set(indexes)),
         },
+        # coalescing is timing-dependent, so the delivery count is evidence but never a parity-compared outcome
+        note=f"{len(delivered)} of {STATUS_STREAM} updates delivered (hot keys coalesce)",
     )
     return ctx.steps
 

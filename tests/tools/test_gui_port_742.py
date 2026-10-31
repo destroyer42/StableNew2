@@ -752,3 +752,14 @@ def test_a_query_built_from_the_filter_bar_is_the_one_the_matcher_receives():
     query = HistoryFilters(text="dragon", status_label="Failed").to_query(limit=500)
     assert isinstance(query, HistoryQuery) and query.statuses == frozenset({JobStatus.FAILED})
     assert query.terms == ("dragon",)
+
+
+def test_timing_dependent_counts_are_never_part_of_the_parity_compared_outcome():
+    driver = scenario.ModelDriver()
+    try:
+        steps = {s.name: s for s in scenario.run_scenario(driver)}
+    finally:
+        driver.close()
+    stream = steps["worker_status_stream"]
+    assert "deliveries" not in stream.observed and "deliveries" not in stream.semantic()["observed"]
+    assert "updates delivered" in stream.note
