@@ -1,10 +1,12 @@
-"""Toolkit-agnostic UI design tokens for StableNew."""
+"""Toolkit-agnostic UI design tokens for StableNew.
+
+Imports no toolkit: values come from ``src/gui_v2/design_values.py`` so Tk and any other host read the same constants."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.gui import design_system_v2 as design_system
+from src.gui_v2 import design_values as design_system
 
 
 @dataclass(frozen=True)

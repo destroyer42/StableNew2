@@ -10,12 +10,15 @@ How the Tk GUI looks and which names to use. It supplements `docs/Subsystems/GUI
 
 | Layer | File | Owns |
 |---|---|---|
-| Raw palette, spacing, type sizes, ttk style *names* | `src/gui/design_system_v2.py` | `Colors`, `Spacing`, `Typography`, style-name constants, card/label/action-button styles |
-| Semantic tokens (what new code reads) | `src/gui/ui_tokens.py` | `TOKENS.colors / spacing / typography / notices` |
+| Raw palette, spacing, type sizes, radii (immutable values, no toolkit import) | `src/gui_v2/design_values.py` | `Colors`, `Spacing`, `Typography`, `Radii`, `NOTICE_KINDS` |
+| ttk style *names* and Tk registration | `src/gui/design_system_v2.py` | style-name constants, card/label/action-button styles; re-exports the values above unchanged |
+| Semantic tokens (what new code reads) | `src/gui/ui_tokens.py` | `TOKENS.colors / spacing / typography / notices`; built from `design_values`, imports no toolkit |
 | Registration of every other ttk style | `src/gui/theme_v2.py` | `init_theme` / `apply_theme`; entries, checkbuttons, radiobuttons, notebook tabs, disclosure, notices; style-name constants (`*_STYLE`) |
 
 New code takes values from `TOKENS` and style names from the constants; it does not write hex literals or a second theme.
-Style names are public: add one, do not rename one. `TOKENS.spacing` is canonical (its `xs` is 4; the older
+Style names are public: add one, do not rename one. A value is changed once, in `design_values.py`; a renderer (Tk today) reads it and
+never keeps its own copy. `design_values` and `ui_tokens` must stay importable without `tkinter`
+(`tests/gui_v2/test_design_values_741.py` imports them in a process that forbids it). `TOKENS.spacing` is canonical (its `xs` is 4; the older
 `design_system_v2.Spacing.XS` is 2 and is kept only for existing callers).
 
 Metrics are frozen for Wave 1: Segoe UI 10 / 11 / 12 pt, spacing 4 / 8 / 12. A change to a global metric needs

@@ -45,8 +45,8 @@ All new Tk widgets, panels, dialogs, and views go here.
 | `widgets/` | Reusable Tk widget helpers |
 | `models/` | GUI-local presentation models |
 | `utils/` | GUI utility helpers (threading, event dispatching) |
-| `ui_tokens.py` | Semantic style source-of-truth for all GUI hosts |
-| `theme.py`, `theme_v2.py`, `design_system_v2.py` | Visual styling |
+| `ui_tokens.py` | Semantic style source-of-truth for all GUI hosts (Tk-free; reads `src/gui_v2/design_values.py`) |
+| `theme.py`, `theme_v2.py`, `design_system_v2.py` | Tk visual styling and ttk registration (`design_system_v2` re-exports the raw values) |
 
 ### Rules
 
@@ -197,6 +197,7 @@ It is *not* a second GUI host. It does not render panels or widgets.
 |---|---|
 | `adapters/` | Thin bridges: translate GUI events → controller calls, or controller results → GUI updates |
 | `validation/` | Pure-Python field validators used by panels (no Tk dependency) |
+| `design_values.py` | Immutable raw palette, spacing, type and radii: the one source every renderer reads (imports nothing) |
 
 ### Rules
 
