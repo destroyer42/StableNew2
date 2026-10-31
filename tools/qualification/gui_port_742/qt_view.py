@@ -468,6 +468,10 @@ class QtWorkspace:
             status_line=self.status_line.text(),
         )
 
+    def first_history_id(self) -> str | None:
+        rows = self.history_model.rows
+        return rows[0][0] if rows else None
+
     def navigate_group(self, group_id: str) -> bool:
         item = self._leaf(f"group:{group_id}")
         if item is None:

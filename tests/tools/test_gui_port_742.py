@@ -784,3 +784,37 @@ def test_tk_heartbeat_stopped_chain_never_feeds_the_next_run() -> None:
     )  # the stale callback neither records nor reschedules
     pending.pop()()
     assert len(view._gaps) == 1 and len(pending) == 1
+
+
+def test_expected_step_count_matches_the_scenario_and_empty_parity_is_rejected() -> None:
+    from tools.qualification.gui_port_742.run import EXPECTED_STEPS
+
+    driver = scenario.ModelDriver()
+    try:
+        steps = scenario.run_scenario(driver)
+    finally:
+        driver.close()
+    # the toolkit-free driver offers no keyboard capability, which adds exactly these three steps
+    keyboard = {"keyboard_focus_order", "keyboard_row_navigation", "scroll_to_selection"}
+    source = Path(scenario.__file__).read_text(encoding="utf8")
+    assert all(f'"{name}"' in source for name in keyboard)
+    assert len(steps) + len(keyboard) == EXPECTED_STEPS
+    assert evidence.compare_parity([], [])
+
+
+def test_tk_heartbeat_is_drift_compensated_and_never_below_one_millisecond() -> None:
+    from types import SimpleNamespace
+
+    from tools.qualification.gui_port_742.tk_view import TkWorkspace
+
+    delays: list[int] = []
+    pending: list = []
+
+    def after(ms, fn) -> None:
+        delays.append(ms)
+        pending.append(fn)
+
+    view = SimpleNamespace(toplevel=SimpleNamespace(after=after))
+    TkWorkspace.start_heartbeat(view)
+    pending.pop()()  # a late beat re-arms against the original schedule, not "interval after now"
+    assert all(delay >= 1 for delay in delays)

@@ -45,6 +45,9 @@ SOURCE_FILES = (
 )
 # (requested DPI label, viewport, simulated factor). 1920x1080 at a simulated 150% needs 2880x1620 physical pixels,
 # which this 2560x1440 desktop cannot show, so it is recorded as UNQUALIFIED rather than run at a clamped size.
+EXPECTED_STEPS = (
+    12  # the scripted journey; a record with fewer or more steps is not the same experiment
+)
 MATRIX = (
     ("actual-100", "1366x768", 1.0),
     ("actual-100", "1920x1080", 1.0),
@@ -268,10 +271,11 @@ def main(argv: list[str] | None = None) -> int:
     def execute(
         toolkit: str, arguments: list[str], *, env: dict[str, str] | None = None, on_event=None
     ):
+        host = host_snapshot()  # 500 ms of host load immediately BEFORE this child starts
         record = run_child(
             args.python, f"{PACKAGE}.{toolkit}_child", arguments, env_extra=env, on_event=on_event
         )
-        record["host"] = host_snapshot()
+        record["host"] = host
         return record
 
     base = ["--rows", str(args.rows)]
@@ -315,7 +319,21 @@ def main(argv: list[str] | None = None) -> int:
                 dpi = interpret_dpi((record.get("result") or {}).get("dpi") or {})
                 if not dpi["valid"]:
                     failures.append(f"{label}: DPI record invalid: {dpi['reasons']}")
-                failed = [s["name"] for s in matrix.get("steps", []) if not s["ok"]]
+                steps = matrix.get("steps", [])
+                if len(steps) != EXPECTED_STEPS:
+                    failures.append(
+                        f"{label}: {len(steps)} scenario steps recorded, expected {EXPECTED_STEPS}"
+                    )
+                focus = matrix.get("focus") or {}
+                if not focus.get("window_active"):
+                    failures.append(
+                        f"{label}: window was not the foreground window during focus evidence"
+                    )
+                if not focus.get("visible_indicator"):
+                    failures.append(
+                        f"{label}: keyboard focus indicator not proven visible: {focus.get('controls')}"
+                    )
+                failed = [s["name"] for s in steps if not s["ok"]]
                 if failed:
                     failures.append(f"{label}: scenario steps failed: {failed}")
                 if matrix.get("reachability_issues"):

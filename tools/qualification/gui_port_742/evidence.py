@@ -199,6 +199,8 @@ def compare_parity(
     """Differences in the semantic outcome of the shared scenario (empty means identical)."""
 
     diffs: list[str] = []
+    if not tk_steps or not qt_steps:
+        return ["no steps recorded for at least one toolkit"]
     tk, qt = {s["name"]: s for s in tk_steps}, {s["name"]: s for s in qt_steps}
     if list(tk) != list(qt):
         diffs.append(f"step lists differ: {sorted(set(tk) ^ set(qt))}")

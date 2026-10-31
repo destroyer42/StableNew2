@@ -428,6 +428,10 @@ class TkWorkspace:
             status_line=self.status_line.cget("text"),
         )
 
+    def first_history_id(self) -> str | None:
+        ids = self.history_tree.get_children()
+        return ids[0] if ids else None
+
     def navigate_group(self, group_id: str) -> bool:
         if not self.nav.exists(f"group:{group_id}"):
             return False
@@ -628,6 +632,7 @@ class TkWorkspace:
         self._gaps: list[float] = []
         self._beat_token = token = object()
         self._last = time.perf_counter()
+        deadline = [self._last]
 
         def beat() -> None:
             if self._beat_token is not token:
@@ -635,7 +640,11 @@ class TkWorkspace:
             now = time.perf_counter()
             self._gaps.append((now - self._last) * 1000)
             self._last = now
-            self.toplevel.after(interval_ms, beat)
+            # deadline-compensated like a repeating QTimer: lateness is not added to every later interval
+            deadline[0] += interval_ms / 1000
+            if deadline[0] < now:
+                deadline[0] = now
+            self.toplevel.after(max(1, round((deadline[0] - now) * 1000)), beat)
 
         self.toplevel.after(interval_ms, beat)
 

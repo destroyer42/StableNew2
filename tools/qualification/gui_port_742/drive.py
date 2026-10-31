@@ -88,8 +88,10 @@ def measure_refresh(view, count: int = 500) -> dict[str, Any]:
     keep = view.model.visible[len(view.model.visible) // 2].job_id
     view.select(keep)
     renders_before = len(view.render_ms["history"])
+    first_id = history_entries(count, REFRESH_REVISIONS)[
+        0
+    ].job_id  # computed before the clocks start
     view.start_heartbeat()
-    first_id = history_entries(count, REFRESH_REVISIONS)[0].job_id
     base_sink = view.sink_metrics().get("surface_revisions", {}).get("history", 0)
 
     def work() -> None:
@@ -100,7 +102,8 @@ def measure_refresh(view, count: int = 500) -> dict[str, Any]:
     started = time.perf_counter()
     thread = threading.Thread(target=work, name="742-refresh")
     thread.start()
-    arrived = view.wait_until(lambda: view.observe().history_first[:1] == (first_id,), 15000)
+    # a cheap, symmetric predicate: a full observe() costs far more in Tk (about 500 item() calls) than in Qt
+    arrived = view.wait_until(lambda: view.first_history_id() == first_id, 15000)
     elapsed = (time.perf_counter() - started) * 1000
     thread.join(timeout=5)
     view.flush()
