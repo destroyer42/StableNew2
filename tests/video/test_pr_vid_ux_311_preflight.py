@@ -1,23 +1,24 @@
 """PR-VID-UX-311: read-only readiness gates for a Comfy video workflow, answered before the job is queued.
 
-Each gate is something ``ComfyWorkflowVideoBackend.execute`` would otherwise refuse after the click. Injected probes
-only: no ComfyUI, no GPU, no process. A gate that needs a runtime that is not running is ``unknown`` and never blocks;
-only a proven shortfall is ``blocked`` and keeps Queue off with its reason.
+Setup and dependency gates can block admission; RAM and GPU pressure are advisory. Injected probes only: no ComfyUI,
+GPU or process. Dependencies needing a runtime that is not running are ``unknown`` and never block admission.
 """
 
 from __future__ import annotations
 
 import subprocess
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from src.video.comfy_runtime_setup import ComfyLaunchFacts
 from src.video.managed_comfy_runtime import ManagedComfyContract
 from src.video.workflow_preflight import (
+    GATE_ADVISORY,
     GATE_BLOCKED,
     GATE_OK,
     GATE_UNKNOWN,
-    STARTUP_RAM_ALLOWANCE_GB,
     PreflightProbes,
     default_preflight_probes,
     evaluate_workflow_preflight,
@@ -226,35 +227,31 @@ def test_an_unreadable_node_list_is_unknown_not_blocking() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_ram_is_counted_after_comfy_has_started() -> None:
+@pytest.mark.parametrize("ram_gb", [0.5, 4.0, 8.0, 15.0, 16.5])
+@pytest.mark.parametrize("state", ["free", "healthy"])
+def test_ram_is_advisory_without_a_startup_penalty(ram_gb: float, state: str) -> None:
     spec = _spec(TI2V)
     floor = spec.backend_defaults["resource_readiness"]["min_available_ram_gb"]
-    just_above = floor + STARTUP_RAM_ALLOWANCE_GB - 0.2
-
-    idle = evaluate_workflow_preflight(spec, _probes(spec, ram_gb=just_above))
-    assert _gate(idle, "ram").state == GATE_BLOCKED  # ComfyUI's own start-up would take it under
-    assert "once ComfyUI has started" in _gate(idle, "ram").detail
-    assert "Close memory-heavy applications" in idle.block_reason
-
-    running = evaluate_workflow_preflight(spec, _probes(spec, state="healthy", ram_gb=just_above))
-    assert _gate(running, "ram").state == GATE_OK  # already running: nothing more will be taken
-
-    roomy = evaluate_workflow_preflight(
-        spec, _probes(spec, ram_gb=floor + STARTUP_RAM_ALLOWANCE_GB + 0.5)
-    )
-    assert _gate(roomy, "ram").state == GATE_OK
+    result = evaluate_workflow_preflight(spec, _probes(spec, state=state, ram_gb=ram_gb))
+    gate = _gate(result, "ram")
+    assert result.queueable and result.block_reason == ""
+    assert gate.state == (GATE_ADVISORY if ram_gb < floor else GATE_OK)
+    assert f"{ram_gb:.1f} GB" in gate.detail
+    assert "advisory" in gate.detail
 
 
-def test_gpu_memory_below_the_floor_blocks_and_an_unreadable_driver_fails_closed() -> None:
+@pytest.mark.parametrize("state", ["free", "healthy"])
+def test_low_or_unreadable_gpu_memory_is_advisory_before_handoff(state: str) -> None:
     spec = _spec(TI2V)
     floor = spec.backend_defaults["resource_readiness"]["min_available_to_comfy_vram_mib"]
 
-    low = evaluate_workflow_preflight(spec, _probes(spec, vram=(12282.0, floor - 500)))
-    assert _gate(low, "vram").state == GATE_BLOCKED and not low.queueable
+    low = evaluate_workflow_preflight(spec, _probes(spec, state=state, vram=(12282.0, floor - 500)))
+    assert _gate(low, "vram").state == GATE_ADVISORY and low.queueable
     assert "Close other GPU applications" in _gate(low, "vram").detail
+    assert "after runtime handoff" in _gate(low, "vram").detail
 
-    unreadable = evaluate_workflow_preflight(spec, _probes(spec, vram=None))
-    assert _gate(unreadable, "vram").state == GATE_BLOCKED
+    unreadable = evaluate_workflow_preflight(spec, _probes(spec, state=state, vram=None))
+    assert _gate(unreadable, "vram").state == GATE_ADVISORY and unreadable.queueable
     assert "could not be read" in _gate(unreadable, "vram").detail
 
 
@@ -278,7 +275,8 @@ def test_the_first_blocked_gate_is_the_one_queue_reports() -> None:
     )
 
     assert [g.id for g in result.blocking][:1] == ["launch_flags"]
-    assert {g.id for g in result.blocking} >= {"launch_flags", "vram", "ram"}
+    assert {g.id for g in result.blocking} == {"launch_flags"}
+    assert {g.id for g in result.gates if g.state == GATE_ADVISORY} == {"vram", "ram"}
     assert "Launch flags" in result.block_reason and "System RAM" not in result.block_reason
 
 
@@ -334,6 +332,11 @@ def test_the_default_probes_only_read_and_never_queue_or_start_anything(monkeypa
         "src.video.comfy_process_manager.build_default_comfy_process_config",
         lambda _manager=None: None,
     )
+    monkeypatch.setattr(
+        "src.video.comfy_process_manager.read_comfy_launch_facts",
+        lambda _manager=None: ComfyLaunchFacts(saved_command=()),
+    )
+    monkeypatch.setattr("psutil.virtual_memory", lambda: SimpleNamespace(available=24e9))
     monkeypatch.setattr(
         "src.video.workflow_readiness._driver_gpu_memory_mib", lambda _i=0: (12282.0, 11000.0)
     )

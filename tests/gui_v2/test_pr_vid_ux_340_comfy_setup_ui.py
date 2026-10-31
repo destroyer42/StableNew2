@@ -112,7 +112,7 @@ def test_a_missing_launch_configuration_shows_fix_setup_and_it_opens_engine_sett
 
 
 @pytest.mark.gui
-def test_a_resource_blocker_shows_its_reason_and_no_fix_setup(
+def test_a_resource_advisory_shows_its_reason_and_no_fix_setup(
     tk_root, tmp_path, monkeypatch
 ) -> None:
     probes = _LaunchProbes()
@@ -122,7 +122,11 @@ def test_a_resource_blocker_shows_its_reason_and_no_fix_setup(
     strip = tab.runtime_readiness_strip
 
     assert not strip.last_view.repair_available and not _shown(strip.fix_setup_button)
-    assert "System RAM" in tab.queue_block_reason_var.get()
+    assert tab.queue_block_reason_var.get() == ""
+    assert tab.queue_workflow_button.instate(["!disabled"])
+    assert any(
+        row.label == "System RAM" and row.state == "advisory" for row in strip.last_view.rows
+    )
 
 
 @pytest.mark.gui

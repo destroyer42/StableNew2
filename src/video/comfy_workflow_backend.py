@@ -385,6 +385,28 @@ def _history_nonterminal(entry: Mapping[str, Any]) -> bool:
     }
 
 
+def _history_failure_detail(entry: Mapping[str, Any]) -> str:
+    """Keep Comfy's allocation/error diagnosis in the job failure, without dumping the graph or traceback."""
+
+    status = entry.get("status")
+    if not isinstance(status, Mapping):
+        return ""
+    messages = status.get("messages")
+    if not isinstance(messages, (list, tuple)):
+        return ""
+    for message in messages:
+        if not isinstance(message, (list, tuple)) or len(message) != 2:
+            continue
+        kind, detail = message
+        if kind == "execution_error" and isinstance(detail, Mapping):
+            return ": ".join(
+                str(detail[key]).strip()
+                for key in ("exception_type", "exception_message")
+                if detail.get(key)
+            )[:2000]
+    return ""
+
+
 class ComfyWorkflowVideoBackend:
     backend_id = "comfy"
     capabilities = VideoBackendCapabilities(
@@ -561,6 +583,10 @@ class ComfyWorkflowVideoBackend:
                     and warm_pid is not None
                     and self._owned_running_pid() == warm_pid
                 ),
+            )
+            # Record the measurements and RAM advisories even if allocation or dispatch later fails.
+            logger.info(
+                "Workflow '%s' resource readiness: %s", spec.workflow_id, readiness.to_dict()
             )
             if not readiness.ready:
                 raise RuntimeError(
@@ -1267,7 +1293,11 @@ class ComfyWorkflowVideoBackend:
             last_payload = dict(payload or {})
             entry = _history_entry_from_payload(last_payload, prompt_id)
             if entry is not None and _history_failed(entry):
-                raise RuntimeError(f"Comfy workflow failed for prompt_id '{prompt_id}'")
+                detail = _history_failure_detail(entry)
+                raise RuntimeError(
+                    f"Comfy workflow failed for prompt_id '{prompt_id}'"
+                    + (f": {detail}" if detail else "")
+                )
             if entry and _history_ready(entry):
                 return entry
             now = time.time()

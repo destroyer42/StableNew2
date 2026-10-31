@@ -182,10 +182,13 @@ class RuntimeReadinessSession:
                 )
             else:
                 unknown = sum(1 for gate in preflight.gates if gate.state == "unknown")
-                summary = "Ready to queue." + (
-                    f" {unknown} item{'s' if unknown != 1 else ''} can only be checked once ComfyUI is running."
-                    if unknown
-                    else ""
+                summary = (
+                    "Ready to queue. Queueing reserves no memory; GPU readiness is checked at execution."
+                    + (
+                        f" {unknown} item{'s' if unknown != 1 else ''} can only be checked once ComfyUI is running."
+                        if unknown
+                        else ""
+                    )
                 )
             return RuntimeReadinessView(
                 STATE_READY,

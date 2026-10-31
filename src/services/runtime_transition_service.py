@@ -42,9 +42,9 @@ unknown ownership causes no mutation.
 Nothing is restarted afterward: the target backend's own existing owner remains responsible for
 starting/loading what it needs (``WebUIProcessManager.ensure_running``, the Comfy backend's own
 ``_ensure_runtime_ready``, ``SVDService``/``SVDRunner`` loading a pipeline). This service only
-clears the way; the resource-readiness guards that already exist per workflow (for example the
-Wan2.2 10,000 MiB / 16 GB floors in ``src/video/workflow_readiness.py``) remain the authoritative
-check for whether the target itself may proceed, and are unchanged and uncalled by this module.
+clears the way; the GPU-readiness guard per workflow (for example the Wan2.2 10,000 MiB floor in
+``src/video/workflow_readiness.py``) remains authoritative after handoff; host RAM is advisory.
+This module neither evaluates nor changes those policies.
 
 Safety: this is called once, synchronously, from inside a single admitted job's backend
 ``execute()``. ``PipelineRunner``/``JobService`` already serialize job execution (one job runs at

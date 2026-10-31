@@ -1,8 +1,8 @@
 """Bounded, workflow-specific resource-readiness check (PR-VID-130).
 
 This is deliberately **not** a scheduler, allocator, lease manager or process controller.  It
-only *observes* the reachable Comfy runtime and the host and answers one question before a queue
-dispatch: "does this workflow's declared, qualification-derived floor look satisfiable right now?"
+only *observes* the reachable Comfy runtime and the host before dispatch: GPU readiness gates
+execution after runtime handoff; qualification-derived host RAM measurements are advisory.
 It never terminates, adopts, restarts or reconfigures any process (A1111, Comfy, or otherwise) and
 never retries or replays a job; a failing check simply fails the job with what is blocking.
 
@@ -25,10 +25,11 @@ whole-GPU. Headroom is therefore narrow by measurement, not comfortable.
   figure: observed live on the target machine it reported 11,056 MiB free while A1111 held
   7,259 MiB and the driver reported 3,298 MiB free, which would have passed an unsafe start. If
   the driver figure cannot be read the check fails closed (blocks) instead of guessing.
-* **Available host RAM** floor 16 GB. The three models are 18.1 GB on disk and are memory-mapped
+* **Available host RAM** advisory threshold 16 GB. The three models are 18.1 GB on disk and are memory-mapped
   on a cold load; qualification runs started with 20.8-27 GB available and still dipped to
   0.01-0.05 GB free transiently. Windows counts standby cache as available, so a warm load is not
-  penalised. Below the floor a cold load is likely to thrash the pagefile.
+  penalised. Below the threshold a cold load may thrash the pagefile. This is qualification
+  context, never a refusal: the backend attempts allocation and reports any actual failure.
 """
 
 from __future__ import annotations
@@ -83,12 +84,14 @@ class ResourceReadinessResult:
     ready: bool
     blocking: tuple[str, ...] = ()
     observations: dict[str, Any] = field(default_factory=dict)
+    advisories: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "ready": bool(self.ready),
             "blocking": list(self.blocking),
             "observations": dict(self.observations),
+            "advisories": list(self.advisories),
         }
 
     @property
@@ -121,14 +124,14 @@ class WorkflowResourceReadiness:
         """Observe-only readiness.
 
         ``warm_sequence`` is set only by the backend for a later segment of a sequence, when the very StableNew-owned
-        process that served the earlier segment is still the one running. The host-RAM floor guards a *cold* model
-        load; a resident model is what makes free RAM low, so the floor is not applied then. A single clip, an
-        unowned runtime and a restarted process never set it."""
+        process that served the earlier segment is still the one running. It provides context for the RAM
+        observation; RAM is advisory for cold and warm loads alike. GPU readiness always gates execution."""
 
         policy = self.policy_for(spec)
         if policy is None:
             return ResourceReadinessResult(ready=True, observations={"policy": None})
         blocking: list[str] = []
+        advisories: list[str] = []
         observations: dict[str, Any] = {"policy": policy.get("policy")}
 
         vram_floor = float(policy.get("min_available_to_comfy_vram_mib") or 0)
@@ -174,23 +177,31 @@ class WorkflowResourceReadiness:
                     )
 
         ram_floor = float(policy.get("min_available_ram_gb") or 0)
-        if ram_floor and warm_sequence:
-            observations["ram_floor_skipped"] = (
-                "warm sequence runtime: the model is already resident"
-            )
-        elif ram_floor:
-            available_ram = float(self._ram_probe())
-            observations.update(
-                ram_available_gb=round(available_ram, 1), ram_floor_gb=round(ram_floor, 1)
-            )
-            if available_ram < ram_floor:
-                blocking.append(
-                    f"only {available_ram:.1f} GB of system RAM is available (needs "
-                    f"{ram_floor:.1f} GB for a cold Wan2.2 model load). Close memory-heavy "
-                    "applications and retry"
+        if ram_floor:
+            observations.update(ram_floor_gb=round(ram_floor, 1), warm_sequence=warm_sequence)
+            try:
+                available_ram = float(self._ram_probe())
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                advisories.append(
+                    f"System RAM could not be measured: {exc}. Allocation will be attempted at execution."
                 )
+            else:
+                observations["ram_available_gb"] = round(available_ram, 1)
+                if available_ram < ram_floor:
+                    advisories.append(
+                        f"Only {available_ram:.1f} GB of system RAM is available; the qualification-derived "
+                        f"cold-load advisory is {ram_floor:.1f} GB. Loading may be slow or fail to allocate"
+                        + (
+                            "; this sequence's owned runtime is already warm."
+                            if warm_sequence
+                            else "."
+                        )
+                    )
         return ResourceReadinessResult(
-            ready=not blocking, blocking=tuple(blocking), observations=observations
+            ready=not blocking,
+            blocking=tuple(blocking),
+            observations=observations,
+            advisories=tuple(advisories),
         )
 
 
