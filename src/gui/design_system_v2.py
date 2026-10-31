@@ -11,14 +11,10 @@ from collections.abc import Callable
 from tkinter import ttk
 from typing import NamedTuple
 
-from src.gui_v2.design_values import (  # noqa: F401  (re-exported: the toolkit-neutral values are the single source)
-    NOTICE_KINDS,
-    Color,
-    Colors,
-    Radii,
-    Spacing,
-    Typography,
-)
+from src.gui_v2.design_values import NOTICE_KINDS, Color, Colors, Radii, Spacing, Typography
+
+# The neutral values stay importable from here for existing callers; ``__all__`` marks them as intentional re-exports.
+__all__ = ["NOTICE_KINDS", "Color", "Colors", "Radii", "Spacing", "Typography"]
 
 PRIMARY_BUTTON = "Primary.TButton"
 SECONDARY_BUTTON = "Secondary.TButton"
