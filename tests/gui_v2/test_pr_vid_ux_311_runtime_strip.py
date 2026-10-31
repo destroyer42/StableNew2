@@ -25,6 +25,7 @@ from src.gui.view_contracts.video_runtime_readiness_contract import (
 from src.gui.views.video_workflow_runtime_strip_v2 import WorkflowRuntimeReadinessStrip
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.video.workflow_preflight import (
+    GATE_ADVISORY,
     GATE_BLOCKED,
     GATE_OK,
     GATE_UNKNOWN,
@@ -97,6 +98,15 @@ def test_a_probe_error_is_shown_and_never_blocks() -> None:
 
     assert session.view().state == STATE_ERROR and "nvidia-smi exploded" in session.view().summary
     assert session.block_reason() == ""
+
+
+def test_resource_advisories_do_not_claim_resources_are_secured() -> None:
+    session, _ = _session({"a": _preflight(GATE_ADVISORY, GATE_ADVISORY)})
+    work = session.refresh("a", "1")
+    session.finish(work, session.run(work))
+    assert session.block_reason() == ""
+    assert "Queueing reserves no memory" in session.view().summary
+    assert {row.state for row in session.view().rows} == {GATE_ADVISORY}
 
 
 def test_a_finished_probe_never_overwrites_a_newer_selection() -> None:
@@ -202,7 +212,7 @@ def test_a_blocked_gate_disables_queue_with_the_reason_and_a_refresh_enables_it(
     tk_root, tmp_path, monkeypatch
 ) -> None:
     probes = _Probes()
-    probes.ram = 15.0  # below the 16 GB floor once ComfyUI's own start-up is counted
+    probes.state = "occupied"  # resource pressure is advisory; an unusable endpoint still blocks
     tab, runner = _tab(tk_root, tmp_path, monkeypatch, probes)
     strip = tab.runtime_readiness_strip
     assert len(runner.jobs) == 1  # showing the tab started one probe, on the worker
@@ -212,11 +222,11 @@ def test_a_blocked_gate_disables_queue_with_the_reason_and_a_refresh_enables_it(
     assert strip.last_view is not None and strip.last_view.state == STATE_READY
     assert strip.grid_info()
     assert tab.queue_workflow_button.instate(["disabled"])
-    assert "System RAM" in tab.queue_block_reason_var.get()
+    assert "ComfyUI" in tab.queue_block_reason_var.get()
     assert tab.queue_block_reason_var.get().startswith("Queue is off:")
     assert any(row.state == GATE_BLOCKED for row in strip.last_view.rows)
 
-    probes.ram = 64.0
+    probes.state = "free"
     strip.request_refresh(force=True)
     assert tab.queue_workflow_button.instate(["disabled"])  # still off until the new answer arrives
     runner.drain()
@@ -224,6 +234,28 @@ def test_a_blocked_gate_disables_queue_with_the_reason_and_a_refresh_enables_it(
     assert tab.queue_workflow_button.instate(["!disabled"])
     assert tab.queue_block_reason_var.get() == ""
     assert not any(row.state == GATE_BLOCKED for row in strip.last_view.rows)
+
+
+@pytest.mark.gui
+@pytest.mark.parametrize("ram", [0.5, 4.0, 8.0, 15.0])
+def test_resource_pressure_leaves_queue_enabled_and_submission_uses_job_service(
+    tk_root, tmp_path, monkeypatch, ram
+) -> None:
+    probes = _Probes()
+    probes.ram = ram
+    probes.vram = (12282.0, 500.0)  # e.g. the managed Forge still holds its model
+    tab, runner = _tab(tk_root, tmp_path, monkeypatch, probes)
+    runner.drain()
+
+    strip = tab.runtime_readiness_strip
+    assert tab.queue_workflow_button.instate(["!disabled"])
+    assert tab.queue_block_reason_var.get() == ""
+    assert sum(row.state == GATE_ADVISORY for row in strip.last_view.rows) == 2
+    assert sum(label.cget("text") == "ADVISORY" for label in strip._row_labels) == 2
+    tab.prompt_text.insert("1.0", "the person waves")
+    tab.queue_workflow_button.invoke()
+    assert len(tab.app_controller.job_service.calls) == 1, tab.submission_notice.message_var.get()
+    assert tab.submission_notice.kind == "queued"
 
 
 @pytest.mark.gui
@@ -246,7 +278,7 @@ def test_selecting_another_workflow_discards_the_previous_workflows_answer(
     tk_root, tmp_path, monkeypatch
 ) -> None:
     probes = _Probes()
-    probes.ram = 15.0
+    probes.state = "occupied"
     tab, runner = _tab(tk_root, tmp_path, monkeypatch, probes)
     runner.drain()
     assert tab.queue_workflow_button.instate(["disabled"])

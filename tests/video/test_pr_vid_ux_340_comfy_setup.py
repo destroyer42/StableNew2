@@ -332,12 +332,12 @@ def test_an_occupied_endpoint_reports_the_port_and_offers_no_setup_repair() -> N
     ("kwargs", "gate_id"),
     [({"ram_gb": 4.0}, "ram"), ({"vram": (12282.0, 500.0)}, "vram"), ({"vram": None}, "vram")],
 )
-def test_resource_blockers_never_offer_the_setup_repair(kwargs: dict, gate_id: str) -> None:
+def test_resource_advisories_never_offer_the_setup_repair(kwargs: dict, gate_id: str) -> None:
     spec = _spec(ANIMATE)
 
     result = evaluate_workflow_preflight(spec, _probes(_facts(saved_command=GOOD), **kwargs))
 
-    assert _gate(result, gate_id).state == GATE_BLOCKED
+    assert _gate(result, gate_id).state == "advisory" and result.queueable
     assert not result.setup_repair_available
     assert result.setup_repair_reason == ""
     assert (

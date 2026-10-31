@@ -2,7 +2,8 @@
 
 Every gate here is something ``ComfyWorkflowVideoBackend.execute`` would otherwise refuse *after* the click, inside the
 queue: the launch flags the workflow requires, a ComfyUI that can be reached or started, the pinned nodes and model
-files, and the host resource floors. ``evaluate_workflow_preflight`` runs them against injected probes and returns plain
+files. Host RAM and current GPU pressure are advisory; GPU readiness gates dispatch after runtime handoff and startup.
+``evaluate_workflow_preflight`` runs them against injected probes and returns plain
 data, so the Video Workflow tab can show each gate and keep Queue disabled with the reason instead.
 
 It observes only. It never queues a prompt, starts, stops or adopts a process, writes a file or changes a setting: the
@@ -32,15 +33,11 @@ from src.video.workflow_readiness import WorkflowResourceReadiness, required_lau
 GATE_OK = "ok"
 GATE_BLOCKED = "blocked"
 GATE_UNKNOWN = "unknown"
+GATE_ADVISORY = "advisory"
 
 ENDPOINT_FREE = "free"
 ENDPOINT_HEALTHY = "healthy"
 ENDPOINT_OCCUPIED = "occupied"
-
-# Host memory ComfyUI itself takes while it starts (observed: 17.06 GB available before the process, 15.7 GB
-# when the backend's own readiness check ran after it). Counted against the RAM floor while ComfyUI is not
-# running, so a gate shown green here is not refused one step later.
-STARTUP_RAM_ALLOWANCE_GB = 1.5
 
 ENGINE_SETTINGS_HINT = "Engine Settings > Video runtime (ComfyUI)"
 
@@ -370,16 +367,10 @@ def _resource_gates(spec: Any, probes: PreflightProbes, state: str) -> tuple[Pre
     if stats is None:
         # ComfyUI is not running (nothing of the GPU is Comfy's yet): the driver's free figure is all there is.
         stats = {"devices": [{"type": "cuda", "index": 0, "torch_vram_total": 0, "vram_free": 0}]}
-    # The RAM figure ComfyUI will see is what is free after its own start-up, not before it.
-    allowance = 0.0 if state == ENDPOINT_HEALTHY else STARTUP_RAM_ALLOWANCE_GB
-    adjusted = WorkflowResourceReadiness(
-        ram_probe=lambda: probes.ram_probe() - allowance, gpu_probe=probes.gpu_probe
-    )
-    result = adjusted.evaluate(spec, system_stats=stats)
+    result = readiness.evaluate(spec, system_stats=stats)
     observed = result.observations
     gates: list[PreflightGate] = []
     vram_blocks = [text for text in result.blocking if "GPU" in text or "NVIDIA" in text]
-    ram_blocks = [text for text in result.blocking if "system RAM" in text]
     if "vram_floor_mib" in observed or vram_blocks:
         detail = (
             f"{observed.get('vram_available_to_comfy_mib', '?')} MiB available to ComfyUI "
@@ -389,27 +380,27 @@ def _resource_gates(spec: Any, probes: PreflightProbes, state: str) -> tuple[Pre
             PreflightGate(
                 "vram",
                 "GPU memory",
-                GATE_BLOCKED if vram_blocks else GATE_OK,
-                vram_blocks[0] if vram_blocks else detail,
+                GATE_ADVISORY if vram_blocks else GATE_OK,
+                (vram_blocks[0] if vram_blocks else detail)
+                + " GPU readiness is checked again after runtime handoff and ComfyUI startup, before dispatch."
+                + (
+                    " StableNew releases its own conflicting runtime; external processes stay untouched."
+                    if vram_blocks
+                    else ""
+                ),
             )
         )
-    if "ram_floor_gb" in observed or ram_blocks:
-        note = (
-            ""
-            if state == ENDPOINT_HEALTHY
-            else f" once ComfyUI has started (counting the {STARTUP_RAM_ALLOWANCE_GB:g} GB it takes)"
-        )
+    if "ram_floor_gb" in observed:
         detail = (
-            f"{observed.get('ram_available_gb', '?')} GB available{note}; "
-            f"needs {observed.get('ram_floor_gb', '?')} GB."
+            f"{observed.get('ram_available_gb', '?')} GB available; "
+            f"qualification-derived cold-load advisory: {observed['ram_floor_gb']} GB."
         )
         gates.append(
             PreflightGate(
                 "ram",
                 "System RAM",
-                GATE_BLOCKED if ram_blocks else GATE_OK,
-                detail,
-                "Close memory-heavy applications and refresh." if ram_blocks else "",
+                GATE_ADVISORY if result.advisories else GATE_OK,
+                " ".join(result.advisories) if result.advisories else detail,
             )
         )
     return tuple(gates)
@@ -511,9 +502,9 @@ __all__ = [
     "ENDPOINT_HEALTHY",
     "ENDPOINT_OCCUPIED",
     "GATE_BLOCKED",
+    "GATE_ADVISORY",
     "GATE_OK",
     "GATE_UNKNOWN",
-    "STARTUP_RAM_ALLOWANCE_GB",
     "PreflightGate",
     "PreflightProbes",
     "WorkflowPreflight",

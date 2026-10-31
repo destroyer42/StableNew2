@@ -286,7 +286,8 @@ def test_readiness_uses_driver_free_vram_plus_comfy_held_and_reports_what_blocks
     blocked = _readiness(blocked_stats).evaluate(spec, system_stats=blocked_stats)
     assert not blocked.ready and "A1111" in blocked.message and "will not stop" in blocked.message
     low_ram = _readiness(ok_stats, ram_gb=9.0).evaluate(spec, system_stats=ok_stats)
-    assert not low_ram.ready and "system RAM" in low_ram.message
+    assert low_ram.ready and not low_ram.blocking
+    assert "system RAM" in low_ram.advisories[0]
     no_gpu = _readiness(ok_stats).evaluate(spec, system_stats={"devices": []})
     assert not no_gpu.ready and "no CUDA device" in no_gpu.message
     undeclared = build_synthetic_contract_registry().get(SYNTHETIC_ANCHOR_ID)
@@ -339,7 +340,6 @@ def test_success_compiles_the_wan_graph_and_returns_a_canonical_local_artifact(t
         ),
         ({"info": _object_info(missing_node="KSampler")}, True, 24.0, "node_ksampler"),
         ({"stats": _stats(free_mib=5000)}, True, 24.0, "not resource-ready"),
-        ({}, True, 4.0, "not resource-ready"),
     ],
 )
 def test_governance_dependency_and_readiness_fail_before_queue_prompt(

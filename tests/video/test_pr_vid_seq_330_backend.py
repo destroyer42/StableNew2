@@ -160,12 +160,13 @@ def _approved_spec():
     return build_default_workflow_registry().get(WAN_ID, "1.3.0")
 
 
-def test_a_cold_load_and_a_single_clip_still_need_the_ram_floor() -> None:
+def test_a_cold_load_and_a_single_clip_treat_ram_as_advisory() -> None:
     spec = _approved_spec()
 
-    refused = _readiness(ram_gb=7.3).evaluate(spec, system_stats=_stats())
+    result = _readiness(ram_gb=7.3).evaluate(spec, system_stats=_stats())
 
-    assert refused.ready is False and "system RAM" in refused.message
+    assert result.ready is True and "system RAM" in result.advisories[0]
+    assert result.observations["ram_available_gb"] == 7.3
     assert _readiness(ram_gb=24.0).evaluate(spec, system_stats=_stats()).ready is True
 
 
@@ -175,7 +176,9 @@ def test_a_warm_sequence_segment_is_not_refused_for_the_ram_its_resident_model_h
 
     warm = readiness.evaluate(spec, system_stats=_stats(), warm_sequence=True)
 
-    assert warm.ready is True and "already resident" in warm.observations["ram_floor_skipped"]
+    assert warm.ready is True and "already warm" in warm.advisories[0]
+    assert warm.observations["ram_available_gb"] == 7.3
+    assert warm.observations["warm_sequence"] is True
 
 
 def test_the_gpu_memory_floor_still_applies_to_a_warm_sequence_segment() -> None:

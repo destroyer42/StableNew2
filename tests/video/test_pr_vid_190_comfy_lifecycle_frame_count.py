@@ -1,8 +1,8 @@
 """PR-VID-190 (part 1): owned-Comfy release after each job, and a neutral frame-count control.
 
 Fakes only: no GPU, model, network or real process.  The fake manager models the one fact the
-production defect depends on: while a StableNew-owned Comfy stays resident after a job, the models
-it loaded keep host RAM, so the next job's resource readiness fails.
+original defect depended on: while a StableNew-owned Comfy stays resident after a job, the models
+it loaded keep host RAM. VID-RES-350 now reports that pressure as advisory instead of failing the next job.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ class _ResidentComfy(_FakeComfy):
 
 
 def _resident_ram_readiness(client, manager: _FakeManager, probes: list[float]):
-    """16 GB floor: a fresh runtime sees 24 GB free; one that already served a job sees 5 GB,
+    """16 GB advisory: a fresh runtime sees 24 GB free; one that already served a job sees 5 GB,
     exactly the owner's observed failure."""
 
     def ram() -> float:
@@ -539,17 +539,17 @@ def test_three_queued_jobs_complete_serially_without_manual_teardown(tmp_path: P
         repository.close()
 
 
-def test_without_the_policy_the_second_job_fails_readiness_against_a_resident_runtime(
+def test_without_the_release_policy_low_ram_is_advisory_on_later_jobs(
     tmp_path: Path,
 ) -> None:
-    """The owner's observed defect, reproduced with the unchanged 1.0.0 revision."""
+    """VID-RES-350: the unchanged 1.0.0 revision keeps its lifecycle policy, with RAM advisory."""
 
     repository, service, manager, client, probes, job_ids = _queue_three_jobs(tmp_path, V1)
     try:
         statuses = [repository.get_job(job_id).status for job_id in job_ids]
-        assert statuses == [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.FAILED]
-        assert "5.0 GB of system RAM" in str(repository.get_job(job_ids[1]).error_message)
-        assert manager.stops == 0 and len(client.queued) == 1
+        assert statuses == [JobStatus.COMPLETED] * 3
+        assert probes == [24.0, 5.0, 5.0]
+        assert manager.starts == 1 and manager.stops == 0 and len(client.queued) == 3
     finally:
         service.runner.stop()
         repository.close()

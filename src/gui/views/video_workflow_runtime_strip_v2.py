@@ -26,7 +26,7 @@ from src.gui.view_contracts.video_runtime_readiness_contract import (
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.utils.thread_registry import get_thread_registry
 
-_STATE_TAG = {"ok": "OK", "blocked": "BLOCKED", "unknown": "LATER"}
+_STATE_TAG = {"ok": "OK", "blocked": "BLOCKED", "unknown": "LATER", "advisory": "ADVISORY"}
 
 
 class WorkflowRuntimeReadinessStrip(ttk.LabelFrame):
