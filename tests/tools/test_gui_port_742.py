@@ -779,6 +779,8 @@ def test_tk_heartbeat_stopped_chain_never_feeds_the_next_run() -> None:
     TkWorkspace.stop_heartbeat(view)
     TkWorkspace.start_heartbeat(view)  # the second run begins before the first run's timer fires
     stale()
-    assert view._gaps == [] and len(pending) == 1  # the stale callback neither records nor reschedules
+    assert (
+        view._gaps == [] and len(pending) == 1
+    )  # the stale callback neither records nor reschedules
     pending.pop()()
     assert len(view._gaps) == 1 and len(pending) == 1
