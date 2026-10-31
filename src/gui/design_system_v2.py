@@ -1,70 +1,20 @@
-"""Design tokens and primitive helpers for the StableNew V2 GUI."""
+"""Tk/ttk style registration and primitive helpers for the StableNew V2 GUI.
+
+The raw palette, spacing, type and radii live in the toolkit-neutral ``src/gui_v2/design_values.py`` and are re-exported
+here unchanged, so existing callers keep importing them from this module.
+"""
 
 from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
-from dataclasses import dataclass
 from tkinter import ttk
 from typing import NamedTuple
 
-Color = str
+from src.gui_v2.design_values import NOTICE_KINDS, Color, Colors, Radii, Spacing, Typography
 
-
-@dataclass(frozen=True)
-class Spacing:
-    NONE: int = 0
-    XS: int = 2
-    SM: int = 4
-    MD: int = 8
-    LG: int = 12
-    XL: int = 16
-
-
-@dataclass(frozen=True)
-class Radii:
-    SM: int = 4
-    MD: int = 8
-    LG: int = 12
-
-
-@dataclass(frozen=True)
-class Typography:
-    FAMILY: str = "Segoe UI"
-    XS: int = 9
-    SM: int = 10
-    MD: int = 11
-    LG: int = 12
-    XL: int = 14
-    BOLD: str = "bold"
-    NORMAL: str = "normal"
-
-
-@dataclass(frozen=True)
-class Colors:
-    PRIMARY_BG: Color = "#121212"
-    ELEVATED_SURFACE: Color = "#1E1E1E"
-    CARD_BG: Color = "#1E1E1E"
-    BORDER: Color = "#2D2D2D"
-    PRIMARY_ACCENT: Color = "#FFC805"
-    PRIMARY_ACCENT_HOVER: Color = "#FFD94D"
-    TEXT_PRIMARY: Color = "#FFFFFF"
-    TEXT_MUTED: Color = "#CCCCCC"
-    TEXT_DISABLED: Color = "#777777"
-    # PR-GUI-400: white on the former #FF4D4F fill was 3.3:1; this deeper red keeps the identity at 4.6:1.
-    DANGER_BG: Color = "#D9363E"
-    DANGER_BG_HOVER: Color = "#C62F36"
-    DANGER_FG: Color = "#FFFFFF"
-    SEPARATOR: Color = "#2A2A2A"
-    # PR-GUI-400: interactive-state surfaces and the focus edge (gold on dark surfaces, white on gold/red fills).
-    SURFACE_HOVER: Color = "#262626"
-    SURFACE_SELECTED: Color = "#2B2B2B"
-    SECONDARY_HOVER: Color = "#3A3A3A"
-    TEXT_ON_ACCENT: Color = "#000000"
-    FOCUS_RING: Color = PRIMARY_ACCENT
-    FOCUS_RING_ON_FILL: Color = "#FFFFFF"
-    ACCENT_DISABLED_EDGE: Color = "#8C7413"
-
+# The neutral values stay importable from here for existing callers; ``__all__`` marks them as intentional re-exports.
+__all__ = ["NOTICE_KINDS", "Color", "Colors", "Radii", "Spacing", "Typography"]
 
 PRIMARY_BUTTON = "Primary.TButton"
 SECONDARY_BUTTON = "Secondary.TButton"
@@ -82,8 +32,6 @@ SECTION_FRAME = "Section.TFrame"
 PAGE_BODY_LABEL = "Page.Body.TLabel"
 PAGE_MUTED_LABEL = "Page.Muted.TLabel"
 PAGE_RADIOBUTTON = "Page.TRadiobutton"
-
-NOTICE_KINDS = ("neutral", "info", "success", "warning", "error")
 
 
 class NoticeStyleNames(NamedTuple):
