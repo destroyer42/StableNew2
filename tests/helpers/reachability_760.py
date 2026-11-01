@@ -52,6 +52,9 @@ class Finding:
     clipped_px: tuple[int, int, int, int] = (0, 0, 0, 0)  # left, top, right, bottom
     size: tuple[int, int] = (0, 0)
     viewport_height: int = 0  # height of the innermost scroll viewport (0 when not scrolled)
+    detail: str = (
+        ""  # for a hidden control: the outermost ancestor that is not mapped, with its geometry
+    )
 
     @property
     def severity(self) -> str:
@@ -67,7 +70,8 @@ class Finding:
         return "blocking" if min(visible_x, visible_y) < MIN_VISIBLE_FRACTION else "degraded"
 
     def describe(self) -> str:
-        return f"{self.kind} {self.widget_class} '{self.label}' [{self.state}] clipped(l,t,r,b)={self.clipped_px} {self.path}"
+        suffix = f" | {self.detail}" if self.detail else ""
+        return f"{self.kind} {self.widget_class} '{self.label}' [{self.state}] clipped(l,t,r,b)={self.clipped_px} {self.path}{suffix}"
 
 
 @dataclass
@@ -90,6 +94,21 @@ def _pump(root: tk.Misc, seconds: float) -> None:
     while time.perf_counter() < end:
         root.update()
         time.sleep(0.01)
+
+
+def _unmapped_ancestor(widget: tk.Misc) -> str:
+    """Outermost ancestor of ``widget`` that is not mapped, with its manager and size (diagnoses a hidden control)."""
+
+    outermost = ""
+    node: tk.Misc | None = widget
+    while node is not None:
+        if not node.winfo_ismapped():
+            outermost = (
+                f"{node} {node.winfo_class()} manager={node.winfo_manager() or '-'} "
+                f"size={node.winfo_width()}x{node.winfo_height()} req={node.winfo_reqwidth()}x{node.winfo_reqheight()}"
+            )
+        node = getattr(node, "master", None)
+    return outermost
 
 
 def _label(widget: tk.Misc) -> str:
@@ -231,6 +250,8 @@ def probe(root: tk.Misc, container: tk.Misc, *, keyboard: bool = False) -> Probe
                     _state(widget),
                     (0, 0, 0, 0),
                     (widget.winfo_width(), widget.winfo_height()),
+                    0,
+                    _unmapped_ancestor(widget),
                 )
             )
             continue

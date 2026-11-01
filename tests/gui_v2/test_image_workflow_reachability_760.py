@@ -131,7 +131,11 @@ def test_flow_row_manual_reflow_leaves_no_stale_job_after_destroy(tk_root: tk.Tk
 
 
 def test_flow_row_self_schedules_after_a_child_changes_size(tk_root: tk.Tk) -> None:
-    host = _host(tk_root, 330)
+    # Font metrics differ per platform, so size the host from the real caption widths instead of a fixed number.
+    probe = ttk.Button(tk_root, text="A much longer caption that needs the whole row to itself")
+    long_width = probe.winfo_reqwidth()
+    probe.destroy()
+    host = _host(tk_root, long_width + 8)
     row = FlowRow(host)
     row.pack(fill="x")
     label = ttk.Button(row, text="Short")
