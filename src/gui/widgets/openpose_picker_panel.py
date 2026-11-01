@@ -56,6 +56,7 @@ from src.conditioning.openpose_library import (
 )
 from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.tooltip import attach_tooltip
+from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui_v2.openpose_conditioning_view import (
     MODEL_MISSING,
     SEVERITY_ERROR,
@@ -195,27 +196,33 @@ class OpenPosePickerPanel(ttk.LabelFrame):
             "The exact name Forge advertises is used when the job runs.",
         )
 
-        numbers = ttk.Frame(settings)
+        # GUI-COMPLETE-760: the numeric and choice options wrap instead of being cut off on a narrow column.
+        numbers = FlowRow(settings, gap=8)
         numbers.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        self._options_row = numbers
         self.weight_var = tk.StringVar(value=f"{DEFAULT_WEIGHT:g}")
         self.start_var = tk.StringVar(value=f"{DEFAULT_GUIDANCE_START:g}")
         self.end_var = tk.StringVar(value=f"{DEFAULT_GUIDANCE_END:g}")
-        self.weight_spin = self._spin(numbers, "Strength", self.weight_var, MIN_WEIGHT, MAX_WEIGHT, 0, 0.05)
-        self.start_spin = self._spin(numbers, "Guidance start", self.start_var, 0.0, 1.0, 2, 0.05)
-        self.end_spin = self._spin(numbers, "Guidance end", self.end_var, 0.0, 1.0, 4, 0.05)
+        self.weight_spin = self._spin(numbers, "Strength", self.weight_var, MIN_WEIGHT, MAX_WEIGHT, 0.05)
+        self.start_spin = self._spin(numbers, "Guidance start", self.start_var, 0.0, 1.0, 0.05)
+        self.end_spin = self._spin(numbers, "Guidance end", self.end_var, 0.0, 1.0, 0.05)
         self.control_mode_var = tk.StringVar(value=DEFAULT_CONTROL_MODE)
         self.resize_mode_var = tk.StringVar(value=DEFAULT_RESIZE_MODE)
-        ttk.Label(numbers, text="Control mode").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        mode_pair = ttk.Frame(numbers)
+        ttk.Label(mode_pair, text="Control mode").pack(side="left")
         self.control_mode_combo = ttk.Combobox(
-            numbers, textvariable=self.control_mode_var, values=CONTROL_MODES, state="readonly", width=26
+            mode_pair, textvariable=self.control_mode_var, values=CONTROL_MODES, state="readonly", width=26
         )
-        self.control_mode_combo.grid(row=1, column=1, columnspan=2, sticky="w", padx=(4, 8), pady=(4, 0))
+        self.control_mode_combo.pack(side="left", padx=(4, 0))
+        numbers.add(mode_pair)
         self.control_mode_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_choice_changed())
-        ttk.Label(numbers, text="Resize").grid(row=1, column=3, sticky="w", pady=(4, 0))
+        resize_pair = ttk.Frame(numbers)
+        ttk.Label(resize_pair, text="Resize").pack(side="left")
         self.resize_mode_combo = ttk.Combobox(
-            numbers, textvariable=self.resize_mode_var, values=RESIZE_MODES, state="readonly", width=16
+            resize_pair, textvariable=self.resize_mode_var, values=RESIZE_MODES, state="readonly", width=16
         )
-        self.resize_mode_combo.grid(row=1, column=4, columnspan=2, sticky="w", padx=(4, 0), pady=(4, 0))
+        self.resize_mode_combo.pack(side="left", padx=(4, 0))
+        numbers.add(resize_pair)
         self.resize_mode_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_choice_changed())
         attach_tooltip(self.control_mode_combo,
                        "Balanced balances prompt and pose. ControlNet is more important increases pose priority; "
@@ -232,11 +239,12 @@ class OpenPosePickerPanel(ttk.LabelFrame):
         self.notes_label.grid(row=3, column=0, sticky="ew", pady=(6, 0))
 
     def _spin(
-        self, parent: ttk.Frame, label: str, variable: tk.StringVar, low: float, high: float, column: int, step: float
+        self, row: FlowRow, label: str, variable: tk.StringVar, low: float, high: float, step: float
     ) -> ttk.Spinbox:
-        ttk.Label(parent, text=label).grid(row=0, column=column, sticky="w", padx=(0 if column == 0 else 8, 0))
+        pair = ttk.Frame(row)
+        ttk.Label(pair, text=label).pack(side="left")
         spin = ttk.Spinbox(
-            parent,
+            pair,
             from_=low,
             to=high,
             increment=step,
@@ -244,7 +252,8 @@ class OpenPosePickerPanel(ttk.LabelFrame):
             width=6,
             command=self._on_number_changed,
         )
-        spin.grid(row=0, column=column + 1, sticky="w", padx=(4, 0))
+        spin.pack(side="left", padx=(4, 0))
+        row.add(pair)
         spin.bind("<Return>", lambda _e: self._on_number_changed())
         spin.bind("<FocusOut>", lambda _e: self._on_number_changed())
         return spin

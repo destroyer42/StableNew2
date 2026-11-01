@@ -136,17 +136,21 @@ def measure_horizontal_extent(content: tk.Misc, viewport_width: int) -> tuple[in
     """(required_width, available_width) of ``content`` inside a viewport that never scrolls horizontally.
 
     ``required_width`` is the rightmost edge of any mapped actionable control, measured from the content's left edge, so
-    a control wider than its viewport shows up as ``required_width > available_width``. Callers should
-    ``update_idletasks`` first so the geometry is realized.
+    a control wider than its viewport shows up as ``required_width > available_width``. A control that sits inside an
+    intermediate container narrower than the control (a grid cell or a fixed pane clips it) is reported by the width it
+    overruns that container by, added to its own right edge, so a clipped control is never counted as fitting.
+    Callers should ``update_idletasks`` first so the geometry is realized.
     """
     origin = content.winfo_rootx()
     required = 0
-    stack: list[tk.Misc] = [content]
+    stack: list[tuple[tk.Misc, int]] = [(content, 10**9)]
     while stack:
-        widget = stack.pop()
-        stack.extend(widget.winfo_children())
+        widget, clip_right = stack.pop()
+        child_clip = clip_right if widget is content else min(clip_right, widget.winfo_rootx() + widget.winfo_width())
+        stack.extend((child, child_clip) for child in widget.winfo_children())
         if isinstance(widget, _ACTIONABLE_CLASSES) and widget.winfo_ismapped() and widget.winfo_width() > 1:
-            required = max(required, widget.winfo_rootx() - origin + widget.winfo_width())
+            right = widget.winfo_rootx() + widget.winfo_width()
+            required = max(required, right - origin + max(0, right - clip_right))
     return required, int(viewport_width)
 
 

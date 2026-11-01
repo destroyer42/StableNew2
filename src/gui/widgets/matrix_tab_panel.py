@@ -16,6 +16,7 @@ from typing import Any
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.models.prompt_pack_model import MatrixConfig, MatrixSlot
 from src.gui.prompt_workspace_state import PromptWorkspaceState
+from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui_v2.matrix_editor_view import (
     STARTER_DIMENSIONS,
@@ -192,22 +193,23 @@ class MatrixTabPanel(ttk.Frame):
         ttk.Label(header_frame, text="", width=5).grid(row=0, column=2)
 
         # Add Slot button + starter examples (each adds one new dimension; nothing is overwritten)
-        add_btn_frame = ttk.Frame(parent)
+        # GUI-COMPLETE-760: wrapping row, so Add example is reachable when the panel is narrow.
+        add_btn_frame = FlowRow(parent, gap=8)
         add_btn_frame.pack(fill="x", pady=(5, 0))
-        ttk.Button(add_btn_frame, text="+ Add Slot", command=self._on_slot_added).pack(side="left")
-        ttk.Label(add_btn_frame, text="Starter example:").pack(side="left", padx=(16, 5))
+        add_btn_frame.add(ttk.Button(add_btn_frame, text="+ Add Slot", command=self._on_slot_added))
+        example_pair = ttk.Frame(add_btn_frame)
+        ttk.Label(example_pair, text="Starter example:").pack(side="left", padx=(0, 5))
         self.example_var = tk.StringVar(value=STARTER_DIMENSIONS[0].label)
         self.example_combo = ttk.Combobox(
-            add_btn_frame,
+            example_pair,
             textvariable=self.example_var,
             values=[item.label for item in STARTER_DIMENSIONS],
             state="readonly",
             width=22,
         )
         self.example_combo.pack(side="left")
-        ttk.Button(add_btn_frame, text="Add example", command=self._on_example_added).pack(
-            side="left", padx=(5, 0)
-        )
+        add_btn_frame.add(example_pair)
+        add_btn_frame.add(ttk.Button(add_btn_frame, text="Add example", command=self._on_example_added))
         self.example_message_var = tk.StringVar(value="")
         ttk.Label(parent, textvariable=self.example_message_var).pack(anchor="w")
 

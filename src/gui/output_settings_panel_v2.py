@@ -8,6 +8,7 @@ from tkinter import filedialog, ttk
 
 from src.config import app_config
 from src.gui.theme_v2 import HEADING_LABEL_STYLE, MUTED_LABEL_STYLE
+from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.state.output_routing import OUTPUT_ROUTE_AUTO, OUTPUT_ROUTE_PIPELINE, OUTPUT_ROUTE_TESTING
 
@@ -57,24 +58,30 @@ class OutputSettingsPanelV2(ttk.Frame):
         # Build output dir row with browse button
         self._build_dir_row(parent, "Output Dir", self.output_dir_var, 1, 0)
 
-        # Consolidate Format, Batch Size, and Seed Mode on one row
-        controls_row = ttk.Frame(parent)
+        # Format, Batch Size, Seed Mode and Route wrap onto further rows when the column is narrow (GUI-COMPLETE-760);
+        # a single packed row left the trailing pairs unmapped, so Seed Mode / Route could not be reached.
+        controls_row = FlowRow(parent, gap=16)
         controls_row.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 4))
+        self.controls_row = controls_row
 
-        ttk.Label(controls_row, text="Format:", style="TLabel").pack(side="left", padx=(0, 4))
+        def _pair(label: str) -> ttk.Frame:
+            pair = ttk.Frame(controls_row)
+            ttk.Label(pair, text=label, style="TLabel").pack(side="left", padx=(0, 4))
+            controls_row.add(pair)
+            return pair
+
         format_combo = ttk.Combobox(
-            controls_row,
+            _pair("Format:"),
             textvariable=self.image_format_var,
             values=self.FORMATS,
             state="readonly",
             width=8,
             style="Dark.TCombobox",
         )
-        format_combo.pack(side="left", padx=(0, 16))
+        format_combo.pack(side="left")
 
-        ttk.Label(controls_row, text="Batch Size:", style="TLabel").pack(side="left", padx=(0, 4))
         batch_spin = ttk.Spinbox(
-            controls_row,
+            _pair("Batch Size:"),
             from_=1,
             to=99,
             increment=1,
@@ -82,12 +89,11 @@ class OutputSettingsPanelV2(ttk.Frame):
             width=6,
             style="Dark.TSpinbox",
         )
-        batch_spin.pack(side="left", padx=(0, 16))
+        batch_spin.pack(side="left")
         self._create_tooltip(batch_spin, "Number of images to generate per prompt")
 
-        ttk.Label(controls_row, text="Seed Mode:", style="TLabel").pack(side="left", padx=(0, 4))
         seed_combo = ttk.Combobox(
-            controls_row,
+            _pair("Seed Mode:"),
             textvariable=self.seed_mode_var,
             values=self.SEED_MODES,
             state="readonly",
@@ -96,9 +102,8 @@ class OutputSettingsPanelV2(ttk.Frame):
         )
         seed_combo.pack(side="left")
 
-        ttk.Label(controls_row, text="Route:", style="TLabel").pack(side="left", padx=(16, 4))
         route_combo = ttk.Combobox(
-            controls_row,
+            _pair("Route:"),
             textvariable=self.output_route_var,
             values=self.OUTPUT_ROUTES,
             state="readonly",

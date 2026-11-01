@@ -33,6 +33,7 @@ from src.gui.view_contracts.review_selection_contract import (
     SelectionToken,
 )
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
@@ -593,27 +594,31 @@ class ReviewTabFrame(ttk.Frame):
         effective_label.grid(row=0, column=0, sticky="ew")
         bind_wraplength(effective_label)
 
-        batch_row = ttk.Frame(run_box, style="Panel.TFrame")
+        # GUI-COMPLETE-760: wrapping row, so the group-by-model option and its help stay reachable.
+        batch_row = FlowRow(run_box, style="Panel.TFrame", gap=8)
         batch_row.grid(row=4, column=0, sticky="ew", pady=(0, 8))
-        ttk.Label(batch_row, text="Batch size", style="Dark.TLabel").pack(side="left", padx=(0, 8))
-        ttk.Spinbox(
-            batch_row,
-            from_=1,
-            to=64,
-            increment=1,
-            textvariable=self.batch_size_var,
-            width=6,
-            style="Dark.TSpinbox",
-        ).pack(side="left")
-        ttk.Label(batch_row, text="(groups by compatible settings)", style="Dark.TLabel").pack(
-            side="left", padx=(8, 0)
+        self._batch_row = batch_row
+        batch_row.add(ttk.Label(batch_row, text="Batch size", style="Dark.TLabel"))
+        batch_row.add(
+            ttk.Spinbox(
+                batch_row,
+                from_=1,
+                to=64,
+                increment=1,
+                textvariable=self.batch_size_var,
+                width=6,
+                style="Dark.TSpinbox",
+            )
         )
-        ttk.Checkbutton(
-            batch_row,
-            text="Order new batch by checkpoint/profile",
-            variable=self.group_by_model_var,
-            style="Dark.TCheckbutton",
-        ).pack(side="left", padx=8)
+        batch_row.add(ttk.Label(batch_row, text="(groups by compatible settings)", style="Dark.TLabel"))
+        batch_row.add(
+            ttk.Checkbutton(
+                batch_row,
+                text="Order new batch by checkpoint/profile",
+                variable=self.group_by_model_var,
+                style="Dark.TCheckbutton",
+            )
+        )
         batch_help_btn = ttk.Button(
             batch_row,
             text="?",
@@ -621,7 +626,7 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=self._show_batch_logic_help,
         )
-        batch_help_btn.pack(side="left", padx=(8, 0))
+        batch_row.add(batch_help_btn)
         attach_tooltip(
             batch_help_btn,
             "Batching only combines images with identical effective prompt/model/config. "
