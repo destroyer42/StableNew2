@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-654 of 809 modules have a docstring.
+659 of 814 modules have a docstring.
 
 ## src/
 
@@ -923,8 +923,13 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_artifact_helpers.py`: Generic helpers for normalizing workflow-video output bundles
 - `video_backend_registry.py`: (no docstring)
 - `video_backend_types.py`: (no docstring)
+- `video_eval_assessment.py`: Pure identity and continuity assessment of an eval run (PR-VID-QUALITY-351)
+- `video_eval_assessment_html.py`: HTML fragments for the identity assessment in the eval contact sheet (PR-VID-QUALITY-351)
+- `video_eval_identity.py`: Source-image, clip and job identity for eval reports (PR-VID-QUALITY-351)
 - `video_eval_metrics.py`: Deterministic clip measurements for the video eval kit (PR-VID-EVAL-320)
+- `video_eval_ratings_store.py`: Safe, lossless persistence for an eval run's ``ratings.csv`` (PR-VID-QUALITY-351)
 - `video_eval_report.py`: Measure an admitted eval run and write its contact sheet (PR-VID-EVAL-320)
+- `video_eval_rubric.py`: Identity and continuity rubric for eval-suite ratings (PR-VID-QUALITY-351)
 - `video_eval_run.py`: Plan and admit one video eval run on the canonical path (PR-VID-EVAL-320)
 - `video_eval_suite.py`: Video eval suite: a fixed set of source images and prompts run against named arms (PR-VID-EVAL-320)
 - `video_execution_resolver.py`: Single canonical resolver for video execution: explicit backend, task and controls
