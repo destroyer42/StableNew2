@@ -191,8 +191,8 @@ def test_long_form_tabs_reach_their_lowest_control_on_a_laptop_viewport(
 @pytest.mark.skipif(
     sys.platform != "win32", reason="Windows desktop DPI geometry; enforced in the Windows lane"
 )
-@pytest.mark.parametrize("font_scale", [1.0, 1.5])
-def test_recent_video_controls_and_detach_return_fit_the_compact_viewport(tk_root, tmp_path, font_scale):
+@pytest.mark.parametrize(("font_scale", "viewport_height"), [(1.0, None), (1.5, None), (1.5, 327)])
+def test_recent_video_controls_and_detach_return_fit_the_compact_viewport(tk_root, tmp_path, font_scale, viewport_height):
     import time
 
     from src.video.recent_video_outputs import RecentVideoOutput
@@ -234,6 +234,14 @@ def test_recent_video_controls_and_detach_return_fit_the_compact_viewport(tk_roo
         ),)
         panel.session.select("recorded")
         settle(lambda: panel.preview._video is not None and panel.preview._video.session.clip is not None)
+        if viewport_height is not None:
+            # Reproduce the actual 327px viewport measured in the failing hosted desktop.
+            tk_root.geometry(f"1024x{layout.height}+0+0")
+            tk_root.update()
+            height = tk_root.winfo_height() + viewport_height - tab._body_scroll._canvas.winfo_height()
+            tk_root.geometry(f"1024x{height}+0+0")
+            tk_root.update()
+            assert tab._body_scroll._canvas.winfo_height() == viewport_height
         for detached in (False, True, False):
             panel.preview.detach() if detached else panel.preview.dock()
             tk_root.update()
