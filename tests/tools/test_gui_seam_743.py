@@ -486,7 +486,13 @@ def good_result(
             "arrived": True,
             "selection_kept": True,
             "to_visible_ms": refresh,
-            "heartbeat": {"n": 16, "min": 2.6, "median": 5.1, "p95": 9.0, "max": 36.0},
+            "heartbeat": {
+                "n": 16,
+                "min": 2.6,
+                "median": 5.1,
+                "p95": None,
+                "max": 36.0,
+            },  # n < 20: no p95
         },
         "interaction": {"filter_visible_ms": 8.5, "select_visible_ms": 4.9},
         "idle": {
@@ -575,6 +581,7 @@ def _mutations() -> list[tuple[str, Any]]:
         ("burst-negative", set_((*r, "burst", "peak_backlog"), -1)),
         ("burst-short-samples", set_((*r, "burst", "latency_ms", "n"), 1999)),
         ("heartbeat-inconsistent", set_((*r, "sustained", "heartbeat"), _hb(20.0, 10.0, 17.0))),
+        ("refresh-heartbeat-nonfinite", set_((*r, "refresh", "heartbeat", "max"), float("nan"))),
         ("sustained-nothing-rendered", set_((*r, "sustained", "renders"), 0)),
         ("refresh-selection-lost", set_((*r, "refresh", "selection_kept"), False)),
         ("refresh-missing-latency", drop((*r, "refresh", "to_visible_ms"))),
@@ -651,6 +658,13 @@ def test_screening_requires_both_burst_and_operator_benefit_without_regression()
         ),
     )
     assert not busy["gates"]["resource"] and busy["idle_pump_rate_note"]
+    refresh_stall = ev.screen(
+        BASE,
+        _runs(MATRIX[4], [200, 210, 190, 205, 195], [90, 88, 92, 89, 91], refresh_hb_max_ms=60.0),
+    )
+    assert not refresh_stall["gates"][
+        "responsiveness"
+    ]  # a refresh-window stall is a regression too
     weak = ev.screen(BASE, _runs(MATRIX[3], [400, 410, 390, 405, 395], [90, 88, 92, 89, 91]))
     assert not weak["gates"]["burst"]  # a 33% cut is below the screening floor
     noisy = ev.screen(BASE, _runs(MATRIX[3], [200, 210, 190, 205, 700], [90, 88, 92, 89, 91]))

@@ -62,7 +62,7 @@ SCALAR_KEYS = (
     "sustained_renders",
     "sustained_pump_max_ms",
     "refresh_to_visible_ms",
-    "refresh_hb_p95_ms",
+    "refresh_hb_median_ms",
     "refresh_hb_max_ms",
     "filter_visible_ms",
     "select_visible_ms",
@@ -159,7 +159,8 @@ def validate_run(
     if refresh.get("arrived") is not True or refresh.get("selection_kept") is not True:
         raise EvidenceError("worker refresh did not arrive or lost the selection")
     _require_finite(refresh, ("to_visible_ms",), "refresh")
-    _require_summary(refresh.get("heartbeat"), "refresh.heartbeat")
+    # a 12-revision refresh yields about 16 heartbeat gaps: median/max only (p95 needs n >= 20)
+    _require_summary(refresh.get("heartbeat"), "refresh.heartbeat", p95=False)
 
     interaction = result.get("interaction") or {}
     _require_finite(interaction, ("filter_visible_ms", "select_visible_ms"), "interaction")
@@ -203,7 +204,7 @@ def run_scalars(record: Mapping[str, Any]) -> dict[str, float]:
         "sustained_renders": sustained["renders"],
         "sustained_pump_max_ms": sustained["pump_ms"]["max"],
         "refresh_to_visible_ms": refresh["to_visible_ms"],
-        "refresh_hb_p95_ms": refresh["heartbeat"]["p95"],
+        "refresh_hb_median_ms": refresh["heartbeat"]["median"],
         "refresh_hb_max_ms": refresh["heartbeat"]["max"],
         "filter_visible_ms": r["interaction"]["filter_visible_ms"],
         "select_visible_ms": r["interaction"]["select_visible_ms"],
@@ -265,11 +266,11 @@ def screen(
     hb_worst = max(r["sustained_hb_max_ms"] for r in candidate) - max(
         r["sustained_hb_max_ms"] for r in baseline
     )
-    refresh_p95 = _med(candidate, "refresh_hb_p95_ms") - _med(baseline, "refresh_hb_p95_ms")
+    refresh_hb_max = _med(candidate, "refresh_hb_max_ms") - _med(baseline, "refresh_hb_max_ms")
     responsiveness_pass = (
         hb_p95 <= HEARTBEAT_P95_REVIEW_MS
         and hb_max <= HEARTBEAT_MAX_REVIEW_MS
-        and refresh_p95 <= HEARTBEAT_P95_REVIEW_MS
+        and refresh_hb_max <= HEARTBEAT_MAX_REVIEW_MS
     )
     refresh_cut = _reduction(
         _med(baseline, "refresh_to_visible_ms"), _med(candidate, "refresh_to_visible_ms")
@@ -299,7 +300,7 @@ def screen(
         "heartbeat_p95_delta_ms": hb_p95,
         "heartbeat_max_delta_ms_median_of_runs": hb_max,
         "heartbeat_worst_gap_delta_ms": hb_worst,
-        "refresh_heartbeat_p95_delta_ms": refresh_p95,
+        "refresh_heartbeat_max_delta_ms": refresh_hb_max,
         "refresh_reduction": refresh_cut,
         "idle_cpu_delta_pp": cpu_delta,
         "idle_pump_rate_ratio": rate_ratio,

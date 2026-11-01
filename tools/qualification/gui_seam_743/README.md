@@ -11,7 +11,7 @@ and the raw results under `docs/assessments/evidence/gui_seam_743/`.
 
 Reused unchanged from GUI-PORT-742: the representative Pipeline / Job History workspace (`tk_view.py`), fixture, the
 filter / selection / worker-refresh / sustained-load measurements (`drive.py`), the sample validators, the owned
-job-object launcher and the child isolation guard. Added here (about 1,000 lines including the parent):
+job-object launcher and the child isolation guard. Added here (about 1,300 lines including the parent and analysis script):
 
 | File | Role |
 |---|---|
