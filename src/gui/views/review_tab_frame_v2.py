@@ -610,7 +610,9 @@ class ReviewTabFrame(ttk.Frame):
                 style="Dark.TSpinbox",
             )
         )
-        batch_row.add(ttk.Label(batch_row, text="(groups by compatible settings)", style="Dark.TLabel"))
+        batch_row.add(
+            ttk.Label(batch_row, text="(groups by compatible settings)", style="Dark.TLabel")
+        )
         batch_row.add(
             ttk.Checkbutton(
                 batch_row,

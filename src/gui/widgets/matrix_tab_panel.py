@@ -209,7 +209,9 @@ class MatrixTabPanel(ttk.Frame):
         )
         self.example_combo.pack(side="left")
         add_btn_frame.add(example_pair)
-        add_btn_frame.add(ttk.Button(add_btn_frame, text="Add example", command=self._on_example_added))
+        add_btn_frame.add(
+            ttk.Button(add_btn_frame, text="Add example", command=self._on_example_added)
+        )
         self.example_message_var = tk.StringVar(value="")
         ttk.Label(parent, textvariable=self.example_message_var).pack(anchor="w")
 

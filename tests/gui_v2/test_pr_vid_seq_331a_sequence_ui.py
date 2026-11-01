@@ -224,7 +224,9 @@ def test_history_offers_resume_and_replay_only_for_a_sequence_job(history) -> No
     history.panel._action_bar.reflow()
     assert history.panel.resume_sequence_btn.winfo_manager() == "place"
     rows = [b for row in history.panel._action_bar.rows() for b in row]
-    assert rows.index(history.panel.resume_sequence_btn) < rows.index(history.panel.replay_sequence_btn)
+    assert rows.index(history.panel.resume_sequence_btn) < rows.index(
+        history.panel.replay_sequence_btn
+    )
     assert rows[-1] is history.panel.refresh_btn
 
     _select(history, [sequence, ordinary], 1)
