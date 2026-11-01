@@ -14,7 +14,7 @@ A refresh never changes what was recorded, queues anything or repairs a missing 
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
@@ -32,6 +32,8 @@ class RecentOutputsSession:
         runner: BackgroundWorkRunner,
         on_change: Callable[[], None] | None = None,
         send_to_movie: Callable[[RecentVideoOutput], Any] | None = None,
+        add_to_library: Callable[[RecentVideoOutput, Mapping[str, Any]], Any] | None = None,
+        on_library_changed: Callable[[], None] | None = None,
         open_path: Callable[[str], ShellResult] = open_file,
         reveal_path: Callable[[str], ShellResult] = reveal_in_file_manager,
     ) -> None:
@@ -39,6 +41,8 @@ class RecentOutputsSession:
         self._runner = runner
         self._on_change = on_change
         self._send_to_movie = send_to_movie
+        self._add_to_library = add_to_library
+        self._on_library_changed = on_library_changed
         self._open_path = open_path
         self._reveal_path = reveal_path
         self._token = 0
@@ -61,6 +65,10 @@ class RecentOutputsSession:
     @property
     def can_send_to_movie(self) -> bool:
         return self._send_to_movie is not None and self.selected is not None
+
+    @property
+    def can_add_to_library(self) -> bool:
+        return self._add_to_library is not None and self.selected is not None
 
     # ------------------------------------------------------------------ commands (UI thread)
 
@@ -100,6 +108,37 @@ class RecentOutputsSession:
         except (ValueError, RuntimeError, OSError) as exc:
             return self._say(ShellResult(False, f"Could not send to Movie Clips: {exc}"))
         return self._say(ShellResult(True, f"Sent {output.file_name} to Movie Clips."))
+
+    def add_selected_to_library(self, details: Mapping[str, Any]) -> None:
+        """Keep the selected finished clip as a motion reference (explicit action; hashes on a worker)."""
+
+        output, add = self.selected, self._add_to_library
+        if output is None or add is None:
+            self._say(ShellResult(False, "Select a finished clip first."))
+            return
+        self._runner.start(
+            "video-recent-add-to-library",
+            lambda: WorkOutcome(value=add(output, dict(details))),
+            lambda outcome: self._finish_add(output, outcome),
+        )
+        self._say(ShellResult(True, f"Adding {output.file_name} to the Motion Library..."))
+
+    def _finish_add(self, output: RecentVideoOutput, outcome: WorkOutcome) -> None:
+        if self._closed:
+            return
+        result = outcome.value
+        if outcome.error:
+            self._say(ShellResult(False, f"Could not add to the Motion Library: {outcome.error}"))
+        elif getattr(result, "status", "") == "failed":
+            self._say(ShellResult(False, f"Not added: {getattr(result, 'reason', '')}"))
+        elif getattr(result, "status", "") == "duplicate":
+            self._say(
+                ShellResult(True, getattr(result, "reason", "") or "Already in the Motion Library.")
+            )
+        else:
+            self._say(ShellResult(True, f"Added {output.file_name} to the Motion Library."))
+        if self._on_library_changed is not None:
+            self._on_library_changed()
 
     def close(self) -> None:
         self._closed = True

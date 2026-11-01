@@ -59,6 +59,10 @@ PREPARED_MOTION_SOURCE_FIELD = "prepared_motion_source"
 # or is out of date: its text is refused as-is, so a job never silently falls back to the
 # unprepared clip the operator meant to replace.
 MOTION_SOURCE_BLOCKED_FIELD = "motion_source_preparation_blocked"
+# Optional form key set when the driving clip was handed over from the Motion Library
+# (PR-VID-MOTION-LIB-353): ``{"asset_id", "sha256"}``.  It is provenance only; the builder refuses the job
+# unless the hash equals the clip it just froze, so a swapped file can never carry a library identity.
+MOTION_LIBRARY_ASSET_FIELD = "motion_library_asset"
 _DEFAULT_OUTPUT_ROUTES = (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_MOVIE_CLIPS,
@@ -225,6 +229,7 @@ class FrozenVideoInputs:
     # actually uses.  Evidence only: re-hashed by ``verify_unchanged``, never stored in the NJR.
     shared_files: tuple[tuple[str, str, str], ...] = ()
     motion_source_preparation: Mapping[str, Any] | None = None
+    library_asset: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -234,6 +239,7 @@ class SharedFrozenInputs:
     driving_video: Mapping[str, str] | None  # {"path", "sha256"}; the prepared clip when prepared
     files: tuple[tuple[str, str, str], ...]  # (label, path, sha256)
     motion_source_preparation: Mapping[str, Any] | None = None
+    library_asset: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -416,9 +422,37 @@ class VideoWorkflowNjrBuilder:
             depth_input = _normalize_depth_input(form_data)
             if depth_input["mode"] == "upload" and depth_input["path"]:
                 add("depth map", depth_input["path"])
-        return SharedFrozenInputs(
-            driving_video=driving, files=tuple(files), motion_source_preparation=preparation
+        library_asset = self._frozen_library_asset(
+            form_data.get(MOTION_LIBRARY_ASSET_FIELD), driving, preparation
         )
+        return SharedFrozenInputs(
+            driving_video=driving,
+            files=tuple(files),
+            motion_source_preparation=preparation,
+            library_asset=library_asset,
+        )
+
+    @staticmethod
+    def _frozen_library_asset(
+        binding: Any, driving: Mapping[str, str] | None, preparation: Mapping[str, Any] | None
+    ) -> dict[str, str] | None:
+        """The Motion Library identity of the *original* clip, or a refusal when it is not that clip."""
+
+        if not binding:
+            return None
+        original_sha = (
+            str(preparation["original"]["sha256"])
+            if preparation
+            else str((driving or {}).get("sha256") or "")
+        )
+        asset_id = str(binding.get("asset_id") or "") if isinstance(binding, Mapping) else ""
+        claimed = str(binding.get("sha256") or "") if isinstance(binding, Mapping) else ""
+        if not asset_id or not original_sha or claimed != original_sha:
+            raise ValueError(
+                "The driving video no longer matches the Motion Library clip it was chosen from. "
+                "Choose the clip from the library again."
+            )
+        return {"asset_id": asset_id, "sha256": original_sha}
 
     def freeze_inputs(
         self,
@@ -468,6 +502,7 @@ class VideoWorkflowNjrBuilder:
             prepared_source_sha256=sha256_file(prepared_source_path),
             shared_files=shared.files,
             motion_source_preparation=shared.motion_source_preparation,
+            library_asset=shared.library_asset,
         )
 
     @staticmethod
@@ -667,6 +702,8 @@ class VideoWorkflowNjrBuilder:
             extra_metadata["video_workflow"]["operator_controls"] = dict(frozen_controls)
         if driving_provenance is not None:
             extra_metadata["video_workflow"]["pose_video"] = dict(driving_provenance)
+        if frozen.library_asset:
+            extra_metadata["video_workflow"]["motion_library_asset"] = dict(frozen.library_asset)
         if preparation_record is not None:
             extra_metadata["video_workflow"]["motion_source_preparation"] = {
                 side: {key: preparation_record[side].get(key) for key in ("path", "sha256")}

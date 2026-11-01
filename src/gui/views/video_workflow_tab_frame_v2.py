@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Mapping
 from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any, cast
@@ -10,6 +11,7 @@ from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
+from src.gui.view_contracts.motion_library_contract import MotionLibraryPorts
 from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
 from src.gui.view_contracts.video_batch_contract import VideoBatchSession
 from src.gui.view_contracts.video_experiment_contract import VideoExperimentSession
@@ -26,6 +28,7 @@ from src.gui.views.video_eval_panel_v2 import VideoEvalPanel
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
+from src.gui.views.video_workflow_motion_library_panel_v2 import WorkflowMotionLibraryPanel
 from src.gui.views.video_workflow_motion_prep_panel_v2 import WorkflowMotionPreparationPanel
 from src.gui.views.video_workflow_motion_readiness_panel_v2 import WorkflowMotionReadinessPanel
 from src.gui.views.video_workflow_recent_outputs_panel_v2 import WorkflowRecentOutputsPanel
@@ -42,6 +45,12 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_TESTING,
 )
+from src.video.motion_library.handoff import (
+    FIELD_LIBRARY_BINDING,
+    HandoffPlan,
+    binding_for_submission,
+)
+from src.video.recent_video_outputs import RecentVideoOutput
 from src.video.workflow_picker import workflow_choices
 
 _IMAGE_FILETYPES = [
@@ -90,6 +99,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.app_controller = app_controller
         self.app_state = app_state
         self._workflow_map: dict[str, dict[str, Any]] = {}
+        # Identity of the Motion Library clip last handed to the driving-video field
+        # (PR-VID-MOTION-LIB-353); frozen with a job only while the field still names that file.
+        self._library_binding: dict[str, str] | None = None
+        self._library_bound_path = ""
         self._last_folder = ""
         self._source_bundle: dict[str, Any] | None = None
         self._setting_tooltips: dict[str, Any] = {}
@@ -780,8 +793,24 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             body,
             list_outputs=self._list_recent_outputs,
             send_to_movie=self._send_output_to_movie,
+            add_to_library=self._add_output_to_library,
+            on_library_changed=self._refresh_motion_library,
         )
         self.recent_outputs_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+
+        # PR-VID-MOTION-LIB-353: local motion-reference catalog; Use as Driving Video fills the
+        # driving-video field above and nothing else.
+        self._recent_controller = self._experiment_controller()
+        self.motion_library_panel = WorkflowMotionLibraryPanel(
+            body,
+            ports=self._motion_library_ports(),
+            mode_provider=lambda: str(
+                getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw"
+            ),
+            selected_workflow=self._selected_workflow_identity,
+            on_handoff=self._apply_library_handoff,
+        )
+        self.motion_library_panel.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(0, 6))
 
     def _add_labeled_entry(
         self,
@@ -1005,6 +1034,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             if for_submission:
                 # The prepared record, or a blocker while a preparation is running/failed/stale.
                 state.update(self.motion_prep_panel.submission_fields())
+                binding = binding_for_submission(
+                    self._library_binding,
+                    current_path=str(state["pose_video_path"]),
+                    bound_path=self._library_bound_path,
+                )
+                if binding is not None:
+                    state[FIELD_LIBRARY_BINDING] = binding
         if self.workflow_controls_panel.control_names:
             state["operator_controls"] = self.workflow_controls_panel.get_values()
         if for_submission:
@@ -1382,6 +1418,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             # Resolved on the Tk thread; the worker only calls the already-built controller.
             self._recent_controller = self._experiment_controller()
             recent.request_refresh()
+        self._refresh_motion_library()
 
     def _open_comfy_setup(self) -> None:
         """Open the existing Engine Settings > Video runtime (ComfyUI) section; nothing is edited or started here."""
@@ -1395,6 +1432,72 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             focus_video_runtime=True,
             comfy_repair_reason=view.repair_reason if view else "",
             on_closed=lambda: strip.request_refresh(force=True),  # shows a restart-pending save at once
+        )
+
+    # ------------------------------------------------------------------ Motion Library
+
+    def _library_controller(self) -> Any:
+        controller = getattr(self, "_recent_controller", None)
+        if controller is None:
+            raise RuntimeError("The Video Workflow controller is not available.")
+        return controller
+
+    def _motion_library_ports(self) -> MotionLibraryPorts:
+        def lib() -> Any:
+            return self._library_controller()
+
+        return MotionLibraryPorts(
+            snapshot=lambda: lib().motion_library_snapshot(),
+            inspect=lambda asset_id, cancel: lib().inspect_motion_asset(asset_id, cancel),
+            import_file=lambda path, mode, notes, cancel: lib().import_motion_video(
+                path, mode=mode, annotations=notes, cancel=cancel
+            ),
+            import_folder=lambda folder, mode, notes, cancel: lib().import_motion_folder(
+                folder, mode=mode, annotations=notes, cancel=cancel
+            ),
+            annotate=lambda asset_id, changes: lib().annotate_motion_asset(asset_id, changes),
+            relink=lambda asset_id, path, cancel: lib().relink_motion_asset(asset_id, path, cancel),
+            configure=lambda root: lib().configure_motion_library(root),
+            plan_handoff=lambda asset_id, workflow_id, version, cancel: (
+                lib().plan_motion_library_handoff(asset_id, workflow_id, version, cancel)
+            ),
+        )
+
+    def _selected_workflow_identity(self) -> tuple[str, str]:
+        meta = self._workflow_map.get(self.workflow_var.get().strip(), {})
+        return (str(meta.get("workflow_id") or ""), str(meta.get("workflow_version") or ""))
+
+    def _refresh_motion_library(self) -> None:
+        panel = getattr(self, "motion_library_panel", None)
+        if panel is not None:
+            panel.request_refresh()
+
+    def _add_output_to_library(self, output: RecentVideoOutput, details: Mapping[str, Any]) -> Any:
+        """Worker-side: keep a finished clip as a motion reference (explicit operator action)."""
+
+        return self._library_controller().add_job_to_motion_library(
+            output.job_id,
+            mode=str(details.get("mode") or "linked"),
+            motion_label=str(details.get("motion_label") or ""),
+            motion_achieved=details.get("motion_achieved"),
+            good_for_motion=details.get("good_for_motion"),
+            known_artifacts=str(details.get("known_artifacts") or ""),
+            reuse_conditions=str(details.get("reuse_conditions") or ""),
+        )
+
+    def _apply_library_handoff(self, plan: HandoffPlan) -> None:
+        """Fill only the driving-video field with the verified clip (nothing is previewed or queued)."""
+
+        fields = plan.form_fields
+        if not fields:
+            return
+        self.pose_video_var.set(fields["pose_video_path"])
+        self._library_binding = plan.binding
+        self._library_bound_path = plan.path
+        self._invalidate_experiment_preview()
+        self.status_var.set(
+            "Driving video set from the Motion Library. Preview the job to confirm it. "
+            + " ".join(plan.advisories[:2])
         )
 
     def _list_recent_outputs(self) -> list[Any]:
@@ -1544,6 +1647,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._pending_visibility_refresh = False
         self.visibility_banner.configure(text="")
+        library = getattr(self, "motion_library_panel", None)
+        if library is not None:
+            library.on_content_visibility_mode_changed(mode)
 
     def _on_content_visibility_mode_changed(self) -> None:
         if not bool(self.winfo_ismapped()):
