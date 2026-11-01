@@ -55,8 +55,10 @@ from src.video.video_interpolation import (
     interpolate_video_file,
     normalize_interpolation_request,
 )
+from src.video.workflow_asset_integrity import configured_asset_issues
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
+from src.video.workflow_input_integrity import verify_exact_dispatch_inputs
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_readiness import required_launch_flags as _required_launch_flags
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
@@ -506,6 +508,16 @@ class ComfyWorkflowVideoBackend:
                 f"not '{self.backend_id}'"
             )
         # Retired secondary motion (D8) is refused before any runtime is started or dispatched.
+        verify_exact_dispatch_inputs(spec, request)
+        if spec.backend_defaults.get("asset_integrity"):
+            manager = self._resolve_process_manager()
+            config = getattr(manager, "config", None) if manager else build_default_comfy_process_config()
+            issues = configured_asset_issues(spec, config)
+            if issues:
+                raise ValueError("; ".join(issues))
+        policy = self._readiness.policy_for(spec) or {}
+        if policy.get("qualification_status") == "not_qualified":
+            raise ValueError(str(policy["reason"]))
         require_secondary_motion_block_disabled(stage_config.get("secondary_motion"))
         # An illegal frozen length fails before any runtime is started or dispatched.
         if frame_count_policy(spec) is not None:
@@ -1086,6 +1098,9 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{compiled.workflow_id}' compiled without a queueable Comfy prompt payload"
             )
         stage_config = request.stage_config or {}
+        spec = self._workflow_registry.get(compiled.workflow_id, compiled.workflow_version,
+                                          allow_experimental=bool(request.experimental_opt_in))
+        verify_exact_dispatch_inputs(spec, request)
         if stage_config.get("pose_video_path"):
             self._verify_driving_video_source(
                 stage_config["pose_video_path"],
@@ -1095,6 +1110,10 @@ class ComfyWorkflowVideoBackend:
             prompt_payload,
             client=client,
             object_info=object_info,
+            input_hashes={
+                str(request.input_image_path): (stage_config.get("reference_identity") or {}).get("prepared_sha256"),
+                str(stage_config.get("pose_video_path")): stage_config.get("pose_video_sha256"),
+            } if spec.backend_defaults.get("motion_source_policy") else None,
         )
         extra_data = {
             "workflow_id": compiled.workflow_id,
@@ -1116,6 +1135,7 @@ class ComfyWorkflowVideoBackend:
         *,
         client: ComfyApiClient,
         object_info: Mapping[str, Any] | None = None,
+        input_hashes: Mapping[str, str | None] | None = None,
     ) -> dict[str, Any]:
         prompt = deepcopy(dict(prompt_payload))
         info = dict(object_info or {})
@@ -1151,6 +1171,7 @@ class ComfyWorkflowVideoBackend:
                         client,
                         raw_value,
                         uploaded_cache,
+                        expected_sha256=(input_hashes or {}).get(str(raw_value)),
                     )
                     continue
                 declared_type = self._extract_declared_input_type(input_specs.get(input_name))
@@ -1214,6 +1235,7 @@ class ComfyWorkflowVideoBackend:
         client: ComfyApiClient,
         raw_value: Any,
         uploaded_cache: dict[str, str],
+        *, expected_sha256: str | None = None,
     ) -> Any:
         path_text = str(raw_value or "").strip()
         if not path_text:
@@ -1224,7 +1246,8 @@ class ComfyWorkflowVideoBackend:
         cache_key = str(path.resolve()) if path.exists() else str(path)
         if cache_key in uploaded_cache:
             return uploaded_cache[cache_key]
-        uploaded = client.upload_image(path)
+        uploaded = (client.upload_image(path, expected_sha256=expected_sha256)
+                    if expected_sha256 else client.upload_image(path))
         name = str(uploaded.get("name") or path.name).strip()
         subfolder = str(uploaded.get("subfolder") or "").strip().strip("/\\")
         relative_name = f"{subfolder}/{name}" if subfolder else name

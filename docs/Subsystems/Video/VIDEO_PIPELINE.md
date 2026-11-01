@@ -102,7 +102,7 @@ Every MP4 written from frames goes through `VideoCreator.create_video_from_image
 | Layer | Module | Role |
 |---|---|---|
 | Spec types | `src/video/workflow_contracts.py` | `WorkflowSpec` (frozen), input/output bindings, `WorkflowDependencySpec`, governance state (`approved`, `experimental`, `disabled`), capability tags that decide `accepted_controls` |
-| Catalog | `src/video/workflow_catalog.py`, `src/video/workflow_catalog_wan_animate2.py` | `build_builtin_workflow_specs()`: all graphs as inline Python dicts in `backend_defaults["prompt_template"]` (adapter-private; never in the NJR) |
+| Catalog | `src/video/workflow_catalog.py`, `src/video/workflow_catalog_wan_animate2.py`, `src/video/workflow_catalog_fun_control.py` | `build_builtin_workflow_specs()`: all graphs as inline Python dicts in `backend_defaults["prompt_template"]` (adapter-private; never in the NJR) |
 | Registry | `src/video/workflow_registry.py` | `WorkflowRegistry.get(..., allow_experimental=)` enforces governance; `list_offerable_specs` (approved plus experimental, never disabled); `get_offerable` for form validation |
 | Controller port | `src/controller/ports/default_runtime_ports.py` | `DefaultWorkflowRegistryPort` exposes the offerable list to the controller; `VideoWorkflowController.list_workflow_specs` shows only the newest version of each workflow |
 | Declarative controls | `src/video/workflow_controls.py`, `workflow_frame_count.py`, `workflow_source_preparation.py`, `workflow_readiness.py`, `workflow_motion_guidance.py` | Spec-declared operator controls, 4n+1 frame length, source preparation, GPU guard, RAM advisory and motion guidance. None branch on a workflow or model name |
@@ -111,12 +111,13 @@ Every MP4 written from frames goes through `VideoCreator.create_video_from_image
 | Backend | `src/video/comfy_workflow_backend.py` (`ComfyWorkflowVideoBackend`) | Governance, dependency probe, readiness, queue prompt, history wait, output localization, manifest |
 | Clients and runtime | `src/video/comfy_api_client.py`, `comfy_dependency_probe.py`, `comfy_healthcheck.py`, `comfy_process_manager.py` | HTTP, `/object_info` dependency check, readiness polling, managed process lifecycle |
 
-### 4.2 The catalog today (9 specs) [V]
+### 4.2 The catalog today (11 specs) [V]
 
 | Workflow id | Versions | State | Notes |
 |---|---|---|---|
 | `wan22_ti2v_5b_i2v_v1` | 1.0.0, 1.1.0, 1.2.0, 1.3.0 | **1.2.0 and 1.3.0 approved**; 1.0.0 and 1.1.0 experimental | Stock nodes, three pinned model files with SHA-256. 1.0.0 fixed 49 frames. 1.1.0 adds `frame_count_policy` (17..81, 4n+1, 24 fps) and `release_owned_runtime_after_job`. 1.2.0 is the identical graph requalified on managed ComfyUI 0.38.0 (provenance only). Source-aware 480x832 / 832x480. Execution floor 10,000 MiB VRAM available to Comfy; qualification-derived host RAM advisory 16 GB. |
 | `wan_animate2_prompt_i2v_v1` | 1.0.0, 1.1.0, 1.2.0 | experimental | Reference image + prompt, no driving video; motion is subtle and exploratory. |
+| `wan22_fun_control_5b_canny_i2v_v1` | 1.0.0 | experimental | Reference appearance + driving-video Canny, stock pinned nodes, 17–49 frames at 24 FPS, frames out. Explicit verified prepared source and concrete seed required. Model weights are not installed automatically. Hardware NOT QUALIFIED: Preview is available but Queue/admission/dispatch are blocked. `PR-VID-FUN-352_Fun_Control_5B.md` records exact assets, node contract and future qualification proposal. |
 | `wan_animate2_drive_i2v_v1` | 1.0.0, 1.1.0, 1.2.0 | experimental | Adds a driving video (the qualified mode). 1.1.0 binds the real `WanAnimate2ToVideo` controls (motion prompt, pose strength, pose window, reference strength). Requires `--disable-pinned-memory`. |
 
 The catalog holds no disabled placeholder. The two former LTX multi-frame-anchor specs (`ltx_multiframe_anchor_v1`, `ltx_multiframe_anchor_v1_conditioned`) were retired because the bridge nodes they named never existed and no runtime evidence was accepted; future LTX support is not ruled out and would need bridge implementations plus accepted runtime evidence. `RETIRED_WORKFLOW_IDS` in `src/video/workflow_registry.py` is a message-only record: a stored job or history snapshot that still names a retired id loads and displays, and an execution request for it fails with `Workflow '<id>' is not registered: ... was removed ...` (`WorkflowLookupError`, a `KeyError` subclass whose `str()` is that plain message; the resolver reports it as `invalid_workflow`). It never aliases or substitutes a workflow. The disabled governance state still exists and is enforced (not offerable, lookup refused even with the experimental opt-in); tests exercise it with a synthetic disabled spec.
@@ -136,6 +137,8 @@ Only the ids in the table can reach `ComfyWorkflowVideoBackend.execute`; an appr
 The same builder serves a normal submission, every arm of a one-variable experiment (`VideoWorkflowExperimentService`; arms must differ only in the chosen control; admission via `ExperimentAdmissionService` in `src/learning/experiment_execution.py`) and a multi-source batch of 1-25 images (`VideoWorkflowBatchService`: `assess`, `preview`, `admit`; one `submit_njrs` call; provenance descriptor `stablenew.batch.v1`, 0-based `source_index`). Do not create another path that builds a video NJR.
 
 A finished experiment is reviewed, not re-run: `src/video/video_review_group.py` rebuilds the study from the persisted arms (any job id reopens it, after a restart too), `src/video/review_preview.py` decodes bounded, downscaled, read-only preview frames, and `src/learning/video_review_service.py` records the operator's per-clip quality assessment as Learning evidence (section 5.1). It queues, retries and scores nothing.
+
+Fun Control's exact-prepared policy additionally freezes reference hashes, a graph digest, the model manifest and resource-policy identity. It requires a concrete seed and an accepted, ordered-frame-verified motion record at 24 FPS. Preview Frozen Plan uses the existing one-source batch worker and remains available while hardware is unqualified; Queue and canonical JobService admission refuse that resource policy. Admission and execution share normalized neutral-intent workflow identity. Readiness explains explicit preparation without predicting automatic raw-clip trimming, padding or speed changes. Local size/hash verification and hash-verified upload snapshots apply to this declared policy; older workflows retain their existing contracts.
 
 ### 4.4 Execution (`ComfyWorkflowVideoBackend.execute`)
 

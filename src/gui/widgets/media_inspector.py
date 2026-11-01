@@ -383,6 +383,7 @@ class MediaInspector(ttk.Frame):
                 if clip.truncated:
                     caption += f" · first {clip.frame_count} frames"
                 self._video.caption_var.set(caption)
+                self._video.caption.grid_configure(pady=0)
                 self._video.canvas.configure(
                     width=max(min(256, self._edge), clip.width * self._video._scale),
                     height=clip.height * self._video._scale,

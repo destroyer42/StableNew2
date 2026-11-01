@@ -211,6 +211,9 @@ class ScrollableFrame(ttk.Frame):
         widget is not inside this frame.
         """
         try:
+            # Preview/toolbar reflow can still be queued when focus requests a reveal.
+            # Measure only after Tk has committed the current child sizes and scroll region.
+            self.update_idletasks()
             if not self.has_scroll_overflow():
                 return
             top = 0
@@ -228,10 +231,11 @@ class ScrollableFrame(ttk.Frame):
             visible_bottom = visible_top + view
             if top >= visible_top and bottom <= visible_bottom:
                 return
+            margin = min(_REVEAL_MARGIN, max(0, (view - (bottom - top)) // 2))
             if top < visible_top or bottom - top > view:
-                target = top - _REVEAL_MARGIN
+                target = top - margin
             else:
-                target = bottom + _REVEAL_MARGIN - view
+                target = bottom + margin - view
             self._canvas.yview_moveto(max(target, 0) / total)
         except tk.TclError:
             return

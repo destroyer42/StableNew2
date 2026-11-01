@@ -460,6 +460,7 @@ def motion_readiness_projection(spec: Any) -> dict[str, Any]:
             "reason": consumption.reason,
             "rule": consumption.rule,
             "runtime_revision": consumption.runtime_revision,
+            **({"requires_prepared_source": True} if consumption.requires_prepared_source else {}),
         },
         "guidance": _plain(asdict(motion_guidance(spec))),
     }

@@ -221,7 +221,7 @@ def _timing(
     fps = facts.reported_fps if facts is not None else None
     used = unused = held = None
     speed: float | None = None
-    if known and output is not None:
+    if known and output is not None and not (consumption and consumption.requires_prepared_source):
         if frames is not None:
             used = min(output.frame_count, frames)
             unused = max(0, frames - output.frame_count)
@@ -364,9 +364,13 @@ def assess_motion_source(
 
     timing = _timing(driving, output, consumption)
     if timing is not None and driving is not None and output is not None:
-        if timing.driving_fps is not None and _reaches(
-            abs(timing.driving_fps - output.fps) / output.fps,
-            FPS_DIFFERENCE_ADVISORY_FRACTION,
+        if (
+            (not (consumption and consumption.requires_prepared_source))
+            and timing.driving_fps is not None
+            and _reaches(
+                abs(timing.driving_fps - output.fps) / output.fps,
+                FPS_DIFFERENCE_ADVISORY_FRACTION,
+            )
         ):
             if timing.consumption_known and timing.playback_speed_vs_original is not None:
                 message = (
