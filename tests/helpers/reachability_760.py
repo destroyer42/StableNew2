@@ -40,6 +40,7 @@ ACTIONABLE_CLASSES = frozenset(
 TOLERANCE_PX = 1
 SETTLE_SECONDS = 0.3  # a newly selected page reflows its wrapping rows after the coalescing delay
 MIN_VISIBLE_FRACTION = 0.5
+HIDDEN_RECHECK_SECONDS = 2.0  # a control still unmapped after this long is genuinely hidden
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,16 @@ def _pump(root: tk.Misc, seconds: float) -> None:
     while time.perf_counter() < end:
         root.update()
         time.sleep(0.01)
+
+
+def _wait_until_viewable(root: tk.Misc, widget: tk.Misc) -> None:
+    """Give a freshly selected page time to map: a canvas window maps on a redraw, which a slow host can delay."""
+
+    deadline = time.perf_counter() + HIDDEN_RECHECK_SECONDS
+    while not widget.winfo_viewable() and time.perf_counter() < deadline:
+        _pump(root, 0.1)
+        for frame in scroll_chain(widget):
+            frame.reveal(widget)
 
 
 def _unmapped_ancestor(widget: tk.Misc) -> str:
@@ -256,6 +267,8 @@ def probe(root: tk.Misc, container: tk.Misc, *, keyboard: bool = False) -> Probe
                 frame.reveal(widget)
             root.update_idletasks()
             root.update()
+        if not widget.winfo_viewable():
+            _wait_until_viewable(root, widget)
         if not widget.winfo_viewable():
             result.findings.append(
                 Finding(
