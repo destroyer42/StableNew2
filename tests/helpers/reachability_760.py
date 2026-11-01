@@ -108,7 +108,23 @@ def _unmapped_ancestor(widget: tk.Misc) -> str:
                 f"size={node.winfo_width()}x{node.winfo_height()} req={node.winfo_reqwidth()}x{node.winfo_reqheight()}"
             )
         node = getattr(node, "master", None)
-    return outermost
+    return outermost + _canvas_state(widget)
+
+
+def _canvas_state(widget: tk.Misc) -> str:
+    """Geometry of the nearest scroll canvas above ``widget``: a canvas window outside its view is unmapped."""
+
+    node: tk.Misc | None = widget
+    while node is not None:
+        if isinstance(node, tk.Canvas):
+            return (
+                f" canvas={node.winfo_width()}x{node.winfo_height()} mapped={node.winfo_ismapped()} "
+                f"yview={tuple(round(v, 3) for v in node.yview())} xview={tuple(round(v, 3) for v in node.xview())} "
+                f"scrollregion={node.cget('scrollregion')} items={node.find_all()} "
+                f"bbox={[node.bbox(item) for item in node.find_all()]}"
+            )
+        node = getattr(node, "master", None)
+    return ""
 
 
 def _label(widget: tk.Misc) -> str:
