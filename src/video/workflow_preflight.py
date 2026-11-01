@@ -28,6 +28,7 @@ from src.video.comfy_runtime_setup import (
     setup_notices,
 )
 from src.video.managed_comfy_runtime import ManagedComfyContract, assess_comfy_command
+from src.video.workflow_asset_integrity import configured_asset_issues
 from src.video.workflow_readiness import WorkflowResourceReadiness, required_launch_flags
 
 GATE_OK = "ok"
@@ -361,6 +362,12 @@ def _resource_gates(spec: Any, probes: PreflightProbes, state: str) -> tuple[Pre
     policy = readiness.policy_for(spec)
     if policy is None:
         return ()
+    if policy.get("qualification_status") == "not_qualified":
+        return (
+            PreflightGate(
+                "resource_qualification", "Hardware readiness", GATE_BLOCKED, str(policy["reason"])
+            ),
+        )
     stats: Mapping[str, Any] | None = None
     if state == ENDPOINT_HEALTHY:
         stats = probes.fetch_system_stats(probes.base_url)
@@ -417,6 +424,18 @@ def evaluate_workflow_preflight(spec: Any, probes: PreflightProbes) -> WorkflowP
     gates.append(_runtime_gate(probes, state))
     node_gate, file_gate, _info = _dependency_gates(spec, probes, state)
     gates.extend((node_gate, file_gate))
+    if spec.backend_defaults.get("asset_integrity"):
+        issues = configured_asset_issues(spec, probes.extras.get("process_config"))
+        gates.append(
+            PreflightGate(
+                "asset_integrity",
+                "Local model integrity",
+                GATE_BLOCKED if issues else GATE_OK,
+                "; ".join(issues)
+                if issues
+                else "All pinned model sizes and SHA-256 digests verified.",
+            )
+        )
     gates.extend(_resource_gates(spec, probes, state))
     return WorkflowPreflight(
         workflow_id=str(spec.workflow_id),
@@ -494,6 +513,7 @@ def default_preflight_probes(
         gpu_probe=_driver_gpu_memory_mib,
         managed_contract=managed_contract,
         launch=launch,
+        extras={"process_config": config},
     )
 
 

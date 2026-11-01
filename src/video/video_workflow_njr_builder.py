@@ -49,6 +49,11 @@ from src.video.workflow_frame_count import (
     frame_count_policy,
     parse_frame_count,
 )
+from src.video.workflow_input_integrity import (
+    requires_exact_motion,
+    verify_exact_motion,
+    workflow_identity,
+)
 from src.video.workflow_source_preparation import prepare_declared_workflow_source
 
 _DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
@@ -303,6 +308,8 @@ class VideoWorkflowNjrBuilder:
             depth_input = _normalize_depth_input(form_data)
             if "seed" in spec.declared_input_names:
                 parse_seed_input(form_data.get("seed"))
+                if requires_exact_motion(spec) and parse_seed_input(form_data.get("seed")) is None:
+                    raise ValueError("Choose a concrete seed before Preview for this controlled-motion workflow.")
             if frame_count_policy(spec) is not None:
                 parse_frame_count(spec, form_data.get("frame_count"))
             resolve_operator_controls(spec, form_data)
@@ -376,6 +383,8 @@ class VideoWorkflowNjrBuilder:
         if blocked:
             raise ValueError(blocked)
         prepared = form_data.get(PREPARED_MOTION_SOURCE_FIELD)
+        verify_exact_motion(spec, prepared, frame_count=form_data.get("frame_count"),
+                            original_path=driving_text)
         if prepared:
             # An optional, explicit preparation: every byte is re-verified now, and the derived
             # clip (what actually runs) is frozen together with the record of where it came from.
@@ -591,6 +600,14 @@ class VideoWorkflowNjrBuilder:
         source_preparation = dict(frozen.source_preparation) if frozen.source_preparation else None
         if source_preparation is not None:
             workflow_config["source_preparation"] = source_preparation
+        if requires_exact_motion(spec):
+            self.verify_unchanged(frozen)
+            workflow_config["reference_identity"] = {
+                "original_path": frozen.source_image_path, "original_sha256": frozen.source_sha256,
+                "prepared_path": frozen.prepared_source_path,
+                "prepared_sha256": frozen.prepared_source_sha256,
+            }
+            workflow_config["workflow_identity"] = workflow_identity(spec)
 
         config: dict[str, Any] = {
             "video_workflow": workflow_config,

@@ -300,6 +300,14 @@ class WorkflowBatchPanel(ttk.Frame):
         if session.invalidate_if_changed(form):
             self.refresh()
 
+    def preview_single_source(self, path: str) -> None:
+        """Freeze one reference through the same worker and plan used for multiple sources."""
+        if self._session.busy:
+            return
+        self._session.choose_files([path])
+        self.refresh()
+        self._on_preview()
+
     # ------------------------------------------------------------------ selection handlers
 
     def _on_select_images(self) -> None:

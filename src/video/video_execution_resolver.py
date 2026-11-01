@@ -76,6 +76,16 @@ def _clean(value: Any) -> str:
     return str(value or "").strip()
 
 
+def effective_workflow_identity(stage_config: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    """One normalized identity for admission and execution; neutral intent takes precedence."""
+    block = stage_config.get(VIDEO_EXECUTION_KEY)
+    block = block if isinstance(block, Mapping) else {}
+    return (
+        _clean(block.get("workflow_id") or stage_config.get("workflow_id")) or None,
+        _clean(block.get("workflow_version") or stage_config.get("workflow_version")) or None,
+    )
+
+
 class VideoExecutionResolver:
     def __init__(self, registry: VideoBackendRegistry) -> None:
         self._registry = registry
@@ -94,6 +104,7 @@ class VideoExecutionResolver:
         has_source_image: bool,
     ) -> VideoExecutionIntent:
         block = stage_config.get(VIDEO_EXECUTION_KEY)
+        workflow_id, workflow_version = effective_workflow_identity(stage_config)
         if isinstance(block, Mapping) and block:
             controls = {_clean(item) for item in block.get("controls") or () if _clean(item)}
             if has_source_image:
@@ -102,12 +113,8 @@ class VideoExecutionResolver:
                 backend_id=_clean(block.get("backend_id")) or None,
                 task=_clean(block.get("task")) or VIDEO_TASK_IMAGE_TO_VIDEO,
                 controls=tuple(sorted(controls)),
-                workflow_id=_clean(block.get("workflow_id") or stage_config.get("workflow_id"))
-                or None,
-                workflow_version=_clean(
-                    block.get("workflow_version") or stage_config.get("workflow_version")
-                )
-                or None,
+                workflow_id=workflow_id,
+                workflow_version=workflow_version,
                 legacy=False,
                 experimental_opt_in=block.get("experimental_opt_in") is True,
             )
@@ -128,8 +135,8 @@ class VideoExecutionResolver:
             backend_id=None,
             task=task,
             controls=tuple(sorted(controls)),
-            workflow_id=_clean(stage_config.get("workflow_id")) or None,
-            workflow_version=_clean(stage_config.get("workflow_version")) or None,
+            workflow_id=workflow_id,
+            workflow_version=workflow_version,
             legacy=True,
         )
 
@@ -215,4 +222,5 @@ __all__ = [
     "VideoContractError",
     "VideoExecutionIntent",
     "VideoExecutionResolver",
+    "effective_workflow_identity",
 ]

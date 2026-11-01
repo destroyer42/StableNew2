@@ -53,11 +53,13 @@ def test_list_workflow_specs_offers_the_approved_ti2v_and_the_experimental_anima
     # TI2V-5B 1.2.0 is approved (PR-VID-GOV-316) and offered beside the two experimental
     # Wan-Animate-2 modes.
     assert [spec["workflow_id"] for spec in specs] == [
+        "wan22_fun_control_5b_canny_i2v_v1",
         "wan22_ti2v_5b_i2v_v1",
         "wan_animate2_drive_i2v_v1",
         "wan_animate2_prompt_i2v_v1",
     ]
     assert {spec["workflow_id"]: spec["experimental"] for spec in specs} == {
+        "wan22_fun_control_5b_canny_i2v_v1": True,
         "wan22_ti2v_5b_i2v_v1": False,
         "wan_animate2_drive_i2v_v1": True,
         "wan_animate2_prompt_i2v_v1": True,

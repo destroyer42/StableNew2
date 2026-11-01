@@ -148,6 +148,11 @@ def form_visibility(spec: Any) -> dict[str, bool]:
         "pose_video": CONTROL_POSE_VIDEO in accepted and "pose_video" in declared,
         "negative_prompt": CONTROL_NEGATIVE_PROMPT in accepted and "negative_prompt" in declared,
         "experimental": bool(getattr(spec, "is_experimental", False)),
+        "frozen_preview": bool(
+            ((getattr(spec, "backend_defaults", None) or {}).get("motion_source_policy") or {}).get(
+                "exact_prepared_frames"
+            )
+        ),
     }
 
 

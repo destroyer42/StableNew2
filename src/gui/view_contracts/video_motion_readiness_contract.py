@@ -345,6 +345,7 @@ class MotionReadinessSession:
             reason=str(raw.get("reason") or ""),
             rule=str(raw.get("rule") or ""),
             runtime_revision=str(raw.get("runtime_revision") or ""),
+            requires_prepared_source=bool(raw.get("requires_prepared_source")),
         )
 
     def assessment(self) -> MotionSourceAssessment:

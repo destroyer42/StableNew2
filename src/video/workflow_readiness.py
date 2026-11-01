@@ -130,6 +130,15 @@ class WorkflowResourceReadiness:
         policy = self.policy_for(spec)
         if policy is None:
             return ResourceReadinessResult(ready=True, observations={"policy": None})
+        if policy.get("qualification_status") == "not_qualified":
+            return ResourceReadinessResult(
+                ready=False,
+                blocking=(str(policy["reason"]),),
+                observations={
+                    "policy": policy.get("policy"),
+                    "qualification_status": "not_qualified",
+                },
+            )
         blocking: list[str] = []
         advisories: list[str] = []
         observations: dict[str, Any] = {"policy": policy.get("policy")}

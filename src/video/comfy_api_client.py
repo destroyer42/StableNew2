@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import requests
 
@@ -10,6 +14,31 @@ from src.api.http_transport import (
     HttpTransportError,
     RequestPolicy,
 )
+
+MAX_VERIFIED_UPLOAD_BYTES = 256 * 1024 * 1024
+
+
+@contextmanager
+def _upload_stream(path: Path, expected_sha256: str | None) -> Iterator[IO[bytes]]:
+    with path.open("rb") as source:
+        if expected_sha256 is None:
+            yield source
+            return
+        # Send the exact bytes hashed here, even if the operator replaces the original during
+        # upload. Spilling to an automatically deleted private temp file bounds resident RAM.
+        with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as frozen:
+            digest = hashlib.sha256()
+            total = 0
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                total += len(chunk)
+                if total > MAX_VERIFIED_UPLOAD_BYTES:
+                    raise ValueError("Verified workflow input exceeds the 256 MiB upload limit")
+                digest.update(chunk)
+                frozen.write(chunk)
+            if digest.hexdigest() != expected_sha256:
+                raise ValueError(f"Workflow input SHA-256 changed before upload: {path}")
+            frozen.seek(0)
+            yield frozen
 
 
 class ComfyApiClient:
@@ -95,9 +124,10 @@ class ComfyApiClient:
         image_type: str = "input",
         overwrite: bool = True,
         timeout: float = 30.0,
+        expected_sha256: str | None = None,
     ) -> dict[str, Any]:
         path = Path(image_path).expanduser()
-        with path.open("rb") as handle:
+        with _upload_stream(path, expected_sha256) as handle:
             return self._transport.request_json(
                 "POST",
                 "/upload/image",
