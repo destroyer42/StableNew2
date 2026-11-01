@@ -34,17 +34,17 @@ class FlowRow(ttk.Frame):
         super().__init__(master, **kwargs)
         self._gap = int(gap)
         self._row_gap = int(row_gap)
-        self._items: list[tk.Misc] = []
+        self._items: list[tk.Widget] = []
         self._hidden: set[str] = set()
         self._signature: tuple[Any, ...] | None = None
-        self._rows: list[list[tk.Misc]] = []
+        self._rows: list[list[tk.Widget]] = []
         self._job: str | None = None
         self.bind("<Configure>", self._on_self_configure, add="+")
         self.bind("<Destroy>", self._on_destroy, add="+")
 
     # -- public API -------------------------------------------------------------------------------------------------
 
-    def add(self, widget: tk.Misc, *, shown: bool = True) -> tk.Misc:
+    def add(self, widget: tk.Widget, *, shown: bool = True) -> tk.Widget:
         """Append ``widget`` (a child of this row) to the flow order."""
 
         if widget not in self._items:
@@ -58,7 +58,7 @@ class FlowRow(ttk.Frame):
         self._schedule()
         return widget
 
-    def set_shown(self, widget: tk.Misc, shown: bool) -> None:
+    def set_shown(self, widget: tk.Widget, shown: bool) -> None:
         """Show or hide one child without disturbing the order of the others."""
 
         key = str(widget)
@@ -71,7 +71,7 @@ class FlowRow(ttk.Frame):
         self._signature = None
         self._schedule()
 
-    def rows(self) -> list[list[tk.Misc]]:
+    def rows(self) -> list[list[tk.Widget]]:
         """The rows laid out by the last reflow (shown children only, in order)."""
 
         return [list(row) for row in self._rows]
