@@ -19,6 +19,7 @@ from src.gui.tooltip import attach_tooltip
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.batch_operations_contract import BatchOperationsSession, BatchViewHooks
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
+from src.gui.widgets.flow_row_v2 import FlowRow
 from src.queue.batch_membership import BatchKey
 from src.queue.failure_triage import CATEGORY_LABELS
 from src.queue.job_model import JobStatus
@@ -116,18 +117,24 @@ class BatchOperationsPanelV2(ttk.Frame):
         self.summary_label = ttk.Label(self, textvariable=self.summary_var, justify="left", wraplength=360)
         self.summary_label.grid(row=2, column=0, sticky="ew", pady=(6, 2))
 
-        filters = ttk.Frame(self)
+        # GUI-COMPLETE-760: the filters and actions wrap instead of being cut off on a narrow column.
+        filters = FlowRow(self, gap=12)
         filters.grid(row=3, column=0, sticky="ew", pady=(2, 2))
-        ttk.Label(filters, text="Status:").grid(row=0, column=0, padx=(0, 4))
+        self._filters_row = filters
+        status_pair = ttk.Frame(filters)
+        ttk.Label(status_pair, text="Status:").pack(side="left", padx=(0, 4))
         self.status_filter = ttk.Combobox(
-            filters, state="readonly", width=12, values=[ALL_STATUSES, *_STATUS_CHOICES])
+            status_pair, state="readonly", width=12, values=[ALL_STATUSES, *_STATUS_CHOICES])
         self.status_filter.set(ALL_STATUSES)
-        self.status_filter.grid(row=0, column=1, padx=(0, 12))
-        ttk.Label(filters, text="Failure:").grid(row=0, column=2, padx=(0, 4))
+        self.status_filter.pack(side="left")
+        filters.add(status_pair)
+        category_pair = ttk.Frame(filters)
+        ttk.Label(category_pair, text="Failure:").pack(side="left", padx=(0, 4))
         self.category_filter = ttk.Combobox(
-            filters, state="readonly", width=24, values=[ALL_CATEGORIES, *_CATEGORY_CHOICES])
+            category_pair, state="readonly", width=24, values=[ALL_CATEGORIES, *_CATEGORY_CHOICES])
         self.category_filter.set(ALL_CATEGORIES)
-        self.category_filter.grid(row=0, column=3)
+        self.category_filter.pack(side="left")
+        filters.add(category_pair)
         for box in (self.status_filter, self.category_filter):
             box.bind("<<ComboboxSelected>>", self._on_filter_changed, add="+")
 
@@ -143,8 +150,9 @@ class BatchOperationsPanelV2(ttk.Frame):
         self.detail_text.grid(row=0, column=0, sticky="nsew")
         scroll.grid(row=0, column=1, sticky="ns")
 
-        actions = ttk.Frame(self)
+        actions = FlowRow(self, gap=6)
         actions.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+        self._actions_row = actions
         specs = (
             ("cancel_button", "Cancel Remaining", self.cancel_remaining),
             ("retry_button", "Retry Selected Failed", self.retry_selected),
@@ -152,9 +160,9 @@ class BatchOperationsPanelV2(ttk.Frame):
             ("review_button", "Open in Review", lambda: self._open("review")),
             ("clips_button", "Movie Clips", lambda: self._open("movie_clips")),
         )
-        for index, (name, text, command) in enumerate(specs):
+        for name, text, command in specs:
             button = ttk.Button(actions, text=text, command=command, state="disabled")
-            button.grid(row=index // 3, column=index % 3, padx=(0, 6), pady=(0, 4), sticky="w")
+            actions.add(button)
             attach_tooltip(button, text)
             setattr(self, name, button)
         self.hint_var = tk.StringVar()

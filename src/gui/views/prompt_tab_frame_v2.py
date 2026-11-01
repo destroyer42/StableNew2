@@ -43,6 +43,7 @@ from src.gui.view_contracts.prompt_editor_contract import (
 )
 from src.gui.widgets.controlnet_units_panel import ControlNetUnitsPanel
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
+from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.gui.widgets.openpose_picker_panel import OpenPosePickerPanel
@@ -318,11 +319,12 @@ class PromptTabFrame(ttk.Frame):
             side="left"
         )
 
-        # Pack list
+        # Pack list (GUI-COMPLETE-760: few requested rows, expanding with the column, so the slot actions below
+        # stay in view when the column is short; a tall column still shows more rows of both lists)
         self.pack_listbox = tk.Listbox(
             self.left_frame,
             exportselection=False,
-            height=8,
+            height=3,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
             selectbackground=TOKENS.colors.accent_primary,
@@ -330,7 +332,7 @@ class PromptTabFrame(ttk.Frame):
             highlightthickness=0,
             borderwidth=0,
         )
-        self.pack_listbox.pack(fill="both", expand=False, pady=(0, 8))
+        self.pack_listbox.pack(fill="both", expand=True, pady=(0, 8))
         self.pack_listbox.bind("<Double-Button-1>", lambda e: self._on_load_selected_pack())
         enable_mousewheel(self.pack_listbox)
         self._refresh_pack_list()
@@ -344,7 +346,7 @@ class PromptTabFrame(ttk.Frame):
         self.slot_list = tk.Listbox(
             self.left_frame,
             exportselection=False,
-            height=10,
+            height=4,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
             selectbackground=TOKENS.colors.accent_primary,
@@ -359,36 +361,38 @@ class PromptTabFrame(ttk.Frame):
         self.slot_list.pack(fill="both", expand=True, pady=(2, 4))
         enable_mousewheel(self.slot_list)
 
-        # Slot management buttons
-        slot_mgmt_frame = ttk.Frame(self.left_frame)
+        # GUI-COMPLETE-760: the list asks for few rows (it still expands to fill a tall column) so a short or large-text
+        # column keeps Add Slot / Copy / Delete in view; the actions wrap when the column is narrow.
+        slot_mgmt_frame = FlowRow(self.left_frame)
         slot_mgmt_frame.pack(fill="x", pady=(0, 4))
-        ttk.Button(slot_mgmt_frame, text="Add Slot", command=self._on_add_slot).pack(
-            side="left", padx=(0, 2), expand=True, fill="x"
-        )
-        ttk.Button(slot_mgmt_frame, text="Copy", command=self._on_copy_slot).pack(
-            side="left", padx=(0, 2), expand=True, fill="x"
-        )
-        ttk.Button(slot_mgmt_frame, text="Delete", command=self._on_delete_slot).pack(
-            side="left", expand=True, fill="x"
-        )
+        self._slot_actions_row = slot_mgmt_frame
+        for text, command in (
+            ("Add Slot", self._on_add_slot),
+            ("Copy", self._on_copy_slot),
+            ("Delete", self._on_delete_slot),
+        ):
+            slot_mgmt_frame.add(ttk.Button(slot_mgmt_frame, text=text, command=command))
+
         attach_tooltip(self.slot_list, "Select a prompt slot to edit or apply.")
 
     # Center column -----------------------------------------------------
     def _build_center_panel(self) -> None:
         # Header frame
-        header_frame = ttk.Frame(self.center_frame)
+        # GUI-COMPLETE-760: wrapping header, so the Adapt / Suggest actions stay reachable at large text sizes.
+        header_frame = FlowRow(self.center_frame, gap=8)
         header_frame.pack(fill="x", pady=(0, 4))
+        self._header_row = header_frame
         self.pack_name_label = ttk.Label(header_frame, text="Editor", style=PAGE_BODY_LABEL_STYLE)
-        self.pack_name_label.pack(side="left")
-        self.target_banner_label = ttk.Label(
-            header_frame, textvariable=self.target_banner_var, style=PAGE_BODY_LABEL_STYLE
-        )
-        self.target_banner_label.pack(side="right")
+        header_frame.add(self.pack_name_label)
         self.adapt_button = ttk.Button(
             header_frame, text="Adapt for Target…", command=self._open_adaptation_preview, state="disabled"
         )
-        self.adapt_button.pack(side="right", padx=(0, 8))
+        header_frame.add(self.adapt_button)
         self.ai_suggestions = PromptAiSuggestions(self, header_frame)
+        self.target_banner_label = ttk.Label(
+            header_frame, textvariable=self.target_banner_var, style=PAGE_BODY_LABEL_STYLE
+        )
+        header_frame.add(self.target_banner_label)
         attach_tooltip(self.adapt_button, "Preview how this prompt would be adapted for the selected model. Nothing is changed.")
         self.target_detail_label = ttk.Label(
             self.center_frame, textvariable=self.target_detail_var, wraplength=640, justify="left"

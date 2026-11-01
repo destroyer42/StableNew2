@@ -45,7 +45,7 @@ class PromptAiSuggestions:
         self._review_cancelled = False
         self._poll_id: str | None = None
         self.button = ttk.Button(header, text="Suggest…", command=self.open, state="disabled")
-        self.button.pack(side="right", padx=(0, 8))
+        header.add(self.button)
         attach_tooltip(
             self.button,
             "Request a local AI suggestion, then review and explicitly accept into the editing buffer.",

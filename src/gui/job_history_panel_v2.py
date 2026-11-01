@@ -28,6 +28,7 @@ from src.gui.view_contracts.history_sequence_contract import (
     run_sequence_action,
 )
 from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
+from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui.widgets.media_inspector import MediaInspector as ThumbnailWidget
 from src.gui.widgets.media_inspector import MediaInspector as VideoPreviewWidget
 from src.pipeline.artifact_contract import extract_artifact_paths
@@ -106,68 +107,68 @@ class JobHistoryPanelV2(ttk.Frame):
         header_style = theme_mod.STATUS_STRONG_LABEL_STYLE
         ttk.Label(self, text="Job History", style=header_style).pack(anchor=tk.W, pady=(0, 4))
 
-        action_bar = ttk.Frame(self, style=style_name)
+        # GUI-COMPLETE-760: the actions wrap onto further rows instead of being cut off by the column width.
+        action_bar = FlowRow(self, style=style_name)
         action_bar.pack(fill=tk.X, pady=(0, 4))
-        self.refresh_btn = ttk.Button(action_bar, text="Refresh History", command=self._on_refresh)
-        self.refresh_btn.pack(side=tk.RIGHT, padx=(0, 4))
+        self._action_bar = action_bar
         self.open_btn = ttk.Button(
             action_bar,
             text="Open Output Folder",
             command=self._on_open_folder,
             state=tk.DISABLED,
         )
-        self.open_btn.pack(side=tk.LEFT)
+        action_bar.add(self.open_btn)
         self.replay_btn = ttk.Button(
             action_bar,
             text="Replay Job",
             command=self._on_replay_job,
             state=tk.DISABLED,
         )
-        self.replay_btn.pack(side=tk.LEFT, padx=(4, 0))
+        action_bar.add(self.replay_btn)
         self.iterate_btn = ttk.Button(
             action_bar,
             text="Iterate...",
             command=self._on_iterate,
             state=tk.DISABLED,
         )
-        self.iterate_btn.pack(side=tk.LEFT, padx=(4, 0))
+        action_bar.add(self.iterate_btn)
         self.svd_btn = ttk.Button(
             action_bar,
             text="Animate with SVD",
             command=self._on_send_to_svd,
             state=tk.DISABLED,
         )
-        self.svd_btn.pack(side=tk.LEFT, padx=(4, 0))
+        action_bar.add(self.svd_btn)
         self.video_workflow_btn = ttk.Button(
             action_bar,
             text="Make Video",
             command=self._on_send_to_video_workflow,
             state=tk.DISABLED,
         )
-        self.video_workflow_btn.pack(side=tk.LEFT, padx=(4, 0))
+        action_bar.add(self.video_workflow_btn)
         self.movie_clips_btn = ttk.Button(
             action_bar,
             text="Movie Clips",
             command=self._on_send_to_movie_clips,
             state=tk.DISABLED,
         )
-        self.movie_clips_btn.pack(side=tk.LEFT, padx=(4, 0))
+        action_bar.add(self.movie_clips_btn)
         self.explain_btn = ttk.Button(
             action_bar,
             text="Explain Job",
             command=self._on_explain_job,
             state=tk.DISABLED,
         )
-        self.explain_btn.pack(side=tk.LEFT, padx=(4, 0))
+        action_bar.add(self.explain_btn)
         self.review_btn = ttk.Button(
             action_bar,
             text="Review Experiment",
             command=self._on_review_video_experiment,
             state=tk.DISABLED,
         )
-        self.review_btn.pack(side=tk.LEFT, padx=(4, 0))
+        action_bar.add(self.review_btn)
         self.browse_btn = ttk.Button(action_bar, text="Browse All...", command=self._on_browse_all)
-        self.browse_btn.pack(side=tk.LEFT, padx=(4, 0))
+        action_bar.add(self.browse_btn)
         # PR-VID-SEQ-331A: shown only while a multi-segment sequence job is selected.
         self.resume_sequence_btn = ttk.Button(
             action_bar,
@@ -181,6 +182,10 @@ class JobHistoryPanelV2(ttk.Frame):
             command=lambda: self._on_sequence_action(ACTION_REPLAY),
             state=tk.DISABLED,
         )
+        action_bar.add(self.resume_sequence_btn, shown=False)
+        action_bar.add(self.replay_sequence_btn, shown=False)
+        self.refresh_btn = ttk.Button(action_bar, text="Refresh History", command=self._on_refresh)
+        action_bar.add(self.refresh_btn)
         self._browser_window: tk.Toplevel | None = None
 
         self.show_artifact_var = tk.BooleanVar(value=False)
@@ -720,10 +725,9 @@ class JobHistoryPanelV2(ttk.Frame):
             (self.resume_sequence_btn, actions.sequence_resume),
             (self.replay_sequence_btn, actions.sequence_replay),
         ):
-            button.pack_forget()
+            self._action_bar.set_shown(button, info is not None)  # order stays Resume, then Replay
             if info is None:
                 continue
-            button.pack(side=tk.LEFT, padx=(4, 0))  # re-packed in order: Resume, then Replay
             button.configure(state=tk.NORMAL if allowed else tk.DISABLED)
 
     def _pick_sequence_ledger(self) -> str | None:

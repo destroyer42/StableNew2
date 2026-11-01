@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-644 of 799 modules have a docstring.
+645 of 800 modules have a docstring.
 
 ## src/
 
@@ -437,6 +437,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `disclosure_section_v2.py`: Keyboard-accessible collapsible section (PR-GUI-110)
 - `embedding_picker_panel.py`: Embedding picker panel with per-embedding weight controls
 - `expander_v2.py`: Unified expander button used by Pipeline Tab cards
+- `flow_row_v2.py`: Wrapping row of controls (GUI-COMPLETE-760)
 - `image_thumbnail.py`: Reusable image thumbnail widget for Tkinter
 - `lora_browser_dialog.py`: Paged local LoRA browser
 - `lora_keyword_dialog.py`: Dialog for displaying and copying LoRA keywords

@@ -1,0 +1,2017 @@
+{
+ "package": "GUI-COMPLETE-760",
+ "method": "tests/helpers/reachability_760.py on real Tk, fake controller, app startup geometry restored after setting the requested size",
+ "dpi_label": "tk scaling 1.333 = actual Windows 100% on this host; 2.0 = SIMULATED 150% (Tk scaling raised, not a Windows DPI change)",
+ "before": {
+  "1366x768-default": {
+   "geometry_requested": "1342x672",
+   "client_px": [
+    1342,
+    680
+   ],
+   "requested_size_realized": false,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "blocking:hidden": 8
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "blocking:focus_failed": 8
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "blocking:hidden": 8,
+        "degraded:clipped_x": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "blocking:focus_failed": 8,
+        "degraded:clipped_x": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "hidden TCombobox 'PY_VAR104' [normal]": "blocking",
+      "hidden TCombobox 'PY_VAR105' [normal]": "blocking",
+      "hidden TButton 'Animate with SVD' [disabled]": "blocking",
+      "hidden TButton 'Make Video' [disabled]": "blocking",
+      "hidden TButton 'Movie Clips' [disabled]": "blocking",
+      "hidden TButton 'Explain Job' [disabled]": "blocking",
+      "hidden TButton 'Review Experiment' [disabled]": "blocking",
+      "hidden TButton 'Browse All...' [normal]": "blocking",
+      "clipped_x TCombobox '!combobox2' [normal]": "degraded"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "1366x768-min": {
+   "geometry_requested": "1280x672",
+   "client_px": [
+    1280,
+    680
+   ],
+   "requested_size_realized": false,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:hidden": 8
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:focus_failed": 8
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 11,
+        "blocking:hidden": 8
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 11,
+        "blocking:focus_failed": 8
+       }
+      }
+     },
+     "scroll_findings": {
+      "clipped_x TCombobox 'PY_VAR87' [normal]": "degraded",
+      "clipped_x TButton 'Details' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR88' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR90' [normal]": "degraded",
+      "clipped_x TSpinbox 'PY_VAR92' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR98' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR94' [normal]": "degraded",
+      "clipped_x TEntry 'PY_VAR97' [normal]": "degraded",
+      "clipped_x TButton 'Check readiness' [normal]": "degraded",
+      "hidden TCombobox 'PY_VAR104' [normal]": "blocking",
+      "hidden TCombobox 'PY_VAR105' [normal]": "blocking",
+      "hidden TButton 'Animate with SVD' [disabled]": "blocking",
+      "hidden TButton 'Make Video' [disabled]": "blocking",
+      "hidden TButton 'Movie Clips' [disabled]": "blocking",
+      "hidden TButton 'Explain Job' [disabled]": "blocking",
+      "hidden TButton 'Review Experiment' [disabled]": "blocking",
+      "hidden TButton 'Browse All...' [normal]": "blocking",
+      "clipped_x TCombobox '!combobox2' [normal]": "degraded",
+      "clipped_x TButton 'Open Output Folder' [disabled]": "degraded"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "1366x768-sim150": {
+   "geometry_requested": "1342x672",
+   "client_px": [
+    1342,
+    680
+   ],
+   "requested_size_realized": false,
+   "tk_scaling": 2.002,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {
+        "blocking:hidden": 5,
+        "blocking:clipped_x": 2
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {
+        "blocking:focus_failed": 5,
+        "blocking:clipped_x": 2
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {
+        "blocking:hidden": 5,
+        "blocking:clipped_x": 2
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {
+        "blocking:focus_failed": 5,
+        "blocking:clipped_x": 2
+       }
+      }
+     },
+     "scroll_findings": {
+      "hidden TButton 'Add Slot' [normal]": "blocking",
+      "hidden TButton 'Copy' [normal]": "blocking",
+      "hidden TButton 'Delete' [normal]": "blocking",
+      "hidden TButton 'Adapt for Target\u2026' [disabled]": "blocking",
+      "hidden TButton 'Suggest\u2026' [disabled]": "blocking",
+      "clipped_x TSpinbox 'PY_VAR4017' [disabled]": "blocking",
+      "clipped_x TCombobox 'PY_VAR4019' [disabled]": "blocking"
+     }
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 11,
+        "blocking:hidden": 9
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 11,
+        "blocking:focus_failed": 9
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 11,
+        "blocking:hidden": 9,
+        "blocking:clipped_x": 2
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 11,
+        "blocking:focus_failed": 9,
+        "blocking:clipped_x": 2
+       }
+      }
+     },
+     "scroll_findings": {
+      "clipped_x TCombobox 'PY_VAR4071' [normal]": "degraded",
+      "clipped_x TButton 'Details' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR4072' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR4074' [normal]": "degraded",
+      "clipped_x TSpinbox 'PY_VAR4076' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR4082' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR4078' [normal]": "degraded",
+      "clipped_x TButton 'Rand' [normal]": "degraded",
+      "clipped_x TEntry 'PY_VAR4081' [normal]": "degraded",
+      "clipped_x TButton 'Check readiness' [normal]": "degraded",
+      "hidden TCombobox 'PY_VAR4088' [normal]": "blocking",
+      "hidden TCombobox 'PY_VAR4089' [normal]": "blocking",
+      "hidden TButton 'Iterate...' [disabled]": "blocking",
+      "hidden TButton 'Animate with SVD' [disabled]": "blocking",
+      "hidden TButton 'Make Video' [disabled]": "blocking",
+      "hidden TButton 'Movie Clips' [disabled]": "blocking",
+      "hidden TButton 'Explain Job' [disabled]": "blocking",
+      "hidden TButton 'Review Experiment' [disabled]": "blocking",
+      "hidden TButton 'Browse All...' [normal]": "blocking",
+      "clipped_x TCombobox '!combobox2' [normal]": "blocking",
+      "clipped_x TButton 'Open Output Folder' [disabled]": "blocking"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1,
+        "blocking:hidden": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1,
+        "blocking:focus_failed": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1,
+        "blocking:hidden": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1,
+        "blocking:focus_failed": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded",
+      "hidden TButton '?' [normal]": "blocking"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {
+        "degraded:tall": 2
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {
+        "degraded:tall": 2
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    }
+   }
+  },
+  "1920x1080-default": {
+   "geometry_requested": "1896x984",
+   "client_px": [
+    1896,
+    984
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:hidden": 5
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:focus_failed": 5
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:hidden": 5
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:focus_failed": 5
+       }
+      }
+     },
+     "scroll_findings": {
+      "clipped_x TCombobox 'PY_VAR751' [normal]": "degraded",
+      "clipped_x TButton 'Details' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR752' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR754' [normal]": "degraded",
+      "clipped_x TSpinbox 'PY_VAR756' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR762' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR758' [normal]": "degraded",
+      "clipped_x TEntry 'PY_VAR761' [normal]": "degraded",
+      "clipped_x TButton 'Check readiness' [normal]": "degraded",
+      "hidden TCombobox 'PY_VAR769' [normal]": "blocking",
+      "hidden TButton 'Movie Clips' [disabled]": "blocking",
+      "hidden TButton 'Explain Job' [disabled]": "blocking",
+      "hidden TButton 'Review Experiment' [disabled]": "blocking",
+      "hidden TButton 'Browse All...' [normal]": "blocking"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "1920x1080-min": {
+   "geometry_requested": "1280x680",
+   "client_px": [
+    1280,
+    680
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:hidden": 8
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:focus_failed": 8
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 11,
+        "blocking:hidden": 8
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 11,
+        "blocking:focus_failed": 8
+       }
+      }
+     },
+     "scroll_findings": {
+      "clipped_x TCombobox 'PY_VAR1415' [normal]": "degraded",
+      "clipped_x TButton 'Details' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR1416' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR1418' [normal]": "degraded",
+      "clipped_x TSpinbox 'PY_VAR1420' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR1426' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR1422' [normal]": "degraded",
+      "clipped_x TEntry 'PY_VAR1425' [normal]": "degraded",
+      "clipped_x TButton 'Check readiness' [normal]": "degraded",
+      "hidden TCombobox 'PY_VAR1432' [normal]": "blocking",
+      "hidden TCombobox 'PY_VAR1433' [normal]": "blocking",
+      "hidden TButton 'Animate with SVD' [disabled]": "blocking",
+      "hidden TButton 'Make Video' [disabled]": "blocking",
+      "hidden TButton 'Movie Clips' [disabled]": "blocking",
+      "hidden TButton 'Explain Job' [disabled]": "blocking",
+      "hidden TButton 'Review Experiment' [disabled]": "blocking",
+      "hidden TButton 'Browse All...' [normal]": "blocking",
+      "clipped_x TCombobox '!combobox2' [normal]": "degraded",
+      "clipped_x TButton 'Open Output Folder' [disabled]": "degraded"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "1920x1080-sim150": {
+   "geometry_requested": "1896x984",
+   "client_px": [
+    1896,
+    984
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 2.002,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "blocking:hidden": 8
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "blocking:focus_failed": 8
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "blocking:hidden": 8,
+        "degraded:clipped_x": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "blocking:focus_failed": 8,
+        "degraded:clipped_x": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "hidden TCombobox 'PY_VAR3424' [normal]": "blocking",
+      "hidden TCombobox 'PY_VAR3425' [normal]": "blocking",
+      "hidden TButton 'Animate with SVD' [disabled]": "blocking",
+      "hidden TButton 'Make Video' [disabled]": "blocking",
+      "hidden TButton 'Movie Clips' [disabled]": "blocking",
+      "hidden TButton 'Explain Job' [disabled]": "blocking",
+      "hidden TButton 'Review Experiment' [disabled]": "blocking",
+      "hidden TButton 'Browse All...' [normal]": "blocking",
+      "clipped_x TCombobox '!combobox2' [normal]": "degraded"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "2560x1440-default": {
+   "geometry_requested": "1900x1000",
+   "client_px": [
+    1900,
+    1000
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:hidden": 5
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:focus_failed": 5
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:hidden": 5
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 9,
+        "blocking:focus_failed": 5
+       }
+      }
+     },
+     "scroll_findings": {
+      "clipped_x TCombobox 'PY_VAR2079' [normal]": "degraded",
+      "clipped_x TButton 'Details' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR2080' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR2082' [normal]": "degraded",
+      "clipped_x TSpinbox 'PY_VAR2084' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR2090' [normal]": "degraded",
+      "clipped_x TCombobox 'PY_VAR2086' [normal]": "degraded",
+      "clipped_x TEntry 'PY_VAR2089' [normal]": "degraded",
+      "clipped_x TButton 'Check readiness' [normal]": "degraded",
+      "hidden TCombobox 'PY_VAR2097' [normal]": "blocking",
+      "hidden TButton 'Movie Clips' [disabled]": "blocking",
+      "hidden TButton 'Explain Job' [disabled]": "blocking",
+      "hidden TButton 'Review Experiment' [disabled]": "blocking",
+      "hidden TButton 'Browse All...' [normal]": "blocking"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "2560x1440-maximized": {
+   "geometry_requested": "zoomed",
+   "client_px": [
+    2560,
+    1369
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "blocking:hidden": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {
+        "blocking:focus_failed": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "blocking:hidden": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "blocking:focus_failed": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "hidden TButton 'Browse All...' [normal]": "blocking"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  }
+ },
+ "after": {
+  "1366x768-default": {
+   "geometry_requested": "1342x672",
+   "client_px": [
+    1342,
+    680
+   ],
+   "requested_size_realized": false,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "1366x768-min": {
+   "geometry_requested": "1280x672",
+   "client_px": [
+    1280,
+    680
+   ],
+   "requested_size_realized": false,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "1366x768-sim150": {
+   "geometry_requested": "1342x672",
+   "client_px": [
+    1342,
+    680
+   ],
+   "requested_size_realized": false,
+   "tk_scaling": 2.002,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {
+        "degraded:clipped_y": 1,
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {
+        "degraded:clipped_y": 1,
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {
+        "degraded:clipped_y": 1,
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {
+        "degraded:clipped_y": 1,
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "clipped_y Text '!text2' [normal]": "degraded",
+      "tall Text '!text' [disabled]": "degraded"
+     }
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {
+        "degraded:clipped_x": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "clipped_x TCombobox '!combobox' [normal]": "degraded"
+     }
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {
+        "degraded:tall": 2
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {
+        "degraded:tall": 2
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    }
+   }
+  },
+  "1920x1080-default": {
+   "geometry_requested": "1896x984",
+   "client_px": [
+    1896,
+    984
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "1920x1080-min": {
+   "geometry_requested": "1280x680",
+   "client_px": [
+    1280,
+    680
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "1920x1080-sim150": {
+   "geometry_requested": "1896x984",
+   "client_px": [
+    1896,
+    984
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 2.002,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "2560x1440-default": {
+   "geometry_requested": "1900x1000",
+   "client_px": [
+    1900,
+    1000
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {
+        "degraded:tall": 1
+       }
+      }
+     },
+     "scroll_findings": {
+      "tall Listbox '!listbox' [normal]": "degraded"
+     }
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  },
+  "2560x1440-maximized": {
+   "geometry_requested": "zoomed",
+   "client_px": [
+    2560,
+    1369
+   ],
+   "requested_size_realized": true,
+   "tk_scaling": 1.334,
+   "screen_px": [
+    2560,
+    1440
+   ],
+   "tabs": {
+    "prompt": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 216,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "pipeline": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 294,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 336,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "review": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 49,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 49,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 49,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 49,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    },
+    "photo_optimize": {
+     "modes": {
+      "scroll-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "keyboard-collapsed": {
+       "controls_checked": 157,
+       "findings": {}
+      },
+      "scroll-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      },
+      "keyboard-expanded": {
+       "controls_checked": 171,
+       "findings": {}
+      }
+     },
+     "scroll_findings": {}
+    }
+   }
+  }
+ },
+ "blocking_unique_widgets_by_tab": {
+  "before": {
+   "prompt": 7,
+   "pipeline": 54,
+   "review": 1,
+   "photo_optimize": 0
+  },
+  "after": {
+   "prompt": 0,
+   "pipeline": 0,
+   "review": 0,
+   "photo_optimize": 0
+  }
+ }
+}
