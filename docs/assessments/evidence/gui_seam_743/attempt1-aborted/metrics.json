@@ -1,0 +1,1311 @@
+{
+  "identity": {
+    "experiment": "GUI-SEAM-743",
+    "phase": "primary",
+    "started_iso": "2026-10-31T22:01:36-0400",
+    "source_sha": "e159963bcff71ceb3e03a0cd374b147dcb7caede",
+    "worktree_clean": true,
+    "windows": "Windows-11-10.0.26100-SP0",
+    "parent": {
+      "pid": 22728,
+      "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+      "executable": "C:\\Users\\rob\\projects\\StableNew-main\\.venv\\Scripts\\python.exe",
+      "prefix": "C:\\Users\\rob\\projects\\StableNew-main\\.venv",
+      "base_prefix": "C:\\Users\\rob\\Python314",
+      "platform": "Windows-11-10.0.26100-SP0",
+      "machine": "AMD64",
+      "gil_enabled": true,
+      "gil_disabled_build": 0
+    },
+    "samples": 5,
+    "seed": 743,
+    "fingerprint": {
+      "src/gui_v2/design_values.py": "bfd9f0dbc1fa4b91ec73465fe31acb86d4326d10aa6daa7d80f0d54407590eb6",
+      "src/gui/ui_tokens.py": "a07c3f089d80c9030e0489e1df2505cde6db624794d33ecacddf9564bd038c14",
+      "src/gui_v2/history_browser_model.py": "400667841bfe7952af8e5ec8a0e5955348aeace7ee44c2c0cf879b3c7bee04d7",
+      "src/gui/view_contracts/task_navigation_contract.py": "9de65b2e9af47cfa2faa2297559fd5e027c1fe552e833a08bda9f24e774094be",
+      "src/controller/ports/ui_dispatcher.py": "c910230c53fa7698e3f4a7bc32b847dfb4791b741afa063afe89ab13f4a96aa7",
+      "src/gui/app_state_v2.py": "4bea4c77236874be77bd4723377b981a9abcd7880dfeb59af9101544cec11d54",
+      "src/gui/app_state_projection_sink.py": "51c083b031c7ca1231088511d790c89549669a11509184b97dba0a55a6b873f3",
+      "src/gui/ui_dispatcher.py": "7d0d3be3b9817808e9514131ab2e5b7c8f389611c34cc69db5ecac6fe751bc49",
+      "src/gui/gui_invoker.py": "da8a2ddded94a9e4da3153dfb5edb44becac06587e5630bb6bf6f4f64989a230",
+      "src/queue/history_query.py": "3233f4143036f24d97b32d0108b43dd25df461a17f4f882ed79a0195fde3ed99",
+      "tools/qualification/gui_port_740/qt_dispatcher.py": "cc37d31666834f6e499d7b07cbe6e33f04ea4b3ed23fd893d7ec6adf02289341",
+      "tools/qualification/gui_port_740/common.py": "f3c08bd76770fccb01b25da15b9d8175eac674b75f82dec2450724dc0fefee3a",
+      "tools/qualification/gui_port_742/__init__.py": "0dd4ee0448565a5ffe0a63dd70ad6c42c11ff0532cac5654349a5e9495dd0ea0",
+      "tools/qualification/gui_port_742/child_common.py": "6e289390c32263058d29c7a6afdb63a97c9e319049f24d339a477c9f3a27d838",
+      "tools/qualification/gui_port_742/drive.py": "62e2e1849c0aac6cc6e67446143416d66844fd914210c103ce90079b75a7bff5",
+      "tools/qualification/gui_port_742/evidence.py": "cec19ae4a4e5e22374e3796b22c881500cf026b8eacac6c327b669e48d8dc8a5",
+      "tools/qualification/gui_port_742/fixture.py": "1a09d01e779693d4496065a43f751bef4dde3e53db413c4551ca8da159c83e67",
+      "tools/qualification/gui_port_742/launch.py": "6823c0d078e13c292fdc0aab07de827ebde7617b86a0554d849f0502de4c76f4",
+      "tools/qualification/gui_port_742/model.py": "fd75ffb868b61a73ac708bea7137253c418352d92a4da3e1ddefb54742c98135",
+      "tools/qualification/gui_port_742/qt_child.py": "d039337df85476a9038869eb72c85b1e342eb9fb187b611d5521c39bbb06c630",
+      "tools/qualification/gui_port_742/qt_dispatchers.py": "97c995c21ecf47e3b8d5b9a0f0e74bafad62e8d9fac8843067b46d0194e142fd",
+      "tools/qualification/gui_port_742/qt_style.py": "b41ebcf70abb4a78722ce68377b9b28bc44d35a8130c668f3bb9d343b377455c",
+      "tools/qualification/gui_port_742/qt_view.py": "88c733d47b541ac7e8f42ebb3966ec2ffd2b957a5827e9899d526d2a639597c6",
+      "tools/qualification/gui_port_742/run.py": "4d0a0706690f57257c43c923f803d242a8225bd7d318d925f11884225db9a360",
+      "tools/qualification/gui_port_742/scenario.py": "fa8deec13d369dfd11ff171deac6101360f9e2e0b07ba5e50c00ddef19297ed7",
+      "tools/qualification/gui_port_742/tk_child.py": "e32d21f1c085802935517ac579c6352ebcdfa7603392cdf29256807fb4176034",
+      "tools/qualification/gui_port_742/tk_view.py": "d192b1bcf70ba9c89b69badf7343c3334cb181d8bca443daf644ff7c36ce5700",
+      "tools/qualification/gui_port_742/wiring.py": "753b935179719ec1e27a4b918b2550f7ca7dc51cdecb814afa1c06f51a9ecf79",
+      "tools/qualification/gui_seam_743/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tools/qualification/gui_seam_743/child.py": "ebd5869c772c863a2e57fe2e6450d93272e0414830c0e12b6e0edd5415748a7c",
+      "tools/qualification/gui_seam_743/config.py": "35f7dcf12de113b0530a77a9fcb130795ea95145b5591ac308d8eacaf8166f13",
+      "tools/qualification/gui_seam_743/evidence.py": "f6bf859e7e54a83eb44184fd0f913a0dddd5be3598587c8893f061686306ee05",
+      "tools/qualification/gui_seam_743/inject.py": "a221515e093998dbf6069f854e96bf24fd8aa188263a9a366876d4ccd9acedfa",
+      "tools/qualification/gui_seam_743/run.py": "9ed20c592510df43e3b4be2888133b3ef31b0a9f7f357d522252742bc69ff3dc"
+    },
+    "production_defaults": {
+      "interval_ms": 15,
+      "max_callbacks": 32,
+      "max_pump_ms": 8.0
+    },
+    "control": {
+      "name": "A",
+      "interval_ms": 15,
+      "max_callbacks": 32,
+      "max_pump_ms": 8.0
+    },
+    "host_start": {
+      "cpu_percent_500ms": 77.8,
+      "available_memory_mib": 7635,
+      "logical_cpus": 32
+    },
+    "primary_sha256": null
+  },
+  "plan": [
+    {
+      "run_id": "primary-warmup-A",
+      "kind": "warmup",
+      "round": 0,
+      "position": 0,
+      "config": {
+        "name": "A",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Baseline"
+      }
+    },
+    {
+      "run_id": "primary-warmup-B",
+      "kind": "warmup",
+      "round": 0,
+      "position": 1,
+      "config": {
+        "name": "B",
+        "interval_ms": 10,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Faster polling"
+      }
+    },
+    {
+      "run_id": "primary-warmup-C",
+      "kind": "warmup",
+      "round": 0,
+      "position": 2,
+      "config": {
+        "name": "C",
+        "interval_ms": 5,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Short polling"
+      }
+    },
+    {
+      "run_id": "primary-warmup-D",
+      "kind": "warmup",
+      "round": 0,
+      "position": 3,
+      "config": {
+        "name": "D",
+        "interval_ms": 15,
+        "max_callbacks": 64,
+        "max_pump_ms": 8.0,
+        "label": "Larger batch"
+      }
+    },
+    {
+      "run_id": "primary-warmup-E",
+      "kind": "warmup",
+      "round": 0,
+      "position": 4,
+      "config": {
+        "name": "E",
+        "interval_ms": 15,
+        "max_callbacks": 128,
+        "max_pump_ms": 8.0,
+        "label": "Large batch"
+      }
+    },
+    {
+      "run_id": "primary-warmup-F",
+      "kind": "warmup",
+      "round": 0,
+      "position": 5,
+      "config": {
+        "name": "F",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 4.0,
+        "label": "Shorter time budget"
+      }
+    },
+    {
+      "run_id": "primary-warmup-G",
+      "kind": "warmup",
+      "round": 0,
+      "position": 6,
+      "config": {
+        "name": "G",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 12.0,
+        "label": "Longer time budget"
+      }
+    },
+    {
+      "run_id": "primary-r1-G",
+      "kind": "measured",
+      "round": 1,
+      "position": 0,
+      "config": {
+        "name": "G",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 12.0,
+        "label": "Longer time budget"
+      }
+    },
+    {
+      "run_id": "primary-r1-B",
+      "kind": "measured",
+      "round": 1,
+      "position": 1,
+      "config": {
+        "name": "B",
+        "interval_ms": 10,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Faster polling"
+      }
+    },
+    {
+      "run_id": "primary-r1-D",
+      "kind": "measured",
+      "round": 1,
+      "position": 2,
+      "config": {
+        "name": "D",
+        "interval_ms": 15,
+        "max_callbacks": 64,
+        "max_pump_ms": 8.0,
+        "label": "Larger batch"
+      }
+    },
+    {
+      "run_id": "primary-r1-A",
+      "kind": "measured",
+      "round": 1,
+      "position": 3,
+      "config": {
+        "name": "A",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Baseline"
+      }
+    },
+    {
+      "run_id": "primary-r1-E",
+      "kind": "measured",
+      "round": 1,
+      "position": 4,
+      "config": {
+        "name": "E",
+        "interval_ms": 15,
+        "max_callbacks": 128,
+        "max_pump_ms": 8.0,
+        "label": "Large batch"
+      }
+    },
+    {
+      "run_id": "primary-r1-C",
+      "kind": "measured",
+      "round": 1,
+      "position": 5,
+      "config": {
+        "name": "C",
+        "interval_ms": 5,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Short polling"
+      }
+    },
+    {
+      "run_id": "primary-r1-F",
+      "kind": "measured",
+      "round": 1,
+      "position": 6,
+      "config": {
+        "name": "F",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 4.0,
+        "label": "Shorter time budget"
+      }
+    },
+    {
+      "run_id": "primary-r2-B",
+      "kind": "measured",
+      "round": 2,
+      "position": 0,
+      "config": {
+        "name": "B",
+        "interval_ms": 10,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Faster polling"
+      }
+    },
+    {
+      "run_id": "primary-r2-D",
+      "kind": "measured",
+      "round": 2,
+      "position": 1,
+      "config": {
+        "name": "D",
+        "interval_ms": 15,
+        "max_callbacks": 64,
+        "max_pump_ms": 8.0,
+        "label": "Larger batch"
+      }
+    },
+    {
+      "run_id": "primary-r2-A",
+      "kind": "measured",
+      "round": 2,
+      "position": 2,
+      "config": {
+        "name": "A",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Baseline"
+      }
+    },
+    {
+      "run_id": "primary-r2-E",
+      "kind": "measured",
+      "round": 2,
+      "position": 3,
+      "config": {
+        "name": "E",
+        "interval_ms": 15,
+        "max_callbacks": 128,
+        "max_pump_ms": 8.0,
+        "label": "Large batch"
+      }
+    },
+    {
+      "run_id": "primary-r2-C",
+      "kind": "measured",
+      "round": 2,
+      "position": 4,
+      "config": {
+        "name": "C",
+        "interval_ms": 5,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Short polling"
+      }
+    },
+    {
+      "run_id": "primary-r2-F",
+      "kind": "measured",
+      "round": 2,
+      "position": 5,
+      "config": {
+        "name": "F",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 4.0,
+        "label": "Shorter time budget"
+      }
+    },
+    {
+      "run_id": "primary-r2-G",
+      "kind": "measured",
+      "round": 2,
+      "position": 6,
+      "config": {
+        "name": "G",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 12.0,
+        "label": "Longer time budget"
+      }
+    },
+    {
+      "run_id": "primary-r3-D",
+      "kind": "measured",
+      "round": 3,
+      "position": 0,
+      "config": {
+        "name": "D",
+        "interval_ms": 15,
+        "max_callbacks": 64,
+        "max_pump_ms": 8.0,
+        "label": "Larger batch"
+      }
+    },
+    {
+      "run_id": "primary-r3-A",
+      "kind": "measured",
+      "round": 3,
+      "position": 1,
+      "config": {
+        "name": "A",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Baseline"
+      }
+    },
+    {
+      "run_id": "primary-r3-E",
+      "kind": "measured",
+      "round": 3,
+      "position": 2,
+      "config": {
+        "name": "E",
+        "interval_ms": 15,
+        "max_callbacks": 128,
+        "max_pump_ms": 8.0,
+        "label": "Large batch"
+      }
+    },
+    {
+      "run_id": "primary-r3-C",
+      "kind": "measured",
+      "round": 3,
+      "position": 3,
+      "config": {
+        "name": "C",
+        "interval_ms": 5,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Short polling"
+      }
+    },
+    {
+      "run_id": "primary-r3-F",
+      "kind": "measured",
+      "round": 3,
+      "position": 4,
+      "config": {
+        "name": "F",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 4.0,
+        "label": "Shorter time budget"
+      }
+    },
+    {
+      "run_id": "primary-r3-G",
+      "kind": "measured",
+      "round": 3,
+      "position": 5,
+      "config": {
+        "name": "G",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 12.0,
+        "label": "Longer time budget"
+      }
+    },
+    {
+      "run_id": "primary-r3-B",
+      "kind": "measured",
+      "round": 3,
+      "position": 6,
+      "config": {
+        "name": "B",
+        "interval_ms": 10,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Faster polling"
+      }
+    },
+    {
+      "run_id": "primary-r4-A",
+      "kind": "measured",
+      "round": 4,
+      "position": 0,
+      "config": {
+        "name": "A",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Baseline"
+      }
+    },
+    {
+      "run_id": "primary-r4-E",
+      "kind": "measured",
+      "round": 4,
+      "position": 1,
+      "config": {
+        "name": "E",
+        "interval_ms": 15,
+        "max_callbacks": 128,
+        "max_pump_ms": 8.0,
+        "label": "Large batch"
+      }
+    },
+    {
+      "run_id": "primary-r4-C",
+      "kind": "measured",
+      "round": 4,
+      "position": 2,
+      "config": {
+        "name": "C",
+        "interval_ms": 5,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Short polling"
+      }
+    },
+    {
+      "run_id": "primary-r4-F",
+      "kind": "measured",
+      "round": 4,
+      "position": 3,
+      "config": {
+        "name": "F",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 4.0,
+        "label": "Shorter time budget"
+      }
+    },
+    {
+      "run_id": "primary-r4-G",
+      "kind": "measured",
+      "round": 4,
+      "position": 4,
+      "config": {
+        "name": "G",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 12.0,
+        "label": "Longer time budget"
+      }
+    },
+    {
+      "run_id": "primary-r4-B",
+      "kind": "measured",
+      "round": 4,
+      "position": 5,
+      "config": {
+        "name": "B",
+        "interval_ms": 10,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Faster polling"
+      }
+    },
+    {
+      "run_id": "primary-r4-D",
+      "kind": "measured",
+      "round": 4,
+      "position": 6,
+      "config": {
+        "name": "D",
+        "interval_ms": 15,
+        "max_callbacks": 64,
+        "max_pump_ms": 8.0,
+        "label": "Larger batch"
+      }
+    },
+    {
+      "run_id": "primary-r5-E",
+      "kind": "measured",
+      "round": 5,
+      "position": 0,
+      "config": {
+        "name": "E",
+        "interval_ms": 15,
+        "max_callbacks": 128,
+        "max_pump_ms": 8.0,
+        "label": "Large batch"
+      }
+    },
+    {
+      "run_id": "primary-r5-C",
+      "kind": "measured",
+      "round": 5,
+      "position": 1,
+      "config": {
+        "name": "C",
+        "interval_ms": 5,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Short polling"
+      }
+    },
+    {
+      "run_id": "primary-r5-F",
+      "kind": "measured",
+      "round": 5,
+      "position": 2,
+      "config": {
+        "name": "F",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 4.0,
+        "label": "Shorter time budget"
+      }
+    },
+    {
+      "run_id": "primary-r5-G",
+      "kind": "measured",
+      "round": 5,
+      "position": 3,
+      "config": {
+        "name": "G",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 12.0,
+        "label": "Longer time budget"
+      }
+    },
+    {
+      "run_id": "primary-r5-B",
+      "kind": "measured",
+      "round": 5,
+      "position": 4,
+      "config": {
+        "name": "B",
+        "interval_ms": 10,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Faster polling"
+      }
+    },
+    {
+      "run_id": "primary-r5-D",
+      "kind": "measured",
+      "round": 5,
+      "position": 5,
+      "config": {
+        "name": "D",
+        "interval_ms": 15,
+        "max_callbacks": 64,
+        "max_pump_ms": 8.0,
+        "label": "Larger batch"
+      }
+    },
+    {
+      "run_id": "primary-r5-A",
+      "kind": "measured",
+      "round": 5,
+      "position": 6,
+      "config": {
+        "name": "A",
+        "interval_ms": 15,
+        "max_callbacks": 32,
+        "max_pump_ms": 8.0,
+        "label": "Baseline"
+      }
+    }
+  ],
+  "phases": {
+    "primary": {
+      "conditions": {
+        "A": {
+          "config": {
+            "name": "A",
+            "interval_ms": 15,
+            "max_callbacks": 32,
+            "max_pump_ms": 8.0,
+            "label": "Baseline"
+          },
+          "warmup": {
+            "run_id": "primary-warmup-A",
+            "round": 0,
+            "position": 0,
+            "host": {
+              "cpu_percent_500ms": 79.0,
+              "available_memory_mib": 7638,
+              "logical_cpus": 32
+            },
+            "process": {
+              "exit_code": 0,
+              "stderr": "",
+              "timeout": false,
+              "contained": true,
+              "events": [
+                {
+                  "event": "first_visible",
+                  "clock_ns": 35280351772900,
+                  "visible": true
+                }
+              ],
+              "first_visible": {
+                "event": "first_visible",
+                "clock_ns": 35280351772900,
+                "visible": true
+              },
+              "peak_sampled_working_set": 104198144,
+              "startup_ms": 1082.1909,
+              "close_to_exit_ms": 329.6792,
+              "surviving_descendants": [],
+              "observed_descendants": 2,
+              "descendant_quiescence_ms": 0.16570000298088416
+            },
+            "invalid": "EvidenceError('refresh.heartbeat.p95: missing, nonfinite or negative (None)')",
+            "result": {
+              "event": "result",
+              "clock_ns": 35287539251400,
+              "status": "PASS",
+              "checks": {
+                "populated": true
+              },
+              "errors": [],
+              "close_started_ns": 35287282284700,
+              "toolkit": "tk",
+              "runtime": {
+                "pid": 38084,
+                "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+                "executable": "C:\\Users\\rob\\projects\\StableNew-main\\.venv\\Scripts\\python.exe",
+                "prefix": "C:\\Users\\rob\\projects\\StableNew-main\\.venv",
+                "base_prefix": "C:\\Users\\rob\\Python314",
+                "platform": "Windows-11-10.0.26100-SP0",
+                "machine": "AMD64",
+                "gil_enabled": true,
+                "gil_disabled_build": 0
+              },
+              "fixture": "3f7d33fb2ac861f3aeee3212c7fc42691642798cf50c3f73541963d441f3c433",
+              "workload": {
+                "rows": 500,
+                "burst_callbacks": 2000,
+                "refresh_revisions": 12,
+                "sustained_seconds": 1.5,
+                "sustained_interval_s": 0.02,
+                "idle_quiet_seconds": 3.0
+              },
+              "config": {
+                "name": "A",
+                "requested": {
+                  "interval_ms": 15,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                },
+                "effective": {
+                  "interval_ms": 15,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                },
+                "production_defaults": {
+                  "interval_ms": 15,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                }
+              },
+              "idle": {
+                "window_s": 3.0056706000032136,
+                "pump_count": 166,
+                "pump_hz": 55.22893959165802,
+                "period_ms": {
+                  "n": 165,
+                  "min": 15.035800002806354,
+                  "median": 15.966400002071168,
+                  "p95": 27.779600000940263,
+                  "max": 34.73590000066906
+                },
+                "process_cpu_percent": 1.0397014230357309,
+                "host_cpu_percent": 60.9
+              },
+              "idle_memory": {
+                "working_set": 89124864,
+                "peak_working_set": 89124864,
+                "native_threads": 31
+              },
+              "interaction": {
+                "filter_handler_ms": 3.1117500038817525,
+                "filter_visible_ms": 9.099099999730242,
+                "filter_ops": 12,
+                "select_handler_ms": 0.1914000022225082,
+                "select_visible_ms": 4.852549998759059,
+                "select_ops": 20
+              },
+              "refresh": {
+                "arrived": true,
+                "to_visible_ms": 98.37530000368133,
+                "renders": 1,
+                "render_ms_median": 3.198700003849808,
+                "selection_kept": true,
+                "heartbeat": {
+                  "n": 13,
+                  "min": 2.4726999981794506,
+                  "median": 5.08080000145128,
+                  "p95": null,
+                  "max": 36.14229999948293
+                }
+              },
+              "sustained": {
+                "heartbeat": {
+                  "n": 282,
+                  "min": 2.06090000574477,
+                  "median": 5.060499996034196,
+                  "p95": 9.054499998455867,
+                  "max": 15.868000002228655
+                },
+                "publishes": 53,
+                "renders": 14,
+                "render_ms_median": 3.2208000011451077,
+                "pump_count": 103,
+                "pump_ms": {
+                  "n": 103,
+                  "min": 0.007700000423938036,
+                  "median": 0.020699997548945248,
+                  "p95": 8.428799999819603,
+                  "max": 9.180399996694177
+                },
+                "pump_period_ms_median": 16.675449998729164
+              },
+              "burst": {
+                "arrived": true,
+                "problem": null,
+                "expected": 2000,
+                "delivered": 2000,
+                "missing": 0,
+                "duplicates": 0,
+                "out_of_order": 0,
+                "wrong_thread": 0,
+                "peak_backlog": 2000,
+                "total_ms": 1163.3036999992328,
+                "pumps_used": 63,
+                "latency_ms": {
+                  "n": 2000,
+                  "min": 18.9881999976933,
+                  "median": 575.7308499996725,
+                  "p95": 1099.3740999983856,
+                  "max": 1161.3351999985753
+                },
+                "callback_ms": {
+                  "n": 2000,
+                  "min": 0.008499999239575118,
+                  "median": 0.009099996532313526,
+                  "p95": 0.06040000153006986,
+                  "max": 0.26989999605575576
+                },
+                "batch_sizes": {
+                  "n": 63,
+                  "min": 16,
+                  "median": 32,
+                  "p95": 32,
+                  "max": 32
+                },
+                "pump_ms": {
+                  "n": 63,
+                  "min": 0.25720000121509656,
+                  "median": 0.5145999966771342,
+                  "p95": 1.1461999965831637,
+                  "max": 1.325000004726462
+                }
+              },
+              "lifecycle": {
+                "pending_dropped_at_close": true,
+                "no_late_mutations": true,
+                "no_python_worker_leak": true,
+                "pyside_absent": true,
+                "single_dispatcher_per_root": true,
+                "dispatcher_disposed": true,
+                "dispatcher_queue_empty": true,
+                "dispatcher_timers_empty": true,
+                "marks": [],
+                "alive_threads": [],
+                "late_view_mutations": []
+              }
+            }
+          },
+          "runs": []
+        },
+        "B": {
+          "config": {
+            "name": "B",
+            "interval_ms": 10,
+            "max_callbacks": 32,
+            "max_pump_ms": 8.0,
+            "label": "Faster polling"
+          },
+          "warmup": {
+            "run_id": "primary-warmup-B",
+            "round": 0,
+            "position": 1,
+            "host": {
+              "cpu_percent_500ms": 8.9,
+              "available_memory_mib": 8598,
+              "logical_cpus": 32
+            },
+            "process": {
+              "exit_code": 0,
+              "stderr": "",
+              "timeout": false,
+              "contained": true,
+              "events": [
+                {
+                  "event": "first_visible",
+                  "clock_ns": 35289148477700,
+                  "visible": true
+                }
+              ],
+              "first_visible": {
+                "event": "first_visible",
+                "clock_ns": 35289148477700,
+                "visible": true
+              },
+              "peak_sampled_working_set": 104521728,
+              "startup_ms": 1033.5472,
+              "close_to_exit_ms": 325.4218,
+              "surviving_descendants": [],
+              "observed_descendants": 2,
+              "descendant_quiescence_ms": 0.04069999704370275
+            },
+            "invalid": "EvidenceError('refresh.heartbeat.p95: missing, nonfinite or negative (None)')",
+            "result": {
+              "event": "result",
+              "clock_ns": 35296418471300,
+              "status": "PASS",
+              "checks": {
+                "populated": true
+              },
+              "errors": [],
+              "close_started_ns": 35296158209200,
+              "toolkit": "tk",
+              "runtime": {
+                "pid": 38480,
+                "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+                "executable": "C:\\Users\\rob\\projects\\StableNew-main\\.venv\\Scripts\\python.exe",
+                "prefix": "C:\\Users\\rob\\projects\\StableNew-main\\.venv",
+                "base_prefix": "C:\\Users\\rob\\Python314",
+                "platform": "Windows-11-10.0.26100-SP0",
+                "machine": "AMD64",
+                "gil_enabled": true,
+                "gil_disabled_build": 0
+              },
+              "fixture": "3f7d33fb2ac861f3aeee3212c7fc42691642798cf50c3f73541963d441f3c433",
+              "workload": {
+                "rows": 500,
+                "burst_callbacks": 2000,
+                "refresh_revisions": 12,
+                "sustained_seconds": 1.5,
+                "sustained_interval_s": 0.02,
+                "idle_quiet_seconds": 3.0
+              },
+              "config": {
+                "name": "B",
+                "requested": {
+                  "interval_ms": 10,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                },
+                "effective": {
+                  "interval_ms": 10,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                },
+                "production_defaults": {
+                  "interval_ms": 15,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                }
+              },
+              "idle": {
+                "window_s": 3.0015663000012864,
+                "pump_count": 201,
+                "pump_hz": 66.9650375538644,
+                "period_ms": {
+                  "n": 200,
+                  "min": 10.043800000858027,
+                  "median": 15.128250000998378,
+                  "p95": 21.944499996607192,
+                  "max": 24.361000003409572
+                },
+                "process_cpu_percent": 0.5205615481488216,
+                "host_cpu_percent": 80.1
+              },
+              "idle_memory": {
+                "working_set": 89423872,
+                "peak_working_set": 89423872,
+                "native_threads": 31
+              },
+              "interaction": {
+                "filter_handler_ms": 4.890650001470931,
+                "filter_visible_ms": 14.004799999383977,
+                "filter_ops": 12,
+                "select_handler_ms": 0.24159999884432182,
+                "select_visible_ms": 8.153499999025371,
+                "select_ops": 20
+              },
+              "refresh": {
+                "arrived": true,
+                "to_visible_ms": 115.48380000022007,
+                "renders": 1,
+                "render_ms_median": 6.758700001228135,
+                "selection_kept": true,
+                "heartbeat": {
+                  "n": 10,
+                  "min": 2.50170000072103,
+                  "median": 7.648799997696187,
+                  "p95": null,
+                  "max": 44.16369999671588
+                }
+              },
+              "sustained": {
+                "heartbeat": {
+                  "n": 236,
+                  "min": 1.3143999967724085,
+                  "median": 5.024250000133179,
+                  "p95": 18.358299996179994,
+                  "max": 27.365100002498366
+                },
+                "publishes": 51,
+                "renders": 15,
+                "render_ms_median": 5.805799999507144,
+                "pump_count": 129,
+                "pump_ms": {
+                  "n": 129,
+                  "min": 0.0092999980552122,
+                  "median": 0.023799999326001853,
+                  "p95": 16.514199996890966,
+                  "max": 21.74390000436688
+                },
+                "pump_period_ms_median": 12.037249998684274
+              },
+              "burst": {
+                "arrived": true,
+                "problem": null,
+                "expected": 2000,
+                "delivered": 2000,
+                "missing": 0,
+                "duplicates": 0,
+                "out_of_order": 0,
+                "wrong_thread": 0,
+                "peak_backlog": 2000,
+                "total_ms": 925.6277000022237,
+                "pumps_used": 63,
+                "latency_ms": {
+                  "n": 2000,
+                  "min": 3.2952000037766993,
+                  "median": 456.6615500007174,
+                  "p95": 879.6957000013208,
+                  "max": 922.3819999970146
+                },
+                "callback_ms": {
+                  "n": 2000,
+                  "min": 0.008700000762473792,
+                  "median": 0.015349996829172596,
+                  "p95": 0.08789999992586672,
+                  "max": 0.3456999984337017
+                },
+                "batch_sizes": {
+                  "n": 63,
+                  "min": 16,
+                  "median": 32,
+                  "p95": 32,
+                  "max": 32
+                },
+                "pump_ms": {
+                  "n": 63,
+                  "min": 0.4206000012345612,
+                  "median": 0.8545000018784776,
+                  "p95": 1.6454999931738712,
+                  "max": 1.9228000019211322
+                }
+              },
+              "lifecycle": {
+                "pending_dropped_at_close": true,
+                "no_late_mutations": true,
+                "no_python_worker_leak": true,
+                "pyside_absent": true,
+                "single_dispatcher_per_root": true,
+                "dispatcher_disposed": true,
+                "dispatcher_queue_empty": true,
+                "dispatcher_timers_empty": true,
+                "marks": [],
+                "alive_threads": [],
+                "late_view_mutations": []
+              }
+            }
+          },
+          "runs": []
+        },
+        "C": {
+          "config": {
+            "name": "C",
+            "interval_ms": 5,
+            "max_callbacks": 32,
+            "max_pump_ms": 8.0,
+            "label": "Short polling"
+          },
+          "warmup": {
+            "run_id": "primary-warmup-C",
+            "round": 0,
+            "position": 2,
+            "host": {
+              "cpu_percent_500ms": 17.1,
+              "available_memory_mib": 7436,
+              "logical_cpus": 32
+            },
+            "process": {
+              "exit_code": 0,
+              "stderr": "",
+              "timeout": false,
+              "contained": true,
+              "events": [
+                {
+                  "event": "first_visible",
+                  "clock_ns": 35297870390200,
+                  "visible": true
+                }
+              ],
+              "first_visible": {
+                "event": "first_visible",
+                "clock_ns": 35297870390200,
+                "visible": true
+              },
+              "peak_sampled_working_set": 104194048,
+              "startup_ms": 882.756,
+              "close_to_exit_ms": 348.5397,
+              "surviving_descendants": [],
+              "observed_descendants": 2,
+              "descendant_quiescence_ms": 0.0503999981447123
+            },
+            "invalid": "EvidenceError('refresh.heartbeat.p95: missing, nonfinite or negative (None)')",
+            "result": {
+              "event": "result",
+              "clock_ns": 35304682490200,
+              "status": "PASS",
+              "checks": {
+                "populated": true
+              },
+              "errors": [],
+              "close_started_ns": 35304420568900,
+              "toolkit": "tk",
+              "runtime": {
+                "pid": 36900,
+                "python": "3.14.9 (tags/v3.14.9:ead82c0, Oct 21 2026, 06:26:14) [MSC v.1944 64 bit (AMD64)]",
+                "executable": "C:\\Users\\rob\\projects\\StableNew-main\\.venv\\Scripts\\python.exe",
+                "prefix": "C:\\Users\\rob\\projects\\StableNew-main\\.venv",
+                "base_prefix": "C:\\Users\\rob\\Python314",
+                "platform": "Windows-11-10.0.26100-SP0",
+                "machine": "AMD64",
+                "gil_enabled": true,
+                "gil_disabled_build": 0
+              },
+              "fixture": "3f7d33fb2ac861f3aeee3212c7fc42691642798cf50c3f73541963d441f3c433",
+              "workload": {
+                "rows": 500,
+                "burst_callbacks": 2000,
+                "refresh_revisions": 12,
+                "sustained_seconds": 1.5,
+                "sustained_interval_s": 0.02,
+                "idle_quiet_seconds": 3.0
+              },
+              "config": {
+                "name": "C",
+                "requested": {
+                  "interval_ms": 5,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                },
+                "effective": {
+                  "interval_ms": 5,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                },
+                "production_defaults": {
+                  "interval_ms": 15,
+                  "max_callbacks": 32,
+                  "max_pump_ms": 8.0
+                }
+              },
+              "idle": {
+                "window_s": 3.013889100002416,
+                "pump_count": 299,
+                "pump_hz": 99.20736632272246,
+                "period_ms": {
+                  "n": 298,
+                  "min": 5.028300001868047,
+                  "median": 6.640600000537233,
+                  "p95": 17.557299994223285,
+                  "max": 24.948400001449045
+                },
+                "process_cpu_percent": 0.5184331434088758,
+                "host_cpu_percent": 8.2
+              },
+              "idle_memory": {
+                "working_set": 89198592,
+                "peak_working_set": 89198592,
+                "native_threads": 31
+              },
+              "interaction": {
+                "filter_handler_ms": 4.631150000932394,
+                "filter_visible_ms": 13.619350000226405,
+                "filter_ops": 12,
+                "select_handler_ms": 0.265499998931773,
+                "select_visible_ms": 10.105400000611553,
+                "select_ops": 20
+              },
+              "refresh": {
+                "arrived": true,
+                "to_visible_ms": 127.76109999686014,
+                "renders": 1,
+                "render_ms_median": 6.7673000012291595,
+                "selection_kept": true,
+                "heartbeat": {
+                  "n": 8,
+                  "min": 1.618800000869669,
+                  "median": 9.08980000167503,
+                  "p95": null,
+                  "max": 55.11259999911999
+                }
+              },
+              "sustained": {
+                "heartbeat": {
+                  "n": 221,
+                  "min": 1.069199999619741,
+                  "median": 5.052100001194049,
+                  "p95": 22.754500001610722,
+                  "max": 33.64449999935459
+                },
+                "publishes": 49,
+                "renders": 15,
+                "render_ms_median": 6.692599999951199,
+                "pump_count": 200,
+                "pump_ms": {
+                  "n": 200,
+                  "min": 0.006900001608300954,
+                  "median": 0.022050000552553684,
+                  "p95": 16.65089999733027,
+                  "max": 22.57189999363618
+                },
+                "pump_period_ms_median": 7.111499995517079
+              },
+              "burst": {
+                "arrived": true,
+                "problem": null,
+                "expected": 2000,
+                "delivered": 2000,
+                "missing": 0,
+                "duplicates": 0,
+                "out_of_order": 0,
+                "wrong_thread": 0,
+                "peak_backlog": 2000,
+                "total_ms": 536.3577999960398,
+                "pumps_used": 63,
+                "latency_ms": {
+                  "n": 2000,
+                  "min": 7.918499999505002,
+                  "median": 274.05554999859305,
+                  "p95": 496.86929999734275,
+                  "max": 533.4697999933269
+                },
+                "callback_ms": {
+                  "n": 2000,
+                  "min": 0.009499999578110874,
+                  "median": 0.016099998902063817,
+                  "p95": 0.06709999433951452,
+                  "max": 0.29429999995045364
+                },
+                "batch_sizes": {
+                  "n": 63,
+                  "min": 16,
+                  "median": 32,
+                  "p95": 32,
+                  "max": 32
+                },
+                "pump_ms": {
+                  "n": 63,
+                  "min": 0.4665000014938414,
+                  "median": 0.873099997988902,
+                  "p95": 1.3376999995671213,
+                  "max": 2.405600003839936
+                }
+              },
+              "lifecycle": {
+                "pending_dropped_at_close": true,
+                "no_late_mutations": true,
+                "no_python_worker_leak": true,
+                "pyside_absent": true,
+                "single_dispatcher_per_root": true,
+                "dispatcher_disposed": true,
+                "dispatcher_queue_empty": true,
+                "dispatcher_timers_empty": true,
+                "marks": [],
+                "alive_threads": [],
+                "late_view_mutations": []
+              }
+            }
+          },
+          "runs": []
+        },
+        "D": {
+          "config": {
+            "name": "D",
+            "interval_ms": 15,
+            "max_callbacks": 64,
+            "max_pump_ms": 8.0,
+            "label": "Larger batch"
+          },
+          "warmup": null,
+          "runs": []
+        },
+        "E": {
+          "config": {
+            "name": "E",
+            "interval_ms": 15,
+            "max_callbacks": 128,
+            "max_pump_ms": 8.0,
+            "label": "Large batch"
+          },
+          "warmup": null,
+          "runs": []
+        },
+        "F": {
+          "config": {
+            "name": "F",
+            "interval_ms": 15,
+            "max_callbacks": 32,
+            "max_pump_ms": 4.0,
+            "label": "Shorter time budget"
+          },
+          "warmup": null,
+          "runs": []
+        },
+        "G": {
+          "config": {
+            "name": "G",
+            "interval_ms": 15,
+            "max_callbacks": 32,
+            "max_pump_ms": 12.0,
+            "label": "Longer time budget"
+          },
+          "warmup": null,
+          "runs": []
+        }
+      }
+    }
+  },
+  "validity": {
+    "failures": [
+      "primary-warmup-A: EvidenceError('refresh.heartbeat.p95: missing, nonfinite or negative (None)')",
+      "primary-warmup-B: EvidenceError('refresh.heartbeat.p95: missing, nonfinite or negative (None)')",
+      "primary-warmup-C: EvidenceError('refresh.heartbeat.p95: missing, nonfinite or negative (None)')"
+    ]
+  }
+}
