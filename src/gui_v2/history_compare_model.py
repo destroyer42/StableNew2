@@ -17,7 +17,7 @@ from src.controller.pipeline_controller_services.history_handoff_service import 
     HistoryHandoffService,
 )
 from src.gui_v2.history_iterate_model import _recorded_seed
-from src.pipeline.history_variation_marker import is_history_variation
+from src.pipeline.history_variation_marker import VARIATION_KEY, is_history_variation
 from src.pipeline.njr_core_v26 import NormalizedJobRecord
 
 MAX_DIFFERENCE_ROWS = 600
@@ -146,6 +146,13 @@ def _source(record: Mapping[str, Any]) -> Mapping[str, Any]:
     return source if isinstance(source, Mapping) else {}
 
 
+def _get_mapping(record: Mapping[str, Any], *path: str) -> Any:
+    current: Any = record
+    for key in path:
+        current = current.get(key) if isinstance(current, Mapping) else None
+    return current
+
+
 def recorded_parent_id(record: Mapping[str, Any]) -> str:
     """The child's frozen ``source.parent_job_id`` - the only relationship authority."""
 
@@ -166,18 +173,26 @@ def verify_direct_lineage(
     source = _source(child.record)
     if parent.job_id == child.job_id or recorded_parent_id(child.record) != parent.job_id:
         raise ComparisonRefused("These records do not verify a direct parent/child relationship.")
-    for metadata in (
-        source.get("metadata"),
-        (child.record.get("workload") or {}).get("metadata"),
-        (child.record.get("provenance") or {}).get("metadata"),
+    for block in (
+        lambda record: _source(record).get("metadata"),
+        lambda record: _get_mapping(record, "workload", "metadata"),
+        lambda record: _get_mapping(record, "provenance", "metadata"),
     ):
+        metadata, inherited = block(child.record), block(parent.record)
         if not isinstance(metadata, Mapping):
             continue
+        # A replay or resume copies its parent's metadata unchanged, so a claim that merely equals what the
+        # parent's own record says in the same block is inherited history, not a statement about this child.
+        inherited = inherited if isinstance(inherited, Mapping) else {}
         claimed = metadata.get("parent_job_id")
-        if claimed and claimed != parent.job_id:
+        if claimed and claimed != parent.job_id and claimed != inherited.get("parent_job_id"):
             raise ComparisonRefused("Recorded parent identity claims contradict one another.")
         artifact = metadata.get("parent_artifact_id")
-        if artifact and artifact != source.get("parent_artifact_id"):
+        if (
+            artifact
+            and artifact != source.get("parent_artifact_id")
+            and artifact != inherited.get("parent_artifact_id")
+        ):
             raise ComparisonRefused("Recorded parent-artifact claims contradict one another.")
     if persisted is None or persisted != (
         parent.job_id,
@@ -195,7 +210,13 @@ def lineage_kind(record: Mapping[str, Any]) -> str:
     provenance = record.get("provenance")
     provenance_meta = provenance.get("metadata") if isinstance(provenance, Mapping) else None
     if kind == "history_replay":
-        if is_history_variation(metadata):
+        variation = metadata.get(VARIATION_KEY) if isinstance(metadata, Mapping) else None
+        # An exact replay of a variation copies its marker; only the variation's own child names this parent.
+        if (
+            is_history_variation(metadata)
+            and isinstance(variation, Mapping)
+            and variation.get("parent_job_id") == source.get("parent_job_id")
+        ):
             return "Edited History variation"
         if isinstance(provenance_meta, Mapping) and provenance_meta.get("replay") is True:
             return "Exact History replay"

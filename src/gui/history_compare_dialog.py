@@ -13,11 +13,13 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
-from src.controller.content_visibility_resolver import ContentVisibilityResolver
+from src.controller.content_visibility_resolver import (
+    REDACTED_TEXT,
+    ContentVisibilityResolver,
+)
 from src.gui import theme_v2 as theme_mod
 from src.gui.controllers.history_compare_service import (
     Comparison,
-    ComparisonSide,
     HistoryCompareService,
 )
 from src.gui.ui_dispatcher import tk_dispatcher_for
@@ -31,7 +33,6 @@ from src.gui.widgets.media_inspector import MediaInspector
 from src.gui_v2.history_compare_model import (
     ComparisonRefused,
     DifferenceState,
-    FieldDifference,
     format_value,
 )
 
@@ -103,10 +104,20 @@ class HistoryCompareDialog(tk.Toplevel):
                 row=0, column=column, sticky="w", padx=4
             )
         self.parent_view = MediaInspector(
-            images, width=480, height=320, allow_original=False, image_decoder=self._decoder
+            images,
+            width=480,
+            height=320,
+            allow_original=False,
+            image_decoder=self._decoder,
+            follow_workspace=False,
         )
         self.child_view = MediaInspector(
-            images, width=480, height=320, allow_original=False, image_decoder=self._decoder
+            images,
+            width=480,
+            height=320,
+            allow_original=False,
+            image_decoder=self._decoder,
+            follow_workspace=False,
         )
         self.parent_view.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
         self.child_view.grid(row=1, column=1, sticky="nsew", padx=(4, 0))
@@ -123,12 +134,12 @@ class HistoryCompareDialog(tk.Toplevel):
             command=self._render,
         ).grid(row=0, column=0, sticky="w")
         self.tree = ttk.Treeview(table, columns=_COLUMNS, show="headings", height=8)
-        for column, heading, width in (
+        for key, heading, width in (
             ("field", "Setting", 220), ("state", "State", 110),
             ("parent", "Parent", 320), ("child", "Child", 320),
         ):  # fmt: skip
-            self.tree.heading(column, text=heading)
-            self.tree.column(column, width=width, stretch=column in {"parent", "child"})
+            self.tree.heading(key, text=heading)
+            self.tree.column(key, width=width, stretch=key in {"parent", "child"})
         vertical = ttk.Scrollbar(table, orient=tk.VERTICAL, command=self.tree.yview)
         horizontal = ttk.Scrollbar(table, orient=tk.HORIZONTAL, command=self.tree.xview)
         self.tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
@@ -232,10 +243,11 @@ class HistoryCompareDialog(tk.Toplevel):
     def _mode(self) -> str:
         return str(getattr(self.app_state, "content_visibility_mode", None) or "nsfw")
 
-    def _shown(self, value: Any, side: ComparisonSide, resolver: ContentVisibilityResolver) -> str:
+    @staticmethod
+    def _shown(value: Any, restricted: bool, resolver: ContentVisibilityResolver) -> str:
         text = format_value(value)
-        if resolver.redact_text(text, item=side.visibility_subject) != text:
-            return resolver.redact_text(text, item=side.visibility_subject)  # a restricted side
+        if restricted:  # the whole side is restricted (classified once per render, not per cell)
+            return REDACTED_TEXT if text.strip() else text
         return resolver.redact_text(text)  # restricted text on an otherwise clean side
 
     def _render(self) -> None:
@@ -244,6 +256,10 @@ class HistoryCompareDialog(tk.Toplevel):
         if comparison is None or self._closed:
             return
         resolver = ContentVisibilityResolver(self._mode())
+        restricted = (
+            not resolver.is_visible(comparison.parent.visibility_subject),
+            not resolver.is_visible(comparison.child.visibility_subject),
+        )
         changes_only = self._changes_only.get()
         group = ""
         for row in comparison.differences:
@@ -256,21 +272,16 @@ class HistoryCompareDialog(tk.Toplevel):
                 group = row.group
                 self.tree.insert("", "end", values=(f"— {group} —", "", "", ""))
             label = row.field + (" (observed)" if row.evidence == "observed" else "")
-            self.tree.insert("", "end", values=self._row_values(label, row, comparison, resolver))
-
-    def _row_values(
-        self,
-        label: str,
-        row: FieldDifference,
-        comparison: Comparison,
-        resolver: ContentVisibilityResolver,
-    ) -> tuple[str, str, str, str]:
-        return (
-            label,
-            row.state.value,
-            self._shown(row.parent, comparison.parent, resolver),
-            self._shown(row.child, comparison.child, resolver),
-        )
+            self.tree.insert(
+                "",
+                "end",
+                values=(
+                    label,
+                    row.state.value,
+                    self._shown(row.parent, restricted[0], resolver),
+                    self._shown(row.child, restricted[1], resolver),
+                ),
+            )
 
     def _policy_changed(self) -> None:
         if not self._closed:

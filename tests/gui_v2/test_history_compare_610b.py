@@ -444,6 +444,57 @@ def test_values_come_from_the_two_recorded_jobs_only(family):
     assert (model.parent, model.child, model.state) == ("sdxl", "sdxl", DifferenceState.UNCHANGED)
 
 
+def _hydrate(family, job_id):
+    from src.controller.pipeline_controller_services.history_handoff_service import (
+        HistoryHandoffService,
+    )
+
+    return HistoryHandoffService().hydrate_njr_from_snapshot(family.repo.get_job(job_id).snapshot)
+
+
+def _add_completed(family, *njrs):
+    family.repo.record_job_submissions([_job(njr) for njr in njrs])
+    for njr in njrs:
+        path = family.tmp_path / f"{njr.job_id}.png"
+        Image.new("RGB", (64, 48), "orange").save(path)
+        family.paths[njr.job_id] = path
+        _complete(family.repo, njr.job_id, path)
+
+
+def test_exact_replay_of_a_review_child_inherits_its_claims_without_contradiction(family):
+    # Replay copies the review child's workload/provenance metadata, which names the review child's own parent.
+    base = _hydrate(family, "review")
+    claims = {"parent_job_id": "parent", "parent_artifact_id": f"sha256:{family.digest}"}
+    review2 = replace(
+        base,
+        job_id="review2",
+        workload=replace(base.workload, metadata={**dict(base.workload.metadata), **claims}),
+        provenance=replace(base.provenance, metadata={**dict(base.provenance.metadata), **claims}),
+    )
+    replayed = compile_replay_intent(ReplayIntent(review2), id_fn=lambda: "review2-replay")
+    _add_completed(family, review2, replayed)
+    comparison = family.service.prepare("review2-replay")
+    assert comparison.parent.job.job_id == "review2"
+    assert comparison.relationship == "Exact History replay"
+    assert family.service.prepare("review2").parent.job.job_id == "parent"
+
+
+def test_exact_replay_of_a_variation_is_not_labelled_an_edited_variation(family):
+    replayed = compile_replay_intent(
+        ReplayIntent(_hydrate(family, "variation")), id_fn=lambda: "variation-replay"
+    )
+    _add_completed(family, replayed)
+    assert family.service.prepare("variation").relationship == "Edited History variation"
+    comparison = family.service.prepare("variation-replay")
+    assert comparison.parent.job.job_id == "variation"
+    assert comparison.relationship == "Exact History replay"
+
+
+def test_stored_null_variants_do_not_break_artifact_verification(family):
+    _patch_entry(family, "variation", lambda entry: entry.result.__setitem__("variants", None))
+    assert family.service.prepare("variation").child.job.job_id == "variation"
+
+
 def test_oversized_frozen_config_is_capped_with_a_disclosed_limitation(family):
     def huge(entry):
         config = entry.snapshot["normalized_job"]["workload"]["config"]
@@ -684,6 +735,31 @@ def test_late_decode_after_content_becomes_hidden_is_not_shown(
         time.sleep(0.01)
     assert dialog.child_view._image is None and dialog.child_view._photo_image is None
     dialog.destroy()
+
+
+def test_viewer_images_do_not_follow_the_main_window_workspace_tabs(
+    tk_root, family, inline_edit_work
+):
+    from tkinter import ttk
+
+    from src.gui.history_compare_dialog import HistoryCompareDialog
+    from src.gui.widgets.media_inspector import MediaInspector
+
+    notebook = ttk.Notebook(tk_root)
+    page = ttk.Frame(notebook)
+    notebook.add(page, text="Pipeline")
+    notebook.add(ttk.Frame(notebook), text="Other")
+    followed = MediaInspector(page)  # control: an embedded inspector is hidden with its tab
+    dialog = HistoryCompareDialog(page, repository=family.repo, child_id="variation")
+    _pump(tk_root, lambda: _images_ready(dialog))
+    assert followed._workspace_hosts
+    assert dialog.parent_view._workspace_hosts == [] and dialog.child_view._workspace_hosts == []
+    notebook.select(1)
+    tk_root.update()
+    assert dialog.parent_view.model.active and dialog.child_view.model.active
+    dialog.destroy()
+    followed.destroy()
+    notebook.destroy()
 
 
 def test_restricted_frozen_config_text_hides_its_side_even_with_clean_prompts(

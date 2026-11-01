@@ -59,6 +59,7 @@ class MediaInspector(ttk.Frame):
         allow_original: bool = True,
         shown_var: tk.BooleanVar | None = None,
         image_decoder: Callable[[str, threading.Event], InspectionImage] | None = None,
+        follow_workspace: bool = True,
         **kwargs: Any,
     ) -> None:
         kwargs.pop("bg", None)
@@ -99,7 +100,8 @@ class MediaInspector(ttk.Frame):
         policy_found = False
         owner: Any = master
         while owner is not None:
-            if isinstance(getattr(owner, "master", None), ttk.Notebook):
+            # An auxiliary window that outlives tab switches (History compare) opts out of workspace visibility.
+            if follow_workspace and isinstance(getattr(owner, "master", None), ttk.Notebook):
                 self._workspace_hosts.append(owner)
                 for event_name in ("<Map>", "<Unmap>"):
                     binding = owner.bind(event_name, self._workspace_changed, add="+")

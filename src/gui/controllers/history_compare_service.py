@@ -123,9 +123,10 @@ class HistoryCompareService:
 
     def _read(self, job_id: str) -> JobHistoryEntry | None:
         try:
-            return self._repository.get_job(job_id)
+            entry: JobHistoryEntry | None = self._repository.get_job(job_id)
         except Exception as exc:  # noqa: BLE001 - an unreadable store is a visible, content-safe refusal
             raise ComparisonRefused("History could not be read.") from exc
+        return entry
 
     def prepare(self, child_id: str) -> Comparison:
         if not child_id:

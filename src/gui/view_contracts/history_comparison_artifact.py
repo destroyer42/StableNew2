@@ -84,7 +84,7 @@ def _embedded_job_id(image: Image.Image) -> str | None:
 def _recorded_digests(entry: JobHistoryEntry) -> list[str]:
     result = entry.result if isinstance(entry.result, dict) else {}
     artifacts = [result.get("artifact", {})] + [
-        v.get("artifact", {}) for v in result.get("variants", []) if isinstance(v, dict)
+        v.get("artifact", {}) for v in (result.get("variants") or []) if isinstance(v, dict)
     ]
     digests: list[str] = []
     for item in artifacts:
