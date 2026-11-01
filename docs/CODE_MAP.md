@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-645 of 800 modules have a docstring.
+649 of 804 modules have a docstring.
 
 ## src/
 
@@ -230,6 +230,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `generation_profile_strip.py`: Compact generation-profile selector for the Base Generation panel (PR-IMG-PROFILE-630)
 - `gui_invoker.py`: (no docstring)
 - `history_browser_panel_v2.py`: Searchable, paged browser over the whole job history (every row, not only the newest few)
+- `history_compare_dialog.py`: Read-only "Compare with Parent" window (PR-HISTORY-610B): parent image left, child image right, typed differe…
 - `history_iterate_dialog.py`: The "Iterate from History" choice dialog (PR-HISTORY-610A)
 - `job_history_panel_v2.py`: Compact job history renderer for the Pipeline tab
 - `klein_lora_selection_dialog.py`: One batch review of ordered verified candidates, on the Tk thread only
@@ -273,6 +274,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 ## src/gui/controllers/
 
+- `history_compare_service.py`: Read-only "Compare with Parent" (PR-HISTORY-610B): resolve and assess ONE direct parent/child pair
 - `history_iterate_service.py`: Glue for "Iterate from History" (PR-HISTORY-610A): re-reads the canonical record, then hands off - never queu…
 - `learning_controller.py`: (no docstring)
 - `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
@@ -349,6 +351,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `feedback_panel_contract.py`: Feedback panel contract for review/learning flows
 - `form_section_contract.py`: Form section contract independent of widget framework
 - `history_artifact_contract.py`: Select a recorded History artifact by media type, not by its poster image
+- `history_comparison_artifact.py`: Bounded verification of the one recorded still image per job (PR-HISTORY-610B); no thumbnail or directory fal…
 - `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
 - `media_image_decode.py`: Bounded image inspection on workers, reusing the thumbnail utilities and preserving source identity
 - `media_inspector_contract.py`: Ephemeral media inspection state; host workspaces retain artifact/selection authority
@@ -467,6 +470,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `effective_settings.py`: Read-only "Effective Settings" projection of compiled preview jobs (PR-GUI-UX-520)
 - `generation_profile_projection.py`: Toolkit-neutral projection of the model's generation profiles for the Base Generation panel (PR-IMG-PROFILE-6…
 - `history_browser_model.py`: Toolkit-neutral model for the history browser: turn the filter-bar text into a ``HistoryQuery`` and describe…
+- `history_compare_model.py`: Pure parent/child comparison (PR-HISTORY-610B): recorded lineage identity and typed recipe differences
 - `history_iterate_model.py`: Toolkit-neutral eligibility for "Iterate from History" (PR-HISTORY-610A)
 - `lora_authoring_view.py`: Toolkit-neutral presentation of a selected LoRA inside the Prompt tab (GUI-540)
 - `lora_browser.py`: Pure browser projection; registry evidence and ModelPolicy remain authoritative

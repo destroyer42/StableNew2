@@ -167,6 +167,21 @@ calibration rule. Provider bridges such as `CLAUDE.md` and
 replace it. Provider-specific orchestration is an implementation detail, not a
 repository authority.
 
+### Work-package session boundaries and token discipline
+
+**Every new work package starts in a fresh top-level Claude Code or Codex session.** Do not carry an accumulated coding
+conversation across unrelated PRs. When a new package arrives in an existing session, close the old package and hand
+off its contract, branch, exact SHA, accepted evidence, open findings and authorization limits to a new session.
+Resetting session context never authorizes resetting Git history, deleting files, losing user work or restarting an
+application.
+
+Within each package, acquire relevant repository context once; reuse accepted unchanged exact-SHA evidence; avoid
+repetitive broad searches and verbose CI/log reads; run focused validation before the prescribed late gate; wait on
+long-running checks without repeated polling; conduct one aggregate review and bounded repair; and stop when acceptance
+is met. Record the task-start timestamp and all participating session IDs before discovery, and report measured usage
+under `docs/AI_MODEL_SELECTION.md`. Investigate usage exceeding the prescribed 3x threshold. Procedural details remain
+in `docs/AGENT_OPERATING_MODEL.md`.
+
 ## 8. Completion report
 
 Keep it concise: outcome, branch/SHA, evidence, architecture effect, unresolved
