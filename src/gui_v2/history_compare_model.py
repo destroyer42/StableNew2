@@ -173,12 +173,11 @@ def verify_direct_lineage(
     source = _source(child.record)
     if parent.job_id == child.job_id or recorded_parent_id(child.record) != parent.job_id:
         raise ComparisonRefused("These records do not verify a direct parent/child relationship.")
-    for block in (
-        lambda record: _source(record).get("metadata"),
-        lambda record: _get_mapping(record, "workload", "metadata"),
-        lambda record: _get_mapping(record, "provenance", "metadata"),
-    ):
-        metadata, inherited = block(child.record), block(parent.record)
+    for block in (("source", "metadata"), ("workload", "metadata"), ("provenance", "metadata")):
+        metadata, inherited = (
+            _get_mapping(child.record, *block),
+            _get_mapping(parent.record, *block),
+        )
         if not isinstance(metadata, Mapping):
             continue
         # A replay or resume copies its parent's metadata unchanged, so a claim that merely equals what the
