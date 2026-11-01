@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import ttk
 from typing import Any
@@ -57,6 +58,8 @@ class MediaInspector(ttk.Frame):
         show_control: bool = True,
         allow_original: bool = True,
         shown_var: tk.BooleanVar | None = None,
+        image_decoder: Callable[[str, threading.Event], InspectionImage] | None = None,
+        follow_workspace: bool = True,
         **kwargs: Any,
     ) -> None:
         kwargs.pop("bg", None)
@@ -72,7 +75,8 @@ class MediaInspector(ttk.Frame):
         self._height = min(620, min(300, max_height) if max_height else height)
         self._on_source_changed = on_source_changed
         self._decode_video = decode
-        self._decode_image = decode_inspection_image
+        # A host that already proved the file's identity supplies a decoder bound to that proof (History compare).
+        self._decode_image = image_decoder or decode_inspection_image
         self._cancel = threading.Event()
         self._image: InspectionImage | None = None
         self._photo_image: ImageTk.PhotoImage | None = None
@@ -96,7 +100,8 @@ class MediaInspector(ttk.Frame):
         policy_found = False
         owner: Any = master
         while owner is not None:
-            if isinstance(getattr(owner, "master", None), ttk.Notebook):
+            # An auxiliary window that outlives tab switches (History compare) opts out of workspace visibility.
+            if follow_workspace and isinstance(getattr(owner, "master", None), ttk.Notebook):
                 self._workspace_hosts.append(owner)
                 for event_name in ("<Map>", "<Unmap>"):
                     binding = owner.bind(event_name, self._workspace_changed, add="+")

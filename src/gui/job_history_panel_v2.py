@@ -19,7 +19,12 @@ from src.controller.pipeline_controller_services.history_handoff_service import 
     HistoryHandoffService,
 )
 from src.gui import theme_v2 as theme_mod
+from src.gui.controllers.history_compare_service import (
+    has_recorded_parent,
+    resolve_history_repository,
+)
 from src.gui.controllers.history_iterate_service import HistoryIterateRefused, HistoryIterateService
+from src.gui.history_compare_dialog import HistoryCompareDialog
 from src.gui.history_iterate_dialog import CHOICE_REVIEW, HistoryIterateDialog
 from src.gui.view_contracts.history_artifact_contract import resolve_recorded_artifact
 from src.gui.view_contracts.history_sequence_contract import (
@@ -73,6 +78,7 @@ class HistoryActionState:
     sequence_resume: bool = False
     sequence_replay: bool = False
     iterate: bool = False
+    compare: bool = False
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -132,6 +138,14 @@ class JobHistoryPanelV2(ttk.Frame):
             state=tk.DISABLED,
         )
         action_bar.add(self.iterate_btn)
+        self.compare_btn = ttk.Button(
+            action_bar,
+            text="Compare with Parent",
+            command=self._on_compare,
+            state=tk.DISABLED,
+        )
+        action_bar.add(self.compare_btn)
+        self._compare_window: Any = None
         self.svd_btn = ttk.Button(
             action_bar,
             text="Animate with SVD",
@@ -310,6 +324,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self.history_tree.bind("<Leave>", self._hide_tooltip)
         self._history_menu = tk.Menu(self, tearoff=0)
         self._history_menu.add_command(label="Iterate from History...", command=self._on_iterate)
+        self._history_menu.add_command(label="Compare with Parent", command=self._on_compare)
         self._history_menu.add_command(label="Animate with SVD", command=self._on_send_to_svd)
         self._history_menu.add_command(label="Make Video", command=self._on_send_to_video_workflow)
         self._history_menu.add_command(
@@ -582,6 +597,34 @@ class JobHistoryPanelV2(ttk.Frame):
 
         HistoryIterateDialog(self, assessment, on_choose=choose)
 
+    def _on_compare(self) -> None:
+        """Open the read-only parent/child viewer; it re-reads both records itself on a worker."""
+
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).compare:
+            return
+        repository = resolve_history_repository(self.controller)
+        if repository is None:
+            return
+        window = self._compare_window
+        if window is not None and window.winfo_exists():
+            window.load(entry.job_id)
+            window.lift()
+            return
+        self._compare_window = HistoryCompareDialog(
+            self,
+            repository=repository,
+            child_id=entry.job_id,
+            app_state=self.app_state or getattr(self.controller, "app_state", None),
+        )
+
+    def _compare_offered(self, entry: JobHistoryEntry) -> bool:
+        """Cheap gate from the cached row (no repository reads while rendering the table)."""
+
+        return resolve_history_repository(self.controller) is not None and has_recorded_parent(
+            entry
+        )
+
     def _on_browse_all(self) -> None:
         """Open (or raise) the searchable browser over the whole history in its own window."""
 
@@ -679,6 +722,10 @@ class JobHistoryPanelV2(ttk.Frame):
         self.iterate_btn.configure(state=tk.NORMAL if actions.iterate else tk.DISABLED)
         self._history_menu.entryconfigure(
             "Iterate from History...", state=tk.NORMAL if actions.iterate else tk.DISABLED
+        )
+        self.compare_btn.configure(state=tk.NORMAL if actions.compare else tk.DISABLED)
+        self._history_menu.entryconfigure(
+            "Compare with Parent", state=tk.NORMAL if actions.compare else tk.DISABLED
         )
         self.svd_btn.configure(state=tk.NORMAL if actions.svd else tk.DISABLED)
         self.video_workflow_btn.configure(
@@ -946,6 +993,7 @@ class JobHistoryPanelV2(ttk.Frame):
             sequence_resume=bool(sequence_ready and sequence is not None and sequence.can_resume),
             sequence_replay=bool(sequence_ready and sequence is not None and sequence.can_replay),
             iterate=self._iterate_offered(entry),
+            compare=self._compare_offered(entry),
         )
 
     def _iterate_offered(self, entry: JobHistoryEntry) -> bool:

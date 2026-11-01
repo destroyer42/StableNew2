@@ -1,5 +1,6 @@
 """Bounded image inspection on workers, reusing the thumbnail utilities and preserving source identity."""
 
+import io
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,13 +24,17 @@ class InspectionImage:
         return bool(self.image.size == self.source_size)
 
 
-def decode_inspection_image(path: str, cancel: threading.Event) -> InspectionImage:
+def decode_inspection_image(
+    path: str, cancel: threading.Event, *, source_bytes: bytes | None = None
+) -> InspectionImage:
+    """Decode ``path`` (or the caller's already-verified ``source_bytes`` of it) within the inspection budget."""
+
     if cancel.is_set():
         raise ValueError("Image load canceled")
-    if not Path(path).is_file():
+    if source_bytes is None and not Path(path).is_file():
         raise ValueError("Media file is missing")
     try:
-        with Image.open(path) as source:
+        with Image.open(io.BytesIO(source_bytes) if source_bytes is not None else path) as source:
             size = source.size
             if source.width * source.height > MAX_SOURCE_PIXELS:
                 raise ValueError(
