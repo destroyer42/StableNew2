@@ -101,10 +101,20 @@ def _wait_until_viewable(root: tk.Misc, widget: tk.Misc) -> None:
     """Give a freshly selected page time to map: a canvas window maps on a redraw, which a slow host can delay."""
 
     deadline = time.perf_counter() + HIDDEN_RECHECK_SECONDS
+    nudged = False
     while not widget.winfo_viewable() and time.perf_counter() < deadline:
         _pump(root, 0.1)
         for frame in scroll_chain(widget):
             frame.reveal(widget)
+        if not nudged and not widget.winfo_viewable():
+            # scrolling is what an operator does: one unit down and back forces the canvas to redraw its window
+            nudged = True
+            for frame in scroll_chain(widget):
+                frame._canvas.yview_scroll(1, "units")
+            _pump(root, 0.1)
+            for frame in scroll_chain(widget):
+                frame._canvas.yview_scroll(-1, "units")
+            _pump(root, 0.1)
 
 
 def _unmapped_ancestor(widget: tk.Misc) -> str:
