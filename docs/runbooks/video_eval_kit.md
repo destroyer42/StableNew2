@@ -70,9 +70,9 @@ When the jobs finish, **Build eval report...** and choose the run folder. The re
 
 | File | Content |
 |---|---|
-| `index.html` | Cases as rows, arms as columns; every clip loops beside its numbers and any flags. Prompts are hidden in SFW mode. |
-| `metrics.json` | `stablenew.video-eval-report.v1`: each cell's state, measurements, flags and the per-arm means. |
-| `ratings.csv` | One row per clip for your rating (`rating_1_to_5`, `requested_action`: achieved, partially_achieved, not_achieved or cannot_assess, `notes`). Rebuilding the report keeps every rating already typed for the same job. |
+| `index.html` | Cases as rows, arms as columns. Each case shows its hash-verified source image; every clip loops beside its numbers, flags, your ratings and its difference from the baseline. A summary and a readiness banner sit above the grid. Prompts, notes and the source image are hidden in SFW mode; the clips themselves are not content-screened. |
+| `metrics.json` | `stablenew.video-eval-report.v1`: each cell's state, measurements, flags, clip digest, the per-arm means and an `identity_assessment` block (cell states, comparisons, per-arm summaries, readiness, source checks). It never contains your notes. |
+| `ratings.csv` | One row per clip for your review (section 4). Rebuilding keeps every row, value and unknown column already there. |
 
 Rebuild the report at any time; unfinished jobs show as queued or running.
 
@@ -93,7 +93,75 @@ higher, more than twice its brightness flicker, colour drift more than 10 higher
 action happened. The owner's rating is the decision (roadmap section 5: the owner's eye is the gate, metrics are
 guardrails).
 
-## 4. Deciding
+## 4. Reviewing identity and continuity (PR-VID-QUALITY-351)
+
+Open `index.html`, watch each clip beside its case's source image (and the original clip file for fine detail: the
+page's numbers use a downscaled preview of the first 120 frames), then fill in that clip's row in `ratings.csv` and
+rebuild. Blank means *not assessed*, never zero or pass.
+
+| Column | Values |
+|---|---|
+| `rating_1_to_5` | Overall quality (optional). |
+| `requested_action` | `achieved`, `partially_achieved`, `not_achieved`, `cannot_assess`. Independent of identity. |
+| `source_fidelity_1_to_5` | Does the generated subject still resemble the original image? **Required.** |
+| `subject_stability_1_to_5` | Does that same subject stay recognizable through the whole clip? **Required.** |
+| `temporal_continuity_1_to_5` | Smooth and coherent over time, not flickering, freezing or morphing. |
+| `anatomy_integrity_1_to_5` | Faces, clothing, proportions and important objects stable and plausible. |
+| `scene_stability_1_to_5` | Background coherent. |
+| `critical_identity_break` | `yes`, `no`, `cannot_assess`. **Required** as yes or no for a complete review. |
+| `failure_categories` | Any of `face_or_identity_drift`, `clothing_or_appearance_change`, `body_proportion_change`, `important_object_change`, `subject_disappearance`, `scene_background_drift`, `temporal_flicker`, `motion_freeze`, `other`, separated by `;`. |
+| `first_failure_seconds` | Optional time you actually saw the first failure in the original clip. |
+| `notes` | Free text. |
+| `artifact_sha256` | Filled in by the report; see below. |
+
+Scores: **5** stable and convincing, no meaningful defect; **4** minor imperfection, identity preserved; **3**
+noticeable issue but still interpretable; **2** major inconsistency that materially reduces usefulness; **1** severe
+failure, no longer trustworthy. A critical break is a different face, a central object turning into another object
+without the requested action causing it, substantially changed identifying features, or the subject disappearing or
+being replaced. An intended rotation, expression change, occlusion or camera move is not a break just because pixels
+differ. A frozen but stable clip is `requested_action = not_achieved`, not a success; a lively clip of a different
+subject has a critical break.
+
+**Evidence identity.** The report writes `artifact_sha256` (the digest of the clip bytes) into each row that has no
+judgment yet. A judgment is only counted while that digest equals the clip's current digest.
+
+* If the clip file is replaced, the row becomes **STALE_ARTIFACT**: your numbers stay in the file, but they are not
+  counted. To review the new clip, watch it, then type `rebind` in `artifact_sha256` and rebuild.
+* Rows rated before this column existed are **legacy / artifact identity unverified**: kept, shown for reference, not counted. Re-review
+  path: watch the current clip, confirm or change the values, type `rebind` in `artifact_sha256`, rebuild.
+* The report never rewrites an existing digest by itself.
+
+**Source image.** The recorded source path is hashed and compared with the manifest's `image_sha256`. A missing file is
+**UNAVAILABLE**; a changed file is **INCOMPARABLE** and is not shown. No other file is ever substituted.
+
+**Per-cell state:** UNREVIEWED, PARTIAL (something required is missing or invalid), REVIEWED, IDENTITY_CONCERN (you
+answered `yes`), LEGACY_UNVERIFIED, STALE_ARTIFACT, UNAVAILABLE (no playable clip or source), INCOMPARABLE.
+
+**Baseline comparison.** For each case and candidate arm the report compares only counted, complete reviews, and only when the
+pair is a **verified controlled pair**: the stored NJRs of both jobs agree with the manifest on job id, backend, seed, source
+image and (for Video Workflow arms) prompt. If the snapshots are missing or lack a fact the pair is **not fully verified** and
+yields no comparison; a contradiction (another seed, source, prompt, backend or job) makes it **incomparable**. Differences are
+points on the 1-5 anchors, shown per dimension, with requested action, critical break and numeric flags alongside. A candidate
+two or more points below the baseline on source fidelity or subject stability, or a new critical break, is a *material*
+regression.
+
+**Readiness** (per candidate arm, then overall; a review aid, never approval, ranking or promotion):
+
+* `IDENTITY CONCERNS`: a counted critical identity break, or a material regression.
+* `INSUFFICIENT EVIDENCE`: not every case has a verified, fully reviewed comparison.
+* `READY FOR OWNER REVIEW`: every case does, and no critical break is recorded. The decision is still yours.
+
+**Safety of the file.** If `ratings.csv` is malformed (bad CSV or UTF-8, duplicate rows, a row longer than the header,
+over 5 MiB), the build stops with an error and writes nothing; fix or move the file. The first rebuild of an older layout
+copies it to `ratings.csv.legacy-<time>.bak`. If the file changes while a report is being built, nothing is overwritten.
+Rows for jobs no longer in the run, and any columns this version does not know, are kept.
+
+**Later physical qualification.** Whether identity actually improved with a workflow or setting is answered only by a separate,
+owner-reviewed physical run (named workflow versions, cases and sources, baseline and candidate settings, number of generations,
+expected VRAM/RAM, runtime state, device monitoring, stop conditions for device loss, and what result would justify a change).
+This tooling makes no generation and starts no runtime.
+
+## 5. Deciding
 
 * An arm is promotion-worthy when its ratings beat the baseline on the cases that matter and it carries no flag
   the owner considers a regression. Record the run id, the arms and the decision in the promoting PR.
