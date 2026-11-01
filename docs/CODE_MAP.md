@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-654 of 809 modules have a docstring.
+659 of 814 modules have a docstring.
 
 ## src/
 
@@ -663,6 +663,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `config_variant_plan_v2.py`: Config Variant Plan V2 — Config Sweep Support (PR-CORE-E)
 - `controlnet_compile.py`: Multi-unit adapter at the existing PromptPack conditioning compile seam
 - `exact_profile_effective_config.py`: Effective-configuration preparation for the generic (non-PromptPack) NJR builder (PR-IMG-MODELS-159)
+- `execution_admission.py`: Execution eligibility checks used before the canonical repository admission
 - `executor.py`: Pipeline execution module
 - `global_prompt_policy.py`: Freeze and read the operator-selected global prompt policy
 - `history_variation_compiler.py`: Pure compiler for "Regenerate with Changes" from a persisted history job (PR-HISTORY-610A)
@@ -939,12 +940,16 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_experiment.py`: One-variable operator experiments for Video Workflow (PR-VID-194)
 - `video_workflow_intent.py`: Producer-side, capability-driven video workflow intent (PR-VID-130)
 - `video_workflow_njr_builder.py`: The single Video Workflow NJR construction path (PR-VID-194)
+- `workflow_admission.py`: Workflow-specific admission constraints at the canonical JobService boundary
+- `workflow_asset_integrity.py`: Read-only verification of catalog-pinned assets in the configured Comfy model folders
 - `workflow_catalog.py`: (no docstring)
+- `workflow_catalog_fun_control.py`: Pinned stock-node Fun Control graph; no installation or physical qualification
 - `workflow_catalog_wan_animate2.py`: Wan-Animate-2 experimental workflow specs (PR-VID-190 part 2)
 - `workflow_compiler.py`: (no docstring)
 - `workflow_contracts.py`: (no docstring)
 - `workflow_controls.py`: Neutral, spec-declared operator controls for workflow-owned generation inputs (PR-VID-192)
 - `workflow_frame_count.py`: Neutral, spec-declared generation-length contract (PR-VID-190)
+- `workflow_input_integrity.py`: Exact prepared-motion admission/dispatch policy, opt-in by workflow declaration
 - `workflow_motion_guidance.py`: Display-only, evidence-grounded motion guidance for a Video Workflow (PR-VID-196)
 - `workflow_picker.py`: Operator-facing workflow choices for the Video Workflow tab (PR-VID-UX-313)
 - `workflow_preflight.py`: Read-only readiness gates for a Comfy video workflow, answered before the job is queued (PR-VID-UX-311)

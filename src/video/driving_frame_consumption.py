@@ -36,12 +36,61 @@ _CONSUMPTION_RULE = (
 )
 
 
+def _canny_consumption(template: Mapping[str, Any], revision: str) -> DrivingFrameConsumption:
+    """Recognize only the pinned, frame-preserving Canny path (no seek or resampling)."""
+    consumers = [
+        node
+        for node in template.values()
+        if isinstance(node, Mapping) and node.get("class_type") == "Wan22FunControlToVideo"
+    ]
+    if len(consumers) != 1 or revision != "6b747c0428c343e1417219641db93a4fb7cb69ae":
+        return DrivingFrameConsumption(
+            False, "The Canny frame consumer or runtime is not verified."
+        )
+    inputs = consumers[0].get("inputs", {})
+    link = inputs.get("control_video")
+    for node_type, port in (
+        ("Canny", "image"),
+        ("GetVideoComponents", "video"),
+        ("LoadVideo", "file"),
+    ):
+        if (
+            not isinstance(link, (list, tuple))
+            or len(link) != 2
+            or type(link[1]) is not int
+            or link[1] != 0
+        ):
+            return DrivingFrameConsumption(False, "The Canny driving-frame path is not verified.")
+        node = template.get(str(link[0]), {})
+        if not isinstance(node, Mapping) or node.get("class_type") != node_type:
+            return DrivingFrameConsumption(False, "The Canny driving-frame path is not verified.")
+        ports = node.get("inputs", {})
+        if node_type == "Canny" and (ports.get("low_threshold"), ports.get("high_threshold")) != (
+            0.1,
+            0.6,
+        ):
+            return DrivingFrameConsumption(False, "The Canny thresholds are not verified.")
+        link = ports.get(port)
+    if link != "{{input.pose_video}}" or "start_image" in inputs:
+        return DrivingFrameConsumption(False, "The Canny driving-video binding is not verified.")
+    return DrivingFrameConsumption(
+        True,
+        "Verified against the pinned ComfyUI node source.",
+        rule="Ordered driving frames pass through Canny (0.1 / 0.6), then per-frame bilinear "
+        "cover resize and centre crop to the frozen geometry. No rate conversion occurs in the graph; "
+        "admission requires the exact prepared length and 24 FPS, preventing truncation or padding.",
+        runtime_revision=revision,
+        requires_prepared_source=True,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class DrivingFrameConsumption:
     verified: bool
     reason: str
     rule: str = ""
     runtime_revision: str = ""
+    requires_prepared_source: bool = False
 
 
 def _verified_pose_chain(template: Mapping[str, Any], node_id: str) -> bool:
@@ -99,6 +148,12 @@ def driving_frame_consumption(spec: Any) -> DrivingFrameConsumption:
     template = defaults.get("prompt_template")
     if not isinstance(template, Mapping):
         return DrivingFrameConsumption(False, "The workflow graph is not available to verify.")
+    if any(
+        isinstance(node, Mapping) and node.get("class_type") == "Wan22FunControlToVideo"
+        for node in template.values()
+    ):
+        provenance = defaults.get("provenance") or {}
+        return _canny_consumption(template, str(provenance.get("comfyui_revision") or ""))
     animate_ids = [
         node_id
         for node_id, node in template.items()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.video.workflow_catalog_fun_control import build_fun_control_spec
 from src.video.workflow_catalog_wan_animate2 import build_wan_animate2_specs
 from src.video.workflow_contracts import (
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
@@ -21,6 +22,7 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_wan22_ti2v_5b_i2v_v1_2(),
         _build_wan22_ti2v_5b_i2v_v1_3(),
         *build_wan_animate2_specs(),
+        build_fun_control_spec(_build_wan22_ti2v_5b_i2v_v1_3()),
     )
 
 

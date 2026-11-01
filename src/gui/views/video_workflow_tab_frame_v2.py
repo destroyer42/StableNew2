@@ -356,6 +356,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             command=self._on_submit,
         )
         self.queue_workflow_button.pack(side="left")
+        self.frozen_plan_button = ttk.Button(action_bar, text="Preview Frozen Plan",
+                                             command=self._preview_frozen_plan, style="Dark.TButton")
         self.queue_workflow_tooltip = attach_tooltip(
             self.queue_workflow_button,
             "Queue a workflow-driven video job using the selected workflow, anchors, prompts, and route shown in this tab.",
@@ -562,7 +564,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.pose_video_frame = ttk.Frame(adv, style="Panel.TFrame")
         self.pose_video_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         pose_video_label = ttk.Label(
-            self.pose_video_frame, text="Driving Video", style="Dark.TLabel"
+            self.pose_video_frame, text="Driving / Control Video", style="Dark.TLabel"
         )
         pose_video_label.pack(side="left", padx=(0, 6))
         self.pose_video_entry = ttk.Entry(
@@ -1101,6 +1103,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.seed_entry.grid_remove()
             self.seed_var.set("")
         self._apply_frame_count_choices(workflow_meta, enabled("frame_count"))
+        plan_button = getattr(self, "frozen_plan_button", None)
+        if plan_button is not None:
+            if visible.get("frozen_preview"):
+                plan_button.pack(side="left", padx=(8, 0), before=self.status_label)
+            else:
+                plan_button.pack_forget()
         if bool(visible.get("pose_video", False)):
             self.pose_video_frame.grid()
         else:
@@ -1135,6 +1143,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         The controller still refuses an un-opted-in experimental job (defence in depth)."""
 
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
+        policy_reason = (workflow_meta.get("operator_projection") or {}).get("admission_block_reason")
+        if policy_reason:
+            return str(policy_reason)
         if workflow_meta.get("experimental") and not self.experimental_opt_in_var.get():
             return "Queue is off until you tick the experimental opt-in for this job."
         runtime_reason = self._runtime_readiness_session.block_reason()
@@ -1472,7 +1483,18 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # The batch owns its sources; the single-image field is not part of the batch inputs.
         form = self.get_video_workflow_state(for_submission=True)
         form.pop("source_image_path", None)
+        if getattr(self, "_single_frozen_plan", False):
+            form["_preview_reference_path"] = self.source_image_var.get().strip()
         return form
+
+    def _preview_frozen_plan(self) -> None:
+        """Use the existing one-source batch compiler/worker and its edit-invalidated preview."""
+        source = self.source_image_var.get().strip()
+        if not source:
+            self.status_var.set("Choose a reference image before Preview Frozen Plan.")
+            return
+        self._single_frozen_plan = True
+        self.batch_panel.preview_single_source(source)
 
     def _on_batch_mode_change(self, active: bool) -> None:
         # One authoritative source mode at a time: batch mode disables the single-image queue.

@@ -54,6 +54,7 @@ def test_exactly_two_catalog_versions_are_approved_and_both_are_ti2v() -> None:
         APPROVED_FRAMES_OUT,
     ]
     assert {key for key, state in states.items() if state == "experimental"} == {
+        ("wan22_fun_control_5b_canny_i2v_v1", "1.0.0"),
         *OLDER_TI2V,
         *(
             (wid, ver)
@@ -61,7 +62,9 @@ def test_exactly_two_catalog_versions_are_approved_and_both_are_ti2v() -> None:
             for ver in ("1.0.0", "1.1.0", "1.2.0")
         ),
     }
-    assert len(states) == 10  # the frames-out TI2V-5B revision is the only addition
+    assert (
+        len(states) == 11
+    )  # Fun Control adds one experimental identity; approvals stay unchanged.
 
 
 def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_is_unchanged() -> (
@@ -72,7 +75,7 @@ def test_the_runnable_listing_is_the_approved_version_and_the_offerable_listing_
     assert [
         (s.workflow_id, s.workflow_version) for s in registry.list_specs_for_backend("comfy")
     ] == [APPROVED, APPROVED_FRAMES_OUT]
-    assert len(registry.list_offerable_specs("comfy")) == 10
+    assert len(registry.list_offerable_specs("comfy")) == 11
 
 
 def test_registry_runs_the_approved_version_without_opt_in_and_keeps_older_ones_gated() -> None:

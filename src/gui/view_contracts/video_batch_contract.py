@@ -50,6 +50,7 @@ class BatchPreviewView:
     warnings: tuple[str, ...]
     notes: tuple[str, ...]
     blocked_indices: tuple[int, ...]
+    admission_block_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -161,8 +162,34 @@ def build_preview_view(plan: Any) -> BatchPreviewView:
     rows = tuple(_row_view(row, jobs.get(row.index)) for row in assessment.rows)
     blocked = tuple(view.index for view in rows if view.blocked)
     frozen = bool(plan.njrs)
+    identity_summary: list[tuple[str, str]] = []
+    admission_block_reason = ""
+    for njr in plan.njrs:
+        stage = njr.config.get("video_workflow") or {}
+        if "workflow_identity" in stage:
+            resource = stage["workflow_identity"].get("resource_readiness") or {}
+            if resource.get("qualification_status") == "not_qualified":
+                admission_block_reason = resource["reason"]
+            identity_summary.extend(
+                (
+                    ("Graph SHA-256", stage["workflow_identity"]["graph_sha256"]),
+                    ("Reference SHA-256", stage["reference_identity"]["prepared_sha256"]),
+                    ("Driving / Control Video SHA-256", stage["pose_video_sha256"]),
+                    (
+                        "Processing",
+                        "Canny 0.1 / 0.6; exact prepared frames at 24 FPS; frozen geometry shown per source",
+                    ),
+                    ("Hardware", admission_block_reason or "See runtime readiness"),
+                )
+            )
+            for name, asset in stage["workflow_identity"]["assets"]["files"].items():
+                identity_summary.append(
+                    ("Model", f"{name}; {asset['size']} bytes; SHA-256 {asset['sha256']}")
+                )
     count = len(assessment.rows)
-    if plan.eligible:
+    if admission_block_reason:
+        headline = "Frozen plan prepared. Queue is off: " + admission_block_reason
+    elif plan.eligible:
         headline = (
             f"Eligible to queue: {count} independent video job(s) "
             "(software and admission checks only)."
@@ -182,11 +209,12 @@ def build_preview_view(plan: Any) -> BatchPreviewView:
         frozen=frozen,
         headline=headline,
         rows=rows,
-        summary=_summary(assessment, plan.batch_id, frozen),
+        summary=(*_summary(assessment, plan.batch_id, frozen), *identity_summary),
         problems=tuple(assessment.problems),
         warnings=tuple(assessment.warnings),
         notes=tuple(assessment.notes),
         blocked_indices=blocked,
+        admission_block_reason=admission_block_reason,
     )
 
 
@@ -351,7 +379,11 @@ class VideoBatchSession:
 
     @property
     def preview_valid(self) -> bool:
-        return self._plan is not None and bool(self._plan.eligible)
+        return (
+            self._plan is not None
+            and bool(self._plan.eligible)
+            and not (self.preview and self.preview.admission_block_reason)
+        )
 
     @property
     def busy_text(self) -> str:
@@ -459,6 +491,9 @@ class VideoBatchSession:
             self._set_message("Build an eligible preview first; blocked sources must be excluded.")
             return None
         if self.invalidate_if_changed(form_data):
+            return None
+        if self.preview and self.preview.admission_block_reason:
+            self._set_message(self.preview.admission_block_reason)
             return None
         self.busy = "queue"
         self._set_message("")
