@@ -798,10 +798,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             add_to_library=self._add_output_to_library,
             on_library_changed=self._refresh_motion_library,
         )
-        self.recent_outputs_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.recent_outputs_panel.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(0, 6))
 
         # PR-VID-MOTION-LIB-353: local motion-reference catalog; Use as Driving Video fills the
         # driving-video field above and nothing else.
+        # It sits above Recent outputs, which stays the lowest control of the scrolled form.
         self._recent_controller = self._experiment_controller()
         self.motion_library_panel = WorkflowMotionLibraryPanel(
             body,
@@ -812,7 +813,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             selected_workflow=self._selected_workflow_identity,
             on_handoff=self._apply_library_handoff,
         )
-        self.motion_library_panel.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.motion_library_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
 
     def _add_labeled_entry(
         self,

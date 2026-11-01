@@ -28,6 +28,7 @@ from src.gui.view_contracts.motion_library_contract import (
 )
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
+from src.gui.widgets.flow_row_v2 import FlowRow
 from src.gui.widgets.media_inspector import MediaInspector
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.utils.os_shell import open_file, reveal_in_file_manager
@@ -170,7 +171,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         intro = ttk.Label(self, text=_INTRO, style="Muted.TLabel", justify="left")
         intro.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         bind_wraplength(intro)
-        bar = ttk.Frame(self, style="Panel.TFrame")
+        bar = FlowRow(self, style="Panel.TFrame")
         bar.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         self.choose_button = ttk.Button(
             bar, text="Choose library folder...", style="Dark.TButton", command=self._on_choose_root
@@ -194,24 +195,22 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             self.refresh_button,
             self.copy_check,
         )
-        for index, widget in enumerate(buttons):
-            widget.grid(row=index // 3, column=index % 3, padx=(0, 6), pady=(0, 4), sticky="w")
-        import_options = ttk.Frame(self, style="Panel.TFrame")
+        for widget in buttons:
+            bar.add(widget)
+        import_options = FlowRow(self, style="Panel.TFrame")
         import_options.grid(row=2, column=0, sticky="ew", pady=(0, 6))
-        ttk.Label(import_options, text="Import as", style="Dark.TLabel").grid(
-            row=0, column=0, padx=(0, 4), sticky="w"
-        )
+        import_options.add(ttk.Label(import_options, text="Import as", style="Dark.TLabel"))
         self.import_category_combo = ttk.Combobox(
             import_options, state="readonly", width=18, textvariable=self.import_category_var,
             values=[_label_for(c) for c in SOURCE_CATEGORIES if c != "stablenew_generated"],
         )  # fmt: skip
-        self.import_category_combo.grid(row=0, column=1, padx=(0, 8), sticky="w")
-        ttk.Label(import_options, text="Tags", style="Dark.TLabel").grid(
-            row=0, column=2, padx=(0, 4), sticky="w"
+        import_options.add(self.import_category_combo)
+        import_options.add(ttk.Label(import_options, text="Tags", style="Dark.TLabel"))
+        import_options.add(
+            ttk.Entry(
+                import_options, textvariable=self.import_tags_var, width=24, style="Dark.TEntry"
+            )
         )
-        ttk.Entry(
-            import_options, textvariable=self.import_tags_var, width=24, style="Dark.TEntry"
-        ).grid(row=0, column=3, sticky="w")
         self.status_label = ttk.Label(
             self, textvariable=self.status_var, style="Muted.TLabel", justify="left"
         )
@@ -228,10 +227,12 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         self.filters = DisclosureSection(self, title="Filters")
         self.filters.grid(row=5, column=0, sticky="ew", pady=(0, 6))
         body = self.filters.body
+        body.columnconfigure(0, weight=1)
         self.filter_combos: dict[str, ttk.Combobox] = {}
-        for index, (key, label, choices) in enumerate(_FILTER_CHOICES):
-            cell = ttk.Frame(body, style="Panel.TFrame")
-            cell.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 10), pady=(0, 4))
+        choice_row = FlowRow(body, style="Panel.TFrame")
+        choice_row.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        for key, label, choices in _FILTER_CHOICES:
+            cell = ttk.Frame(choice_row, style="Panel.TFrame")
             ttk.Label(cell, text=label, style="Dark.TLabel", width=10).grid(
                 row=0, column=0, sticky="w"
             )
@@ -241,26 +242,22 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             )  # fmt: skip
             combo.grid(row=0, column=1, sticky="w")
             self.filter_combos[key] = combo
-        rows = (len(_FILTER_CHOICES) + 1) // 2
-        ranges = ttk.Frame(body, style="Panel.TFrame")
-        ranges.grid(row=rows, column=0, columnspan=2, sticky="w")
-        for column, (label, var) in enumerate(
-            (
-                ("Min s", self.min_seconds_var),
-                ("Max s", self.max_seconds_var),
-                ("Min frames", self.min_frames_var),
-                ("Max frames", self.max_frames_var),
-            )
+            choice_row.add(cell)
+        ranges = FlowRow(body, style="Panel.TFrame")
+        ranges.grid(row=1, column=0, sticky="ew", pady=(0, 4))
+        for label, var in (
+            ("Min s", self.min_seconds_var),
+            ("Max s", self.max_seconds_var),
+            ("Min frames", self.min_frames_var),
+            ("Max frames", self.max_frames_var),
         ):
-            ttk.Label(ranges, text=label, style="Dark.TLabel").grid(
-                row=0, column=column * 2, padx=(0, 4)
-            )
-            ttk.Entry(ranges, textvariable=var, width=7, style="Dark.TEntry").grid(
-                row=0, column=column * 2 + 1, padx=(0, 8)
-            )
+            pair = ttk.Frame(ranges, style="Panel.TFrame")
+            ttk.Label(pair, text=label, style="Dark.TLabel").grid(row=0, column=0, padx=(0, 4))
+            ttk.Entry(pair, textvariable=var, width=7, style="Dark.TEntry").grid(row=0, column=1)
+            ranges.add(pair)
         ttk.Checkbutton(
             body, text="Marked good for motion driving only", variable=self.reviewed_only_var, style="Dark.TCheckbutton"
-        ).grid(row=rows + 1, column=0, columnspan=2, sticky="w")  # fmt: skip
+        ).grid(row=2, column=0, sticky="w")  # fmt: skip
         watched = [
             self.search_var,
             self.min_frames_var,
@@ -312,7 +309,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         self.detail_text = tk.Text(detail, height=9, wrap="word", state="disabled", takefocus=True)
         style_text_widget(self.detail_text, elevated=True)
         self.detail_text.grid(row=2, column=0, sticky="ew", pady=(0, 6))
-        actions = ttk.Frame(detail, style="Panel.TFrame")
+        actions = FlowRow(detail, style="Panel.TFrame")
         actions.grid(row=3, column=0, sticky="ew")
         self.use_button = ttk.Button(
             actions,
@@ -334,10 +331,8 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         self.reveal_button = ttk.Button(
             actions, text="Reveal", style="Dark.TButton", command=self._on_reveal, state="disabled"
         )
-        for index, button in enumerate(
-            (self.use_button, self.relink_button, self.open_button, self.reveal_button)
-        ):
-            button.grid(row=index // 2, column=index % 2, padx=(0, 6), pady=(0, 4), sticky="w")
+        for button in (self.use_button, self.relink_button, self.open_button, self.reveal_button):
+            actions.add(button)
 
     def _media_decode_arg(self) -> Any:
         return getattr(self, "_media_decode", None)

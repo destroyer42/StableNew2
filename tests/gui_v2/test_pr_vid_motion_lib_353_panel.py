@@ -394,9 +394,14 @@ def test_keyboard_return_on_a_row_uses_the_clip_and_every_control_takes_focus(pa
         assert str(widget.cget("takefocus")) not in {"0", "false"}
 
 
-@pytest.mark.parametrize("width", [420, 900])
-def test_every_action_is_reachable_on_a_narrow_layout(panel_env, width: int) -> None:
+@pytest.mark.parametrize(("width", "font_scale"), [(420, 1.0), (420, 1.6), (900, 1.0)])
+def test_every_action_is_reachable_on_a_narrow_layout(
+    panel_env, request, width: int, font_scale: float
+) -> None:
     panel, root = panel_env.panel, panel_env.root
+    base = float(root.tk.call("tk", "scaling"))
+    root.tk.call("tk", "scaling", base * font_scale)  # wider fonts, as on a Linux host
+    request.addfinalizer(lambda: root.tk.call("tk", "scaling", base))
     root.geometry(f"{width}x900")
     panel.request_refresh()
     assert _pump_until(root, lambda: len(panel.tree.get_children()) == 3)
@@ -415,6 +420,14 @@ def test_every_action_is_reachable_on_a_narrow_layout(panel_env, width: int) -> 
     ):  # fmt: skip
         assert widget.winfo_ismapped(), widget
         assert widget.winfo_rootx() + widget.winfo_reqwidth() <= limit + 2, (widget, width)
+    # Nothing else the operator can see may be pushed past the pane either (filters, ranges, import options).
+    stack = list(panel.winfo_children())
+    while stack:
+        widget = stack.pop()
+        stack.extend(widget.winfo_children())
+        if widget.winfo_class() in {"Frame", "TFrame", "Toplevel"} or not widget.winfo_ismapped():
+            continue
+        assert widget.winfo_rootx() + widget.winfo_width() <= limit + 2, (widget, width, font_scale)
 
 
 def test_destroying_the_panel_mid_work_is_clean(panel_env) -> None:
