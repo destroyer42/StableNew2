@@ -782,6 +782,8 @@ def _build_record(
             "pixel_format": original_facts.pixel_format,
             "width": original_facts.display_width,
             "height": original_facts.display_height,
+            "coded_width": original_facts.coded_width,
+            "coded_height": original_facts.coded_height,
             "rotation_quadrants": original_facts.rotation_quadrants,
             "frame_rate": original_facts.fps_rational,
             "frame_count": original_facts.frame_count,
@@ -794,6 +796,8 @@ def _build_record(
             "frames": plan.output_frames,
             "width": derived_facts.display_width,
             "height": derived_facts.display_height,
+            "coded_width": derived_facts.coded_width,
+            "coded_height": derived_facts.coded_height,
             "rotation_quadrants": derived_facts.rotation_quadrants,
             "pixel_format": pixel_format,
             "frame_rate": _rate_text(plan.output_rate),
@@ -883,17 +887,24 @@ def validate_prepared_record(
     # Reject old, validly-hashed but oversized Fun Control derivatives at admission.
     if contract.workflow_id == FUN_CONTROL_WORKFLOW_ID:
         try:
-            required_resize = fun_control_resize(
-                int(original.get("width") or 0),
-                int(original.get("height") or 0),
-                contract.workflow_id,
+            # Older records hold display dimensions only; a phone-video rotation
+            # swaps axes but must never change the Canny decode-size verdict.
+            original_size = (
+                int(original.get("coded_width") or original.get("width") or 0),
+                int(original.get("coded_height") or original.get("height") or 0),
             )
+            if "coded_width" not in original and int(original.get("rotation_quadrants") or 0) % 2:
+                original_size = original_size[::-1]
+            required_resize = fun_control_resize(*original_size, contract.workflow_id)
         except (TypeError, ValueError) as exc:
             raise PreparedMotionSourceError("Invalid original video geometry.") from exc
         if required_resize is not None:
             detail = _mapping(_mapping(data.get("processing")).get("resize"))
             if (
-                (derived.get("width"), derived.get("height")) != required_resize
+                (
+                    derived.get("coded_width", derived.get("width")),
+                    derived.get("coded_height", derived.get("height")),
+                ) != required_resize
                 or (detail.get("width"), detail.get("height")) != required_resize
                 or detail.get("policy") != "fun-control-canny-max-832"
             ):
