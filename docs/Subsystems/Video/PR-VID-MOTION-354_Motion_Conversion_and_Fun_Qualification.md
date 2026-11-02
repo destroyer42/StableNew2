@@ -58,7 +58,7 @@ thing that can run a case and refuses unless `--authorize-plan` equals the store
 |---|---|
 | Q0 | Offline readiness above. No GPU, no runtime. |
 | Q1 | One generation, 17 frames, 480x832, seed 424242, 900 s limit (Mixamo walk). |
-| Q1C | Source-type coverage at 17 frames, one fresh runtime per clip: the Q1 walk plus Mixamo run and Rokoko walk (character FBX), two Xsens skeleton renders (skeleton FBX), two handwritten BVH files, three Pexels MP4s. |
+| Q1C | Source-type coverage at 17 frames, one fresh runtime per clip: the Q1 walk plus Mixamo run and Rokoko walk (character FBX), two Xsens side-view skeleton renders (skeleton FBX), three handwritten BVH files, three Pexels MP4s (pre-scaled to 480x832). |
 | Q2 | 49 frames seeds 424242 and 424243 (repeatability) plus a cancel/release case, 1800 s limit; only after a clean Q1. |
 
 Stop conditions (frozen in the digest): device loss, allocation failure, host commit >= 0.95 for two samples, available RAM <
@@ -73,46 +73,56 @@ identity), `FEASIBLE` (every case clean): technical feasibility on this host onl
 catalog policy. Offline tests drive the executor with fake managers and clients for every outcome
 (`tests/video/test_pr_vid_motion_354_fun_physical.py`).
 
-### Physical result (2026-11-02, plan digest `58eb515e0df16dfc3e0bd87214d120e6cf4f518d6eb7176ba6bcfd0f83b41b33`)
+### Physical results (2026-11-02, three owner-authorized runs on the same host)
 
-Authorized by the owner in chat for exactly this digest. Q0 READY (weights, all 12 pinned inputs, runtime commit). GPU RTX 4070 Ti
-12 GB, host 32 GB RAM plus a 21 GB page file (commit limit about 54 GB), baseline commit 0.59 with the desktop open.
+GPU RTX 4070 Ti 12 GB, host 32 GB RAM plus a 21 GB page file (commit limit about 54 GB). The owner authorized each plan digest in
+chat. Run 1 and run 2 are kept as evidence because they show what is and is not safe to feed the workflow.
 
-**Harness verdict: NO-GO**, from `q1c_cov_mp4_dance: host_commit_pressure` with complete telemetry. Q2 was never started (the
-harness stops at the first non-clean case).
+| Run | Plan digest | Verdict | What happened |
+|---|---|---|---|
+| 1 | `58eb515e0df1...` | NO-GO | 9 of 10 clips clean at host commit 0.89-0.92 (desktop apps open); `q1c_cov_mp4_dance` reached host commit 0.995 during load and was stopped. |
+| 2 | `99bea6b0f90c...` | INCONCLUSIVE | Apps closed; 9 clips clean at commit 0.65-0.69; `q1c_cov_mp4_wave` made no progress for 900 s after load and hit the timeout (one `nvlddmkm` event 153 was logged at the moment the owned process tree was stopped, teardown clean). |
+| 3 | `a6080f532d00...` | **FEASIBLE** | All 14 cases clean, including Q2. |
+
+**Finding from runs 1 and 2.** Both failing clips were the 4K landscape MP4s. Source preparation is deliberately exact and does not
+rescale, so those clips reached Comfy at 3840x2160 (and the treadmill at 1440x2560) while the graph runs `LoadVideo ->
+GetVideoComponents -> Canny` at the clip's own resolution and only then lets `Wan22FunControlToVideo` resize to 480x832. Every
+clean clip in runs 1 and 2 was 480x832 (Blender output) except the treadmill, which was the slowest clean case (60-67 s versus 22-37 s).
+Run 3 pre-scaled the three MP4 drivers to 480x832 with ffmpeg (lanczos, centre crop, CRF 12) as operator input preparation, and
+every MP4 completed in 22-24 s. This is evidence about the inputs, not a change to the frozen catalog graph.
+
+**Run 3 detail** (plan `a6080f532d0043f0cca13490149353466dab6730b76b83576d6b88298da2e720`; Q0 READY; every case passed teardown
+verification with owned processes gone and VRAM back to baseline; the system event log showed no display-driver, WHEA or power fault):
 
 | Case | Source type | Frames | Wall | Peak commit | Min free RAM | Peak VRAM |
 |---|---|---|---|---|---|---|
-| q1 Mixamo walk | fbx_character | 17/17 | 27 s | 0.894 | 9791 MiB | 11692 MiB |
-| Mixamo running | fbx_character | 17/17 | 35 s | 0.897 | 10686 | 11577 |
-| Rokoko walk cycle | fbx_character | 17/17 | 42 s | 0.915 | 9978 | 11630 |
-| Xsens walk (skeleton) | fbx_skeleton | 17/17 | 28 s | 0.894 | 10973 | 11730 |
-| Xsens run (skeleton) | fbx_skeleton | 17/17 | 30 s | 0.894 | 10661 | 11366 |
-| BVH arm raise | bvh | 17/17 | 29 s | 0.892 | 10949 | 11508 |
-| BVH walk in place | bvh | 17/17 | 29 s | 0.896 | 11063 | 11732 |
-| Pexels treadmill | mp4 | 17/17 | 60 s | 0.921 | 9685 | 11700 |
-| Pexels yoga | mp4 | 17/17 | 40 s | 0.909 | 10346 | 11700 |
-| Pexels dancing | mp4 | **stopped** | 7.5 s | **0.995** | 5741 | 11896 |
+| q1 Mixamo walk | fbx_character | 17/17 | 24 s | 0.665 | 15534 MiB | 11792 MiB |
+| Mixamo running | fbx_character | 17/17 | 26 s | 0.657 | 15599 | 11792 |
+| Rokoko walk cycle (T-pose skipped) | fbx_character | 17/17 | 22 s | 0.651 | 15656 | 11354 |
+| Xsens run and jump, side | fbx_skeleton | 17/17 | 22 s | 0.654 | 15673 | 11376 |
+| Xsens run forward, side | fbx_skeleton | 17/17 | 22 s | 0.653 | 15589 | 11408 |
+| BVH both arms raised | bvh | 17/17 | 22 s | 0.655 | 15767 | 11532 |
+| BVH walk in place, side | bvh | 17/17 | 22 s | 0.655 | 15644 | 11538 |
+| BVH jumping jacks | bvh | 17/17 | 23 s | 0.661 | 15760 | 11784 |
+| Pexels treadmill (pre-scaled) | mp4 | 17/17 | 22 s | 0.655 | 15608 | 11461 |
+| Pexels waving (pre-scaled) | mp4 | 17/17 | 24 s | 0.664 | 15649 | 11813 |
+| Pexels dancing (pre-scaled) | mp4 | 17/17 | 23 s | 0.664 | 15152 | 11802 |
+| Q2 walk 49 frames, seed 424242 | fbx_character | 49/49 | 60 s | 0.673 | 15905 | 11799 |
+| Q2 walk 49 frames, seed 424243 | fbx_character | 49/49 | 54 s | 0.663 | 16086 | 11671 |
+| Q2 cancel and release | fbx_character | interrupt sent at 20 s | 21 s | 0.649 | 16338 | 11009 |
 
-Every case, including the stopped one, passed teardown verification (owned processes gone, VRAM back to its baseline) and the
-system event log showed no display-driver, WHEA or power fault. Nothing was retried. In the stopped case the baseline commit
-(0.59) and free RAM (14 GB) matched the passing cases, and the clip is the same 480x832 shape as the others; commit climbed from
-0.65 to 0.995 in about six seconds during model load while VRAM filled to 11.9 GB (passing cases held 6-10 GB at that point).
-The telemetry therefore shows load-phase variability near the commit limit, not a property of that clip; the cause of the
-different load behaviour was not isolated.
+Reading it: with the desktop mostly closed, 17-frame and 49-frame Fun Control completed on this host with exact frame counts, a second
+seed, a cancel that released VRAM, and clean teardown. Peak VRAM sits at 11.0-11.9 GB of 12.3 GB in every case, so there is little
+headroom, and with a typical desktop open (run 1) commit climbed to 0.89-0.92 and one load reached the 0.95 stop. This is technical
+feasibility on this host only. It is not a visual-quality result and does not qualify the workflow: the catalog entry is unchanged and
+still `not_qualified`, and Queue/admission still refuse it.
 
-How to read it: nine of ten 17-frame cases completed with exact frames and clean teardown, and two or three clips completed for
-every source type (character FBX 3, skeleton FBX 2, BVH 2, MP4 2). The one stop means 17-frame Fun Control on this host with a
-typical desktop open is **marginal, not established**: commit peaks sit at 0.89-0.92 of the limit and one load reached the stop.
-This is not a visual-quality result and does not qualify the workflow; the catalog entry is unchanged and still `not_qualified`.
-Q2 (49 frames, repeatability, cancel) is NOT RUN.
-
-Visual review (owner-local contact sheets, not committed): character-FBX drivers transferred motion convincingly (walk, run);
-the treadmill MP4 transferred the running motion strongly but also leaked its background edges (the Canny preview warns about
-dense backgrounds); the Xsens skeleton and handwritten BVH drivers produced nearly static people (a thin white skeleton gives
-Canny little to follow); the yoga MP4 start window is a close-up of a hand and foot, a poor driver. The Rokoko and Xsens clips
-begin with a T-pose calibration frame that renders as frame 0 (the generated frame 0 is visibly degraded in those clips); choose
-a later start until the converter warns about it.
+Visual review (owner-local contact sheets and side-by-side videos, not committed): Mixamo and Rokoko character drivers transferred
+walking and running convincingly; the Xsens side-view skeleton drivers (run, run and jump) transferred strong, readable motion once
+rendered from the side; the handwritten BVH drivers transferred arm raises, jacks and a side-view walk, with some artefacts on the
+hands; MP4 drivers transferred motion but also leaked their own face, clothing and background (the waving clip lost the reference
+identity almost entirely). Earlier front-view skeleton renders and a BVH that covered only the first fraction of its motion gave nearly
+static people; those drivers were replaced with side or three-quarter views, a later start and one-second motion cycles.
 
 ## Review and repairs
 
@@ -150,6 +160,9 @@ root.
 * The BVH files used were written by hand; no real mocap BVH is available locally.
 * The Canny preview is approximate; parity with the pinned node's kornia implementation was not verified.
 * The converter does not yet warn that a clip's first frame is a T-pose calibration frame (Rokoko and Xsens files).
-* Q2 and the repeatability and cancel/release cases are NOT RUN. A further physical session needs a new owner decision; a retry
-  of the stopped case would be a new plan and a new authorization.
+* MP4 driving clips are not rescaled by source preparation; a 4K MP4 stalled the graph in two physical runs (Canny runs at the
+  clip's own size). The pre-scale used in run 3 was operator preparation outside the app. Whether preparation should scale to the
+  workflow geometry, or the preview should refuse oversized sources, is an open product decision.
+* The generated frames are single-run samples from one reference image and seed; ranking drivers by look is owner feedback, not a
+  measured result.
 * Fun Control remains hardware NOT QUALIFIED; Queue/admission still refuse it.
