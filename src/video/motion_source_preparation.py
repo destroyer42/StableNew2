@@ -675,8 +675,9 @@ def prepare_motion_source(
                 "verification_failed",
                 "The prepared clip does not report the planned number of frames.",
             )
-        expected_size = resize or (facts.coded_width, facts.coded_height)
-        if (derived_facts.coded_width, derived_facts.coded_height) != expected_size:
+        if resize is not None and (
+            derived_facts.coded_width, derived_facts.coded_height
+        ) != resize:
             raise _Stop(
                 STATUS_FAILED_PREPARATION, "verification_failed",
                 "The prepared clip does not report the requested safe frame dimensions.",
