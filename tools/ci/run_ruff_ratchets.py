@@ -154,13 +154,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    # Temporary diagnostic only: print formatter's exact suggested diff, then
-    # preserve the existing ratchet verdict. Removed before PR acceptance.
-    if not args.update:
-        preview = _ruff("format", "--diff", "src/video/motion_source_preparation.py",
-                        "tests/video/test_pr_vid_motion_355_operator_safety.py")
-        print(preview.stdout, flush=True)
-
     files, counts = collect()
     if args.update:
         write_baseline(files, counts)
