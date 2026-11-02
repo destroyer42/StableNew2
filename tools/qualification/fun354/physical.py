@@ -296,7 +296,18 @@ def validate_frames(
     seen: set[Path] = set()
     records: list[dict[str, Any]] = []
     for image in images:
-        path = (output_root / image.get("subfolder", "") / image["filename"]).resolve()
+        # Comfy supplies slash-separated paths. Backslashes are separators on Windows
+        # but literal filename characters on POSIX; reject them on both hosts rather
+        # than accepting a Windows traversal during Linux qualification.
+        subfolder, filename = image.get("subfolder", ""), image.get("filename")
+        if (
+            not isinstance(subfolder, str)
+            or not isinstance(filename, str)
+            or "\\" in subfolder
+            or "\\" in filename
+        ):
+            raise RuntimeError("Escaped, duplicate or invalid frame path")
+        path = (output_root / subfolder / filename).resolve()
         if (
             image.get("type") != "output"
             or not path.is_relative_to(root)
