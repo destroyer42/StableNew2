@@ -389,6 +389,8 @@ def test_preview_is_short_labeled_and_cannot_be_the_accepted_derivative(tmp_path
         ("lie", "produced 4 file"),
         ("gpu", "not confirmed CPU-only"),
         ("partial", "boom"),
+        ("blank", "shows no visible subject"),
+        ("static", "animation was not applied"),
     ],
 )
 def test_a_failed_or_untrustworthy_render_publishes_nothing(
@@ -453,7 +455,7 @@ def test_frame_verification_catches_missing_extra_and_wrongly_sized_frames(tmp_p
         FAKE_BLENDER,  # noqa: F401  (png writer lives in the fake)
     )
 
-    def png(w: int, h: int) -> bytes:
+    def png(w: int, h: int, subject: bool = True) -> bytes:
         def chunk(kind: bytes, data: bytes) -> bytes:
             return (
                 struct.pack(">I", len(data))
@@ -462,7 +464,11 @@ def test_frame_verification_catches_missing_extra_and_wrongly_sized_frames(tmp_p
                 + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
             )
 
-        raw = b"".join(b"\x00" + b"\x10" * (w * 3) for _ in range(h))
+        bar = b"\x10" * (w // 4 * 3) + b"\xa0" * (w // 2 * 3) + b"\x10" * (w // 4 * 3)
+        plain = b"\x10" * (w * 3)
+        raw = b"".join(
+            b"\x00" + (bar if subject and h // 4 <= y < 3 * h // 4 else plain) for y in range(h)
+        )
         return (
             b"\x89PNG\r\n\x1a\n"
             + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
@@ -480,3 +486,8 @@ def test_frame_verification_catches_missing_extra_and_wrongly_sized_frames(tmp_p
     assert "not a 8x8 PNG" in verify_frames(frames, 4, 8, 8)
     (frames / "extra.png").write_bytes(png(8, 8))
     assert "unexpected" in verify_frames(frames, 4, 8, 8)
+    (frames / "extra.png").unlink()
+    (frames / "frame_00004.png").write_bytes(png(8, 8, subject=False))
+    assert "frame_00004.png shows no visible subject" in verify_frames(frames, 4, 8, 8)
+    (frames / "frame_00004.png").write_bytes(b"not a png at all, but sized wrong anyway")
+    assert "is not a 8x8 PNG" in verify_frames(frames, 4, 8, 8)

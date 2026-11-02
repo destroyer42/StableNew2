@@ -24,7 +24,10 @@ from src.gui.view_contracts.video_workspace_contract import (
     summarize_video_workflow_source,
 )
 from src.gui.view_contracts.workspace_density_contract import changed_value_count
-from src.gui.views.motion_conversion_dialog import MotionConversionDialog
+from src.gui.views.motion_conversion_dialog import (
+    ConditioningPreviewWindow,
+    MotionConversionDialog,
+)
 from src.gui.views.video_eval_panel_v2 import VideoEvalPanel
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
@@ -814,6 +817,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             selected_workflow=self._selected_workflow_identity,
             on_handoff=self._apply_library_handoff,
             on_convert=self._open_motion_conversion,
+            on_preview_conditioning=self._open_conditioning_preview,
         )
         self.motion_library_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
 
@@ -1492,6 +1496,28 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             ports=self._library_controller().motion_conversion_ports(self._selected_workflow_identity),
             on_accepted=lambda asset_id: self.motion_library_panel.focus_asset(asset_id),
         )
+
+    def _open_conditioning_preview(self, detail: Any) -> None:
+        """Approximate Canny preview of the selected, verified library clip (no queue, no Comfy, no GPU)."""
+
+        window = getattr(self, "_conditioning_preview_window", None)
+        try:
+            if window is None or not window.winfo_exists():
+                window = ConditioningPreviewWindow(
+                    self,
+                    preview=lambda path, sha, size, cancel: self._library_controller().motion_conditioning_preview(
+                        path, sha, size, cancel
+                    ),
+                )
+                self._conditioning_preview_window = window
+            else:
+                window.lift()
+        except tk.TclError:
+            return
+        asset = detail.asset
+        portrait = not asset.width or not asset.height or asset.height >= asset.width
+        size = (480, 832) if portrait else (832, 480)
+        window.show_clip(detail.media_path, asset.sha256, size, f"{asset.display_name} - {size[0]}x{size[1]}")
 
     def _selected_workflow_identity(self) -> tuple[str, str]:
         meta = self._workflow_map.get(self.workflow_var.get().strip(), {})

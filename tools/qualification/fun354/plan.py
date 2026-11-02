@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -26,7 +27,12 @@ SEEDS = (424242, 424243)
 GEOMETRY = (480, 832)  # portrait; the product's source-aware default
 OUTPUT_RESERVE_BYTES = 2 * 1024**3
 
-PHASE_Q0, PHASE_Q1, PHASE_Q2 = "Q0", "Q1", "Q2"
+PHASE_Q0, PHASE_Q1, PHASE_Q1C, PHASE_Q2 = "Q0", "Q1", "Q1C", "Q2"
+PROMPT = (
+    "A full-body woman in navy athletic clothing moves naturally. Static camera, continuous natural movement, "
+    "same person and clothing, softly lit abstract background."
+)
+ROLE_DRIVING, ROLE_Q2_DRIVING, ROLE_REFERENCE = "driving_clip", "q2_driving_clip", "reference_image"
 CASE_Q1 = "q1_forward_walk_17_s424242"
 CASE_Q2_A = "q2_forward_walk_49_s424242"
 CASE_Q2_B = "q2_forward_walk_49_s424243"
@@ -62,6 +68,15 @@ class InputPin:
 
 
 @dataclass(frozen=True)
+class CoverageEntry:
+    """One driving clip of the source-type coverage phase (Q1C): which kind of source motion it stands for."""
+
+    role: str
+    source_type: str
+    label: str
+
+
+@dataclass(frozen=True)
 class StopCondition:
     code: str
     trigger: str
@@ -76,6 +91,7 @@ class CasePlan:
     seed: int
     purpose: str
     cancel_after_seconds: int = 0
+    driving_role: str = "driving_clip"
 
 
 @dataclass(frozen=True)
@@ -104,6 +120,9 @@ class QualificationPlan:
     stops: tuple[StopCondition, ...]
     telemetry: tuple[str, ...]
     baseline: tuple[str, str]
+    prompt: str = ""
+    negative_prompt: str = ""
+    coverage: tuple[CoverageEntry, ...] = ()
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -121,6 +140,8 @@ class QualificationPlan:
             "stops": [asdict(s) for s in self.stops],
             "telemetry": list(self.telemetry),
             "baseline": list(self.baseline),
+            "request": {"prompt": self.prompt, "negative_prompt": self.negative_prompt},
+            "coverage": [asdict(c) for c in self.coverage],
             "physical_execution": "NOT AUTHORIZED",
             "frozen_catalog_entry": "unchanged; qualification never edits the immutable 1.0.0 spec",
         }
@@ -222,6 +243,8 @@ def build_plan(
     driving_clip_size: int = 0,
     reference_sha256: str = "",
     reference_size: int = 0,
+    extra_inputs: Sequence[InputPin] = (),
+    coverage: Sequence[CoverageEntry] = (),
 ) -> QualificationPlan:
     """Freeze the proposal from the catalog.  Raises ``PlanError`` if the catalog no longer matches what was reviewed."""
 
@@ -246,16 +269,38 @@ def build_plan(
     q1 = CasePlan(
         CASE_Q1, 17, SEEDS[0], "Smallest legal generation: does the allocation complete at all"
     )
+    q2_role = (
+        ROLE_Q2_DRIVING if any(i.role == ROLE_Q2_DRIVING for i in extra_inputs) else ROLE_DRIVING
+    )
     q2 = (
-        CasePlan(CASE_Q2_A, 49, SEEDS[0], "Product-envelope length, first seed"),
-        CasePlan(CASE_Q2_B, 49, SEEDS[1], "Product-envelope length, second seed (repeatability)"),
+        CasePlan(
+            CASE_Q2_A, 49, SEEDS[0], "Product-envelope length, first seed", driving_role=q2_role
+        ),
+        CasePlan(
+            CASE_Q2_B,
+            49,
+            SEEDS[1],
+            "Product-envelope length, second seed (repeatability)",
+            driving_role=q2_role,
+        ),
         CasePlan(
             CASE_Q2_CANCEL,
             49,
             SEEDS[0],
             "Cancel mid-generation; owned runtime and VRAM must release",
             cancel_after_seconds=20,
+            driving_role=q2_role,
         ),
+    )
+    q1c = tuple(
+        CasePlan(
+            f"q1c_{entry.role}",
+            17,
+            SEEDS[0],
+            f"{entry.source_type}: {entry.label}",
+            driving_role=entry.role,
+        )
+        for entry in coverage
     )
     phases = (
         PhasePlan(
@@ -272,6 +317,20 @@ def build_plan(
             900,
             (PHASE_Q0,),
             (q1,),
+        ),
+        *(
+            (
+                PhasePlan(
+                    PHASE_Q1C,
+                    "Source-type coverage at the smallest legal length: each kind of source motion, 2-3 clips",
+                    True,
+                    900,
+                    (PHASE_Q0, PHASE_Q1),
+                    q1c,
+                ),
+            )
+            if q1c
+            else ()
         ),
         PhasePlan(
             PHASE_Q2,
@@ -293,8 +352,9 @@ def build_plan(
             for name, a in FUN_ASSETS.items()
         ),
         inputs=(
-            InputPin("driving_clip", driving_clip_sha256, driving_clip_size),
-            InputPin("reference_image", reference_sha256, reference_size),
+            InputPin(ROLE_DRIVING, driving_clip_sha256, driving_clip_size),
+            InputPin(ROLE_REFERENCE, reference_sha256, reference_size),
+            *extra_inputs,
         ),
         width=GEOMETRY[0],
         height=GEOMETRY[1],
@@ -303,4 +363,7 @@ def build_plan(
         stops=STOPS,
         telemetry=TELEMETRY,
         baseline=BASELINE_WORKFLOW,
+        prompt=PROMPT,
+        negative_prompt=str(spec.backend_defaults.get("default_negative_prompt") or ""),
+        coverage=tuple(coverage),
     )

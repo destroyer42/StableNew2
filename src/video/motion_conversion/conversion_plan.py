@@ -20,7 +20,7 @@ from src.video.motion_conversion.rig_compat import BindingPlan
 from src.video.workflow_frame_count import parse_frame_count
 
 PLAN_SCHEMA = "stablenew.motion-conversion-plan.v1"
-SCRIPT_VERSION = "1"
+SCRIPT_VERSION = "8"
 
 SOURCE_FBX_CHARACTER = "fbx_character"
 SOURCE_FBX_SKELETON = "fbx_skeleton"

@@ -103,10 +103,14 @@ FAKE_BLENDER = textwrap.dedent(
     """
     import json, os, struct, sys, time, zlib
 
-    def png(w, h, value):
+    def png(w, h, value, subject=True):
         def chunk(kind, data):
             return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
-        raw = b"".join(b"\\x00" + bytes([value]) * (w * 3) for _ in range(h))
+        edge = w // 4
+        plain = b"\\x00" + bytes([value]) * (w * 3)
+        figure = (b"\\x00" + bytes([value]) * (edge * 3) + bytes([(value + 120) % 256]) * ((w - 2 * edge) * 3)
+                  + bytes([value]) * (edge * 3))
+        raw = b"".join(figure if subject and h // 4 <= y < 3 * h // 4 else plain for y in range(h))
         return (b"\\x89PNG\\r\\n\\x1a\\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
                 + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
 
@@ -137,7 +141,7 @@ FAKE_BLENDER = textwrap.dedent(
     os.makedirs(request["frames_dir"], exist_ok=True)
     for i in range(written):
         with open(os.path.join(request["frames_dir"], "frame_%05d.png" % (i + 1)), "wb") as fh:
-            fh.write(png(w, h, (i * 7) % 256))
+            fh.write(png(w, h, 5 if mode == "static" else (i * 7) % 256, mode != "blank"))
     device = "CUDA" if mode == "gpu" else "CPU"
     json.dump({"ok": mode != "partial", "error": "boom" if mode == "partial" else "", "render_engine": "CYCLES",
                "render_device": device, "frames_written": n if mode == "lie" else written, "bone_names": ["mixamorig:Hips"],

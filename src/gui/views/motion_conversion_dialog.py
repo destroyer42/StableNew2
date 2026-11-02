@@ -17,6 +17,7 @@ from PIL import Image, ImageTk
 
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.motion_conversion_contract import (
+    ConditioningPreviewSession,
     ConversionView,
     MotionConversionSession,
 )
@@ -24,6 +25,7 @@ from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunne
 from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.utils.thread_registry import get_thread_registry
 from src.video.motion_conversion import conversion_plan as cp
+from src.video.motion_conversion.conditioning_preview import ConditioningPreview
 from src.video.motion_conversion.ports import ConversionPorts
 
 _ANIMATION_FILETYPES = [("Animation files", "*.fbx *.bvh"), ("All files", "*.*")]
@@ -56,6 +58,32 @@ def _label_to_value(items: list[tuple[str, str]], label: str) -> str:
 
 def _value_to_label(items: list[tuple[str, str]], value: str) -> str:
     return next((text for text, v in items if v == value), items[0][0])
+
+
+def render_conditioning_thumbs(
+    parent: ttk.Frame, preview: ConditioningPreview | None, photos: list[ImageTk.PhotoImage]
+) -> None:
+    """Fill ``parent`` with each sampled frame above its edge map; ``photos`` keeps the images alive."""
+
+    for child in parent.winfo_children():
+        child.destroy()
+    photos.clear()
+    if preview is None or not preview.ok:
+        return
+    for column, frame in enumerate(preview.frames):
+        for row, (png, caption) in enumerate(
+            ((frame.source_png, "frame"), (frame.edge_png, "edges"))
+        ):
+            try:
+                image = Image.open(io.BytesIO(png))
+                image.thumbnail((_THUMB, _THUMB))
+                photo = ImageTk.PhotoImage(image)
+            except (OSError, ValueError):
+                continue
+            photos.append(photo)
+            ttk.Label(parent, image=photo, text=f"{frame.label} {caption}", compound="top").grid(
+                row=row, column=column, padx=4, pady=2
+            )
 
 
 class MotionConversionDialog(tk.Toplevel):
@@ -128,10 +156,16 @@ class MotionConversionDialog(tk.Toplevel):
 
         ttk.Label(body, text="Blender").grid(row=1, column=0, sticky="w", padx=(0, 6))
         ttk.Label(body, textvariable=self.blender_var).grid(row=1, column=1, sticky="w")
-        self.blender_button = ttk.Button(
-            body, text="Choose Blender...", command=self._on_choose_blender
+        blender_buttons = ttk.Frame(body)
+        blender_buttons.grid(row=1, column=2, sticky="e")
+        self.find_blender_button = ttk.Button(
+            blender_buttons, text="Find Blender", command=self.session.find_blender
         )
-        self.blender_button.grid(row=1, column=2, sticky="e")
+        self.find_blender_button.grid(row=0, column=0, padx=(0, 6))
+        self.blender_button = ttk.Button(
+            blender_buttons, text="Choose Blender...", command=self._on_choose_blender
+        )
+        self.blender_button.grid(row=0, column=1)
         ttk.Label(body, text="Animation").grid(
             row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
         )
@@ -314,6 +348,7 @@ class MotionConversionDialog(tk.Toplevel):
         self.next_label.configure(text=view.next_step)
         for button, enabled in (
             (self.blender_button, not view.busy),
+            (self.find_blender_button, not view.busy),
             (self.source_button, view.can_choose_source),
             (self.inspect_button, view.can_inspect),
             (self.preview_button, view.can_preview),
@@ -327,27 +362,7 @@ class MotionConversionDialog(tk.Toplevel):
         self._render_thumbs(view)
 
     def _render_thumbs(self, view: ConversionView) -> None:
-        for child in self.thumbs.winfo_children():
-            child.destroy()
-        self._photos.clear()
-        preview = view.conditioning
-        if preview is None or not preview.ok:
-            return
-        for column, frame in enumerate(preview.frames):
-            for row, (png, caption) in enumerate(
-                ((frame.source_png, "frame"), (frame.edge_png, "edges"))
-            ):
-                try:
-                    image = Image.open(io.BytesIO(png))
-                    image.thumbnail((_THUMB, _THUMB))
-                    photo = ImageTk.PhotoImage(image)
-                except (OSError, ValueError):
-                    continue
-                self._photos.append(photo)
-                cell = ttk.Label(
-                    self.thumbs, image=photo, text=f"{frame.label} {caption}", compound="top"
-                )
-                cell.grid(row=row, column=column, padx=4, pady=2)
+        render_conditioning_thumbs(self.thumbs, view.conditioning, self._photos)
 
     def _on_destroy(self, event: Any = None) -> None:
         if event is None or event.widget is self:
@@ -355,4 +370,77 @@ class MotionConversionDialog(tk.Toplevel):
             self.session.close()
 
 
-__all__ = ["MotionConversionDialog"]
+class ConditioningPreviewWindow(tk.Toplevel):
+    """Non-modal approximate Canny preview of one Motion Library clip; reads the file, writes and queues nothing."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        preview: Callable[..., ConditioningPreview],
+        runner: BackgroundWorkRunner | None = None,
+    ) -> None:
+        super().__init__(master)
+        self.title("Conditioning Preview")
+        self.transient(master.winfo_toplevel())
+        self.geometry("720x460")
+        self._closed = False
+        self._photos: list[ImageTk.PhotoImage] = []
+        self.status_var = tk.StringVar(self)
+        self.heading_var = tk.StringVar(self)
+        self.session = ConditioningPreviewSession(
+            preview=preview, runner=runner or self._work_runner(), on_change=self._render
+        )
+        body = ttk.Frame(self, padding=10)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, textvariable=self.heading_var, justify="left").pack(anchor="w")
+        self.thumbs = ttk.Frame(body)
+        self.thumbs.pack(anchor="w", pady=6)
+        self.warnings_label = ttk.Label(body, justify="left")
+        self.warnings_label.pack(fill="x")
+        bind_wraplength(self.warnings_label)
+        status = ttk.Label(body, textvariable=self.status_var, justify="left")
+        status.pack(fill="x", pady=(8, 0))
+        bind_wraplength(status)
+        self.bind("<Destroy>", self._on_destroy, add="+")
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self._render()
+
+    def _work_runner(self) -> BackgroundWorkRunner:
+        dispatcher = tk_dispatcher_for(self)
+        return BackgroundWorkRunner(
+            spawn=lambda name, target: get_thread_registry().spawn(
+                target=target,
+                name=name,
+                daemon=False,
+                purpose="Build a conditioning preview without blocking Tk",
+            ),
+            dispatch=lambda fn: dispatcher.invoke(lambda: self._deliver(fn)),
+        )
+
+    def _deliver(self, finish: Callable[[], None]) -> None:
+        if not self._closed:
+            finish()
+
+    def show_clip(self, video_path: str, sha256: str, size: tuple[int, int], heading: str) -> None:
+        self.session.start(video_path, sha256, size, heading)
+
+    def _render(self) -> None:
+        if self._closed:
+            return
+        try:
+            view = self.session.view()
+            self.status_var.set(view.status)
+            self.heading_var.set(view.heading)
+            self.warnings_label.configure(text="\n".join(view.warnings))
+            render_conditioning_thumbs(self.thumbs, view.preview, self._photos)
+        except tk.TclError:
+            pass
+
+    def _on_destroy(self, event: Any = None) -> None:
+        if event is None or event.widget is self:
+            self._closed = True
+            self.session.close()
+
+
+__all__ = ["ConditioningPreviewWindow", "MotionConversionDialog", "render_conditioning_thumbs"]

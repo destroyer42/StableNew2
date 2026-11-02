@@ -401,3 +401,203 @@ def test_the_tab_opens_one_non_modal_dialog_with_the_controllers_ports_and_queue
     assert store.assets() == () and _Controller.submissions == []
     first.destroy()
     tab.destroy()
+
+
+# ------------------------------------------------------------------ Find Blender and library conditioning preview
+
+
+def test_find_blender_asks_the_port_to_search_and_reports_what_it_found_or_why_not(
+    tmp_path, monkeypatch
+) -> None:
+    from src.video.motion_conversion.blender import BlenderProblem
+
+    env = _env(tmp_path, monkeypatch)
+    asked: list[str] = []
+    ports = env.session._ports
+    results: list[Any] = [
+        env.install,
+        BlenderProblem("Blender was not found. Choose its blender.exe."),
+    ]
+
+    def select(path: str, cancel: Any) -> Any:
+        asked.append(path)
+        outcome = results.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    session = MotionConversionSession(
+        ports=ConversionPorts(**{**ports.__dict__, "select_blender": select}),
+        runner=env.runner,
+    )
+    session.find_blender()
+    env.runner.run_all()
+    assert asked == [""] and session.install is env.install and session.status.startswith("Found ")
+    session.install = None
+    session.find_blender()
+    env.runner.run_all()
+    assert asked == ["", ""] and session.install is None
+    assert "Blender was not found" in session.status
+
+
+def _preview_result(ok: bool = True) -> Any:
+    return SimpleNamespace(ok=ok, error="" if ok else "unreadable", warnings=("approximate",))
+
+
+def test_the_library_preview_session_drops_superseded_and_closed_results() -> None:
+    from src.gui.view_contracts.motion_conversion_contract import ConditioningPreviewSession
+
+    runner = ManualRunner()
+    calls: list[tuple[str, str, tuple[int, int]]] = []
+
+    def preview(path: str, sha: str, size: tuple[int, int], cancel: threading.Event) -> Any:
+        calls.append((path, sha, size))
+        return _preview_result(ok=path != "bad.mp4")
+
+    session = ConditioningPreviewSession(preview=preview, runner=runner)
+    assert not session.view().busy and session.view().preview is None
+    session.start("a.mp4", "s1", (480, 832), "A")
+    session.start("b.mp4", "s2", (832, 480), "B")  # supersedes A before either result is delivered
+    runner.run_all()
+    view = session.view()
+    assert [c[0] for c in calls] == ["a.mp4", "b.mp4"]
+    assert view.heading == "B" and view.preview is not None and view.warnings == ("approximate",)
+    assert not view.busy and "approximate" in view.status
+    session.start("bad.mp4", "s3", (480, 832))
+    runner.run_all()
+    assert session.view().preview is not None and session.view().warnings == ()
+    assert session.view().status == "unreadable"
+    session.start("c.mp4", "s4", (480, 832))
+    session.close()
+    runner.run_all()
+    assert session.view().busy  # the late result after close was dropped, not applied
+
+
+def test_the_library_preview_session_reports_a_failing_port() -> None:
+    from src.gui.view_contracts.motion_conversion_contract import ConditioningPreviewSession
+
+    runner = ManualRunner()
+
+    def boom(*_args: Any) -> Any:
+        raise RuntimeError("no decoder")
+
+    session = ConditioningPreviewSession(preview=boom, runner=runner)
+    session.start("a.mp4", "s", (480, 832))
+    runner.run_all()
+    assert "no decoder" in session.view().status and not session.view().busy
+
+
+def test_the_conditioning_window_shows_a_result_and_survives_destruction(tk_root) -> None:
+    from src.gui.views.motion_conversion_dialog import ConditioningPreviewWindow
+
+    runner = ManualRunner()
+    window = ConditioningPreviewWindow(
+        tk_root, preview=lambda *_a: _preview_result(), runner=runner
+    )
+    window.show_clip("a.mp4", "s", (480, 832), "Walk - 480x832")
+    runner.run_all()
+    tk_root.update()
+    assert window.heading_var.get() == "Walk - 480x832" and "approximate" in window.status_var.get()
+    assert "approximate" in window.warnings_label.cget("text")
+    window.show_clip("b.mp4", "s", (480, 832), "Other")  # queued, never delivered
+    window.destroy()
+    runner.run_all()  # a late delivery after destroy must not raise
+
+
+def test_the_find_blender_button_starts_one_search(tk_root, tmp_path, monkeypatch) -> None:
+    from src.gui.views.motion_conversion_dialog import MotionConversionDialog
+
+    env = _env(tmp_path, monkeypatch)
+    asked: list[str] = []
+    ports = ConversionPorts(
+        **{
+            **env.session._ports.__dict__,
+            "select_blender": lambda path, cancel: asked.append(path) or env.install,
+        }
+    )
+    runner = ManualRunner()
+    dialog = MotionConversionDialog(tk_root, ports=ports, runner=runner)
+    runner.run_all()
+    tk_root.update()
+    assert str(dialog.find_blender_button["state"]) == "normal"
+    dialog.find_blender_button.invoke()
+    runner.run_all()
+    tk_root.update()
+    assert asked == [""] and "Found" in dialog.status_var.get()
+    dialog.destroy()
+
+
+def test_the_library_panel_offers_conditioning_preview_only_for_a_verified_selection(
+    tk_root, tmp_path
+) -> None:
+    from src.gui.views.video_workflow_motion_library_panel_v2 import WorkflowMotionLibraryPanel
+    from tests.gui_v2.test_pr_vid_motion_lib_353_panel import _populated, _pump_until
+    from tests.helpers.motion_library_353 import make_ports
+
+    store, inspector, ids = _populated(tmp_path, names=("walk",))
+    seen: list[Any] = []
+    panel = WorkflowMotionLibraryPanel(
+        tk_root,
+        ports=make_ports(store, inspector),
+        decode=lambda path, cancel: SimpleNamespace(path=path, status="failed", message="stub"),
+        on_preview_conditioning=seen.append,
+    )
+    panel.pack()
+    assert str(panel.condition_button["state"]) == "disabled"  # nothing selected
+    panel.request_refresh()
+    assert _pump_until(tk_root, lambda: len(panel.tree.get_children()) == 1)
+    panel.tree.selection_set(ids["walk"])
+    panel.tree.event_generate("<<TreeviewSelect>>")
+    assert _pump_until(tk_root, lambda: str(panel.condition_button["state"]) == "normal")
+    panel.condition_button.invoke()
+    assert len(seen) == 1 and seen[0].asset.asset_id == ids["walk"] and seen[0].media_path
+    assert store.assets()[0].asset_id == ids["walk"]  # nothing was added, changed or queued
+    panel.destroy()
+
+
+def test_the_tab_previews_a_library_clip_at_its_orientation_through_the_controller(
+    tk_root, monkeypatch
+) -> None:
+    from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
+
+    calls: list[tuple[str, str, tuple[int, int]]] = []
+
+    class _Library:
+        def motion_conditioning_preview(self, path, sha, size, cancel):
+            calls.append((path, sha, size))
+            return _preview_result()
+
+    class _Controller:
+        def build_video_workflow_defaults(self) -> dict[str, object]:
+            return {"workflow_id": "wf"}
+
+        def get_video_workflow_specs(self) -> list[dict[str, Any]]:
+            return []
+
+        def get_video_workflow_controller(self):
+            return None
+
+    tab = VideoWorkflowTabFrameV2(
+        tk_root, app_controller=_Controller(), app_state=SimpleNamespace()
+    )
+    tab._recent_controller = _Library()
+
+    def clip(width: int, height: int) -> Any:
+        asset = SimpleNamespace(width=width, height=height, sha256="a" * 64, display_name="walk")
+        return SimpleNamespace(asset=asset, media_path="C:/clips/walk.mp4")
+
+    tab._open_conditioning_preview(clip(1080, 1920))
+    first = tab._conditioning_preview_window
+    end = time.monotonic() + 10
+    while time.monotonic() < end and len(calls) < 1:
+        tk_root.update()
+        time.sleep(0.01)
+    tab._open_conditioning_preview(clip(1920, 1080))
+    assert tab._conditioning_preview_window is first  # one window, reused
+    while time.monotonic() < end and len(calls) < 2:
+        tk_root.update()
+        time.sleep(0.01)
+    assert [c[2] for c in calls] == [(480, 832), (832, 480)]
+    assert calls[0][:2] == ("C:/clips/walk.mp4", "a" * 64)
+    first.destroy()
+    tab.destroy()

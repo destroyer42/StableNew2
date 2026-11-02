@@ -9,6 +9,7 @@ The original animation and character files are only ever opened for reading.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -21,6 +22,8 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 from src.utils.atomic_io import atomic_write_text
 from src.utils.managed_process import ProcessOutcome, run_bounded
@@ -51,6 +54,10 @@ MAX_FFMPEG_STDOUT = 8 * 1024 * 1024
 PURPOSE_ACCEPTED = "accepted"
 PURPOSE_PREVIEW = "preview"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+# A render whose pixels all sit within SUBJECT_TONE_DELTA of its background tone (all but a tiny fraction of them) is a miss:
+# the subject is absent or off-frame.  A real figure, even a thin skeleton, covers well over this.
+SUBJECT_TONE_DELTA = 24
+MIN_SUBJECT_COVERAGE = 0.0005
 _SLUG = re.compile(r"[^A-Za-z0-9._-]+")
 
 STATUS_OK = "ok"
@@ -121,7 +128,47 @@ def verify_frames(frames_dir: Path, count: int, width: int, height: int) -> str:
         size = png_size(frames_dir / name)
         if size != (width, height):
             return f"{name} is not a {width}x{height} PNG."
+    for name in expected:
+        covered = subject_coverage(frames_dir / name)
+        if covered is None:
+            return f"{name} could not be decoded."
+        if covered < MIN_SUBJECT_COVERAGE:
+            return f"{name} shows no visible subject (a blank or nearly empty render); nothing was published."
     return ""
+
+
+def verify_motion(frames_dir: Path, count: int) -> str:
+    """Refuse a multi-frame render whose frames are all byte-identical: the animation was not applied."""
+
+    if count < 2:
+        return ""
+    digests = {
+        hashlib.sha256((frames_dir / f"frame_{i:05d}.png").read_bytes()).hexdigest()
+        for i in range(1, count + 1)
+    }
+    if len(digests) == 1:
+        return "Every rendered frame is identical, so the animation was not applied; nothing was published."
+    return ""
+
+
+def subject_coverage(path: Path) -> float | None:
+    """Fraction of pixels that differ clearly from the frame's dominant (background) tone; ``None`` if undecodable."""
+
+    try:
+        with Image.open(path) as image:
+            histogram: list[int] = list(image.convert("L").histogram())
+    except (OSError, ValueError):
+        return None
+    total = sum(histogram)
+    if total <= 0:
+        return None
+    background = max(range(256), key=histogram.__getitem__)
+    near = sum(
+        count
+        for tone, count in enumerate(histogram)
+        if abs(tone - background) <= SUBJECT_TONE_DELTA
+    )
+    return float((total - near) / total)
 
 
 class MotionConverter:
@@ -382,7 +429,9 @@ class MotionConverter:
             )
         if int(report.get("frames_written", -1)) != plan.output_frames:
             return _fail("Blender reported a different number of frames than the plan.", plan)
-        problem = verify_frames(frames_dir, plan.output_frames, plan.width, plan.height)
+        problem = verify_frames(
+            frames_dir, plan.output_frames, plan.width, plan.height
+        ) or verify_motion(frames_dir, plan.output_frames)
         if problem:
             return _fail(problem, plan)
 

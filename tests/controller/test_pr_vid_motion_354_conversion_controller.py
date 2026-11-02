@@ -102,3 +102,23 @@ def test_ports_describe_and_plan_without_blender_and_queue_nothing(isolated) -> 
 
     assert service.calls == []
     assert not (isolated / "lib" / "conversions").exists()  # planning writes no output
+
+
+def test_the_library_conditioning_preview_delegates_to_the_workbench_and_queues_nothing(
+    isolated, monkeypatch
+) -> None:
+    controller, service = _controller(isolated)
+    controller.configure_motion_library(isolated / "lib")
+    seen: list[tuple[object, ...]] = []
+
+    def fake_preview(video, *, target_size, video_sha256="", **kwargs):
+        seen.append((video, target_size, video_sha256, kwargs.get("cancel")))
+        return "preview"
+
+    monkeypatch.setattr(
+        controller.motion_conversion_workbench(), "conditioning_preview", fake_preview
+    )
+    cancel = threading.Event()
+    result = controller.motion_conditioning_preview("clip.mp4", "a" * 64, (480, 832), cancel)
+    assert result == "preview" and seen == [("clip.mp4", (480, 832), "a" * 64, cancel)]
+    assert service.calls == []

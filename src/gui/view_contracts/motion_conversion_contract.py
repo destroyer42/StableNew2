@@ -190,6 +190,21 @@ class MotionConversionSession:
             "Verifying Blender...",
         )
 
+    def find_blender(self) -> None:
+        """Search the usual install places (never the whole disk, never the network) and verify what is found."""
+
+        def finished(install: BlenderInstall) -> None:
+            self.install = install
+            self.status = f"Found {install.version_text or 'Blender'} (CPU rendering only)."
+            self._notify()
+
+        self._run(
+            "blender",
+            lambda c: self._ports.select_blender("", c),
+            finished,
+            "Looking for Blender...",
+        )
+
     def choose_source(self, path: str) -> None:
         def finished(facts: SourceFacts) -> None:
             self.facts, self.probe, self.plan, self.result, self.accepted = (
@@ -468,4 +483,94 @@ class MotionConversionSession:
             if self.accepted is not None and self.accepted.status != "failed"
             else "",
             warnings=self.conditioning.warnings if self.conditioning is not None else (),
+        )
+
+
+CONDITIONING_PREVIEW_IDLE = "Choose a clip in the Motion Library, then Preview Conditioning."
+
+
+@dataclass(frozen=True)
+class ConditioningPreviewView:
+    busy: bool
+    status: str
+    heading: str
+    preview: ConditioningPreview | None
+    warnings: tuple[str, ...]
+
+
+class ConditioningPreviewSession:
+    """Approximate Canny preview of an existing library clip.
+
+    One injected port, run on the injected worker; a newer request or a closed window drops older results.  It writes nothing
+    to the library, builds no job and never touches Comfy or the GPU.
+    """
+
+    def __init__(
+        self,
+        *,
+        preview: Callable[[str, str, tuple[int, int], threading.Event], ConditioningPreview],
+        runner: BackgroundWorkRunner,
+        on_change: Callable[[], None] | None = None,
+    ) -> None:
+        self._preview = preview
+        self._runner = runner
+        self._on_change = on_change
+        self._closed = False
+        self._token = 0
+        self._cancel = threading.Event()
+        self.busy = False
+        self.status = CONDITIONING_PREVIEW_IDLE
+        self.heading = ""
+        self.result: ConditioningPreview | None = None
+
+    def _notify(self) -> None:
+        if self._on_change is not None and not self._closed:
+            self._on_change()
+
+    def start(self, video_path: str, sha256: str, size: tuple[int, int], heading: str = "") -> None:
+        self._cancel.set()
+        self._token += 1
+        token = self._token
+        cancel = self._cancel = threading.Event()
+        self.busy, self.result, self.heading = True, None, heading
+        self.status = "Building the conditioning preview..."
+        self._notify()
+
+        def done(outcome: WorkOutcome) -> None:
+            if self._closed or token != self._token:
+                return
+            self.busy = False
+            if outcome.error:
+                self.status = f"The conditioning preview failed: {outcome.error}"
+            else:
+                self.result = outcome.value
+                self.status = (
+                    "Conditioning preview ready (approximate, advisory)."
+                    if outcome.value.ok
+                    else outcome.value.error
+                )
+            self._notify()
+
+        self._runner.start(
+            "motion-conditioning-preview",
+            lambda: WorkOutcome(value=self._preview(video_path, sha256, size, cancel)),
+            done,
+        )
+
+    def cancel_work(self) -> None:
+        self._cancel.set()
+
+    def close(self) -> None:
+        self._closed = True
+        self._cancel.set()
+        self._on_change = None
+
+    def view(self) -> ConditioningPreviewView:
+        result = self.result
+        return ConditioningPreviewView(
+            busy=self.busy,
+            status=self.status,
+            heading=self.heading,
+            preview=result,
+            warnings=result.warnings if result is not None and result.ok else (),
         )

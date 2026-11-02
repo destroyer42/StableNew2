@@ -51,6 +51,19 @@ class VideoMotionConversionControllerMixin:
                 )
         return WorkflowChoice()
 
+    def motion_conditioning_preview(
+        self,
+        video_path: str,
+        video_sha256: str,
+        target_size: tuple[int, int],
+        cancel: threading.Event,
+    ) -> Any:
+        """Approximate Canny preview of an existing clip (worker-side; reads the file, writes nothing)."""
+
+        return self.motion_conversion_workbench().conditioning_preview(
+            video_path, target_size=target_size, video_sha256=video_sha256, cancel=cancel
+        )
+
     def motion_conversion_ports(
         self, selected_workflow: Callable[[], tuple[str, str]]
     ) -> ConversionPorts:

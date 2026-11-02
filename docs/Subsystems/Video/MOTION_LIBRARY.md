@@ -93,9 +93,8 @@ your own `blender.exe` (4.2 or newer); the dialog verifies only the file you pic
   published atomically. A verified identical result is reused instead of re-rendered. *Add to Motion Library* imports it with a
   derivation record that keeps the original file's identity apart from the derivative's; derivation text is searchable and
   survives restart. Previews and unverified folders cannot be added.
-- **Existing MP4s** need no conversion and are never re-encoded: import them as in section 1. (The dialog's conditioning preview
-  is offered for a quick or full conversion result; `ConversionWorkbench.conditioning_preview` also accepts any local MP4, but
-  no library-browser button calls it yet.)
+- **Existing MP4s** need no conversion and are never re-encoded: import them as in section 1. The Motion Library panel's **Preview Conditioning...**
+  button shows the same advisory preview for any usable selected clip, and the conversion dialog offers it for a result.
 - **Preview Conditioning** is an advisory CPU Canny preview (first/middle/last frames) of what a Fun Control graph would see,
   centre-cropped to the generation shape like the pinned node. It is labeled *approximate* (not verified against the node's
   source or recorded vectors), shows bounded heuristic warnings, calls no Comfy and changes no job.

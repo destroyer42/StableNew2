@@ -1,4 +1,4 @@
-# StableNew motion conversion script (SCRIPT_VERSION 1). Run ONLY by `blender --background --factory-startup
+# StableNew motion conversion script (SCRIPT_VERSION 8). Run ONLY by `blender --background --factory-startup
 # --disable-autoexec --python this_file -- <action> <input.json> <output.json>`; never imported by StableNew.
 # Actions: probe (read the animation's facts) and render (write PNG frames for the listed source frames).
 # The host has already decided everything that changes pixels; this file evaluates the plan and reports what happened.
@@ -186,29 +186,66 @@ def estimate_facing(arm_objs):
     return 0.0, False
 
 
+SKELETON_BONE_VERTICES = 6  # head, tail and a four-point ring near the head: a thin solid spindle per segment
+SKELETON_BONE_FACES = (
+    (0, 2, 1), (0, 3, 2), (0, 4, 3), (0, 1, 4),
+    (5, 1, 2), (5, 2, 3), (5, 3, 4), (5, 4, 1),
+)
+
+
+def skeleton_segments(arm_objs):
+    # Joint-to-joint lines: each bone is drawn from its parent's head to its own head, and a bone with no child gets a stub
+    # from its own head to its tail.  (An importer's bone tails do not generally reach the next joint.)
+    segments = []
+    for arm in arm_objs:
+        world = arm.matrix_world
+        children = {pb.name: 0 for pb in arm.pose.bones}
+        for pb in arm.pose.bones:
+            if pb.parent is not None:
+                children[pb.parent.name] += 1
+        for pb in arm.pose.bones:
+            if pb.parent is not None:
+                segments.append((world @ pb.parent.head, world @ pb.head))
+            if children[pb.name] == 0:
+                segments.append((world @ pb.head, world @ pb.tail))
+    return segments
+
+
 def build_skeleton_mesh(arm_objs):
-    mesh = bpy.data.meshes.new("StableNewSkeleton")
-    count = sum(len(a.pose.bones) for a in arm_objs)
-    mesh.vertices.add(count * 2)
-    mesh.edges.add(count)
+    # Loose edges render nothing (the Wireframe modifier ignores them), so every segment is a small closed solid.
+    count = len(skeleton_segments(arm_objs))
+    verts, faces = [], []
     for i in range(count):
-        mesh.edges[i].vertices = (2 * i, 2 * i + 1)
+        base = i * SKELETON_BONE_VERTICES
+        verts.extend((float(base + k), 0.0, 0.0) for k in range(SKELETON_BONE_VERTICES))
+        faces.extend(tuple(base + k for k in face) for face in SKELETON_BONE_FACES)
+    mesh = bpy.data.meshes.new("StableNewSkeleton")
+    mesh.from_pydata(verts, [], faces)
     obj = bpy.data.objects.new("StableNewSkeleton", mesh)
     bpy.context.scene.collection.objects.link(obj)
-    mod = obj.modifiers.new("wire", "WIREFRAME")
-    mod.thickness = 0.015
-    mod.use_even_offset = True
     obj.data.materials.append(emission_material("StableNewBone", 1.0))
     return obj
 
 
+def bone_spindle(head, tail):
+    axis = tail - head
+    length = axis.length
+    if length < 1e-9:
+        return [head] * SKELETON_BONE_VERTICES
+    axis = axis / length
+    helper = Vector((0.0, 0.0, 1.0)) if abs(axis.z) < 0.9 else Vector((1.0, 0.0, 0.0))
+    side = axis.cross(helper).normalized() * (0.07 * length)
+    up = axis.cross(side).normalized() * (0.07 * length)
+    ring = head + axis * (0.15 * length)
+    return [head, ring + side, ring + up, ring - side, ring - up, tail]
+
+
 def update_skeleton_mesh(skel_obj, arm_objs):
-    i = 0
-    for arm in arm_objs:
-        for head, tail, _ in bone_world_points(arm):
-            skel_obj.data.vertices[2 * i].co = head
-            skel_obj.data.vertices[2 * i + 1].co = tail
-            i += 1
+    flat = []
+    for head, tail in skeleton_segments(arm_objs):
+        for point in bone_spindle(head, tail):
+            flat.extend(point)
+    skel_obj.data.vertices.foreach_set("co", flat)
     skel_obj.data.update()
 
 
@@ -248,15 +285,21 @@ def camera_azimuth(plan, facing):
 def frame_camera(cam_obj, cam_data, plan, lo, hi, facing):
     margin = 1.0 + float(plan["transform"]["margin_fraction"])
     width, height = plan["geometry"]["width"], plan["geometry"]["height"]
-    cam_data.sensor_fit = "VERTICAL" if height >= width else "HORIZONTAL"
     cam_data.lens = 50.0
-    sensor = cam_data.sensor_width
-    vfov = 2 * math.atan((sensor * (height / width if height < width else 1.0)) / (2 * cam_data.lens))
+    aspect = width / height
+    # The fitted sensor dimension is the height in a portrait frame and the width otherwise; both half-angles follow from it.
+    if height >= width:
+        cam_data.sensor_fit = "VERTICAL"
+        tan_v = cam_data.sensor_height / (2 * cam_data.lens)
+        tan_h = tan_v * aspect
+    else:
+        cam_data.sensor_fit = "HORIZONTAL"
+        tan_h = cam_data.sensor_width / (2 * cam_data.lens)
+        tan_v = tan_h / aspect
     extent_z = (hi.z - lo.z) * margin
     extent_xy = max(hi.x - lo.x, hi.y - lo.y) * margin
-    aspect = width / height
-    fit_v = (extent_z / 2) / math.tan(vfov / 2)
-    fit_h = (extent_xy / 2) / (math.tan(vfov / 2) * aspect)
+    fit_v = (extent_z / 2) / tan_v
+    fit_h = (extent_xy / 2) / tan_h
     dist = max(fit_v, fit_h, 0.5) + extent_xy / 2
     center = (lo + hi) / 2
     az = camera_azimuth(plan, facing)
@@ -266,6 +309,42 @@ def frame_camera(cam_obj, cam_data, plan, lo, hi, facing):
     look = center - cam_obj.location
     cam_obj.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
     return center, cam_obj.location.copy()
+
+
+REST_TOLERANCE_DEGREES = 10.0
+REST_MIN_SEGMENT_FRACTION = 0.06
+
+
+def rest_pose_difference(src_arm, char_arm, names):
+    # Same bone names do not mean the same rig: an animation is a set of rotations relative to each bone's rest pose, so it only
+    # transfers when both skeletons rest the same way (a T-pose animation on an A-pose character, arms-down on arms-out, ...).
+    # Compared as joint-to-joint directions in world space, which do not depend on how an importer rolled each bone.
+    # Returns (largest direction difference in degrees, "parent>child" bone pair).
+    wanted = set(names)
+    worst, worst_pair = 0.0, ""
+    heads = [char_arm.matrix_world @ char_arm.data.bones[n].head_local for n in names if n in char_arm.data.bones]
+    if not heads:
+        return 0.0, ""
+    lo = Vector((min(h[i] for h in heads) for i in range(3)))
+    hi = Vector((max(h[i] for h in heads) for i in range(3)))
+    smallest = REST_MIN_SEGMENT_FRACTION * (hi - lo).length  # fingers and toes: too small to judge a pose by
+    for name in names:
+        a = src_arm.data.bones.get(name)
+        b = char_arm.data.bones.get(name)
+        if a is None or b is None:
+            continue
+        for child in a.children:
+            other = char_arm.data.bones.get(child.name)
+            if child.name not in wanted or other is None:
+                continue
+            da = (src_arm.matrix_world @ child.head_local) - (src_arm.matrix_world @ a.head_local)
+            db = (char_arm.matrix_world @ other.head_local) - (char_arm.matrix_world @ b.head_local)
+            if da.length < 1e-9 or db.length < smallest:
+                continue
+            angle = math.degrees(da.angle(db))
+            if angle > worst:
+                worst, worst_pair = angle, "%s>%s" % (name, child.name)
+    return worst, worst_pair
 
 
 def do_render(request, out):
@@ -288,8 +367,28 @@ def do_render(request, out):
         for source_name, target_name in plan["binding_mapping"]:
             if source_name != target_name or target_name not in char_arms[0].data.bones:
                 fail("Bone %s is not present under the same name on the character." % source_name)
+        rest_degrees, rest_bone = rest_pose_difference(
+            src_arms[0], char_arms[0], [pair[0] for pair in plan["binding_mapping"]]
+        )
+        out.update(rest_pose_max_degrees=rest_degrees, rest_pose_worst_bone=rest_bone)
+        if rest_degrees > REST_TOLERANCE_DEGREES:
+            fail(
+                "The animation's rest pose differs from the character's (%s by %.0f degrees), so its rotations would "
+                "distort the character. Retargeting was refused." % (rest_bone, rest_degrees)
+            )
+        # The action animates each bone in the rotation mode it was authored in; a bone left in another mode ignores it.
+        for source_bone in src_arms[0].pose.bones:
+            target_bone = char_arms[0].pose.bones.get(source_bone.name)
+            if target_bone is not None:
+                target_bone.rotation_mode = source_bone.rotation_mode
         char_arms[0].animation_data_create()
         char_arms[0].animation_data.action = action
+        # Blender 4.4+ actions are slotted: assigning one leaves the slot empty (a static pose) until a slot is chosen.
+        suitable = getattr(char_arms[0].animation_data, "action_suitable_slots", None)
+        if suitable is not None:
+            if not suitable:
+                fail("The animation has no data that can drive the character.")
+            char_arms[0].animation_data.action_slot = suitable[0]
         for obj in src_arms:
             obj.hide_render = True
         arms, mesh_objs = char_arms, meshes(char_objs)
@@ -305,8 +404,11 @@ def do_render(request, out):
     if plan["root_motion"] == "in_place":
         root = bpy.data.objects.new("StableNewRoot", None)
         scene.collection.objects.link(root)
-        for obj in arms + mesh_objs:
-            obj.parent = root
+        # Only the top of each imported hierarchy moves under the root: a skinned mesh keeps its armature parent.
+        imported = set(char_objs if plan["source"]["route"] == "fbx_on_reference_character" else objs)
+        for obj in imported:
+            if obj.parent is None or obj.parent not in imported:
+                obj.parent = root
     skel = apply_profile(scene, plan, mesh_objs, arms)
     cam_data = bpy.data.cameras.new("StableNewCamera")
     cam_obj = bpy.data.objects.new("StableNewCamera", cam_data)
