@@ -296,6 +296,9 @@ def validate_frames(
     seen: set[Path] = set()
     records: list[dict[str, Any]] = []
     for image in images:
+        parts = f"{image.get('subfolder', '')}/{image['filename']}".replace("\\", "/").split("/")
+        if "\\" in image["filename"] or ".." in parts:
+            raise RuntimeError("Escaped, duplicate or invalid frame path")
         path = (output_root / image.get("subfolder", "") / image["filename"]).resolve()
         if (
             image.get("type") != "output"

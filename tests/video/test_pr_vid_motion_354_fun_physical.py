@@ -275,9 +275,14 @@ def test_frame_validation_demands_exact_count_geometry_and_containment(tmp_path:
         validate_frames(
             _frames(tmp_path / "wrong", 3, (64, 64)), tmp_path / "wrong", 3, REFERENCE_SIZE
         )
-    escaped = {"outputs": {"11": {"images": [{"filename": "..\\..\\x.png", "type": "output"}]}}}
-    with pytest.raises(RuntimeError, match="Escaped"):
-        validate_frames(escaped, out, 1, REFERENCE_SIZE)
+    for name, subfolder in (("..\\..\\x.png", ""), ("x.png", "../.."), ("../x.png", "")):
+        escaped = {
+            "outputs": {
+                "11": {"images": [{"filename": name, "subfolder": subfolder, "type": "output"}]}
+            }
+        }
+        with pytest.raises(RuntimeError, match="Escaped"):
+            validate_frames(escaped, out, 1, REFERENCE_SIZE)
 
 
 def test_only_driver_and_hardware_faults_in_the_event_log_count() -> None:
