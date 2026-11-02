@@ -10,13 +10,14 @@ job, calls no backend and never writes.
 from __future__ import annotations
 
 import tkinter as tk
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from tkinter import ttk
 from typing import Any
 
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner
 from src.gui.view_contracts.video_recent_outputs_contract import RecentOutputsSession
+from src.gui.views.video_workflow_motion_library_panel_v2 import prompt_add_details
 from src.gui.widgets.media_inspector import MediaInspector as VideoPreviewWidget
 from src.utils.thread_registry import get_thread_registry
 from src.video.recent_video_outputs import RecentVideoOutput
@@ -36,6 +37,9 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
         *,
         list_outputs: Callable[[], Sequence[RecentVideoOutput]],
         send_to_movie: Callable[[RecentVideoOutput], Any] | None = None,
+        add_to_library: Callable[[RecentVideoOutput, Mapping[str, Any]], Any] | None = None,
+        on_library_changed: Callable[[], None] | None = None,
+        ask_library_details: Callable[[RecentVideoOutput], Mapping[str, Any] | None] | None = None,
         decode: Any = None,
         **kwargs: Any,
     ) -> None:
@@ -66,11 +70,19 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             command=self._on_send_to_movie,
             state="disabled",
         )
+        self.library_button = ttk.Button(
+            actions,
+            text="Add to Motion Library",
+            style="Dark.TButton",
+            command=self._on_add_to_library,
+            state="disabled",
+        )
         for button in (
             self.refresh_button,
             self.open_button,
             self.reveal_button,
             self.movie_button,
+            self.library_button,
         ):
             button.pack(side="left", padx=(0, 6))
 
@@ -103,11 +115,14 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0)
         )
 
+        self._ask_library_details = ask_library_details
         self.session = RecentOutputsSession(
             list_outputs=list_outputs,
             runner=self._work_runner(),
             on_change=self._render,
             send_to_movie=send_to_movie,
+            add_to_library=add_to_library,
+            on_library_changed=on_library_changed,
         )
         self.status_var.set(self.session.status)
         self.bind("<Destroy>", self._on_destroy, add="+")
@@ -156,6 +171,9 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
             self.reveal_button.configure(state=state)
             self.movie_button.configure(
                 state="normal" if self.session.can_send_to_movie else "disabled"
+            )
+            self.library_button.configure(
+                state="normal" if self.session.can_add_to_library else "disabled"
             )
             self.refresh_button.configure(state="disabled" if self.session.busy else "normal")
             self.status_var.set(
@@ -208,6 +226,17 @@ class WorkflowRecentOutputsPanel(ttk.LabelFrame):
 
     def _on_send_to_movie(self) -> None:
         self.session.send_selected_to_movie()
+
+    def _on_add_to_library(self) -> None:
+        output = self.session.selected
+        if output is None:
+            return
+        if self._ask_library_details is not None:
+            details = self._ask_library_details(output)
+        else:
+            details = prompt_add_details(self, output.file_name)
+        if details is not None:
+            self.session.add_selected_to_library(details)
 
     def _on_destroy(self, event: Any = None) -> None:
         if event is None or event.widget is self:

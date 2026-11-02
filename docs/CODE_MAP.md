@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-659 of 814 modules have a docstring.
+673 of 828 modules have a docstring.
 
 ## src/
 
@@ -145,6 +145,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_controller.py`: Controller surface for native SVD selected-image jobs
 - `svd_submission_service.py`: Thin form-data bridge for SVD submissions owned by AppController
 - `video_eval_controller.py`: Video eval suites on the Video Workflow controller (PR-VID-EVAL-320)
+- `video_motion_library_controller.py`: Motion Library support on the Video Workflow controller (PR-VID-MOTION-LIB-353)
 - `video_preflight_controller.py`: Read-only workflow readiness on the Video Workflow controller (PR-VID-UX-311)
 - `video_recent_outputs_controller.py`: Make Video support on the Video Workflow controller (PR-VID-UX-313/314)
 - `video_sequence_controller.py`: Admit, resume and replay multi-segment video jobs on the Video Workflow controller (PR-VID-SEQ-330-CORE)
@@ -355,6 +356,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
 - `media_image_decode.py`: Bounded image inspection on workers, reusing the thumbnail utilities and preserving source identity
 - `media_inspector_contract.py`: Ephemeral media inspection state; host workspaces retain artifact/selection authority
+- `motion_library_contract.py`: Toolkit-neutral state of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `movie_clips_contract.py`: Movie Clips tab UI normalization helpers
 - `photo_baseline_save_contract.py`: Toolkit-neutral save coordination for the Photo Optimize active-photo baseline (PR-GUI-UX-580)
 - `photo_optimize_layout_contract.py`: Pure fit/placement rules for the Photo Optimize tab (PR-GUI-420)
@@ -425,6 +427,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_batch_panel_v2.py`: Tk rendering of the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_workflow_controls_panel_v2.py`: Renders the operator controls a video workflow declares (PR-VID-192)
 - `video_workflow_experiment_panel_v2.py`: Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194)
+- `video_workflow_motion_library_panel_v2.py`: Tk rendering of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `video_workflow_motion_prep_panel_v2.py`: Tk rendering of the Video Workflow "Prepare Motion Source" panel (PR-VID-MOTION-210)
 - `video_workflow_motion_readiness_panel_v2.py`: Tk rendering of the Video Workflow "Motion source readiness" panel (PR-VID-196)
 - `video_workflow_recent_outputs_panel_v2.py`: Tk rendering of the Video Workflow "Recent outputs" section (PR-VID-UX-314)
@@ -963,6 +966,20 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `secondary_motion_metrics.py`: (no docstring)
 - `secondary_motion_models.py`: (no docstring)
 - `secondary_motion_provenance.py`: (no docstring)
+
+## src/video/motion_library/
+
+- `__init__.py`: Local Motion Library: a durable catalog of motion-reference videos (PR-VID-MOTION-LIB-353)
+- `config.py`: Where the operator's Motion Library lives (PR-VID-MOTION-LIB-353)
+- `handoff.py`: Hand a library clip to the Video Workflow as its driving video (PR-VID-MOTION-LIB-353)
+- `hashing.py`: Bounded, cancellable file hashing for the Motion Library
+- `importer.py`: Import local videos and completed StableNew clips into the Motion Library (PR-VID-MOTION-LIB-353)
+- `models.py`: Motion Library asset records (PR-VID-MOTION-LIB-353)
+- `relink.py`: Explicit relink of a moved, renamed or restored file (PR-VID-MOTION-LIB-353)
+- `search.py`: Local search over the catalog (PR-VID-MOTION-LIB-353)
+- `snapshot.py`: A point-in-time, read-only view of the catalog for the browser (PR-VID-MOTION-LIB-353)
+- `store.py`: Versioned local catalog of motion-reference videos (PR-VID-MOTION-LIB-353)
+- `verification.py`: Is the file an asset points at still the file that was imported? (PR-VID-MOTION-LIB-353)
 
 ## src/video/restoration/
 

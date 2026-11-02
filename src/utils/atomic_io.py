@@ -30,6 +30,12 @@ def _replace_with_retry(source: str, target: Path) -> None:
             time.sleep(_REPLACE_BACKOFF_S * attempt)
 
 
+def atomic_replace(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> None:
+    """``os.replace`` with the same Windows retry the writers use, for callers that stage a file themselves."""
+
+    _replace_with_retry(os.fspath(source), Path(target))
+
+
 def atomic_write_text(path: str | os.PathLike[str], text: str, *, encoding: str = "utf-8") -> Path:
     """Write ``text`` so readers only ever see the old or the complete new content. Raises ``OSError`` on failure."""
 
