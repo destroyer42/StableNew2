@@ -17,9 +17,7 @@ from tests.video.test_pr_vid_motion_210_preparation import _clip, needs_ffmpeg
 
 
 def _fun(frames: int = 17) -> MotionSourceContract:
-    return MotionSourceContract(
-        prep.FUN_CONTROL_WORKFLOW_ID, "1.0.0", frames, 24, "rev", "rule"
-    )
+    return MotionSourceContract(prep.FUN_CONTROL_WORKFLOW_ID, "1.0.0", frames, 24, "rev", "rule")
 
 
 def test_fun_geometry_only_limits_named_workflow(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -60,10 +58,27 @@ def test_fun_source_is_resized_before_canny_and_verifies_exact_transformed_frame
     # The reference is independently decoded from the original source. A
     # transcode must not silently omit, repeat or corrupt the planned frames.
     cmd = [
-        str(prep.resolve_ffmpeg_executable()), "-v", "error", "-nostdin", "-noautorotate",
-        "-i", str(original), "-map", "0:v:0", "-an",
-        "-vf", "scale=128:72:flags=bilinear", "-frames:v", "17", "-fps_mode",
-        "passthrough", "-pix_fmt", "yuv420p", "-f", "framemd5", "-",
+        str(prep.resolve_ffmpeg_executable()),
+        "-v",
+        "error",
+        "-nostdin",
+        "-noautorotate",
+        "-i",
+        str(original),
+        "-map",
+        "0:v:0",
+        "-an",
+        "-vf",
+        "scale=128:72:flags=bilinear",
+        "-frames:v",
+        "17",
+        "-fps_mode",
+        "passthrough",
+        "-pix_fmt",
+        "yuv420p",
+        "-f",
+        "framemd5",
+        "-",
     ]
     reference = subprocess.run(cmd, capture_output=True, check=True, timeout=120)
     expected = prep.parse_framemd5(reference.stdout)
@@ -71,7 +86,9 @@ def test_fun_source_is_resized_before_canny_and_verifies_exact_transformed_frame
     assert expected == prep.parse_framemd5(
         subprocess.run(
             prep.build_file_md5_command(prep.resolve_ffmpeg_executable(), prepared, "yuv420p"),
-            capture_output=True, check=True, timeout=120
+            capture_output=True,
+            check=True,
+            timeout=120,
         ).stdout
     )
     prep.validate_prepared_record(record, original_path=original, contract=_fun())
@@ -91,9 +108,7 @@ def test_old_full_resolution_fun_source_is_refused_at_admission(
     assert outcome.record["processing"]["resize"] is None
     monkeypatch.setattr(prep, "FUN_CONTROL_MAX_SOURCE_EDGE", 128)
     with pytest.raises(prep.PreparedMotionSourceError, match="Prepare it again"):
-        prep.validate_prepared_record(
-            outcome.record, original_path=original, contract=_fun()
-        )
+        prep.validate_prepared_record(outcome.record, original_path=original, contract=_fun())
 
 
 def test_matching_rig_names_are_distinct_from_an_executable_blender_binding() -> None:
