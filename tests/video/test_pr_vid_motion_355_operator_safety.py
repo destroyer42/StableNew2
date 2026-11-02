@@ -123,3 +123,26 @@ def test_matching_rig_names_are_distinct_from_an_executable_blender_binding() ->
     )
     assert renamed.compatible  # common humanoid layout is recognized
     assert not renamed.can_apply  # conversion cannot rename the target bones safely
+
+
+@needs_ffmpeg
+def test_rotated_phone_clip_uses_coded_dimensions_for_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Metadata dimensions are display-oriented; Canny decodes coded pixels."""
+    original = _clip(tmp_path, frames=24, size="192x108")
+    monkeypatch.setattr(prep, "FUN_CONTROL_MAX_SOURCE_EDGE", 128)
+    outcome = prep.prepare_motion_source(
+        prep.MotionSourceRequest(str(original), _fun()), output_root=tmp_path / "out"
+    )
+    assert outcome.prepared, outcome.message
+    assert outcome.record is not None
+    record = dict(outcome.record)
+    record["original"] = dict(record["original"])
+    record["derived"] = dict(record["derived"])
+    record["original"]["width"], record["original"]["height"] = 108, 192
+    record["derived"]["width"], record["derived"]["height"] = 72, 128
+    record["original"]["rotation_quadrants"] = 1
+    record["derived"]["rotation_quadrants"] = 1
+    verified = prep.validate_prepared_record(record, original_path=original, contract=_fun())
+    assert verified["processing"]["resize"]["width"] == 128
