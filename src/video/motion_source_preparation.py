@@ -904,7 +904,8 @@ def validate_prepared_record(
                 (
                     derived.get("coded_width", derived.get("width")),
                     derived.get("coded_height", derived.get("height")),
-                ) != required_resize
+                )
+                != required_resize
                 or (detail.get("width"), detail.get("height")) != required_resize
                 or detail.get("policy") != "fun-control-canny-max-832"
             ):
