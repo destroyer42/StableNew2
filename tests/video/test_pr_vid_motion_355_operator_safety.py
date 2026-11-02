@@ -94,3 +94,17 @@ def test_old_full_resolution_fun_source_is_refused_at_admission(
         prep.validate_prepared_record(
             outcome.record, original_path=original, contract=_fun()
         )
+
+
+def test_matching_rig_names_are_distinct_from_an_executable_blender_binding() -> None:
+    from src.video.motion_conversion.rig_compat import plan_binding
+    from tests.helpers.motion_conversion_354 import MIXAMO_BONES
+
+    exact = plan_binding(MIXAMO_BONES, MIXAMO_BONES)
+    assert exact.compatible and exact.can_apply
+    renamed = plan_binding(
+        MIXAMO_BONES,
+        [bone.replace("mixamorig:", "mixamorig1:") for bone in MIXAMO_BONES],
+    )
+    assert renamed.compatible  # common humanoid layout is recognized
+    assert not renamed.can_apply  # conversion cannot rename the target bones safely
