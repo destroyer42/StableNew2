@@ -231,7 +231,11 @@ def _input_args(ffmpeg: str | Path, video: str | Path) -> list[str]:
 
 
 def build_window_md5_command(
-    ffmpeg: str | Path, video: str | Path, first: int, last: int, pixel_format: str,
+    ffmpeg: str | Path,
+    video: str | Path,
+    first: int,
+    last: int,
+    pixel_format: str,
     resize: tuple[int, int] | None = None,
 ) -> list[str]:
     """Fingerprint every source frame in ``[first, last]`` (decode order, stored orientation)."""
@@ -675,11 +679,10 @@ def prepare_motion_source(
                 "verification_failed",
                 "The prepared clip does not report the planned number of frames.",
             )
-        if resize is not None and (
-            derived_facts.coded_width, derived_facts.coded_height
-        ) != resize:
+        if resize is not None and (derived_facts.coded_width, derived_facts.coded_height) != resize:
             raise _Stop(
-                STATUS_FAILED_PREPARATION, "verification_failed",
+                STATUS_FAILED_PREPARATION,
+                "verification_failed",
                 "The prepared clip does not report the requested safe frame dimensions.",
             )
         if derived_facts.rotation_quadrants != facts.rotation_quadrants:
@@ -727,7 +730,8 @@ def prepare_motion_source(
             + (
                 f" Fun Control safety resize: {facts.coded_width}x{facts.coded_height}"
                 f" to {resize[0]}x{resize[1]} before Canny; original unchanged."
-                if resize else ""
+                if resize
+                else ""
             ),
             record=record,
             preview=preview,
@@ -811,13 +815,16 @@ def _build_record(
                 "height": resize[1],
                 "filter": FUN_CONTROL_RESIZE_FILTER,
                 "policy": "fun-control-canny-max-832",
-            } if resize else None,
+            }
+            if resize
+            else None,
             "encoder_args": list(_ENCODER_ARGS[2:]) + ["-pix_fmt", pixel_format],
             "frame_selection": "select+settb+setpts+fps+tpad",
             "orientation": "stored orientation kept; display rotation preserved as metadata",
             "verification": (
                 "every output frame equals the planned resized source frame (framemd5)"
-                if resize else "every output frame equals the planned source frame (framemd5)"
+                if resize
+                else "every output frame equals the planned source frame (framemd5)"
             ),
         },
     }
@@ -877,7 +884,8 @@ def validate_prepared_record(
     if contract.workflow_id == FUN_CONTROL_WORKFLOW_ID:
         try:
             required_resize = fun_control_resize(
-                int(original.get("width") or 0), int(original.get("height") or 0),
+                int(original.get("width") or 0),
+                int(original.get("height") or 0),
                 contract.workflow_id,
             )
         except (TypeError, ValueError) as exc:
