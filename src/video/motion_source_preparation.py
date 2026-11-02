@@ -74,6 +74,11 @@ MAX_VERSION_STDOUT_BYTES = 16 * 1024
 HASH_CHUNK_BYTES = 1024 * 1024
 #: Frames above this many pixels are refused before FFmpeg is asked to decode (and hold) a frame.
 MAX_FRAME_PIXELS = MAX_PREVIEW_DECODE_PIXELS
+# Fun Control runs Canny at source size before the graph's later resize. Keep the
+# prepared input bounded for 12 GB-class hosts; other workflows remain lossless.
+FUN_CONTROL_WORKFLOW_ID = "wan22_fun_control_5b_canny_i2v_v1"
+FUN_CONTROL_MAX_SOURCE_EDGE = 832
+FUN_CONTROL_RESIZE_FILTER = "bilinear"
 STALE_TEMP_SECONDS = 24 * 3600
 
 STATUS_PREPARED = "prepared"
@@ -226,14 +231,16 @@ def _input_args(ffmpeg: str | Path, video: str | Path) -> list[str]:
 
 
 def build_window_md5_command(
-    ffmpeg: str | Path, video: str | Path, first: int, last: int, pixel_format: str
+    ffmpeg: str | Path, video: str | Path, first: int, last: int, pixel_format: str,
+    resize: tuple[int, int] | None = None,
 ) -> list[str]:
     """Fingerprint every source frame in ``[first, last]`` (decode order, stored orientation)."""
 
     return [
         *_input_args(ffmpeg, video),
         "-vf",
-        f"select='between(n,{first},{last})'",
+        f"select='between(n,{first},{last})'"
+        + (f",scale={resize[0]}:{resize[1]}:flags={FUN_CONTROL_RESIZE_FILTER}" if resize else ""),
         "-fps_mode",
         "passthrough",
         "-pix_fmt",
@@ -265,6 +272,7 @@ def build_encode_command(
     plan: FramePlan,
     pixel_format: str,
     destination: str | Path,
+    resize: tuple[int, int] | None = None,
 ) -> list[str]:
     """Write exactly the plan's frames, losslessly, with no metadata and a hard size cap."""
 
@@ -275,7 +283,8 @@ def build_encode_command(
         "-map_chapters",
         "-1",
         "-vf",
-        ffmpeg_filter_chain(plan),
+        ffmpeg_filter_chain(plan)
+        + (f",scale={resize[0]}:{resize[1]}:flags={FUN_CONTROL_RESIZE_FILTER}" if resize else ""),
         "-frames:v",
         str(plan.output_frames),
         "-fps_mode",
@@ -294,6 +303,27 @@ def build_encode_command(
         "mp4",
         str(destination),
     ]
+
+
+def fun_control_resize(width: int, height: int, workflow_id: str) -> tuple[int, int] | None:
+    """Return even dimensions with a maximum edge of 832 for Fun Control, else None.
+
+    Preserve aspect ratio and source frames; a scaled derivative is never advertised
+    as a lossless pixel copy of the original. The operator's source stays untouched.
+    """
+
+    if workflow_id != FUN_CONTROL_WORKFLOW_ID or max(width, height) <= FUN_CONTROL_MAX_SOURCE_EDGE:
+        return None
+    if width <= 0 or height <= 0:
+        raise ValueError("The driving video's dimensions are invalid.")
+    edge = FUN_CONTROL_MAX_SOURCE_EDGE
+    if width >= height:
+        size = (edge, (height * edge // width) // 2 * 2)
+    else:
+        size = ((width * edge // height) // 2 * 2, edge)
+    if min(size) < 2:
+        raise ValueError("The video is too narrow to resize safely for Fun Control.")
+    return size
 
 
 def parse_framemd5(stdout: bytes) -> list[str]:
@@ -468,6 +498,7 @@ def prepare_motion_source(
     temporary: Path | None = None
     plan: FramePlan | None = None
     facts: DrivingVideoFacts | None = None
+    resize: tuple[int, int] | None = None
 
     def finish(status: str, message: str = "", code: str = "", **extra: Any) -> PreparationOutcome:
         return PreparationOutcome(
@@ -520,6 +551,12 @@ def prepare_motion_source(
                 f"Frames are {facts.coded_width}x{facts.coded_height}; exact preparation is limited to "
                 f"{MAX_FRAME_PIXELS / 1e6:.0f} megapixels per frame.",
             )
+        try:
+            resize = fun_control_resize(
+                facts.coded_width, facts.coded_height, request.contract.workflow_id
+            )
+        except ValueError as exc:
+            raise _Stop(STATUS_FAILED_PREPARATION, "unsafe_geometry", str(exc)) from exc
         pixel_format = target_pixel_format(facts.pixel_format)
         if pixel_format is None:
             raise _Stop(
@@ -553,7 +590,7 @@ def prepare_motion_source(
         window = parse_framemd5(
             run.run(
                 build_window_md5_command(
-                    executable, clip, settings.start_frame, last_needed, pixel_format
+                    executable, clip, settings.start_frame, last_needed, pixel_format, resize
                 ),
                 max_stdout=MAX_MD5_STDOUT_BYTES,
                 what="while reading the window",
@@ -573,7 +610,7 @@ def prepare_motion_source(
         _remove_stale_temporaries(directory, time.time())
         temporary = directory / f"{_TEMP_PREFIX}{uuid.uuid4().hex}{PREPARED_SUFFIX}"
         run.run(
-            build_encode_command(executable, clip, plan, pixel_format, temporary),
+            build_encode_command(executable, clip, plan, pixel_format, temporary, resize),
             max_stdout=MAX_VERSION_STDOUT_BYTES,
             what="while writing the prepared clip",
         )
@@ -638,6 +675,12 @@ def prepare_motion_source(
                 "verification_failed",
                 "The prepared clip does not report the planned number of frames.",
             )
+        expected_size = resize or (facts.coded_width, facts.coded_height)
+        if (derived_facts.coded_width, derived_facts.coded_height) != expected_size:
+            raise _Stop(
+                STATUS_FAILED_PREPARATION, "verification_failed",
+                "The prepared clip does not report the requested safe frame dimensions.",
+            )
         if derived_facts.rotation_quadrants != facts.rotation_quadrants:
             raise _Stop(
                 STATUS_FAILED_PREPARATION,
@@ -675,10 +718,16 @@ def prepare_motion_source(
             pixel_format=pixel_format,
             frame_digest=hashlib.sha256("\n".join(expected).encode("ascii")).hexdigest(),
             version=_ffmpeg_version(run, executable),
+            resize=resize,
         )
         return finish(
             STATUS_PREPARED,
-            f"Prepared {plan.output_frames} frames ({derived_sha[:12]}).",
+            f"Prepared {plan.output_frames} frames ({derived_sha[:12]})."
+            + (
+                f" Fun Control safety resize: {facts.coded_width}x{facts.coded_height}"
+                f" to {resize[0]}x{resize[1]} before Canny; original unchanged."
+                if resize else ""
+            ),
             record=record,
             preview=preview,
             preview_captions=captions,
@@ -715,6 +764,7 @@ def _build_record(
     pixel_format: str,
     frame_digest: str,
     version: str,
+    resize: tuple[int, int] | None,
 ) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
@@ -754,11 +804,20 @@ def _build_record(
             "tool": "ffmpeg",
             "tool_version": version,
             "video_codec": "libx264",
-            "lossless": True,
+            "lossless": resize is None,
+            "resize": {
+                "width": resize[0],
+                "height": resize[1],
+                "filter": FUN_CONTROL_RESIZE_FILTER,
+                "policy": "fun-control-canny-max-832",
+            } if resize else None,
             "encoder_args": list(_ENCODER_ARGS[2:]) + ["-pix_fmt", pixel_format],
             "frame_selection": "select+settb+setpts+fps+tpad",
             "orientation": "stored orientation kept; display rotation preserved as metadata",
-            "verification": "every output frame equals the planned source frame (framemd5)",
+            "verification": (
+                "every output frame equals the planned resized source frame (framemd5)"
+                if resize else "every output frame equals the planned source frame (framemd5)"
+            ),
         },
     }
 
@@ -813,6 +872,26 @@ def validate_prepared_record(
         or derived.get("frames") != contract.output_frames
     ):
         raise PreparedMotionSourceError("The prepared motion source record is inconsistent.")
+    # Reject old, validly-hashed but oversized Fun Control derivatives at admission.
+    if contract.workflow_id == FUN_CONTROL_WORKFLOW_ID:
+        try:
+            required_resize = fun_control_resize(
+                int(original.get("width") or 0), int(original.get("height") or 0),
+                contract.workflow_id,
+            )
+        except (TypeError, ValueError) as exc:
+            raise PreparedMotionSourceError("Invalid original video geometry.") from exc
+        if required_resize is not None:
+            detail = _mapping(_mapping(data.get("processing")).get("resize"))
+            if (
+                (derived.get("width"), derived.get("height")) != required_resize
+                or (detail.get("width"), detail.get("height")) != required_resize
+                or detail.get("policy") != "fun-control-canny-max-832"
+            ):
+                raise PreparedMotionSourceError(
+                    "This Fun Control source was prepared without the required safe resize. "
+                    "Prepare it again before running Canny."
+                )
     if not _same_path(str(original.get("path") or ""), str(original_path)):
         raise PreparedMotionSourceError(
             "The motion source was prepared from a different driving video. Prepare it again."
@@ -873,6 +952,9 @@ def prepare_for_form(
 
 __all__ = [
     "DEADLINE_SECONDS",
+    "FUN_CONTROL_MAX_SOURCE_EDGE",
+    "FUN_CONTROL_WORKFLOW_ID",
+    "fun_control_resize",
     "MAX_PREPARED_BYTES",
     "PREPARED_DIRNAME",
     "STATUS_CANCELLED",
