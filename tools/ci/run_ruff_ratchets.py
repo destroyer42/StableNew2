@@ -154,6 +154,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if not args.update:
+        preview = _ruff("format", "--diff", "src/video/motion_source_preparation.py")
+        print(preview.stdout, flush=True)
+
     files, counts = collect()
     if args.update:
         write_baseline(files, counts)
