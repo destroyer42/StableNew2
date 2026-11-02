@@ -24,6 +24,7 @@ from src.gui.view_contracts.video_workspace_contract import (
     summarize_video_workflow_source,
 )
 from src.gui.view_contracts.workspace_density_contract import changed_value_count
+from src.gui.views.motion_conversion_dialog import MotionConversionDialog
 from src.gui.views.video_eval_panel_v2 import VideoEvalPanel
 from src.gui.views.video_workflow_batch_panel_v2 import WorkflowBatchPanel
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
@@ -812,6 +813,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             ),
             selected_workflow=self._selected_workflow_identity,
             on_handoff=self._apply_library_handoff,
+            on_convert=self._open_motion_conversion,
         )
         self.motion_library_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
 
@@ -1473,6 +1475,22 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             plan_handoff=lambda asset_id, workflow_id, version, cancel: (
                 lib().plan_motion_library_handoff(asset_id, workflow_id, version, cancel)
             ),
+        )
+
+    def _open_motion_conversion(self) -> None:
+        """PR-VID-MOTION-354: the non-modal Convert Motion dialog (Blender, CPU only); queues nothing."""
+
+        existing = getattr(self, "_motion_conversion_dialog", None)
+        try:
+            if existing is not None and existing.winfo_exists():
+                existing.lift()
+                return
+        except tk.TclError:
+            pass
+        self._motion_conversion_dialog = MotionConversionDialog(
+            self,
+            ports=self._library_controller().motion_conversion_ports(self._selected_workflow_identity),
+            on_accepted=lambda asset_id: self.motion_library_panel.focus_asset(asset_id),
         )
 
     def _selected_workflow_identity(self) -> tuple[str, str]:

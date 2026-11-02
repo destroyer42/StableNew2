@@ -1,0 +1,396 @@
+# StableNew motion conversion script (SCRIPT_VERSION 1). Run ONLY by `blender --background --factory-startup
+# --disable-autoexec --python this_file -- <action> <input.json> <output.json>`; never imported by StableNew.
+# Actions: probe (read the animation's facts) and render (write PNG frames for the listed source frames).
+# The host has already decided everything that changes pixels; this file evaluates the plan and reports what happened.
+import json
+import math
+import os
+import sys
+import traceback
+from fractions import Fraction
+
+import bpy
+from mathutils import Vector
+
+
+def fail(message):
+    raise RuntimeError(message)
+
+
+def frac(text):
+    return Fraction(str(text))
+
+
+def scene_fps(scene):
+    return Fraction(scene.render.fps) / Fraction(str(scene.render.fps_base))
+
+
+def reset_scene():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    return bpy.context.scene
+
+
+def import_animation(path, kind, transform):
+    forward, up, scale = transform["axis_forward"], transform["axis_up"], float(transform["global_scale"])
+    before = set(bpy.data.objects)
+    if kind == "bvh":
+        bpy.ops.import_anim.bvh(
+            filepath=path, axis_forward=forward, axis_up=up, global_scale=scale,
+            rotate_mode="NATIVE", update_scene_fps=True, update_scene_duration=True,
+        )
+    elif hasattr(bpy.ops.import_scene, "fbx"):
+        bpy.ops.import_scene.fbx(
+            filepath=path, axis_forward=forward, axis_up=up, global_scale=scale,
+            use_anim=True, anim_offset=0.0, automatic_bone_orientation=False,
+        )
+    elif hasattr(bpy.ops.wm, "fbx_import"):
+        bpy.ops.wm.fbx_import(filepath=path, global_scale=scale)
+    else:
+        fail("This Blender has no FBX importer.")
+    return [o for o in bpy.data.objects if o not in before]
+
+
+def armatures(objs):
+    return [o for o in objs if o.type == "ARMATURE"]
+
+
+def meshes(objs):
+    return [o for o in objs if o.type == "MESH"]
+
+
+def action_range():
+    first, last = None, None
+    for action in bpy.data.actions:
+        lo, hi = action.frame_range
+        first = lo if first is None else min(first, lo)
+        last = hi if last is None else max(last, hi)
+    if first is None:
+        fail("The file contains no animation action.")
+    return Fraction(float(first)).limit_denominator(1000), Fraction(float(last)).limit_denominator(1000)
+
+
+def do_probe(request, out):
+    scene = reset_scene()
+    objs = import_animation(request["path"], request["kind"], request["transform"])
+    arms = armatures(objs)
+    first, last = action_range()
+    fps = scene_fps(scene)
+    bones = [b.name for a in arms for b in a.data.bones]
+    out.update(
+        fps="%d/%d" % (fps.numerator, fps.denominator),
+        frame_first="%d/%d" % (first.numerator, first.denominator),
+        frame_last="%d/%d" % (last.numerator, last.denominator),
+        bone_names=bones[:600],
+        has_mesh=bool(meshes(objs)),
+        armature_count=len(arms),
+    )
+
+
+def configure_cpu_render(scene, plan):
+    r = plan["renderer"]
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.samples = int(r["samples"])
+    scene.cycles.use_denoising = bool(r["denoise"])
+    try:
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+        prefs.compute_device_type = "NONE"
+    except Exception:
+        pass
+    if scene.render.engine != "CYCLES" or scene.cycles.device != "CPU":
+        fail("CPU-only rendering could not be established; refusing to render.")
+    scene.render.resolution_x = plan["geometry"]["width"]
+    scene.render.resolution_y = plan["geometry"]["height"]
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.color_mode = "RGB"
+    scene.render.image_settings.color_depth = "8"
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.look = "None"
+    scene.render.film_transparent = False
+    scene.render.use_motion_blur = False
+
+
+def set_world(scene, color):
+    world = bpy.data.worlds.new("StableNewWorld")
+    world.use_nodes = True
+    bg = world.node_tree.nodes["Background"]
+    bg.inputs[0].default_value = (color, color, color, 1.0)
+    bg.inputs[1].default_value = 1.0
+    scene.world = world
+
+
+def emission_material(name, value):
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    nodes.clear()
+    emit = nodes.new("ShaderNodeEmission")
+    emit.inputs[0].default_value = (value, value, value, 1.0)
+    out = nodes.new("ShaderNodeOutputMaterial")
+    links.new(emit.outputs[0], out.inputs[0])
+    return mat
+
+
+def diffuse_fallback():
+    mat = bpy.data.materials.new("StableNewNeutral")
+    mat.diffuse_color = (0.7, 0.7, 0.7, 1.0)
+    return mat
+
+
+def bone_world_points(arm_obj):
+    pts = []
+    for pb in arm_obj.pose.bones:
+        pts.append((arm_obj.matrix_world @ pb.head, arm_obj.matrix_world @ pb.tail, pb.name))
+    return pts
+
+
+def subject_bounds(depsgraph, mesh_objs, arm_objs):
+    lo = Vector((1e9, 1e9, 1e9))
+    hi = Vector((-1e9, -1e9, -1e9))
+    seen = False
+    for obj in mesh_objs:
+        ev = obj.evaluated_get(depsgraph)
+        for corner in ev.bound_box:
+            p = ev.matrix_world @ Vector(corner)
+            lo = Vector((min(lo[i], p[i]) for i in range(3)))
+            hi = Vector((max(hi[i], p[i]) for i in range(3)))
+            seen = True
+    if not seen:
+        for arm in arm_objs:
+            for head, tail, _ in bone_world_points(arm):
+                for p in (head, tail):
+                    lo = Vector((min(lo[i], p[i]) for i in range(3)))
+                    hi = Vector((max(hi[i], p[i]) for i in range(3)))
+                    seen = True
+    if not seen:
+        fail("Nothing visible to frame.")
+    return lo, hi
+
+
+def set_frame(scene, source_frame):
+    whole = math.floor(source_frame)
+    scene.frame_set(int(whole), subframe=float(source_frame - whole))
+
+
+def estimate_facing(arm_objs):
+    # Facing yaw (radians about Z) from the left/right upper-leg bones; 0.0 means the subject faces -Y.
+    for arm in arm_objs:
+        names = {pb.name.split(":")[-1].lower(): pb for pb in arm.pose.bones}
+        left, right = names.get("leftupleg"), names.get("rightupleg")
+        if left and right:
+            side = (arm.matrix_world @ left.head) - (arm.matrix_world @ right.head)
+            side.z = 0.0
+            if side.length > 1e-6:
+                return math.atan2(side.y, side.x), True
+    return 0.0, False
+
+
+def build_skeleton_mesh(arm_objs):
+    mesh = bpy.data.meshes.new("StableNewSkeleton")
+    count = sum(len(a.pose.bones) for a in arm_objs)
+    mesh.vertices.add(count * 2)
+    mesh.edges.add(count)
+    for i in range(count):
+        mesh.edges[i].vertices = (2 * i, 2 * i + 1)
+    obj = bpy.data.objects.new("StableNewSkeleton", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    mod = obj.modifiers.new("wire", "WIREFRAME")
+    mod.thickness = 0.015
+    mod.use_even_offset = True
+    obj.data.materials.append(emission_material("StableNewBone", 1.0))
+    return obj
+
+
+def update_skeleton_mesh(skel_obj, arm_objs):
+    i = 0
+    for arm in arm_objs:
+        for head, tail, _ in bone_world_points(arm):
+            skel_obj.data.vertices[2 * i].co = head
+            skel_obj.data.vertices[2 * i + 1].co = tail
+            i += 1
+    skel_obj.data.update()
+
+
+def apply_profile(scene, plan, mesh_objs, arm_objs):
+    profile = plan["profile"]
+    if profile == "skeleton_reference":
+        for obj in mesh_objs:
+            obj.hide_render = True
+        for arm in arm_objs:
+            arm.hide_render = True
+        set_world(scene, 0.04)
+        return build_skeleton_mesh(arm_objs)
+    if profile == "high_contrast_silhouette":
+        set_world(scene, 0.04)
+        mat = emission_material("StableNewSilhouette", 1.0)
+        for obj in mesh_objs:
+            obj.data.materials.clear()
+            obj.data.materials.append(mat)
+        return None
+    set_world(scene, 0.35)
+    for obj in mesh_objs:
+        if not obj.data.materials:
+            obj.data.materials.append(diffuse_fallback())
+    sun = bpy.data.lights.new("StableNewSun", "SUN")
+    sun.energy = 3.0
+    sun_obj = bpy.data.objects.new("StableNewSun", sun)
+    sun_obj.rotation_euler = (math.radians(50), 0.0, math.radians(30))
+    scene.collection.objects.link(sun_obj)
+    return None
+
+
+def camera_azimuth(plan, facing):
+    offset = {"front": 0.0, "three_quarter": math.radians(35), "side": math.radians(90)}[plan["camera"]]
+    return facing + offset
+
+
+def frame_camera(cam_obj, cam_data, plan, lo, hi, facing):
+    margin = 1.0 + float(plan["transform"]["margin_fraction"])
+    width, height = plan["geometry"]["width"], plan["geometry"]["height"]
+    cam_data.sensor_fit = "VERTICAL" if height >= width else "HORIZONTAL"
+    cam_data.lens = 50.0
+    sensor = cam_data.sensor_width
+    vfov = 2 * math.atan((sensor * (height / width if height < width else 1.0)) / (2 * cam_data.lens))
+    extent_z = (hi.z - lo.z) * margin
+    extent_xy = max(hi.x - lo.x, hi.y - lo.y) * margin
+    aspect = width / height
+    fit_v = (extent_z / 2) / math.tan(vfov / 2)
+    fit_h = (extent_xy / 2) / (math.tan(vfov / 2) * aspect)
+    dist = max(fit_v, fit_h, 0.5) + extent_xy / 2
+    center = (lo + hi) / 2
+    az = camera_azimuth(plan, facing)
+    # The subject faces -Y when facing == 0; the camera sits in front of it.
+    direction = Vector((math.sin(az) * -1.0, -math.cos(az), 0.0))
+    cam_obj.location = center + direction * dist
+    look = center - cam_obj.location
+    cam_obj.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
+    return center, cam_obj.location.copy()
+
+
+def do_render(request, out):
+    plan = request["plan"]
+    frames_dir = request["frames_dir"]
+    scene = reset_scene()
+    configure_cpu_render(scene, plan)
+    kind = plan["source"]["type"]
+    objs = import_animation(plan["source"]["path"], kind, plan["transform"])
+    arms, mesh_objs = armatures(objs), meshes(objs)
+    if plan["source"]["route"] == "fbx_on_reference_character":
+        char_objs = import_animation(plan["character"]["path"], "fbx", plan["transform"])
+        char_arms = armatures(char_objs)
+        src_arms = arms
+        if len(char_arms) != 1 or len(src_arms) != 1:
+            fail("Exactly one armature is required on both the animation and the character.")
+        action = src_arms[0].animation_data.action if src_arms[0].animation_data else None
+        if action is None:
+            fail("The animation file has no action to apply.")
+        for source_name, target_name in plan["binding_mapping"]:
+            if source_name != target_name or target_name not in char_arms[0].data.bones:
+                fail("Bone %s is not present under the same name on the character." % source_name)
+        char_arms[0].animation_data_create()
+        char_arms[0].animation_data.action = action
+        for obj in src_arms:
+            obj.hide_render = True
+        arms, mesh_objs = char_arms, meshes(char_objs)
+    if plan["profile"] != "skeleton_reference" and not mesh_objs:
+        fail("The selected profile needs a character mesh and none was found.")
+    if not arms:
+        fail("No skeleton was found in the file.")
+    actual_fps = scene_fps(scene)
+    if actual_fps != frac(plan["timing"]["source_fps"]):
+        fail("The file's frame rate (%s) differs from the probed plan (%s)." % (actual_fps, plan["timing"]["source_fps"]))
+    scene.render.fps, scene.render.fps_base = plan["timing"]["target_fps"], 1.0
+    root = None
+    if plan["root_motion"] == "in_place":
+        root = bpy.data.objects.new("StableNewRoot", None)
+        scene.collection.objects.link(root)
+        for obj in arms + mesh_objs:
+            obj.parent = root
+    skel = apply_profile(scene, plan, mesh_objs, arms)
+    cam_data = bpy.data.cameras.new("StableNewCamera")
+    cam_obj = bpy.data.objects.new("StableNewCamera", cam_data)
+    scene.collection.objects.link(cam_obj)
+    scene.camera = cam_obj
+    samples = [frac(s) for s in plan["timing"]["sample_frames"]]
+    facing = 0.0
+    set_frame(scene, samples[0])
+    facing, facing_estimated = estimate_facing(arms)
+    hips0 = None
+    if root is not None:
+        pb = arms[0].pose.bones[0]
+        hips0 = (arms[0].matrix_world @ pb.head).copy()
+    # First pass: the union of the subject's bounds over the whole window (a static camera must keep it in frame).
+    lo_all, hi_all, centers = Vector((1e9,) * 3), Vector((-1e9,) * 3), []
+    for s in samples:
+        set_frame(scene, s)
+        if root is not None:
+            pb = arms[0].pose.bones[0]
+            now = arms[0].matrix_world @ pb.head
+            root.location = Vector((hips0.x - now.x, hips0.y - now.y, 0.0))
+            bpy.context.view_layer.update()
+        lo, hi = subject_bounds(bpy.context.evaluated_depsgraph_get(), mesh_objs, arms)
+        centers.append((lo + hi) / 2)
+        lo_all = Vector((min(lo_all[i], lo[i]) for i in range(3)))
+        hi_all = Vector((max(hi_all[i], hi[i]) for i in range(3)))
+    if plan["camera_mode"] == "static":
+        frame_camera(cam_obj, cam_data, plan, lo_all, hi_all, facing)
+        static_location = cam_obj.location.copy()
+    else:
+        height = hi_all.z - lo_all.z
+        span = Vector((height, height, height))
+        base_center = centers[0]
+        frame_camera(cam_obj, cam_data, plan, base_center - span / 2, base_center + span / 2, facing)
+        offset = cam_obj.location - base_center
+        static_location = None
+    os.makedirs(frames_dir, exist_ok=True)
+    for index, s in enumerate(samples):
+        set_frame(scene, s)
+        if root is not None:
+            pb = arms[0].pose.bones[0]
+            now = arms[0].matrix_world @ pb.head
+            root.location = Vector((hips0.x - now.x, hips0.y - now.y, 0.0))
+            bpy.context.view_layer.update()
+        if skel is not None:
+            update_skeleton_mesh(skel, arms)
+        if static_location is None:
+            cam_obj.location = centers[index] + offset
+        scene.render.filepath = os.path.join(frames_dir, "frame_%05d.png" % (index + 1))
+        bpy.ops.render.render(write_still=True)
+    out.update(
+        render_engine=scene.render.engine,
+        render_device=scene.cycles.device,
+        samples=scene.cycles.samples,
+        frames_written=len(samples),
+        facing_yaw_radians=facing,
+        facing_estimated=facing_estimated,
+        subject_bounds_min=list(lo_all),
+        subject_bounds_max=list(hi_all),
+        camera_mode=plan["camera_mode"],
+        bone_names=[b.name for a in arms for b in a.data.bones][:600],
+        mesh_object_count=len(mesh_objs),
+        blender_version=bpy.app.version_string,
+    )
+
+
+def main():
+    args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    if len(args) != 3 or args[0] not in ("probe", "render"):
+        fail("usage: -- probe|render <input.json> <output.json>")
+    action, in_path, out_path = args
+    out = {"action": action, "ok": False, "error": ""}
+    try:
+        with open(in_path, "r", encoding="utf-8") as handle:
+            request = json.load(handle)
+        (do_probe if action == "probe" else do_render)(request, out)
+        out["ok"] = True
+    except BaseException as exc:  # reported, then a non-zero exit so the host never trusts partial frames
+        out["error"] = "%s: %s" % (type(exc).__name__, exc)
+        out["trace"] = traceback.format_exc()[-2000:]
+    with open(out_path, "w", encoding="utf-8") as handle:
+        json.dump(out, handle)
+    if not out["ok"]:
+        sys.exit(3)
+
+
+main()

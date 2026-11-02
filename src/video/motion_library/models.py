@@ -315,6 +315,55 @@ class GeneratedOrigin:
 
 
 @dataclass(frozen=True, slots=True)
+class DerivationRecord:
+    """Pointer from a converted clip back to the animation file it was rendered from (PR-VID-MOTION-354).
+
+    The clip's own ``sha256`` stays its identity; ``source_sha256`` is the identity of the *original* animation.  The full
+    machine-readable record is the conversion's ``provenance.json``; this keeps the facts a browser needs, so provenance
+    survives a restart without the converter being available.  The catalog never reads the source or runs a conversion."""
+
+    source_sha256: str
+    source_type: str
+    source_name: str = ""
+    source_path: str = ""
+    provenance_path: str = ""
+    plan_digest: str = ""
+    profile: str = ""
+    camera: str = ""
+    camera_mode: str = ""
+    root_motion: str = ""
+    blender_version: str = ""
+    script_version: str = ""
+    character_mode: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {name: getattr(self, name) for name in self.__slots__}
+
+    @classmethod
+    def from_dict(cls, data: Any) -> DerivationRecord:
+        if not isinstance(data, Mapping):
+            raise AssetFormatError("derivation must be an object")
+        sha = str(data.get("source_sha256") or "")
+        if not is_sha256(sha):
+            raise AssetFormatError("derivation needs the source file's sha256")
+        return cls(
+            source_sha256=sha,
+            source_type=clean_text(data.get("source_type"), 20),
+            source_name=clean_text(data.get("source_name"), MAX_NAME_CHARS),
+            source_path=str(data.get("source_path") or "")[:1000],
+            provenance_path=str(data.get("provenance_path") or "")[:1000],
+            plan_digest=str(data.get("plan_digest") or "")[:64],
+            profile=clean_text(data.get("profile"), 60),
+            camera=clean_text(data.get("camera"), 40),
+            camera_mode=clean_text(data.get("camera_mode"), 40),
+            root_motion=clean_text(data.get("root_motion"), 40),
+            blender_version=clean_text(data.get("blender_version"), 40),
+            script_version=clean_text(data.get("script_version"), 20),
+            character_mode=clean_text(data.get("character_mode"), 60),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class MotionAsset:
     """One catalog entry.  Technical facts come from the bounded FFprobe inspection; everything else is
     operator annotation.  ``sha256`` is the identity of the bytes."""
@@ -354,6 +403,8 @@ class MotionAsset:
     origin: GeneratedOrigin | None = None
     #: Operator statement that the clip is good for motion driving, independent of its visual rating.
     good_for_motion: bool | None = None
+    #: Set only for a clip converted from an animation file (the original's identity, not the clip's).
+    derivation: DerivationRecord | None = None
 
     # ------------------------------------------------------------------ derived
 
@@ -400,6 +451,7 @@ class MotionAsset:
             "aliases": [alias.to_dict() for alias in self.aliases],
             "origin": self.origin.to_dict() if self.origin is not None else None,
             "good_for_motion": self.good_for_motion,
+            "derivation": self.derivation.to_dict() if self.derivation is not None else None,
         }
 
     @classmethod
@@ -429,6 +481,10 @@ class MotionAsset:
         if raw_origin is not None:
             origin = GeneratedOrigin.from_dict(raw_origin)
         good = data.get("good_for_motion")
+        raw_derivation = data.get("derivation")
+        derivation: DerivationRecord | None = None
+        if raw_derivation is not None:
+            derivation = DerivationRecord.from_dict(raw_derivation)
         return cls(
             asset_id=asset_id,
             display_name=name,
@@ -462,6 +518,7 @@ class MotionAsset:
             aliases=tuple(aliases),
             origin=origin,
             good_for_motion=good if isinstance(good, bool) else None,
+            derivation=derivation,
         )
 
 
