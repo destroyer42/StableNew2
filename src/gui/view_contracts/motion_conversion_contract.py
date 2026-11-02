@@ -264,11 +264,16 @@ class MotionConversionSession:
         def finished(value: tuple[SourceFacts, Any]) -> None:
             character, binding = value
             self.binding, self.character = binding, character
-            self.options.character_path = character.path if binding.compatible else ""
+            self.options.character_path = character.path if binding.can_apply else ""
             self.status = (
                 "The character's bones match the animation exactly; it can be used."
-                if binding.compatible
-                else f"Automated retargeting is refused: {binding.reason}"
+                if binding.can_apply
+                else (
+                    "These rigs match after namespace normalization but cannot be applied: "
+                    "Blender requires identical bone names. No names are changed automatically."
+                    if binding.compatible
+                    else f"Automated retargeting is refused: {binding.reason}"
+                )
             )
             self._refresh_plan()
 
@@ -413,6 +418,12 @@ class MotionConversionSession:
                 source_lines += (
                     f"Length {_rational_text(probe.duration_seconds)} s at {_rational_text(probe.fps)} fps",
                 )
+                if self.options.start_seconds.strip() in ("", "0", "0.0"):
+                    source_lines += (
+                        "Calibration check: inspect Preview (short) for an initial T-pose. "
+                        "If present, change Start (s) to the first active frame before Convert; "
+                        "calibration frames are not removed automatically.",
+                    )
         plan_lines: tuple[str, ...] = ()
         if plan is not None:
             plan_lines = (
@@ -442,7 +453,7 @@ class MotionConversionSession:
                 )
             )
         profiles = [cp.PROFILE_SKELETON]
-        bound = self.binding is not None and self.binding.compatible and self.character is not None
+        bound = self.binding is not None and self.binding.can_apply and self.character is not None
         if facts is not None and facts.ready and (facts.has_mesh or bound):
             profiles = [cp.PROFILE_CHARACTER, cp.PROFILE_SILHOUETTE, cp.PROFILE_SKELETON]
         ready_to_plan = (
