@@ -25,6 +25,7 @@ from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
 from src.gui.view_contracts.video_motion_readiness_contract import FrameThumb
 from src.video.driving_video_inspection import DrivingVideoInspection
+from src.video.motion_library.derivation import derivation_lines
 from src.video.motion_library.handoff import HandoffPlan
 from src.video.motion_library.importer import FolderImportReport, ImportOutcome
 from src.video.motion_library.models import (
@@ -168,6 +169,7 @@ class MotionLibrarySession:
         self._inspection_for = ""
         self._inspecting = False
         self.last_plan: HandoffPlan | None = None
+        self._select_after_refresh = ""
 
     # ------------------------------------------------------------------ plumbing
 
@@ -226,6 +228,12 @@ class MotionLibrarySession:
             self._notice = ""
         self._run("refresh", lambda _c: self._ports.snapshot(), self._finish_refresh)
 
+    def refresh_and_select(self, asset_id: str) -> None:
+        """Refresh the catalog, then select ``asset_id`` once it is listed (a clip added by another dialog)."""
+
+        self._select_after_refresh = str(asset_id or "")
+        self.refresh(keep_notice=True)
+
     def _finish_refresh(self, snapshot: LibrarySnapshot) -> None:
         self.snapshot = snapshot
         if snapshot.error:
@@ -240,6 +248,9 @@ class MotionLibrarySession:
         if self.selected_id and not any(a.asset_id == self.selected_id for a in snapshot.assets):
             self.selected_id = ""
             self._inspection = None
+        pending, self._select_after_refresh = self._select_after_refresh, ""
+        if pending and any(a.asset_id == pending for a in snapshot.assets):
+            self.select(pending)
         self._notify()
 
     def set_query(self, query: SearchQuery) -> None:
@@ -482,6 +493,12 @@ class MotionLibrarySession:
             provenance.append(f"Quality notes: {asset.quality_notes}")
         provenance.extend(f"Also seen at: {alias.path}" for alias in asset.aliases)
         origin_lines: list[str] = []
+        if asset.derivation is not None:
+            origin_lines.extend(
+                derivation_lines(
+                    asset.derivation, source_present=snapshot.derivation_sources.get(asset.asset_id)
+                )
+            )
         if asset.origin is not None:
             o = asset.origin
             subject = visibility_subject(asset)

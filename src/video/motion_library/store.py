@@ -39,6 +39,7 @@ from src.video.motion_library.models import (
     AssetAlias,
     AssetFormatError,
     AssetLocator,
+    DerivationRecord,
     GeneratedOrigin,
     MotionAsset,
     clean_note,
@@ -423,6 +424,17 @@ class MotionLibraryStore:
             if aliases == asset.aliases and merged_tags == asset.tags:
                 return asset
             updated = asset.with_changes(aliases=aliases, tags=merged_tags)
+            self._commit({**self._state.assets, asset_id: updated})
+            return updated
+
+    def attach_derivation(self, asset_id: str, derivation: DerivationRecord) -> MotionAsset:
+        """Same bytes were produced by a conversion: keep the first record, never overwrite a recorded source."""
+
+        with self._lock:
+            asset = self.require(asset_id)
+            if asset.derivation is not None:
+                return asset
+            updated = asset.with_changes(derivation=derivation)
             self._commit({**self._state.assets, asset_id: updated})
             return updated
 

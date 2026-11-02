@@ -33,6 +33,7 @@ from src.video.motion_library.models import (
     LOCATOR_MODES,
     SOURCE_STABLENEW_GENERATED,
     AssetLocator,
+    DerivationRecord,
     GeneratedOrigin,
     MotionAsset,
     clean_text,
@@ -138,12 +139,14 @@ def import_video(
     mode: str = LOCATOR_LINKED,
     annotations: Mapping[str, Any] | None = None,
     origin: GeneratedOrigin | None = None,
+    derivation: DerivationRecord | None = None,
     inspect: Inspector = _default_inspector,
     cancel: threading.Event | None = None,
     clock: Callable[[], str] = utc_now_iso,
 ) -> ImportOutcome:
     """Add one video.  ``mode`` ``linked`` references the file where it is; ``managed`` also copies it
-    into the library after the copy hashes to the verified SHA-256."""
+    into the library after the copy hashes to the verified SHA-256.  ``derivation`` names the animation file a
+    converted clip was rendered from; it is kept beside, never instead of, the clip's own identity."""
 
     text = str(path or "").strip()
     if not text:
@@ -179,7 +182,7 @@ def import_video(
 
     existing = store.find_by_sha(digest)
     if existing is not None:
-        return _record_duplicate(store, existing, source, edits, origin)
+        return _record_duplicate(store, existing, source, edits, origin, derivation)
 
     inspection = inspect(source, cancel)
     if inspection.status == STATUS_FAILED or inspection.facts is None:
@@ -222,6 +225,7 @@ def import_video(
             thumbnail=thumbnail,
             imported_at=clock(),
             origin=origin,
+            derivation=derivation,
             **fields,
         )
         store.add(asset)
@@ -229,7 +233,7 @@ def import_video(
         _discard_new_copy(store, managed_name)
         existing = store.get(exc.existing_id)
         if existing is not None:
-            return _record_duplicate(store, existing, source, edits, origin)
+            return _record_duplicate(store, existing, source, edits, origin, derivation)
         return _failed(source, "These bytes are already in the library.")
     except HashCancelled:
         _discard_new_copy(store, managed_name)
@@ -259,6 +263,7 @@ def _record_duplicate(
     source: Path,
     edits: Mapping[str, Any],
     origin: GeneratedOrigin | None = None,
+    derivation: DerivationRecord | None = None,
 ) -> ImportOutcome:
     try:
         store.record_duplicate(
@@ -270,6 +275,8 @@ def _record_duplicate(
         )
         if origin is not None:
             store.attach_origin(existing.asset_id, origin)
+        if derivation is not None:
+            store.attach_derivation(existing.asset_id, derivation)
     except (LibraryError, OSError) as exc:
         return _failed(source, f"Already in the library, but the alias could not be saved: {exc}")
     return ImportOutcome(

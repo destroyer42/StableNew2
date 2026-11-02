@@ -66,11 +66,40 @@ The library accepts **rendered video files only** (`.mp4 .webm .mov .mkv`). Ther
 - **Owner-recorded, stock or other source.** Obtain the clip yourself under terms you are entitled to use, save it locally,
   import it, and fill *Source*, *Source reference*, *Source URL (text only)* and *Usage terms* in Edit details. The URL is a note; it is
   never fetched. Do not commit third-party media to Git.
-- **Mocap or animation files (FBX, BVH, AMC).** These are not accepted. Render a reference video from them first, for example in
-  Blender: import the file, add a camera, set the frame range and output FPS, render to FFmpeg video (H.264 in MP4), then
-  import the rendered clip and set *Source* to the rendered-mocap category and the original file's license in the notes.
-  Pose-driven workflows consume video, so no format conversion is done inside StableNew.
+- **Mocap or animation files (FBX, BVH).** The library itself still accepts rendered video only. **Convert Motion**
+  (PR-VID-MOTION-354, section 4.1) renders such a file to an MP4 with a Blender you installed yourself, then adds the result to
+  this library with its derivation recorded. ASF/AMC are reported as unsupported. You can still render a reference video yourself
+  in any tool and import it as above; set *Source* to the rendered-mocap category and note the original file's license.
 - **StableNew-generated clips.** Use *Add to Motion Library* on a finished clip; the job and artifact identity are kept.
+
+### 4.1 Convert Motion (Blender, CPU only)
+
+The **Convert Motion** button in the Motion Library opens a non-modal dialog. Nothing in it queues a job, starts Comfy or uses the
+GPU; it runs one contained Blender child per explicit action (bounded time, output and process tree, Cycles on the CPU, scripts
+and add-ons disabled, private empty Blender user folders, no network). StableNew never downloads or installs Blender; choose
+your own `blender.exe` (4.2 or newer); the dialog verifies only the file you pick (`--version`) and remembers it. (The engine's
+`discover_blender` can also search `STABLENEW_BLENDER`, `PATH` and Program Files, but no button calls it yet.)
+
+- **Supported sources.** FBX with mesh and animation (rendered as that character); animation-only FBX with a known rig (Mixamo,
+  Rokoko) rendered as a skeleton, or onto a reference character only when every needed bone name matches exactly (no guessing,
+  renaming or automated retargeting, otherwise refused with the reason); BVH as a skeleton render. FBX/BVH are scanned by header
+  only before anything is imported.
+- **Profiles.** Character reference, high-contrast silhouette, skeleton reference (a skeleton view, *not* an OpenPose map).
+  Cameras: front, side, three-quarter; static by default, optional tracking; root motion is preserved unless you opt out.
+- **Output.** 24 FPS, exact frame count and geometry verified before publication, no audio, no silent trim, pad or speed change
+  (the length follows the selected workflow's own legal lengths). A frozen plan with a canonical digest is shown first.
+- **Provenance and reuse.** Each result is a folder (`<library>/conversions/converted/...`) holding the MP4 and `provenance.json`
+  (source SHA-256, derivative SHA-256, Blender version, script version, rig, window, FPS, transform, camera, geometry, warnings),
+  published atomically. A verified identical result is reused instead of re-rendered. *Add to Motion Library* imports it with a
+  derivation record that keeps the original file's identity apart from the derivative's; derivation text is searchable and
+  survives restart. Previews and unverified folders cannot be added.
+- **Existing MP4s** need no conversion and are never re-encoded: import them as in section 1. The Motion Library panel's **Preview Conditioning...**
+  button shows the same advisory preview for any usable selected clip, and the conversion dialog offers it for a result.
+- **Preview Conditioning** is an advisory CPU Canny preview (first/middle/last frames) of what a Fun Control graph would see,
+  centre-cropped to the generation shape like the pinned node. It is labeled *approximate* (not verified against the node's
+  source or recorded vectors), shows bounded heuristic warnings, calls no Comfy and changes no job.
+
+Operator procedure: `docs/runbooks/motion_conversion.md`. Design record and limits: `PR-VID-MOTION-354_Motion_Conversion_and_Fun_Qualification.md`.
 
 ## 5. Limits and cost
 
@@ -94,7 +123,13 @@ The library accepts **rendered video files only** (`.mp4 .webm .mov .mkv`). Ther
 | Controller commands | `src/controller/video_motion_library_controller.py` (mixin on `VideoWorkflowController`) |
 | Toolkit-neutral session | `src/gui/view_contracts/motion_library_contract.py` |
 | Tk browser | `src/gui/views/video_workflow_motion_library_panel_v2.py` |
+| Derivation record (PR-VID-MOTION-354) | `src/video/motion_library/derivation.py` |
+| Conversion engine (scan, plan, Blender child, publication, archive extraction, conditioning preview) | `src/video/motion_conversion/` |
+| Convert Motion session / dialog / controller seam | `src/gui/view_contracts/motion_conversion_contract.py`, `src/gui/views/motion_conversion_dialog.py`, `src/controller/video_motion_conversion_controller.py` |
+| Read-only asset inventory | `tools/motion_asset_inventory.py` |
 
-Tests: `tests/video/test_pr_vid_motion_lib_353_catalog.py`, `..._handoff.py`, `tests/gui_v2/test_pr_vid_motion_lib_353_panel.py`
+Tests: `tests/video/test_pr_vid_motion_354_*.py`, `tests/controller/test_pr_vid_motion_354_conversion_controller.py`,
+`tests/gui_v2/test_pr_vid_motion_354_convert_dialog.py` (a fake Blender that obeys the real command-line contract; no Blender is
+needed), and `tests/video/test_pr_vid_motion_lib_353_catalog.py`, `..._handoff.py`, `tests/gui_v2/test_pr_vid_motion_lib_353_panel.py`
 (temp directories, a fake inspector, real Tk, a KB-sized clip from CPU-only FFmpeg where a real probe is needed and skipped
 without FFmpeg; no runtime, model, GPU or network).

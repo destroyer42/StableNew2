@@ -113,6 +113,8 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         mode_provider: Callable[[], str] = lambda: "nsfw",
         selected_workflow: Callable[[], tuple[str, str]] = lambda: ("", ""),
         on_handoff: Callable[[HandoffPlan], None] | None = None,
+        on_convert: Callable[[], None] | None = None,
+        on_preview_conditioning: Callable[[Any], None] | None = None,
         decode: Any = None,
         runner: BackgroundWorkRunner | None = None,
         **kwargs: Any,
@@ -121,6 +123,8 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             master, text="Motion Library", style="Dark.TLabelframe", padding=8, **kwargs
         )
         self._closed = False
+        self._on_convert = on_convert
+        self._on_preview_conditioning = on_preview_conditioning
         self._runner = runner
         self._media_decode = decode
         self._photos: list[tk.PhotoImage] = []
@@ -182,6 +186,9 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         self.import_folder_button = ttk.Button(
             bar, text="Import folder...", style="Dark.TButton", command=self._on_import_folder
         )
+        self.convert_button = ttk.Button(
+            bar, text="Convert Motion...", style="Dark.TButton", command=self._on_convert_motion
+        )
         self.refresh_button = ttk.Button(
             bar, text="Refresh", style="Dark.TButton", command=self.request_refresh
         )
@@ -192,6 +199,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             self.choose_button,
             self.import_file_button,
             self.import_folder_button,
+            self.convert_button,
             self.refresh_button,
             self.copy_check,
         )
@@ -325,13 +333,26 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             command=self._on_relink,
             state="disabled",
         )
+        self.condition_button = ttk.Button(
+            actions,
+            text="Preview Conditioning...",
+            style="Dark.TButton",
+            command=self._on_preview_condition,
+            state="disabled",
+        )
         self.open_button = ttk.Button(
             actions, text="Open", style="Dark.TButton", command=self._on_open, state="disabled"
         )
         self.reveal_button = ttk.Button(
             actions, text="Reveal", style="Dark.TButton", command=self._on_reveal, state="disabled"
         )
-        for button in (self.use_button, self.relink_button, self.open_button, self.reveal_button):
+        for button in (
+            self.use_button,
+            self.condition_button,
+            self.relink_button,
+            self.open_button,
+            self.reveal_button,
+        ):
             actions.add(button)
 
     def _media_decode_arg(self) -> Any:
@@ -490,7 +511,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
 
     def _render_buttons(self, view: LibraryView) -> None:
         can = "normal" if view.can_import else "disabled"
-        for button in (self.import_file_button, self.import_folder_button):
+        for button in (self.import_file_button, self.import_folder_button, self.convert_button):
             button.configure(state=can)
         self.refresh_button.configure(state="disabled" if view.busy else "normal")
         self.choose_button.configure(state="disabled" if view.busy else "normal")
@@ -536,6 +557,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             self.detail_text.configure(state="disabled")
             for button in (
                 self.use_button,
+                self.condition_button,
                 self.relink_button,
                 self.open_button,
                 self.reveal_button,
@@ -574,6 +596,9 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         self.detail_text.insert("1.0", "\n".join(lines))
         self.detail_text.configure(state="disabled")
         self.use_button.configure(state="normal" if detail.can_use else "disabled")
+        self.condition_button.configure(
+            state="normal" if detail.can_use and self._on_preview_conditioning else "disabled"
+        )
         self.relink_button.configure(state="normal" if detail.can_relink else "disabled")
         playable = "normal" if detail.media_path else "disabled"
         self.open_button.configure(state=playable)
@@ -644,6 +669,16 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         if path:
             self.session.import_file(path, self._mode(), self._import_annotations())
 
+    def _on_convert_motion(self) -> None:
+        if self._on_convert is not None:
+            self._on_convert()
+
+    def focus_asset(self, asset_id: str) -> None:
+        """Refresh, then select a clip that was just added elsewhere (for example by Convert Motion)."""
+
+        if not self._closed:
+            self.session.refresh_and_select(asset_id)
+
     def _on_import_folder(self) -> None:
         folder = filedialog.askdirectory(
             title="Import the videos in a folder (sub-folders are not entered)"
@@ -670,6 +705,13 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
 
     def _on_use(self) -> None:
         self.session.use_as_driving()
+
+    def _on_preview_condition(self) -> None:
+        """Hand the verified, selected clip to the owner of the preview window; nothing is queued or changed."""
+
+        detail = self.session.view().detail
+        if detail is not None and detail.can_use and self._on_preview_conditioning is not None:
+            self._on_preview_conditioning(detail)
 
     def _on_relink(self) -> None:
         detail = self.session.view().detail

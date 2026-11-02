@@ -7,6 +7,7 @@ locally while the operator types.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
@@ -25,6 +26,8 @@ class LibrarySnapshot:
     thumbnails: Mapping[str, str] = field(default_factory=dict)
     #: The safely resolved file of each asset the in-app preview may play.
     media_paths: Mapping[str, str] = field(default_factory=dict)
+    #: For a converted clip: whether its original animation file is still where it was recorded (one ``stat``).
+    derivation_sources: Mapping[str, bool] = field(default_factory=dict)
     issues: tuple[str, ...] = ()
     revision: int = 0
     #: A refusal to open the library at all (corrupt or newer manifest, unusable folder).
@@ -36,7 +39,15 @@ def build_snapshot(store: MotionLibraryStore) -> LibrarySnapshot:
     checks: dict[str, FileCheck] = {}
     thumbnails: dict[str, str] = {}
     media_paths: dict[str, str] = {}
+    derivation_sources: dict[str, bool] = {}
     for asset in assets:
+        if asset.derivation is not None:
+            try:
+                derivation_sources[asset.asset_id] = bool(
+                    asset.derivation.source_path and os.path.isfile(asset.derivation.source_path)
+                )
+            except OSError:
+                derivation_sources[asset.asset_id] = False
         try:
             path = store.asset_path(asset)
             media_paths[asset.asset_id] = str(path)
@@ -59,6 +70,7 @@ def build_snapshot(store: MotionLibraryStore) -> LibrarySnapshot:
         checks=checks,
         thumbnails=thumbnails,
         media_paths=media_paths,
+        derivation_sources=derivation_sources,
         issues=tuple(issues),
         revision=store.revision,
     )
