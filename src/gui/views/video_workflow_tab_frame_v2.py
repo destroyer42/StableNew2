@@ -790,6 +790,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             frame_counts=lambda: dict(self._frame_count_labels),
             block_reason=self._queue_block_reason,
             on_queued=self._on_sequence_queued,
+            restore_form=self.restore_video_workflow_state,
         )
         self.sequence_panel.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.sequence_panel.refresh_lengths()

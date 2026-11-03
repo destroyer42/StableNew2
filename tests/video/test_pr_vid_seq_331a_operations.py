@@ -26,7 +26,7 @@ from src.video.sequence_shots import MAX_SHOTS, ShotDraft, build_sequence_intent
 
 def test_shots_become_one_intent_with_provided_anchors_only_where_a_keyframe_is_named() -> None:
     shots = [
-        ShotDraft(prompt="waves", frame_count=17, seed="5", keyframe_path="ignored.png"),
+        ShotDraft(prompt="waves", frame_count=17, seed="5"),
         ShotDraft(frame_count=21),
         ShotDraft(prompt="turns", frame_count=17, keyframe_path="C:/k/two.PNG"),
     ]

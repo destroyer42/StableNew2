@@ -303,7 +303,18 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   (`HistoryActionState.sequence_resume` / `sequence_replay`, `src/video/sequence_history.py`, `src/gui/view_contracts/history_sequence_contract.py`) shows
   "n of N segments done" for a sequence job and offers *Resume Sequence* (failed or cancelled) and *Replay Sequence* (any finished job); both queue a NEW job through
   `resume_sequence` / `replay_sequence`, and a job whose checkpoint cannot be found asks for its `sequence_state.json`.
-- **Not here**: a persistent Storyboard library with reorder-and-re-render (the rest of SEQ-331), first-last-frame anchors (FLF-322), crossfades between segments, new Wan models. `PR-VID-SEQ-330_Acceptance.md` is the physical procedure (runs A-C passed on the RTX 4070 Ti on 2026-10-22; native SVD was not run),
+- **Persistent Storyboards**: the same Multi-shot sequence section saves versioned editable intent under `%LOCALAPPDATA%/StableNew/storyboards/`,
+  separate from executable `SequencePlan` and repository jobs (`src/video/storyboard.py`, `storyboard_store.py`). Save/Save As/Open/Rename,
+  JSON import/export and shot duplication/reorder never submit work. Atomic writes and exclusive per-draft revision checks refuse stale saves;
+  malformed/future-schema files are preserved. Source and authored-anchor SHA-256 identities survive reopen; changed bytes require explicit acceptance.
+  Readiness is an authoring projection with seed intent, legal native frames, approximate duration, workflow/version and source/anchor problems.
+  Queue alone uses `build_sequence_intent` and the existing `submit_sequence_job` admission, verifying linked identities against the frozen inputs;
+  unsupported controls (including Fun Control driving inputs) refuse. Background file operations use `EditWorkRunner` and drop disposed-view callbacks.
+  History's *Create Storyboard from Sequence* rereads the canonical NJR through `src/video/storyboard_history.py`, verifies the typed plan digest and creates
+  a new draft with provenance only. Homogeneous Comfy sequences with standard assembly/overlap are supported; native SVD model/settings, mixed workflows,
+  per-shot negatives and custom assembly/color/overlap cannot be represented in this editor and are refused precisely. Existing SVD Resume/Replay is unchanged.
+  [Operator guide and proposed suffix-regeneration boundary](STORYBOARDS.md).
+- **Not here**: selective middle-shot rerender or suffix reuse, first-last-frame anchors (FLF-322), crossfades between segments, new Wan models. `PR-VID-SEQ-330_Acceptance.md` is the physical procedure (runs A-C passed on the RTX 4070 Ti on 2026-10-22; native SVD was not run),
   `tools/acceptance/seq330_sequence_acceptance.py` drives it and `tools/acceptance/seq330_sequence_verification.py` re-verifies a finished run's ledger and
   artifacts.
 

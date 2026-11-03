@@ -16,9 +16,10 @@ Pure: no file is opened, nothing is queued.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
+from uuid import uuid4
 
 from src.video.sequence_plan import (
     ANCHOR_IMAGE_SUFFIXES,
@@ -39,6 +40,9 @@ class ShotDraft:
     frame_count: int | None = None
     keyframe_path: str = ""
     seed: str = ""
+    shot_id: str = field(default_factory=lambda: uuid4().hex)
+    keyframe_sha256: str = ""
+    label: str = ""
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> ShotDraft:
@@ -68,6 +72,10 @@ def shot_problems(shots: Sequence[ShotDraft]) -> list[str]:
     for position, shot in enumerate(shots, start=1):
         if shot.frame_count is None:
             problems.append(f"Shot {position}: choose a length.")
+        if position == 1 and shot.keyframe_path:
+            problems.append(
+                "Shot 1 uses the form source image; clear its unused keyframe or move the shot."
+            )
         if shot.keyframe_path and position > 1:
             suffix = Path(shot.keyframe_path).suffix.lower()
             if suffix not in ANCHOR_IMAGE_SUFFIXES:
@@ -90,7 +98,7 @@ def build_sequence_intent(shots: Sequence[ShotDraft], *, clip_name: str = "") ->
             segment["prompt"] = shot.prompt
         if shot.seed:
             segment["seed"] = shot.seed
-        # Shot 0 always starts from the source image; a keyframe typed there would silently do nothing, so it is ignored.
+        # An unused first-shot keyframe was refused above, never silently discarded.
         if position > 0 and shot.keyframe_path:
             segment["anchor"] = {"policy": ANCHOR_PROVIDED, "path": shot.keyframe_path}
         segments.append(segment)

@@ -198,6 +198,13 @@ class JobHistoryPanelV2(ttk.Frame):
         )
         action_bar.add(self.resume_sequence_btn, shown=False)
         action_bar.add(self.replay_sequence_btn, shown=False)
+        self.storyboard_sequence_btn = ttk.Button(
+            self,
+            text="Create Storyboard from Sequence",
+            style="Dark.TButton",
+            command=self._on_storyboard_sequence,
+        )
+        action_bar.add(self.storyboard_sequence_btn, shown=False)
         self.refresh_btn = ttk.Button(action_bar, text="Refresh History", command=self._on_refresh)
         action_bar.add(self.refresh_btn)
         self._browser_window: tk.Toplevel | None = None
@@ -768,6 +775,8 @@ class JobHistoryPanelV2(ttk.Frame):
     ) -> None:
         info = self._sequence_info(entry)
         self.sequence_status_var.set(info.label if info is not None else "")
+        self._action_bar.set_shown(self.storyboard_sequence_btn, info is not None)
+        self.storyboard_sequence_btn.configure(state=tk.NORMAL if info is not None else tk.DISABLED)
         for button, allowed in (
             (self.resume_sequence_btn, actions.sequence_resume),
             (self.replay_sequence_btn, actions.sequence_replay),
@@ -776,6 +785,44 @@ class JobHistoryPanelV2(ttk.Frame):
             if info is None:
                 continue
             button.configure(state=tk.NORMAL if allowed else tk.DISABLED)
+
+    def _on_storyboard_sequence(self) -> None:
+        from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
+        from src.video.storyboard_history import from_history
+
+        entry = self._selected_entry()
+        if entry is None:
+            return
+        runner = getattr(self, "_storyboard_runner", None)
+        if runner is None:
+            runner = self._storyboard_runner = build_edit_work_runner(self)
+            self.bind(
+                "<Destroy>", lambda event: runner.close() if event.widget is self else None, add="+"
+            )
+        repository = getattr(getattr(self.controller, "job_service", None), "history_store", None)
+        job_id = entry.job_id
+
+        def show(draft: Any) -> None:
+            window = getattr(self.controller, "main_window", None)
+            tab = getattr(window, "video_workflow_tab", None)
+            panel = getattr(tab, "sequence_panel", None)
+            if panel is None:
+                self.replay_status_var.set("Video Workflow Storyboard editor is unavailable.")
+                return
+            if panel.load_storyboard(draft):
+                notebook = getattr(window, "center_notebook", None)
+                if notebook is not None:
+                    notebook.select(tab)
+                self.replay_status_var.set(
+                    "Created a new editable Storyboard; nothing queued or saved."
+                )
+
+        runner.submit(
+            "history-storyboard",
+            lambda: from_history(repository, job_id),
+            on_result=show,
+            on_error=lambda exc: self.replay_status_var.set(f"Create Storyboard refused: {exc}"),
+        )
 
     def _pick_sequence_ledger(self) -> str | None:
         chosen = filedialog.askopenfilename(
