@@ -58,3 +58,43 @@ The script was exercised against Blender 4.5.9 on real Mixamo and Rokoko charact
 eye. Two things remain unproven on real data: putting an animation onto a *separate* reference character (only the rest-pose
 refusal was exercised, because no compatible skeleton-only/character pair exists in the local library) and BVH from a real
 capture system (the BVH files used were written by hand). Inspect a quick preview before relying on a new kind of file.
+
+## Operator safeguards added in PR-VID-MOTION-355
+
+**Calibration frame.** After Inspect, the dialog reminds you that a first-frame T-pose may be a
+capture/calibration pose rather than the first usable movement frame. Use **Preview (short)**;
+if you see the T-pose, set **Start (s)** to the first active pose and preview again. This is
+an inspection reminder, not automated pose recognition; the application does not silently
+trim footage. Side or three-quarter skeleton views may expose motion that is inconspicuous
+from the front.
+
+**Separate character.** A matching *normalized* Mixamo skeleton layout is not sufficient to
+render onto a different character. For now, the animation and character must have **identical
+actual bone names** and compatible rest poses. The dialog now distinguishes a normalized
+match from an executable binding rather than presenting the pair as ready. This does not
+add generic retargeting, and successful separate-character transfer still needs a real pair.
+
+**Oversized filmed drivers.** For the Fun Control workflow only, **Prepare Motion Source**
+automatically scales an input longer than 832 pixels on either axis to an even, aspect-preserving
+size with a long edge of 832 before the Canny stage. Examples:
+3840x2160 -> 832x468; 2160x3840 -> 468x832. The original MP4 and its hash stay unchanged.
+Every selected frame of the *scaled* derivative is checked against FFmpeg's filtered source
+frame, and provenance records the resize. Rescaling is **lossy in spatial resolution** and
+may soften control edges; it does not add identity preservation. The app refuses older Fun
+Control prepared records lacking this safety transform for oversized inputs, even if their
+hashes are correct: use **Prepare Motion Source** again. Other workflows retain their
+existing lossless pixel-copy preparation policy.
+
+**Quality / reference identity.** A photographic driving video is also visual conditioning:
+the original person's facial features, clothing and background can compete with the reference
+character. Prefer a clearly visible subject, simple background, appropriate camera direction
+and, where suitable, a skeleton or high-contrast silhouette driver. Use the side-by-side
+review media to compare motion *and* appearance independently. A clean technical run is
+not evidence that identity transfer worked.
+
+**Qualification remains closed.** The original third-run 14/14 result only establishes
+feasibility on the tested hardware with operator-prepared 480x832 MP4s. It does not qualify
+this new 832-long-edge scaling policy or enable Fun Control Queue. Repeat a bounded
+owner-authorized physical/visual test before changing the catalog's `not_qualified` state.
+Canny preview stays approximate until tested against the pinned runtime's actual node
+and known vectors; real capture-system BVH remains unqualified.

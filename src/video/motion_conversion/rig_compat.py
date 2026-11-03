@@ -74,6 +74,12 @@ class BindingPlan:
     ambiguous: tuple[str, ...] = ()
     reason: str = ""
 
+    @property
+    def can_apply(self) -> bool:
+        """Blender can apply only exact-name mappings; namespace matches alone are advisory."""
+
+        return self.compatible and all(source == target for source, target in self.mapping)
+
     def to_record(self) -> dict[str, object]:
         return {
             "compatible": self.compatible,

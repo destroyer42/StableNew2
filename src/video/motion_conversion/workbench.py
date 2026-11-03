@@ -276,7 +276,7 @@ class ConversionWorkbench:
         if (
             character is not None
             and binding is not None
-            and binding.compatible
+            and binding.can_apply
             and facts.route == cp.SOURCE_FBX_SKELETON
         ):
             options.update(
