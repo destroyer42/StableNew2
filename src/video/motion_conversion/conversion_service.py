@@ -16,8 +16,9 @@ import re
 import shutil
 import struct
 import threading
+import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +28,7 @@ from PIL import Image
 
 from src.utils.atomic_io import atomic_write_text
 from src.utils.managed_process import ProcessOutcome, run_bounded
+from src.video.motion_conversion import diagnostics as diag
 from src.video.motion_conversion.blender import BlenderInstall, child_environment
 from src.video.motion_conversion.conversion_plan import (
     SCRIPT_VERSION,
@@ -79,6 +81,10 @@ class ConversionResult:
     frame_count: int = 0
     plan_digest: str = ""
     warnings: tuple[str, ...] = ()
+    #: One of the ``diagnostics.KIND_*`` values when the conversion did not succeed.
+    failure_kind: str = ""
+    #: A redacted JSON report outside the repository (see ``diagnostics``); empty when none could be written.
+    diagnostic_path: str = ""
 
     @property
     def ok(self) -> bool:
@@ -86,10 +92,19 @@ class ConversionResult:
 
 
 def _fail(
-    reason: str, plan: ConversionPlan | None = None, *, status: str = STATUS_FAILED
+    reason: str,
+    plan: ConversionPlan | None = None,
+    *,
+    status: str = STATUS_FAILED,
+    kind: str = "",
+    diagnostic_path: str = "",
 ) -> ConversionResult:
     return ConversionResult(
-        status=status, reason=reason, plan_digest=plan.digest if plan is not None else ""
+        status=status,
+        reason=reason,
+        plan_digest=plan.digest if plan is not None else "",
+        failure_kind=kind,
+        diagnostic_path=diagnostic_path,
     )
 
 
@@ -171,6 +186,14 @@ def subject_coverage(path: Path) -> float | None:
     return float((total - near) / total)
 
 
+class ProbeError(RuntimeError):
+    """The Blender probe failed; ``result`` carries the classified cause and report path for the caller."""
+
+    def __init__(self, message: str, result: ConversionResult | None = None) -> None:
+        super().__init__(message)
+        self.result = result
+
+
 class MotionConverter:
     def __init__(
         self,
@@ -182,6 +205,7 @@ class MotionConverter:
         script_path: Path = SCRIPT_PATH,
         environ: dict[str, str] | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        diagnostics_dir: str | Path | None = None,
     ) -> None:
         self._install = install
         self._root = Path(output_root).expanduser().resolve()
@@ -190,6 +214,7 @@ class MotionConverter:
         self._script = Path(script_path)
         self._environ = environ
         self._clock = clock
+        self._diagnostics_dir = Path(diagnostics_dir) if diagnostics_dir else None
 
     # ------------------------------------------------------------------ owned work folders
 
@@ -217,6 +242,80 @@ class MotionConverter:
 
     # ------------------------------------------------------------------ blender child
 
+    def _failure_result(
+        self,
+        info: diag.FailureInfo,
+        plan: ConversionPlan | None,
+        *,
+        context: Mapping[str, Any],
+        reason: str = "",
+        outcome: ProcessOutcome | None = None,
+        script_report: Mapping[str, Any] | None = None,
+        elapsed: float = 0.0,
+    ) -> ConversionResult:
+        """A failed result carrying its classified cause and, where a folder is configured, a redacted report."""
+
+        status = STATUS_CANCELLED if info.kind == diag.KIND_CANCELLED else STATUS_FAILED
+        path = ""
+        if self._diagnostics_dir is not None and info.kind != diag.KIND_CANCELLED:
+            path = self._write_diagnostic(info, context, outcome, script_report, elapsed)
+        return _fail(
+            reason or info.message, plan, status=status, kind=info.kind, diagnostic_path=path
+        )
+
+    def _write_diagnostic(
+        self,
+        info: diag.FailureInfo,
+        context: Mapping[str, Any],
+        outcome: ProcessOutcome | None,
+        script_report: Mapping[str, Any] | None,
+        elapsed: float,
+    ) -> str:
+        process: dict[str, Any] = {"elapsed_seconds": round(elapsed, 1)}
+        if outcome is not None:
+            process.update(
+                exit_code=diag.exit_code_text(outcome.returncode),
+                timed_out=outcome.timed_out,
+                cancelled=outcome.cancelled,
+                output_truncated=outcome.output_truncated,
+                contained=outcome.contained,
+            )
+        redact = diag.redactor([(self._root, "<conversion-root>")])
+        report = diag.build_report(
+            info,
+            context={
+                **context,
+                "blender": self._install.to_record(),
+                "script_version": SCRIPT_VERSION,
+            },
+            process=process,
+            stdout=outcome.stdout if outcome is not None else b"",
+            stderr=outcome.stderr if outcome is not None else b"",
+            script_report=script_report,
+            redact=redact,
+            clock=self._clock,
+        )
+        try:
+            assert self._diagnostics_dir is not None
+            return str(diag.write_report(self._diagnostics_dir, report))
+        except OSError:
+            return ""  # the reason is still shown; a report that cannot be written must not hide it
+
+    @staticmethod
+    def _plan_context(plan: ConversionPlan) -> dict[str, Any]:
+        return {
+            "plan_digest": plan.digest,
+            "source_name": Path(plan.source_path).name,
+            "source_sha256": plan.source_sha256,
+            "source_route": plan.source_route,
+            "profile": plan.profile,
+            "camera": plan.camera,
+            "camera_mode": plan.camera_mode,
+            "root_motion": plan.root_motion,
+            "output_frames": plan.output_frames,
+            "geometry": f"{plan.width}x{plan.height}",
+        }
+
     def _blender(
         self,
         action: str,
@@ -224,7 +323,11 @@ class MotionConverter:
         work: Path,
         timeout: float,
         cancel: threading.Event | None,
-    ) -> tuple[dict[str, Any] | None, str, ProcessOutcome]:
+        context: Mapping[str, Any],
+        plan: ConversionPlan | None = None,
+    ) -> tuple[dict[str, Any] | None, ConversionResult | None]:
+        """Run one Blender child.  Returns ``(report, None)`` or ``(None, failed result)``."""
+
         request_path, report_path = work / f"{action}.request.json", work / f"{action}.report.json"
         request_path.write_text(json.dumps(request), encoding="utf-8")
         command = self._install.command(
@@ -241,6 +344,9 @@ class MotionConverter:
             str(request_path),
             str(report_path),
         )
+        started = time.monotonic()
+        # Blender prints per-frame progress to the console: a long clip writes far more than any fixed cap, so the console
+        # is a log whose tail is kept, never a reason to stop the render.  The result is read from the report file.
         outcome = self._runner(
             command,
             timeout_seconds=timeout,
@@ -248,28 +354,55 @@ class MotionConverter:
             cancel=cancel,
             cwd=str(work),
             env=child_environment(self._environ, work / "blender-user"),
+            keep_output_tail=True,
         )
-        if outcome.launch_error:
-            return None, f"Blender could not be started: {outcome.launch_error}", outcome
-        if outcome.cancelled:
-            return None, "Cancelled.", outcome
-        if outcome.timed_out:
-            return None, f"Blender did not finish within {int(timeout)} s and was stopped.", outcome
-        report: dict[str, Any] | None = None
+        elapsed = time.monotonic() - started
+        report = self._read_report(report_path)
+        clean = (
+            outcome.returncode == 0
+            and not outcome.launch_error
+            and not outcome.timed_out
+            and not outcome.cancelled
+        )
+        if clean and report is not None and report.get("ok"):
+            return report, None
+        info = diag.classify_blender_failure(
+            action,
+            returncode=outcome.returncode,
+            timed_out=outcome.timed_out,
+            cancelled=outcome.cancelled,
+            launch_error=outcome.launch_error,
+            report=report,
+            stdout=outcome.stdout,
+            stderr=outcome.stderr,
+            timeout_seconds=timeout,
+        )
+        direct = (diag.KIND_LAUNCH, diag.KIND_CANCELLED, diag.KIND_TIMEOUT)
+        reason = (
+            info.message
+            if info.kind in direct
+            else f"Blender could not {action} the file: {info.message}"[:600]
+        )
+        failed = self._failure_result(
+            info,
+            plan,
+            context={**context, "action": action},
+            reason=reason,
+            outcome=outcome,
+            script_report=report,
+            elapsed=elapsed,
+        )
+        return None, failed
+
+    @staticmethod
+    def _read_report(path: Path) -> dict[str, Any] | None:
         try:
-            report = (
-                json.loads(report_path.read_text(encoding="utf-8"))
-                if report_path.is_file()
-                else None
-            )
+            if not path.is_file() or path.stat().st_size > MAX_REPORT_BYTES:
+                return None
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            report = None
-        if outcome.returncode != 0 or report is None or not report.get("ok"):
-            detail = (report or {}).get(
-                "error"
-            ) or f"Blender exited with code {outcome.returncode}."
-            return None, f"Blender could not {action} the file: {detail}"[:400], outcome
-        return report, "", outcome
+            return None
+        return data if isinstance(data, dict) else None
 
     def probe(
         self,
@@ -283,15 +416,16 @@ class MotionConverter:
 
         work = self._new_work_dir()
         try:
-            report, problem, _ = self._blender(
+            report, failed = self._blender(
                 "probe",
                 {"path": str(source_path), "kind": kind, "transform": transform},
                 work,
                 300.0,
                 cancel,
+                {"source_name": Path(str(source_path)).name, "source_kind": kind},
             )
             if report is None:
-                raise RuntimeError(problem)
+                raise ProbeError(failed.reason if failed is not None else "Blender failed.", failed)
             return AnimationProbe(
                 fps=parse_rational(report["fps"]),
                 frame_first=parse_rational(report["frame_first"]),
@@ -314,12 +448,10 @@ class MotionConverter:
         warnings: tuple[str, ...] = (),
     ) -> ConversionResult:
         if purpose not in (PURPOSE_ACCEPTED, PURPOSE_PREVIEW):
-            return _fail("Unknown conversion purpose.", plan)
-        problem = self._verify_inputs(plan, cancel)
-        if problem:
-            return _fail(
-                problem, plan, status=STATUS_CANCELLED if problem == "Cancelled." else STATUS_FAILED
-            )
+            return _fail("Unknown conversion purpose.", plan, kind=diag.KIND_REFUSED)
+        refused = self._verify_inputs(plan, cancel)
+        if refused is not None:
+            return self._refuse(plan, refused)
         target = self._final_dir(plan, purpose)
         existing = self._existing_result(target, plan)
         if existing is not None:
@@ -334,17 +466,39 @@ class MotionConverter:
             self._root.mkdir(parents=True, exist_ok=True)
             work = self._new_work_dir()
         except OSError as exc:
-            return _fail(f"The output folder cannot be used: {exc}", plan)
+            return self._refuse(
+                plan,
+                diag.FailureInfo(diag.KIND_STORAGE, f"The output folder cannot be used: {exc}"),
+            )
         try:
             return self._convert_in(work, plan, purpose, target, cancel, warnings)
         except OSError as exc:
-            return _fail(f"A file operation failed: {exc}", plan)
+            return self._refuse(
+                plan,
+                diag.FailureInfo(diag.KIND_STORAGE, f"A file operation failed: {exc}"),
+            )
         finally:
             self._remove_owned(work)
 
-    def _verify_inputs(self, plan: ConversionPlan, cancel: threading.Event | None) -> str:
+    def _refuse(
+        self,
+        plan: ConversionPlan,
+        info: diag.FailureInfo,
+        *,
+        outcome: ProcessOutcome | None = None,
+    ) -> ConversionResult:
+        """A classified failure that is not a Blender child's own (verification, encoding, storage, input checks)."""
+
+        return self._failure_result(info, plan, context=self._plan_context(plan), outcome=outcome)
+
+    def _verify_inputs(
+        self, plan: ConversionPlan, cancel: threading.Event | None
+    ) -> diag.FailureInfo | None:
         if not self._script.is_file():
-            return "The Blender conversion script is missing from this installation."
+            return diag.FailureInfo(
+                diag.KIND_CAPABILITY,
+                "The Blender conversion script is missing from this installation.",
+            )
         pairs = [(plan.source_path, plan.source_sha256, "animation file")]
         if plan.character_path:
             pairs.append((plan.character_path, plan.character_sha256, "reference character"))
@@ -352,12 +506,15 @@ class MotionConverter:
             try:
                 actual = sha256_file(Path(path), cancel)
             except InterruptedError:
-                return "Cancelled."
+                return diag.FailureInfo(diag.KIND_CANCELLED, "Cancelled.")
             except OSError as exc:
-                return f"The {label} cannot be read: {exc}"
+                return diag.FailureInfo(diag.KIND_ASSET, f"The {label} cannot be read: {exc}")
             if actual != expected:
-                return f"The {label} changed since the plan was made (SHA-256 differs); inspect it again."
-        return ""
+                return diag.FailureInfo(
+                    diag.KIND_SOURCE,
+                    f"The {label} changed since the plan was made (SHA-256 differs); inspect it again.",
+                )
+        return None
 
     def _final_dir(self, plan: ConversionPlan, purpose: str) -> Path:
         base = "previews" if purpose == PURPOSE_PREVIEW else "converted"
@@ -410,30 +567,39 @@ class MotionConverter:
             BLENDER_MAX_SECONDS,
             BLENDER_BASE_SECONDS + BLENDER_SECONDS_PER_FRAME * plan.output_frames,
         )
-        report, problem, _ = self._blender(
+        report, failed = self._blender(
             "render",
             {"plan": plan.to_record(), "frames_dir": str(frames_dir)},
             work,
             timeout,
             cancel,
+            self._plan_context(plan),
+            plan,
         )
         if report is None:
-            return _fail(
-                problem, plan, status=STATUS_CANCELLED if problem == "Cancelled." else STATUS_FAILED
-            )
+            assert failed is not None
+            return failed
         if report.get("render_device") != "CPU" or report.get("render_engine") != "CYCLES":
-            return _fail(
-                f"The render was not confirmed CPU-only ({report.get('render_engine')}/{report.get('render_device')}); "
-                "nothing was published.",
+            return self._refuse(
                 plan,
+                diag.FailureInfo(
+                    diag.KIND_CAPABILITY,
+                    f"The render was not confirmed CPU-only ({report.get('render_engine')}/{report.get('render_device')}); "
+                    "nothing was published.",
+                ),
             )
         if int(report.get("frames_written", -1)) != plan.output_frames:
-            return _fail("Blender reported a different number of frames than the plan.", plan)
+            return self._refuse(
+                plan,
+                diag.FailureInfo(
+                    diag.KIND_OUTPUT, "Blender reported a different number of frames than the plan."
+                ),
+            )
         problem = verify_frames(
             frames_dir, plan.output_frames, plan.width, plan.height
         ) or verify_motion(frames_dir, plan.output_frames)
         if problem:
-            return _fail(problem, plan)
+            return self._refuse(plan, diag.FailureInfo(diag.KIND_OUTPUT, problem))
 
         stage = work / "stage"
         stage.mkdir()
@@ -446,20 +612,30 @@ class MotionConverter:
             cancel=cancel,
         )
         if encode.cancelled:
-            return _fail("Cancelled.", plan, status=STATUS_CANCELLED)
+            return _fail("Cancelled.", plan, status=STATUS_CANCELLED, kind=diag.KIND_CANCELLED)
         if encode.returncode != 0 or not staged_video.is_file():
-            return _fail("FFmpeg could not encode the rendered frames.", plan)
+            return self._refuse(
+                plan,
+                diag.FailureInfo(diag.KIND_ENCODE, "FFmpeg could not encode the rendered frames."),
+                outcome=encode,
+            )
         check = self._runner(
             build_file_md5_command(self._ffmpeg, staged_video, "yuv420p"),
             timeout_seconds=FFMPEG_TIMEOUT_SECONDS,
             max_stdout_bytes=MAX_FFMPEG_STDOUT,
             cancel=cancel,
         )
+        if check.cancelled:
+            return _fail("Cancelled.", plan, status=STATUS_CANCELLED, kind=diag.KIND_CANCELLED)
         decoded = parse_framemd5(check.stdout) if check.returncode == 0 else []
         if len(decoded) != plan.output_frames:
-            return _fail(
-                f"The encoded video decodes to {len(decoded)} frame(s), expected {plan.output_frames}; not published.",
+            return self._refuse(
                 plan,
+                diag.FailureInfo(
+                    diag.KIND_ENCODE,
+                    f"The encoded video decodes to {len(decoded)} frame(s), expected {plan.output_frames}; not published.",
+                ),
+                outcome=check,
             )
         output_sha = sha256_file(staged_video)
         record = self._provenance(plan, purpose, report, video_name, output_sha, target, warnings)
@@ -468,7 +644,12 @@ class MotionConverter:
         try:
             os.replace(stage, target)  # one rename publishes video and provenance together
         except OSError as exc:
-            return _fail(f"The result could not be published at {target}: {exc}", plan)
+            return self._refuse(
+                plan,
+                diag.FailureInfo(
+                    diag.KIND_STORAGE, f"The result could not be published at {target}: {exc}"
+                ),
+            )
         return ConversionResult(
             STATUS_OK,
             "",
@@ -630,6 +811,42 @@ def published_video(folder: Path, record: dict[str, Any]) -> Path | None:
     return folder / name
 
 
+STALE_WORK_SECONDS = 3600.0
+
+
+def sweep_stale_work(
+    output_root: str | Path, *, older_than_seconds: float = STALE_WORK_SECONDS
+) -> int:
+    """Delete work folders an interrupted run (a crash, a killed application) left in ``<root>/.work``.
+
+    Only a folder that carries this converter's ownership marker naming itself, and that has not been touched for
+    ``older_than_seconds``, is removed -- never a live run's folder, never anything this converter did not create.
+    Published results are never inside ``.work``.  Returns how many were removed."""
+
+    parent = Path(output_root) / WORK_DIRNAME
+    removed = 0
+    try:
+        children = list(parent.iterdir())
+    except OSError:
+        return 0
+    for work in children:
+        try:
+            marker = work / OWNER_MARKER
+            if (
+                work.is_dir()
+                and not work.is_symlink()
+                and work.name.startswith("run-")
+                and marker.is_file()
+                and marker.read_text(encoding="utf-8") == work.name
+                and time.time() - work.stat().st_mtime > older_than_seconds
+            ):
+                shutil.rmtree(work, ignore_errors=True)
+                removed += 0 if work.exists() else 1
+        except OSError:
+            continue
+    return removed
+
+
 def read_provenance(path: str | Path) -> dict[str, Any] | None:
     """A conversion record, or ``None`` when it is missing, malformed or of another schema."""
 
@@ -663,11 +880,13 @@ def verify_published(directory: str | Path) -> str:
 __all__ = [
     "ConversionResult",
     "MotionConverter",
+    "ProbeError",
     "PROVENANCE_SCHEMA",
     "canonical_json",
     "preview_plan",
     "published_video",
     "read_provenance",
+    "sweep_stale_work",
     "verify_frames",
     "verify_published",
 ]

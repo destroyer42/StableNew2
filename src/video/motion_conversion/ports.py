@@ -48,3 +48,19 @@ class ConversionPorts:
     build_plan: Callable[
         [SourceFacts, cp.AnimationProbe, WorkflowChoice, Mapping[str, Any], Any], cp.ConversionPlan
     ]
+    #: Path of the redacted report written by the most recent failed Blender step ("" when none).
+    last_diagnostic: Callable[[], str] = lambda: ""
+    #: The text of a report this application wrote (empty for any other path).
+    diagnostic_text: Callable[[str], str] = lambda path: ""
+
+
+@dataclass(frozen=True)
+class BatchPorts:
+    """Worker-safe calls the Batch Convert Motion dialog needs (an offline asset operation: no queue, no job)."""
+
+    remembered_blender: Callable[[threading.Event], BlenderInstall | None]
+    scan: Callable[[str, Any, threading.Event], Any]
+    #: ``run(inventory, entries, confirmation, cancel, progress, include_existing) -> BatchSummary``
+    run: Callable[[Any, Any, Any, threading.Event, Callable[[Any], None], bool], Any]
+    workflow: Callable[[], WorkflowChoice]
+    diagnostic_text: Callable[[str], str] = lambda path: ""

@@ -119,16 +119,33 @@ FAKE_BLENDER = textwrap.dedent(
     if "--version" in args:
         print(os.environ.get("FAKE_BLENDER_VERSION", "Blender 4.2.3 LTS"))
         sys.exit(0)
-    log = os.environ.get("FAKE_BLENDER_LOG")
-    if log:
-        with open(log, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(args) + "\\n")
     action, in_path, out_path = args[args.index("--") + 1:]
     request = json.load(open(in_path, encoding="utf-8"))
+    target = request.get("path") or request.get("plan", {}).get("source", {}).get("path", "")
+    log = os.environ.get("FAKE_BLENDER_LOG")
+    if log:  # the command words, then the file the call is about
+        with open(log, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps([*args, target]) + "\\n")
+    fail_on = os.environ.get("FAKE_BLENDER_FAIL_ON")
+    if fail_on and fail_on in target:  # only the named file misbehaves; every other file renders normally
+        mode = os.environ.get("FAKE_BLENDER_FAIL_MODE", "crash")
     if mode == "hang":
         time.sleep(600)
     if mode == "crash":
         sys.exit(1)
+    if mode == "oom":
+        sys.stderr.write("Error: Out of memory in CPU render\\n")
+        sys.exit(1)
+    if mode in ("badrig", "badfile"):
+        error = ("RuntimeError: The animation's rest pose differs from the character's (Hips>Spine by 40 degrees)"
+                 if mode == "badrig" else "RuntimeError: The file contains no animation action.")
+        json.dump({"ok": False, "error": error, "trace": "Traceback ..."}, open(out_path, "w"))
+        sys.exit(3)
+    if mode == "chatty":  # a renderer's per-frame progress: far more console output than any fixed cap
+        for i in range(30000):
+            print("Fra:%d Mem:96.59M (Peak 109.52M) | Time:00:00.07 | Remaining:00:00.09 | Sample 16/16" % i)
+        sys.stderr.write("Warning: noisy but harmless\\n" * 20000)
+        sys.stdout.flush()
     if action == "probe":
         json.dump({"ok": True, "fps": os.environ.get("FAKE_BLENDER_FPS", "24/1"), "frame_first": "1/1",
                    "frame_last": os.environ.get("FAKE_BLENDER_LAST", "121/1"), "bone_names": ["mixamorig:Hips"],
@@ -141,7 +158,7 @@ FAKE_BLENDER = textwrap.dedent(
     os.makedirs(request["frames_dir"], exist_ok=True)
     for i in range(written):
         with open(os.path.join(request["frames_dir"], "frame_%05d.png" % (i + 1)), "wb") as fh:
-            fh.write(png(w, h, 5 if mode == "static" else (i * 7) % 256, mode != "blank"))
+            fh.write(png(w, h, 5 if mode == "static" else (sum(target.encode()) + i * 7) % 256, mode != "blank"))
     device = "CUDA" if mode == "gpu" else "CPU"
     json.dump({"ok": mode != "partial", "error": "boom" if mode == "partial" else "", "render_engine": "CYCLES",
                "render_device": device, "frames_written": n if mode == "lie" else written, "bone_names": ["mixamorig:Hips"],

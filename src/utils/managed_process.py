@@ -540,8 +540,9 @@ class _CappedBuffer:
     """What a capped reader has read so far.  Updated in place so a reader that never finishes (an escaped
     descendant keeps the pipe open) still yields everything read before the deadline."""
 
-    def __init__(self, limit: int) -> None:
+    def __init__(self, limit: int, *, keep_tail: bool = False) -> None:
         self.limit = limit
+        self.keep_tail = keep_tail
         self.data = bytearray()
         self.overflow = False
 
@@ -553,7 +554,8 @@ def _read_capped(stream: Any, buffer: _CappedBuffer, *, stop_on_overflow: bool) 
     """Read ``stream`` to EOF keeping at most ``buffer.limit`` bytes.
 
     With ``stop_on_overflow`` the read stops as soon as more than the limit arrived (the caller then kills the process);
-    otherwise the excess is drained and discarded so the child can never block on a full pipe."""
+    otherwise the excess is drained and discarded so the child can never block on a full pipe.  A ``keep_tail`` buffer
+    discards the *oldest* bytes instead, so what is kept is the end of the output (where a crash explains itself)."""
 
     # read1 returns what is available (``read(n)`` would wait for n bytes or EOF), so output is captured as it
     # arrives and survives a pipe that never reaches EOF.
@@ -563,6 +565,13 @@ def _read_capped(stream: Any, buffer: _CappedBuffer, *, stop_on_overflow: bool) 
             chunk = read(_READ_CHUNK)
             if not chunk:
                 break
+            if buffer.keep_tail:
+                buffer.data.extend(chunk)
+                excess = len(buffer.data) - buffer.limit
+                if excess > 0:
+                    del buffer.data[:excess]
+                    buffer.overflow = True
+                continue
             room = buffer.limit - len(buffer.data)
             if room > 0:
                 buffer.data.extend(chunk[:room])
@@ -588,8 +597,14 @@ def run_bounded(
     memory_limit_mb: float | None = None,
     allow_unenforced_memory_limit: bool = False,
     record_ownership: bool = False,
+    keep_output_tail: bool = False,
 ) -> ProcessOutcome:
     """Run one child with a wall-clock timeout, output caps and cooperative cancellation.
+
+    By default output beyond ``max_stdout_bytes`` means the child is not behaving as a bounded tool and it is killed
+    (``output_truncated``).  ``keep_output_tail`` is for a child whose console output is only a log (a renderer's per-frame
+    progress): it is drained for as long as the child runs, ``stdout`` and ``stderr`` keep their *last* cap bytes,
+    ``output_truncated`` records that older output was dropped, and the child is not stopped for talking too much.
 
     ``memory_limit_mb`` caps the memory the child's whole tree may commit (the container's job limit). When given it is
     mandatory and verified: if the container cannot report exactly that limit the child is not run and
@@ -632,8 +647,8 @@ def run_bounded(
 
     process, container = spawned.process, spawned.container
     observation: OwnedChildObservation | None = None
-    out_buf = _CappedBuffer(max_stdout_bytes)
-    err_buf = _CappedBuffer(max_stderr_bytes)
+    out_buf = _CappedBuffer(max_stdout_bytes, keep_tail=keep_output_tail)
+    err_buf = _CappedBuffer(max_stderr_bytes, keep_tail=keep_output_tail)
     readers: list[threading.Thread] = []
 
     deadline = time.monotonic() + max(0.0, timeout_seconds)
@@ -686,7 +701,7 @@ def run_bounded(
                 break
             stdout_reader.join(min(poll_seconds, remaining))
 
-        if timed_out or cancelled or out_buf.overflow:
+        if timed_out or cancelled or (out_buf.overflow and not keep_output_tail):
             _kill_tree(process, container)
         else:
             # stdout is at EOF; the child is exiting (or holds stdout open only through a grandchild).

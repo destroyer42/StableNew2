@@ -24,6 +24,7 @@ from src.gui.view_contracts.video_workspace_contract import (
     summarize_video_workflow_source,
 )
 from src.gui.view_contracts.workspace_density_contract import changed_value_count
+from src.gui.views.motion_batch_dialog import MotionBatchDialog
 from src.gui.views.motion_conversion_dialog import (
     ConditioningPreviewWindow,
     MotionConversionDialog,
@@ -817,6 +818,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             selected_workflow=self._selected_workflow_identity,
             on_handoff=self._apply_library_handoff,
             on_convert=self._open_motion_conversion,
+            on_batch_convert=self._open_motion_batch,
             on_preview_conditioning=self._open_conditioning_preview,
         )
         self.motion_library_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(0, 6))
@@ -1495,6 +1497,22 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self,
             ports=self._library_controller().motion_conversion_ports(self._selected_workflow_identity),
             on_accepted=lambda asset_id: self.motion_library_panel.focus_asset(asset_id),
+        )
+
+    def _open_motion_batch(self) -> None:
+        """PR-VID-MOTION-356: the non-modal Batch Convert Motion dialog (offline, Blender CPU); queues nothing."""
+
+        existing = getattr(self, "_motion_batch_dialog", None)
+        try:
+            if existing is not None and existing.winfo_exists():
+                existing.lift()
+                return
+        except tk.TclError:
+            pass
+        self._motion_batch_dialog = MotionBatchDialog(
+            self,
+            ports=self._library_controller().motion_batch_ports(self._selected_workflow_identity),
+            on_finished=self._refresh_motion_library,
         )
 
     def _open_conditioning_preview(self, detail: Any) -> None:
