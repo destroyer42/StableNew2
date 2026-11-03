@@ -74,7 +74,11 @@ def _env(
         blender=install,
         ffmpeg=FFMPEG or "ffmpeg",
         converter_factory=lambda inst, root, ffmpeg: MotionConverter(
-            inst, root, ffmpeg=ffmpeg, environ=fake_environ(**fake_env)
+            inst,
+            root,
+            ffmpeg=ffmpeg,
+            environ=fake_environ(**fake_env),
+            diagnostics_dir=tmp_path / "diag",
         ),
     )
     choice = workflow or _fun_choice()
@@ -96,6 +100,8 @@ def _env(
         build_plan=lambda facts, probe, wf, request, character: bench.plan_from_request(
             facts, probe, wf.spec, dict(request), wf.default_frames, character
         ),
+        last_diagnostic=bench.last_diagnostic,
+        diagnostic_text=bench.diagnostic_text,
     )
     runner = ManualRunner()
     changes: list[int] = []
@@ -262,6 +268,47 @@ def test_a_failed_conversion_is_reported_and_nothing_can_be_added(tmp_path, monk
     assert env.session.result is not None and not env.session.result.ok
     assert "Not converted" in view.status and not view.can_accept and not view.can_condition
     assert env.store.assets() == ()
+
+
+def test_a_failed_conversion_names_its_cause_and_offers_the_redacted_report(
+    tmp_path, monkeypatch
+) -> None:
+    env = _env(tmp_path, monkeypatch)
+    _ready(env, write_fbx(tmp_path / "in" / "walk.fbx"))
+    env.bench._factory = lambda inst, root, ffmpeg: MotionConverter(
+        inst,
+        root,
+        ffmpeg=ffmpeg,
+        environ=fake_environ(FAKE_BLENDER_MODE="oom"),
+        diagnostics_dir=tmp_path / "diag",
+    )
+    env.session.convert()
+    env.runner.run_all()
+    view = env.session.view()
+    assert view.diagnostic_path and Path(view.diagnostic_path).is_file()
+    text = " ".join(view.result_lines)
+    assert "out of memory" in text.lower() and "Cause: The computer ran out of memory." in text
+    assert "diagnostic report" in text
+    copied = env.session.diagnostic_text()
+    assert '"kind": "out_of_memory"' in copied and str(Path.home()) not in copied
+    env.session.set_options(camera=cp.CAMERA_SIDE)  # a new plan clears nothing misleading
+    env.session.convert()
+    assert (
+        env.session.diagnostic_path == ""
+    )  # a new run starts without the previous failure's report
+
+
+def test_a_failed_inspection_still_offers_its_report(tmp_path, monkeypatch) -> None:
+    env = _env(tmp_path, monkeypatch, FAKE_BLENDER_MODE="badfile")
+    env.session.load_remembered_blender()
+    env.runner.run_all()
+    env.session.choose_source(str(write_fbx(tmp_path / "in" / "walk.fbx")))
+    env.runner.run_all()
+    env.session.inspect()
+    env.runner.run_all()
+    view = env.session.view()
+    assert "failed" in view.status and "no animation action" in view.status
+    assert view.diagnostic_path and Path(view.diagnostic_path).is_file()
 
 
 def test_results_arriving_after_close_or_after_a_newer_request_are_dropped(

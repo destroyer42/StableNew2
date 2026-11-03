@@ -98,3 +98,45 @@ this new 832-long-edge scaling policy or enable Fun Control Queue. Repeat a boun
 owner-authorized physical/visual test before changing the catalog's `not_qualified` state.
 Canny preview stays approximate until tested against the pinned runtime's actual node
 and known vectors; real capture-system BVH remains unqualified.
+
+## Diagnostics and batch conversion (PR-VID-MOTION-356)
+
+**Root cause of "Blender exited with code 1".** Blender prints a progress line for every rendered frame. The contained child's
+standard output was capped, and when a long render (129 frames at the default size) overflowed the cap the process layer treated it
+as runaway output and killed Blender mid-render, which surfaced as a bare exit code. Nothing was wrong with the file. Blender's
+console output is now kept as a bounded tail (`keep_output_tail`) instead of being a kill condition; the result is read from the
+report file the script writes. Output verification (frame count, geometry, visible subject, frames not identical, CPU-only,
+encode decode check) is unchanged and nothing was loosened. Timeout, cancellation and genuine runaway paths still kill the whole
+process tree.
+
+**Failure reports.** Every failed conversion is classified (unreadable or empty animation, invalid rig, missing renderer capability,
+Blender crash, out of memory, timeout, cancelled, output verification, encode, launch, changed input, unusable output folder,
+refused plan) and shown with the cause in words. **Copy report** and **Open report folder** appear in the Convert Motion dialog. A
+report holds the exit code or Windows status, the last few error lines and a bounded output tail, with user paths, home folders and
+bearer or key-like values redacted. Reports are written to a per-user folder beside the Motion Library pointer file
+(`motion_conversion_diagnostics`), never into the repository; at most 25 reports and 4 MiB are kept.
+
+**Batch Convert Motion...** (Motion Library panel). It is offline asset management: no job, queue, GPU, model or Comfy is involved.
+
+1. Choose a Blender and a folder. The scan is recursive but bounded (5,000 files, 8 levels, 256 MiB per file; links are not
+   followed) and nothing is written.
+2. Read the dry run: files to convert, already converted (matched by source, profile and plan), duplicates (by content),
+   not eligible (the reason is listed per file, for example an unsupported or damaged FBX, a skeleton the renderer cannot use, or
+   missing rig data), ZIP files (never extracted; extract them yourself) and videos (import those directly). The storage
+   estimate is shown as a range because frame sizes vary; the destination is `<Motion Library>/conversions/converted`.
+3. Tick the confirmation, which states the file count, destination and disk budget. A changed setting makes the scan stale and
+   removes the confirmation.
+4. **Convert sample (3)** first, or **Convert all (skip sample)**. Files run one at a time through the same contained CPU Blender
+   path as single conversion, each verified and published atomically, then registered in the Motion Library (tagged
+   `batch-converted`). A different file with identical bytes in the library is reused, never overwritten.
+5. **Cancel** stops the running child and every later file (reported as not run). Failures do not stop other files, except that
+   a launch or missing-capability failure, or five consecutive crash, memory or timeout failures, stops the batch because the
+   remainder would fail the same way. There are no automatic retries; run the batch again and verified results are skipped.
+6. A JSON summary is written under `<Motion Library>/conversions/batch-reports`.
+
+Batch uses the best profile each file supports (character render for a skinned mesh, otherwise a skeleton render), or a skeleton
+render for everything. It never retargets silently. The T-pose calibration reminder from PR-355 still applies: check a sample
+before converting a large folder, since the batch does not trim any footage.
+
+Tested with real Blender 4.5.9 on Mixamo character FBX, Rokoko character FBX, Rokoko skeleton-only FBX and a hand-written BVH;
+truncated and garbage FBX files are refused at scan. Real capture-system BVH remains unqualified.

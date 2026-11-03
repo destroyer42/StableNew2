@@ -9,6 +9,7 @@ with a reason.  The report is plain data; saving it is the caller's job (and mus
 from __future__ import annotations
 
 import hashlib
+import os
 import threading
 import zipfile
 from collections import Counter
@@ -23,6 +24,8 @@ from src.video.motion_conversion.rig_compat import identify_rig
 SCHEMA = "stablenew.motion-asset-inventory.v1"
 VIDEO_SUFFIXES = (".mp4", ".mov", ".webm", ".mkv")
 MAX_FILES = 20_000
+#: Directory entries looked at before a scan stops (a mistaken root such as a whole drive cannot run away).
+MAX_VISITED = 500_000
 MAX_ARCHIVE_ENTRIES = 5_000
 HASH_CHUNK = 1024 * 1024
 MAX_TEXT_SNIFF = 4096
@@ -299,6 +302,72 @@ def _size(path: Path) -> int:
         return 0
 
 
+def _is_link(entry: os.DirEntry[str]) -> bool:
+    """A symbolic link or (on Windows) a junction: either can lead out of the chosen folder."""
+
+    try:
+        return entry.is_symlink() or bool(
+            getattr(os.path, "isjunction", lambda _p: False)(entry.path)
+        )
+    except OSError:
+        return True
+
+
+def _walk_bounded(
+    base: Path,
+    *,
+    max_files: int,
+    max_depth: int | None,
+    max_visited: int,
+    exclude: Sequence[Path],
+    cancel: threading.Event | None,
+) -> tuple[list[Path], list[str], bool]:
+    """Files under ``base`` (links never followed, ``exclude`` trees skipped), the notes for what was skipped, truncation."""
+
+    files: list[Path] = []
+    skipped: list[str] = []
+    visited, truncated = 0, False
+    blocked = {p.resolve() for p in exclude}
+    pending: list[tuple[Path, int]] = [(base, 0)]
+    while pending and not truncated:
+        folder, depth = pending.pop()
+        if cancel is not None and cancel.is_set():
+            break
+        try:
+            with os.scandir(folder) as scan:
+                children = sorted(scan, key=lambda e: e.name.lower())
+        except OSError:
+            continue
+        for entry in children:
+            visited += 1
+            if visited > max_visited or len(files) >= max_files:
+                truncated = True
+                break
+            path = Path(entry.path)
+            if _is_link(entry):
+                skipped.append(f"{path.relative_to(base).as_posix()} (symbolic link not followed)")
+                continue
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    if path.resolve() in blocked:
+                        skipped.append(f"{path.relative_to(base).as_posix()} (excluded)")
+                    elif max_depth is None or depth < max_depth:
+                        pending.append((path, depth + 1))
+                    else:
+                        skipped.append(
+                            f"{path.relative_to(base).as_posix()} (deeper than {max_depth} levels)"
+                        )
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    continue
+            except OSError:
+                continue
+            if entry.name.lower() not in _IGNORED_NAMES:
+                files.append(path)
+    files.sort(key=lambda p: str(p).lower())
+    return files, skipped, truncated
+
+
 def scan_inventory(
     root: str | Path,
     *,
@@ -306,34 +375,34 @@ def scan_inventory(
     blender_available: bool = False,
     cancel: threading.Event | None = None,
     max_files: int = MAX_FILES,
+    max_depth: int | None = None,
+    max_file_bytes: int | None = None,
+    max_visited: int = MAX_VISITED,
+    exclude: Sequence[str | Path] = (),
 ) -> InventoryReport:
-    """Inventory ``root`` (read-only).  ``probe_video`` is the existing bounded inspector, injected."""
+    """Inventory ``root`` (read-only).  ``probe_video`` is the existing bounded inspector, injected.
+
+    The walk is bounded (``max_files``, ``max_visited`` entries, optional ``max_depth``), never follows a link and skips the
+    ``exclude`` trees (a batch excludes its own output folder).  A file over ``max_file_bytes`` is listed as unsupported
+    without being read."""
 
     base = Path(root).expanduser().resolve()
     if not base.is_dir():
         raise FileNotFoundError(f"The asset folder does not exist: {base}")
-    files: list[Path] = []
-    skipped: list[str] = []
-    truncated = False
-    for path in sorted(base.rglob("*"), key=lambda p: str(p).lower()):
-        try:
-            if path.is_symlink():
-                skipped.append(f"{path.relative_to(base).as_posix()} (symbolic link not followed)")
-                continue
-            if not path.is_file():
-                continue
-        except OSError:
-            continue
-        if path.name.lower() in _IGNORED_NAMES:
-            continue
-        if len(files) >= max_files:
-            truncated = True
-            break
-        files.append(path)
+    files, skipped, truncated = _walk_bounded(
+        base,
+        max_files=max_files,
+        max_depth=max_depth,
+        max_visited=max_visited,
+        exclude=[Path(p) for p in exclude],
+        cancel=cancel,
+    )
 
     entries: list[InventoryEntry] = []
     first_by_hash: dict[str, str] = {}
-    cancelled = False
+    cancelled = (
+        cancel is not None and cancel.is_set()
+    )  # a walk stopped by cancel is a cancelled scan
     amc_stems = {p.with_suffix("").as_posix().lower() for p in files if p.suffix.lower() == ".amc"}
     asf_stems = {p.with_suffix("").as_posix().lower() for p in files if p.suffix.lower() == ".asf"}
     for path in files:
@@ -345,6 +414,25 @@ def scan_inventory(
         family = parts[0] if len(parts) > 1 else "(root)"
         folder = str(PurePosixPath(relative).parent)
         suffix = path.suffix.lower()
+        if max_file_bytes is not None and _size(path) > max_file_bytes:
+            entries.append(
+                InventoryEntry(
+                    relative,
+                    suffix,
+                    KIND_OTHER,
+                    _size(path),
+                    "",
+                    family,
+                    folder,
+                    False,
+                    False,
+                    False,
+                    ROUTE_NONE,
+                    STATE_UNSUPPORTED,
+                    f"Larger than the {max_file_bytes} byte limit; not read.",
+                )
+            )
+            continue
         try:
             digest = sha256_file(path, cancel)
         except InterruptedError:

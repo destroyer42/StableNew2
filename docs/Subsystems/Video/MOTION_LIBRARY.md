@@ -99,6 +99,24 @@ your own `blender.exe` (4.2 or newer); the dialog verifies only the file you pic
   centre-cropped to the generation shape like the pinned node. It is labeled *approximate* (not verified against the node's
   source or recorded vectors), shows bounded heuristic warnings, calls no Comfy and changes no job.
 
+### 4.2 Batch Convert Motion and failure diagnostics (PR-VID-MOTION-356)
+
+**Batch Convert Motion...** converts a folder of FBX/BVH files one at a time through the same contained CPU Blender path, as an
+offline asset operation: it creates no NJR, queue entry or job and starts no GPU, model or Comfy. It scans recursively within bounds
+(5,000 files, 8 levels, 256 MiB each; links not followed), shows a dry-run inventory (to convert, already converted, duplicates,
+not eligible with reasons, ZIP files that need extraction by the operator, videos to import) with a storage range, and requires
+an explicit confirmation of file count, destination and disk budget. A three-file sample can run first. Outputs go only under
+`<library>/conversions/converted`, are published atomically, are registered in this library (tagged `batch-converted`) and are
+skipped when a verified identical result exists. Originals are never modified, no result overwrites different bytes, and nothing is
+retried automatically. Cancellation stops the Blender process tree and the remaining files; a summary report is written under
+`<library>/conversions/batch-reports`.
+
+Failed conversions are classified (asset, rig, renderer capability, crash, memory, timeout, output verification, encode, launch,
+changed input, storage, refused plan) and reported in the dialog with Copy report / Open report folder. Reports are redacted,
+bounded (25 files, 4 MiB) and live in a per-user folder outside the repository. The original "exit code 1" on long clips was
+Blender's per-frame progress output exceeding the captured-output cap and the process layer killing the child; that output is now
+kept as a bounded tail.
+
 Operator procedure: `docs/runbooks/motion_conversion.md`. Design record and limits: `PR-VID-MOTION-354_Motion_Conversion_and_Fun_Qualification.md`.
 
 ## 5. Limits and cost
@@ -126,10 +144,11 @@ Operator procedure: `docs/runbooks/motion_conversion.md`. Design record and limi
 | Derivation record (PR-VID-MOTION-354) | `src/video/motion_library/derivation.py` |
 | Conversion engine (scan, plan, Blender child, publication, archive extraction, conditioning preview) | `src/video/motion_conversion/` |
 | Convert Motion session / dialog / controller seam | `src/gui/view_contracts/motion_conversion_contract.py`, `src/gui/views/motion_conversion_dialog.py`, `src/controller/video_motion_conversion_controller.py` |
+| Batch conversion, failure diagnostics | `src/video/motion_conversion/batch.py`, `diagnostics.py`, `src/gui/view_contracts/motion_batch_contract.py`, `src/gui/views/motion_batch_dialog.py` |
 | Read-only asset inventory | `tools/motion_asset_inventory.py` |
 
 Tests: `tests/video/test_pr_vid_motion_354_*.py`, `tests/controller/test_pr_vid_motion_354_conversion_controller.py`,
-`tests/gui_v2/test_pr_vid_motion_354_convert_dialog.py` (a fake Blender that obeys the real command-line contract; no Blender is
+`tests/gui_v2/test_pr_vid_motion_354_convert_dialog.py`, `tests/video/test_pr_vid_motion_356_*.py`, `tests/gui_v2/test_pr_vid_motion_356_batch_dialog.py` (a fake Blender that obeys the real command-line contract; no Blender is
 needed), and `tests/video/test_pr_vid_motion_lib_353_catalog.py`, `..._handoff.py`, `tests/gui_v2/test_pr_vid_motion_lib_353_panel.py`
 (temp directories, a fake inspector, real Tk, a KB-sized clip from CPU-only FFmpeg where a real probe is needed and skipped
 without FFmpeg; no runtime, model, GPU or network).

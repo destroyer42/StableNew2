@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-689 of 844 modules have a docstring.
+693 of 848 modules have a docstring.
 
 ## src/
 
@@ -357,6 +357,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `history_sequence_contract.py`: Resume and Replay of a sequence job from Job History (PR-VID-SEQ-331A)
 - `media_image_decode.py`: Bounded image inspection on workers, reusing the thumbnail utilities and preserving source identity
 - `media_inspector_contract.py`: Ephemeral media inspection state; host workspaces retain artifact/selection authority
+- `motion_batch_contract.py`: Toolkit-neutral state of the "Batch Convert Motion" dialog (PR-VID-MOTION-356)
 - `motion_conversion_contract.py`: Toolkit-neutral state of the "Convert Motion" dialog (PR-VID-MOTION-354)
 - `motion_library_contract.py`: Toolkit-neutral state of the Video Workflow "Motion Library" browser (PR-VID-MOTION-LIB-353)
 - `movie_clips_contract.py`: Movie Clips tab UI normalization helpers
@@ -406,6 +407,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `lora_composition_design_frame.py`: LoRA Composition authoring inside the existing scrollable Learning Design surface
 - `model_evidence_proposals_dialog.py`: Operator selection of offline qualification drafts; no execution controls or admission
 - `model_evidence_window.py`: Explicit operator catalog journey
+- `motion_batch_dialog.py`: Tk dialog for Batch Convert Motion (PR-VID-MOTION-356)
 - `motion_conversion_dialog.py`: Tk dialog for Convert Motion (PR-VID-MOTION-354)
 - `movie_clips_tab_frame_v2.py`: Movie Clips tab frame for StableNew v2.6
 - `next_test_dialog.py`: Compact "What Should I Test Next?" dialog
@@ -974,10 +976,12 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Motion asset inventory, Blender conversion and conditioning preview (PR-VID-MOTION-354)
 - `archive_extract.py`: Explicit, bounded extraction of a motion-asset zip into a new empty folder (PR-VID-MOTION-354)
+- `batch.py`: Batch conversion of a folder of mocap files into verified driving videos (PR-VID-MOTION-356)
 - `blender.py`: Optional, operator-selected Blender executable (PR-VID-MOTION-354)
 - `conditioning_preview.py`: Advisory preview of what a Canny control video would look like (PR-VID-MOTION-354)
 - `conversion_plan.py`: Deterministic, frozen conversion plan for one animation file (PR-VID-MOTION-354)
 - `conversion_service.py`: Run one frozen conversion plan through Blender and FFmpeg and publish a verified derivative (PR-VID-MOTION-35…
+- `diagnostics.py`: Why a Blender conversion step failed, in words an operator can act on (PR-VID-MOTION-356)
 - `fbx_scan.py`: Bounded structural scan of a binary FBX file (PR-VID-MOTION-354)
 - `inventory.py`: Read-only inventory of downloaded motion assets (PR-VID-MOTION-354)
 - `library_bridge.py`: Accept a verified converted clip into the existing Motion Library (PR-VID-MOTION-354)
