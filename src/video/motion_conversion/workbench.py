@@ -20,6 +20,7 @@ from src.utils.atomic_io import atomic_write_json
 from src.video.driving_video_inspection import inspect_driving_video
 from src.video.motion_conversion import conditioning_preview as cond
 from src.video.motion_conversion import conversion_plan as cp
+from src.video.motion_conversion import diagnostics as diag
 from src.video.motion_conversion.blender import (
     BlenderInstall,
     BlenderProblem,
@@ -31,7 +32,9 @@ from src.video.motion_conversion.conversion_service import (
     PURPOSE_PREVIEW,
     ConversionResult,
     MotionConverter,
+    ProbeError,
     preview_plan,
+    sweep_stale_work,
 )
 from src.video.motion_conversion.fbx_scan import scan_fbx
 from src.video.motion_conversion.inventory import (
@@ -110,8 +113,11 @@ class ConversionWorkbench:
         blender: BlenderInstall | None = None,
         ffmpeg: str | Path | None = None,
         converter_factory: Callable[[BlenderInstall, Path, str], MotionConverter] | None = None,
+        diagnostics_dir: str | Path | None = None,
     ) -> None:
         self._output_root = Path(library_root) / CONVERSIONS_DIRNAME
+        self._diagnostics_dir = Path(diagnostics_dir) if diagnostics_dir else None
+        self._last_diagnostic = ""
         self._blender = blender
         self._ffmpeg = str(ffmpeg) if ffmpeg else ""
         self._factory = converter_factory
@@ -163,7 +169,31 @@ class ConversionWorkbench:
             raise BlenderProblem("Choose a Blender executable first.")
         if self._factory is not None:
             return self._factory(self._blender, self._output_root, self.ffmpeg())
-        return MotionConverter(self._blender, self._output_root, ffmpeg=self.ffmpeg())
+        return MotionConverter(
+            self._blender,
+            self._output_root,
+            ffmpeg=self.ffmpeg(),
+            diagnostics_dir=self._diagnostics_dir or diag.default_directory(),
+        )
+
+    def output_root(self) -> Path:
+        """Where converted clips are published (the Motion Library's ``conversions`` folder)."""
+
+        return self._output_root
+
+    def prepare_batch(self) -> int:
+        """Remove work folders an interrupted run left behind (only ones carrying this application's marker)."""
+
+        return sweep_stale_work(self._output_root)
+
+    def last_diagnostic(self) -> str:
+        """The redacted report of the most recent failed Blender step this workbench ran (empty when it succeeded)."""
+
+        return self._last_diagnostic
+
+    @staticmethod
+    def diagnostic_text(path: str | Path) -> str:
+        return diag.report_text(path)
 
     # ------------------------------------------------------------------ inspect
 
@@ -225,9 +255,14 @@ class ConversionWorkbench:
     def probe(self, facts: SourceFacts, cancel: threading.Event | None = None) -> cp.AnimationProbe:
         """One bounded Blender child reading the animation's rate, range and bones (explicit operator action)."""
 
-        return self._converter().probe(
-            facts.path, facts.kind, transform=dict(cp.IMPORT_TRANSFORM), cancel=cancel
-        )
+        self._last_diagnostic = ""
+        try:
+            return self._converter().probe(
+                facts.path, facts.kind, transform=dict(cp.IMPORT_TRANSFORM), cancel=cancel
+            )
+        except ProbeError as exc:
+            self._last_diagnostic = exc.result.diagnostic_path if exc.result is not None else ""
+            raise
 
     def check_character(
         self, facts: SourceFacts, character_path: str | Path
@@ -293,11 +328,17 @@ class ConversionWorkbench:
         *,
         preview: bool = False,
         cancel: threading.Event | None = None,
+        warnings: tuple[str, ...] = (),
     ) -> ConversionResult:
         converter = self._converter()
         if preview:
-            return converter.convert(preview_plan(plan), purpose=PURPOSE_PREVIEW, cancel=cancel)
-        return converter.convert(plan, purpose=PURPOSE_ACCEPTED, cancel=cancel)
+            result = converter.convert(preview_plan(plan), purpose=PURPOSE_PREVIEW, cancel=cancel)
+        else:
+            result = converter.convert(
+                plan, purpose=PURPOSE_ACCEPTED, cancel=cancel, warnings=warnings
+            )
+        self._last_diagnostic = result.diagnostic_path
+        return result
 
     # ------------------------------------------------------------------ library and conditioning
 

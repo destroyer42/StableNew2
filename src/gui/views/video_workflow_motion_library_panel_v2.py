@@ -114,6 +114,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         selected_workflow: Callable[[], tuple[str, str]] = lambda: ("", ""),
         on_handoff: Callable[[HandoffPlan], None] | None = None,
         on_convert: Callable[[], None] | None = None,
+        on_batch_convert: Callable[[], None] | None = None,
         on_preview_conditioning: Callable[[Any], None] | None = None,
         decode: Any = None,
         runner: BackgroundWorkRunner | None = None,
@@ -124,6 +125,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         )
         self._closed = False
         self._on_convert = on_convert
+        self._on_batch_convert = on_batch_convert
         self._on_preview_conditioning = on_preview_conditioning
         self._runner = runner
         self._media_decode = decode
@@ -189,6 +191,12 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
         self.convert_button = ttk.Button(
             bar, text="Convert Motion...", style="Dark.TButton", command=self._on_convert_motion
         )
+        self.batch_button = ttk.Button(
+            bar,
+            text="Batch Convert Motion...",
+            style="Dark.TButton",
+            command=self._on_batch_convert_motion,
+        )
         self.refresh_button = ttk.Button(
             bar, text="Refresh", style="Dark.TButton", command=self.request_refresh
         )
@@ -200,6 +208,7 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
             self.import_file_button,
             self.import_folder_button,
             self.convert_button,
+            self.batch_button,
             self.refresh_button,
             self.copy_check,
         )
@@ -511,7 +520,12 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
 
     def _render_buttons(self, view: LibraryView) -> None:
         can = "normal" if view.can_import else "disabled"
-        for button in (self.import_file_button, self.import_folder_button, self.convert_button):
+        for button in (
+            self.import_file_button,
+            self.import_folder_button,
+            self.convert_button,
+            self.batch_button,
+        ):
             button.configure(state=can)
         self.refresh_button.configure(state="disabled" if view.busy else "normal")
         self.choose_button.configure(state="disabled" if view.busy else "normal")
@@ -672,6 +686,10 @@ class WorkflowMotionLibraryPanel(ttk.LabelFrame):
     def _on_convert_motion(self) -> None:
         if self._on_convert is not None:
             self._on_convert()
+
+    def _on_batch_convert_motion(self) -> None:
+        if self._on_batch_convert is not None:
+            self._on_batch_convert()
 
     def focus_asset(self, asset_id: str) -> None:
         """Refresh, then select a clip that was just added elsewhere (for example by Convert Motion)."""

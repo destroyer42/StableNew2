@@ -8,6 +8,7 @@ not modal and never queues a job, prepares a motion source or edits the Video Wo
 from __future__ import annotations
 
 import io
+import os
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import filedialog, ttk
@@ -231,8 +232,21 @@ class MotionConversionDialog(tk.Toplevel):
         self.cancel_button = ttk.Button(
             actions, text="Cancel work", command=self.session.cancel_work
         )
+        self.copy_report_button = ttk.Button(
+            actions, text="Copy report", command=self._on_copy_report
+        )
+        self.open_report_button = ttk.Button(
+            actions, text="Open report folder", command=self._on_open_report
+        )
         for column, button in enumerate(
-            (self.preview_button, self.convert_button, self.condition_button, self.cancel_button)
+            (
+                self.preview_button,
+                self.convert_button,
+                self.condition_button,
+                self.cancel_button,
+                self.copy_report_button,
+                self.open_report_button,
+            )
         ):
             button.grid(row=0, column=column, padx=(0, 6))
         self.result_label = ttk.Label(body, justify="left")
@@ -313,6 +327,19 @@ class MotionConversionDialog(tk.Toplevel):
             frames=self.frames_var.get().strip(),
         )
 
+    def _on_copy_report(self) -> None:
+        text = self.session.diagnostic_text()
+        if text:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self.status_var.set("The redacted diagnostic report was copied to the clipboard.")
+
+    def _on_open_report(self) -> None:
+        path = self.session.diagnostic_path
+        startfile = getattr(os, "startfile", None)  # Windows only
+        if path and startfile is not None:
+            startfile(os.path.dirname(path))
+
     def _on_accept(self) -> None:
         tags = tuple(t.strip() for t in self.tags_var.get().split(",") if t.strip())
         self.session.accept(self.name_var.get(), tags, self.terms_var.get())
@@ -355,6 +382,8 @@ class MotionConversionDialog(tk.Toplevel):
             (self.convert_button, view.can_convert),
             (self.condition_button, view.can_condition),
             (self.accept_button, view.can_accept),
+            (self.copy_report_button, bool(view.diagnostic_path)),
+            (self.open_report_button, bool(view.diagnostic_path) and hasattr(os, "startfile")),
             (self.character_button, view.can_inspect or view.can_preview),
         ):
             button.configure(state="normal" if enabled else "disabled")

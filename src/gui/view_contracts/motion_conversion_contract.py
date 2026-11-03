@@ -21,6 +21,7 @@ from src.video.motion_conversion import conversion_plan as cp
 from src.video.motion_conversion.blender import BlenderInstall
 from src.video.motion_conversion.conditioning_preview import ConditioningPreview
 from src.video.motion_conversion.conversion_service import ConversionResult
+from src.video.motion_conversion.diagnostics import KIND_LABELS
 from src.video.motion_conversion.ports import ConversionPorts
 from src.video.motion_conversion.workbench import SourceFacts
 from src.video.motion_library.importer import ImportOutcome
@@ -71,10 +72,23 @@ class ConversionView:
     legal_frames: tuple[int, ...]
     next_step: str = ""
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    #: The redacted report of the latest failure ("" when there is none); the dialog offers Copy and Open for it.
+    diagnostic_path: str = ""
 
 
 def _rational_text(value: Fraction) -> str:
     return f"{float(value):g}"
+
+
+def failure_lines(result: ConversionResult) -> tuple[str, ...]:
+    """What the operator reads under a failed conversion: the cause in words, its class, and where the report is."""
+
+    lines: list[str] = [f"Reason: {result.reason}"]
+    if result.failure_kind:
+        lines.append(f"Cause: {KIND_LABELS.get(result.failure_kind, result.failure_kind)}.")
+    if result.diagnostic_path:
+        lines.append("A redacted diagnostic report was saved. Use Copy report to share it.")
+    return tuple(lines)
 
 
 class MotionConversionSession:
@@ -106,6 +120,7 @@ class MotionConversionSession:
         self.binding: Any = None
         self.character: SourceFacts | None = None
         self.busy = False
+        self.diagnostic_path = ""
         self.status = "Choose Blender and an animation file (.fbx or .bvh)."
 
     # ------------------------------------------------------------------ plumbing
@@ -136,6 +151,7 @@ class MotionConversionSession:
         cancel = self._cancels[kind]
         self.busy = True
         self.status = busy_text
+        self.diagnostic_path = ""
         self._notify()
 
         def done(outcome: WorkOutcome) -> None:
@@ -144,6 +160,8 @@ class MotionConversionSession:
             self.busy = False
             if outcome.error:
                 self.status = f"{busy_text.rstrip('.')} failed: {outcome.error}"
+                if kind == "probe":
+                    self.diagnostic_path = self._ports.last_diagnostic()
                 self._notify()
                 return
             finish(outcome.value)
@@ -330,6 +348,7 @@ class MotionConversionSession:
             return
 
         def finished(result: ConversionResult) -> None:
+            self.diagnostic_path = result.diagnostic_path
             if preview:
                 self.preview_result = result
             else:
@@ -444,7 +463,7 @@ class MotionConversionSession:
         shown = self.result or self.preview_result
         if shown is not None:
             result_lines = (
-                (f"Reason: {shown.reason}",)
+                failure_lines(shown)
                 if not shown.ok
                 else (
                     f"{'Preview' if shown is self.preview_result and shown is not self.result else 'Converted'} video: {shown.video_path}",
@@ -494,7 +513,13 @@ class MotionConversionSession:
             if self.accepted is not None and self.accepted.status != "failed"
             else "",
             warnings=self.conditioning.warnings if self.conditioning is not None else (),
+            diagnostic_path=self.diagnostic_path,
         )
+
+    def diagnostic_text(self) -> str:
+        """The redacted report text for Copy ("" when there is no report); read through the port, not from the GUI."""
+
+        return self._ports.diagnostic_text(self.diagnostic_path) if self.diagnostic_path else ""
 
 
 CONDITIONING_PREVIEW_IDLE = "Choose a clip in the Motion Library, then Preview Conditioning."

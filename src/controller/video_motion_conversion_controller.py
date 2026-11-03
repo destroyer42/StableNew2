@@ -10,7 +10,8 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from src.video.motion_conversion.ports import ConversionPorts, WorkflowChoice
+from src.video.motion_conversion.batch import BatchRunner, scan_for_batch
+from src.video.motion_conversion.ports import BatchPorts, ConversionPorts, WorkflowChoice
 from src.video.motion_conversion.workbench import ConversionWorkbench
 from src.video.motion_library.config import load_library_root
 from src.video.motion_library.store import LibraryError
@@ -109,6 +110,42 @@ class VideoMotionConversionControllerMixin:
             workflow=workflow,
             check_character=lambda facts, path: bench().check_character(facts, path),
             build_plan=plan,
+            last_diagnostic=lambda: bench().last_diagnostic(),
+            diagnostic_text=lambda path: bench().diagnostic_text(path),
+        )
+
+    def motion_batch_ports(self, selected_workflow: Callable[[], tuple[str, str]]) -> BatchPorts:
+        """Ports for Batch Convert Motion: an offline folder conversion (no job, no queue, no GPU)."""
+
+        def bench() -> ConversionWorkbench:
+            return self.motion_conversion_workbench()
+
+        def run(
+            inventory: Any,
+            entries: Any,
+            confirmation: Any,
+            cancel: threading.Event,
+            progress: Callable[[Any], None],
+            include_existing: bool,
+        ) -> Any:
+            runner = BatchRunner(bench(), self.motion_library())  # type: ignore[attr-defined]
+            return runner.run(
+                inventory,
+                entries,
+                confirmation=confirmation,
+                cancel=cancel,
+                progress=progress,
+                include_existing=include_existing,
+            )
+
+        return BatchPorts(
+            remembered_blender=lambda cancel: bench().remembered_blender(cancel),
+            scan=lambda folder, settings, cancel: scan_for_batch(
+                bench(), folder, settings, cancel=cancel
+            ),
+            run=run,
+            workflow=lambda: self.motion_conversion_workflow(*selected_workflow()),
+            diagnostic_text=lambda path: bench().diagnostic_text(path),
         )
 
 

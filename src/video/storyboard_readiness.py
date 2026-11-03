@@ -83,7 +83,9 @@ def unsupported_controls(form: dict[str, Any]) -> list[str]:
     if (form.get("depth_input") or {}).get("mode", "none") not in ("", "none"):
         problems.append("Sequence cannot carry depth controls.")
     if (form.get("interpolation") or {}).get("enabled"):
-        problems.append("RIFE smoothing is not applied inside a Comfy sequence.")
+        problems.append(
+            "RIFE smoothing is not applied inside a sequence; the sequence is assembled from each segment's original frames."
+        )
     return problems
 
 
