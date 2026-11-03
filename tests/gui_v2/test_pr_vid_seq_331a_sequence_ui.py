@@ -22,7 +22,15 @@ pytestmark = pytest.mark.gui
 
 
 @pytest.fixture
-def env(tk_root, tmp_path):
+def env(tk_root, tmp_path, monkeypatch):
+    from src.controller.app_controller_services.background_task_coordinator import (
+        BackgroundTaskCoordinator,
+    )
+
+    monkeypatch.setattr(
+        "src.gui.view_contracts.edit_work_runner.coordinator_factory",
+        lambda _widget: BackgroundTaskCoordinator(run_inline=True),
+    )
     app, controller, service = make_app(tmp_path)
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=app, app_state=SimpleNamespace())
     yield SimpleNamespace(app=app, controller=controller, service=service, tab=tab, tmp=tmp_path)

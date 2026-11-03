@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-693 of 848 modules have a docstring.
+699 of 854 modules have a docstring.
 
 ## src/
 
@@ -370,6 +370,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `review_selection_contract.py`: Toolkit-neutral revision bookkeeping for Review's asynchronous selection (PR-GUI-UX-580)
 - `selection_list_contract.py`: Selection list contract for deterministic list + selection behavior
 - `status_banner_contract.py`: Status banner contract independent of toolkit widgets
+- `storyboard_contract.py`: Toolkit-neutral capture and dirty-state for the existing sequence editor; no executable state
 - `task_navigation_contract.py`: Task-first navigation contract (PR-GUI-410)
 - `video_batch_contract.py`: Toolkit-neutral state for the Video Workflow multi-source batch section (PR-VID-BATCH-200)
 - `video_experiment_contract.py`: Toolkit-neutral state for the Video Workflow "Compare one control" section (PR-VID-194)
@@ -426,6 +427,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `review_tab_frame_v2.py`: (no docstring)
 - `stage_cards_panel.py`: (no docstring)
 - `stage_cards_panel_v2.py`: (no docstring)
+- `storyboard_panel_actions.py`: Storyboard actions for the existing sequence panel; all disk work uses the shared UI work runner
 - `svd_tab_frame_v2.py`: (no docstring)
 - `video_eval_panel_v2.py`: Video Workflow tab: queue an eval suite and build its contact sheet (PR-VID-EVAL-320)
 - `video_experiment_review_window.py`: Tk window for comparing and rating the clips of one Video Workflow experiment (PR-VID-QUALITY-211)
@@ -914,6 +916,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `sequence_plan.py`: The typed, frozen plan of a multi-segment video job (PR-VID-SEQ-330-CORE)
 - `sequence_resume.py`: Resume a failed or interrupted sequence job as a NEW job (PR-VID-SEQ-330-CORE)
 - `sequence_shots.py`: Operator shots in, ``sequence_intent`` out (PR-VID-SEQ-331A)
+- `storyboard.py`: Versioned, editable Storyboard intent, distinct from an admitted SequencePlan (VID-STORYBOARD-350)
+- `storyboard_history.py`: Create new authoring intent only from a canonical frozen sequence snapshot, never from artifacts
+- `storyboard_readiness.py`: Read-only source identity and workflow projections for editable Storyboards; admission stays authoritative
+- `storyboard_store.py`: Atomic Storyboard JSON storage with revision compare-and-swap; never stores executable jobs
 - `svd_capabilities.py`: Capability discovery for native SVD postprocess helpers
 - `svd_config.py`: Typed configuration models for native SVD image-to-video
 - `svd_errors.py`: Typed error surface for native SVD runtime

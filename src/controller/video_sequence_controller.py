@@ -27,6 +27,9 @@ from src.video.sequence_resume import (
     find_ledger_path,
     sequence_stage_name,
 )
+from src.video.sequence_shots import build_sequence_intent
+from src.video.storyboard import StoryboardDraft, StoryboardError
+from src.video.storyboard_readiness import unsupported_controls, verify_images
 from src.video.video_workflow_intent import EXPERIMENTAL_OPT_IN_FIELD
 from src.video.video_workflow_njr_builder import VideoWorkflowBuild, VideoWorkflowNjrBuilder
 from src.video.workflow_frame_count import frame_count_policy
@@ -49,10 +52,27 @@ class VideoSequenceControllerMixin:
         sequence_intent: Mapping[str, Any],
         continuity: Mapping[str, Any] | None = None,
         plan_origin: Mapping[str, Any] | None = None,
+        storyboard: StoryboardDraft | None = None,
     ) -> VideoWorkflowBuild:
         """Freeze the first segment's inputs and the typed plan, and build the one NJR; nothing is queued."""
 
         form = dict(form_data)
+        if storyboard is not None:
+            if (
+                storyboard.backend != "comfy"
+                or source_image_path != storyboard.source_path
+                or {k: v for k, v in sequence_intent.items() if k != "sequence_id"}
+                != build_sequence_intent(storyboard.shots, clip_name=storyboard.clip_name)
+                or (form.get("workflow_id"), form.get("workflow_version"))
+                != (storyboard.workflow_id, storyboard.workflow_version)
+            ):
+                raise StoryboardError(
+                    "Displayed Storyboard and admission inputs disagree; refresh before queueing."
+                )
+            verify_images(storyboard)
+        controls = unsupported_controls(form)
+        if controls:
+            raise SequencePlanError(" ".join(controls))
         if (form.get("interpolation") or {}).get("enabled"):
             raise SequencePlanError(
                 "RIFE smoothing is not applied inside a sequence; the sequence is assembled from each segment's "
@@ -61,11 +81,13 @@ class VideoSequenceControllerMixin:
         segments = sequence_intent.get("segments")
         first = segments[0] if isinstance(segments, (list, tuple)) and segments else {}
         if isinstance(first, Mapping):
-            if first.get("seed") not in (None, "", "random"):
+            if first.get("seed") not in (None, ""):
                 form["seed"] = first["seed"]
             if first.get("frame_count") not in (None, ""):
                 form["frame_count"] = first["frame_count"]
         frozen = self._njr_builder.freeze_inputs(source_image_path, form)
+        if storyboard is not None and frozen.source_sha256 != storyboard.source_sha256:
+            raise StoryboardError("Source changed during admission; nothing queued.")
         spec = self._njr_builder.spec_for(form)
         policy = frame_count_policy(spec)
         if policy is None:
@@ -95,6 +117,13 @@ class VideoSequenceControllerMixin:
             continuity=continuity,
             plan_origin=plan_origin,
         )
+        if storyboard is not None:
+            verify_images(storyboard)
+            for shot, segment in zip(storyboard.shots, plan.segments, strict=True):
+                if shot.keyframe_path and shot.keyframe_sha256 != segment.anchor_sha256:
+                    raise StoryboardError(
+                        "Authored anchor changed during admission; nothing queued."
+                    )
         return self._njr_builder.build_job(form, frozen, sequence_plan=plan.to_dict())
 
     def submit_sequence_job(
@@ -105,6 +134,7 @@ class VideoSequenceControllerMixin:
         sequence_intent: Mapping[str, Any],
         continuity: Mapping[str, Any] | None = None,
         plan_origin: Mapping[str, Any] | None = None,
+        storyboard: StoryboardDraft | None = None,
     ) -> str:
         built = self.build_sequence_job(
             source_image_path=source_image_path,
@@ -112,6 +142,7 @@ class VideoSequenceControllerMixin:
             sequence_intent=sequence_intent,
             continuity=continuity,
             plan_origin=plan_origin,
+            storyboard=storyboard,
         )
         job_ids = self._job_service().submit_njrs([built.njr], SubmissionPolicy())
         if not job_ids:

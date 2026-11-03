@@ -286,7 +286,8 @@ def freeze_sequence_plan(
             segment_zero_seed
             if position == 0
             and segment_zero_seed is not None
-            and raw.get("seed") in (None, "", "random")
+            and str(raw.get("seed") if raw.get("seed") is not None else "").strip().lower()
+            in ("", "random")
             else _concrete_seed(raw.get("seed"), label=label, max_seed=max_seed)
         )
         workflow_id = workflow_version = None

@@ -16,6 +16,7 @@ from typing import Any
 
 from src.video.sequence_plan import SequencePlanError
 from src.video.sequence_shots import ShotDraft, build_sequence_intent, shot_problems
+from src.video.storyboard import StoryboardDraft
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,7 @@ class SequenceSession:
         form_data: Mapping[str, Any],
         shots: Sequence[ShotDraft],
         clip_name: str = "",
+        storyboard: StoryboardDraft | None = None,
     ) -> SequenceSubmitOutcome:
         controller = self._get_controller()
         submit = getattr(controller, "submit_sequence_job", None)
@@ -62,6 +64,7 @@ class SequenceSession:
                 source_image_path=source_image_path,
                 form_data=dict(form_data),
                 sequence_intent=intent,
+                **({"storyboard": storyboard} if storyboard is not None else {}),
             )
         except (SequencePlanError, ValueError, RuntimeError, OSError) as exc:
             return self._say(SequenceSubmitOutcome(False, f"Not queued: {exc}"))
