@@ -149,19 +149,28 @@ def _reopen_saved_experiment(run: GoldenRun, experiment_name: str) -> None:
         timeout=15,
         description="the saved experiment is open",
     )
-    if (
-        not review.analytics_button.winfo_viewable()
-    ):  # land on the results step like an operator would
+    if not _results_step_shown(review):  # land on the results step like an operator would
         bar = learning.workflow_bar
         for step in ("rate", "compare"):
             if not is_disabled(bar.step_buttons[step]):
                 d.invoke(bar.step_buttons[step], label=f"step {step}")
                 break
         d.wait_until(
-            lambda: review.analytics_button.winfo_viewable(),
+            lambda: _results_step_shown(review),
             timeout=15,
             description="the review step shows View Analytics",
         )
+
+
+def _results_step_shown(review) -> bool:
+    """The review panel is on screen with its recommendations section laid out.
+
+    Not ``analytics_button.winfo_viewable()``: the section sits in a scrolling page, and Tk unmaps a canvas-embedded
+    window that is scrolled out of view, so a button below the fold is "not viewable" although the step is shown.
+    Clicking the button scrolls the page to it.
+    """
+
+    return bool(review.winfo_viewable()) and review.recommendations_frame.winfo_manager() == "grid"
 
 
 def run_lrn01(run: GoldenRun, *, simulated: bool = True, physical: dict | None = None) -> None:
