@@ -22,7 +22,7 @@
         "Look for the 1-5 Rating box for the next variant."
       ],
       "expected": "The Rating controls, the selected variant information and Save Rating / Save & Next stay reachable.",
-      "observed": "The Recommendations box takes the height of the Rating box, which is squeezed to zero height; the controls cannot be clicked.",
+      "observed": "The Recommendations box takes the height of the Rating box, which is squeezed to zero height; the controls cannot be clicked. Re-confirmed by the PR-830 amendment acceptance run at the application's normal (non-maximized) startup size: LRN-01 is BLOCKED at the rating control (ControlUnreachable: rating 4, hidden).",
       "harness_workaround": "The window is maximized and the workspace divider is dragged before rating (recorded as window_forced_maximized and pane_dragged_to_reveal_controls).",
       "friction_kinds": [
         "window_forced_maximized",
@@ -36,6 +36,45 @@
         {
           "description": "Same failure, second reproduction",
           "source_hint": "gp_winl10/*/screenshots/LRN-01_1_failure.png"
+        },
+        {
+          "description": "Acceptance run, layout normal (no maximize): LRN-01 failure screenshot",
+          "source_hint": "gp_final_normal/*/screenshots/LRN-01_1_failure.png"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    },
+    {
+      "id": "GP830-F7",
+      "title": "At the 1280x680 minimum window the Learning review image list is covered by the Operator Log",
+      "severity": "major",
+      "category": "layout",
+      "area": "Learning tab, Compare/Rate step; bottom zone Operator Log",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "resized to the application's declared minimum 1280x680",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Resize the window to the minimum size.",
+        "Run a Learning experiment to completion and open Compare/Rate.",
+        "Try to click the review Images list."
+      ],
+      "expected": "The Images list stays reachable, by scrolling if necessary, at every supported window size.",
+      "observed": "ControlUnreachable: review image list is obscured by the bottom zone (Operator Log panel). The Experiment Review pane shows only its header; the Images list is behind the log panel.",
+      "harness_workaround": "None; the journey fails honestly (LRN-01 BLOCKED at the minimum layout). The pane divider was dragged once, as in the other layouts.",
+      "friction_kinds": [
+        "pane_dragged_to_reveal_controls"
+      ],
+      "evidence": [
+        {
+          "description": "Acceptance run, layout minimum: LRN-01 failure screenshot",
+          "source_hint": "gp_final_minimum/*/screenshots/LRN-01_1_failure.png"
         }
       ],
       "repair": {
@@ -46,7 +85,7 @@
     },
     {
       "id": "GP830-F2",
-      "title": "Focus-induced scrolling moves a pressed control between mouse press and release",
+      "title": "Focus-induced scrolling moves a pressed control between mouse press and release (every journey, every layout)",
       "severity": "major",
       "category": "event-ordering",
       "area": "Pack list Refresh, Model combobox, Learning source combobox",
@@ -62,7 +101,7 @@
         "The focus-in reveal scrolls the page (up to about 200 px) between press and release."
       ],
       "expected": "One ordinary click activates the control.",
-      "observed": "The control moved under the pointer between press and release; the release landed elsewhere and the click was lost.",
+      "observed": "The control moved under the pointer between press and release; the release landed elsewhere and the click was lost. Measured on the acceptance runs: the release had to follow the control 3 to 8 times per journey in all three layouts, in IMG-01 and VID-01 as well as LRN-01, so it is general rather than limited to the three controls first noticed.",
       "harness_workaround": "The driver settles after the press and moves the pointer onto the control before release, and retries clicks that had no effect (recorded as mouse_release_followed_moving_control and click_retried_after_no_effect).",
       "friction_kinds": [
         "mouse_release_followed_moving_control",
@@ -72,6 +111,10 @@
         {
           "description": "Trace rows with pointer_followed_control in the accepted exploratory run",
           "source_hint": "gp_winall/*/actions.jsonl"
+        },
+        {
+          "description": "Acceptance run, layout normal: pointer_followed_control events",
+          "source_hint": "gp_final_normal/*/actions.jsonl"
         }
       ],
       "repair": {
@@ -236,6 +279,38 @@
         {
           "description": "Regression run log showing the failure on a clean HEAD worktree",
           "source_hint": "regress.log"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    },
+    {
+      "id": "GP830-F8",
+      "title": "Stale Tk after-callbacks fire after the root is destroyed at shutdown",
+      "severity": "minor",
+      "category": "lifecycle",
+      "area": "Application shutdown, GUI timers",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "any",
+        "driver": "windows and tk"
+      },
+      "reproduction": [
+        "Run any golden-path journey and close the window through the system close command.",
+        "Read shutdown_noise_after_close in the journey evidence."
+      ],
+      "expected": "Closing the window cancels every scheduled callback; no Tcl background error is raised afterwards.",
+      "observed": "Each journey records four tcl-bgerror entries after close: invalid command name \"<id>_pump\" (three) and \"<id>_tick\" (one), i.e. scheduled after-callbacks outliving their widgets. Not an application crash and not captured as a GUI error, so journeys still PASS; the noise is retained as evidence and is counted in the comparison's error_count.",
+      "harness_workaround": "None. The harness records the noise as shutdown_noise_after_close and never filters it.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "Acceptance run, layout maximized: shutdown_noise_after_close per journey",
+          "source_hint": "gp_final_maximized/*/evidence.json"
         }
       ],
       "repair": {

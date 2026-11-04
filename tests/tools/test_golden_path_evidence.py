@@ -499,22 +499,25 @@ def test_identical_evidence_is_unchanged_and_regressions_are_degraded(
                 "IMG-01",
                 trace=[{"t": 1, "action": "maximize_window", "driver": "windows"}] * 2,
                 errors=2,
-                verdict="FAIL",
             )
         ],
     )
     result = compare.compare(a, worse)
     metrics = result["journeys"]["IMG-01"]["metrics"]
-    assert result["regressions"] >= 3
-    assert (
-        metrics["verdict"]["result"] == "degraded"
-        and metrics["workaround_count"]["result"] == "degraded"
-    )
+    assert result["regressions"] >= 2
+    assert metrics["workaround_count"]["result"] == "degraded"
     assert metrics["error_count"]["result"] == "degraded"
     better = compare.compare(worse, a)["journeys"]["IMG-01"]["metrics"]
+    assert better["workaround_count"]["result"] == "improved"
+    # a failing run stopped early: its verdict degrades, but its action/workaround counts are truncated, not comparable
+    failed = _archive(tmp_path, acceptance_root, "d", [journey("IMG-01", verdict="FAIL")])
+    metrics = compare.compare(a, failed)["journeys"]["IMG-01"]["metrics"]
+    assert metrics["verdict"]["result"] == "degraded"
+    assert metrics["workaround_count"]["result"] == "inconclusive"
+    assert metrics["action_count"]["result"] == "inconclusive"
     assert (
-        better["workaround_count"]["result"] == "improved"
-        and better["verdict"]["result"] == "improved"
+        compare.compare(failed, a)["journeys"]["IMG-01"]["metrics"]["verdict"]["result"]
+        == "improved"
     )
 
 

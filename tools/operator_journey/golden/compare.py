@@ -156,6 +156,9 @@ def _judge(name: str, a: Any, b: Any, ctx: dict[str, Any]) -> tuple[str, str]:
             if a == b
             else (INCONCLUSIVE, "different bytes; visual quality needs operator review")
         )
+    if name in ("workaround_count", "action_count") and ctx["verdicts"] != {"PASS"}:
+        # A journey that stopped early performed fewer actions and met fewer controls; the counts are truncated.
+        return INCONCLUSIVE, "a run that did not pass stopped early, so its counts are truncated"
     return _judge_lower_better(a, b), ""  # workaround_count, error_count, action_count
 
 
