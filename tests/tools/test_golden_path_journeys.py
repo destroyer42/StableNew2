@@ -31,6 +31,16 @@ pytestmark = pytest.mark.journey
 _DESKTOP_LANE = os.environ.get("STABLENEW_DESKTOP_LANE") == "1"
 
 
+def _diagnostics(result: dict) -> list:
+    """What the application itself said before a journey stopped (so a CI-only failure is diagnosable from the log)."""
+
+    return [
+        o
+        for o in result.get("observations", [])
+        if o["name"] in ("operator_log_tail", "captured_log_tail")
+    ]
+
+
 def _run_suite(tmp_path: Path, *args: str, timeout: float = 580) -> tuple[int, dict, Path]:
     _require_display()
     env = _journey_subprocess_env(_shim_dir(tmp_path))
@@ -67,7 +77,11 @@ def test_simulated_journey_passes_through_the_canonical_path(tmp_path: Path, jou
         # An honest HOLD (recorded in the evidence), not a PASS; the encoder tool is absent on this host.
         pytest.skip(result["hold_reason"])
     failed = [c for c in result["checks"] if not c["passed"]]
-    assert code == 0 and result["verdict"] == "PASS", (result.get("failed_assertion"), failed)
+    assert code == 0 and result["verdict"] == "PASS", (
+        result.get("failed_assertion"),
+        failed,
+        _diagnostics(result),
+    )
     assert evidence["mode"] == "simulated" and evidence["desktop_driver"] == "tk"
     assert {t["driver"] for t in result["action_trace"]} == {"tk"}
     captured = result["captured_errors"]
@@ -145,6 +159,7 @@ def test_the_physical_code_path_needs_no_fake_backend_object_and_submits_the_fro
         evidence.get("abort_reason"),
         evidence.get("hold_reason"),
         failed,
+        _diagnostics(evidence),
     )
     assert evidence["execution_mode"] == "rehearsal" and evidence["backend_mode"] == "rehearsal"
     names = {o["name"] for o in evidence["observations"]}

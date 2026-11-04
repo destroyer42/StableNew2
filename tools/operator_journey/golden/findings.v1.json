@@ -223,7 +223,7 @@
     },
     {
       "id": "GP830-F6",
-      "title": "Pack list selection can be dropped without a selection event (suspected X11 exportselection)",
+      "title": "Add to Job produces no draft on the Linux/Xvfb CI runner (root cause unknown)",
       "severity": "minor",
       "category": "event-ordering",
       "area": "Pipeline sidebar pack list, Add to Job",
@@ -238,12 +238,12 @@
         "Click Add to Job: the preview panel stays at 'No job selected'."
       ],
       "expected": "Add to Job adds the selected pack, or the button is disabled when nothing is selected.",
-      "observed": "CI shard 1 (PR #250): the journey timed out after 60 s with the preview at 'No job selected'. Root cause inferred from code, not reproduced: ListBox exportselection lets another widget's selection clear the list selection silently; <<ListboxSelect>> does not fire, so the button state stays NORMAL while curselection() is empty.",
-      "harness_workaround": "The journey re-selects the pack row when the list selection was lost and records selection_lost_reselected.",
+      "observed": "CI shard 1 (PR #250, runs 41762540470 and 41815158779): IMG-01 timed out after 60 s with the preview at 'No job selected'. The second run's evidence showed the pack list selection present (0,) and Add to Job enabled, so the first hypothesis (X11 exportselection dropping the selection) is not the cause. The failure has not been reproduced on Windows, where the journey passes; the application operator log (now recorded on failure) is needed to diagnose it.",
+      "harness_workaround": "The journey re-selects the pack row if the selection was lost (recorded as friction); that did not change the outcome on CI.",
       "friction_kinds": [
         "list_selection_lost_and_reselected"
       ],
-      "classification_open": "Inferred from the CI log and source; needs a Linux reproduction before any product repair.",
+      "classification_open": "Unexplained Linux-only failure of the Add to Job path; diagnostics added to the failure evidence.",
       "evidence": [
         {
           "description": "CI log of the failing shard (GitHub Actions run 41762540470, job 126353793545)",

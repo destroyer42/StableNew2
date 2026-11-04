@@ -474,6 +474,22 @@ def run_journey_body(
                     )
                 if run.root is not None:
                     if ev.abort_reason or ev.hold_reason or ev.no_go_reason:
+                        try:  # what the application itself said, for diagnosis without a screen
+                            ev.observe(
+                                "operator_log_tail",
+                                [str(x)[:300] for x in list(run.app_state.operator_log)[-40:]],
+                            )
+                            ev.observe(
+                                "captured_log_tail",
+                                [
+                                    f"{r['level']} {r['logger']}: {r['message'][:200]}"
+                                    for r in run.faults.logs[-25:]
+                                ]
+                                if run.faults is not None
+                                else [],
+                            )
+                        except Exception:  # noqa: BLE001 - diagnostics are evidence, never a new failure
+                            pass
                         try:
                             run.snap("failure")  # what the operator saw when the journey stopped
                         except Exception:  # noqa: BLE001 - the screenshot is evidence, never a new failure
