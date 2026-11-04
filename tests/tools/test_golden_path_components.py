@@ -382,3 +382,49 @@ def test_the_page_hiding_a_control_is_scrolled_not_the_box_that_already_shows_it
     )
 
     assert driver._scroll_container(button) is page  # noqa: SLF001
+
+
+def test_a_short_viewport_is_scrolled_a_notch_at_a_time_so_the_page_does_not_oscillate(
+    desktop,
+) -> None:
+    """PR-GUI-RELIABILITY-831: three 40 px notches overshoot an 80 px viewport; the control is then above, then below, ..."""
+
+    root, driver, fake = desktop.root, desktop.driver, desktop.fake
+    page = tk.Canvas(root, yscrollcommand=lambda *_a: None, highlightthickness=0)
+    page.place(x=0, y=0, width=300, height=80)
+    body = tk.Frame(page)
+    page.create_window((0, 0), window=body, anchor="nw", width=300)
+    tk.Frame(
+        body, height=448
+    ).pack()  # the button's centre lands 100 px into a 120 px step: a 3-notch step skips it
+    button = ttk.Button(body, text="rating 3")
+    button.pack()
+    tk.Frame(body, height=300).pack()
+    root.update()
+    page.configure(scrollregion=page.bbox("all"))
+    root.update()
+
+    def containing(x: int, y: int) -> tk.Misc:
+        in_viewport = page.winfo_rooty() <= y < page.winfo_rooty() + page.winfo_height()
+        inside = (
+            button.winfo_rootx() <= x < button.winfo_rootx() + button.winfo_width()
+            and button.winfo_rooty() <= y < button.winfo_rooty() + button.winfo_height()
+        )
+        return (
+            button if inside and in_viewport else root
+        )  # outside the viewport nothing of the page is there
+
+    root.winfo_containing = containing  # type: ignore[method-assign]
+    span = page.bbox("all")[3]
+
+    def wheel(
+        _x: int, _y: int, notches: int
+    ) -> None:  # one notch is a fixed 40 px, as in ScrollableFrame
+        first = page.yview()[0]
+        page.yview_moveto(min(max(first - notches * 40 / span, 0.0), 1.0))
+
+    fake.wheel = wheel  # type: ignore[attr-defined]
+
+    _x, y = driver.reach(button, label="rating 3")
+
+    assert page.winfo_rooty() <= y < page.winfo_rooty() + page.winfo_height()

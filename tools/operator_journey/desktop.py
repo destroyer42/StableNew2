@@ -573,8 +573,11 @@ class WindowsDesktopDriver(TkDriver):
             above = widget.winfo_rooty() < container.winfo_rooty()
             before = container.yview()
             cx, cy = self._wheel_point(container, skip=stalled)
-            self.win32.wheel(cx, cy, 3 if above else -3)
-            scrolls += 3
+            # Three notches per look, but in a short viewport that overshoots the control and the page oscillates:
+            # use one notch when three would move the page by about the viewport's own height.
+            notches = 3 if container.winfo_height() >= 240 else 1
+            self.win32.wheel(cx, cy, notches if above else -notches)
+            scrolls += notches
             self.pump(0.06)
             stalled = stalled + 1 if container.yview() == before else 0
             if stalled >= 6:
