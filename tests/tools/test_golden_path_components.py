@@ -315,3 +315,43 @@ def test_physical_driver_is_never_constructed_by_the_golden_modules_at_import() 
     assert (
         "tools.operator_journey.desktop" not in sys.modules
     )  # simulated/tk runs never load the input driver
+
+
+def test_select_tree_row_scrolls_the_page_to_a_tree_below_the_fold(desktop) -> None:
+    """PR-GUI-RELIABILITY-831: a list below the fold is reached by wheel-scrolling its page, as a person would."""
+
+    root, driver, fake = desktop.root, desktop.driver, desktop.fake
+    canvas = tk.Canvas(
+        root, yscrollcommand=lambda *_a: None, yscrollincrement=20, highlightthickness=0
+    )
+    canvas.place(x=0, y=0, width=300, height=200)
+    inner = tk.Frame(canvas)
+    canvas.create_window((0, 0), window=inner, anchor="nw", width=300)
+    tk.Frame(inner, height=320).pack()  # the content above the tree
+    tree = ttk.Treeview(inner, height=3, show="tree")
+    tree.pack()
+    tree.insert("", "end", iid="row1", text="row one")
+    cover = tk.Frame(root)  # the bottom zone: covers everything below the page's visible area
+    cover.place(x=0, y=200, width=600, height=200)
+    cover.lift()
+    root.update()
+    canvas.configure(scrollregion=canvas.bbox("all"))
+    root.update()
+
+    def containing(x: int, y: int) -> tk.Misc:
+        if y >= cover.winfo_rooty():
+            return cover
+        inside = (
+            tree.winfo_rootx() <= x < tree.winfo_rootx() + tree.winfo_width()
+            and tree.winfo_rooty() <= y < tree.winfo_rooty() + tree.winfo_height()
+        )
+        return tree if inside else canvas
+
+    root.winfo_containing = containing  # type: ignore[method-assign]
+    fake.wheel = lambda _x, _y, notches: canvas.yview_scroll(-notches, "units")  # type: ignore[attr-defined]
+    assert tree.winfo_rooty() >= cover.winfo_rooty(), "precondition: the tree starts below the fold"
+
+    driver.select_tree_row(tree, "row1", label="History row")
+
+    assert fake.clicks and fake.clicks[-1][1] < cover.winfo_rooty()
+    assert any(e["action"] == "scrolled_into_view" for e in driver.trace.entries)
