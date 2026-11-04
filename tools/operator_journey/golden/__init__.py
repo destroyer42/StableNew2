@@ -5,4 +5,4 @@ Three product journeys (image, video, Learning) share one definition, one eviden
 """
 
 SUITE_ID = "golden-paths"
-SUITE_VERSION = "1.0.0"
+SUITE_VERSION = "1.1.0"

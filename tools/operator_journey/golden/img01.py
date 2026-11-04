@@ -10,6 +10,7 @@ from typing import Any
 
 from tools.operator_journey.golden.gui import combo_for, select_history_row, set_toggle, wait_text
 from tools.operator_journey.golden.media import inspect_image
+from tools.operator_journey.golden.provenance import settings_report, text_identity
 from tools.operator_journey.golden.session import GoldenRun, JourneyAbort, JourneyHold
 
 PACK_NAME = "golden_img01"
@@ -39,6 +40,14 @@ def run_img01(
     from src.gui.view_contracts.pipeline_composer_contract import STAGE_LABELS
 
     ev, d, w = run.ev, None, None
+    # A physical run reads every operator-controlled value from its frozen plan; simulated runs use the defaults.
+    frozen = physical or {}
+    frozen_settings, frozen_inputs = frozen.get("settings") or {}, frozen.get("inputs") or {}
+    prompt = str(frozen_inputs.get("prompt") or PROMPT)
+    negative = str(frozen_inputs.get("negative_prompt") or NEGATIVE)
+    pack_name = str(frozen_inputs.get("pack_name") or PACK_NAME)
+    steps = int(frozen_settings.get("steps", STEPS))
+    seed = int(frozen_settings.get("seed", SEED))
     run.boot_app()
     d, w = run.driver, run.window
     source = "simulated_fixture" if simulated else "observed"
@@ -47,18 +56,18 @@ def run_img01(
     # 2-3. Prompt tab: author a one-slot PromptPack (New, type positive and negative prompt, Save).
     d.select_tab(w.center_notebook, "Prompt")
     tab = w.prompt_tab
-    run.answer_string(PACK_NAME)
+    run.answer_string(pack_name)
     d.invoke(d.find_button(tab, "New"), label="Prompt: New pack")
-    d.type_in_text(tab.editor, PROMPT, label="Prompt editor")
-    d.type_in_text(tab.negative_editor, NEGATIVE, label="Negative prompt editor")
+    d.type_in_text(tab.editor, prompt, label="Prompt editor")
+    d.type_in_text(tab.negative_editor, negative, label="Negative prompt editor")
     run.snap("prompt")
     run.require(
         "prompt",
         "prompt_visible_in_editor",
-        tab.editor.get("1.0", "end-1c").strip() == PROMPT,
+        tab.editor.get("1.0", "end-1c").strip() == prompt,
         "the editor does not show the typed prompt",
     )
-    pack_file = run.ws.packs_dir / f"{PACK_NAME}.json"
+    pack_file = run.ws.packs_dir / f"{pack_name}.json"
     run.answer_file(str(pack_file))
     d.invoke(d.find_button(tab, "Save"), label="Prompt: Save pack")
     d.wait_until(pack_file.is_file, timeout=10, description="the PromptPack file is saved")
@@ -79,12 +88,24 @@ def run_img01(
     profile_text = str(base._profile_strip.status_label.cget("text"))
     ev.observe("generation_profile_status", profile_text)
     ev.observe("requested_model", match, source=source)
-    d.set_variable(base.steps_var, STEPS, label="Steps")
-    d.set_variable(base.seed_var, str(SEED), label="Seed")
+    d.set_variable(base.steps_var, steps, label="Steps")
+    for variable, wanted, label in (
+        (base.width_var, frozen_settings.get("width"), "Width"),
+        (base.height_var, frozen_settings.get("height"), "Height"),
+    ):
+        if wanted is None or str(variable.get()) == str(wanted):
+            continue
+        offered = [str(v) for v in combo_for(run, pipeline, variable).cget("values")]
+        if str(wanted) not in offered:
+            raise JourneyHold(
+                f"the plan asks for {label.lower()} {wanted}, which the GUI does not offer ({offered})"
+            )
+        d.set_variable(variable, str(wanted), label=label)
+    d.set_variable(base.seed_var, str(seed), label="Seed")
     run.require(
         "settings",
         "gui_reflects_adjustment",
-        int(base.steps_var.get()) == STEPS and str(base.seed_var.get()) == str(SEED),
+        int(base.steps_var.get()) == steps and str(base.seed_var.get()) == str(seed),
         f"steps={base.steps_var.get()} seed={base.seed_var.get()}",
     )
 
@@ -95,36 +116,43 @@ def run_img01(
     ev.observe("pack_refresh_feedback", str(sidebar.refresh_packs_button.cget("text")))
     run.snap("after_refresh")
     d.wait_until(
-        lambda: PACK_NAME in sidebar._current_pack_names,
+        lambda: pack_name in sidebar._current_pack_names,
         timeout=15,
         description="the saved pack is listed",
         evidence=lambda: f"refresh button text {sidebar.refresh_packs_button.cget('text')!r}; listed packs {list(sidebar._current_pack_names)}; packs dir {sorted(p.name for p in run.ws.packs_dir.iterdir())}",
     )
     d.select_listbox_row(
-        sidebar.pack_listbox, sidebar._current_pack_names.index(PACK_NAME), label="Pack list"
+        sidebar.pack_listbox, sidebar._current_pack_names.index(pack_name), label="Pack list"
     )
     # The pack takes the visible settings only by an explicit, confirmed "Apply to PromptPack" (never implicitly).
     run.answer_yesno(True)
     d.invoke(sidebar.apply_config_button, label="Apply current settings to PromptPack")
     d.wait_until(
-        lambda: sidebar._pack_has_saved_config(PACK_NAME),
+        lambda: sidebar._pack_has_saved_config(pack_name),
         timeout=15,
         description="the pack stores the applied settings",
     )
+    # Add to Job reads the list selection at click time.  Some platforms (X11 with exportselection) drop a list
+    # selection when another widget claims the selection, without sending <<ListboxSelect>>, so the button
+    # stays enabled with nothing selected.  Re-select visibly and record it as friction, never silently.
+    row = sidebar._current_pack_names.index(pack_name)
+    if row not in sidebar.pack_listbox.curselection():
+        run.trace.record("selection_lost_reselected", label="Pack list", row=row)
+        d.select_listbox_row(sidebar.pack_listbox, row, label="Pack list (reselect)")
     d.invoke(sidebar.add_to_job_button, label="Add to Job")
     preview = pipeline.preview_panel
     d.wait_until(
         lambda: str(preview.job_count_label.cget("text")).strip() == "Job: 1",
         timeout=60,
         description="the preview panel reports one draft job",
-        evidence=lambda: str(preview.job_count_label.cget("text")),
+        evidence=lambda: f"{preview.job_count_label.cget('text')}; list selection {sidebar.pack_listbox.curselection()}; Add to Job {sidebar.add_to_job_button.cget('state')}",
     )
     d.wait_until(
         lambda: preview.add_to_queue_button.instate(["!disabled"]),
         timeout=60,
         description="Add to Queue becomes available once the preview is compiled",
     )
-    wait_text(run, preview, PROMPT[:30], description="the preview shows the typed prompt")
+    wait_text(run, preview, prompt[:30], description="the preview shows the typed prompt")
     run.snap("preview")
     preview_model = str(preview.model_label.cget("text"))
     run.check(
@@ -142,6 +170,7 @@ def run_img01(
 
     # 9. Submit through the normal GUI control.
     d.invoke(preview.add_to_queue_button, label="Add to Queue")
+    run.assert_plan_agreed()
     rows = run.wait_jobs_terminal(1, description="the image job reaches a terminal state")
     run.snap("queue_done")
     job = rows[0]
@@ -165,14 +194,14 @@ def run_img01(
     run.check(
         "njr",
         "prompt_matches_visible_intent",
-        job["njr_positive_prompt"].startswith(PROMPT),
+        job["njr_positive_prompt"].startswith(prompt),
         f"njr prompt {job['njr_positive_prompt']!r}",
     )
     run.check(
-        "njr", "seed_matches_visible_intent", job["njr_seed"] == SEED, f"njr seed {job['njr_seed']}"
+        "njr", "seed_matches_visible_intent", job["njr_seed"] == seed, f"njr seed {job['njr_seed']}"
     )
     blob = json.dumps(njr, default=str)
-    run.check("njr", "negative_prompt_in_njr", NEGATIVE in blob, "negative prompt missing from NJR")
+    run.check("njr", "negative_prompt_in_njr", negative in blob, "negative prompt missing from NJR")
     run.check(
         "njr",
         "model_in_njr",
@@ -195,11 +224,37 @@ def run_img01(
     media = inspect_image(images[0])
     ev.observe("image_media", media)
     run.check("artifact", "image_decodes", media["valid"], str(media.get("error")))
-    ev.observe(
-        "fixture_image_generator",
-        "FakeA1111 solid-colour PNG at the requested size",
-        source="simulated_fixture",
-    )
+    if simulated:
+        ev.observe(
+            "fixture_image_generator",
+            "FakeA1111 solid-colour PNG at the requested size",
+            source="simulated_fixture",
+        )
+    # Requested versus observed settings, read back from the frozen NJR (the same in every mode).
+    njr_config = (njr.get("workload") or {}).get("config") or {}
+    requested = {
+        "model": match.split(" [")[0].replace(".safetensors", ""),
+        "steps": steps,
+        "seed": seed,
+        "prompt": text_identity(prompt),
+        "negative_prompt_contained": negative,
+    }
+    if frozen_settings.get("width") is not None:
+        requested["width"] = int(frozen_settings["width"])
+        requested["height"] = int(frozen_settings["height"])
+    njr_negative = str(njr_config.get("negative_prompt") or "")
+    observed = {
+        "model": str(njr_config.get("model") or "").replace(".safetensors", ""),
+        "steps": njr_config.get("steps"),
+        "seed": njr_config.get("seed"),
+        "prompt": text_identity(str(njr_config.get("prompt") or "")[: len(prompt)]),
+        "negative_prompt_contained": negative if negative in njr_negative else njr_negative,
+    }
+    if "width" in requested:
+        observed["width"], observed["height"] = njr_config.get("width"), njr_config.get("height")
+    ev.observe("requested_settings", requested)
+    ev.observe("observed_settings", {**observed, "from": "frozen NJR"})
+    ev.observe("settings_report", settings_report(requested, observed))
     if run.fake_a1111 is not None:
         payloads = run.fake_a1111.txt2img_payloads
         run.check(
@@ -210,12 +265,22 @@ def run_img01(
         )
         if payloads:
             p0 = payloads[0]
+            ev.observe(
+                "backend_readback",
+                {
+                    "steps": p0.get("steps"),
+                    "seed": p0.get("seed"),
+                    "width": p0.get("width"),
+                    "height": p0.get("height"),
+                    "from": "request received by the loopback backend",
+                },
+            )
             run.check(
                 "backend",
                 "backend_readback_matches_intent",
-                p0.get("seed") == SEED
-                and p0.get("steps") == STEPS
-                and str(p0.get("prompt", "")).startswith(PROMPT),
+                p0.get("seed") == seed
+                and p0.get("steps") == steps
+                and str(p0.get("prompt", "")).startswith(prompt),
                 f"payload seed={p0.get('seed')} steps={p0.get('steps')}",
             )
             run.check(

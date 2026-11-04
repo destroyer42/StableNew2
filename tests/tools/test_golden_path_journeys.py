@@ -61,6 +61,11 @@ def test_simulated_journey_passes_through_the_canonical_path(tmp_path: Path, jou
     before = _tracked_state()
     code, evidence, bundle = _run_suite(tmp_path, "--journey", journey, "--hide-window")
     ((journey_id, result),) = evidence["journeys"].items()
+    if result["verdict"] == "HOLD" and "FFmpeg is not available" in (
+        result.get("hold_reason") or ""
+    ):
+        # An honest HOLD (recorded in the evidence), not a PASS; the encoder tool is absent on this host.
+        pytest.skip(result["hold_reason"])
     failed = [c for c in result["checks"] if not c["passed"]]
     assert code == 0 and result["verdict"] == "PASS", (result.get("failed_assertion"), failed)
     assert evidence["mode"] == "simulated" and evidence["desktop_driver"] == "tk"
@@ -97,6 +102,85 @@ def test_simulated_run_starts_no_model_runtime_and_refuses_real_backend_options(
         timeout=60,
     )
     assert result.returncode != 0 and "no real-backend options" in result.stderr
+
+
+def _rehearse(tmp_path: Path, journey: str, *extra: str) -> tuple[int, dict, str]:
+    _require_display()
+    env = _journey_subprocess_env(_shim_dir(tmp_path))
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.operator_journey.golden.rehearsal",
+            "--journey",
+            journey,
+            "--evidence-dir",
+            str(tmp_path),
+            *extra,
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=580,
+    )
+    evidence = json.loads((tmp_path / "rehearsal_evidence.json").read_text(encoding="utf-8"))
+    return result.returncode, evidence, result.stderr
+
+
+@pytest.mark.parametrize("journey", ["image", "video", "learning"])
+def test_the_physical_code_path_needs_no_fake_backend_object_and_submits_the_frozen_plan(
+    tmp_path: Path, journey: str
+) -> None:
+    """Regression for the PR-830 executor gaps: physical VID-01/LRN-01 touched fake objects, and values were not the plan's."""
+
+    code, evidence, _ = _rehearse(tmp_path, journey)
+    if evidence["verdict"] == "HOLD" and "FFmpeg is not available" in (
+        evidence.get("hold_reason") or ""
+    ):
+        pytest.skip(evidence["hold_reason"])
+    failed = [c for c in evidence["checks"] if not c["passed"]]
+    assert code == 0 and evidence["verdict"] == "PASS", (
+        evidence.get("failed_assertion"),
+        evidence.get("abort_reason"),
+        evidence.get("hold_reason"),
+        failed,
+    )
+    assert evidence["execution_mode"] == "rehearsal" and evidence["backend_mode"] == "rehearsal"
+    names = {o["name"] for o in evidence["observations"]}
+    assert "fixture_image_generator" not in names and "fixture_video_generator" not in names
+    assert (
+        "fixture_backend" not in names and "comfy_runtime" not in names
+    )  # nothing fake was handed to the journey
+    assert any(o["name"] == "settings_report" for o in evidence["observations"])
+
+
+@pytest.mark.parametrize(
+    ("journey", "tamper"),
+    [
+        ("image", "steps"),
+        ("image", "width"),
+        ("image", "model"),
+        ("image", "prompt"),
+        ("video", "frames"),
+        ("video", "seed"),
+    ],
+)
+def test_a_plan_that_disagrees_with_the_njr_is_no_go_before_anything_is_queued(
+    tmp_path: Path, journey: str, tamper: str
+) -> None:
+    code, evidence, _ = _rehearse(tmp_path, journey, "--tamper", tamper)
+    if evidence["verdict"] == "HOLD" and "FFmpeg is not available" in (
+        evidence.get("hold_reason") or ""
+    ):
+        pytest.skip(evidence["hold_reason"])
+    # The journey applied the true plan; the gate compared against a corrupted copy.  The gate must decline the
+    # submission (NO-GO) before anything reaches the queue.
+    assert evidence["verdict"] == "NO-GO" and code == 3, evidence
+    reason = evidence.get("no_go_reason") or ""
+    assert "frozen plan" in reason, reason
+    jobs = [o for o in evidence["observations"] if o["name"] == "job_row"]
+    assert jobs == [], "a job reached the queue although the plan disagreed with the NJR"
 
 
 needs_desktop = pytest.mark.skipif(

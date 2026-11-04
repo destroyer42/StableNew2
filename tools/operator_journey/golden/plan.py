@@ -82,6 +82,14 @@ def build_plan(
     probes: HostProbes | None = None,
 ) -> dict[str, Any]:
     probes = probes or HostProbes()
+    from tools.operator_journey.golden.frozen import journey_inputs
+
+    # Every operator-controlled input the journey will type is frozen into the target (the plan, not the code, is the
+    # authority the physical run reads them from).
+    targets = {
+        key: {**target, "inputs": {**journey_inputs(key), **(target.get("inputs") or {})}}
+        for key, target in targets.items()
+    }
     plan: dict[str, Any] = {
         "schema": PLAN_SCHEMA,
         "suite": SUITE_ID,
@@ -149,6 +157,9 @@ def shape_problems(plan: dict[str, Any]) -> list[str]:
                 problems.append("video: workflow id and version are required")
             if not target.get("source_assets"):
                 problems.append("video: a source reference image identity is required")
+        from tools.operator_journey.golden.frozen import input_problems
+
+        problems += input_problems(journey, target)
         settings = target.get("settings") or {}
         for key, limit in (
             ("width", "max_width"),

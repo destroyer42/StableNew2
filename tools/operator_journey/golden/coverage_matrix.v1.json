@@ -1,0 +1,136 @@
+{
+  "schema": "stablenew.golden_coverage_matrix",
+  "version": "1.0.0",
+  "recorded_for": "PR-TEST-DESKTOP-830",
+  "classes": {
+    "full_desktop_journey": "Driven end to end through visible controls (semantic Tk and, locally, real Win32 input) against the real GUI, compiler, NJR, JobService, queue, runner and History. Backends are loopback fakes unless a physical run says otherwise.",
+    "partial_journey": "Some steps of the workflow are exercised through visible controls inside another journey, but the workflow is not driven end to end.",
+    "integration_only": "Covered by tests below the desktop (controller, service, headless widget or journey-harness tests); no real-input desktop journey.",
+    "untested": "No automated coverage identified for the workflow at this version."
+  },
+  "physical_gpu_note": "No row claims physical GPU coverage. Physical execution is a separate gated mode and is NOT RUN for this version.",
+  "workflows": [
+    {
+      "id": "image-txt2img-from-promptpack",
+      "title": "Author a PromptPack, apply settings, queue one image, inspect History",
+      "coverage": "full_desktop_journey",
+      "journeys": [
+        "IMG-01"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py"
+      ],
+      "limits": "Fixture backend; stages ADetailer and upscale are switched off by the journey."
+    },
+    {
+      "id": "video-wan22-ti2v-from-reference-image",
+      "title": "Reference image to Wan2.2 TI2V video and in-app preview",
+      "coverage": "full_desktop_journey",
+      "journeys": [
+        "VID-01"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py"
+      ],
+      "limits": "Fixture Comfy backend; Preview Frozen Plan is recorded as offered, not run."
+    },
+    {
+      "id": "learning-designed-experiment-rating-persistence",
+      "title": "Designed experiment, rating, close and reopen persistence",
+      "coverage": "full_desktop_journey",
+      "journeys": [
+        "LRN-01"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py",
+        "tests/gui_v2/test_learning_guided_journey_590.py"
+      ],
+      "limits": "Rate-step reachability depends on window height; see findings GP830-F1."
+    },
+    {
+      "id": "history-browse-and-media-preview",
+      "title": "Select a History record and view its image or clip",
+      "coverage": "partial_journey",
+      "journeys": [
+        "IMG-01",
+        "VID-01"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py"
+      ],
+      "limits": "Open (system viewer) is verified as enabled, not clicked."
+    },
+    {
+      "id": "queue-pause-resume-cancel",
+      "title": "Pause, resume and cancel queued jobs",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_queue_pause_resume_journey_150.py"
+      ],
+      "limits": "No real-input desktop journey."
+    },
+    {
+      "id": "discovered-outputs-media-inspector",
+      "title": "Discover existing outputs and inspect them",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/tools/test_operator_journey_gui.py"
+      ],
+      "limits": "Known inherited failure GP830-I1 (MediaInspector._current_path)."
+    },
+    {
+      "id": "adetailer-and-upscale-stages",
+      "title": "ADetailer and upscale stage cards through a queued job",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_adetailer_card_truth_160.py",
+        "tests/gui_v2/test_advanced_upscale_stage_card_v2.py"
+      ],
+      "limits": "Card rendering and truth only; not driven through a job."
+    },
+    {
+      "id": "movie-clips-assembly",
+      "title": "Assemble clips in Movie Clips",
+      "coverage": "partial_journey",
+      "journeys": [
+        "VID-01"
+      ],
+      "tests": [
+        "tests/gui_v2/test_movie_clips_tab_v2.py"
+      ],
+      "limits": "VID-01 only checks the History hand-off submits nothing."
+    },
+    {
+      "id": "photo-optimize",
+      "title": "Photo Optimize baseline and results",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_photo_optimize_tab_v2.py",
+        "tests/gui_v2/test_photo_baseline_save_580.py"
+      ],
+      "limits": "Known photo-optimize ordering failures noted in earlier state."
+    },
+    {
+      "id": "character-training-frame",
+      "title": "Character training frame",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_character_training_frame.py"
+      ],
+      "limits": "Frame behaviour only; no training job is run."
+    },
+    {
+      "id": "physical-gpu-generation-through-the-gui",
+      "title": "Any golden path against a real model runtime",
+      "coverage": "untested",
+      "journeys": [],
+      "tests": [],
+      "limits": "Physical mode is gated and NOT RUN for this version; no evidence exists."
+    }
+  ]
+}

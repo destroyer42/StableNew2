@@ -17,6 +17,7 @@ from typing import Any
 from tools.operator_journey.evidence import FAIL, HOLD, NO_GO, PASS, JourneyEvidence
 from tools.operator_journey.golden import SUITE_ID, SUITE_VERSION
 from tools.operator_journey.golden.definitions import JourneyDef, select
+from tools.operator_journey.golden.friction import friction_report, outcomes
 from tools.operator_journey.golden.modes import (
     PHYSICAL,
     READINESS,
@@ -24,18 +25,59 @@ from tools.operator_journey.golden.modes import (
     ModeRefusal,
     validate_combination,
 )
+from tools.operator_journey.golden.provenance import provenance
 from tools.operator_journey.golden.session import RunConfig
 from tools.operator_journey.workspace import REPO_ROOT, repo_sha
 
+EVIDENCE_SCHEMA = "2"
 EXIT_CODES = {PASS: 0, FAIL: 1, HOLD: 2, NO_GO: 3}
 EXIT_REFUSED = 4
 _LOG_LIMIT = 20_000
+_HOME = str(Path.home())
 _REDACTIONS = (
-    (re.compile(re.escape(str(Path.home())), re.IGNORECASE), "~"),
+    # the home path in the three spellings a report can carry: native, forward slashes and JSON-escaped
+    *(
+        (re.compile(re.escape(form), re.IGNORECASE), "~")
+        for form in sorted(
+            {_HOME, _HOME.replace("\\", "/"), _HOME.replace("\\", "\\\\")}, key=len, reverse=True
+        )
+    ),
     (re.compile(r"(?i)(api[_-]?key|token|secret|password)\s*[=:]\s*\S+"), r"\1=<redacted>"),
     (re.compile(r"(?i)bearer\s+[a-z0-9._\-]+"), "Bearer <redacted>"),
 )
 _WORST = {PASS: 0, HOLD: 1, FAIL: 2, NO_GO: 3}
+
+
+def journey_assessment(
+    r: JourneyEvidence, driver: str, *, physical: bool = False
+) -> dict[str, Any]:
+    """Friction, the four-way outcome and timings of one journey (derived from its own trace; nothing is assumed)."""
+
+    from datetime import datetime
+
+    friction = friction_report(r.action_trace)
+    try:
+        duration = round(
+            (
+                datetime.fromisoformat(r.completed_at) - datetime.fromisoformat(r.started_at)
+            ).total_seconds(),
+            2,
+        )
+    except ValueError:
+        duration = None
+    clicks = sum(1 for e in r.action_trace if e.get("action") == "click")
+    return {
+        "friction": friction,
+        "outcomes": outcomes(driver, r.verdict, r.failed_assertion, friction, physical=physical),
+        "timings": {
+            "started_at": r.started_at,
+            "completed_at": r.completed_at,
+            "duration_s": duration,
+            "trace_span_s": r.action_trace[-1]["t"] if r.action_trace else None,
+            "actions": len(r.action_trace),
+            "clicks": clicks,
+        },
+    }
 
 
 def redact(text: str, limit: int = _LOG_LIMIT) -> str:
@@ -146,13 +188,17 @@ def write_run_evidence(
         display = display_facts() if driver == "windows" else {}
     except Exception:  # noqa: BLE001
         display = {}
+    layout = next((r.summary.get("layout") for r in results if r.summary.get("layout")), None)
     evidence = {
         "suite": SUITE_ID,
         "suite_version": SUITE_VERSION,
+        "evidence_schema": EVIDENCE_SCHEMA,
         "mode": mode,
         "desktop_driver": driver,
+        "layout": layout,
         "repository_sha": repo_sha(),
         "display": display,
+        "provenance": provenance(display=display, layout=layout),
         "overall_verdict": overall,
         "journeys": {},
         **(extra or {}),
@@ -160,7 +206,10 @@ def write_run_evidence(
     artifacts: list[dict[str, Any]] = []
     with (run_dir / "actions.jsonl").open("w", encoding="utf-8") as actions:
         for r in results:
-            evidence["journeys"][r.journey_id] = r.as_dict() | {"observations": r.observations}
+            evidence["journeys"][r.journey_id] = r.as_dict() | {
+                "observations": r.observations,
+                **journey_assessment(r, driver, physical=mode == PHYSICAL),
+            }
             for entry in r.action_trace:
                 actions.write(json.dumps({"journey": r.journey_id, **entry}, default=str) + "\n")
             for obs in r.observations:
@@ -233,9 +282,11 @@ def run_simulated(
     evidence_root: Path,
     hide_window: bool = False,
     discard_workspace: bool = False,
+    layout: str = "maximized",
 ) -> tuple[str, Path]:
     run_dir = new_run_dir(evidence_root, SIMULATED)
     config = RunConfig(
+        layout=layout,
         driver=driver,
         evidence_dir=run_dir / "journeys",
         hide_window=hide_window and driver == "tk",
@@ -326,14 +377,19 @@ def run_suite(
     env: dict[str, str] | None = None,
     confirm: Any = None,
     ctx: Any = None,
+    layout: str = "maximized",
 ) -> tuple[str, Path | None]:
     """Validate the combination, then run.  Raises ``ModeRefusal`` before anything starts when it is not allowed."""
 
-    validate_combination(mode=mode, driver=driver, plan=plan_path, env=env)
+    validate_combination(mode=mode, driver=driver, plan=plan_path, env=env, layout=layout)
     chosen = select(journeys_choice)
     if mode == SIMULATED:
         return run_simulated(
-            chosen, driver=driver, evidence_root=evidence_root, hide_window=hide_window
+            chosen,
+            driver=driver,
+            evidence_root=evidence_root,
+            hide_window=hide_window,
+            layout=layout,
         )
     assert plan_path is not None
     if mode == READINESS:

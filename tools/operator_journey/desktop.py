@@ -365,6 +365,18 @@ class WindowsDesktopDriver(TkDriver):
                 f"foreground hwnd {self.win32.foreground()} is not a StableNew window",
             )
 
+    def window_facts(self) -> dict[str, Any]:
+        """The StableNew window as the operator sees it (no input is sent)."""
+
+        left, top, right, bottom = self.win32.rect(self.hwnd)
+        return {
+            "state": str(self.root.state()),
+            "left": left,
+            "top": top,
+            "width": right - left,
+            "height": bottom - top,
+        }
+
     def maximize_window(self) -> dict[str, Any]:
         """Maximize by double-clicking the title bar, as a person does; returns the resulting window facts."""
 
@@ -509,17 +521,24 @@ class WindowsDesktopDriver(TkDriver):
         scrolls = 0
         stalled = 0
         started = time.monotonic()
+        waited_for = ""
         while True:
             self.pump(0.02)
             x, y = self._center(widget, *point)
             reason = self.diagnose(widget, x, y)
             if reason is None:
+                waited = time.monotonic() - started
+                if waited_for and waited >= 0.5:
+                    self.trace.record(
+                        "waited_for_state", label=label, state=waited_for, seconds=round(waited, 2)
+                    )
                 if scrolls and not self._settled(widget, point):
                     continue  # the page is still moving after the wheel: look again before pressing
                 if scrolls:
                     self.trace.record("scrolled_into_view", label=label, wheel_notches=scrolls)
                 return x, y
             if reason.startswith(("hidden", "disabled")) and time.monotonic() - started < patience:
+                waited_for = reason.split(" ")[0]
                 continue  # the view may still be switching or a gate still resolving; a person would wait a moment
             scrollable = ("obscured within", "outside", "off-screen")
             container = (

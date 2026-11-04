@@ -72,6 +72,58 @@ def build_parser() -> argparse.ArgumentParser:
     golden.add_argument(
         "--plan-spec", type=Path, default=None, help="JSON {targets, limits} used by --build-plan"
     )
+    golden.add_argument(
+        "--layout",
+        choices=["maximized", "normal", "minimum"],
+        default="maximized",
+        help="windows driver window layout: maximized (recorded workaround), normal (application startup size) or minimum",
+    )
+    golden.add_argument(
+        "--archive",
+        action="store_true",
+        help="archive the run into the permanent acceptance root (always done for physical runs)",
+    )
+    golden.add_argument(
+        "--baseline-root",
+        type=Path,
+        default=None,
+        help="acceptance root (default $STABLENEW_ACCEPTANCE_ROOT or ~/StableNewAcceptance; never inside the repo)",
+    )
+    golden.add_argument(
+        "--archive-label", default=None, help="free-text label stored in the manifest"
+    )
+    golden.add_argument(
+        "--archive-existing",
+        type=Path,
+        default=None,
+        metavar="RUN_DIR",
+        help="archive an earlier run folder as exploratory evidence (provenance kept, never acceptance evidence)",
+    )
+    golden.add_argument(
+        "--findings-source-root",
+        type=Path,
+        default=None,
+        help="where the findings' evidence hints resolve (copied into the archive with SHA-256)",
+    )
+    golden.add_argument(
+        "--verify-archive", type=Path, default=None, metavar="DIR", help="re-hash a sealed archive"
+    )
+    golden.add_argument(
+        "--compare",
+        nargs=2,
+        type=Path,
+        default=None,
+        metavar=("A", "B"),
+        help="compare reference A with candidate B: improved/unchanged/degraded/inconclusive per metric",
+    )
+    golden.add_argument(
+        "--compare-out", type=Path, default=None, help="write comparison.json/.md here"
+    )
+    golden.add_argument(
+        "--check-registries",
+        action="store_true",
+        help="validate the findings registry and the critical-workflow coverage matrix",
+    )
     backend = parser.add_mutually_exclusive_group()
     backend.add_argument("--backend", choices=["fake", "real"], default=None)
     backend.add_argument(
@@ -160,6 +212,9 @@ def _golden_main(parser: argparse.ArgumentParser, args: argparse.Namespace) -> i
     root = args.evidence_dir or (
         Path(__file__).resolve().parents[2] / "reports" / "operator_journeys"
     )
+    tool = _golden_tool(args)
+    if tool is not None:
+        return tool
     if args.build_plan:
         if not args.plan_spec:
             parser.error("--build-plan needs --plan-spec")
@@ -174,13 +229,78 @@ def _golden_main(parser: argparse.ArgumentParser, args: argparse.Namespace) -> i
             plan_path=args.plan,
             evidence_root=Path(root),
             hide_window=args.hide_window,
+            layout=args.layout,
         )
     except ModeRefusal as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return EXIT_REFUSED
     print(f"golden-paths [{args.mode}/{args.desktop_driver}]: {verdict}")
     print(f"evidence: {run_dir}")
+    if run_dir is not None and (args.archive or args.mode == "physical"):
+        from tools.operator_journey.golden import baseline
+
+        try:
+            sealed = baseline.archive_with_registries(
+                run_dir,
+                args.baseline_root,
+                findings_source_root=args.findings_source_root,
+                label=args.archive_label,
+            )
+        except baseline.ArchiveRefused as exc:
+            print(f"ARCHIVE FAILED (the run folder above is the only copy): {exc}", file=sys.stderr)
+            return EXIT_REFUSED
+        print(f"archived (sealed): {sealed}")
     return GOLDEN_EXIT[verdict]
+
+
+def _golden_tool(args: argparse.Namespace) -> int | None:
+    """Evidence tools that run no journey: archive an old run, verify an archive, compare, validate registries."""
+
+    from tools.operator_journey.golden import baseline, compare, registry
+    from tools.operator_journey.golden.suite import EXIT_REFUSED
+
+    if args.check_registries:
+        problems = registry.finding_problems(registry.load_findings()) + registry.coverage_problems(
+            registry.load_coverage()
+        )
+        for line in problems:
+            print(f"registry problem: {line}", file=sys.stderr)
+        print(f"registries: {'OK' if not problems else 'INVALID'}")
+        return 0 if not problems else 1
+    if args.verify_archive:
+        report = baseline.verify_archive(args.verify_archive)
+        print(f"archive {args.verify_archive}: {report['status']}")
+        for line in report["problems"]:
+            print(f"  {line}", file=sys.stderr)
+        return 0 if report["status"] == "OK" else 1
+    if args.archive_existing:
+        try:
+            sealed = baseline.archive_with_registries(
+                args.archive_existing,
+                args.baseline_root,
+                findings_source_root=args.findings_source_root,
+                evidence_class="exploratory",
+                label=args.archive_label,
+                notes=[
+                    "Preserved from an earlier run; not produced by the committed tree and never acceptance evidence."
+                ],
+            )
+        except baseline.ArchiveRefused as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            return EXIT_REFUSED
+        print(f"archived (sealed): {sealed}")
+        return 0
+    if args.compare:
+        try:
+            result = compare.compare(*args.compare)
+        except compare.Incomparable as exc:
+            print(f"incomparable: {exc}", file=sys.stderr)
+            return compare.EXIT_INCOMPARABLE
+        print(compare.markdown(result))
+        if args.compare_out:
+            print(f"comparison written: {compare.write_comparison(result, args.compare_out)}")
+        return compare.EXIT_DEGRADED if result["regressions"] else compare.EXIT_OK
+    return None
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from contextlib import nullcontext
 from pathlib import Path
 from tkinter import ttk
 from typing import Any
@@ -10,6 +12,7 @@ from typing import Any
 from tools.operator_journey.golden.gui import select_history_row
 from tools.operator_journey.golden.img01 import read_njr
 from tools.operator_journey.golden.media import inspect_image, inspect_video, sha256_file
+from tools.operator_journey.golden.provenance import settings_report, text_identity
 from tools.operator_journey.golden.session import GoldenRun, JourneyAbort, JourneyHold
 from tools.operator_journey.golden.video_fixture import fixture_video_runtime
 
@@ -37,29 +40,55 @@ def run_vid01(
     from src.video.workflow_registry import build_default_workflow_registry
 
     ev = run.ev
-    spec = build_default_workflow_registry().get(WORKFLOW_ID, WORKFLOW_VERSION)
+    # A physical run reads every operator-controlled value from its frozen plan and touches no fake backend.
+    frozen = physical or {}
+    frozen_settings, frozen_inputs = frozen.get("settings") or {}, frozen.get("inputs") or {}
+    frozen_workflow = frozen.get("workflow") or {}
+    workflow_id = str(frozen_workflow.get("id") or WORKFLOW_ID)
+    workflow_version = str(frozen_workflow.get("version") or WORKFLOW_VERSION)
+    motion_prompt = str(frozen_inputs.get("motion_prompt") or MOTION_PROMPT)
+    seed = int(frozen_settings.get("seed", SEED))
+    from src.pipeline.video import VideoCreator
+
+    if (
+        not VideoCreator().ffmpeg_available
+    ):  # the product's own encoder needs it; a missing tool is a HOLD, never a fake PASS
+        raise JourneyHold(
+            "FFmpeg is not available on this host, so the video encoder cannot produce the clip"
+        )
+    spec = build_default_workflow_registry().get(workflow_id, workflow_version)
     run.require(
         "workflow",
         "workflow_is_approved",
         spec.governance_state == "approved",
-        f"{WORKFLOW_ID} {WORKFLOW_VERSION} is {spec.governance_state}",
+        f"{workflow_id} {workflow_version} is {spec.governance_state}",
     )
-    source_image = make_reference_image(run.ws.root / "reference" / "lighthouse.png")
+    assets = frozen.get("source_assets") or []
+    if assets:
+        source_image = Path(str(assets[0]["path"]))
+        if not source_image.is_file() or sha256_file(source_image) != assets[0].get("sha256"):
+            raise JourneyHold(
+                f"the planned source image {source_image} is missing or changed since freezing"
+            )
+    else:
+        source_image = make_reference_image(run.ws.root / "reference" / "lighthouse.png")
     source_sha = sha256_file(source_image)
     ev.observe("reference_image_sha256", source_sha)
-    ev.observe("workflow", {"id": WORKFLOW_ID, "version": WORKFLOW_VERSION})
+    ev.observe("workflow", {"id": workflow_id, "version": workflow_version})
 
-    with fixture_video_runtime(run.fake_comfy, spec) as fixture:
-        ev.observe(
-            "comfy_runtime",
-            {"base_url": run.fake_comfy.base_url, "command_flags": fixture["command"][4:]},
-            source="simulated_fixture",
-        )
-        ev.observe(
-            "resource_probes",
-            {"ram_gb": 24.0, "vram_mib": [12282.0, 11000.0], "asset_integrity": "skipped"},
-            source="simulated_fixture",
-        )
+    fixture_cm = fixture_video_runtime(run.fake_comfy, spec) if simulated else nullcontext({})
+    with fixture_cm as fixture:
+        if simulated:
+            ev.observe(
+                "comfy_runtime",
+                {"base_url": run.fake_comfy.base_url, "command_flags": fixture["command"][4:]},
+                source="simulated_fixture",
+            )
+            ev.observe(
+                "resource_probes",
+                {"ram_gb": 24.0, "vram_mib": [12282.0, 11000.0], "asset_integrity": "skipped"},
+                source="simulated_fixture",
+            )
         run.boot_app()
         d, w = run.driver, run.window
         tab = w.video_workflow_tab
@@ -80,16 +109,32 @@ def run_vid01(
         wanted = next((v for v in labels if "TI2V-5B" in v), None)
         if wanted is None:
             raise JourneyHold(
-                f"the picker does not offer {WORKFLOW_ID} {WORKFLOW_VERSION}: {labels}"
+                f"the picker does not offer {workflow_id} {workflow_version}: {labels}"
             )
         d.select_combobox(tab.workflow_combo, wanted, label="Workflow")
-        d.type_in_text(tab.prompt_text, MOTION_PROMPT, label="Motion prompt")
+        d.type_in_text(tab.prompt_text, motion_prompt, label="Motion prompt")
         lengths = [str(v) for v in tab.frame_count_combo.cget("values")]
         run.require("length", "legal_lengths_offered", bool(lengths), "no frame counts offered")
-        d.select_combobox(tab.frame_count_combo, lengths[0], label="Length (smallest legal)")
-        ev.observe("requested_length", lengths[0])
-        if tab.seed_var.get() != str(SEED):
-            d.set_variable(tab.seed_var, str(SEED), label="Seed")
+        wanted_frames = frozen_settings.get("frames")
+        chosen_length = lengths[0]
+        if wanted_frames is not None:
+            chosen_length = next(
+                (
+                    v
+                    for v in lengths
+                    if re.match(r"\d+", v)
+                    and int(re.match(r"\d+", v).group()) == int(wanted_frames)
+                ),
+                "",
+            )
+            if not chosen_length:
+                raise JourneyHold(
+                    f"the plan asks for {wanted_frames} frames, which the GUI does not offer ({lengths})"
+                )
+        d.select_combobox(tab.frame_count_combo, chosen_length, label="Length")
+        ev.observe("requested_length", chosen_length)
+        if tab.seed_var.get() != str(seed):
+            d.set_variable(tab.seed_var, str(seed), label="Seed")
 
         # 5-6. Source preparation and readiness are shown; Queue must be enabled by the real gates.
         d.pump(1.0)
@@ -114,6 +159,7 @@ def run_vid01(
 
         # 7-8. Submit and observe.
         d.invoke(tab.queue_workflow_button, label="Queue Video Workflow")
+        run.assert_plan_agreed()
         rows = run.wait_jobs_terminal(1, description="the video job reaches a terminal state")
         run.snap("queue_done")
         job = rows[0]
@@ -130,18 +176,19 @@ def run_vid01(
             len(run.submissions.calls) == 1,
             f"{run.submissions.calls}",
         )
-        run.check(
-            "execute",
-            "one_generation_request",
-            len(run.fake_comfy.prompts) == 1,
-            f"{len(run.fake_comfy.prompts)} /prompt requests",
-        )
-        run.check(
-            "execute",
-            "backend_received_source_image",
-            len(run.fake_comfy.uploads) >= 1,
-            "no image upload seen",
-        )
+        if run.fake_comfy is not None:
+            run.check(
+                "execute",
+                "one_generation_request",
+                len(run.fake_comfy.prompts) == 1,
+                f"{len(run.fake_comfy.prompts)} /prompt requests",
+            )
+            run.check(
+                "execute",
+                "backend_received_source_image",
+                len(run.fake_comfy.uploads) >= 1,
+                "no image upload seen",
+            )
 
         # NJR carries the visible intent and the exact workflow identity.
         njr = read_njr(run.repository_path, job["job_id"])
@@ -149,13 +196,13 @@ def run_vid01(
         run.check(
             "njr",
             "workflow_identity_in_njr",
-            WORKFLOW_ID in blob and WORKFLOW_VERSION in blob,
+            workflow_id in blob and workflow_version in blob,
             "workflow missing",
         )
         run.check(
-            "njr", "motion_prompt_in_njr", MOTION_PROMPT in blob, "motion prompt missing from NJR"
+            "njr", "motion_prompt_in_njr", motion_prompt in blob, "motion prompt missing from NJR"
         )
-        run.check("njr", "seed_in_njr", str(SEED) in blob, "seed missing from NJR")
+        run.check("njr", "seed_in_njr", str(seed) in blob, "seed missing from NJR")
         run.check(
             "njr",
             "source_identity_in_njr",
@@ -178,26 +225,64 @@ def run_vid01(
         media = inspect_video(videos[0])
         ev.observe("video_media", media)
         run.check("artifact", "video_decodes", media["valid"], str(media.get("error")))
-        sent = run.fake_comfy.prompts[0].get("prompt", {})
-        frames_requested = next(
-            (
-                n["inputs"]["length"]
-                for n in sent.values()
-                if isinstance((n.get("inputs") or {}).get("length"), int)
-            ),
-            None,
+        # The expected clip length is read from the frozen NJR (and, in the simulated lane, the request the loopback
+        # backend received); a physical run has no fake to read.
+        frames_requested = (
+            (((njr.get("normalized_job") or njr).get("workload") or {}).get("config") or {})
+            .get("video_workflow", {})
+            .get("frame_count")
         )
+        if run.fake_comfy is not None and run.fake_comfy.prompts:
+            sent = run.fake_comfy.prompts[0].get("prompt", {})
+            frames_requested = next(
+                (
+                    n["inputs"]["length"]
+                    for n in sent.values()
+                    if isinstance((n.get("inputs") or {}).get("length"), int)
+                ),
+                frames_requested,
+            )
         run.check(
             "artifact",
             "decoded_frames_match_generated_frames",
             frames_requested is not None and media.get("decoded_frames") == frames_requested,
             f"decoded {media.get('decoded_frames')} vs requested {frames_requested}",
         )
+        requested = {
+            "workflow": f"{workflow_id} {workflow_version}",
+            "length": int(re.match(r"\d+", chosen_length).group()),
+            "seed": seed,
+            "motion_prompt": text_identity(motion_prompt),
+        }
+        observed = {
+            "length": frames_requested,
+            "workflow": None,
+            "seed": None,
+            "motion_prompt": None,
+        }
+        for key, value in (
+            (
+                "workflow",
+                f"{workflow_id} {workflow_version}"
+                if workflow_id in blob and workflow_version in blob
+                else None,
+            ),
+            ("seed", seed if str(seed) in blob else None),
+            ("motion_prompt", text_identity(motion_prompt) if motion_prompt in blob else None),
+        ):
+            observed[key] = value  # read back from the frozen NJR
+        ev.observe("requested_settings", requested)
         ev.observe(
-            "fixture_video_generator",
-            "FakeComfy synthetic PNG frames encoded by StableNet's frame encoder",
-            source="simulated_fixture",
+            "observed_settings",
+            {**observed, "from": "frozen NJR and the request received by the loopback backend"},
         )
+        ev.observe("settings_report", settings_report(requested, observed))
+        if simulated:
+            ev.observe(
+                "fixture_video_generator",
+                "FakeComfy synthetic PNG frames encoded by StableNet's frame encoder",
+                source="simulated_fixture",
+            )
 
         # 11. History shows the clip in-app.
         d.select_tab(w.center_notebook, "Pipeline")

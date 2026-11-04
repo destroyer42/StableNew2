@@ -1,0 +1,248 @@
+{
+  "schema": "stablenew.golden_findings",
+  "version": "1.0.0",
+  "recorded_for": "PR-TEST-DESKTOP-830",
+  "note": "Product findings exposed by the real-input golden-path journeys. None is repaired by PR-TEST-DESKTOP-830; the harness records the workaround it needed for each so a green journey is never read as defect-free. Evidence sources are exploratory runs made on the pre-commit tree (base 7f381e2c) and are preserved into the acceptance baseline with their SHA-256.",
+  "findings": [
+    {
+      "id": "GP830-F1",
+      "title": "Learning Rate step collapses the 1-5 Rating box after the first saved rating",
+      "severity": "blocking",
+      "category": "layout",
+      "area": "Learning tab, Rate step",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "application default (about 1916x1040); reproduced at window heights of 1040 px or less",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Open the Learning tab and run a designed experiment with at least two variants.",
+        "Open the Rate step and save the first rating.",
+        "Look for the 1-5 Rating box for the next variant."
+      ],
+      "expected": "The Rating controls, the selected variant information and Save Rating / Save & Next stay reachable.",
+      "observed": "The Recommendations box takes the height of the Rating box, which is squeezed to zero height; the controls cannot be clicked.",
+      "harness_workaround": "The window is maximized and the workspace divider is dragged before rating (recorded as window_forced_maximized and pane_dragged_to_reveal_controls).",
+      "friction_kinds": [
+        "window_forced_maximized",
+        "pane_dragged_to_reveal_controls"
+      ],
+      "evidence": [
+        {
+          "description": "Failure screenshot of the Rate step with the Rating box absent",
+          "source_hint": "gp_winl8/*/screenshots/LRN-01_1_failure.png"
+        },
+        {
+          "description": "Same failure, second reproduction",
+          "source_hint": "gp_winl10/*/screenshots/LRN-01_1_failure.png"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    },
+    {
+      "id": "GP830-F2",
+      "title": "Focus-induced scrolling moves a pressed control between mouse press and release",
+      "severity": "major",
+      "category": "event-ordering",
+      "area": "Pack list Refresh, Model combobox, Learning source combobox",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "application default",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Scroll so the control sits near the edge of a scrolling page.",
+        "Press the mouse button on the control and release.",
+        "The focus-in reveal scrolls the page (up to about 200 px) between press and release."
+      ],
+      "expected": "One ordinary click activates the control.",
+      "observed": "The control moved under the pointer between press and release; the release landed elsewhere and the click was lost.",
+      "harness_workaround": "The driver settles after the press and moves the pointer onto the control before release, and retries clicks that had no effect (recorded as mouse_release_followed_moving_control and click_retried_after_no_effect).",
+      "friction_kinds": [
+        "mouse_release_followed_moving_control",
+        "click_retried_after_no_effect"
+      ],
+      "evidence": [
+        {
+          "description": "Trace rows with pointer_followed_control in the accepted exploratory run",
+          "source_hint": "gp_winall/*/actions.jsonl"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    },
+    {
+      "id": "GP830-F3",
+      "title": "Closing during an in-flight LoRA-Discovery scan stalls 10 s and logs an ERROR",
+      "severity": "major",
+      "category": "shutdown",
+      "area": "Application shutdown, thread registry",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "any",
+        "driver": "windows and tk"
+      },
+      "reproduction": [
+        "Start the application and close it while the LoRA-Discovery scan is still running."
+      ],
+      "expected": "Shutdown cancels the worker and completes promptly without errors.",
+      "observed": "The scan posts a callback to the Tk thread that is joining it; shutdown waits the full 10 s and logs \"[thread_registry] Thread 'LoRA-Discovery' did not shutdown within 10.0s timeout!\".",
+      "harness_workaround": "The harness waits up to 20 s for non-daemon threads to settle before closing.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "Diagnostics of a run that captured the ERROR",
+          "source_hint": "gp_ev7/*/logs/LRN-01.diagnostics.txt"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    },
+    {
+      "id": "GP830-F4",
+      "title": "A pending tooltip timer during teardown re-enters the application's destroy",
+      "severity": "major",
+      "category": "lifecycle",
+      "area": "Tooltip, application teardown",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "any",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Hover a tooltip-bearing control so a show timer is pending.",
+        "Close the window; the timer fires during teardown and its update_idletasks re-enters _destroy_root."
+      ],
+      "expected": "Teardown cancels pending callbacks; no reentrant idle update.",
+      "observed": "One access-violation crash of the process (faulthandler trace retained); not reliably reproducible.",
+      "harness_workaround": "The pointer is moved off the controls and the loop pumped before the close command is sent.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "faulthandler trace of the crash",
+          "source_hint": "winv2.log"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    },
+    {
+      "id": "GP830-F5",
+      "title": "Requested window geometry is not honoured at startup",
+      "severity": "minor",
+      "category": "geometry",
+      "area": "Main window sizing",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "requested 1500x940+10+10, observed about 1916x1040",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Request a window geometry before the application builds its window.",
+        "Compare the requested and observed size."
+      ],
+      "expected": "Either the requested size, or a documented saved-state restoration.",
+      "observed": "The application opens at about 1916x1040.",
+      "harness_workaround": "The windows driver maximizes after boot so every run has the same canvas.",
+      "friction_kinds": [
+        "window_forced_maximized"
+      ],
+      "classification_open": "Not yet distinguished from intentional saved-state restoration or a harness ordering issue; PR-GUI-RELIABILITY-831 must classify it before any repair.",
+      "evidence": [
+        {
+          "description": "window_1 observation (maximized size) and display facts of the accepted exploratory run",
+          "source_hint": "gp_winall/*/evidence.json"
+        }
+      ],
+      "repair": {
+        "status": "UNCLASSIFIED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    },
+    {
+      "id": "GP830-F6",
+      "title": "Pack list selection can be dropped without a selection event (suspected X11 exportselection)",
+      "severity": "minor",
+      "category": "event-ordering",
+      "area": "Pipeline sidebar pack list, Add to Job",
+      "environment": {
+        "os": "Linux CI runner under Xvfb (ubuntu); not reproduced on Windows",
+        "display": "Xvfb virtual display",
+        "window": "default",
+        "driver": "tk"
+      },
+      "reproduction": [
+        "Select a PromptPack in the sidebar pack list and apply current settings to it.",
+        "Click Add to Job: the preview panel stays at 'No job selected'."
+      ],
+      "expected": "Add to Job adds the selected pack, or the button is disabled when nothing is selected.",
+      "observed": "CI shard 1 (PR #250): the journey timed out after 60 s with the preview at 'No job selected'. Root cause inferred from code, not reproduced: ListBox exportselection lets another widget's selection clear the list selection silently; <<ListboxSelect>> does not fire, so the button state stays NORMAL while curselection() is empty.",
+      "harness_workaround": "The journey re-selects the pack row when the list selection was lost and records selection_lost_reselected.",
+      "friction_kinds": [
+        "list_selection_lost_and_reselected"
+      ],
+      "classification_open": "Inferred from the CI log and source; needs a Linux reproduction before any product repair.",
+      "evidence": [
+        {
+          "description": "CI log of the failing shard (GitHub Actions run 41762540470, job 126353793545)",
+          "source_hint": "ci_shard1.log"
+        }
+      ],
+      "repair": {
+        "status": "UNCLASSIFIED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    },
+    {
+      "id": "GP830-I1",
+      "title": "MediaInspector has no attribute _current_path (inherited)",
+      "severity": "major",
+      "category": "regression",
+      "area": "Media Inspector, test_discovered_outputs_journey_passes_on_an_isolated_output_tree",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "not display-dependent",
+        "window": "n/a",
+        "driver": "tk"
+      },
+      "reproduction": [
+        "Run tests/tools/test_operator_journey_gui.py::test_discovered_outputs_journey_passes_on_an_isolated_output_tree on unchanged main."
+      ],
+      "expected": "The discovered-outputs journey passes on an isolated output tree.",
+      "observed": "Fails identically on unchanged HEAD with AttributeError: MediaInspector has no attribute '_current_path'. Documented in docs/work_packages/IMG_EVIDENCE_AUTOPILOT_800.md.",
+      "harness_workaround": "None; the test is reported as a known inherited failure and is not weakened.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "Regression run log showing the failure on a clean HEAD worktree",
+          "source_hint": "regress.log"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_package": "PR-GUI-RELIABILITY-831"
+      }
+    }
+  ]
+}

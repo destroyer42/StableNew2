@@ -11,6 +11,7 @@ READINESS = "readiness"
 PHYSICAL = "physical"
 MODES = (SIMULATED, READINESS, PHYSICAL)
 DRIVERS = ("tk", "windows")
+LAYOUTS = ("maximized", "normal", "minimum")
 JOURNEY_CHOICES = ("image", "video", "learning", "all")
 
 _CI_MARKERS = ("CI", "GITHUB_ACTIONS", "TF_BUILD", "JENKINS_URL", "BUILDKITE")
@@ -36,10 +37,19 @@ def running_under_pytest(
 
 
 def validate_combination(
-    *, mode: str, driver: str, plan: object | None, env: Mapping[str, str] | None = None
+    *,
+    mode: str,
+    driver: str,
+    plan: object | None,
+    env: Mapping[str, str] | None = None,
+    layout: str = "maximized",
 ) -> None:
     """Refuse invalid or unsafe combinations before anything starts."""
 
+    if layout not in LAYOUTS:
+        raise ModeRefusal(f"unknown layout {layout!r}; choose one of {LAYOUTS}")
+    if layout != "maximized" and driver != "windows":
+        raise ModeRefusal("--layout normal|minimum needs --desktop-driver windows (a real window)")
     if mode not in MODES:
         raise ModeRefusal(f"unknown mode {mode!r}; choose one of {MODES}")
     if driver not in DRIVERS:

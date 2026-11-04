@@ -16,6 +16,7 @@ from typing import Any
 from tools.operator_journey.capture import FaultCapture, leaked_non_daemon_threads, thread_snapshot
 from tools.operator_journey.dialogs import DialogSeam, scripted_dialogs
 from tools.operator_journey.evidence import JourneyEvidence
+from tools.operator_journey.golden.frozen import PlanGate
 from tools.operator_journey.golden.media import sha256_file
 from tools.operator_journey.observe import (
     SubmissionObserver,
@@ -54,6 +55,9 @@ class RunConfig:
     run_timeout: float = 180.0
     window_geometry: str = "1500x940+10+10"
     maximize: bool = True  # windows driver: maximize with a title-bar double-click so every run has the same canvas
+    #: windows driver window layout: "maximized" (title-bar double-click, recorded as a workaround), "normal" (the
+    #: application's own startup window, nothing forced) or "minimum" (resized to the application's declared minimum).
+    layout: str = "maximized"
     discard_workspace: bool = False
     extras: dict[str, Any] = field(default_factory=dict)
 
@@ -86,7 +90,11 @@ class GoldenRun:
         self.journey_id, self.config, self.ev, self.ws = journey_id, config, evidence, workspace
         self.fake_a1111, self.fake_comfy = fake_a1111, fake_comfy
         self.trace = ActionTrace()
-        self.submissions = SubmissionObserver()
+        target, key = config.extras.get("target"), config.extras.get("journey_key")
+        # A physical run declines any submission whose NJR disagrees with the frozen plan (it can only decline).
+        self.submissions: SubmissionObserver = (
+            PlanGate(key, target) if target and key else SubmissionObserver()
+        )
         self.responder: Any = None
         self.seam = DialogSeam()
         self._seam_cm: Any = None
@@ -124,6 +132,16 @@ class GoldenRun:
     def job_rows(self) -> list[dict[str, Any]]:
         return read_job_rows(self.repository_path, self.ws.root)
 
+    def assert_plan_agreed(self) -> None:
+        """Stop the journey as NO-GO when the frozen-plan gate declined a submission (nothing was queued)."""
+
+        mismatches = getattr(self.submissions, "mismatches", [])
+        if mismatches:
+            raise JourneyNoGo(
+                "the NJR about to be dispatched disagrees with the frozen plan: "
+                + "; ".join(mismatches)
+            )
+
     def wait_jobs_terminal(self, expected: int, *, description: str) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
 
@@ -134,6 +152,7 @@ class GoldenRun:
             reason = abort_check() if callable(abort_check) else None
             if reason:
                 raise JourneyNoGo(str(reason))
+            self.assert_plan_agreed()
             rows = self.job_rows()
             return job_lifecycle_settled(rows, expected)
 
@@ -266,10 +285,27 @@ class GoldenRun:
         self.driver.pump(0.8)
         if self.config.driver == "windows":
             self.driver.ensure_foreground()  # type: ignore[attr-defined]
-            if not self.config.hide_window and self.config.maximize:
-                facts = self.driver.maximize_window()  # type: ignore[attr-defined]
-                self.ev.observe(f"window_{self.boots}", facts)
-                self.driver.pump(0.8)
+            if not self.config.hide_window:
+                self.ev.observe(
+                    f"window_requested_{self.boots}",
+                    {"geometry": self.config.window_geometry, "layout": self.config.layout},
+                )
+                self.ev.observe(
+                    f"window_startup_{self.boots}",
+                    self.driver.window_facts(),  # type: ignore[attr-defined]
+                )
+                if self.config.layout == "minimum":
+                    min_w, min_h = self.root.minsize()  # type: ignore[union-attr]
+                    self.root.state("normal")  # type: ignore[union-attr]
+                    self.root.geometry(f"{max(min_w, 1)}x{max(min_h, 1)}+20+20")  # type: ignore[union-attr]
+                    self.driver.pump(1.0)
+                elif self.config.layout == "maximized" and self.config.maximize:
+                    self.driver.maximize_window()  # type: ignore[attr-defined]
+                    self.driver.pump(0.8)
+                self.ev.observe(
+                    f"window_{self.boots}",
+                    self.driver.window_facts(),  # type: ignore[attr-defined]
+                )
         self.submissions.install(self.controller.job_service)
         self.checkpoint(f"app_started_{self.boots}")
 
@@ -411,6 +447,7 @@ def run_journey_body(
         )
         ev.summary["workspace"] = str(workspace.root)
         ev.summary["desktop_driver"] = config.driver
+        ev.summary["layout"] = config.layout if config.driver == "windows" else None
         spy = AccessSpy(allowed=(workspace.root,))
         with workspace.activate(), spy:
             if workspace_hook is not None:
@@ -447,6 +484,12 @@ def run_journey_body(
                         ev.abort_reason = ev.abort_reason or f"shutdown failed: {exc}"
         ev.isolation_violations.extend(spy.violations())
         archive_workspace(workspace, ev, run_dir, discard=config.discard_workspace)
+        # Produced media is copied (hash-verified) before the workspace is released, so the proof outlives it.
+        from tools.operator_journey.golden.provenance import retain_media
+
+        retained = retain_media(ev.observations, run_dir)
+        if retained:
+            ev.observe("retained_media", retained)
     except Exception as exc:  # noqa: BLE001
         ev.abort_reason = ev.abort_reason or f"harness error {type(exc).__name__}: {exc}"
     finally:

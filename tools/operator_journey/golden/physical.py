@@ -155,7 +155,12 @@ def real_executor(
         run_timeout=float(target.get("timeout", 900)),
         startup_wait=120.0,
     )
-    config.extras.update(physical=True, abort_check=lambda: monitor.tripped)
+    config.extras.update(
+        physical=True,
+        abort_check=lambda: monitor.tripped,
+        target=target,
+        journey_key=journey.key,
+    )
     base_url = target["runtime"]["base_url"]
     settings = _engine_settings(target)
     if journey.key == "image":
@@ -305,7 +310,19 @@ def run_physical(
                 return finish(
                     HOLD, "the environment changed during the run; stopped", plan, results
                 )
-            ev = run_executor(journey, plan["targets"][journey.key], monitor, run_dir)
+            try:
+                ev = run_executor(journey, plan["targets"][journey.key], monitor, run_dir)
+            except (
+                Exception
+            ) as exc:  # an executor crash is a NO-GO with evidence, never a lost run directory
+                outcome["functional"] = FAIL
+                outcome["safety"] = NO_GO
+                return finish(
+                    NO_GO,
+                    f"the executor raised during {journey.key}: {type(exc).__name__}: {exc} (never retried)",
+                    plan,
+                    results,
+                )
             results.append(ev)
             stop = next((c for c in (classify_job_failure(r) for r in _job_rows(ev)) if c), None)
             if stop:
