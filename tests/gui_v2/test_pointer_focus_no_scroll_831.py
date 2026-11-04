@@ -86,3 +86,47 @@ def test_pointer_over_is_true_for_a_descendant_of_the_focused_widget_only(
         assert not _WheelRouter._pointer_over(first)  # noqa: SLF001
     finally:
         frame.destroy()
+
+
+def test_a_nested_scroll_box_at_its_limit_hands_the_wheel_to_the_page(
+    tk_root: tk.Tk, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A nested box at its end must not trap the wheel: the page behind it scrolls (finding F1/F7 follow-up)."""
+
+    from tkinter import ttk
+    from types import SimpleNamespace
+
+    from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
+
+    tk_root.geometry("360x300+50+50")
+    tk_root.deiconify()
+    outer = ScrollableFrame(tk_root)
+    outer.place(relx=0, rely=0, relwidth=1, relheight=1)
+    for row in range(30):
+        ttk.Label(outer.inner, text=f"page row {row}").pack()
+    inner = ScrollableFrame(outer.inner)
+    inner.pack(fill="x")
+    for row in range(30):
+        ttk.Label(inner.inner, text=f"box row {row}").pack()
+    tk_root.update()
+    try:
+        router = _WheelRouter.for_widget(tk_root)
+        monkeypatch.setattr(router, "_frames_under_pointer", lambda x, y: [inner, outer])
+        event = SimpleNamespace(x_root=5, y_root=5)
+
+        assert router._dispatch(event, 1) == "break"  # noqa: SLF001
+        assert inner._canvas.yview()[0] > 0.0 and outer._canvas.yview()[0] == 0.0  # noqa: SLF001
+
+        inner._canvas.yview_moveto(1.0)  # noqa: SLF001 - the box is now at its end
+        tk_root.update()
+        assert router._dispatch(event, 1) == "break"  # noqa: SLF001
+        assert outer._canvas.yview()[0] > 0.0  # noqa: SLF001 - the page took the wheel
+
+        inner._canvas.yview_moveto(0.0)  # noqa: SLF001 - and at the box's top, scrolling up goes to the page
+        outer._canvas.yview_moveto(0.5)  # noqa: SLF001
+        tk_root.update()
+        before = outer._canvas.yview()[0]  # noqa: SLF001
+        assert router._dispatch(event, -1) == "break"  # noqa: SLF001
+        assert outer._canvas.yview()[0] < before  # noqa: SLF001
+    finally:
+        outer.destroy()

@@ -124,8 +124,10 @@ class _WheelRouter:
     def _dispatch(self, event: tk.Event, units: int) -> str | None:
         if not units:
             return None
+        # Innermost first; a frame already at its limit in this direction hands the wheel to the page around it
+        # instead of trapping it (a nested scroll box at its end must not freeze the page behind it).
         for frame in self._frames_under_pointer(event.x_root, event.y_root):
-            if frame.has_scroll_overflow():
+            if frame.can_scroll(units):
                 frame.scroll_units(units)
                 return "break"
         return None
@@ -238,6 +240,14 @@ class ScrollableFrame(ttk.Frame):
         except tk.TclError:
             return False
         return first > 0.0 or last < 1.0
+
+    def can_scroll(self, units: int) -> bool:
+        """True when scrolling ``units`` (negative is up) would move the content."""
+        try:
+            first, last = self._canvas.yview()
+        except tk.TclError:
+            return False
+        return first > 0.0 if units < 0 else last < 1.0
 
     def viewport_width(self) -> int:
         """Width of the visible region (the content never scrolls horizontally)."""
