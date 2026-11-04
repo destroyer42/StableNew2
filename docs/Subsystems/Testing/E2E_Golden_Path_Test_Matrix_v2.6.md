@@ -157,6 +157,10 @@ must have hermetic coverage where meaningful.
 Runs with a controlled GUI environment and fake backends. It verifies visible
 state, scheduling, bounded shutdown/cancel, and no worker-thread widget access.
 
+### Golden-path desktop journeys
+
+`python -m tools.operator_journey --suite golden-paths` adds IMG-01, VID-01 and LRN-01 with simulated, readiness (read-only) and owner-authorized physical modes and a physical Windows input driver. See `docs/Subsystems/Testing/TESTING_AND_CI.md` section 11a; physical GPU execution is never part of any gate.
+
 ### Operator-journey gate (semantic Tk)
 
 Local and display-required; never part of required CI. `python -m tools.operator_journey

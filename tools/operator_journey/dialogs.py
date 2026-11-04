@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from tkinter import messagebox
+from tkinter import filedialog, messagebox, simpledialog
 
 
 @dataclass
@@ -29,6 +29,12 @@ class DialogSeam:
     default: bool = True
     calls: list[DialogRecord] = field(default_factory=list)  # journeys may clear this
     history: list[DialogRecord] = field(default_factory=list)  # never cleared: evidence
+    strings: list[str | None] = field(
+        default_factory=list
+    )  # scripted simpledialog.askstring answers
+    files: list[str] = field(
+        default_factory=list
+    )  # scripted file-dialog answers (an operator picking a path)
 
     def script(self, *answers: bool) -> None:
         self.answers = list(answers)
@@ -43,6 +49,23 @@ class DialogSeam:
         self.history.append(record)
         return answer
 
+    def askstring(self, title: str = "", prompt: str = "", **_: object) -> str | None:
+        answer = self.strings.pop(0) if self.strings else None
+        record = DialogRecord("askstring", str(title), str(prompt), answer is not None)
+        self.calls.append(record)
+        self.history.append(record)
+        return answer
+
+    def file(self, kind: str) -> object:
+        def pick(*_args: object, **kwargs: object) -> str:
+            answer = self.files.pop(0) if self.files else ""
+            record = DialogRecord(kind, str(kwargs.get("title", "")), answer, bool(answer))
+            self.calls.append(record)
+            self.history.append(record)
+            return answer
+
+        return pick
+
     def info(self, kind: str) -> object:
         def record(title: str = "", message: str = "", **_: object) -> str:
             record = DialogRecord(kind, str(title), str(message))
@@ -56,6 +79,14 @@ class DialogSeam:
 @contextmanager
 def scripted_dialogs(seam: DialogSeam) -> Iterator[DialogSeam]:
     saved = (messagebox.askyesno, messagebox.showinfo, messagebox.showwarning, messagebox.showerror)
+    saved_more = (
+        simpledialog.askstring,
+        filedialog.askopenfilename,
+        filedialog.asksaveasfilename,
+    )
+    simpledialog.askstring = seam.askstring  # type: ignore[assignment]
+    filedialog.askopenfilename = seam.file("askopenfilename")  # type: ignore[assignment]
+    filedialog.asksaveasfilename = seam.file("asksaveasfilename")  # type: ignore[assignment]
     messagebox.askyesno = seam.askyesno  # type: ignore[assignment]
     messagebox.showinfo = seam.info("showinfo")  # type: ignore[assignment]
     messagebox.showwarning = seam.info("showwarning")  # type: ignore[assignment]
@@ -69,3 +100,8 @@ def scripted_dialogs(seam: DialogSeam) -> Iterator[DialogSeam]:
             messagebox.showwarning,
             messagebox.showerror,
         ) = saved
+        (
+            simpledialog.askstring,
+            filedialog.askopenfilename,
+            filedialog.asksaveasfilename,
+        ) = saved_more

@@ -8,6 +8,8 @@ calls a controller submission method, JobService, runner, executor or backend.
 
 from __future__ import annotations
 
+import os
+import sys
 import time
 import tkinter as tk
 from collections.abc import Callable, Iterator
@@ -32,11 +34,34 @@ class ActionTrace:
 
     entries: list[dict[str, Any]] = field(default_factory=list)
     _t0: float = field(default_factory=time.monotonic)
+    #: Which driver produced the actions ("tk" = semantic widget calls, "windows" = physical Win32 input).
+    driver: str = "tk"
 
     def record(self, action: str, **details: Any) -> None:
-        self.entries.append(
-            {"t": round(time.monotonic() - self._t0, 3), "action": action, **details}
-        )
+        entry = {
+            "t": round(time.monotonic() - self._t0, 3),
+            "action": action,
+            "driver": self.driver,
+            **details,
+        }
+        self.entries.append(entry)
+        if os.environ.get("OPERATOR_JOURNEY_ECHO"):  # live progress while debugging a stuck journey
+            print(f"[trace] {entry}", file=sys.stderr, flush=True)
+
+
+def is_disabled(widget: tk.Misc) -> bool:
+    """True for a disabled control: a ttk state flag (``state(["disabled"])``) or a classic ``state`` option."""
+
+    try:
+        instate = getattr(widget, "instate", None)
+        if callable(instate) and instate(["disabled"]):
+            return True
+    except tk.TclError:
+        pass
+    try:
+        return str(widget.cget("state")) == "disabled"
+    except tk.TclError:
+        return False
 
 
 def iter_widgets(parent: tk.Misc) -> Iterator[tk.Misc]:
@@ -190,7 +215,7 @@ class TkDriver:
         allowed = [str(v) for v in combo.cget("values")]
         if value not in allowed:
             raise WidgetNotFound(f"{label}: {value!r} not among combobox values {allowed}")
-        if str(combo.cget("state")) == "disabled":
+        if is_disabled(combo):
             raise WidgetNotFound(f"{label}: combobox is disabled")
         combo.set(value)
         combo.event_generate("<<ComboboxSelected>>")
@@ -200,15 +225,31 @@ class TkDriver:
     def invoke(self, button: tk.Misc, *, label: str) -> None:
         """Click a Button/Radiobutton/Checkbutton via its own ``invoke``."""
 
-        try:
-            state = str(button.cget("state"))
-        except tk.TclError:
-            state = "normal"
-        if state == "disabled":
+        if is_disabled(button):
             raise WidgetNotFound(f"{label}: control is disabled")
         button.invoke()  # type: ignore[attr-defined]
         self.trace.record("invoke", label=label)
         self.pump(0.05)
+
+    def click(self, widget: tk.Misc, *, label: str, **_ignored: Any) -> None:
+        """Press and release the left button on a visible control (for controls that are not buttons, e.g. a tile)."""
+
+        if not widget.winfo_viewable():
+            raise WidgetNotFound(f"{label}: control is not visible")
+        widget.event_generate("<Button-1>", x=2, y=2)
+        widget.event_generate("<ButtonRelease-1>", x=2, y=2)
+        self.trace.record("click", label=label, widget=str(widget))
+        self.pump(0.05)
+
+    def drag_sash(self, paned: ttk.Panedwindow, index: int, *, delta: int, label: str) -> None:
+        """Move a pane divider by ``delta`` pixels (negative = up/left)."""
+
+        before = int(paned.sashpos(index))
+        paned.sashpos(index, max(30, before + delta))
+        self.trace.record(
+            "drag_sash", label=label, index=index, before=before, after=int(paned.sashpos(index))
+        )
+        self.pump(0.1)
 
     def select_listbox_row(self, listbox: tk.Listbox, index: int, *, label: str) -> None:
         listbox.selection_clear(0, tk.END)

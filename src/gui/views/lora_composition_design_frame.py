@@ -64,14 +64,17 @@ class LoraCompositionDesignFrame(ttk.LabelFrame):
         )
         self.operation_box.grid(row=1, column=0, sticky="ew", pady=3)
         self.operation_box.bind("<<ComboboxSelected>>", lambda _e: self._changed())
-        ttk.Label(self, text="Fixed LoRAs (unchanged in every variant)").grid(
-            row=2, column=0, sticky="w"
-        )
+        ttk.Label(
+            self, text="Fixed LoRAs (unchanged in every variant)", wraplength=340, justify="left"
+        ).grid(row=2, column=0, sticky="w")
         self.fixed_list = tk.Listbox(self, height=3, exportselection=False)
         self.fixed_list.grid(row=3, column=0, sticky="ew")
-        ttk.Label(self, text="Tested LoRA position: original from the baseline prompt").grid(
-            row=4, column=0, sticky="w", pady=(4, 0)
-        )
+        ttk.Label(
+            self,
+            text="Tested LoRA position: original from the baseline prompt",
+            wraplength=340,
+            justify="left",
+        ).grid(row=4, column=0, sticky="w", pady=(4, 0))
         self.original_var = tk.StringVar(value=NONE_CHOICE)
         self.original_box = ttk.Combobox(
             self, textvariable=self.original_var, values=(NONE_CHOICE,), state="readonly"
@@ -82,7 +85,7 @@ class LoraCompositionDesignFrame(ttk.LabelFrame):
         search.grid(row=6, column=0, sticky="ew", pady=(6, 0))
         search.columnconfigure(0, weight=1)
         self.query_var = tk.StringVar()
-        ttk.Entry(search, textvariable=self.query_var).grid(row=0, column=0, sticky="ew")
+        ttk.Entry(search, textvariable=self.query_var, width=8).grid(row=0, column=0, sticky="ew")
         ttk.Button(search, text="Refresh Installed LoRAs", command=self.refresh_inventory).grid(
             row=0, column=1, padx=(4, 0)
         )
@@ -103,8 +106,10 @@ class LoraCompositionDesignFrame(ttk.LabelFrame):
         ttk.Label(add, text="Strength").grid(row=0, column=0)
         self.strength_var = tk.StringVar(value="0.8")
         ttk.Entry(add, textvariable=self.strength_var, width=6).grid(row=0, column=1, padx=3)
-        ttk.Button(add, text="Add LoRA Candidate", command=self.add_selected).grid(row=0, column=2)
-        ttk.Button(add, text="Add No LoRA", command=self.add_empty).grid(row=0, column=3, padx=3)
+        ttk.Button(add, text="Add No LoRA", command=self.add_empty).grid(row=0, column=2, padx=3)
+        ttk.Button(add, text="Add LoRA Candidate", command=self.add_selected).grid(
+            row=1, column=0, columnspan=3, sticky="w", pady=(3, 0)
+        )
         self.candidate_list = tk.Listbox(self, height=4, exportselection=False)
         self.candidate_list.grid(row=11, column=0, sticky="ew")
         actions = ttk.Frame(self)

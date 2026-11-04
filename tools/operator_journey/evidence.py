@@ -11,6 +11,7 @@ from typing import Any
 PASS = "PASS"
 FAIL = "FAIL"
 HOLD = "HOLD"
+NO_GO = "NO-GO"
 
 
 @dataclass
@@ -50,9 +51,20 @@ class JourneyEvidence:
     shutdown_noise: list[str] = field(default_factory=list)
     hold_reason: str = ""
     abort_reason: str = ""
+    #: A safety or resource condition forbids execution (distinct from an unmet prerequisite).
+    no_go_reason: str = ""
+    #: Golden-path additions: which desktop driver ran, and every notable value tagged observed vs simulated fixture.
+    desktop_driver: str = ""
+    execution_mode: str = ""
+    observations: list[dict[str, Any]] = field(default_factory=list)
 
     def now(self) -> str:
         return datetime.now(UTC).isoformat(timespec="seconds")
+
+    def observe(self, name: str, value: Any, *, source: str = "observed") -> None:
+        """Record a value; ``source`` is ``observed`` (read from the running system) or ``simulated_fixture``."""
+
+        self.observations.append({"name": name, "value": value, "source": source})
 
     def check(self, phase: str, name: str, passed: bool, detail: str = "") -> bool:
         self.checks.append(Check(phase, name, bool(passed), str(detail)))
@@ -64,6 +76,8 @@ class JourneyEvidence:
 
     @property
     def verdict(self) -> str:
+        if self.no_go_reason:
+            return NO_GO
         if self.hold_reason:
             return HOLD
         problems = (
@@ -77,6 +91,8 @@ class JourneyEvidence:
 
     @property
     def failed_assertion(self) -> str:
+        if self.no_go_reason:
+            return f"safety: {self.no_go_reason}"
         if self.hold_reason:
             return f"prerequisite: {self.hold_reason}"
         if self.failed_checks:
@@ -102,7 +118,11 @@ class JourneyEvidence:
             "verdict": self.verdict,
             "failed_assertion": self.failed_assertion,
             "hold_reason": self.hold_reason,
+            "no_go_reason": self.no_go_reason,
             "abort_reason": self.abort_reason,
+            "execution_mode": self.execution_mode,
+            "desktop_driver": self.desktop_driver,
+            "observations": self.observations,
             "summary": self.summary,
             "variants": self.variants,
             "checks": [c.as_dict() for c in self.checks],
