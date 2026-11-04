@@ -20,7 +20,6 @@ FRICTION_ACTIONS: dict[str, tuple[str, str | None, str]] = {
     "reclick_after_no_effect": ("click_retried_after_no_effect", "GP830-F2", "workaround"),
     "typing_retried": ("typing_retried_with_another_strategy", None, "workaround"),
     "waited_for_state": ("waited_for_hidden_or_disabled_control", None, "workaround"),
-    "selection_lost_reselected": ("list_selection_lost_and_reselected", "GP830-F6", "workaround"),
     "dialog_never_appeared": ("expected_dialog_never_appeared", None, "workaround"),
 }
 #: Ordinary operator behaviour that is worth counting but is not a workaround.

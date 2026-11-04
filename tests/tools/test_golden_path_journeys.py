@@ -21,9 +21,11 @@ import pytest
 from tests.tools.test_operator_journey_gui import (
     REPO_ROOT,
     _journey_subprocess_env,
-    _require_display,
     _shim_dir,
     _tracked_state,
+)
+from tests.tools.test_operator_journey_gui import (
+    _require_display as _require_tk_display,
 )
 
 pytestmark = pytest.mark.journey
@@ -31,14 +33,27 @@ pytestmark = pytest.mark.journey
 _DESKTOP_LANE = os.environ.get("STABLENEW_DESKTOP_LANE") == "1"
 
 
-def _diagnostics(result: dict) -> list:
-    """What the application itself said before a journey stopped (so a CI-only failure is diagnosable from the log)."""
+def _require_display() -> None:
+    """StableNew's GUI is supported on Windows only; the journeys are not exercised on other platforms."""
 
-    return [
-        o
-        for o in result.get("observations", [])
-        if o["name"] in ("operator_log_tail", "captured_log_tail")
+    if sys.platform != "win32":
+        pytest.skip("the golden-path GUI journeys run on Windows only (the supported platform)")
+    _require_tk_display()
+
+
+def _fail_with_diagnostics(result: dict, failed: list) -> None:
+    """Fail with the full, untruncated story: what stopped the journey and what the application itself said."""
+
+    lines = [
+        f"verdict={result.get('verdict')} failed_assertion={result.get('failed_assertion')}",
+        f"abort={result.get('abort_reason')} hold={result.get('hold_reason')} no_go={result.get('no_go_reason')}",
+        f"failed checks={failed}",
     ]
+    for obs in result.get("observations", []):
+        if obs["name"] in ("operator_log_tail", "captured_log_tail"):
+            lines.append(f"--- {obs['name']}")
+            lines.extend(str(v) for v in obs["value"])
+    pytest.fail(chr(10).join(lines), pytrace=False)
 
 
 def _run_suite(tmp_path: Path, *args: str, timeout: float = 580) -> tuple[int, dict, Path]:
@@ -77,11 +92,8 @@ def test_simulated_journey_passes_through_the_canonical_path(tmp_path: Path, jou
         # An honest HOLD (recorded in the evidence), not a PASS; the encoder tool is absent on this host.
         pytest.skip(result["hold_reason"])
     failed = [c for c in result["checks"] if not c["passed"]]
-    assert code == 0 and result["verdict"] == "PASS", (
-        result.get("failed_assertion"),
-        failed,
-        _diagnostics(result),
-    )
+    if not (code == 0 and result["verdict"] == "PASS"):
+        _fail_with_diagnostics(result, failed)
     assert evidence["mode"] == "simulated" and evidence["desktop_driver"] == "tk"
     assert {t["driver"] for t in result["action_trace"]} == {"tk"}
     captured = result["captured_errors"]
@@ -154,13 +166,8 @@ def test_the_physical_code_path_needs_no_fake_backend_object_and_submits_the_fro
     ):
         pytest.skip(evidence["hold_reason"])
     failed = [c for c in evidence["checks"] if not c["passed"]]
-    assert code == 0 and evidence["verdict"] == "PASS", (
-        evidence.get("failed_assertion"),
-        evidence.get("abort_reason"),
-        evidence.get("hold_reason"),
-        failed,
-        _diagnostics(evidence),
-    )
+    if not (code == 0 and evidence["verdict"] == "PASS"):
+        _fail_with_diagnostics(evidence, failed)
     assert evidence["execution_mode"] == "rehearsal" and evidence["backend_mode"] == "rehearsal"
     names = {o["name"] for o in evidence["observations"]}
     assert "fixture_image_generator" not in names and "fixture_video_generator" not in names

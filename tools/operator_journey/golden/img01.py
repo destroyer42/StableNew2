@@ -132,20 +132,13 @@ def run_img01(
         timeout=15,
         description="the pack stores the applied settings",
     )
-    # Add to Job reads the list selection at click time.  Some platforms (X11 with exportselection) drop a list
-    # selection when another widget claims the selection, without sending <<ListboxSelect>>, so the button
-    # stays enabled with nothing selected.  Re-select visibly and record it as friction, never silently.
-    row = sidebar._current_pack_names.index(pack_name)
-    if row not in sidebar.pack_listbox.curselection():
-        run.trace.record("selection_lost_reselected", label="Pack list", row=row)
-        d.select_listbox_row(sidebar.pack_listbox, row, label="Pack list (reselect)")
     d.invoke(sidebar.add_to_job_button, label="Add to Job")
     preview = pipeline.preview_panel
     d.wait_until(
         lambda: str(preview.job_count_label.cget("text")).strip() == "Job: 1",
         timeout=60,
         description="the preview panel reports one draft job",
-        evidence=lambda: f"{preview.job_count_label.cget('text')}; list selection {sidebar.pack_listbox.curselection()}; Add to Job {sidebar.add_to_job_button.cget('state')}",
+        evidence=lambda: f"{preview.job_count_label.cget('text')}; Add to Job {sidebar.add_to_job_button.cget('state')}",
     )
     d.wait_until(
         lambda: preview.add_to_queue_button.instate(["!disabled"]),
