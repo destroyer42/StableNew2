@@ -130,3 +130,30 @@ def test_a_nested_scroll_box_at_its_limit_hands_the_wheel_to_the_page(
         assert outer._canvas.yview()[0] < before  # noqa: SLF001
     finally:
         outer.destroy()
+
+
+def test_a_wheel_notch_moves_at_least_a_readable_step_even_in_a_short_pane(tk_root: tk.Tk) -> None:
+    """Tk's own unit is a tenth of the window: in an 88 px pane that is under 10 px per notch."""
+
+    from tkinter import ttk
+
+    from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
+
+    tk_root.geometry("360x300+50+50")
+    tk_root.deiconify()
+    frame = ScrollableFrame(tk_root)
+    frame.place(x=0, y=0, width=360, height=90)
+    for row in range(60):
+        ttk.Label(frame.inner, text=f"row {row}").pack()
+    tk_root.update()
+    try:
+        span = frame._canvas.bbox("all")[3]  # noqa: SLF001
+        frame.scroll_units(1)
+        moved = frame._canvas.yview()[0] * span  # noqa: SLF001
+        assert moved >= 39.0
+        frame.scroll_units(-1)
+        assert frame._canvas.yview()[0] == pytest.approx(0.0, abs=1e-6)  # noqa: SLF001
+        frame.scroll_units(10_000)
+        assert frame._canvas.yview()[1] == pytest.approx(1.0)  # noqa: SLF001
+    finally:
+        frame.destroy()

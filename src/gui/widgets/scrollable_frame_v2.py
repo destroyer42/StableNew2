@@ -11,6 +11,7 @@ _SELF_SCROLLING_CLASSES = ("combobox", "listbox", "spinbox", "text", "treeview")
 _WHEEL_SEQUENCES = ("<MouseWheel>", "<Button-4>", "<Button-5>")
 _FOCUS_SEQUENCE = "<FocusIn>"
 _REVEAL_MARGIN = 8  # px of context kept around a control scrolled into view
+_WHEEL_STEP_MIN_PX = 40  # one wheel notch never moves less than this, however short the viewport
 # An unused grid column and a row span covering every row carry the stretch-to-viewport ruler (``fill_height``).
 _RULER_COLUMN = 999
 _RULER_ROWSPAN = 999
@@ -254,7 +255,23 @@ class ScrollableFrame(ttk.Frame):
         return int(self._canvas.winfo_width())
 
     def scroll_units(self, units: int) -> None:
-        self._canvas.yview_scroll(int(units), "units")
+        """Scroll ``units`` wheel notches (negative is up).
+
+        A notch moves a tenth of the viewport but at least ``_WHEEL_STEP_MIN_PX``: Tk's own unit is a tenth of the
+        window, which in a short pane is a few pixels and takes dozens of notches to cross the page.
+        """
+        try:
+            total = self._canvas.bbox("all")
+            view = int(self._canvas.winfo_height())
+            if not total or int(total[3]) - int(total[1]) <= 0:
+                return
+            span = int(total[3]) - int(total[1])
+            step = max(_WHEEL_STEP_MIN_PX, view // 10)
+            first, _last = self._canvas.yview()
+            target = min(max(first + int(units) * step / span, 0.0), 1.0)
+            self._canvas.yview_moveto(target)
+        except tk.TclError:
+            return
 
     def reveal(self, widget: tk.Misc) -> None:
         """Scroll just enough that ``widget`` (a descendant of ``inner``) is inside the viewport.
