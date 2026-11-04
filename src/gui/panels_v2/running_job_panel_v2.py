@@ -55,6 +55,8 @@ class RunningJobPanelV2(ttk.Frame):
         self._runtime_status: RuntimeJobStatus | None = None  # Dynamic execution state
         self._queue_origin: int | None = None  # PR-GUI-F2: Original queue position (1-based)
         self._timer_id: str | None = None  # Tk after() timer ID for elapsed time updates
+        self._timer_closed = False
+        self.bind("<Destroy>", self._on_destroy_stop_timer, add="+")
         self._last_display_signature: tuple[Any, ...] | None = None
         self._timeline_is_clear = True
         self._refresh_metrics: dict[str, float | int] = {
@@ -599,6 +601,11 @@ class RunningJobPanelV2(ttk.Frame):
         if self._timer_id is None:
             self._tick()
 
+    def _on_destroy_stop_timer(self, event: tk.Event) -> None:
+        if event.widget is self:
+            self._timer_closed = True
+            self._stop_timer()
+
     def _stop_timer(self) -> None:
         """Stop the periodic timer."""
         if self._timer_id is not None:
@@ -610,6 +617,8 @@ class RunningJobPanelV2(ttk.Frame):
 
     def _tick(self) -> None:
         """Update elapsed time and schedule next tick."""
+        if self._timer_closed:
+            return
         # Update elapsed time if job is running
         if self._current_job:
             # Safely access started_at or created_at

@@ -24,6 +24,7 @@ class TkInvoker:
         self._max_callbacks_per_pump = 32
         self._max_pump_duration_ms = 8.0
         self._pump_scheduled = False
+        self._pump_after_id: str | None = None
         self._timers: set[threading.Timer] = set()
         self._schedule_pump()
 
@@ -57,7 +58,7 @@ class TkInvoker:
                 return
             self._pump_scheduled = True
         try:
-            self._root.after(self._pump_interval_ms, self._pump)
+            self._pump_after_id = self._root.after(self._pump_interval_ms, self._pump)
         except tk.TclError:
             with self._lock:
                 self._disposed = True
@@ -89,6 +90,7 @@ class TkInvoker:
         timer.start()
 
     def _pump(self) -> None:
+        self._pump_after_id = None
         callbacks: list[Callable[[], None]] = []
         with self._lock:
             if self._disposed:
@@ -129,11 +131,19 @@ class TkInvoker:
             self._pending_ids.clear()
             timers = list(self._timers)
             self._timers.clear()
+            after_id, self._pump_after_id = self._pump_after_id, None
         for timer in timers:
             try:
                 timer.cancel()
             except Exception:
                 continue
+        # A pending pump belongs to this invoker's widget; if the widget is destroyed first, the callback fires
+        # into a deleted command ("invalid command name ..._pump").  Cancel it on the thread that owns Tk.
+        if after_id is not None and threading.get_ident() == self._ui_thread_id:
+            try:
+                self._root.after_cancel(after_id)
+            except tk.TclError:
+                pass  # the interpreter or widget is already gone, and the timer with it
 
 
 # Compatibility alias: existing imports keep working while new code names the

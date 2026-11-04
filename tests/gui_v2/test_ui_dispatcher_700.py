@@ -16,6 +16,11 @@ class _FakeRoot:
         self.pending.append((delay_ms, callback))
         return str(len(self.pending))
 
+    def after_cancel(self, after_id: str) -> None:
+        index = int(after_id) - 1
+        if 0 <= index < len(self.pending):
+            self.pending[index] = (0, lambda: None)
+
 
 def test_gui_invoker_alias_remains_backward_compatible() -> None:
     assert GuiInvoker is TkInvoker

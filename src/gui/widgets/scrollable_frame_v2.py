@@ -11,6 +11,9 @@ _SELF_SCROLLING_CLASSES = ("combobox", "listbox", "spinbox", "text", "treeview")
 _WHEEL_SEQUENCES = ("<MouseWheel>", "<Button-4>", "<Button-5>")
 _FOCUS_SEQUENCE = "<FocusIn>"
 _REVEAL_MARGIN = 8  # px of context kept around a control scrolled into view
+# An unused grid column and a row span covering every row carry the stretch-to-viewport ruler (``fill_height``).
+_RULER_COLUMN = 999
+_RULER_ROWSPAN = 999
 
 
 class _WheelRouter:
@@ -136,10 +139,32 @@ class _WheelRouter:
         """Linux X11 wheel buttons."""
         return self._dispatch(event, -1 if getattr(event, "num", 0) == 4 else 1)
 
+    @staticmethod
+    def _pointer_over(widget: tk.Misc) -> bool:
+        """Whether the pointer is on ``widget`` or one of its descendants (so the person can already see it)."""
+        try:
+            x, y = widget.winfo_pointerxy()
+            target = widget.winfo_containing(x, y)
+        except (tk.TclError, KeyError):
+            return False
+        while target is not None:
+            if target is widget:
+                return True
+            target = getattr(target, "master", None)
+        return False
+
     def _on_focus_in(self, event: tk.Event) -> None:
-        """Scroll every ``ScrollableFrame`` around the focused widget so the widget is visible (never consumes)."""
+        """Scroll every ``ScrollableFrame`` around the focused widget so the widget is visible (never consumes).
+
+        A control the pointer is already on is visible by definition, and focus gained from a mouse press must not
+        scroll the page: the control would move between button press and release and the click would land on
+        whatever scrolled under the pointer (PR-GUI-RELIABILITY-831).  Only focus that arrives elsewhere (Tab,
+        programmatic focus) reveals the control.
+        """
         widget = getattr(event, "widget", None)
         if not isinstance(widget, tk.Misc):
+            return
+        if self._pointer_over(widget):
             return
         node: tk.Misc | None = widget
         while node is not None:
@@ -149,9 +174,18 @@ class _WheelRouter:
 
 
 class ScrollableFrame(ttk.Frame):
-    """Reusable vertically scrollable frame for V2 panels."""
+    """Reusable vertically scrollable frame for V2 panels.
 
-    def __init__(self, master: tk.Misc, *, style: str | None = None, **kwargs) -> None:
+    ``fill_height`` is for content laid out with ``grid`` inside ``inner``: sections keep their natural height and
+    the page scrolls when the viewport is shorter, but when the viewport is taller the weighted rows stretch to use
+    it, as they would in a plain frame.  (A plain frame squeezes weighted rows to nothing instead of scrolling; a
+    plain ``ScrollableFrame`` never stretches.)  It works by giving ``inner`` a minimum height equal to the
+    viewport through a zero-width ruler spanning every row, so the canvas still sees a normal requested size.
+    """
+
+    def __init__(
+        self, master: tk.Misc, *, style: str | None = None, fill_height: bool = False, **kwargs
+    ) -> None:
         super().__init__(master, style=style, **kwargs)
 
         self._canvas = tk.Canvas(
@@ -168,6 +202,12 @@ class ScrollableFrame(ttk.Frame):
 
         self.inner = ttk.Frame(self._canvas, style="Panel.TFrame")
         self._inner_window = self._canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self._ruler: tk.Frame | None = None
+        if fill_height:
+            self._ruler = tk.Frame(
+                self.inner, width=0, height=1, borderwidth=0, highlightthickness=0
+            )
+            self._ruler.grid(row=0, column=_RULER_COLUMN, rowspan=_RULER_ROWSPAN, sticky="ns")
 
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
@@ -184,6 +224,8 @@ class ScrollableFrame(ttk.Frame):
     def _on_canvas_configure(self, event: tk.Event) -> None:
         canvas_width = event.width
         self._canvas.itemconfigure(self._inner_window, width=canvas_width)
+        if self._ruler is not None:
+            self._ruler.configure(height=max(1, int(event.height)))
 
     def _on_destroy(self, event: tk.Event) -> None:
         if event.widget is self:

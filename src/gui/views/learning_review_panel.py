@@ -49,17 +49,27 @@ class LearningReviewPanel(ttk.Frame):
         self.rowconfigure(0, weight=1)
 
         # Left: image-first review workspace
+        #
+        # Both columns scroll as one body (PR-GUI-RELIABILITY-831, findings F1 and F7).  A fixed grid squeezed the
+        # weighted row to nothing whenever the pane was shorter than its neighbours, so the Images list and the 1-5
+        # rating could not be reached at ordinary window sizes.  Each section keeps its natural height and the body
+        # scrolls; a taller pane still stretches the weighted row (``fill_height``).
         self.preview_column = ttk.Frame(self)
         self.preview_column.grid(row=0, column=0, sticky="nsew", padx=(5, 3), pady=5)
         self.preview_column.columnconfigure(0, weight=1)
-        self.preview_column.rowconfigure(0, weight=0)
-        self.preview_column.rowconfigure(1, weight=1)
+        self.preview_column.rowconfigure(0, weight=1)
+        self.preview_scroll = ScrollableFrame(self.preview_column, fill_height=True)
+        self.preview_scroll.grid(row=0, column=0, sticky="nsew")
+        self.preview_body = self.preview_scroll.inner
+        self.preview_body.columnconfigure(0, weight=1)
+        self.preview_body.rowconfigure(0, weight=0)
+        self.preview_body.rowconfigure(1, weight=1)
 
         # Experiment-wide review workspace.  The existing per-variant viewer
         # remains the detail surface; this layer makes the durable experiment
         # the navigation/comparison unit.
         self.experiment_workspace = ttk.LabelFrame(
-            self.preview_column, text="Experiment Review", padding=5
+            self.preview_body, text="Experiment Review", padding=5
         )
         self.experiment_workspace.grid(row=0, column=0, sticky="ew", pady=(0, 5))
         self.experiment_workspace.columnconfigure(0, weight=1)
@@ -94,17 +104,24 @@ class LearningReviewPanel(ttk.Frame):
         self.qualification_button.pack(fill="x", pady=(4, 0))
 
         # Right: rating first. Status and metadata describe the variant while comparing; the recommendations
-        # are the outcome of the ratings and sit below them.
+        # are the outcome of the ratings and sit below them.  The sections scroll as one body above a fixed
+        # action strip, so Save & Next stays visible whatever the size.
         self.side_column = ttk.Frame(self)
         self.side_column.grid(row=0, column=1, sticky="nsew", padx=(3, 5), pady=5)
         self.side_column.columnconfigure(0, weight=1)
-        self.side_column.rowconfigure(0, weight=0)
+        self.side_column.rowconfigure(0, weight=1)
         self.side_column.rowconfigure(1, weight=0)
-        self.side_column.rowconfigure(3, weight=1)
+        self.side_scroll = ScrollableFrame(self.side_column, fill_height=True)
+        self.side_scroll.grid(row=0, column=0, sticky="nsew")
+        self.side_body = self.side_scroll.inner
+        self.side_body.columnconfigure(0, weight=1)
+        self.side_body.rowconfigure(0, weight=0)
+        self.side_body.rowconfigure(1, weight=0)
+        self.side_body.rowconfigure(3, weight=1)
         self._mode = "rate"
 
         # Status section
-        self.status_frame = ttk.LabelFrame(self.side_column, text="Variant Status", padding=5)
+        self.status_frame = ttk.LabelFrame(self.side_body, text="Variant Status", padding=5)
         self.status_frame.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
         self.status_label = ttk.Label(self.status_frame, text="No variant selected")
@@ -114,7 +131,7 @@ class LearningReviewPanel(ttk.Frame):
         self.progress_label.pack(anchor="w")
 
         # Metadata section
-        self.metadata_frame = ttk.LabelFrame(self.side_column, text="Metadata", padding=5)
+        self.metadata_frame = ttk.LabelFrame(self.side_body, text="Metadata", padding=5)
         self.metadata_frame.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 
         self.metadata_text = ScrolledText(
@@ -129,7 +146,7 @@ class LearningReviewPanel(ttk.Frame):
         self.metadata_text.pack(fill="x")
 
         # Recommendations section: a plain-language summary first, the evidence one disclosure away.
-        self.recommendations_frame = ttk.LabelFrame(self.side_column, text="Recommendations", padding=5)
+        self.recommendations_frame = ttk.LabelFrame(self.side_body, text="Recommendations", padding=5)
         self.recommendations_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
         self.recommendations_frame.columnconfigure(0, weight=1)
         self.recommendation_summary_var = tk.StringVar(
@@ -208,7 +225,7 @@ class LearningReviewPanel(ttk.Frame):
         self.profile_publication.grid(row=6, column=0, sticky="ew", pady=(6, 0))
 
         # Image display section
-        self.image_frame = ttk.LabelFrame(self.preview_column, text="Images", padding=5)
+        self.image_frame = ttk.LabelFrame(self.preview_body, text="Images", padding=5)
         self.image_frame.grid(row=1, column=0, sticky="nsew")
         self.image_frame.columnconfigure(0, weight=1)
         self.image_frame.rowconfigure(1, weight=1)  # Thumbnail row gets weight
@@ -246,7 +263,7 @@ class LearningReviewPanel(ttk.Frame):
 
         # Rating section: the image, the 1-5 choice and Save & Next come first; the detailed evidence fields
         # (context, sub-scores, notes) stay available under "Rating details".
-        self.rating_frame = ttk.LabelFrame(self.side_column, text="Rating", padding=5)
+        self.rating_frame = ttk.LabelFrame(self.side_body, text="Rating", padding=5)
         self.rating_frame.grid(row=3, column=0, sticky="nsew")
         self.rating_details_scroll = ScrollableFrame(self.rating_frame)
         self.rating_details_scroll.pack(fill="both", expand=True)
@@ -319,7 +336,7 @@ class LearningReviewPanel(ttk.Frame):
         # This strip stays outside the scrollable/detail stack so persistence
         # is reachable at constrained review-pane heights.
         self.rating_action_strip = ttk.Frame(self.side_column, padding=(0, 5))
-        self.rating_action_strip.grid(row=4, column=0, sticky="ew")
+        self.rating_action_strip.grid(row=1, column=0, sticky="ew")
         self.save_next_button = ttk.Button(
             self.rating_action_strip,
             text="Save & Next",
