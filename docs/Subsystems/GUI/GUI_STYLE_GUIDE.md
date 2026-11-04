@@ -70,6 +70,14 @@ Every interactive style defines the same states, and tests assert them:
 - **Focus is scrolled into view**: `ScrollableFrame` reveals a control that takes focus, in every containing frame, through the
   router's single `<FocusIn>` binding. Do not build a second scrolling container that lacks this (`scrolling.make_scrollable`
   does not have it yet).
+- **A page scrolls; it never squeezes** (PR-GUI-RELIABILITY-831). A fixed `grid` with a weighted row squeezes that row to
+  nothing when the pane is shorter than its neighbours (the Learning Rating box and Images list did). Put sections that must stay
+  reachable in a `ScrollableFrame(fill_height=True)` and lay them out with `grid` in `inner`: each section keeps its natural height,
+  the page scrolls when short, and a weighted row still stretches when the pane is tall. Keep actions that must always be visible
+  (Save & Next) in a fixed strip outside the scroll body. The shared router also guarantees: a wheel notch moves at least 40 px; a
+  scroll box at its limit hands the wheel to the page around it; focus gained under the pointer (a mouse press) does not scroll
+  the page between press and release, only Tab and programmatic focus reveal. Tk unmaps a canvas-embedded window that is scrolled
+  out of view, so `winfo_viewable()` is false below the fold: ask whether a step is shown, not whether a control is on screen.
 - **Selected** (`selected` state flag): expanded `DisclosureSection` and `TabOverviewPanel` headers and the selected
   notebook tab. Set it with `widget.state(["selected"])`; it is also the signal tests read.
 
