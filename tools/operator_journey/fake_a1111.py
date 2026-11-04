@@ -21,13 +21,15 @@ DEFAULT_MODEL = "operator-journey-model"
 DEFAULT_LORAS = ("add-detail-xl",)
 
 
-def _png_bytes(seed: int, prompt: str) -> bytes:
+def _png_bytes(seed: int, prompt: str, width: int = 64, height: int = 64) -> bytes:
     from PIL import Image
 
     digest = hashlib.sha256(f"{seed}|{prompt}".encode()).digest()
     color = (digest[0], digest[1], digest[2])
     buffer = io.BytesIO()
-    Image.new("RGB", (64, 64), color).save(buffer, format="PNG")
+    Image.new("RGB", (max(8, min(int(width), 2048)), max(8, min(int(height), 2048))), color).save(
+        buffer, format="PNG"
+    )
     return buffer.getvalue()
 
 
@@ -233,7 +235,14 @@ class FakeA1111:
             for key in ("seed", "all_seeds", "all_subseeds"):
                 info.pop(key, None)
         return {
-            "images": [base64.b64encode(_png_bytes(seed, prompt)).decode() for seed in seeds],
+            "images": [
+                base64.b64encode(
+                    _png_bytes(
+                        seed, prompt, payload.get("width") or 64, payload.get("height") or 64
+                    )
+                ).decode()
+                for seed in seeds
+            ],
             "parameters": {},
             "info": json.dumps(info),
         }

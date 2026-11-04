@@ -471,7 +471,8 @@ class _Journey:
         repository = Path(self.controller._job_repository_path)
         self.repository_path = repository
         self._await_backend_idle()
-        d.invoke(panel.run_button, label="Run Experiment")
+        # Run belongs to the guide bar's primary action; the design panel's own run_button is never shown.
+        d.invoke(self.window.learning_tab.workflow_bar.primary_button, label="Run Experiment")
         self.require(
             ph, "run_accepted", "Error" not in panel.feedback_var.get(), panel.feedback_var.get()
         )
@@ -692,20 +693,6 @@ class _Journey:
                 not self.fake.unhandled,
                 str(self.fake.unhandled),
             )
-        # Learning Review projects every completed variant (workspace list).
-        review = self.window.learning_tab.review_panel
-        tree = self.window.learning_tab.plan_table.tree
-        kids = tree.get_children()
-        if kids:
-            tree.selection_set(kids[0])
-            tree.event_generate("<<TreeviewSelect>>")
-            self.driver.pump(0.5)
-        self.check(
-            ph,
-            "review_projects_all_variants",
-            review.variant_summary_list.size() == 3,
-            f"review workspace lists {review.variant_summary_list.size()} variants",
-        )
         self.ev.summary["artifact_group"] = str(next(iter(parents))) if parents else ""
         self.checkpoint("verified")
 
@@ -715,12 +702,44 @@ class _Journey:
         d = self.driver
         learning = self.window.learning_tab
         review = learning.review_panel
-        tree = learning.plan_table.tree
         feedback: list[str] = []
+        # Review is its own step: open it from the guide bar, then pick each variant in the Experiment Review list.
+        d.invoke(learning.workflow_bar.step_buttons["compare"], label="step 4 Compare")
+        d.wait_until(
+            lambda: review.variant_summary_list.winfo_viewable(),
+            timeout=20,
+            description="the Experiment Review variant list is shown",
+        )
+        # Learning Review projects every completed variant (workspace list) once the Compare step is open.
+        d.wait_until(
+            lambda: review.variant_summary_list.size() == 3,
+            timeout=15,
+            description="the review workspace lists every variant",
+            evidence=lambda: f"{review.variant_summary_list.size()} variants listed",
+        )
+        self.check(
+            ph,
+            "review_projects_all_variants",
+            review.variant_summary_list.size() == 3,
+            f"review workspace lists {review.variant_summary_list.size()} variants",
+        )
+        # Rating is the next step: the guide bar's primary action ("Rate Results") opens it.
+        d.invoke(learning.workflow_bar.primary_button, label="Rate Results")
+        d.wait_until(
+            lambda: review.rate_button.winfo_viewable(),
+            timeout=20,
+            description="the rating controls are shown",
+        )
+        # At this window size the Recommendations box grows after the first rating and squeezes the 1-5 choices out of
+        # view (product finding); a person drags the divider above the review panel up to make room.
+        d.drag_sash(
+            learning.workspace_panes, 0, delta=-260, label="divider above Experiment Review"
+        )
         for index, rating in enumerate(_RATINGS):
-            kids = tree.get_children()
-            tree.selection_set(kids[index])
-            tree.event_generate("<<TreeviewSelect>>")
+            if (
+                index
+            ):  # the Rate step has no variant list: "Next Unrated" moves to the next result to rate
+                d.invoke(review.next_unrated_button, label="Next Unrated")
             d.pump(0.4)
             d.wait_until(
                 lambda: review.image_listbox.size() >= 1,
@@ -874,6 +893,11 @@ class _Journey:
             pass
         try:
             self.checkpoint("before_shutdown")
+            # A person does not close the window while a background scan is still running: let started work finish
+            # (pumping Tk, because those workers hand results back to the GUI thread) before using the exit path.
+            settle_until = time.monotonic() + 20
+            while leaked_non_daemon_threads(baseline_threads) and time.monotonic() < settle_until:
+                d.pump(0.1)
             faults.begin_shutdown()
             d.close_via_window_manager()
             deadline = time.monotonic() + 15

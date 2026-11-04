@@ -130,6 +130,9 @@ class OperatorWorkspace:
     # None keeps StableNew's production startup probe grace (the ~15-30 s it takes
     # to connect to WebUI); a number overrides it through the existing env seam.
     startup_grace_sec: float | None = None
+    # Extra engine settings for this disposable workspace only (golden-path physical runs copy the operator's engine
+    # settings here read-only; they never flow back to the operator's real presets).
+    settings_extra: dict[str, Any] = field(default_factory=dict)
 
     @property
     def presets_dir(self) -> Path:
@@ -181,6 +184,7 @@ class OperatorWorkspace:
             "comfy_autostart_enabled": False,
             "output_dir": str(self.output_dir),
         }
+        settings.update(self.settings_extra)
         (self.presets_dir / "settings.json").write_text(json.dumps(settings, indent=2), "utf-8")
 
     def config_manager(self) -> Any:
