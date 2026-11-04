@@ -82,14 +82,20 @@ class EmbeddingExperimentDesignFrame(ttk.LabelFrame):
         )
         self.channel_box.grid(row=2, column=0, sticky="ew")
         self.channel_box.bind("<<ComboboxSelected>>", lambda _e: self._on_channel_changed())
-        ttk.Label(self, text="Fixed embeddings (unchanged in every variant)").grid(
-            row=3, column=0, sticky="w", pady=(4, 0)
-        )
+        ttk.Label(
+            self,
+            text="Fixed embeddings (unchanged in every variant)",
+            wraplength=340,
+            justify="left",
+        ).grid(row=3, column=0, sticky="w", pady=(4, 0))
         self.fixed_list = tk.Listbox(self, height=3, exportselection=False)
         self.fixed_list.grid(row=4, column=0, sticky="ew")
-        ttk.Label(self, text="Tested embedding position: original from the PromptPack row").grid(
-            row=5, column=0, sticky="w", pady=(4, 0)
-        )
+        ttk.Label(
+            self,
+            text="Tested embedding position: original from the PromptPack row",
+            wraplength=340,
+            justify="left",
+        ).grid(row=5, column=0, sticky="w", pady=(4, 0))
         self.original_var = tk.StringVar(value=NONE_CHOICE)
         self.original_box = ttk.Combobox(
             self, textvariable=self.original_var, values=(NONE_CHOICE,), state="readonly"
@@ -100,7 +106,7 @@ class EmbeddingExperimentDesignFrame(ttk.LabelFrame):
         search.grid(row=7, column=0, sticky="ew", pady=(6, 0))
         search.columnconfigure(0, weight=1)
         self.query_var = tk.StringVar()
-        ttk.Entry(search, textvariable=self.query_var).grid(row=0, column=0, sticky="ew")
+        ttk.Entry(search, textvariable=self.query_var, width=8).grid(row=0, column=0, sticky="ew")
         ttk.Button(
             search, text="Refresh Installed Embeddings", command=self.refresh_inventory
         ).grid(row=0, column=1, padx=(4, 0))
@@ -121,11 +127,11 @@ class EmbeddingExperimentDesignFrame(ttk.LabelFrame):
         ttk.Label(add, text="Weight").grid(row=0, column=0)
         self.weight_var = tk.StringVar(value="1.0")
         ttk.Entry(add, textvariable=self.weight_var, width=6).grid(row=0, column=1, padx=3)
-        ttk.Button(add, text="Add Embedding Candidate", command=self.add_selected).grid(
-            row=0, column=2
-        )
         ttk.Button(add, text="Add No Embedding", command=self.add_empty).grid(
-            row=0, column=3, padx=3
+            row=0, column=2, padx=3
+        )
+        ttk.Button(add, text="Add Embedding Candidate", command=self.add_selected).grid(
+            row=1, column=0, columnspan=3, sticky="w", pady=(3, 0)
         )
         self.candidate_list = tk.Listbox(self, height=4, exportselection=False)
         self.candidate_list.grid(row=12, column=0, sticky="ew")
