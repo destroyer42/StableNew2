@@ -355,3 +355,30 @@ def test_select_tree_row_scrolls_the_page_to_a_tree_below_the_fold(desktop) -> N
 
     assert fake.clicks and fake.clicks[-1][1] < cover.winfo_rooty()
     assert any(e["action"] == "scrolled_into_view" for e in driver.trace.entries)
+
+
+def test_the_page_hiding_a_control_is_scrolled_not_the_box_that_already_shows_it(desktop) -> None:
+    """PR-GUI-RELIABILITY-831: with nested scroll boxes, the one whose viewport lacks the control is the one to wheel."""
+
+    root, driver = desktop.root, desktop.driver
+    page = tk.Canvas(root, yscrollcommand=lambda *_a: None, highlightthickness=0)
+    page.place(x=0, y=0, width=300, height=200)
+    body = tk.Frame(page)
+    page.create_window((0, 0), window=body, anchor="nw", width=300)
+    tk.Frame(body, height=300).pack()  # content above the nested box
+    box = tk.Canvas(body, yscrollcommand=lambda *_a: None, height=120, highlightthickness=0)
+    box.pack(fill="x")
+    box_body = tk.Frame(box)
+    box.create_window((0, 0), window=box_body, anchor="nw", width=300)
+    button = ttk.Button(box_body, text="rating 3")
+    button.pack()
+    tk.Frame(box_body, height=400).pack()  # the box has its own overflow, below the button
+    root.update()
+    page.configure(scrollregion=page.bbox("all"))
+    box.configure(scrollregion=box.bbox("all"))
+    root.update()
+    assert button.winfo_rooty() >= page.winfo_rooty() + page.winfo_height(), (
+        "precondition: below the page's fold"
+    )
+
+    assert driver._scroll_container(button) is page  # noqa: SLF001

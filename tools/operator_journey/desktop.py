@@ -455,17 +455,29 @@ class WindowsDesktopDriver(TkDriver):
         )
 
     def _scroll_container(self, widget: tk.Misc) -> tk.Canvas | None:
+        """The scrollable page that is hiding ``widget``: the innermost one that can still move it into view.
+
+        Scroll boxes nest (a rating box inside the review page).  A box whose viewport already shows the control is
+        not the one to scroll; the page around it is.
+        """
+        y = widget.winfo_rooty() + widget.winfo_height() // 2
+        fallback: tk.Canvas | None = None
         node = getattr(widget, "master", None)
         while node is not None:
             if isinstance(node, tk.Canvas) and node.cget("yscrollcommand"):
                 try:
                     first, last = node.yview()
                     if first > 0.0 or last < 1.0:
-                        return node
+                        fallback = fallback or node
+                        top = node.winfo_rooty()
+                        if y < top and first > 0.0:
+                            return node  # the control is above this viewport and it can scroll up
+                        if y >= top + node.winfo_height() and last < 1.0:
+                            return node  # the control is below this viewport and it can scroll down
                 except tk.TclError:
                     pass
             node = getattr(node, "master", None)
-        return None
+        return fallback
 
     _SELF_SCROLLING = ("combobox", "listbox", "spinbox", "text", "treeview")
 
