@@ -16,7 +16,7 @@ from typing import Any
 
 from tools.operator_journey.evidence import FAIL, HOLD, NO_GO, PASS, JourneyEvidence
 from tools.operator_journey.golden import SUITE_ID, SUITE_VERSION
-from tools.operator_journey.golden.definitions import JourneyDef, select
+from tools.operator_journey.golden.definitions import ADVANCED_ORDER, JourneyDef, select
 from tools.operator_journey.golden.friction import friction_report, outcomes
 from tools.operator_journey.golden.modes import (
     PHYSICAL,
@@ -100,6 +100,10 @@ def _runner(journey: JourneyDef, config: RunConfig) -> JourneyEvidence:
     from tools.operator_journey.golden.fixtures import make_fake_a1111, seed_declared_sdxl
     from tools.operator_journey.golden.session import run_journey_body
 
+    if journey.key in ADVANCED_ORDER:
+        from tools.operator_journey.golden.advanced import run_advanced
+
+        return run_advanced(journey, config)
     if journey.key == "image":
         from tools.operator_journey.golden.img01 import run_img01
 
