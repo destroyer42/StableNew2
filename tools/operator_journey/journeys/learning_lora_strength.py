@@ -730,11 +730,6 @@ class _Journey:
             timeout=20,
             description="the rating controls are shown",
         )
-        # At this window size the Recommendations box grows after the first rating and squeezes the 1-5 choices out of
-        # view (product finding); a person drags the divider above the review panel up to make room.
-        d.drag_sash(
-            learning.workspace_panes, 0, delta=-260, label="divider above Experiment Review"
-        )
         for index, rating in enumerate(_RATINGS):
             if (
                 index
