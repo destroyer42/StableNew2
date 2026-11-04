@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import queue
 import tkinter as tk
 from collections import OrderedDict
@@ -30,6 +31,30 @@ class _Tile:
     def __init__(self, frame: tk.Frame, images: list[tk.Label]) -> None:
         self.frame = frame
         self.images = images
+
+
+_GRID_STUDY_TYPES = ("two_axis_grid", "prompt_model_matrix")
+
+
+def _is_saved_grid_study(saved: str) -> bool:
+    """Whether a saved execution snapshot is a grid study.
+
+    Every snapshot carries ``"prompt_model_matrix": null`` for the studies that are not one, so the key's presence
+    says nothing: a snapshot is a grid study by its ``study_type`` or by a grid key that holds a value.  (Treating
+    the bare key as a grid gave every rated experiment an empty "saved grid cannot be shown" pane that took half of
+    the review workspace.)
+    """
+
+    try:
+        snapshot = json.loads(saved)
+    except ValueError:
+        # unparseable: keep the cautious reading
+        return any(name in saved for name in _GRID_STUDY_TYPES)
+    if not isinstance(snapshot, dict):
+        return False
+    return snapshot.get("study_type") in _GRID_STUDY_TYPES or any(
+        snapshot.get(name) for name in _GRID_STUDY_TYPES
+    )
 
 
 class LearningGridView(ttk.Frame):
@@ -135,7 +160,7 @@ class LearningGridView(ttk.Frame):
                 self.learning_controller.learning_state, "current_experiment", None
             )
             saved = str(getattr(experiment, "execution_snapshot_json", "") or "")
-            if "two_axis_grid" in saved or "prompt_model_matrix" in saved:
+            if _is_saved_grid_study(saved):
                 self._model_error = f"The saved grid cannot be shown: {exc}"
             return None
 
