@@ -23,10 +23,17 @@ from src.gui.ui_dispatcher import TkUiDispatcher, release_tk_dispatcher, tk_disp
 class _FakeRoot:
     def __init__(self) -> None:
         self.pending: list[tuple[int, object]] = []
+        self._ids: dict[str, object] = {}
 
     def after(self, delay_ms: int, callback: object) -> str:
         self.pending.append((delay_ms, callback))
-        return str(len(self.pending))
+        after_id = f"after#{len(self._ids)}"
+        self._ids[after_id] = callback
+        return after_id
+
+    def after_cancel(self, after_id: str) -> None:
+        callback = self._ids.pop(after_id, None)
+        self.pending = [entry for entry in self.pending if entry[1] is not callback]
 
     def pump(self) -> None:
         """Run what is scheduled now once; a live pump reschedules itself for the next pass."""

@@ -337,3 +337,40 @@ def test_export_worker_failure_always_reports_and_corrupt_grid_is_explained(
     view._render()
     assert "cannot be shown" in view.summary_var.get()
     shell.destroy()
+
+
+class _NonGridController:
+    """A controller whose experiment is not a grid: the snapshot names the grid keys with null values."""
+
+    def __init__(self, snapshot: str) -> None:
+        self.learning_state = SimpleNamespace(
+            current_experiment=SimpleNamespace(execution_snapshot_json=snapshot)
+        )
+
+    def get_grid_results_model(self, _mode):
+        raise ValueError("The current experiment is not a Two-Axis Grid")
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "shown"),
+    [
+        ('{"study_type":"lora_strength","two_axis_grid":null,"prompt_model_matrix":null}', False),
+        ('{"study_type":"variable","prompt_model_matrix":null}', False),
+        ('{"study_type":"two_axis_grid"}', True),
+        ('{"study_type":"prompt_model_matrix"}', True),
+        ('{"study_type":"other","prompt_model_matrix":{"rows":1}}', True),
+        ("not json but names two_axis_grid", True),
+        ("", False),
+    ],
+)
+def test_the_grid_pane_is_present_only_for_a_saved_grid_study(tk_root, snapshot, shown):
+    """PR-GUI-RELIABILITY-831: a null grid key is not a grid, so no empty grid pane takes review space."""
+
+    shell = tk.Toplevel(tk_root)
+    view = LearningGridView(shell, learning_controller=_NonGridController(snapshot))
+    try:
+        view._render()
+        assert view._present is shown
+        assert bool(view._model_error) is shown
+    finally:
+        shell.destroy()

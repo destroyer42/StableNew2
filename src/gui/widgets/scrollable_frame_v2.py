@@ -11,6 +11,10 @@ _SELF_SCROLLING_CLASSES = ("combobox", "listbox", "spinbox", "text", "treeview")
 _WHEEL_SEQUENCES = ("<MouseWheel>", "<Button-4>", "<Button-5>")
 _FOCUS_SEQUENCE = "<FocusIn>"
 _REVEAL_MARGIN = 8  # px of context kept around a control scrolled into view
+_WHEEL_STEP_MIN_PX = 40  # one wheel notch never moves less than this, however short the viewport
+# An unused grid column and a row span covering every row carry the stretch-to-viewport ruler (``fill_height``).
+_RULER_COLUMN = 999
+_RULER_ROWSPAN = 999
 
 
 class _WheelRouter:
@@ -121,8 +125,10 @@ class _WheelRouter:
     def _dispatch(self, event: tk.Event, units: int) -> str | None:
         if not units:
             return None
+        # Innermost first; a frame already at its limit in this direction hands the wheel to the page around it
+        # instead of trapping it (a nested scroll box at its end must not freeze the page behind it).
         for frame in self._frames_under_pointer(event.x_root, event.y_root):
-            if frame.has_scroll_overflow():
+            if frame.can_scroll(units):
                 frame.scroll_units(units)
                 return "break"
         return None
@@ -136,10 +142,32 @@ class _WheelRouter:
         """Linux X11 wheel buttons."""
         return self._dispatch(event, -1 if getattr(event, "num", 0) == 4 else 1)
 
+    @staticmethod
+    def _pointer_over(widget: tk.Misc) -> bool:
+        """Whether the pointer is on ``widget`` or one of its descendants (so the person can already see it)."""
+        try:
+            x, y = widget.winfo_pointerxy()
+            target = widget.winfo_containing(x, y)
+        except (tk.TclError, KeyError):
+            return False
+        while target is not None:
+            if target is widget:
+                return True
+            target = getattr(target, "master", None)
+        return False
+
     def _on_focus_in(self, event: tk.Event) -> None:
-        """Scroll every ``ScrollableFrame`` around the focused widget so the widget is visible (never consumes)."""
+        """Scroll every ``ScrollableFrame`` around the focused widget so the widget is visible (never consumes).
+
+        A control the pointer is already on is visible by definition, and focus gained from a mouse press must not
+        scroll the page: the control would move between button press and release and the click would land on
+        whatever scrolled under the pointer (PR-GUI-RELIABILITY-831).  Only focus that arrives elsewhere (Tab,
+        programmatic focus) reveals the control.
+        """
         widget = getattr(event, "widget", None)
         if not isinstance(widget, tk.Misc):
+            return
+        if self._pointer_over(widget):
             return
         node: tk.Misc | None = widget
         while node is not None:
@@ -149,9 +177,18 @@ class _WheelRouter:
 
 
 class ScrollableFrame(ttk.Frame):
-    """Reusable vertically scrollable frame for V2 panels."""
+    """Reusable vertically scrollable frame for V2 panels.
 
-    def __init__(self, master: tk.Misc, *, style: str | None = None, **kwargs) -> None:
+    ``fill_height`` is for content laid out with ``grid`` inside ``inner``: sections keep their natural height and
+    the page scrolls when the viewport is shorter, but when the viewport is taller the weighted rows stretch to use
+    it, as they would in a plain frame.  (A plain frame squeezes weighted rows to nothing instead of scrolling; a
+    plain ``ScrollableFrame`` never stretches.)  It works by giving ``inner`` a minimum height equal to the
+    viewport through a zero-width ruler spanning every row, so the canvas still sees a normal requested size.
+    """
+
+    def __init__(
+        self, master: tk.Misc, *, style: str | None = None, fill_height: bool = False, **kwargs
+    ) -> None:
         super().__init__(master, style=style, **kwargs)
 
         self._canvas = tk.Canvas(
@@ -168,6 +205,12 @@ class ScrollableFrame(ttk.Frame):
 
         self.inner = ttk.Frame(self._canvas, style="Panel.TFrame")
         self._inner_window = self._canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self._ruler: tk.Frame | None = None
+        if fill_height:
+            self._ruler = tk.Frame(
+                self.inner, width=0, height=1, borderwidth=0, highlightthickness=0
+            )
+            self._ruler.grid(row=0, column=_RULER_COLUMN, rowspan=_RULER_ROWSPAN, sticky="ns")
 
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
@@ -184,6 +227,8 @@ class ScrollableFrame(ttk.Frame):
     def _on_canvas_configure(self, event: tk.Event) -> None:
         canvas_width = event.width
         self._canvas.itemconfigure(self._inner_window, width=canvas_width)
+        if self._ruler is not None:
+            self._ruler.configure(height=max(1, int(event.height)))
 
     def _on_destroy(self, event: tk.Event) -> None:
         if event.widget is self:
@@ -197,12 +242,36 @@ class ScrollableFrame(ttk.Frame):
             return False
         return first > 0.0 or last < 1.0
 
+    def can_scroll(self, units: int) -> bool:
+        """True when scrolling ``units`` (negative is up) would move the content."""
+        try:
+            first, last = self._canvas.yview()
+        except tk.TclError:
+            return False
+        return first > 0.0 if units < 0 else last < 1.0
+
     def viewport_width(self) -> int:
         """Width of the visible region (the content never scrolls horizontally)."""
         return int(self._canvas.winfo_width())
 
     def scroll_units(self, units: int) -> None:
-        self._canvas.yview_scroll(int(units), "units")
+        """Scroll ``units`` wheel notches (negative is up).
+
+        A notch moves a tenth of the viewport but at least ``_WHEEL_STEP_MIN_PX``: Tk's own unit is a tenth of the
+        window, which in a short pane is a few pixels and takes dozens of notches to cross the page.
+        """
+        try:
+            total = self._canvas.bbox("all")
+            view = int(self._canvas.winfo_height())
+            if not total or int(total[3]) - int(total[1]) <= 0:
+                return
+            span = int(total[3]) - int(total[1])
+            step = max(_WHEEL_STEP_MIN_PX, view // 10)
+            first, _last = self._canvas.yview()
+            target = min(max(first + int(units) * step / span, 0.0), 1.0)
+            self._canvas.yview_moveto(target)
+        except tk.TclError:
+            return
 
     def reveal(self, widget: tk.Misc) -> None:
         """Scroll just enough that ``widget`` (a descendant of ``inner``) is inside the viewport.

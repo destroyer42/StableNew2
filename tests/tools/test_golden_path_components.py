@@ -315,3 +315,116 @@ def test_physical_driver_is_never_constructed_by_the_golden_modules_at_import() 
     assert (
         "tools.operator_journey.desktop" not in sys.modules
     )  # simulated/tk runs never load the input driver
+
+
+def test_select_tree_row_scrolls_the_page_to_a_tree_below_the_fold(desktop) -> None:
+    """PR-GUI-RELIABILITY-831: a list below the fold is reached by wheel-scrolling its page, as a person would."""
+
+    root, driver, fake = desktop.root, desktop.driver, desktop.fake
+    canvas = tk.Canvas(
+        root, yscrollcommand=lambda *_a: None, yscrollincrement=20, highlightthickness=0
+    )
+    canvas.place(x=0, y=0, width=300, height=200)
+    inner = tk.Frame(canvas)
+    canvas.create_window((0, 0), window=inner, anchor="nw", width=300)
+    tk.Frame(inner, height=320).pack()  # the content above the tree
+    tree = ttk.Treeview(inner, height=3, show="tree")
+    tree.pack()
+    tree.insert("", "end", iid="row1", text="row one")
+    cover = tk.Frame(root)  # the bottom zone: covers everything below the page's visible area
+    cover.place(x=0, y=200, width=600, height=200)
+    cover.lift()
+    root.update()
+    canvas.configure(scrollregion=canvas.bbox("all"))
+    root.update()
+
+    def containing(x: int, y: int) -> tk.Misc:
+        if y >= cover.winfo_rooty():
+            return cover
+        inside = (
+            tree.winfo_rootx() <= x < tree.winfo_rootx() + tree.winfo_width()
+            and tree.winfo_rooty() <= y < tree.winfo_rooty() + tree.winfo_height()
+        )
+        return tree if inside else canvas
+
+    root.winfo_containing = containing  # type: ignore[method-assign]
+    fake.wheel = lambda _x, _y, notches: canvas.yview_scroll(-notches, "units")  # type: ignore[attr-defined]
+    assert tree.winfo_rooty() >= cover.winfo_rooty(), "precondition: the tree starts below the fold"
+
+    driver.select_tree_row(tree, "row1", label="History row")
+
+    assert fake.clicks and fake.clicks[-1][1] < cover.winfo_rooty()
+    assert any(e["action"] == "scrolled_into_view" for e in driver.trace.entries)
+
+
+def test_the_page_hiding_a_control_is_scrolled_not_the_box_that_already_shows_it(desktop) -> None:
+    """PR-GUI-RELIABILITY-831: with nested scroll boxes, the one whose viewport lacks the control is the one to wheel."""
+
+    root, driver = desktop.root, desktop.driver
+    page = tk.Canvas(root, yscrollcommand=lambda *_a: None, highlightthickness=0)
+    page.place(x=0, y=0, width=300, height=200)
+    body = tk.Frame(page)
+    page.create_window((0, 0), window=body, anchor="nw", width=300)
+    tk.Frame(body, height=300).pack()  # content above the nested box
+    box = tk.Canvas(body, yscrollcommand=lambda *_a: None, height=120, highlightthickness=0)
+    box.pack(fill="x")
+    box_body = tk.Frame(box)
+    box.create_window((0, 0), window=box_body, anchor="nw", width=300)
+    button = ttk.Button(box_body, text="rating 3")
+    button.pack()
+    tk.Frame(box_body, height=400).pack()  # the box has its own overflow, below the button
+    root.update()
+    page.configure(scrollregion=page.bbox("all"))
+    box.configure(scrollregion=box.bbox("all"))
+    root.update()
+    assert button.winfo_rooty() >= page.winfo_rooty() + page.winfo_height(), (
+        "precondition: below the page's fold"
+    )
+
+    assert driver._scroll_container(button) is page  # noqa: SLF001
+
+
+def test_a_short_viewport_is_scrolled_a_notch_at_a_time_so_the_page_does_not_oscillate(
+    desktop,
+) -> None:
+    """PR-GUI-RELIABILITY-831: three 40 px notches overshoot an 80 px viewport; the control is then above, then below, ..."""
+
+    root, driver, fake = desktop.root, desktop.driver, desktop.fake
+    page = tk.Canvas(root, yscrollcommand=lambda *_a: None, highlightthickness=0)
+    page.place(x=0, y=0, width=300, height=80)
+    body = tk.Frame(page)
+    page.create_window((0, 0), window=body, anchor="nw", width=300)
+    tk.Frame(
+        body, height=448
+    ).pack()  # the button's centre lands 100 px into a 120 px step: a 3-notch step skips it
+    button = ttk.Button(body, text="rating 3")
+    button.pack()
+    tk.Frame(body, height=300).pack()
+    root.update()
+    page.configure(scrollregion=page.bbox("all"))
+    root.update()
+
+    def containing(x: int, y: int) -> tk.Misc:
+        in_viewport = page.winfo_rooty() <= y < page.winfo_rooty() + page.winfo_height()
+        inside = (
+            button.winfo_rootx() <= x < button.winfo_rootx() + button.winfo_width()
+            and button.winfo_rooty() <= y < button.winfo_rooty() + button.winfo_height()
+        )
+        return (
+            button if inside and in_viewport else root
+        )  # outside the viewport nothing of the page is there
+
+    root.winfo_containing = containing  # type: ignore[method-assign]
+    span = page.bbox("all")[3]
+
+    def wheel(
+        _x: int, _y: int, notches: int
+    ) -> None:  # one notch is a fixed 40 px, as in ScrollableFrame
+        first = page.yview()[0]
+        page.yview_moveto(min(max(first - notches * 40 / span, 0.0), 1.0))
+
+    fake.wheel = wheel  # type: ignore[attr-defined]
+
+    _x, y = driver.reach(button, label="rating 3")
+
+    assert page.winfo_rooty() <= y < page.winfo_rooty() + page.winfo_height()

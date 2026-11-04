@@ -471,6 +471,10 @@ class LoRAPickerPanel(ttk.Frame):
         request = self._request_id
         cancel = self._cancel_scan = threading.Event()
         root, scanner, invoker = self.webui_root, self.scanner, self._invoker
+        registry = get_thread_registry()
+        # Application shutdown joins this thread before any widget is destroyed, so the scan must hear the exit
+        # request itself or the join waits out the whole scan.
+        stop_listening = registry.add_shutdown_listener(cancel.set)
 
         def work() -> None:
             resources, failed = {}, False
@@ -481,13 +485,16 @@ class LoRAPickerPanel(ttk.Frame):
                 snapshot = worker_scanner.registry.snapshot
             except Exception:  # path/content-bearing exception text must never reach the GUI
                 failed = True
+            finally:
+                stop_listening()
             invoker.invoke(lambda: self._finish_refresh(request, resources, failed, snapshot))
 
         try:
-            get_thread_registry().spawn(
+            registry.spawn(
                 target=work, name="LoRA-Discovery", daemon=False, purpose="Read local LoRA evidence"
             )
         except Exception:
+            stop_listening()
             self._finish_refresh(request, {}, True)
 
     def _finish_refresh(

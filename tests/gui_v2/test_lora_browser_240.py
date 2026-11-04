@@ -59,6 +59,9 @@ class Workers:
         assert kwargs["daemon"] is False
         self.targets.append(kwargs["target"])
 
+    def add_shutdown_listener(self, listener):
+        return lambda: None
+
     def run(self):
         thread = threading.Thread(target=self.targets.pop(0))
         thread.start()

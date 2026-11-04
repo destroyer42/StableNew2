@@ -37,3 +37,41 @@ def test_lora_picker_exact_entry_updates_weight(tk_root) -> None:
         assert panel.get_loras() == [("LoRA-Alpha", pytest.approx(1.23, rel=1e-3))]
     finally:
         panel.destroy()
+
+
+@pytest.mark.gui
+def test_application_shutdown_cancels_an_in_flight_discovery_scan(tk_root) -> None:
+    """Shutdown joins the scan before any widget is destroyed, so the scan must hear the exit request itself."""
+
+    import threading
+    import time
+
+    from src.utils.thread_registry import get_thread_registry
+
+    started = threading.Event()
+
+    class SlowScanner:
+        registry = None
+
+        def scan_loras(self, read_only=True, cancelled=None):
+            started.set()
+            deadline = time.monotonic() + 20.0
+            while time.monotonic() < deadline:
+                if cancelled is not None and cancelled():
+                    raise InterruptedError("cancelled")
+                time.sleep(0.01)
+            return {}
+
+    panel = LoRAPickerPanel(tk_root)
+    try:
+        panel.scanner = SlowScanner()
+        panel.refresh_loras()
+        assert started.wait(5.0)
+        began = time.monotonic()
+
+        stats = get_thread_registry().shutdown_all(timeout=10.0)
+
+        assert stats["timeout"] == 0
+        assert time.monotonic() - began < 3.0
+    finally:
+        panel.destroy()

@@ -73,8 +73,29 @@ class ThreadRegistry:
         self._threads: dict[int, TrackedThread] = {}
         self._registry_lock = threading.Lock()
         self._shutdown_requested = False
+        self._shutdown_listeners: list[Callable[[], None]] = []
         self._initialized = True
         logger.info("[thread_registry] Thread registry initialized")
+
+    def add_shutdown_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Run ``listener`` when ``shutdown_all`` starts, before any thread is joined.
+
+        A long-running worker registers its own cancel here so the join does not wait out work nobody asked
+        for.  The listener runs on the shutting-down thread and must only signal (set an event); it must
+        not wait for the GUI.  Returns a callable that removes the listener (safe to call more than once).
+        """
+
+        with self._registry_lock:
+            self._shutdown_listeners.append(listener)
+
+        def remove() -> None:
+            with self._registry_lock:
+                try:
+                    self._shutdown_listeners.remove(listener)
+                except ValueError:
+                    pass
+
+        return remove
 
     def spawn(
         self,
@@ -210,7 +231,13 @@ class ThreadRegistry:
         self._shutdown_requested = True
 
         with self._registry_lock:
+            listeners = list(self._shutdown_listeners)
             threads_to_join = list(self._threads.values())
+        for listener in listeners:
+            try:
+                listener()
+            except Exception:
+                logger.exception("[thread_registry] shutdown listener failed")
 
         stats = {
             "total": len(threads_to_join),

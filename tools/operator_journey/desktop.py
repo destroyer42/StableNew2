@@ -455,17 +455,29 @@ class WindowsDesktopDriver(TkDriver):
         )
 
     def _scroll_container(self, widget: tk.Misc) -> tk.Canvas | None:
+        """The scrollable page that is hiding ``widget``: the innermost one that can still move it into view.
+
+        Scroll boxes nest (a rating box inside the review page).  A box whose viewport already shows the control is
+        not the one to scroll; the page around it is.
+        """
+        y = widget.winfo_rooty() + widget.winfo_height() // 2
+        fallback: tk.Canvas | None = None
         node = getattr(widget, "master", None)
         while node is not None:
             if isinstance(node, tk.Canvas) and node.cget("yscrollcommand"):
                 try:
                     first, last = node.yview()
                     if first > 0.0 or last < 1.0:
-                        return node
+                        fallback = fallback or node
+                        top = node.winfo_rooty()
+                        if y < top and first > 0.0:
+                            return node  # the control is above this viewport and it can scroll up
+                        if y >= top + node.winfo_height() and last < 1.0:
+                            return node  # the control is below this viewport and it can scroll down
                 except tk.TclError:
                     pass
             node = getattr(node, "master", None)
-        return None
+        return fallback
 
     _SELF_SCROLLING = ("combobox", "listbox", "spinbox", "text", "treeview")
 
@@ -491,15 +503,15 @@ class WindowsDesktopDriver(TkDriver):
         pool = usable or candidates
         return pool[skip % len(pool)]
 
-    def _settled(self, widget: tk.Misc, point: tuple[float, float]) -> bool:
+    def _settled(self, center: Callable[[], tuple[int, int]]) -> bool:
         """True once the control's screen position has stopped changing (smooth scrolling, deferred layout)."""
 
-        last = self._center(widget, *point)
+        last = center()
         stable_since = time.monotonic()
         deadline = stable_since + 1.5
         while time.monotonic() < deadline:
             self.pump(0.06)
-            now = self._center(widget, *point)
+            now = center()
             if now != last:
                 last, stable_since = now, time.monotonic()
             elif time.monotonic() - stable_since >= 0.25:
@@ -514,8 +526,16 @@ class WindowsDesktopDriver(TkDriver):
         point: tuple[float, float] = (0.5, 0.5),
         max_scrolls: int = 60,
         patience: float = 5.0,
+        locate: Callable[[], tuple[int, int]] | None = None,
     ) -> tuple[int, int]:
-        """Return a clickable screen point, wheel-scrolling the enclosing canvas as a person would."""
+        """Return a clickable screen point, wheel-scrolling the enclosing canvas as a person would.
+
+        ``locate`` names the point inside ``widget`` to reach (a row of a list or tree); by default the point is
+        ``point`` as a fraction of the widget.
+        """
+
+        def center() -> tuple[int, int]:
+            return locate() if locate is not None else self._center(widget, *point)
 
         self.ensure_foreground(widget)
         scrolls = 0
@@ -524,7 +544,7 @@ class WindowsDesktopDriver(TkDriver):
         waited_for = ""
         while True:
             self.pump(0.02)
-            x, y = self._center(widget, *point)
+            x, y = center()
             reason = self.diagnose(widget, x, y)
             if reason is None:
                 waited = time.monotonic() - started
@@ -532,7 +552,7 @@ class WindowsDesktopDriver(TkDriver):
                     self.trace.record(
                         "waited_for_state", label=label, state=waited_for, seconds=round(waited, 2)
                     )
-                if scrolls and not self._settled(widget, point):
+                if scrolls and not self._settled(center):
                     continue  # the page is still moving after the wheel: look again before pressing
                 if scrolls:
                     self.trace.record("scrolled_into_view", label=label, wheel_notches=scrolls)
@@ -553,8 +573,11 @@ class WindowsDesktopDriver(TkDriver):
             above = widget.winfo_rooty() < container.winfo_rooty()
             before = container.yview()
             cx, cy = self._wheel_point(container, skip=stalled)
-            self.win32.wheel(cx, cy, 3 if above else -3)
-            scrolls += 3
+            # Three notches per look, but in a short viewport that overshoots the control and the page oscillates:
+            # use one notch when three would move the page by about the viewport's own height.
+            notches = 3 if container.winfo_height() >= 240 else 1
+            self.win32.wheel(cx, cy, notches if above else -notches)
+            scrolls += notches
             self.pump(0.06)
             stalled = stalled + 1 if container.yview() == before else 0
             if stalled >= 6:
@@ -887,16 +910,20 @@ class WindowsDesktopDriver(TkDriver):
     def select_tree_row(self, tree: ttk.Treeview, iid: str, *, label: str) -> None:
         if iid not in tree.get_children():
             raise WidgetNotFound(f"{label}: row {iid!r} is not in the tree")
-        tree.see(iid)
-        self.pump(0.05)
-        bbox = tree.bbox(iid)
-        if not bbox:
-            raise ControlUnreachable(label, "row not visible")
-        x, y = (
-            tree.winfo_rootx() + bbox[0] + min(bbox[2] // 2, 60),
-            tree.winfo_rooty() + bbox[1] + bbox[3] // 2,
-        )
-        self._require_reachable(tree, x, y, label)
+
+        def row_point() -> tuple[int, int]:
+            tree.see(iid)
+            self.pump(0.05)
+            bbox = tree.bbox(iid)
+            if not bbox:
+                raise ControlUnreachable(label, "row not visible")
+            return (
+                tree.winfo_rootx() + bbox[0] + min(bbox[2] // 2, 60),
+                tree.winfo_rooty() + bbox[1] + bbox[3] // 2,
+            )
+
+        # The tree can sit below the fold of the page that holds it: scroll the page to it as a person would.
+        x, y = self.reach(tree, label=label, locate=row_point)
         self.win32.click(x, y)
         self.trace.record("select_tree_row", label=label, row=iid, x=x, y=y)
         self.pump(0.15)
@@ -951,16 +978,18 @@ class WindowsDesktopDriver(TkDriver):
         raise ControlUnreachable(label, "the divider did not move when dragged")
 
     def select_listbox_row(self, listbox: tk.Listbox, index: int, *, label: str) -> None:
-        listbox.see(index)
-        self.pump(0.05)
-        bbox = listbox.bbox(index)
-        if not bbox:
-            raise ControlUnreachable(label, "row not visible")
-        x, y = (
-            listbox.winfo_rootx() + bbox[0] + bbox[2] // 2,
-            listbox.winfo_rooty() + bbox[1] + bbox[3] // 2,
-        )
-        self._require_reachable(listbox, x, y, label)
+        def row_point() -> tuple[int, int]:
+            listbox.see(index)
+            self.pump(0.05)
+            bbox = listbox.bbox(index)
+            if not bbox:
+                raise ControlUnreachable(label, "row not visible")
+            return (
+                listbox.winfo_rootx() + bbox[0] + bbox[2] // 2,
+                listbox.winfo_rooty() + bbox[1] + bbox[3] // 2,
+            )
+
+        x, y = self.reach(listbox, label=label, locate=row_point)
         self.win32.click(x, y)
         self.trace.record("select_listbox_row", label=label, index=index, x=x, y=y)
         self.pump(0.1)

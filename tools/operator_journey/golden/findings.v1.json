@@ -43,9 +43,15 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
+        "status": "REPAIRED",
         "owner_disposition": "pending",
-        "proposed_package": "PR-GUI-RELIABILITY-831"
+        "repaired_in": "PR-GUI-RELIABILITY-831",
+        "summary": "The Learning review panel's side column scrolls as one body (sections keep natural height, a taller pane still stretches the Rating row) above a fixed Save strip; a scroll box at its limit hands the wheel to the page around it.",
+        "regression_tests": [
+          "tests/gui_v2/test_learning_review_pane_reachability_831.py",
+          "tests/gui_v2/test_pointer_focus_no_scroll_831.py"
+        ],
+        "verification": "Windows-driver journeys IMG-01, VID-01 and LRN-01 at the normal, 1280x680 minimum and maximized layouts: normal 20261104T162625Z_simulated_a18c7403_normal_acceptance_78bb76, minimum 20261104T163042Z_simulated_a18c7403_minimum_acceptance_f052d4, maximized 20261104T163431Z_simulated_a18c7403_maximized_acceptance_a550d7"
       }
     },
     {
@@ -78,9 +84,14 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
+        "status": "REPAIRED",
         "owner_disposition": "pending",
-        "proposed_package": "PR-GUI-RELIABILITY-831"
+        "repaired_in": "PR-GUI-RELIABILITY-831",
+        "summary": "The review panel's left column (Experiment Review, Images) scrolls the same way, so the Images list is reachable at the minimum window size.",
+        "regression_tests": [
+          "tests/gui_v2/test_learning_review_pane_reachability_831.py"
+        ],
+        "verification": "Windows-driver journeys IMG-01, VID-01 and LRN-01 at the normal, 1280x680 minimum and maximized layouts: normal 20261104T162625Z_simulated_a18c7403_normal_acceptance_78bb76, minimum 20261104T163042Z_simulated_a18c7403_minimum_acceptance_f052d4, maximized 20261104T163431Z_simulated_a18c7403_maximized_acceptance_a550d7"
       }
     },
     {
@@ -118,9 +129,14 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
+        "status": "REPAIRED",
         "owner_disposition": "pending",
-        "proposed_package": "PR-GUI-RELIABILITY-831"
+        "repaired_in": "PR-GUI-RELIABILITY-831",
+        "summary": "The page-wide focus reveal no longer scrolls a control the pointer is already on, so focus gained by a mouse press cannot move the control between press and release; Tab and programmatic focus still reveal.",
+        "regression_tests": [
+          "tests/gui_v2/test_pointer_focus_no_scroll_831.py"
+        ],
+        "verification": "Windows-driver journeys IMG-01, VID-01 and LRN-01 at the normal, 1280x680 minimum and maximized layouts: normal 20261104T162625Z_simulated_a18c7403_normal_acceptance_78bb76, minimum 20261104T163042Z_simulated_a18c7403_minimum_acceptance_f052d4, maximized 20261104T163431Z_simulated_a18c7403_maximized_acceptance_a550d7"
       }
     },
     {
@@ -149,9 +165,15 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
+        "status": "REPAIRED",
         "owner_disposition": "pending",
-        "proposed_package": "PR-GUI-RELIABILITY-831"
+        "repaired_in": "PR-GUI-RELIABILITY-831",
+        "summary": "ThreadRegistry.shutdown_all runs registered shutdown listeners before joining; the LoRA discovery scan registers its cancel there, so a close during a scan no longer waits the scan out.",
+        "regression_tests": [
+          "tests/utils/test_thread_registry_shutdown_listener_831.py",
+          "tests/gui_v2/test_lora_picker_panel_v2.py"
+        ],
+        "verification": "Windows-driver journeys IMG-01, VID-01 and LRN-01 at the normal, 1280x680 minimum and maximized layouts: normal 20261104T162625Z_simulated_a18c7403_normal_acceptance_78bb76, minimum 20261104T163042Z_simulated_a18c7403_minimum_acceptance_f052d4, maximized 20261104T163431Z_simulated_a18c7403_maximized_acceptance_a550d7"
       }
     },
     {
@@ -181,9 +203,14 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
+        "status": "REPAIRED",
         "owner_disposition": "pending",
-        "proposed_package": "PR-GUI-RELIABILITY-831"
+        "repaired_in": "PR-GUI-RELIABILITY-831",
+        "summary": "Tooltip show/hide are idempotent and tolerate a destroyed widget or popup; the pending timer is cancelled when the widget is destroyed and its id is cleared when it fires.",
+        "regression_tests": [
+          "tests/gui_v2/test_tooltip_helper_v2.py"
+        ],
+        "verification": "Windows-driver journeys IMG-01, VID-01 and LRN-01 at the normal, 1280x680 minimum and maximized layouts: normal 20261104T162625Z_simulated_a18c7403_normal_acceptance_78bb76, minimum 20261104T163042Z_simulated_a18c7403_minimum_acceptance_f052d4, maximized 20261104T163431Z_simulated_a18c7403_maximized_acceptance_a550d7"
       }
     },
     {
@@ -216,9 +243,11 @@
         }
       ],
       "repair": {
-        "status": "UNCLASSIFIED",
+        "status": "WONTFIX",
         "owner_disposition": "pending",
-        "proposed_package": "PR-GUI-RELIABILITY-831"
+        "repaired_in": "PR-GUI-RELIABILITY-831",
+        "classification": "not an operator-visible defect; harness assumption",
+        "summary": "Reproduced as a mechanism, not as a defect: an unmapped Tk window reports a 1x1 geometry, so the startup policy (saved window state, else the screen-aware default) always applies, and a geometry requested before the application builds its window is overridden. No operator path requests a size before the window exists, and honouring one would change the first-run window size. The harness selects its layout after boot (--layout), which the application does honour."
       }
     },
     {
@@ -247,9 +276,14 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
+        "status": "REPAIRED",
         "owner_disposition": "pending",
-        "proposed_package": "PR-GUI-RELIABILITY-831"
+        "repaired_in": "PR-GUI-RELIABILITY-831",
+        "summary": "The discovered-outputs journey read a private attribute that MediaInspector no longer has; it now uses the inspector's public current_path(). The test is unchanged.",
+        "regression_tests": [
+          "tests/tools/test_operator_journey_gui.py"
+        ],
+        "verification": "Windows-driver journeys IMG-01, VID-01 and LRN-01 at the normal, 1280x680 minimum and maximized layouts: normal 20261104T162625Z_simulated_a18c7403_normal_acceptance_78bb76, minimum 20261104T163042Z_simulated_a18c7403_minimum_acceptance_f052d4, maximized 20261104T163431Z_simulated_a18c7403_maximized_acceptance_a550d7"
       }
     },
     {
@@ -279,9 +313,14 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
+        "status": "REPAIRED",
         "owner_disposition": "pending",
-        "proposed_package": "PR-GUI-RELIABILITY-831"
+        "repaired_in": "PR-GUI-RELIABILITY-831",
+        "summary": "The invoker pump and the running-job elapsed timer are cancelled with their widgets, so no after-callback outlives the widget that owns it.",
+        "regression_tests": [
+          "tests/gui_v2/test_stale_after_callbacks_831.py"
+        ],
+        "verification": "Windows-driver journeys IMG-01, VID-01 and LRN-01 at the normal, 1280x680 minimum and maximized layouts: normal 20261104T162625Z_simulated_a18c7403_normal_acceptance_78bb76, minimum 20261104T163042Z_simulated_a18c7403_minimum_acceptance_f052d4, maximized 20261104T163431Z_simulated_a18c7403_maximized_acceptance_a550d7"
       }
     }
   ]

@@ -129,9 +129,15 @@ def test_shipped_registries_are_valid_and_hold_all_known_findings() -> None:
     assert registry.finding_problems(findings) == []
     ids = {f["id"] for f in findings["findings"]}
     assert {"GP830-F1", "GP830-F2", "GP830-F3", "GP830-F4", "GP830-F5", "GP830-I1"} <= ids
-    assert all(
-        f["repair"]["status"] != "REPAIRED" for f in findings["findings"]
-    )  # none claimed fixed here
+    # A repair is claimed only with the PR that made it, the tests that pin it and the verification that proved it.
+    for finding in findings["findings"]:
+        repair = finding["repair"]
+        if repair["status"] == "REPAIRED":
+            assert repair["repaired_in"], finding["id"]
+            assert repair["regression_tests"], finding["id"]
+            assert repair["verification"], finding["id"]
+        if repair["status"] == "WONTFIX":
+            assert repair["classification"] and repair["summary"], finding["id"]
     coverage = registry.load_coverage()
     assert registry.coverage_problems(coverage) == []
     summary = registry.coverage_summary(coverage)

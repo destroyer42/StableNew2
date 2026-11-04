@@ -17,17 +17,42 @@ class Tooltip:
         self.delay_ms = delay_ms
         self._window: tk.Toplevel | None = None
         self._after_id: str | None = None
+        self._closed = False
         # PR-GUI-110: a combobox too narrow to show its value shows the whole value here (hover or focus).
         self.value_provider: Callable[[], str] | None = None
 
         widget.bind("<Enter>", self._schedule, add="+")
         widget.bind("<Leave>", self._hide, add="+")
         widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<Destroy>", self._on_widget_destroyed, add="+")
+
+    def _on_widget_destroyed(self, event: tk.Event | None) -> None:
+        """The widget is going away: cancel the pending timer and drop the popup, then ignore every later call."""
+        if event is not None and getattr(event, "widget", None) is not self.widget:
+            return  # a descendant's <Destroy> is delivered to this binding too
+        self._closed = True
+        self._hide()
+
+    def _cancel_timer(self) -> None:
+        after_id, self._after_id = self._after_id, None
+        if after_id:
+            try:
+                self.widget.after_cancel(after_id)
+            except tk.TclError:
+                pass  # the interpreter or widget is already gone; the timer went with it
 
     def _schedule(self, _event: tk.Event | None) -> None:
-        if self._after_id:
-            self.widget.after_cancel(self._after_id)
-        self._after_id = self.widget.after(self.delay_ms, self._show)
+        if self._closed:
+            return
+        self._cancel_timer()
+        try:
+            self._after_id = self.widget.after(self.delay_ms, self._fire)
+        except tk.TclError:
+            self._after_id = None
+
+    def _fire(self) -> None:
+        self._after_id = None
+        self._show()
 
     def _schedule_for_focus(self, event: tk.Event | None) -> None:
         """Keyboard focus shows a tooltip only when the full value would add information (it is truncated)."""
@@ -46,12 +71,25 @@ class Tooltip:
         return text
 
     def _show(self) -> None:
-        self.widget.update_idletasks()
+        if self._closed:
+            return
+        try:
+            if not self.widget.winfo_exists():
+                return
+            self.widget.update_idletasks()
+        except tk.TclError:
+            return
         if self._window:
             return
         text = self._display_text()
         if not text:
             return
+        try:
+            self._build_window(text)
+        except tk.TclError:
+            self._discard_window()  # the widget was destroyed while the popup was being built
+
+    def _build_window(self, text: str) -> None:
         self._window = tw = tk.Toplevel(self.widget)
         tw.withdraw()
         tw.overrideredirect(True)
@@ -71,13 +109,18 @@ class Tooltip:
         tw.geometry(f"+{x}+{y}")
         tw.deiconify()
 
+    def _discard_window(self) -> None:
+        window, self._window = self._window, None
+        if window is not None:
+            try:
+                window.destroy()
+            except tk.TclError:
+                pass  # already destroyed with its parent
+
     def _hide(self, _event: tk.Event | None = None) -> None:
-        if self._after_id:
-            self.widget.after_cancel(self._after_id)
-            self._after_id = None
-        if self._window:
-            self._window.destroy()
-            self._window = None
+        """Idempotent: cancel the pending timer and drop the popup, whatever state the widget is in."""
+        self._cancel_timer()
+        self._discard_window()
 
     def show(self) -> None:
         """Public method invoked by tests to show the tooltip."""

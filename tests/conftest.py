@@ -109,6 +109,7 @@ def _isolate_process_global_runtime_state():
         with registry._registry_lock:
             registry._threads.clear()
             registry._shutdown_requested = False
+            registry._shutdown_listeners.clear()
         with SystemWatchdogV2._ACTIVE_LOCK:
             SystemWatchdogV2._ACTIVE_THREAD = None
     except Exception:  # pragma: no cover - isolation must never break collection

@@ -287,8 +287,8 @@ class _DiscoveredJourney:
         self.check(
             ph,
             "preview_is_workspace_artifact",
-            str(Path(thumb._current_path).resolve()).startswith(str(self.ws.root.resolve())),
-            f"preview path={thumb._current_path}",
+            str(Path(thumb.current_path()).resolve()).startswith(str(self.ws.root.resolve())),
+            f"preview path={thumb.current_path()}",
         )
         meta = self.table._preview_meta_var.get()
         self.check(
@@ -466,10 +466,10 @@ class _DiscoveredJourney:
             ph,
             "missing_state_is_explicit_and_not_stale",
             "Artifact unavailable" in self.table._preview_meta_var.get()
-            and thumb._current_path is None
+            and thumb.current_path() is None
             and thumb._photo_image is None
-            and not any(thumb.type(i) == "image" for i in thumb.find_all()),
-            f"meta={self.table._preview_meta_var.get()!r} path={thumb._current_path}",
+            and not any(thumb._canvas.type(i) == "image" for i in thumb._canvas.find_all()),
+            f"meta={self.table._preview_meta_var.get()!r} path={thumb.current_path()}",
         )
         d.invoke(d.find_button(self.table, f"3{_STAR}"), label="rate missing item")
         before = {i.item_id: i.rating for i in self.store().load_group(self.group_id).items}
