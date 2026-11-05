@@ -253,14 +253,14 @@ class GoldenRun:
         from src.app_factory import build_v2_app
 
         self.boots += 1
-        if self.boots > 1:
-            # A reopen in the harness is a second build inside one process; the real application is a new process
-            # with a fresh thread registry.  The first boot's registry stays "shutdown requested" (and would make the
-            # reopened application decline every queue submission), so a reopened boot starts from a fresh one.
-            import src.utils.thread_registry as thread_registry
+        # The real application is a new process with a fresh thread registry.  In the harness every boot after the
+        # first in this process (a reopen within a journey, or the next journey of the suite) would inherit the
+        # previous application's "shutdown requested" registry and decline every queue submission, so each boot
+        # starts from a fresh one.
+        import src.utils.thread_registry as thread_registry
 
-            thread_registry._global_registry = None
-            thread_registry.ThreadRegistry._instance = None
+        thread_registry._global_registry = None
+        thread_registry.ThreadRegistry._instance = None
         root = create_root()
         self.root = root
         if self.config.hide_window:

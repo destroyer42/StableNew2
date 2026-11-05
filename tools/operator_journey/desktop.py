@@ -499,6 +499,8 @@ class WindowsDesktopDriver(TkDriver):
                 continue
             if any(name in str(found.winfo_class()).lower() for name in self._SELF_SCROLLING):
                 continue
+            if isinstance(found, tk.Canvas) and found is not container:
+                continue  # a nested canvas (an image viewer, an inner scroll box) takes the wheel for itself
             usable.append((x, y))
         pool = usable or candidates
         return pool[skip % len(pool)]
@@ -526,6 +528,7 @@ class WindowsDesktopDriver(TkDriver):
         point: tuple[float, float] = (0.5, 0.5),
         max_scrolls: int = 60,
         patience: float = 5.0,
+        max_reach_seconds: float = 90.0,
         locate: Callable[[], tuple[int, int]] | None = None,
     ) -> tuple[int, int]:
         """Return a clickable screen point, wheel-scrolling the enclosing canvas as a person would.
@@ -553,6 +556,10 @@ class WindowsDesktopDriver(TkDriver):
                         "waited_for_state", label=label, state=waited_for, seconds=round(waited, 2)
                     )
                 if scrolls and not self._settled(center):
+                    if time.monotonic() - started > max_reach_seconds:
+                        raise ControlUnreachable(
+                            label, "the page never stopped moving", f"after {scrolls} wheel notches"
+                        )
                     continue  # the page is still moving after the wheel: look again before pressing
                 if scrolls:
                     self.trace.record("scrolled_into_view", label=label, wheel_notches=scrolls)
@@ -560,7 +567,10 @@ class WindowsDesktopDriver(TkDriver):
             if reason.startswith(("hidden", "disabled")) and time.monotonic() - started < patience:
                 waited_for = reason.split(" ")[0]
                 continue  # the view may still be switching or a gate still resolving; a person would wait a moment
-            scrollable = ("obscured within", "outside", "off-screen")
+            # A page below its fold unmaps the controls it has scrolled out of view, so "hidden" can mean "not yet
+            # scrolled to": a person scrolls the page to find it.  A control on an unselected tab has no scrollable
+            # page that can move it, or the wheel stalls, and either way it is still reported as unreachable.
+            scrollable = ("obscured within", "outside", "off-screen", "hidden")
             container = (
                 self._scroll_container(widget) if any(k in reason for k in scrollable) else None
             )
@@ -582,7 +592,11 @@ class WindowsDesktopDriver(TkDriver):
             stalled = stalled + 1 if container.yview() == before else 0
             if stalled >= 6:
                 raise ControlUnreachable(
-                    label, reason, f"the wheel did not move the page after {scrolls} notches"
+                    label,
+                    reason,
+                    f"the wheel did not move the page after {scrolls} notches (scroll box {container}, yview "
+                    f"{container.yview()}, wheel point ({cx},{cy}), control at y={widget.winfo_rooty()}, "
+                    f"box top={container.winfo_rooty()} height={container.winfo_height()})",
                 )
 
     def click(

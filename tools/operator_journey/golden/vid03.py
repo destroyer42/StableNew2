@@ -73,6 +73,13 @@ def _open_workflow_tab(run: GoldenRun, source_image: Path, form_prompt: str = ""
     d.pump(0.6)
     if form_prompt:
         d.type_in_text(tab.prompt_text, form_prompt, label="Motion prompt (form)")
+    if not tab.advanced_section.is_expanded():
+        # The Storyboard lives under "Advanced options", which starts collapsed: an operator opens it first.
+        d.invoke(tab.advanced_section.toggle_button, label="Advanced options")
+        d.pump(0.5)
+    if not tab.sequence_panel.is_expanded():
+        d.invoke(tab.sequence_panel.toggle_button, label="Multi-shot sequence")
+        d.pump(0.5)
     return tab
 
 

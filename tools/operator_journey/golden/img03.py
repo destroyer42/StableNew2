@@ -193,11 +193,13 @@ def run_img03(run: GoldenRun, *, simulated: bool = True, physical: dict[str, Any
     d.select_tab(w.center_notebook, "Review - Adv")
     d.invoke(d.find_button(review, "Clear"), label="Review: Clear")
     d.pump(0.3)
-    dialogs = run.seam
-    before = len(dialogs.history)
+    dialogs, responder = run.seam, run.responder
+    before = len(dialogs.history), len(responder.seen) if responder is not None else 0
     d.invoke(review.edit_mask_button, label="Review: Edit Mask... (nothing selected)")
     d.pump(0.5)
-    refusal = [f"{r.title}: {r.message}" for r in dialogs.history[before:]]
+    refusal = [f"{r.title}: {r.message}" for r in dialogs.history[before[0] :]]
+    if responder is not None:  # the Windows driver meets the real native message box
+        refusal += [f"{seen['title']}: {seen['text']}" for seen in responder.seen[before[1] :]]
     ev.observe("edit_mask_without_selection", refusal)
     run.snap("refusal")
     run.check("refuse", "edit_mask_without_an_image_refuses_with_a_reason", any("Select exactly one" in r for r in refusal) and _toplevel(run.root, MaskEditorDialog) is None, f"{refusal}")
