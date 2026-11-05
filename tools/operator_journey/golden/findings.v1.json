@@ -358,7 +358,7 @@
           "tests/pipeline/test_checkpoint_mismatch_operator_reason.py",
           "tests/gui_v2/test_job_history_panel_display.py"
         ],
-        "verification": "PENDING-ACCEPTANCE"
+        "verification": "Windows-driver journeys IMG-02, IMG-03, VID-02 (real CPU Blender 4.5.9 conversion), VID-03, LRN-02 and OPS-01 all PASS at the normal, 1280x680 minimum and maximized layouts at d8e3e9d0: normal 20261105T130629Z_simulated_d8e3e9d0_normal_acceptance_5da5c5, minimum 20261105T132035Z_simulated_d8e3e9d0_minimum_acceptance_afbcab, maximized 20261105T133347Z_simulated_d8e3e9d0_maximized_acceptance_00abdb"
       }
     },
     {
@@ -396,7 +396,7 @@
           "tests/queue/test_webui_running_claim_projection_832.py",
           "tests/gui_v2/test_operator_readiness_panel_v2.py"
         ],
-        "verification": "PENDING-ACCEPTANCE"
+        "verification": "Windows-driver journeys IMG-02, IMG-03, VID-02 (real CPU Blender 4.5.9 conversion), VID-03, LRN-02 and OPS-01 all PASS at the normal, 1280x680 minimum and maximized layouts at d8e3e9d0: normal 20261105T130629Z_simulated_d8e3e9d0_normal_acceptance_5da5c5, minimum 20261105T132035Z_simulated_d8e3e9d0_minimum_acceptance_afbcab, maximized 20261105T133347Z_simulated_d8e3e9d0_maximized_acceptance_00abdb"
       }
     },
     {
@@ -434,7 +434,7 @@
         "regression_tests": [
           "tests/gui_v2/test_masked_edit_lineage_833.py"
         ],
-        "verification": "PENDING-ACCEPTANCE"
+        "verification": "Windows-driver journeys IMG-02, IMG-03, VID-02 (real CPU Blender 4.5.9 conversion), VID-03, LRN-02 and OPS-01 all PASS at the normal, 1280x680 minimum and maximized layouts at d8e3e9d0: normal 20261105T130629Z_simulated_d8e3e9d0_normal_acceptance_5da5c5, minimum 20261105T132035Z_simulated_d8e3e9d0_minimum_acceptance_afbcab, maximized 20261105T133347Z_simulated_d8e3e9d0_maximized_acceptance_00abdb"
       }
     },
     {
@@ -472,7 +472,7 @@
           "tests/video/test_storyboard_sequence_prompts.py",
           "tests/pipeline/test_pr_vid_seq_330_prompts.py"
         ],
-        "verification": "PENDING-ACCEPTANCE"
+        "verification": "Windows-driver journeys IMG-02, IMG-03, VID-02 (real CPU Blender 4.5.9 conversion), VID-03, LRN-02 and OPS-01 all PASS at the normal, 1280x680 minimum and maximized layouts at d8e3e9d0: normal 20261105T130629Z_simulated_d8e3e9d0_normal_acceptance_5da5c5, minimum 20261105T132035Z_simulated_d8e3e9d0_minimum_acceptance_afbcab, maximized 20261105T133347Z_simulated_d8e3e9d0_maximized_acceptance_00abdb"
       }
     },
     {
