@@ -66,6 +66,13 @@ Planning assistance **is** inference when it uses a model. This draft therefore 
 | D-4 | Are planning proposals allowed while a job is RUNNING? | refuse (P5, current D10 behavior) / allow when the model is CPU-only | Refuse. The measured 742/AI-assist design rests on D10; relaxing it needs its own evidence. |
 | D-5 | Who authorizes the first physical planning inference? | named owner authorization per inference (current rule) / session-level authorization | Keep per inference (preserves the owner's stated requirement). |
 
+### 6a. Owner round-3 direction and clarifications (2026-11-05; no decision on D-1 to D-5 yet)
+
+The owner gave a **policy direction** (Tier-1 advisory planning first; advice visibly distinguishable from an authorized execution plan; candidate evaluation through the existing authorized harness with no second execution or scheduling authority; per-download and per-inference authorization preserved; lower priority than generation; physical GPU and qualification holds preserved) and said it **does not substitute for adjudicating the exact text** of D-1 to D-5. No semantic widening is authorized until that review. Clarifications found while preparing the decision handoff (see `DECISION_HANDOFF.md` section 2):
+
+- Single-item advice fits the three existing `AssistSuggestion` kinds and needs no amendment; *advisory planning* (ordered steps) needs R1, R2, R4, R7, R8 but **not R3**, because an advisory artifact has no approval-to-Preview path. D-1(b)'s wording "no new kind or invariant change" is accurate only for single-item advice.
+- Proposed (not applied) rule **P8: advice is not a plan.** An `ADVISORY` artifact is labelled differently from a validated, approvable plan and can never enter the Confirm & Queue path.
+
 ## 7. Facts to settle before any activation
 
 - Run `tests/ai_assist` and `tests/tools/test_architecture_ratchets.py` (per `AI_ASSIST.md` §9) on the exact SHA before any activation; this research did not run them.

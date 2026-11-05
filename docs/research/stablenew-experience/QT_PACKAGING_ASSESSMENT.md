@@ -30,14 +30,14 @@ The GUI-PORT-740 hermetic test (`tests/tools/test_gui_port_740.py`, lines 86–8
 | `translations` | 59.3 | Qt's own translations |
 | `opengl32sw.dll` (software OpenGL) | 19.7 | optional fallback |
 | `avcodec-63.dll` (FFmpeg, shipped with Qt Multimedia) | 13.5 | license depends on the FFmpeg build; **not inspected** |
-| **Widgets-only core** (Qt6Core/Gui/Widgets, QtCore/QtGui/QtWidgets `.pyd`, `pyside6.abi3.dll`, shiboken6, `opengl32sw.dll`, Qt6Svg) | **≈ 58.2** | plus `plugins/platforms/qwindows.dll` ≈ 1 MiB, `styles` ≈ 0.2, `imageformats` ≈ 2; the figure includes the 19.7 MiB software-OpenGL DLL, which may be omitted if never needed |
+| **Owner-approved evaluation set** (QtCore, QtGui, QtWidgets: `Qt6Core.dll` 9.99, `Qt6Gui.dll` 9.23, `Qt6Widgets.dll` 6.22, the three binding `.pyd` files 11.79, `pyside6.abi3.dll` 0.25, shiboken6 0.41, `plugins/platforms/qwindows.dll` 0.96) | **≈ 38.9** | **Not** in that set: `Qt6Svg.dll` 0.58, software OpenGL `opengl32sw.dll` 19.68, image-format plugins (for example `qjpeg.dll` 0.57), `qmodernwindowsstyle.dll` 0.23, translations. Adding software OpenGL would give ≈ 58.5. Sizes are the named files only; other runtime dependencies (for example the Microsoft C++ runtime) were not determined |
 | **Tk runtime of the current Python 3.14.9** (`tcl90.dll` 3.21 + `tcl9tk90.dll` 2.04 + `_tkinter.pyd` 0.07 + `tcl` 2.81 + `Lib/tkinter` 0.69) | **≈ 8.8** | Tcl/Tk 9.0 |
 
-Reading: a Widgets-only Qt subset is on the order of **6–7× the Tk runtime on disk** (≈ 38 MiB if software OpenGL is dropped), while the full package is ≈ 70×. Whether an application can ship the subset depends on a packaging tool's pruning (**Unavailable**: no packaging was attempted). The figures are file sizes from one pip installation, not a compressed installer.
+Reading: the owner-approved three-module set is about **38.9 MiB on disk, roughly 4.4× the Tk runtime** (≈ 6.6× if software OpenGL were also shipped), while the full package is about 70×. Whether an application can ship the subset depends on a packaging tool's pruning (**Unavailable**: no packaging was attempted). The figures are file sizes from one pip installation, not a compressed installer.
 
 ## 4. Licensing findings and obligations (desk review; counsel/owner must confirm)
 
-- **Declared options.** The metadata offers LGPL-3.0, GPL-2.0, GPL-3.0 **or** a Qt commercial license. Which option StableNew would use is **undecided**.
+- **Declared options.** The metadata offers LGPL-3.0, GPL-2.0, GPL-3.0 **or** a Qt commercial license. The owner chose **LGPL-3.0 as the provisional evaluation route** (DR-A36, section 8); GPL and the commercial license were not selected.
 - **Repository license.** The study documents record that the repository `LICENSE` and distribution form are unresolved (`STATUS.md` decision 1, as cited in GUI-QT-001 and GUI-PORT-742). Until that is decided, no Qt redistribution choice can be made.
 - **What the LGPL path typically involves (general knowledge, unverified for this project):** shipping license texts and notices, allowing the end user to replace the Qt libraries (which favors dynamic linking and a layout that keeps Qt as separate, replaceable DLLs), and not imposing terms that forbid reverse engineering for debugging such replacement. A GPL path would impose copyleft on the whole application. A commercial license changes cost, not technical packaging. **These are the questions to put to counsel**, not conclusions.
 - **Bundled third-party components.** The WebEngine/Chromium and FFmpeg files carry their own licenses (BSD-style and other terms; FFmpeg may be LGPL or GPL depending on build). **Not inspected here.** The owner's instruction to "avoid bundling unused heavyweight modules" removes most of this surface: the Widgets-only subset needs none of WebEngine, PDF, Multimedia/FFmpeg or QML.
@@ -66,7 +66,33 @@ Reading: a Widgets-only Qt subset is on the order of **6–7× the Tk runtime on
 
 ## 7. Implications
 
-1. A **Widgets-only** PySide6 subset is the only configuration this research should consider for COA B; WebEngine, PDF, Multimedia and QML are excluded unless a measured need appears.
+1. The owner-approved **QtCore + QtGui + QtWidgets** set is the only configuration this research should consider for COA B; Qt Svg, WebEngine, PDF, Multimedia, QML and software OpenGL are outside it unless the owner extends the set after a measured need.
 2. The environment that was reused is a full wheel set; any prototype should either use only the three imported modules from it or a pruned copy, and record which files it actually loaded.
-3. The licensing choice (LGPL vs commercial vs GPL) and the repository `LICENSE` decision are **owner decisions** that gate any Qt redistribution, but not a research-only measurement inside the environment.
+3. The route is **provisionally LGPL-3.0** (DR-A36). The repository `LICENSE` decision and the compliance review (section 8) still gate any Qt **redistribution**; neither blocks a research-only measurement inside the environment.
 4. Installer size, cold start and memory for a *product-like* shell remain unmeasured; the figures above must not be presented as such.
+
+## 8. Provisional route and compliance review (owner decision DR-A36; **no legal conclusion here**)
+
+**Route.** LGPL-3.0, as a *provisional evaluation route*, limited to the components QtCore, QtGui and QtWidgets. GPL is **not** selected and a commercial license is **not** purchased. Evaluation stays internal; nothing is distributed. **Before any redistribution** a module-level and third-party dependency compliance review must be done and a **qualified software licensing/legal reviewer** must review it; external distribution is not treated as approved until then (DR-O22).
+
+**Scope of components the review must enumerate (from the environment, measured)**
+
+| Component | Files | Note |
+|---|---|---|
+| Qt libraries | `Qt6Core.dll`, `Qt6Gui.dll`, `Qt6Widgets.dll` | LGPL-3.0 option per package metadata; Qt version 6.12.0 |
+| PySide6 bindings | `QtCore.pyd`, `QtGui.pyd`, `QtWidgets.pyd`, `pyside6.abi3.dll` | same expression |
+| shiboken6 runtime | `shiboken6.abi3.dll`, `Shiboken.pyd` | same expression |
+| Qt platform plugin | `plugins/platforms/qwindows.dll` | required for Windows windows; part of the Qt libraries |
+| Third-party code inside Qt libraries | not itemized here | Qt documents bundled third-party components and their licenses per version; to be enumerated for 6.12.0 (**Unavailable**) |
+| Language runtime and C++ runtime | Python 3.14 (PSF license); Microsoft C++ runtime redistributable | to be listed with their redistribution terms (**Unavailable**) |
+| **Excluded unless the owner extends the set** | Qt Svg, WebEngine/Chromium, PDF, Multimedia/FFmpeg, QML/Quick, software OpenGL, image-format plugins, translations | the owner asked to avoid bundling unused heavyweight modules |
+
+**Checklist headings for the reviewer** (the owner named the first four; the rest are general LGPL practice, to be confirmed or replaced by the reviewer, not asserted as the project's obligations)
+
+1. **Attribution:** a notices bundle with the license texts, copyright notices and the exact Qt/PySide6/shiboken6 versions, including the third-party notices inside the Qt libraries.
+2. **Source availability:** how corresponding source (or a written offer/link) for the LGPL components, at the exact shipped version, is provided for the length of the distribution.
+3. **Library replacement:** the end user's ability to replace the LGPL libraries with a modified version and have the application run (favors shipping Qt as separate, replaceable DLLs; consider whether any packaging, signing or integrity check would prevent a replacement).
+4. **Packaging obligations:** folder-style versus single-file packaging, no static linking of the LGPL libraries, and how an installer and any end-user terms avoid adding restrictions the license forbids.
+5. **Other items for the reviewer to decide:** interaction with StableNew's own (still unresolved) `LICENSE`; any difference for internal-only use; the status of the `LicenseRef-Qt-Commercial.txt` text that ships in the wheels' metadata (informational unless the commercial route is chosen).
+
+**Trigger for presenting the commercial route.** If the reviewer finds LGPL compliance impractical (for example the packaging needed cannot satisfy library replacement, or third-party notice management is unworkable), the next step is to **present the commercial route as a decision with evidence** (obligations avoided, cost quotation, constraints). That choice is **not** made automatically, and no cost figure exists in this assessment (**Unavailable**).

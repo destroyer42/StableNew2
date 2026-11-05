@@ -6,8 +6,8 @@
 
 | # | Precondition | State 2026-11-05 |
 |---|---|---|
-| C1 | B2–B5 baseline complete on `origin/main`, sealed, with unavailable measurements named | **Not started.** B1 partly done (EV-14). B2 awaits explicit owner authorization and an exclusive desktop (DR-A30); B4 needs separate approval immediately before it runs, with a restoration procedure. |
-| C2 | Qt licensing, module and packaging assessment complete | **Partial** (`QT_PACKAGING_ASSESSMENT.md`): module/size/metadata facts measured; counsel/owner review and per-module license table outstanding. |
+| C1 | B2–B5 baseline complete on `origin/main`, sealed, with unavailable measurements named | **Not complete.** B1 partly done (EV-14). B2, B3 and B5 are **approved as one bounded session, conditional** on the owner confirming the desktop is free (DR-A33) and are to be run by the next execution session ([NEXT_SESSION_B2_B3_B5_CONTRACT.md](NEXT_SESSION_B2_B3_B5_CONTRACT.md)); **B4 is not approved** and needs its own approval with original setting, restoration and verification. None has run. |
+| C2 | Qt licensing, module and packaging assessment complete | **Partial** (`QT_PACKAGING_ASSESSMENT.md`): module/size/metadata facts measured; **provisional LGPL-3.0 route limited to QtCore/QtGui/QtWidgets** (DR-A36); the module-level and third-party compliance review and a qualified licensing/legal reviewer are outstanding before any redistribution (DR-O22). |
 | C3 | Owner reviews this proposal and names the package, branch and environment | pending |
 | C4 | Scoring criteria and acceptance thresholds pre-registered **after** C1 baselines and **before** any prototype run | pending (O15: no arbitrary numeric limits before baselines) |
 | C5 | A separate branch/worktree and a Python 3.14 environment outside every checkout (the existing `gui-port740-env` may be reused for the Qt arm; the Tk arm uses the repo interpreter) | environment exists (EV-39); package branch does not |
@@ -26,7 +26,7 @@ Each arm must pass the **same** behavior checks, driven by the same journey scri
 | Area | Behavior to demonstrate (both arms) |
 |---|---|
 | Shell | Task-first navigation with the same five intent groups; one scroll owner per workspace; fixed primary action bar; collapsible status/log drawer |
-| Create workspace | Hybrid Create Image approach; automatic model-profile application with valid overrides preserved; customizable basic controls and pinnable advanced settings (owner-stated, O15; see section 7 caveat) |
+| Create workspace | Hybrid Create Image approach; automatic model-profile application with valid overrides preserved; customizable basic controls and pinnable advanced settings (owner product intent, DR-A34; the profile mechanism exists on `main` but override preservation and pinning do not, EV-40; so these rows test **intent**, not existing behavior) |
 | Review/Learning | Review workspace gets remaining height first; secondary panes reserve no space when empty; rating/compare reachable without scrolling the page at the 760 comparison viewport |
 | Gallery/list | Same N-row synthetic gallery/history (N = 500, 5,000, 50,000): scrolling, filtering, selection, multi-select, virtualization behavior |
 | Media inspection | Fit, 100%, zoom/pan, show/detach, source-pixel vs preview-pixel label |
@@ -65,6 +65,19 @@ Synthetic only: generated placeholder images and clips, generated history rows, 
 - **Desktop control:** every run uses the exclusive-desktop rule (DR-A30); real display-scale changes need approval each time with a restoration step.
 - **Bounds:** at most the five screens in section 3, the T1–T9 journeys, two viewports × three scales, N ≤ 50,000 gallery rows. Anything larger is a new proposal.
 
+## 6a. DPI-awareness experiment (owner-approved, experimental, isolated; DR-A37)
+
+The owner approved **experimental DPI awareness for COA A0**, isolated from the existing production application. Nothing has been run or changed.
+
+| Rule | Detail |
+|---|---|
+| Isolation | Only the COA A0 *prototype* process may opt into DPI awareness. The production application's DPI behavior (currently unaware: the app sets no DPI awareness, `GUI_STYLE_GUIDE.md`) and every global Windows display setting stay untouched. Changing the display scale itself is B4 and needs its own approval. |
+| Order | **Measure the current Tk behavior first**, before applying awareness to the prototype: record the unaware baseline for each probe below. Then apply awareness in the prototype and repeat. |
+| Equivalence | Tk and Qt are compared only under **equivalent configurations**: (i) both DPI-unaware (the stretched case), and (ii) both per-monitor aware, at the same scale and monitor. A cell is not scored if the two arms did not run under the same pair. Qt's default awareness is recorded, not assumed. |
+| Probes (both arms) | widget dimensions (client rectangles of named controls), text scaling (rendered text height against expected font size), **hit targets** (clickable area in physical pixels for the primary and small controls), clipping (clipped-text and cut-off control probe), screenshot consistency (the same named screen at each scale, compared for unexpected differences, with every screenshot labelled "actual 100/125/150%" or "simulated") |
+| Scale source | Real 125%/150% needs B4 (separate approval). Until then only `tk scaling`-style simulation is available, **labelled simulated** and never used as the real-scaling result. |
+| Reporting | Baseline (unaware Tk), experimental (aware Tk), and Qt under the matching pair, each with the probe values; deltas reported as improved / unchanged / degraded / inconclusive. |
+
 ## 7. Evidence ledger: measured vs assumed vs unmeasured (completion-report item 3)
 
 | Statement | Class | Basis |
@@ -82,7 +95,7 @@ Synthetic only: generated placeholder images and clips, generated history rows, 
 | Modern appearance / perceived quality | **Unmeasured** | needs the O15 criteria applied |
 | Real 125%/150% behavior of either toolkit | **Unmeasured** | B4 not run |
 | Installer size, product-like cold start and memory | **Unavailable** | no packaged build |
-| "Hybrid Create Image approach, automatic profile application with overrides preserved, pinnable advanced settings" are accepted product decisions | **Owner-stated, source not located in the repository** (`git grep -il hybrid` finds only a 2025 modernization report and an unrelated AI contract) | see DR-O16; the equivalence rows citing them are provisional |
+| Hybrid Create Image, automatic model profiles with override preservation, and pinnable basic settings are accepted **product intent** | **Owner-stated** (DR-A34); model profiles are implemented on `main` (EV-40), override preservation for settings a profile also recommends and pinning are **not** found in source; the name "Hybrid Create Image" is not in the repository | equivalence rows citing them are intent-based; see `workflows/create-image.md` |
 
 **There are currently no comparable Tk-versus-Qt operator outcomes.** Every row above is either Tk-only, synthetic, file-size-level, or assumed.
 
@@ -94,5 +107,5 @@ Stop and report if: a prototype needs a production controller, queue or runner; 
 
 1. Open the package (C3) and name its branch, environment and time-box.
 2. Authorize each desktop run (B2, and prototype runs) when the exclusive-desktop condition holds; approve B4/real scaling runs individually.
-3. Decide the Qt license route or confirm that the prototype may proceed under the LGPL/commercial question being open (a prototype does not distribute anything).
-4. Confirm or supply the source for the "previously accepted" Create Image decisions (DR-O16).
+3. Qt license route: **provisional LGPL-3.0 for QtCore/QtGui/QtWidgets** (DR-A36); a prototype distributes nothing, but any redistribution needs the compliance review and a qualified reviewer (DR-O22). The commercial route is presented only if LGPL proves impractical.
+4. Create Image intent is recorded (DR-A34); confirm the override-preservation meaning and pin location (DR-O23) before the equivalence rows are finalized.

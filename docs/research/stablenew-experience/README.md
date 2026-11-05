@@ -48,12 +48,14 @@ Evidence tags used throughout: **[V]** verified in source/archive this session; 
 | [DECISION_REGISTER.md](DECISION_REGISTER.md) | Accepted vs proposed decisions |
 | [PROPOSED_AI_ASSIST_AMENDMENT.md](PROPOSED_AI_ASSIST_AMENDMENT.md) | Draft `AI_ASSIST.md`/`STATUS.md` amendment for planning assistance (inactive; decision draft) |
 | [QT_PACKAGING_ASSESSMENT.md](QT_PACKAGING_ASSESSMENT.md) | Qt licensing, module and packaging assessment (partial, measured vs unavailable) |
-| [COMPARATIVE_PACKAGE_PROPOSAL.md](COMPARATIVE_PACKAGE_PROPOSAL.md) | Proposed separate COA A0 vs COA B package (not built) and the measured/assumed/unmeasured ledger |
+| [COMPARATIVE_PACKAGE_PROPOSAL.md](COMPARATIVE_PACKAGE_PROPOSAL.md) | Proposed separate COA A0 vs COA B package (not built), DPI experiment protocol, and the measured/assumed/unmeasured ledger |
+| [DECISION_HANDOFF.md](DECISION_HANDOFF.md) | Final decision handoff: round-3 dispositions, D-1 to D-5 verbatim with recommendations and conflicts, open items, session boundary |
+| [NEXT_SESSION_B2_B3_B5_CONTRACT.md](NEXT_SESSION_B2_B3_B5_CONTRACT.md) | Bounded acceptance contract and kickoff text for the next execution session (B2/B3/B5; B4 excluded) |
 | [RESEARCH_LOG.md](RESEARCH_LOG.md) | Dated discovery outcomes and session identity |
 
 ## Current research phase
 
-**Phase 0 — foundation provisionally accepted by the owner; decisions recorded; baselines held.** Done: evidence reconciliation, workflow scaffolds, candidate IA/design system, COA framing, AI governance, validation plan, owner answers (two rounds), layout-recommendation intake, B1 chrome measurement (four screenshots), independent review applied, draft AI-assist amendment, partial Qt licensing/module/packaging assessment, comparative-package proposal. **Not done:** owner discovery for any of the nine workflows (every record is `DISCOVERY OPEN`), baselines B2–B5 (held for explicit authorization and an exclusive desktop; B4 needs separate approval), any prototype, any operator task timing. See RESEARCH_LOG "Final-acceptance report status".
+**Phase 0 — documentation milestone provisionally accepted; research qualification incomplete; handed off.** Done: evidence reconciliation, workflow scaffolds, candidate IA/design system, COA framing, AI governance, validation plan, owner decisions (three rounds), layout-recommendation intake, B1 chrome measurement (four screenshots), independent review applied, draft AI-assist amendment (inactive), partial Qt licensing/module/packaging assessment, comparative-package proposal with DPI protocol, Create Image product-intent record, decision handoff and next-session contract. **Not done:** owner discovery for the nine workflows (every record is `DISCOVERY OPEN`); B2, B3, B5 (approved conditionally, not run); B4 (not approved); any prototype; any operator task timing; adjudication of D-1 to D-5; Qt legal review. This documentation session is closed; the next session follows the contract.
 
 ## Existing canonical documents (linked, not copied)
 
