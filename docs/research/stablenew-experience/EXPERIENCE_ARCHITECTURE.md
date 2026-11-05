@@ -84,7 +84,7 @@ stateDiagram-v2
 
 ## 5. Points where explicit user approval is required
 
-1. Add to Queue / Queue Selected / Queue Sequence (frozen plan shown first; the owner's "send to Preview and queue immediately" AI option, DR-A13(b), compresses this into one click and whether the preview must be shown first is open, DR-O6b(d)). 2. Any experimental-workflow opt-in (per job). 3. Any overwrite or deletion of user assets (default: never overwrite originals). 4. Any AI-proposed plan (Tier 2) and any step-wise expansion (Tier 3). 5. Applying a recommendation or publishing a profile. 6. Launch/restart of a managed runtime; never an external one. 7. Telemetry enablement (VALIDATION, AI_GUIDED §6).
+1. Add to Queue / Queue Selected / Queue Sequence (frozen plan shown first; the owner's "queue immediately" AI option for confirmed Tier-2 plans, keeps the preview as a mandatory visible confirmation: the operator selects Confirm & Queue, DR-A24). 2. Any experimental-workflow opt-in (per job). 3. Any overwrite or deletion of user assets (default: never overwrite originals). 4. Any AI-proposed plan (Tier 2) and any step-wise expansion (Tier 3). 5. Applying a recommendation or publishing a profile. 6. Launch/restart of a managed runtime; never an external one. 7. Telemetry enablement (VALIDATION, AI_GUIDED §6).
 
 ## 6. What already works and should be kept (counter-hypothesis)
 

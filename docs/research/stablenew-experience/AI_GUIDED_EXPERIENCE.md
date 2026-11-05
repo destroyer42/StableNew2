@@ -4,9 +4,9 @@
 
 ## 0. Owner direction recorded 2026-11-05
 
-- **Model-assisted planning is wanted before offline qualification completes** (DR-A11): models are tested by being used. This research cannot lift the repository's qualification holds (`AI_ASSIST.md`: `allow_candidate=False`, `strict_offline=True`, named authorization per download and inference; `STATUS.md`: D12b, ETW canary). A Tier-2/3 plan object is not one of the three existing `AssistSuggestion` kinds, so it needs an owner-approved amendment to `AI_ASSIST` invariants 1–2 and the import ratchet, and AI yields to generation (a Tier-3 step cannot run while a job is RUNNING). How all this reconciles is DR-O11. Until then, anything model-assisted is labelled *unqualified/experimental* in this document's contracts.
-- **Approval offers two choices** (DR-A13): *Send to Preview*, or *Send to Preview and queue immediately* (equivalent to clicking Queue on the resulting preview). The AI never submits; the operator's click does, through the normal path.
-- **Telemetry:** local only, 90-day retention (DR-A12). Signals and opt-in default are open (DR-O5b).
+- **Model-assisted planning is wanted before offline qualification completes** (DR-A11): models are tested by being used. This research cannot lift the repository's qualification holds. The owner asked for the amendment *text* to be prepared and **not activated** (DR-A25): see [PROPOSED_AI_ASSIST_AMENDMENT.md](PROPOSED_AI_ASSIST_AMENDMENT.md), which lists exactly which restrictions would change (a new `PLAN_PROPOSAL` kind; the wording of invariant 2; optionally `allow_candidate`), preserves per-download and per-inference authorization, runtime ownership and the physical-GPU hold, and keeps planning subordinate to generation.
+- **Approval and "queue immediately" (DR-A24):** applies to **confirmed Tier-2 plans only**; Tier-3 steps stay individually operator-controlled. Submission is disabled with an actionable explanation when required inputs are missing or compatibility cannot be resolved; supported transformations may be applied before submission **with a visible notice**. The **frozen preview is a mandatory visible confirmation**: the operator reviews the resolved workload and selects **Confirm & Queue**. Submission uses the existing JobService and SQLite queue; if another job is running the new job waits in the normal queue with visible status. "Immediately" means immediate admission after confirmation, not immediate GPU execution. (The earlier two-button wording, DR-A13, is refined by this.)
+- **Telemetry (DR-A23):** the owner approved **opt-in, local-only usability telemetry for research and prototype evaluation** (fields and exclusions in [VALIDATION_AND_BASELINES.md](VALIDATION_AND_BASELINES.md) section 10), kept separate from operational diagnostics. The AI-improvement monitoring proposals in section 6 below are a different, still-PROPOSED thing.
 
 ## 1. Tier model
 
@@ -23,7 +23,7 @@ Tier N+1 is not unlocked by Tier N shipping; each needs its own qualification an
 1. **Closed vocabulary.** A plan may reference only entries from deterministic closed lists (models via the existing picker policy, workflows with governance state, installed assets, valid stages). Free text is never a parameter value after validation.
 2. **Deterministic validator is the judge.** Every step is classified `valid`, `incompatible (reason)`, `unavailable (missing prerequisite)`, or `needs operator input`; invalid steps are shown, not repaired silently.
 3. **No silent routing.** Backend/engine selection comes only from a verified capability-policy decision that is shown and overridable where legal; experimental workflows keep their per-job opt-in; a frozen NJR is never edited.
-4. **Plan ≠ job.** Approval creates Intent; every NJR is frozen through Preview. The operator then chooses one of two explicit actions (DR-A13): **Send to Preview** (stop there; Add to Queue is a separate click) or **Send to Preview and queue immediately**, which behaves exactly as if Queue had been clicked on that preview. In both, admission checks are identical to the manual path; "queue immediately" is never available for a plan with a step that is `incompatible`, `unavailable` or `needs operator input` (proposed; confirm in DR-O6b).
+4. **Plan ≠ job.** Approval creates Intent; every NJR is frozen through Preview. For a confirmed Tier-2 plan the operator reviews the resolved workload in the mandatory visible frozen preview and selects **Confirm & Queue** (admission through the existing JobService/queue, DR-A24); the preview contract is never silently bypassed. Tier-3 steps are each approved separately. A plan with a step that is `incompatible`, `unavailable` or `needs operator input` cannot be submitted.
 5. **Bounded.** Max steps, max jobs, max images/frames and resource ceilings per plan; exceeding shows a refusal (cf. frozen-plan limits in the journey harness).
 6. **Provenance.** Plan, validator version, model identity (hash), suggestion text digest and operator edits are recorded as digests/codes only, consistent with the existing privacy rule (no prompt content in logs).
 7. **Failure-closed.** Model absent, refusing, timed out, or admission refused → the manual path is unchanged and the reason is shown.
@@ -58,7 +58,7 @@ T1: Which operator questions can be answered deterministically? T2: What is the 
 
 | Area | Requirement |
 |---|---|
-| Consent | **PROPOSED (not owner-confirmed, DR-O5b):** off by default; explicit opt-in; granular per signal class; revocable; visible indicator when on |
+| Consent | Off by default; explicit opt-in **(owner-confirmed for research telemetry, DR-A23; still PROPOSED for AI-improvement monitoring)**; granular per signal class; revocable; visible indicator when on |
 | Privacy | No prompts, paths, image/video content, model file names or hashes of user content; only event codes, counts, durations, app/feature version; local-only storage; no network |
 | Retention | **90 days, local only (owner, DR-A12)**; size cap and user-visible "view / export / delete all" proposed; deletion is real |
 | Control | Never changes settings or behavior; summaries are suggestions with cited events; uncertainty stated |
@@ -70,4 +70,4 @@ T1: Which operator questions can be answered deterministically? T2: What is the 
 
 ## 7. Items needing owner decisions
 
-Answered: DR-A11 (model-assisted planning wanted now), DR-A12 (local, 90 days), DR-A13 (two approval options). Still open: DR-O11 (reconciling DR-A11 with the repository's qualification holds), DR-O5b (signals and opt-in default), DR-O6b (scope and disabled-state rules for "queue immediately").
+Answered: DR-A11 (model-assisted planning wanted now), DR-A12 and DR-A23 (telemetry local, 90 days, opt-in research scope), DR-A24 (queue immediately = Confirm & Queue after a mandatory preview, Tier-2 only), DR-A25 (amendment text prepared, not activated). Still open: DR-O11b (decide the amendment options D-1 to D-5).

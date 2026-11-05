@@ -1,6 +1,6 @@
 # StableNew experience redesign — research foundation (PR-GUI-UX-850)
 
-**Status:** research foundation, source review only. **No production code, test, dependency, configuration or runtime behavior is changed by this work.**
+**Status:** research foundation, source review only. **Owner disposition 2026-11-05: provisionally accepted on the reported evidence; comparative qualification remains open; not an authorization to merge, migrate toolkits or change production runtime behavior (DR-A22).** **No production code, test, dependency, configuration or runtime behavior is changed by this work.**
 **Opened:** 2026-11-05. **Branch:** `research/gui-ux-850-experience-redesign`, from `origin/main` `ed1e989f2149b01d16aef26d5f880326aeb250e0`.
 **Authority:** `AGENTS.md` and `STATUS.md` win over everything here. This directory records hypotheses and evidence; it authorizes no implementation, prototype, dependency, publication or toolkit decision.
 
@@ -46,11 +46,14 @@ Evidence tags used throughout: **[V]** verified in source/archive this session; 
 | [AI_GUIDED_EXPERIENCE.md](AI_GUIDED_EXPERIENCE.md) | Three AI tiers, governance, improvement monitoring |
 | [VALIDATION_AND_BASELINES.md](VALIDATION_AND_BASELINES.md) | Metrics, task scripts, prototype tests, stop criteria |
 | [DECISION_REGISTER.md](DECISION_REGISTER.md) | Accepted vs proposed decisions |
+| [PROPOSED_AI_ASSIST_AMENDMENT.md](PROPOSED_AI_ASSIST_AMENDMENT.md) | Draft `AI_ASSIST.md`/`STATUS.md` amendment for planning assistance (inactive; decision draft) |
+| [QT_PACKAGING_ASSESSMENT.md](QT_PACKAGING_ASSESSMENT.md) | Qt licensing, module and packaging assessment (partial, measured vs unavailable) |
+| [COMPARATIVE_PACKAGE_PROPOSAL.md](COMPARATIVE_PACKAGE_PROPOSAL.md) | Proposed separate COA A0 vs COA B package (not built) and the measured/assumed/unmeasured ledger |
 | [RESEARCH_LOG.md](RESEARCH_LOG.md) | Dated discovery outcomes and session identity |
 
 ## Current research phase
 
-**Phase 0 — foundation published; owner decisions recorded; discovery and baselines pending.** Done: evidence reconciliation, workflow scaffolds, candidate IA/design system, COA framing, AI governance, validation plan, owner answers to the cross-cutting questions (2026-11-05), layout-recommendation intake, B1 chrome measurement. **Not done:** owner discovery for any of the nine workflows (every record is `DISCOVERY OPEN`), baselines B2–B5, any prototype, any operator task timing. Next gates: the open items DR-O5b, O6b, O11–O15 in `DECISION_REGISTER.md`, then B2 (serialized against any running gate) and the independent counter-review.
+**Phase 0 — foundation provisionally accepted by the owner; decisions recorded; baselines held.** Done: evidence reconciliation, workflow scaffolds, candidate IA/design system, COA framing, AI governance, validation plan, owner answers (two rounds), layout-recommendation intake, B1 chrome measurement (four screenshots), independent review applied, draft AI-assist amendment, partial Qt licensing/module/packaging assessment, comparative-package proposal. **Not done:** owner discovery for any of the nine workflows (every record is `DISCOVERY OPEN`), baselines B2–B5 (held for explicit authorization and an exclusive desktop; B4 needs separate approval), any prototype, any operator task timing. See RESEARCH_LOG "Final-acceptance report status".
 
 ## Existing canonical documents (linked, not copied)
 

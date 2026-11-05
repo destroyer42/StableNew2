@@ -29,7 +29,7 @@
 
 ## 3. Baseline plan (before any prototype)
 
-**Status 2026-11-05:** B1–B5 re-authorized by the owner (DR-A18). B1 done for four retained minimum-size screenshots (EV-14: global chrome ≈36%, Learning review pane ≈62% below the fold); the other sizes and tabs remain. B2–B5 pending: B2 is a Windows desktop `SendInput` run, so it must not overlap another desktop-driving run or a full PR gate on the same machine (a gate was running in the `StableNew-main` checkout when this was written). The harness does not drive the GPU; fakes only. **B4 (real 125%/150% display scale) changes the Windows display setting**, which GUI-COMPLETE-760 treated as out of scope and which would disturb the owner's open applications; the owner's general B1–B5 authorization is taken to cover it only once the owner confirms the moment, so B4 is asked again immediately before it runs.
+**Status 2026-11-05 (updated after the owner's second response, DR-A30):** B2 and B4 are **not yet authorized to run**: B2 needs the owner's explicit authorization *and* exclusive use of the interactive desktop (no gate, pytest or other driver is sufficient evidence of availability); B4 needs separate approval immediately before execution with a documented restoration procedure for the display scale. B1 is partly done. B3 (wheel probe) and B5 also drive or load the application and are held with B2 until the owner authorizes the desktop. (Earlier text: B1–B5 re-authorized by the owner, DR-A18, now narrowed by DR-A30.) B1 done for four retained minimum-size screenshots (EV-14: global chrome ≈36%, Learning review pane ≈62% below the fold); the other sizes and tabs remain. B2–B5 pending: B2 is a Windows desktop `SendInput` run, so it must not overlap another desktop-driving run or a full PR gate on the same machine (a gate was running in the `StableNew-main` checkout when this was written). The harness does not drive the GPU; fakes only. **B4 (real 125%/150% display scale) changes the Windows display setting**, which GUI-COMPLETE-760 treated as out of scope and which would disturb the owner's open applications; the owner's general B1–B5 authorization is taken to cover it only once the owner confirms the moment, so B4 is asked again immediately before it runs.
 
 B1: Pixel-measure chrome ratio on retained and fresh screenshots at the five target sizes. B2: Re-run IMG-01/02/03, VID-01/02/03, LRN-01/02, OPS-01 with the Windows driver on `origin/main` and archive sealed runs with `--archive`; record action counts and navigation counts as the **current-UI baseline**. B3: Wheel-capture probe on `main` (EV-16). B4: Real 125%/150% display scale runs (the 760 gap). B5: Large-history load (N rows in a temporary repository). **Local host only; B2 uses fakes, not the GPU.**
 
@@ -68,3 +68,25 @@ Stop and report if: a prototype requires a production controller or runner; real
 ## 9. Docs-only validation for this PR
 
 Link and local-path check over this directory, `git diff --check`, the repository's documentation rules and the cheap docs path in `tools/ci/validation_plan.py`; **no GPU/GUI journey suite** (Testing §11a). Results are recorded in RESEARCH_LOG.
+
+## 10. Research telemetry (owner-approved scope, DR-A23; **no implementation here**)
+
+**Approved by the owner on 2026-11-05:** opt-in, local-only usability telemetry for **research and prototype evaluation**. It is a separate thing from existing operational diagnostics and from the AI improvement-monitoring requirements in `AI_GUIDED_EXPERIENCE.md` §6 (which stay PROPOSED).
+
+| Aspect | Rule |
+|---|---|
+| Consent | Off by default; the participant enables it; a visible indicator while on |
+| Scope | Research sessions and the comparative prototypes only; **not** enabled in normal operation unless the owner later says so |
+| Fields captured | task completion time; navigation paths; backtracking; failed interactions; control visibility and clipping; scroll use; window dimensions; DPI scaling; queue-submission outcomes (against the prototype's fake JobService); basic-versus-advanced control usage |
+| Never captured | prompt text, generated images, filesystem paths, personal identifiers, model contents; no hashes of user content |
+| Transmission | None. Never sent externally; no network call in the telemetry path |
+| Participant control | The participant can inspect and delete all collected research data at any time (real deletion) |
+| Retention | Local, **90 days** (DR-A12) |
+| Separation | A separate store and code path from operational diagnostics (`events.jsonl`, operator log, crash bundles, journey evidence); it has no queue, history or runtime authority and cannot change behavior |
+| Interaction with other holds | Research's proposal (not stated by the owner): disabled during any physical qualification run. This research has not built it |
+
+How it differs from existing operational diagnostics: diagnostics record *what the application did* for support and qualification (codes, counts, stack/error text, owned-process evidence) and are always on; research telemetry records *how the participant used the interface* to answer design questions, is opt-in, and exists only in research sessions. The golden-path comparator (`extra_interaction_count`, `lost_clicks`, `click_retries`) remains the offline substitute and is exhausted first.
+
+## 11. Viewport and scale matrix (owner, DR-A27)
+
+Primary cells: **1280×680** (existing compatibility baseline) and **1280×760** (additional comparison viewport, **not** an adopted minimum), each at real **100%, 125% and 150%** display scaling (6 cells). Secondary sizes (1366×768, 1920×1080, 2560×1440) are optional. The aim is controls reachable and workflows usable through responsive layout, scrolling and progressive disclosure, not a larger required monitor; the minimum height is **determined by measurement** and no value is adopted yet.
