@@ -1053,6 +1053,7 @@ class NativeDialogResponder:
         self.seen: list[dict[str, Any]] = []
         self._stop = threading.Event()
         self._handled: set[int] = set()
+        self._waiting: dict[int, int] = {}
         self._thread = threading.Thread(target=self._run, name="dialog-responder", daemon=True)
 
     def __enter__(self) -> NativeDialogResponder:
@@ -1072,6 +1073,14 @@ class NativeDialogResponder:
                 if hwnd in self._handled:
                     continue
                 kids = self.win32.children_of(hwnd)
+                wants_file = bool(self.script) and self.script[0][0] == "file"
+                ready = bool(kids) and (not wants_file or any(c == "Edit" for (_h, c, _t) in kids))
+                if not ready:
+                    # The window exists before its controls do.  Answering now would consume the scripted answer
+                    # and mark the dialog done while it is still being built, leaving the application blocked on it.
+                    self._waiting[hwnd] = self._waiting.get(hwnd, 0) + 1
+                    if self._waiting[hwnd] < 100:  # ~10 s
+                        continue
                 self._handled.add(hwnd)
                 title = self.win32.text(hwnd)
                 texts = [t for (_h, c, t) in kids if c == "Static" and t]

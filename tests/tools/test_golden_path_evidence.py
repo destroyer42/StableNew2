@@ -786,3 +786,46 @@ def test_the_native_dialog_responder_ignores_windows_of_other_processes() -> Non
     finally:
         responder.__exit__(None, None, None)
     assert seen and set(seen) == {4242}  # only its own process is ever asked about
+
+
+def test_the_native_dialog_responder_waits_for_a_dialog_that_is_still_being_built() -> None:
+    """A file dialog exists before its controls do; answering it early consumed the answer and hung the app."""
+
+    import time
+
+    from tools.operator_journey.desktop import NativeDialogResponder
+
+    polls = {"n": 0}
+    typed: list[str] = []
+    clicked: list[int] = []
+
+    class Win32Double:
+        def dialogs_of(self, pid: int) -> list[int]:
+            return [7]
+
+        def children_of(self, hwnd: int) -> list[tuple[int, str, str]]:
+            polls["n"] += 1
+            if polls["n"] < 4:  # the window is there, its controls are not
+                return []
+            return [(11, "Edit", ""), (12, "Button", "&Open"), (13, "Button", "Cancel")]
+
+        def text(self, hwnd: int) -> str:
+            return "Open Storyboard"
+
+        def set_text(self, hwnd: int, value: str) -> None:
+            typed.append(value)
+
+        def click_button(self, hwnd: int) -> None:
+            clicked.append(hwnd)
+
+    responder = NativeDialogResponder(Win32Double(), 4242)
+    responder.queue("file", "C:/x/draft.json")
+    responder.__enter__()
+    try:
+        deadline = time.monotonic() + 5
+        while not clicked and time.monotonic() < deadline:
+            time.sleep(0.05)
+    finally:
+        responder.__exit__(None, None, None)
+    assert typed == ["C:/x/draft.json"] and clicked == [12]
+    assert responder.seen[0]["answer"] == "file:C:/x/draft.json" and polls["n"] >= 4
