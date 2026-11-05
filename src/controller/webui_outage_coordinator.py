@@ -496,6 +496,7 @@ class WebUIOutageCoordinator:
             health = self._health
             probe = self._last_probe
             held = int(summary["held_webui"])
+            running = int(summary.get("running_webui") or 0)
             if not summary["hold"] and health is not WebUIHealth.RECOVERING:
                 health = WebUIHealth.HEALTHY if health is not WebUIHealth.UNVERIFIED else health
             messages = {
@@ -530,6 +531,7 @@ class WebUIOutageCoordinator:
                 "owned_pid": getattr(manager, "pid", None) if manager is not None and manager.owns_process else None,
                 "process_running": self._process_running(manager),
                 "held_webui_jobs": held,
+                "running_webui_jobs": running,
                 "independent_jobs_eligible": int(summary["independent"]),
                 "recovery_attempts": self._attempts,
                 "last_recovery_result": self._last_recovery,
