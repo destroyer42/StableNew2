@@ -2,7 +2,7 @@
 
     python tools/ci/run_sharded_census.py [--workers 2] [--out-dir DIR]
 
-Uses the exact path-hash partition of ``census_shards`` (the same one CI shards use), starts one ordinary pytest
+Uses the exact weighted partition of ``census_shards`` (the same one CI shards use, for ``--workers`` shards), starts one ordinary pytest
 process per shard with its own ``--basetemp``, pytest cache, JUnit and log, then runs the same completeness gate as
 the hosted aggregate job and prints one census summary. Two workers is the supported default: a Windows/Tk suite
 shares ports, files and process-global state, so fewer workers means less interference. Elapsed census time is the

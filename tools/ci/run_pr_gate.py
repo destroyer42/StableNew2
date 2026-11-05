@@ -4,7 +4,7 @@
     python tools/ci/run_pr_gate.py --full           # also the hosted ``full-suite`` census, run locally
     python tools/ci/run_pr_gate.py --full --workers 3
 
-``--full`` appends ``tools/ci/run_sharded_census.py``: the same path-hash shard partition and completeness verdict as
+``--full`` appends ``tools/ci/run_sharded_census.py``: the same weighted shard partition and completeness verdict as
 the hosted census, one isolated checkout per worker (a Windows/Tk suite shares ports, files and process-global state,
 so workers must not share a tree; this is why it is not pytest-xdist). It is slow by nature; use it before opening a
 PR that changes executable code, and let hosted CI remain the authority.

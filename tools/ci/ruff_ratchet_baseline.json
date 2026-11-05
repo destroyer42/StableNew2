@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 381,
+    "total": 380,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -354,7 +354,6 @@
       "tools/acceptance/img_forge_120_default_acceptance.py",
       "tools/acceptance/vid130_wan_acceptance.py",
       "tools/acceptance/vid190_queue_recycling_acceptance.py",
-      "tools/ci/census_shards.py",
       "tools/ci/census_summary.py",
       "tools/ci/ci_truth.py",
       "tools/ci/run_collection_gate.py",

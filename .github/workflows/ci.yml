@@ -178,9 +178,10 @@ jobs:
 
   # Blocking gate: the full configured suite (headless-safe GUI v2, fake-backend integration, tools, video).
   # PR-DEVEX-CENSUS-140: the census runs as THREE independent file-level shards (separate runner, Python
-  # process, Xvfb and JUnit each) so its wall time is the slowest shard, not the whole suite. The partition is
-  # `sha256(repo-relative test path) % 3` over the same active test files pytest collects (tools/ci/census_shards.py);
-  # a new test file is assigned automatically. Each shard runs ordinary pytest to completion (no --maxfail) with a
+  # process, Xvfb and JUnit each) so its wall time is the slowest shard, not the whole suite. The partition is a
+  # deterministic longest-processing-time-first assignment of whole files by recorded duration
+  # (tools/ci/census_timings.json, tools/ci/census_weights.py) over the same active test files pytest collects
+  # (tools/ci/census_shards.py); a new test file is assigned automatically. Each shard runs ordinary pytest to completion (no --maxfail) with a
   # per-test timeout. The aggregate `full-suite` job below is the census verdict and the branch-protection identity:
   # it fails closed if any shard artifact is missing, any active file is unassigned or doubly assigned, or any shard
   # failed, and it publishes one merged census. It runs for every executable change after the required gate succeeds.

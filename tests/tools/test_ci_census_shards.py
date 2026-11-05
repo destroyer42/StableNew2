@@ -1,4 +1,8 @@
-"""PR-DEVEX-CENSUS-140: deterministic file-level census sharding and its fail-closed completeness guard."""
+"""PR-DEVEX-CENSUS-140/150: deterministic file-level census sharding and its fail-closed completeness guard.
+
+The weighting algorithm, timing-manifest integrity and shard-count independence are covered in
+``test_ci_census_weights.py``; this file covers the active surface, the aggregate gate and the local runner.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "ci"))
 
 import census_shards as cs  # noqa: E402
+import census_weights  # noqa: E402
 import run_collection_gate as gate  # noqa: E402
 import run_sharded_census as local  # noqa: E402
 
@@ -67,19 +72,7 @@ def test_exclusions_come_from_the_collection_gate_authority() -> None:
 @pytest.mark.parametrize("raw", ["tests/api/test_b.py", "./tests/api/test_b.py", "tests\\api\\test_b.py", Path("tests/api/test_b.py")])
 def test_path_normalization_is_cross_platform_stable(raw) -> None:
     assert cs.normalize_path(raw) == "tests/api/test_b.py"
-    assert cs.shard_of(raw, 3) == cs.shard_of("tests/api/test_b.py", 3)
-
-
-def test_assignment_is_the_documented_sha256_function_and_stable() -> None:
-    import hashlib
-
-    for path in ("tests/test_a.py", "tests/queue/test_job_repository_sqlite.py"):
-        assert cs.shard_of(path, 3) == int(hashlib.sha256(path.encode()).hexdigest(), 16) % 3
-    # pinned values protect against an accidental change of the hash/partition (that would reshuffle every shard)
-    assert cs.shard_of("tests/test_a.py", 3) == 1
-    assert cs.shard_of("tests/queue/test_job_repository_sqlite.py", 3) == 0
-    assert cs.shard_of("tests/gui_v2/test_image_thumbnail_v2.py", 3) == 1
-    assert cs.shard_of("tests/gui_v2/test_image_thumbnail_v2.py", 2) == 0
+    assert cs.partition([raw, "tests/a/test_z.py"], 2) == cs.partition(["tests/api/test_b.py", "tests/a/test_z.py"], 2)
 
 
 def test_real_repository_partition_is_complete_disjoint_and_roughly_balanced() -> None:
@@ -91,6 +84,10 @@ def test_real_repository_partition_is_complete_disjoint_and_roughly_balanced() -
     assert len({f for shard in shards for f in shard}) == len(active)
     assert all(len(shard) > 0.25 * len(active) for shard in shards)
 
+    plan = cs.build_plan(3)  # the committed timing manifest drives the real plan
+    assert plan.weights_source == "timings"
+    assert cs.partition_problems(active, plan.shards) == []
+
 
 def test_a_new_test_file_is_assigned_automatically_without_a_manifest(tmp_path: Path) -> None:
     root = _tree(tmp_path)
@@ -98,7 +95,7 @@ def test_a_new_test_file_is_assigned_automatically_without_a_manifest(tmp_path: 
     _touch(root, "tests/pipeline/test_brand_new.py")
     after = cs.partition(cs.active_test_files(root), 3)
 
-    assert "tests/pipeline/test_brand_new.py" in after[cs.shard_of("tests/pipeline/test_brand_new.py", 3)]
+    assert any("tests/pipeline/test_brand_new.py" in shard for shard in after)
     assert sum(map(len, after)) == sum(map(len, before)) + 1
     assert cs.partition_problems(cs.active_test_files(root), after) == []
 
@@ -129,7 +126,7 @@ JUNIT = (
 )
 
 
-def _shard_artifacts(directory: Path, shards: list[list[str]], *, exit_codes=None, wall=None, drop=None) -> None:
+def _shard_artifacts(directory: Path, shards: list[list[str]], *, exit_codes=None, wall=None, drop=None, digest=None) -> None:
     for index, files in enumerate(shards):
         if drop == index:
             continue
@@ -137,7 +134,9 @@ def _shard_artifacts(directory: Path, shards: list[list[str]], *, exit_codes=Non
             f'<testcase classname="{f[:-3].replace("/", ".")}" name="test_x" time="1.0"/>' for f in files
         )
         (directory / f"census-shard-{index}.xml").write_text(JUNIT.format(n=len(files), t=len(files), cases=cases), encoding="utf-8")
-        (directory / f"census-shard-{index}.manifest.json").write_text(json.dumps({"index": index, "shards": len(shards), "files": files}), encoding="utf-8")
+        (directory / f"census-shard-{index}.manifest.json").write_text(json.dumps({
+            "index": index, "shards": len(shards), "files": files, "plan_digest": digest or census_weights.plan_digest(shards),
+        }), encoding="utf-8")
         (directory / f"census-shard-{index}.result.json").write_text(json.dumps({
             "index": index, "shards": len(shards), "files": len(files),
             "exit_code": (exit_codes or {}).get(index, 0), "pytest_wall_seconds": (wall or {}).get(index, 10.0 + index),
@@ -149,7 +148,7 @@ def test_aggregate_passes_for_a_complete_consistent_census(tmp_path: Path) -> No
     shards = cs.partition(active, 3)
     _shard_artifacts(tmp_path, shards, wall={0: 100.0, 1: 150.0, 2: 120.0})
 
-    problems, evidence = cs.verify_results(3, tmp_path, active=active)
+    problems, evidence = cs.verify_results(3, tmp_path, active=active, timings=None)
 
     assert problems == []
     assert evidence["parallel_wall_seconds"] == 150.0  # slowest shard, not the sum
@@ -163,7 +162,7 @@ def test_aggregate_fails_closed_on_a_missing_shard_artifact(tmp_path: Path) -> N
     shards = cs.partition(active, 3)
     _shard_artifacts(tmp_path, shards, drop=1)
 
-    problems, _ = cs.verify_results(3, tmp_path, active=active)
+    problems, _ = cs.verify_results(3, tmp_path, active=active, timings=None)
 
     assert any("shard 1" in p and "missing" in p for p in problems)
 
@@ -172,7 +171,7 @@ def test_aggregate_fails_on_a_shard_pytest_failure(tmp_path: Path) -> None:
     active = [f"tests/m{n}/test_{n}.py" for n in range(9)]
     _shard_artifacts(tmp_path, cs.partition(active, 3), exit_codes={2: 1})
 
-    problems, _ = cs.verify_results(3, tmp_path, active=active)
+    problems, _ = cs.verify_results(3, tmp_path, active=active, timings=None)
 
     assert any("shard 2" in p and "exited with 1" in p for p in problems)
 
@@ -181,7 +180,7 @@ def test_aggregate_fails_when_a_new_active_file_was_not_in_the_shard_manifests(t
     active = [f"tests/m{n}/test_{n}.py" for n in range(9)]
     _shard_artifacts(tmp_path, cs.partition(active, 3))
 
-    problems, _ = cs.verify_results(3, tmp_path, active=[*active, "tests/new/test_new.py"])
+    problems, _ = cs.verify_results(3, tmp_path, active=[*active, "tests/new/test_new.py"], timings=None)
 
     assert any("differs from the partition" in p or "assigned to no shard" in p for p in problems)
 
@@ -193,7 +192,7 @@ def test_aggregate_fails_on_junit_records_outside_the_manifest(tmp_path: Path) -
     xml = tmp_path / "census-shard-0.xml"
     xml.write_text(xml.read_text(encoding="utf-8").replace("</testsuite>", '<testcase classname="tests.zz.test_stray" name="test_x" time="1"/></testsuite>'), encoding="utf-8")
 
-    problems, _ = cs.verify_results(3, tmp_path, active=active)
+    problems, _ = cs.verify_results(3, tmp_path, active=active, timings=None)
 
     assert any("outside its manifest" in p for p in problems)
 
