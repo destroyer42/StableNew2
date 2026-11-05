@@ -101,4 +101,23 @@ def run_advanced(journey: JourneyDef, config: RunConfig) -> JourneyEvidence:
             # Masked edits are Forge-only: the isolated workspace selects the Forge identity (loopback Forge fake).
             settings_extra={"webui_runtime_identity": "forge_webui"},
         )
+    if journey.key == "motion-assets":
+        from tools.operator_journey.fake_comfy import FakeComfy
+        from tools.operator_journey.golden.vid01 import WORKFLOW_ID, WORKFLOW_VERSION
+        from tools.operator_journey.golden.vid02 import run_vid02
+
+        def make_motion_comfy() -> FakeComfy:
+            from src.video.workflow_registry import build_default_workflow_registry
+
+            return FakeComfy(build_default_workflow_registry().get(WORKFLOW_ID, WORKFLOW_VERSION))
+
+        return run_journey_body(
+            journey.id,
+            run_vid02,
+            config,
+            mode_label="simulated",
+            fake_a1111_factory=make_fake_a1111,
+            fake_comfy_factory=make_motion_comfy,
+            workspace_hook=seed_declared_sdxl,
+        )
     raise KeyError(f"no runner for advanced journey {journey.key!r}")

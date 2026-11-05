@@ -83,10 +83,12 @@ def scripted_dialogs(seam: DialogSeam) -> Iterator[DialogSeam]:
         simpledialog.askstring,
         filedialog.askopenfilename,
         filedialog.asksaveasfilename,
+        filedialog.askdirectory,
     )
     simpledialog.askstring = seam.askstring  # type: ignore[assignment]
     filedialog.askopenfilename = seam.file("askopenfilename")  # type: ignore[assignment]
     filedialog.asksaveasfilename = seam.file("asksaveasfilename")  # type: ignore[assignment]
+    filedialog.askdirectory = seam.file("askdirectory")  # type: ignore[assignment]
     messagebox.askyesno = seam.askyesno  # type: ignore[assignment]
     messagebox.showinfo = seam.info("showinfo")  # type: ignore[assignment]
     messagebox.showwarning = seam.info("showwarning")  # type: ignore[assignment]
@@ -104,4 +106,5 @@ def scripted_dialogs(seam: DialogSeam) -> Iterator[DialogSeam]:
             simpledialog.askstring,
             filedialog.askopenfilename,
             filedialog.asksaveasfilename,
+            filedialog.askdirectory,
         ) = saved_more
