@@ -505,6 +505,26 @@ class WindowsDesktopDriver(TkDriver):
         pool = usable or candidates
         return pool[skip % len(pool)]
 
+    @staticmethod
+    def _scrollbar_of(container: tk.Canvas) -> tk.Misc | None:
+        """The vertical scrollbar that drives ``container`` (a sibling in the same frame), if it is on screen."""
+
+        for sibling in getattr(container.master, "winfo_children", lambda: [])():
+            if isinstance(sibling, (tk.Scrollbar, ttk.Scrollbar)) and str(sibling.cget("orient")) == "vertical":
+                try:
+                    if sibling.winfo_ismapped() and sibling.winfo_height() > 20:
+                        return sibling
+                except tk.TclError:
+                    continue
+        return None
+
+    def _page_with_scrollbar(self, bar: tk.Misc, *, down: bool) -> None:
+        """Click the scrollbar's trough beyond its thumb, as a person does when the wheel has no effect."""
+
+        x = bar.winfo_rootx() + bar.winfo_width() // 2
+        y = bar.winfo_rooty() + (bar.winfo_height() - 8 if down else 8)
+        self.win32.click(x, y)
+
     def _settled(self, center: Callable[[], tuple[int, int]]) -> bool:
         """True once the control's screen position has stopped changing (smooth scrolling, deferred layout)."""
 
@@ -590,6 +610,15 @@ class WindowsDesktopDriver(TkDriver):
             scrolls += notches
             self.pump(0.06)
             stalled = stalled + 1 if container.yview() == before else 0
+            if stalled >= 3:
+                # The wheel is captured (a list or tree that fills the viewport takes it): use the page scrollbar.
+                bar = self._scrollbar_of(container)
+                if bar is not None:
+                    self._page_with_scrollbar(bar, down=not above)
+                    self.pump(0.15)
+                    self.trace.record("scrolled_with_scrollbar", label=label)
+                    if container.yview() != before:
+                        stalled = 0
             if stalled >= 6:
                 raise ControlUnreachable(
                     label,

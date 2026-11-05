@@ -180,7 +180,7 @@ def journey_metrics(result: dict[str, Any], driver: str) -> dict[str, Any]:
         "lost_clicks": (count("click_retried_after_no_effect") + count("expected_dialog_never_appeared")) if trace else None,
         "click_retries": (count("click_retried_after_no_effect") + count("typing_retried_with_another_strategy")) if trace else None,
         "forced_scroll_or_resize": (
-            count("window_forced_maximized") + count("pane_dragged_to_reveal_controls") + informational.get("page_scrolled_with_the_wheel", 0)
+            count("window_forced_maximized") + count("pane_dragged_to_reveal_controls") + informational.get("page_scrolled_with_the_wheel", 0) + informational.get("page_scrolled_with_the_scrollbar", 0)
         ) if trace else None,
         "waiting_time_s": _waiting_seconds(trace),
         "gui_error_count": len((result.get("captured_errors") or {}).get("gui") or []),
