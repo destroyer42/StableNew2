@@ -955,10 +955,7 @@ class PipelineRunner:
         """Why a run produced nothing: a verified checkpoint mismatch if the executor recorded one, else the generic text."""
 
         take = getattr(self._pipeline, "take_model_sync_failure", None)
-        try:
-            reason = take() if callable(take) else None
-        except Exception:
-            reason = None
+        reason = take() if callable(take) else None  # only swaps an attribute; a stand-in pipeline may return anything
         return reason if isinstance(reason, str) and reason.strip() else "No images were generated successfully"
 
     def _execute_stage_plan(

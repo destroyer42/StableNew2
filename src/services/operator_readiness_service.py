@@ -412,7 +412,7 @@ class OperatorReadinessService:
         try:
             snapshot = provider() if provider is not None else None
             return int(snapshot.get("running_webui_jobs") or 0) if isinstance(snapshot, dict) else 0
-        except Exception:
+        except (AttributeError, TypeError, ValueError, RuntimeError):
             return 0
 
     def _webui_record(self) -> OperatorReadinessRecord:
