@@ -1,7 +1,7 @@
 {
   "schema": "stablenew.golden_findings",
   "version": "1.0.0",
-  "recorded_for": "PR-TEST-DESKTOP-830",
+  "recorded_for": "PR-TEST-JOURNEYS-832, PR-QUAL-JOURNEYS-833",
   "note": "Product findings exposed by the real-input golden-path journeys. None is repaired by PR-TEST-DESKTOP-830; the harness records the workaround it needed for each so a green journey is never read as defect-free. Evidence sources are exploratory runs made on the pre-commit tree (base 7f381e2c) and are preserved into the acceptance baseline with their SHA-256.",
   "findings": [
     {
@@ -350,8 +350,15 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
-        "owner_disposition": "pending"
+        "status": "REPAIRED",
+        "owner_disposition": "pending",
+        "repaired_in": "PR-QUAL-JOURNEYS-833",
+        "summary": "A checkpoint the WebUI will not select now fails the job with a bounded, path-free reason in the canonical error message: it names the requested and reported checkpoints, says no images were generated and says to restore the model or prepare a new job. Backend-unreachable and other failures keep their own messages; zero generation POSTs are sent. The Job History status cell shows the recorded reason as a tooltip.",
+        "regression_tests": [
+          "tests/pipeline/test_checkpoint_mismatch_operator_reason.py",
+          "tests/gui_v2/test_job_history_panel_display.py"
+        ],
+        "verification": "PENDING-ACCEPTANCE"
       }
     },
     {
@@ -381,8 +388,15 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
-        "owner_disposition": "pending"
+        "status": "REPAIRED",
+        "owner_disposition": "pending",
+        "repaired_in": "PR-QUAL-JOURNEYS-833",
+        "summary": "Cause: the job was legitimately claimed (no hold existed) and sat RUNNING in the executor's readiness wait; the Operator Readiness window then showed an older snapshot ('WebUI jobs are held in the queue', 0 held) next to a RUNNING row. The queue projection now counts claimed RUNNING WebUI jobs, the readiness record names them and never says jobs are held in the queue when none is, and the window states when its snapshot was taken. No lifecycle, claim, dispatch-certainty or requeue rule changed. The deeper 'preparing / waiting for the backend' state is GP833-F1 (owner decision).",
+        "regression_tests": [
+          "tests/queue/test_webui_running_claim_projection_832.py",
+          "tests/gui_v2/test_operator_readiness_panel_v2.py"
+        ],
+        "verification": "PENDING-ACCEPTANCE"
       }
     },
     {
@@ -413,8 +427,14 @@
         }
       ],
       "repair": {
-        "status": "UNREPAIRED",
-        "owner_disposition": "pending"
+        "status": "REPAIRED",
+        "owner_disposition": "pending",
+        "repaired_in": "PR-QUAL-JOURNEYS-833",
+        "summary": "The History hand-off's source job identity is carried from Review into the Edit Mask and Extend Canvas dialogs and bound to the loaded bytes (recorded path, source artifact digest, embedded job id) before it becomes the frozen source's parent_job_id. A different image, changed bytes or a contradicting claim are refused; an image with no hand-off keeps no parent.",
+        "regression_tests": [
+          "tests/gui_v2/test_masked_edit_lineage_833.py"
+        ],
+        "verification": "PENDING-ACCEPTANCE"
       }
     },
     {
@@ -444,8 +464,175 @@
         }
       ],
       "repair": {
+        "status": "REPAIRED",
+        "owner_disposition": "pending",
+        "repaired_in": "PR-QUAL-JOURNEYS-833",
+        "summary": "Sequence admission no longer demands the form-level motion prompt when every shot supplies its own (the form check is skipped for sequences only; experimental opt-in and accepted-control checks still run). A shot with no prompt of its own inherits the form prompt as before; an unprompted shot with a blank form prompt, or an explicitly empty prompt, is refused naming the shot. Each segment freezes its own prompt.",
+        "regression_tests": [
+          "tests/video/test_storyboard_sequence_prompts.py",
+          "tests/pipeline/test_pr_vid_seq_330_prompts.py"
+        ],
+        "verification": "PENDING-ACCEPTANCE"
+      }
+    },
+    {
+      "id": "GP833-F1",
+      "title": "A claimed job that waits for an unreachable backend is RUNNING with no 'preparing' state until the failure is classified",
+      "severity": "minor",
+      "category": "queue-state",
+      "area": "Queue, executor readiness wait, WebUI outage coordinator",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "hidden Tk window (tk driver)",
+        "driver": "tk"
+      },
+      "reproduction": [
+        "Stop the WebUI endpoint, queue one job and let the runner claim it (OPS-01 case A).",
+        "Watch the queue label, the repository status and Operator Readiness for the first 30 to 120 seconds."
+      ],
+      "expected": "The operator can tell that a RUNNING job is waiting for the backend and that nothing has been dispatched.",
+      "observed": "The job is RUNNING (legitimately claimed) while the executor's readiness gate waits up to 120 s. The queue label says 'Running job...' and no hold exists until the failure is classified; then the job returns to the queue (typed no-dispatch evidence) and the hold applies. After GP832-F2 the readiness text names the claimed RUNNING job, but there is no in-flight signal from the executor.",
+      "harness_workaround": "None. OPS-01 accepts running or queued while down and asserts that whatever the banner says agrees with the job state.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "OPS-01 unreachable_projection and unreachable_before_dispatch outcomes",
+          "source_hint": "gp833_ops4/*/journeys/*OPS-01*/evidence.json"
+        }
+      ],
+      "repair": {
         "status": "UNREPAIRED",
-        "owner_disposition": "pending"
+        "owner_disposition": "decision required",
+        "proposed_contract": "Surface an in-flight 'waiting for the backend, nothing dispatched' signal from the executor through the runner to the queue projection, and decide whether the in-executor wait should reach the outage coordinator sooner so the hold applies earlier. This is new dispatch-certainty evidence and changes lifecycle semantics, so it needs owner approval.",
+        "proposed_acceptance": "A job claimed while the backend is unreachable shows 'waiting for the backend; nothing sent' within 5 s, never a hold it is not under, and still ends exactly once (requeued on typed no-dispatch evidence, otherwise failed)."
+      }
+    },
+    {
+      "id": "GP833-O1",
+      "title": "Opening a Storyboard asks 'Discard the unsaved draft changes?' after only the form was prepared",
+      "severity": "minor",
+      "category": "ux",
+      "area": "Video Workflow, Storyboard Open",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "normal, minimum 1280x680 and maximized",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Restart the application, choose a source image and a workflow, then Open Storyboard."
+      ],
+      "expected": "Opening a saved Storyboard replaces the form, so a prepared form is the only thing at stake.",
+      "observed": "A yes/no box 'Unsaved Storyboard - Discard the unsaved draft changes?' appears. The Storyboard draft includes the form inputs (source, workflow, settings), so a prepared form counts as an unsaved draft; the question is true and protects work.",
+      "harness_workaround": "The native dialog responder answers the question and then the file dialog (recorded as native_dialogs_N).",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "VID-03 Windows-driver native_dialogs observation",
+          "source_hint": "StableNewAcceptance/golden-paths/*02ca0431*/*VID-03*/evidence.json"
+        }
+      ],
+      "repair": {
+        "status": "WONTFIX",
+        "owner_disposition": "pending",
+        "classification": "working as designed; no data-safety implication",
+        "summary": "Not a defect. Optional wording follow-up: say that opening replaces the current form and shots, and skip the question when the draft has no shots and no title."
+      }
+    },
+    {
+      "id": "GP833-O2",
+      "title": "The Motion Library tree and the Review preview canvas capture the mouse wheel",
+      "severity": "minor",
+      "category": "layout",
+      "area": "Video Workflow Motion Library; Review image preview",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "minimum 1280x680",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Resize to the minimum window and open Video Workflow, Motion Library with several clips; scroll the page with the wheel over the list.",
+        "Open Review with an image loaded and scroll over the preview."
+      ],
+      "expected": "The wheel scrolls the page when the list or canvas has nothing more to scroll, or the page scrollbar stays easy to reach.",
+      "observed": "A list that fills the 262 px viewport (and the nested preview canvas) takes the wheel, so controls below it cannot be reached with the wheel; the page scrollbar still works.",
+      "harness_workaround": "The driver clicks the page scrollbar trough when the wheel stalls (scrolled_with_scrollbar, recorded as page_scrolled_with_the_scrollbar).",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "VID-02 minimum layout trace with scrolled_with_scrollbar",
+          "source_hint": "StableNewAcceptance/golden-paths/*02ca0431_minimum*/actions.jsonl"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_acceptance": "At 1280x680 every control in the Motion Library and Review tabs is reachable with the wheel alone; a layout test asserts wheel chaining to the page for nested lists and canvases."
+      }
+    },
+    {
+      "id": "GP833-O3",
+      "title": "Review Edit Mask and Extend Canvas sit below the fold at the minimum window",
+      "severity": "minor",
+      "category": "layout",
+      "area": "Review tab actions",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "minimum 1280x680",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Resize to the minimum window, open Review and select an image."
+      ],
+      "expected": "The edit actions are visible, or reachable by wheel or scrollbar.",
+      "observed": "The actions are reachable by scrolling (the 760 reachability tests pass) but start out below the fold and the preview canvas captures the wheel (GP833-O2).",
+      "harness_workaround": "reach() scrolls the page, then clicks the scrollbar trough.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "IMG-03 Windows-driver minimum layout trace",
+          "source_hint": "StableNewAcceptance/golden-paths/*02ca0431_minimum*/actions.jsonl"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending",
+        "proposed_acceptance": "Primary Review actions are in an action bar visible without scrolling at 1280x680, or the declared minimum height is raised (owner decision, see the layout recommendation)."
+      }
+    },
+    {
+      "id": "GP833-O4",
+      "title": "Controls inside collapsed disclosures are hidden until the disclosure is opened",
+      "severity": "minor",
+      "category": "ux",
+      "area": "Video Workflow Advanced options and Multi-shot sequence",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "normal, minimum 1280x680 and maximized",
+        "driver": "windows"
+      },
+      "reproduction": [
+        "Open Video Workflow; the Storyboard lives under Advanced options, which starts collapsed."
+      ],
+      "expected": "Intentional progressive disclosure.",
+      "observed": "Controls are hidden until the operator opens the section; the journey opens it as an operator does.",
+      "harness_workaround": "VID-03 expands Advanced options and Multi-shot sequence.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "VID-03 journey opens the disclosures",
+          "source_hint": "tools/operator_journey/golden/vid03.py"
+        }
+      ],
+      "repair": {
+        "status": "WONTFIX",
+        "owner_disposition": "pending",
+        "classification": "intentional disclosure, not a defect",
+        "summary": "The disclosures are by design (docs/Subsystems/Video/VIDEO_PIPELINE.md section 4). No change."
       }
     }
   ]

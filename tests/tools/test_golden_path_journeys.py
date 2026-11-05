@@ -109,16 +109,15 @@ def test_simulated_journey_passes_through_the_canonical_path(tmp_path: Path, jou
 
 #: journey key -> (expected verdict, the only checks allowed to fail).  A product defect found by a journey is pinned here
 #: with its finding id, so the journey stays honest until the defect is repaired (then the entry changes to PASS).
+#: GP832-F1/F3 are repaired, so OPS-01 and IMG-03 are PASS with every check required to hold.  VID-02 is HOLD unless an
+#: explicit Blender is supplied (STABLENEW_JOURNEY_BLENDER); with one it must PASS *and* prove a real conversion.
 _ADVANCED_EXPECTED = {
-    "recovery": ("FAIL", {"failure_cause_visible_to_operator"}),  # GP832-F1
+    "recovery": ("PASS", set()),
     "prompt-model": ("PASS", set()),
     "learning-profile": ("PASS", set()),
     "storyboard": ("PASS", set()),
-    "image-edit": ("FAIL", {"parent_job_recorded", "compare_offered_for_the_edit"}),  # GP832-F3
-    "motion-assets": (
-        "HOLD",
-        set(),
-    ),  # conversion needs Blender; PASS is also accepted when Blender is installed
+    "image-edit": ("PASS", set()),
+    "motion-assets": ("HOLD", set()),
 }
 
 
@@ -136,12 +135,19 @@ def test_advanced_simulated_journey_reaches_its_expected_verdict(
     if verdict == "HOLD" and "FFmpeg is not available" in (result.get("hold_reason") or ""):
         pytest.skip(result["hold_reason"])
     failed = {c["name"] for c in result["checks"] if not c["passed"]}
-    acceptable = {expected, "PASS"} if journey == "motion-assets" else {expected}
+    blender_supplied = bool(os.environ.get("STABLENEW_JOURNEY_BLENDER"))
+    acceptable = {"PASS"} if journey == "motion-assets" and blender_supplied else {expected}
     if verdict not in acceptable or not failed <= allowed_failures:
         _fail_with_diagnostics(result, sorted(failed))
     assert evidence["mode"] == "simulated" and evidence["desktop_driver"] == "tk"
     if journey == "motion-assets" and verdict == "HOLD":
-        assert "Blender" in result["hold_reason"]
+        # Without a supplied executable the HOLD says exactly that; it is not a claim that the host lacks Blender.
+        assert "No Blender executable was supplied" in result["hold_reason"]
+        assert "no render was faked" in result["hold_reason"]
+    if journey == "motion-assets" and verdict == "PASS":
+        # A PASS is only possible if a real conversion completed and its outputs were inspected independently.
+        checks = {c["name"]: c["passed"] for c in result["checks"]}
+        assert checks.get("a_real_conversion_completed") is True
     captured = result["captured_errors"]
     assert captured["gui"] == [] and captured["threads"] == []
     if (
