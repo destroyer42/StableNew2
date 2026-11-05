@@ -35,12 +35,34 @@ PROMPTS = (
     "clouds roll in and the sea darkens",
     "dawn breaks over the calm harbour",
 )
-FORM_PROMPT = "a lighthouse on a rocky coast"
 SEEDS = ("1111", "2222", "3333")
 CLIP_NAME = "golden_vid03"
 REVISED_CLIP = "golden_vid03_revised"
 REVISED_PROMPT = "a storm gathers and the lamp burns brighter"
 TITLE = "VID-03 lighthouse storyboard"
+
+
+def _frozen_segment_prompts(node: Any) -> list[str]:
+    """The prompts of the frozen sequence's segments, wherever the NJR keeps its sequence plan."""
+
+    if isinstance(node, dict):
+        segments = node.get("segments")
+        if (
+            isinstance(segments, list)
+            and segments
+            and all(isinstance(s, dict) and "prompt" in s for s in segments)
+        ):
+            return [str(s["prompt"]) for s in segments]
+        for value in node.values():
+            found = _frozen_segment_prompts(value)
+            if found:
+                return found
+    elif isinstance(node, list):
+        for value in node:
+            found = _frozen_segment_prompts(value)
+            if found:
+                return found
+    return []
 
 
 def _wait_status(
@@ -117,7 +139,7 @@ def run_vid03(
     with fixture_video_runtime(run.fake_comfy, spec) if simulated else nullcontext({}):
         run.boot_app()
         d = run.driver
-        tab = _open_workflow_tab(run, source_image, FORM_PROMPT)
+        tab = _open_workflow_tab(run, source_image)
         panel = tab.sequence_panel
         comfy = run.fake_comfy
 
@@ -193,7 +215,7 @@ def run_vid03(
         run.shutdown_app()
         run.boot_app()
         d = run.driver
-        tab = _open_workflow_tab(run, source_image, FORM_PROMPT)
+        tab = _open_workflow_tab(run, source_image)
         panel = tab.sequence_panel
         run.check(
             "persist",
@@ -323,6 +345,15 @@ def run_vid03(
             "shots_frozen_in_the_reordered_order",
             all(p >= 0 for p in positions) and positions == sorted(positions),
             f"{positions}",
+        )
+        frozen_prompts = _frozen_segment_prompts(njr)
+        form_prompt = tab.prompt_text.get("1.0", "end").strip()
+        ev.observe("frozen_segment_prompts", frozen_prompts)
+        run.check(
+            "njr",
+            "each_shot_keeps_its_own_prompt_with_the_form_prompt_blank",
+            not form_prompt and frozen_prompts == [PROMPTS[1], PROMPTS[0], PROMPTS[2]],
+            f"form prompt {form_prompt!r}; frozen {frozen_prompts}",
         )
         run.check(
             "njr",
