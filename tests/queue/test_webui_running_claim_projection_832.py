@@ -67,6 +67,8 @@ def test_claimed_job_waiting_on_an_unreachable_backend_is_running_and_projected_
     stack.submit(image("j1"))
     stack.start()
     wait_for(lambda: stack.statuses().get("j1") == "running")
+    # The claim is visible before the worker thread enters the behavior.
+    wait_for(lambda: calls == ["j1"])
 
     summary = stack.queue.dispatch_summary()
     assert summary["hold"] is None and summary["held"] == 0 and summary["running_webui"] == 1
