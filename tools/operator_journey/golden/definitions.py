@@ -226,7 +226,7 @@ VID_03 = JourneyDef(
     steps=(
         "Select a source image",
         "Choose a supported sequence workflow",
-        "Create a two-shot Storyboard with distinct motion prompts",
+        "Create a three-shot Storyboard with distinct motion prompts",
         "Save the draft",
         "Close and reopen StableNew",
         "Open the draft",

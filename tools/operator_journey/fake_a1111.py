@@ -46,7 +46,11 @@ class FakeA1111:
         loras: tuple[str, ...] = DEFAULT_LORAS,
         drop_seed_readback: bool = False,
         startup_delay: float = 0.0,
+        forge: bool = False,
     ) -> None:
+        # ``forge`` makes the loopback endpoint answer the runtime-identity probe like Forge (PR-IMG-FORGE-100): Forge-only
+        # options and an /sd-modules list, and no /sd-vae.  It is still a fake: nothing here is a real Forge.
+        self.forge = bool(forge)
         self.model = active_model or model  # the checkpoint WebUI has loaded
         self.model_names = tuple(dict.fromkeys((model, *extra_models, self.model)))
         self.checkpoint_switches = 0
@@ -63,11 +67,16 @@ class FakeA1111:
         self.interrupts = 0
         self._interrupt = threading.Event()
         self.txt2img_payloads: list[dict[str, Any]] = []
+        self.img2img_payloads: list[dict[str, Any]] = []
         self.unhandled: list[str] = []
         self.options: dict[str, Any] = {
             "sd_model_checkpoint": self.title(self.model),
             "sd_vae": "Automatic",
         }
+        if self.forge:
+            self.options.update(
+                {"forge_preset": "sd", "forge_additional_modules": [], "forge_unet_storage_dtype": "Automatic"}
+            )
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -250,6 +259,8 @@ class FakeA1111:
             return [{"name": "Euler a", "aliases": [], "options": {}}], 200
         if path == "/sdapi/v1/schedulers":
             return [{"name": "normal", "label": "Normal"}], 200
+        if path == "/sdapi/v1/sd-vae" and self.forge:
+            return {"detail": "Not Found"}, 404
         if path in {"/sdapi/v1/sd-vae", "/sdapi/v1/upscalers", "/sdapi/v1/hypernetworks"}:
             return [], 200
         if path == "/sdapi/v1/scripts":
@@ -265,7 +276,7 @@ class FakeA1111:
         if path == "/sdapi/v1/cmd-flags":
             return {"api": True, "port": 7860}, 200
         if path == "/sdapi/v1/sd-modules":
-            return {"detail": "Not Found"}, 404
+            return ([], 200) if self.forge else ({"detail": "Not Found"}, 404)
         if path == "/sdapi/v1/progress":
             return {"progress": 0.0, "eta_relative": 0.0, "state": {}, "current_image": None}, 200
         if path in {"/internal/ping", "/config"}:
@@ -285,8 +296,41 @@ class FakeA1111:
             return {}, 200
         if path == "/sdapi/v1/txt2img":
             return self._txt2img(body), 200
+        if path == "/sdapi/v1/img2img":
+            return self._img2img(body), 200
         self.unhandled.append(f"POST {path}")
         return {"detail": "not found"}, 404
+
+    def _img2img(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Record the edit request and answer with a synthetic image the size of the first init image."""
+
+        from PIL import Image
+
+        with self._lock:
+            self.img2img_payloads.append(json.loads(json.dumps(payload)))
+        width, height = int(payload.get("width") or 0), int(payload.get("height") or 0)
+        inits = payload.get("init_images") or []
+        if inits and not (width and height):
+            with Image.open(io.BytesIO(base64.b64decode(inits[0]))) as init:
+                width, height = init.size
+        seed = int(payload.get("seed", -1))
+        seed = seed if seed >= 0 else random.randint(0, 2**31 - 1)
+        prompt = str(payload.get("prompt") or "")
+        info = {
+            "prompt": prompt,
+            "negative_prompt": str(payload.get("negative_prompt") or ""),
+            "seed": seed,
+            "all_seeds": [seed],
+            "width": width or 64,
+            "height": height or 64,
+            "denoising_strength": payload.get("denoising_strength"),
+            "infotexts": [prompt],
+        }
+        return {
+            "images": [base64.b64encode(_png_bytes(seed, prompt, width or 64, height or 64)).decode()],
+            "parameters": {},
+            "info": json.dumps(info),
+        }
 
     def _txt2img(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self._lock:

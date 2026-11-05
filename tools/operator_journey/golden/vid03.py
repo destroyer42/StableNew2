@@ -17,13 +17,18 @@ from typing import Any
 from tools.operator_journey.golden.gui import select_history_row
 from tools.operator_journey.golden.img01 import read_njr
 from tools.operator_journey.golden.media import inspect_video
-from tools.operator_journey.golden.session import GoldenRun, JourneyAbort, JourneyHold, file_identity
-from tools.operator_journey.golden.video_fixture import fixture_video_runtime
+from tools.operator_journey.golden.session import (
+    GoldenRun,
+    JourneyAbort,
+    JourneyHold,
+    file_identity,
+)
 from tools.operator_journey.golden.vid01 import (
     WORKFLOW_ID,
     WORKFLOW_VERSION,
     make_reference_image,
 )
+from tools.operator_journey.golden.video_fixture import fixture_video_runtime
 
 PROMPTS = (
     "the lighthouse beam slowly sweeps across the water",

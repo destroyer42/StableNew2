@@ -977,6 +977,18 @@ class WindowsDesktopDriver(TkDriver):
                 return
         raise ControlUnreachable(label, "the divider did not move when dragged")
 
+    def drag_stroke(
+        self, widget: tk.Misc, start: tuple[int, int], end: tuple[int, int], *, label: str
+    ) -> None:
+        """Press at ``start`` (widget coordinates), drag to ``end`` and release with the real mouse."""
+
+        x1, y1 = widget.winfo_rootx() + start[0], widget.winfo_rooty() + start[1]
+        x2, y2 = widget.winfo_rootx() + end[0], widget.winfo_rooty() + end[1]
+        self._require_reachable(widget, x1, y1, label)
+        self.win32.drag(x1, y1, x2, y2, pump=self.pump)
+        self.trace.record("drag_stroke", label=label, start=start, end=end, x=x1, y=y1)
+        self.pump(0.2)
+
     def select_listbox_row(self, listbox: tk.Listbox, index: int, *, label: str) -> None:
         def row_point() -> tuple[int, int]:
             listbox.see(index)

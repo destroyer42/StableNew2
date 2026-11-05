@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from tkinter import ttk
 from typing import Any
 
 from tools.operator_journey.golden import flow
-from tools.operator_journey.golden.lrn01 import _results_step_shown
 from tools.operator_journey.golden.img01 import read_njr
 from tools.operator_journey.golden.session import GoldenRun, JourneyAbort, file_identity
 from tools.operator_journey.observe import job_lifecycle_settled, read_job_rows, read_rating_records
-from tools.operator_journey.tk_driver import is_disabled
 
 PROMPT = "golden path learning, a lighthouse at dusk, oil painting"
 CFG_VALUES = (4.0, 6.0, 8.0)

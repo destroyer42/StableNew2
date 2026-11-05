@@ -83,4 +83,22 @@ def run_advanced(journey: JourneyDef, config: RunConfig) -> JourneyEvidence:
             fake_comfy_factory=make_comfy,
             workspace_hook=seed_declared_sdxl,
         )
+    if journey.key == "image-edit":
+        from tools.operator_journey.golden.fixtures import seed_declared_checkpoints
+        from tools.operator_journey.golden.img03 import run_img03
+
+        def declare_verified_sdxl(workspace, fake_a, _fake_c) -> None:
+            # A masked edit needs a registry-resolved SDXL base: the declared family plus a verified digest.
+            seed_declared_checkpoints(workspace, {fake_a.model: "sdxl"}, verified=(fake_a.model,))
+
+        return run_journey_body(
+            journey.id,
+            run_img03,
+            config,
+            mode_label="simulated",
+            fake_a1111_factory=lambda: make_fake_a1111(forge=True),
+            workspace_hook=declare_verified_sdxl,
+            # Masked edits are Forge-only: the isolated workspace selects the Forge identity (loopback Forge fake).
+            settings_extra={"webui_runtime_identity": "forge_webui"},
+        )
     raise KeyError(f"no runner for advanced journey {journey.key!r}")
