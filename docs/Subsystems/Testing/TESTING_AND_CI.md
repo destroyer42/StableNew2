@@ -219,6 +219,10 @@ Verdicts per journey are `PASS`, `FAIL`, `HOLD` (a prerequisite is missing) and 
 
 **Tests.** `tests/tools/test_golden_path_advanced.py` (deterministic: definitions and routing, physical refusal, fake img2img/Forge/fault seams, store isolation and guard, registries, comparator metrics) and `test_advanced_simulated_journey_reaches_its_expected_verdict` in `tests/tools/test_golden_path_journeys.py` (display required; pins each journey's verdict and, for IMG-03, the only checks allowed to fail). When a finding is repaired, change that pin to PASS.
 
+### 11c. Cross-workflow qualification campaign (PR-QUAL-SYSTEM-840)
+
+`tools/qualification/system840/` (runbook `docs/runbooks/qual_system_840.md`) is operator-only qualification control: a ledger of 50 capabilities across arms IMG-Q0..Q4, VID-Q0..Q5 and AI-Q0..Q3, frozen per-arm plans, owner-authorization and typed-launch gates, immutable evidence archives, per-dimension verdicts and a read-only comparator. Its tests are deterministic and CPU-only: `tests/tools/test_qual840_ledger.py` (completeness, evidence and precedence rules, live reconciliation), `test_qual840_plan_and_safety.py` (digest, authorization, readiness gates, stop classification, AI offline/egress contract), `test_qual840_evidence_verdict_compare.py` (archive immutability, verdicts, comparator) and `test_qual840_coordinator.py` (simulated campaign, stop propagation, no-retry, hygiene). They use fake probes and the simulated adapter only; no model, download, GPU, runtime, network or approval is involved, and the package refuses physical dispatch under CI and pytest. A ledger status is changed only by an owner-accepted edit of `ledger.v1.json` (run `python -m tools.qualification.system840 ledger --check --live` after it).
+
 ## 12. Hermetic seams: fakes, helpers and autouse guards
 
 Root `tests/conftest.py` [V] applies to every test:

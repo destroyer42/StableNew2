@@ -1,0 +1,3075 @@
+{
+  "schema": "stablenew.qual-system-840.ledger.v1",
+  "ledger_version": "1.0.0",
+  "benchmark_version": "840.1",
+  "built_from": {
+    "repo": "destroyer42/StableNew2",
+    "main_sha": "d76d1acde91a64f7f513ac42cffa5baa67f519bf",
+    "state_date": "2026-11-05"
+  },
+  "precedence": "Current code and AGENTS.md/STATUS.md override these records; a recorded claim that differs from live code is reported by reconcile_with_live, never silently adopted.",
+  "standing_holds": [
+    {
+      "id": "HOLD-ZIMAGE-STABILITY",
+      "reason": "Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized.",
+      "source": "STATUS.md"
+    },
+    {
+      "id": "HOLD-COMFY-STILL-IMAGE",
+      "reason": "Forge-vs-Comfy still-image qualification is offline only.",
+      "source": "STATUS.md"
+    },
+    {
+      "id": "HOLD-A14B-NEW-BUDGET",
+      "reason": "Wan A14B is INCONCLUSIVE; teardown and worker-memory defects unresolved; the three-attempt authorization is exhausted.",
+      "source": "tools/qualification/README.md"
+    },
+    {
+      "id": "HOLD-AI-ETW-CANARY",
+      "reason": "AI qualification is held on D12b and a protected-interpreter canary capture.",
+      "source": "STATUS.md"
+    },
+    {
+      "id": "HOLD-GPU-DEVICE-LOSS",
+      "reason": "Intermittent GPU device loss is unresolved (19 losses since 2026-09-07 at the last record); the dispatch quarantine stays the response and any new loss stops the campaign.",
+      "source": "docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "IMG-Q0.sdxl-forge-baseline",
+      "version": "1",
+      "arm_id": "IMG-Q0",
+      "title": "SDXL baseline on Forge (PromptPack -> Preview -> Queue -> History)",
+      "identity": {
+        "backend": "forge_webui",
+        "model": "cyberrealisticXL_v90-16fp.safetensors",
+        "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline tab: PromptPack, model/profile, Preview, Add to Queue, Job History",
+        "modules": [
+          "src/image_backends/forge_webui_backend.py",
+          "src/pipeline/prompt_pack_job_builder.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "production_workflow",
+          "claim": "Pair A txt2img through the canonical driver path (build_cli_njr -> JobService -> run_njr), seed 424242, 16.3 s, VRAM peak 8,118 MiB.",
+          "source": "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md",
+          "date": "2026-10",
+          "exact_source": "repo 702a4fe8be2769be700fab1e8bd150c84c2aeeec",
+          "result": "CANONICAL_FORGE_BASELINE_PASS",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "driver"
+        },
+        {
+          "id": "e2",
+          "kind": "production_workflow",
+          "claim": "Default-path run: job completed in 15.5 s; image quality was not under test.",
+          "source": "docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md",
+          "date": "2026-10",
+          "exact_source": "repo 14f4c3d; evidence C:\\Users\\rob\\qual\\img_forge_120\\physical-14f4c3d",
+          "result": "NEW_WORK_DEFAULT_FORGE_PASS",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "driver"
+        },
+        {
+          "id": "e3",
+          "kind": "offline_contract",
+          "claim": "IMG-01/IMG-02 simulated desktop journeys on a loopback fake backend; ADetailer and upscale off.",
+          "source": "tools/operator_journey/golden/coverage_matrix.v1.json",
+          "date": "2026-11-04",
+          "applies_to": {}
+        },
+        {
+          "id": "e4",
+          "kind": "owner_decision",
+          "claim": "Forge is the supported default backend; A1111 is the rollback backend.",
+          "source": "STATUS.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "NOT TESTED",
+        "integration": "PARTIALLY QUALIFIED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "supported default backend",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "PromptPack-through-GUI physical acceptance not run (coverage matrix row physical-gpu-generation-through-the-gui)",
+        "Visual quality recorded as observations, not verdicts"
+      ],
+      "next_test": {
+        "summary": "One GUI-driven PromptPack txt2img (ADetailer and upscale off) on Forge through the golden-path physical gate; the GUI path has never run physically.",
+        "arm_id": "IMG-Q0",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true,
+        "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical"
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md",
+        "docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q1.sdxl-family",
+      "version": "1",
+      "arm_id": "IMG-Q1",
+      "title": "SDXL model family (the only registry-qualified family policy)",
+      "identity": {
+        "backend": "forge_webui",
+        "family": "sdxl",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline Base Generation with registry-verified SDXL checkpoints",
+        "modules": [
+          "src/image_backends/model_policy.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "production_workflow",
+          "claim": "SDXL checkpoint runs of the Forge acceptance pairs A-D (see IMG-Q0 and IMG-Q2).",
+          "source": "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md",
+          "date": "2026-10",
+          "exact_source": "repo 702a4fe8be2769be700fab1e8bd150c84c2aeeec",
+          "result": "CANONICAL_FORGE_BASELINE_PASS",
+          "applies_to": {
+            "family": "sdxl"
+          },
+          "surface": "driver"
+        },
+        {
+          "id": "e2",
+          "kind": "offline_contract",
+          "claim": "QUALIFIED_REGISTRY_POLICY_IDS contains only sdxl; other families are unverified_generic.",
+          "source": "src/image_backends/model_policy.py",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "NOT TESTED",
+        "integration": "PARTIALLY QUALIFIED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "qualified family policy",
+        "source": "src/image_backends/model_policy.py"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Per-checkpoint matched run under the IMG-Q0 benchmark prompts; reuse IMG-Q0 evidence first.",
+        "arm_id": "IMG-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/MODEL_PROFILES.md",
+        "src/image_backends/model_policy.py"
+      ]
+    },
+    {
+      "id": "IMG-Q1.klein-4b-fp8",
+      "version": "1",
+      "arm_id": "IMG-Q1",
+      "title": "FLUX.2 Klein 4B FP8 (profile flux2_klein_4b_fp8, v1/v2)",
+      "identity": {
+        "backend": "forge_webui",
+        "profile": "flux2_klein_4b_fp8",
+        "model": "flux-2-klein-4b-fp8.safetensors",
+        "model_sha256": "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline Base Generation and Review single-reference edit",
+        "modules": [
+          "src/image_backends/forge_klein_profile.py",
+          "src/pipeline/klein_edit_reprocess.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "IMG-115 target-hardware cases A (768x1024), B (1024x1024), C (single-reference edit) passed; case D two-reference rejected by the Forge API.",
+          "source": "docs/Subsystems/Image/PR-IMG-115_FLUX2_Klein_4B_FP8_Target_Hardware_Qualification.md",
+          "date": "2026-10-04",
+          "exact_source": "repo 554b6aa5/ae7fff9d; evidence %LOCALAPPDATA%\\StableNew\\Qualification\\IMG115_FLUX2_KLEIN_4B_FP8",
+          "result": "FLUX2_KLEIN_4B_FP8_PASS_CONSTRAINED",
+          "applies_to": {
+            "model_sha256": "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "production_workflow",
+          "claim": "IMG-116 production smokes: txt2img 19.7 s and Review single-reference edit 16.7 s through the canonical path.",
+          "source": "docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md",
+          "date": "2026-10",
+          "exact_source": "unverified: evidence C:\\Users\\rob\\qual\\img_116, executed SHA not recorded",
+          "applies_to": {
+            "model_sha256": "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6"
+          },
+          "surface": "driver"
+        },
+        {
+          "id": "e3",
+          "kind": "standalone_feasibility",
+          "claim": "IMG-117 one LoRA (baseline/0.8/0.4) completed with Forge's own LoRA-loaded line.",
+          "source": "docs/Subsystems/Image/PR-IMG-117_FLUX2_Klein_LoRA_Qualification_and_Profile_v2.md",
+          "date": "2026-10",
+          "exact_source": "commits 2026-10-04..06",
+          "applies_to": {
+            "model_sha256": "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6"
+          }
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "NOT TESTED",
+        "integration": "PARTIALLY QUALIFIED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "exact model profile",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "Product value PRODUCT_VALUE_PENDING_OWNER_REVIEW",
+        "Multi-reference, LoRA with edit and ADetailer interaction not proven",
+        "Tensor-level equality of the single files with the official shards is not verified"
+      ],
+      "next_test": {
+        "summary": "Re-run the frozen txt2img case A (seed 424242) through the GUI path under a new frozen plan.",
+        "arm_id": "IMG-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true,
+        "harness": "python -m tools.acceptance.img_116_klein_acceptance --smoke A"
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-115_FLUX2_Klein_4B_FP8_Target_Hardware_Qualification.md",
+        "docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md",
+        "docs/Subsystems/Image/PR-IMG-117_FLUX2_Klein_LoRA_Qualification_and_Profile_v2.md",
+        "docs/Subsystems/Image/MODEL_PROFILES.md"
+      ]
+    },
+    {
+      "id": "IMG-Q1.klein-base-9b",
+      "version": "1",
+      "arm_id": "IMG-Q1",
+      "title": "FLUX.2 Klein Base 9B (refused)",
+      "identity": {
+        "backend": "forge_webui",
+        "model": "flux-2-klein-base-9b.safetensors"
+      },
+      "reachability": {
+        "implemented": false,
+        "operator_reachable": false,
+        "surface": "No profile; refused by the dependency gate (ForgeUnqualifiedModelError)",
+        "modules": [
+          "src/image_backends/forge_klein_profile.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "owner_decision",
+          "claim": "Feasibility verdict NO_GO_RESOURCE_RISK; no model loaded, no generation, no physical test proposed.",
+          "source": "docs/Subsystems/Image/PR-IMG-MODELS-151_Klein_Base_9B_Feasibility.md",
+          "date": "2026-10",
+          "result": "NO_GO_RESOURCE_RISK",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NO-GO",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NO-GO",
+      "governance": {
+        "state": "refused",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "None: the refusal is the verdict.",
+        "arm_id": "IMG-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-MODELS-151_Klein_Base_9B_Feasibility.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q1.zimage-turbo-fp8",
+      "version": "1",
+      "arm_id": "IMG-Q1",
+      "title": "Z-Image-Turbo FP8 (profile z_image_turbo_fp8_scaled, limited support)",
+      "identity": {
+        "backend": "forge_webui",
+        "profile": "z_image_turbo_fp8_scaled",
+        "model": "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors",
+        "model_sha256": "59610861d46ae8d5d1d371ab7b2532ce64c0835052b395551a8550fa0e3eb3cf",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline Base Generation plus PromptPack adaptation (txt2img 1024x1024 only)",
+        "modules": [
+          "src/image_backends/forge_zimage_profile.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "Case 2 produced one valid 1024x1024 image but shutdown reported 20 surviving PIDs, verified:false: INSTRUMENTATION_GAP, not a qualification PASS.",
+          "source": "docs/Subsystems/Image/PR-IMG-MODELS-154B_ZImage_Turbo_Controlled_Physical_Qualification.md",
+          "date": "2026-10-10",
+          "exact_source": "repo a4ee0464d92cd512923530ced8181fe97fec717e",
+          "result": "INSTRUMENTATION_GAP",
+          "applies_to": {
+            "model_sha256": "59610861d46ae8d5d1d371ab7b2532ce64c0835052b395551a8550fa0e3eb3cf"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized.",
+          "source": "STATUS.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "INCONCLUSIVE",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "hold: no repeat physical attempt authorized",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-ZIMAGE-STABILITY"
+      ],
+      "open_items": [],
+      "next_test": {
+        "summary": "None without a new exact owner decision.",
+        "arm_id": "IMG-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-MODELS-154B_ZImage_Turbo_Controlled_Physical_Qualification.md",
+        "docs/Subsystems/Image/PR-IMG-MODELS-155_ZImage_Turbo_FP8_Forge_Enablement.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q1.qwen-image",
+      "version": "1",
+      "arm_id": "IMG-Q1",
+      "title": "Qwen image models (no registered backend route)",
+      "identity": {
+        "backend": null,
+        "family": "qwen_image"
+      },
+      "reachability": {
+        "implemented": false,
+        "operator_reachable": false,
+        "surface": "Header-signature topology only (ARCH_QWEN_IMAGE_DIT); no backend route",
+        "modules": [
+          "src/assets/bundles.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "No Qwen image-generation model is established by the existence of Qwen text encoders; installed weights without a qualified route are an integration gap.",
+          "source": "docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md",
+          "date": "2026-10",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "UNSUPPORTED",
+      "governance": {
+        "state": "integration gap: not registered, not routed",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "Weights on disk never enable a model: classify as an integration gap"
+      ],
+      "next_test": {
+        "summary": "None: needs a backend implementation package and an owner decision.",
+        "arm_id": "IMG-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md",
+        "docs/Subsystems/Image/PR-IMG-MODELS-152_Asset_Topology_and_Bundle_Discovery.md"
+      ]
+    },
+    {
+      "id": "IMG-Q1.other-generic-families",
+      "version": "1",
+      "arm_id": "IMG-Q1",
+      "title": "SD1/SD2/SD3/generic FLUX families (labelled only)",
+      "identity": {
+        "backend": "forge_webui",
+        "family": "unverified_generic"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Labelled but treated as unverified_generic by model policy",
+        "modules": [
+          "src/image_backends/model_policy.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Only sdxl is a qualified family policy; other families are unverified_generic and need owner approval to add.",
+          "source": "src/image_backends/model_policy.py",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "UNSUPPORTED",
+      "governance": {
+        "state": "unqualified families are refused qualification",
+        "source": "src/image_backends/model_policy.py"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "None until an owner approves a family and its profile.",
+        "arm_id": "IMG-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "src/image_backends/model_policy.py",
+        "docs/Subsystems/Image/MODEL_PROFILES.md"
+      ]
+    },
+    {
+      "id": "IMG-Q2.adetailer-face",
+      "version": "1",
+      "arm_id": "IMG-Q2",
+      "title": "ADetailer face correction (ADetailer-Neo)",
+      "identity": {
+        "backend": "forge_webui",
+        "extension": "ADetailer-Neo af228eba7a3f3691a25bcd1fc94aa95e600dd3e6",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline ADetailer card (face pass on by default)",
+        "modules": [
+          "src/refinement/",
+          "src/pipeline/adetailer_contract.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "production_workflow",
+          "claim": "Pair D: one Forge job txt2img -> ADetailer (1 face, 2 hands) -> upscale, 29.0 s, final 1248x1824, VRAM peak 11,004 MiB. Requested processing proven; appearance not judged.",
+          "source": "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md",
+          "date": "2026-10",
+          "exact_source": "repo 97f9d8f; evidence C:\\Users\\rob\\qual\\img_forge_100\\physical-97f9d8f-d110",
+          "result": "FORGE_PAIR_D_TECHNICAL_PASS",
+          "applies_to": {
+            "extension": "ADetailer-Neo af228eba7a3f3691a25bcd1fc94aa95e600dd3e6"
+          },
+          "surface": "driver"
+        },
+        {
+          "id": "e2",
+          "kind": "offline_contract",
+          "claim": "ADetailer control truth: no anatomical claim from a detection, a completed request or a pixel change.",
+          "source": "docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md",
+          "date": "2026-10",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "NOT TESTED",
+        "integration": "PARTIALLY QUALIFIED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "supported; effectiveness unqualified",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "Face and hand run as one request: no per-pass physical attribution"
+      ],
+      "next_test": {
+        "summary": "PR-REFINE-160 operator acceptance procedure on 4 real images (portrait, partial body, full body, multi-subject), recording acceptance, measurable change and operator rating separately.",
+        "arm_id": "IMG-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md",
+        "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md"
+      ]
+    },
+    {
+      "id": "IMG-Q2.adetailer-hands",
+      "version": "1",
+      "arm_id": "IMG-Q2",
+      "title": "ADetailer hand correction (ADetailer-Neo)",
+      "identity": {
+        "backend": "forge_webui",
+        "extension": "ADetailer-Neo af228eba7a3f3691a25bcd1fc94aa95e600dd3e6",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline ADetailer card (hand pass on by default)",
+        "modules": [
+          "src/refinement/",
+          "src/pipeline/adetailer_contract.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "production_workflow",
+          "claim": "Pair D hand detections (2) in the same single request as the face pass; no per-pass split exists.",
+          "source": "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md",
+          "date": "2026-10",
+          "exact_source": "repo 97f9d8f",
+          "result": "FORGE_PAIR_D_TECHNICAL_PASS",
+          "applies_to": {
+            "extension": "ADetailer-Neo af228eba7a3f3691a25bcd1fc94aa95e600dd3e6"
+          },
+          "surface": "driver"
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "NOT TESTED",
+        "integration": "PARTIALLY QUALIFIED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "supported; effectiveness unqualified",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "Per-pass physical attribution is UNVERIFIED"
+      ],
+      "next_test": {
+        "summary": "A matched with/without hand-pass study on fixed sources (needs the 160 acceptance procedure).",
+        "arm_id": "IMG-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "low",
+      "sources": [
+        "docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md"
+      ]
+    },
+    {
+      "id": "IMG-Q2.upscale",
+      "version": "1",
+      "arm_id": "IMG-Q2",
+      "title": "Forge upscaling (4xUltrasharp 1.5x in Pair D)",
+      "identity": {
+        "backend": "forge_webui",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline upscale stage",
+        "modules": [
+          "src/pipeline/executor.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "production_workflow",
+          "claim": "Upscale ran only as the tail of Pair D (final 1248x1824); no upscale-only physical record exists.",
+          "source": "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md",
+          "date": "2026-10",
+          "exact_source": "repo 97f9d8f",
+          "result": "FORGE_PAIR_D_TECHNICAL_PASS",
+          "applies_to": {},
+          "surface": "driver"
+        },
+        {
+          "id": "e2",
+          "kind": "offline_contract",
+          "claim": "Supported-option upscale defaults; a DAT_tile option write was refused in a fake-transport probe and repaired offline only.",
+          "source": "docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md",
+          "date": "2026-10",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "PARTIALLY QUALIFIED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "supported",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Matched upscale on/off pair on a fixed source and seed.",
+        "arm_id": "IMG-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "low",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-FORGE-230_Supported_Option_Defaults_Integrity.md",
+        "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md"
+      ]
+    },
+    {
+      "id": "IMG-Q2.controlnet-openpose",
+      "version": "1",
+      "arm_id": "IMG-Q2",
+      "title": "SDXL ControlNet OpenPose (thibaud_xl_openpose)",
+      "identity": {
+        "backend": "forge_webui",
+        "controlnet": "thibaud_xl_openpose",
+        "model_sha256": "9e070426568a3c60c128ffb98c66cdc7a0ea21d0d8abb86f73564aaf2e0c6f42",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline ControlNet units; reference-map creation needs the pinned onnxruntime",
+        "modules": [
+          "src/conditioning/controlnet.py",
+          "src/pipeline/openpose_compile.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "CNET-210: one pose, one checkpoint, one managed Forge; the image follows the supplied pose by visual judgement only.",
+          "source": "docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md",
+          "date": "2026-10-12",
+          "exact_source": "unverified: executed SHA not recorded",
+          "applies_to": {
+            "model_sha256": "9e070426568a3c60c128ffb98c66cdc7a0ea21d0d8abb86f73564aaf2e0c6f42"
+          }
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "FEASIBLE",
+      "governance": {
+        "state": "supported; real-model output unqualified",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "Installed file identity differs from the curated catalog pin: reconcile before any plan",
+        "Forge batch-directory override risk accepted by the owner 2026-10-12"
+      ],
+      "next_test": {
+        "summary": "CNET-211 focused protocol step 2: one opaque black-background pose map through normal PromptPack Preview, one seed and checkpoint.",
+        "arm_id": "IMG-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "low",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-CNET-210_SDXL_OpenPose_ControlNet.md",
+        "docs/Subsystems/Image/PR-IMG-CNET-211_OpenPose_Output_Integrity_and_Reliability.md"
+      ]
+    },
+    {
+      "id": "IMG-Q2.controlnet-canny",
+      "version": "1",
+      "arm_id": "IMG-Q2",
+      "title": "SDXL ControlNet Canny (up to two ordered units)",
+      "identity": {
+        "backend": "forge_webui",
+        "controlnet": "diffusers_xl_canny_full",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline ControlNet units with an operator-created or supplied map",
+        "modules": [
+          "src/conditioning/controlnet.py",
+          "src/pipeline/controlnet_compile.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Plumbing and refusals are tested; physical two-unit fidelity, VRAM fit and performance are not established.",
+          "source": "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; unqualified",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "One Canny unit with an operator-created map, after OpenPose passes.",
+        "arm_id": "IMG-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q2.controlnet-depth",
+      "version": "1",
+      "arm_id": "IMG-Q2",
+      "title": "SDXL ControlNet Depth (up to two ordered units)",
+      "identity": {
+        "backend": "forge_webui",
+        "controlnet": "diffusers_xl_depth_full",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Pipeline ControlNet units with an operator-created or supplied map",
+        "modules": [
+          "src/conditioning/controlnet.py",
+          "src/pipeline/controlnet_compile.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Plumbing and refusals are tested; physical two-unit fidelity, VRAM fit and performance are not established.",
+          "source": "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; unqualified",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "One Depth unit with an operator-created map, after OpenPose passes.",
+        "arm_id": "IMG-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q2.reference-map-creation",
+      "version": "1",
+      "arm_id": "IMG-Q2",
+      "title": "Reference-map creation (Canny OpenCV, Depth Anything V2 Small, OpenPose DWPose ONNX)",
+      "identity": {
+        "backend": "cpu_child"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Reference map dialog",
+        "modules": [
+          "src/conditioning/reference_map/service.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Map-quality readiness claims are not established; OpenPose needs onnxruntime and reports runtime_missing otherwise.",
+          "source": "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; map quality unqualified",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Canny map from a fixed source (deterministic, CPU) then compare with the supplied-map path.",
+        "arm_id": "IMG-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/IMAGE_PIPELINE.md"
+      ]
+    },
+    {
+      "id": "IMG-Q3.masked-inpaint",
+      "version": "1",
+      "arm_id": "IMG-Q3",
+      "title": "Masked inpainting (registry-verified SDXL on Forge)",
+      "identity": {
+        "backend": "forge_webui",
+        "family": "sdxl",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Review: Edit Mask / Extend Canvas",
+        "modules": [
+          "src/image_backends/masked_inpaint.py",
+          "src/controller/masked_edit_service.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Offline-enforced; physical masked-output and outpaint quality acceptance are deferred and nothing has run physically.",
+          "source": "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported for registry-verified SDXL on Forge; physical acceptance deferred",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "One masked edit on a fixed SDXL source, checking that the protected region is byte-identical and the edited region changed.",
+        "arm_id": "IMG-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+        "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q3.outpaint",
+      "version": "1",
+      "arm_id": "IMG-Q3",
+      "title": "Outpainting / canvas extension",
+      "identity": {
+        "backend": "forge_webui",
+        "family": "sdxl",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Review: Edit Mask / Extend Canvas",
+        "modules": [
+          "src/pipeline/outpaint_canvas.py",
+          "src/controller/outpaint_edit_service.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Offline-enforced; physical masked-output and outpaint quality acceptance are deferred and nothing has run physically.",
+          "source": "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported for registry-verified SDXL on Forge; physical acceptance deferred",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "One masked edit on a fixed SDXL source, checking that the protected region is byte-identical and the edited region changed.",
+        "arm_id": "IMG-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+        "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q3.original-pixel-preservation",
+      "version": "1",
+      "arm_id": "IMG-Q3",
+      "title": "Original-pixel restoration at artifact finalization",
+      "identity": {
+        "backend": "forge_webui",
+        "family": "sdxl",
+        "runtime": "managed Forge Neo d70373ebcf1a96d210b78cd6f77196459e783e2a"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Review: Edit Mask / Extend Canvas",
+        "modules": [
+          "src/pipeline/image_edit_inputs.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Offline-enforced; physical masked-output and outpaint quality acceptance are deferred and nothing has run physically.",
+          "source": "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported for registry-verified SDXL on Forge; physical acceptance deferred",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "One masked edit on a fixed SDXL source, checking that the protected region is byte-identical and the edited region changed.",
+        "arm_id": "IMG-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/IMAGE_PIPELINE.md",
+        "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q3.regenerate-with-changes",
+      "version": "1",
+      "arm_id": "IMG-Q3",
+      "title": "Regenerate with Changes (History iterate)",
+      "identity": {
+        "backend": "forge_webui"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Job History: Regenerate with Changes",
+        "modules": [
+          "src/gui/controllers/history_iterate_service.py",
+          "src/pipeline/history_variation_compiler.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Offline lineage tests; the History-started masked edit records parent_job_id null (finding GP832-F3).",
+          "source": "tools/operator_journey/golden/findings.v1.json",
+          "date": "2026-11-05",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; physical acceptance not done",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "GP832-F3 unrepaired: a History-started masked edit records no parent, so Compare with Parent is unavailable"
+      ],
+      "next_test": {
+        "summary": "A physical Regenerate with Changes on an IMG-Q0 job, after the GP832-F3 repair decision.",
+        "arm_id": "IMG-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
+        "tools/operator_journey/golden/findings.v1.json"
+      ]
+    },
+    {
+      "id": "IMG-Q3.compare-with-parent",
+      "version": "1",
+      "arm_id": "IMG-Q3",
+      "title": "Compare with Parent (direct pairs, SHA-256 verified)",
+      "identity": {
+        "backend": "forge_webui"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Job History: Compare with Parent",
+        "modules": [
+          "src/gui/controllers/history_compare_service.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Direct pairs only; parent artifact verified by SHA-256 when recorded, otherwise labelled not independently verified.",
+          "source": "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; physical acceptance not done",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "GP832-F3"
+      ],
+      "next_test": {
+        "summary": "Compare an IMG-Q3 edited child with its recorded parent after the F3 decision.",
+        "arm_id": "IMG-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q3.replay-and-provenance",
+      "version": "1",
+      "arm_id": "IMG-Q3",
+      "title": "Replay as a new NJR with lineage; provenance integrity",
+      "identity": {
+        "backend": "forge_webui"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Job History replay",
+        "modules": [
+          "src/pipeline/replay_engine.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Replay creates a new NJR identity with parent lineage on the same path; no physical replay acceptance.",
+          "source": "STATUS.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Replay one IMG-Q0 job and compare artifacts and recorded lineage.",
+        "arm_id": "IMG-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "STATUS.md",
+        "src/pipeline/replay_engine.py"
+      ]
+    },
+    {
+      "id": "IMG-Q4.forge-vs-comfy-still",
+      "version": "1",
+      "arm_id": "IMG-Q4",
+      "title": "Comfy still-image slice (conditional candidate vs Forge)",
+      "identity": {
+        "backend": "comfy"
+      },
+      "reachability": {
+        "implemented": false,
+        "operator_reachable": false,
+        "surface": "Offline qualification packet only; no Comfy image backend exists",
+        "modules": [
+          "tools/qualification/img_backend_qual_100/"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Architecture feasibility CONDITIONAL; quality/performance INCONCLUSIVE; physical execution HOLD; promotion NO-GO until controlled evidence shows incremental value.",
+          "source": "docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md",
+          "date": "2026-10",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "conditional; Comfy image slice needs resource and fault clearance",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-COMFY-STILL-IMAGE"
+      ],
+      "open_items": [],
+      "next_test": {
+        "summary": "An owner approval of a bounded matched run after fault clearance (no Comfy image backend is implemented here).",
+        "arm_id": "IMG-Q4",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "IMG-Q4.ideogram4-diffusers",
+      "version": "1",
+      "arm_id": "IMG-Q4",
+      "title": "Ideogram 4 NF4 via Diffusers (qualification only, no production code)",
+      "identity": {
+        "backend": "diffusers",
+        "model": "ideogram-ai/ideogram-4-nf4-diffusers@1874bc70267ba2c823a7239e1d70dd308c8d64dc"
+      },
+      "reachability": {
+        "implemented": false,
+        "operator_reachable": false,
+        "surface": "Isolated qualification harness; PR-IMG-120 is unauthorized",
+        "modules": [
+          "tools/qualification/img110r/"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "PASS-CONSTRAINED on RTX 4070 Ti 12 GB with an explicit residency policy; peak 10.4-11.5 GiB; not PRACTICAL. Standalone feasibility, not StableNew integration.",
+          "source": "docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md",
+          "date": "2026-09-21",
+          "exact_source": "commits f737492e, 3dc638f0; raw evidence in git-ignored reports/img110r",
+          "result": "PASS - CONSTRAINED",
+          "applies_to": {
+            "backend": "diffusers"
+          }
+        }
+      ],
+      "qualification": {
+        "resource": "FEASIBLE",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "FEASIBLE",
+      "governance": {
+        "state": "qualification-only; PR-IMG-120 unauthorized",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "GPU residency lease, JSON-caption mapping and the Ideogram 4 non-commercial licence need owner decisions"
+      ],
+      "next_test": {
+        "summary": "None in StableNew until the owner decides PR-IMG-120.",
+        "arm_id": "IMG-Q4",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q0.wan22-ti2v-5b-1.3.0",
+      "version": "1",
+      "arm_id": "VID-Q0",
+      "title": "Wan2.2 TI2V-5B frames-out 1.3.0 (approved)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0",
+        "spec_sha256": "02eff4ac",
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Video Workflow tab and Make Video (the picker offers 1.3.0)",
+        "modules": [
+          "src/video/workflow_catalog.py",
+          "src/video/comfy_workflow_backend.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "production_workflow",
+          "claim": "Promoted 2026-10-21 after real acceptance runs through tools/acceptance/vid324_frames_out_acceptance.py; the run record and executed SHA are not in the tree.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-21",
+          "exact_source": "unverified: commits 02a6aa4c 55c25b6f 07ba8f1e; no run record in tree",
+          "applies_to": {
+            "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+          },
+          "surface": "driver"
+        },
+        {
+          "id": "e2",
+          "kind": "production_workflow",
+          "claim": "Two- and three-segment sequences with 1.3.0 passed on RTX 4070 Ti (17 frames per segment; peak VRAM 11.2 GiB, min free RAM 1.9 GB).",
+          "source": "docs/Subsystems/Video/PR-VID-SEQ-330_Acceptance.md",
+          "date": "2026-10-22",
+          "exact_source": "unverified: executed SHA not recorded; evidence reports/seq330",
+          "result": "passed",
+          "applies_to": {
+            "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+          },
+          "surface": "driver"
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "NOT TESTED",
+        "integration": "PARTIALLY QUALIFIED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "approved (production; decision D1 2026-10-20 and 2026-10-21 promotion)",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "No formal visual-quality gate; identity is observed, never guaranteed",
+        "Free RAM can dip to about 0.01 GB on cold load"
+      ],
+      "next_test": {
+        "summary": "One 17-frame 1.3.0 job on the managed runtime re-recording frames-out reconciliation, peak VRAM and free RAM.",
+        "arm_id": "VID-Q0",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true,
+        "harness": "python -m tools.acceptance.vid324_frames_out_acceptance <source.png> --label A"
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "docs/Subsystems/Video/PR-VID-SEQ-330_Acceptance.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q0.wan22-ti2v-5b-1.2.0",
+      "version": "1",
+      "arm_id": "VID-Q0",
+      "title": "Wan2.2 TI2V-5B 1.2.0 (approved; requalified on Comfy 0.38.0)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.2.0",
+        "spec_sha256": "cea21fc1d152d056e13b7743c7ea04dc52920f99f3af373a3b54e085b48d07dd",
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Replay of stored jobs; not offered by the picker",
+        "modules": [
+          "src/video/workflow_catalog.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "production_workflow",
+          "claim": "Requalified on managed Comfy 0.38.0: 49 frames in 63.2 s, peak VRAM 11,386 MiB, min host RAM 16.91 GB, COMPLETED.",
+          "source": "docs/Subsystems/Video/PR-COMFY-RUNTIME-100_Managed_Comfy_Runtime.md",
+          "date": "2026-10",
+          "exact_source": "unverified: executed SHA not recorded",
+          "result": "COMPLETED",
+          "applies_to": {
+            "workflow": "wan22_ti2v_5b_i2v_v1@1.2.0"
+          },
+          "surface": "driver"
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "approved",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "No new test: reuse the 1.3.0 canary.",
+        "arm_id": "VID-Q0",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/PR-COMFY-RUNTIME-100_Managed_Comfy_Runtime.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q0.wan22-ti2v-5b-legacy-1.0.0-1.1.0",
+      "version": "1",
+      "arm_id": "VID-Q0",
+      "title": "Wan2.2 TI2V-5B 1.0.0 and 1.1.0 (experimental, kept so stored jobs replay)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.0.0|1.1.0",
+        "runtime": "ComfyUI 0.3.65"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Replay only; per-job experimental opt-in",
+        "modules": [
+          "src/video/workflow_catalog.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "1.0.0: 49 frames at 480x832 in 83.4 s wall, peak VRAM 11,630 MiB, no faults, experimental opt-in.",
+          "source": "docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md",
+          "date": "2026-10",
+          "exact_source": "unverified: repo SHA not recorded",
+          "applies_to": {
+            "workflow": "wan22_ti2v_5b_i2v_v1@1.0.0|1.1.0"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "standalone_feasibility",
+          "claim": "1.1.0: three jobs (49/81/49 frames), each on a fresh owned runtime released afterwards; peak VRAM 11.6-11.7 GiB.",
+          "source": "docs/Subsystems/Video/PR-VID-190_Comfy_Runtime_Recycling_and_Frame_Count.md",
+          "date": "2026-10",
+          "exact_source": "unverified: repo SHA not recorded",
+          "applies_to": {
+            "workflow": "wan22_ti2v_5b_i2v_v1@1.0.0|1.1.0"
+          }
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "FEASIBLE",
+      "governance": {
+        "state": "experimental (replay only)",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "None: superseded by 1.2.0/1.3.0.",
+        "arm_id": "VID-Q0",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md",
+        "docs/Subsystems/Video/PR-VID-190_Comfy_Runtime_Recycling_and_Frame_Count.md"
+      ]
+    },
+    {
+      "id": "VID-Q1.svd-xt-native",
+      "version": "1",
+      "arm_id": "VID-Q1",
+      "title": "Native SVD XT (stabilityai/stable-video-diffusion-img2vid-xt)",
+      "identity": {
+        "backend": "svd_native",
+        "model": "stabilityai/stable-video-diffusion-img2vid-xt (Hugging Face cache; no hash recorded)"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "SVD tab",
+        "modules": [
+          "src/video/svd_service.py",
+          "src/video/svd_native_backend.py",
+          "src/video/svd_runner.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Accepted for production by statement only: no dedicated SVD physical record exists; sequences with native SVD were not run on a GPU.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "approved (production backend)",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "The model must already be installed locally; a missing model is a HOLD, never a download"
+      ],
+      "next_test": {
+        "summary": "A minimal native SVD clip with source geometry, frame/FPS, cancellation and memory release recorded; never downloads a model.",
+        "arm_id": "VID-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "docs/Subsystems/Video/PR-VID-SEQ-330_Acceptance.md"
+      ]
+    },
+    {
+      "id": "VID-Q1.svd-rife-smoothing",
+      "version": "1",
+      "arm_id": "VID-Q1",
+      "title": "RIFE smoothing (rife-ncnn-vulkan, external executable)",
+      "identity": {
+        "backend": "rife_ncnn_vulkan"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "SVD default smoothing and the Video Workflow Smooth action",
+        "modules": [
+          "src/video/rife_runtime.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "No physical run of RIFE is recorded.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "RIFE x2 on the minimal SVD clip, checking manifest postprocess stages.",
+        "arm_id": "VID-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md"
+      ]
+    },
+    {
+      "id": "VID-Q1.svd-loop-export",
+      "version": "1",
+      "arm_id": "VID-Q1",
+      "title": "SVD ping-pong / loop-to-N-seconds export",
+      "identity": {
+        "backend": "svd_native"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "SVD output.loop_mode / extend_to_seconds",
+        "modules": [
+          "src/video/loop_export.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Offline tests only; no physical run recorded.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Ping-pong export on the minimal SVD clip.",
+        "arm_id": "VID-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md"
+      ]
+    },
+    {
+      "id": "VID-Q2.motion-library",
+      "version": "1",
+      "arm_id": "VID-Q2",
+      "title": "Motion Library import, preview and Use as Driving Video",
+      "identity": {
+        "backend": "offline"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Video Workflow Motion Library panel",
+        "modules": [
+          "src/video/motion_library/",
+          "src/gui/views/video_workflow_motion_library_panel_v2.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Simulated journey VID-02 lane B (pre-rendered clip) passed; library capability is not generation quality.",
+          "source": "docs/Subsystems/Video/MOTION_LIBRARY.md",
+          "date": "2026-11-04",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; no physical run",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Import a folder and a finished History clip, preview, and Use as Driving Video with SHA-256 identity recorded (offline).",
+        "arm_id": "VID-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/MOTION_LIBRARY.md",
+        "tools/operator_journey/golden/coverage_matrix.v1.json"
+      ]
+    },
+    {
+      "id": "VID-Q2.motion-convert-blender",
+      "version": "1",
+      "arm_id": "VID-Q2",
+      "title": "Convert Motion and Batch Convert (FBX/BVH to driving MP4 via owner-installed Blender)",
+      "identity": {
+        "backend": "blender (owner-installed)"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Convert Motion and Batch Convert dialogs",
+        "modules": [
+          "src/video/motion_conversion/",
+          "src/gui/views/motion_conversion_dialog.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Journey VID-02: the Batch Convert dry run found 2 convertible and 3 ineligible; conversion was HOLD because no Blender was registered.",
+          "source": "docs/runbooks/motion_conversion.md",
+          "date": "2026-11-04",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; needs an owner-registered Blender 4.2+",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "Blender is not registered on this host: never fake a render"
+      ],
+      "next_test": {
+        "summary": "Register Blender, then convert one BVH and one FBX and verify the driving MP4 identity (offline CPU).",
+        "arm_id": "VID-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/runbooks/motion_conversion.md",
+        "docs/Subsystems/Video/PR-VID-MOTION-354_Motion_Conversion_and_Fun_Qualification.md"
+      ]
+    },
+    {
+      "id": "VID-Q2.fun-control-5b-canny",
+      "version": "1",
+      "arm_id": "VID-Q2",
+      "title": "Fun Control 5B Canny 1.0.0 (experimental, not_qualified)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_fun_control_5b_canny_i2v_v1@1.0.0",
+        "model": "wan2.2_fun_control_5B_bf16.safetensors",
+        "model_sha256": "ace4718a7c87ee3e5606a68ab79142c4395e81aece76b8120bc886f0fbbe1d16",
+        "graph_sha256": "42a6f0b6cd3cf61bcbdf80f600253989426341c924d7d91464ff979278c385fd",
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Preview Frozen Plan only; Queue, admission and dispatch refuse it",
+        "modules": [
+          "src/video/workflow_catalog_fun_control.py",
+          "tools/qualification/fun354/"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "Run 3 plan a6080f53: 14/14 cases clean, teardown clean, peak commit 0.649-0.673, peak VRAM 11.0-11.9 GB; technical feasibility on this host only, not visual quality.",
+          "source": "docs/Subsystems/Video/PR-VID-MOTION-354_Motion_Conversion_and_Fun_Qualification.md",
+          "date": "2026-11-02",
+          "exact_source": "commit f9c5991a (PR #246); executed SHA unverified; evidence C:\\Users\\rob\\qual\\motion354-evidence",
+          "result": "FEASIBLE",
+          "applies_to": {
+            "model_sha256": "ace4718a7c87ee3e5606a68ab79142c4395e81aece76b8120bc886f0fbbe1d16",
+            "graph_sha256": "42a6f0b6cd3cf61bcbdf80f600253989426341c924d7d91464ff979278c385fd"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "The catalog entry stays not_qualified and admission refusal is unchanged.",
+          "source": "src/video/workflow_catalog_fun_control.py",
+          "date": "2026-11-02",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "FEASIBLE",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "FEASIBLE",
+      "governance": {
+        "state": "experimental; not_qualified; Queue refused",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "The 14/14 result does not qualify the corrected 832-long-edge source-prep policy",
+        "No visual-quality gate has run: MP4 drivers leaked driver identity, the waving clip lost the reference identity",
+        "Separate-character retarget verified only as a refusal"
+      ],
+      "next_test": {
+        "summary": "A bounded run 4 after PR-VID-MOTION-355: a raw 4K MP4 through the corrected Prepare Motion Source (832-long-edge policy) at 17 frames, then owner visual review.",
+        "arm_id": "VID-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true,
+        "harness": "python -m tools.qualification.fun354.physical"
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/PR-VID-MOTION-354_Motion_Conversion_and_Fun_Qualification.md",
+        "docs/Subsystems/Video/PR-VID-FUN-352_Fun_Control_5B.md",
+        "src/video/workflow_catalog_fun_control.py"
+      ]
+    },
+    {
+      "id": "VID-Q3.wan-animate-2",
+      "version": "1",
+      "arm_id": "VID-Q3",
+      "title": "Wan-Animate-2 (experimental; drive and prompt workflows)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan_animate2_drive_i2v_v1|wan_animate2_prompt_i2v_v1",
+        "graph_sha256": "9ef8dae44d330e5af05c70fccd02d86d0855b4fb983d1913f8f7f8a012c3928c",
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Video Workflow tab with the job's experimental opt-in",
+        "modules": [
+          "src/video/workflow_catalog_wan_animate2.py",
+          "tools/qualification/vid184s/"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "184S matched-state: pinned-OFF arms 163.6 s, peak commit 52-53%, min free RAM 14 GB, B1 and B2 pixel-identical; pinned-ON did not reproduce the GPU loss but reached 73% commit and 1.94 GB free RAM.",
+          "source": "docs/Subsystems/Video/PR-VID-185_Wan_Animate_2_Promotion_Readiness_Adjudication.md",
+          "date": "2026-09-27",
+          "exact_source": "unverified: evidence location per PR-VID-184S",
+          "applies_to": {
+            "graph_sha256": "9ef8dae44d330e5af05c70fccd02d86d0855b4fb983d1913f8f7f8a012c3928c"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "standalone_feasibility",
+          "claim": "Owner motion-value PASS beside a failing motion-curve correlation (0.139-0.151 vs a 0.30 gate); PR-VID-191 PRODUCT_QUALITY_PARTIAL with a duplicate-subject artifact.",
+          "source": "docs/Subsystems/Video/PR-VID-185_Wan_Animate_2_Promotion_Readiness_Adjudication.md",
+          "date": "2026-09",
+          "exact_source": "unverified: adjudication record only; raw evidence location per PR-VID-184S",
+          "result": "WAN_ANIMATE_2_OWNER_MOTION_VALUE_PASS",
+          "applies_to": {
+            "graph_sha256": "9ef8dae44d330e5af05c70fccd02d86d0855b4fb983d1913f8f7f8a012c3928c"
+          }
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "INCONCLUSIVE",
+        "integration": "NOT TESTED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "experimental; technically not yet promotion-ready; no production integration",
+        "source": "docs/Subsystems/Video/PR-VID-185_Wan_Animate_2_Promotion_Readiness_Adjudication.md"
+      },
+      "holds": [],
+      "open_items": [
+        "Representative accumulated-state resource and usability evidence is missing",
+        "Numeric thresholds and any experimental integration need an owner decision"
+      ],
+      "next_test": {
+        "summary": "One pinned-OFF run after ordinary workstation use (representative accumulated state) with the 184R/S telemetry and artifact contract.",
+        "arm_id": "VID-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true,
+        "harness": "python -m tools.qualification.vid184s.run_arm --arm B1"
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/PR-VID-185_Wan_Animate_2_Promotion_Readiness_Adjudication.md",
+        "docs/Subsystems/Video/PR-VID-184S_Wan_Animate_2_Matched_State_Reproducibility.md",
+        "docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md"
+      ]
+    },
+    {
+      "id": "VID-Q4.wan-a14b-480p",
+      "version": "1",
+      "arm_id": "VID-Q4",
+      "title": "Wan2.2 A14B I2V 480p feasibility (WAN-321F; no catalog entry)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_a14b_i2v_480p (feasibility harness)",
+        "plan_sha256": "7b47d278e1519574330a3d912009fb14dba54d3090b5788ee6164c481562b976",
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": false,
+        "operator_reachable": false,
+        "surface": "Operator-only harness tools/qualification/wan321f",
+        "modules": [
+          "tools/qualification/wan321f/"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "3 of 3 dispatches completed with 81 valid frames each (peak commit 37.6 GiB, VRAM 9,596 MiB) but teardown.json has verified:false, so the verdict is INCONCLUSIVE.",
+          "source": "docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md",
+          "date": "2026-10-23",
+          "exact_source": "adapter physical.py at 6fc4a906; evidence reports/wan321f/physical-001 (machine-local)",
+          "result": "INCONCLUSIVE",
+          "applies_to": {
+            "plan_sha256": "7b47d278e1519574330a3d912009fb14dba54d3090b5788ee6164c481562b976"
+          }
+        }
+      ],
+      "qualification": {
+        "resource": "INCONCLUSIVE",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "INCONCLUSIVE",
+      "governance": {
+        "state": "research closed; no catalog entry; 3-attempt authorization exhausted",
+        "source": "docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md"
+      },
+      "holds": [
+        "HOLD-A14B-NEW-BUDGET"
+      ],
+      "open_items": [
+        "Defect 1: teardown is checked once with no bounded wait",
+        "Defect 2: memory sampled only on the launcher stub, not the Comfy worker tree"
+      ],
+      "next_test": {
+        "summary": "None until teardown wait and worker-tree memory sampling are fixed and the owner grants a new exact budget.",
+        "arm_id": "VID-Q4",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/PR-VID-WAN-321F_Feasibility.md",
+        "tools/qualification/README.md"
+      ]
+    },
+    {
+      "id": "VID-Q5.make-video",
+      "version": "1",
+      "arm_id": "VID-Q5",
+      "title": "Image -> Make Video handoff and Video Workflow admission",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Image -> Make Video handoff and Video Workflow admission",
+        "modules": [
+          "src/gui/controllers/video_workspace_handoff.py",
+          "src/video/workflow_picker.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Offline tests and journey VID-01 on a fixture Comfy; physical NOT RUN.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; physical acceptance not done",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "A 17-frame Make Video on the real runtime from a Review image.",
+        "arm_id": "VID-Q5",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q5.prepare-motion-source",
+      "version": "1",
+      "arm_id": "VID-Q5",
+      "title": "Prepare Motion Source (lossless, content-addressed driving frames)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Prepare Motion Source (lossless, content-addressed driving frames)",
+        "modules": [
+          "src/video/motion_source_preparation.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Source-level verified; no physical generation was run.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; physical acceptance not done",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Prepare a 17-frame driving clip and verify its identity in the job record (offline).",
+        "arm_id": "VID-Q5",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q5.playback-and-history",
+      "version": "1",
+      "arm_id": "VID-Q5",
+      "title": "In-app playback, Recent outputs and History",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "In-app playback, Recent outputs and History",
+        "modules": [
+          "src/gui/views/video_workflow_recent_outputs_panel_v2.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Partial journey; Open is not clicked.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; physical acceptance not done",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Play a finished clip in-app and reopen it from History.",
+        "arm_id": "VID-Q5",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q5.movie-clips-assembly",
+      "version": "1",
+      "arm_id": "VID-Q5",
+      "title": "Movie Clips assembly (queued CPU movie_assembly job)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Movie Clips assembly (queued CPU movie_assembly job)",
+        "modules": [
+          "src/video/movie_assembly_engine.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "No physical acceptance of standalone Movie Clips is recorded.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; physical acceptance not done",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Assemble two finished clips through the queue (CPU).",
+        "arm_id": "VID-Q5",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q5.storyboard-save-reopen",
+      "version": "1",
+      "arm_id": "VID-Q5",
+      "title": "Storyboard save/reopen and one sequence job",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Storyboard save/reopen and one sequence job",
+        "modules": [
+          "src/video/storyboard.py",
+          "src/video/storyboard_store.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Journey VID-03 passed on a fixture Comfy; physical NOT RUN; finding GP832-F4 unrepaired.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; physical acceptance not done",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Save, reopen and queue a two-shot Storyboard on the real runtime.",
+        "arm_id": "VID-Q5",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q5.eval-kit-and-ratings",
+      "version": "1",
+      "arm_id": "VID-Q5",
+      "title": "Video eval kit and hash-bound ratings",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Video eval kit and hash-bound ratings",
+        "modules": [
+          "src/video/video_eval_report.py",
+          "src/video/video_eval_ratings_store.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Review aids only; no physical identity-quality run has been made.",
+          "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "supported; physical acceptance not done",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [],
+      "next_test": {
+        "summary": "Build an eval report for one finished clip and rate it (hash-bound).",
+        "arm_id": "VID-Q5",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "VID-Q5.two-three-segment-sequence",
+      "version": "1",
+      "arm_id": "VID-Q5",
+      "title": "Two- and three-segment TI2V-5B 1.3.0 sequence (one job, N segments)",
+      "identity": {
+        "backend": "comfy",
+        "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0",
+        "runtime": "managed ComfyUI v0.38.0 6b747c0428c343e1417219641db93a4fb7cb69ae"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Video Workflow Multi-shot sequence section",
+        "modules": [
+          "src/video/sequence_admission.py",
+          "src/pipeline/video_sequence_executor.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "production_workflow",
+          "claim": "Runs A (two segments, about 95 s, 33 assembled frames), B (cancel mid-segment, then strict resume) and C (authored anchor) passed; D (native SVD) was not run. Join quality and identity drift were not judged.",
+          "source": "docs/Subsystems/Video/PR-VID-SEQ-330_Acceptance.md",
+          "date": "2026-10-22",
+          "exact_source": "unverified: executed SHA not recorded; evidence reports/seq330",
+          "result": "passed",
+          "applies_to": {
+            "workflow": "wan22_ti2v_5b_i2v_v1@1.3.0"
+          },
+          "surface": "driver"
+        }
+      ],
+      "qualification": {
+        "resource": "PARTIALLY QUALIFIED",
+        "quality": "NOT TESTED",
+        "integration": "PARTIALLY QUALIFIED"
+      },
+      "status": "PARTIALLY QUALIFIED",
+      "governance": {
+        "state": "supported",
+        "source": "STATUS.md"
+      },
+      "holds": [],
+      "open_items": [
+        "Resume/replay driven through the GUI has not run physically"
+      ],
+      "next_test": {
+        "summary": "Reuse the October 22 evidence; only a GUI-driven resume/replay of a real sequence is missing.",
+        "arm_id": "VID-Q5",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/Video/PR-VID-SEQ-330_Acceptance.md",
+        "docs/Subsystems/Video/VIDEO_PIPELINE.md"
+      ]
+    },
+    {
+      "id": "AI-Q0.protected-capture-readiness",
+      "version": "1",
+      "arm_id": "AI-Q0",
+      "title": "AI security readiness: protected interpreter, ETW canary, strict-offline attestation",
+      "identity": {
+        "backend": "cpu_only_contract",
+        "runtime": "llama.cpp b11840 (Qwen) / b11960 (LFM3); registry builds empty"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "tools/qualification/ai111 harness and capture_control (operator-run, elevated)",
+        "modules": [
+          "tools/qualification/ai111/readiness.py",
+          "tools/qualification/ai111/capture_control.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "standalone_feasibility",
+          "claim": "One live canary ai114e-canary-1 passed under analyzer v2 on 2026-10-25 but started from an unprotected interpreter, so it cannot satisfy the runbook.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
+          "date": "2026-10-25",
+          "exact_source": "evidence under git-ignored reports/ai114",
+          "result": "PASS (unprotected interpreter)",
+          "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "D12a and D12b are not granted; qualification is held on D12b and a fresh canary from a protected interpreter.",
+          "source": "STATUS.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "held: D12b not granted; protected runtime and canary-2 missing",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [
+        "System Python in Program Files and the protected capture copy are absent",
+        "Firewall attestation is operator-managed and never changed automatically"
+      ],
+      "next_test": {
+        "summary": "Read-only readiness check of hashes, licence, protected interpreter and capture state (no inference).",
+        "arm_id": "AI-Q0",
+        "stage": "canary",
+        "needs_owner_authorization": false,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
+        "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+        "docs/runbooks/ai_qualification_etw_capture.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q1.qwen3.5-9b-q4_k_m-unsloth",
+      "version": "1",
+      "arm_id": "AI-Q1",
+      "title": "Offline AI Assist candidate qwen3.5-9b-q4_k_m-unsloth",
+      "identity": {
+        "backend": "llama.cpp b11840 CPU",
+        "model_id": "qwen3.5-9b-q4_k_m-unsloth",
+        "model": "Qwen3.5-9B-Q4_K_M.gguf",
+        "model_sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+        "size": 5680522464,
+        "runtime_archive_sha256": "f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Prompt-tab Suggest is wired but disabled without a qualified installation",
+        "modules": [
+          "src/ai_assist/service.py",
+          "src/gui/prompt_ai_suggestions.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Size and SHA-256 locally verified 2026-10-23 and staged outside the repository; never imported, extracted, loaded or run.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+          "date": "2026-10-23",
+          "applies_to": {
+            "model_sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "registry qualified=false; D12a and D12b not granted; Qwen and LFM3 approvals are separate.",
+          "source": "config/ai_model_registry.json",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "candidate; registry qualified=false; held on D12b and canary-2",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [],
+      "next_test": {
+        "summary": "D12a on the b11840 archive (--version/--help only), then D12b Stage A for this model; each needs its own owner package.",
+        "arm_id": "AI-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+        "config/ai_model_registry.json",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q1.qwen3.5-9b-q5_k_m-unsloth",
+      "version": "1",
+      "arm_id": "AI-Q1",
+      "title": "Offline AI Assist candidate qwen3.5-9b-q5_k_m-unsloth",
+      "identity": {
+        "backend": "llama.cpp b11840 CPU",
+        "model_id": "qwen3.5-9b-q5_k_m-unsloth",
+        "model": "Qwen3.5-9B-Q5_K_M.gguf",
+        "model_sha256": "dc2a39aef291f91a9116ad214058da0d86eb648743a124bd8c333787c4b9c91c",
+        "size": 6577841376,
+        "runtime_archive_sha256": "f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Prompt-tab Suggest is wired but disabled without a qualified installation",
+        "modules": [
+          "src/ai_assist/service.py",
+          "src/gui/prompt_ai_suggestions.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Size and SHA-256 locally verified 2026-10-23 and staged outside the repository; never imported, extracted, loaded or run.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+          "date": "2026-10-23",
+          "applies_to": {
+            "model_sha256": "dc2a39aef291f91a9116ad214058da0d86eb648743a124bd8c333787c4b9c91c"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "registry qualified=false; D12a and D12b not granted; Qwen and LFM3 approvals are separate.",
+          "source": "config/ai_model_registry.json",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "candidate; registry qualified=false; held on D12b and canary-2",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [],
+      "next_test": {
+        "summary": "D12a on the b11840 archive (--version/--help only), then D12b Stage A for this model; each needs its own owner package.",
+        "arm_id": "AI-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+        "config/ai_model_registry.json",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q1.qwen3.5-4b-q8_0-unsloth",
+      "version": "1",
+      "arm_id": "AI-Q1",
+      "title": "Offline AI Assist candidate qwen3.5-4b-q8_0-unsloth",
+      "identity": {
+        "backend": "llama.cpp b11840 CPU",
+        "model_id": "qwen3.5-4b-q8_0-unsloth",
+        "model": "Qwen3.5-4B-Q8_0.gguf",
+        "model_sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
+        "size": 4482403488,
+        "runtime_archive_sha256": "f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Prompt-tab Suggest is wired but disabled without a qualified installation",
+        "modules": [
+          "src/ai_assist/service.py",
+          "src/gui/prompt_ai_suggestions.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Size and SHA-256 locally verified 2026-10-23 and staged outside the repository; never imported, extracted, loaded or run.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+          "date": "2026-10-23",
+          "applies_to": {
+            "model_sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "registry qualified=false; D12a and D12b not granted; Qwen and LFM3 approvals are separate.",
+          "source": "config/ai_model_registry.json",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "candidate; registry qualified=false; held on D12b and canary-2",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [],
+      "next_test": {
+        "summary": "D12a on the b11840 archive (--version/--help only), then D12b Stage A for this model; each needs its own owner package.",
+        "arm_id": "AI-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+        "config/ai_model_registry.json",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q1.qwen3.5-4b-q4_k_m-unsloth",
+      "version": "1",
+      "arm_id": "AI-Q1",
+      "title": "Offline AI Assist candidate qwen3.5-4b-q4_k_m-unsloth",
+      "identity": {
+        "backend": "llama.cpp b11840 CPU",
+        "model_id": "qwen3.5-4b-q4_k_m-unsloth",
+        "model": "Qwen3.5-4B-Q4_K_M.gguf",
+        "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+        "size": 2740937888,
+        "runtime_archive_sha256": "f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Prompt-tab Suggest is wired but disabled without a qualified installation",
+        "modules": [
+          "src/ai_assist/service.py",
+          "src/gui/prompt_ai_suggestions.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Size and SHA-256 locally verified 2026-10-23 and staged outside the repository; never imported, extracted, loaded or run.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+          "date": "2026-10-23",
+          "applies_to": {
+            "model_sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "registry qualified=false; D12a and D12b not granted; Qwen and LFM3 approvals are separate.",
+          "source": "config/ai_model_registry.json",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "candidate; registry qualified=false; held on D12b and canary-2",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [],
+      "next_test": {
+        "summary": "D12a on the b11840 archive (--version/--help only), then D12b Stage A for this model; each needs its own owner package.",
+        "arm_id": "AI-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/AiAssist/PR-AI-111_Offline_Qualification.md",
+        "config/ai_model_registry.json",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q1.lfm3-1.7b-q4_k_m-liquidai",
+      "version": "1",
+      "arm_id": "AI-Q1",
+      "title": "Offline AI Assist candidate lfm3-1.7b-q4_k_m-liquidai (frozen LFM3 contract, unapproved)",
+      "identity": {
+        "backend": "llama.cpp b11960 CPU",
+        "model_id": "lfm3-1.7b-q4_k_m-liquidai",
+        "model": "LFM3-1.7B-Q4_K_M.gguf",
+        "model_sha256": "3793e1e6e2266919d6e015287221b41100175a98eddaba92e111aed3b05c93c4",
+        "size": 1099627808,
+        "runtime_archive_sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287",
+        "contract_sha256": "41e65d6769cd4090dc0e8f978014c97e82fd23c3351261f3ff276efd8a129f60"
+      },
+      "reachability": {
+        "implemented": false,
+        "operator_reachable": false,
+        "surface": "Contract-only candidate; refused by validate_contract in production; not in the registry",
+        "modules": [
+          "tools/qualification/ai111/lfm3_contract.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "S0 download and S1 licence were granted 2026-10-29 and verified by size and SHA-256; the archive was hashed in memory and not extracted.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
+          "date": "2026-10-29",
+          "exact_source": "evidence C:\\Users\\rob\\qual\\ai115-s0-evidence",
+          "applies_to": {
+            "model_sha256": "3793e1e6e2266919d6e015287221b41100175a98eddaba92e111aed3b05c93c4"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "S2 (D12a b11960), S3 (Stage A) and S4 (Stage B) are not granted.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
+          "date": "2026-10-29",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "candidate; S2 onward not authorized",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [
+        "Stage B capture-split acceptance status is UNVERIFIED (docs may lag the code)"
+      ],
+      "next_test": {
+        "summary": "S2: extract the b11960 archive to an evidence-only directory and run --version/--help on the two named members.",
+        "arm_id": "AI-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q1.lfm3-1.7b-q8_0-liquidai",
+      "version": "1",
+      "arm_id": "AI-Q1",
+      "title": "Offline AI Assist candidate lfm3-1.7b-q8_0-liquidai (frozen LFM3 contract, unapproved)",
+      "identity": {
+        "backend": "llama.cpp b11960 CPU",
+        "model_id": "lfm3-1.7b-q8_0-liquidai",
+        "model": "LFM3-1.7B-Q8_0.gguf",
+        "model_sha256": "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6",
+        "size": 1846238496,
+        "runtime_archive_sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287",
+        "contract_sha256": "41e65d6769cd4090dc0e8f978014c97e82fd23c3351261f3ff276efd8a129f60"
+      },
+      "reachability": {
+        "implemented": false,
+        "operator_reachable": false,
+        "surface": "Contract-only candidate; refused by validate_contract in production; not in the registry",
+        "modules": [
+          "tools/qualification/ai111/lfm3_contract.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "S0 download and S1 licence were granted 2026-10-29 and verified by size and SHA-256; the archive was hashed in memory and not extracted.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
+          "date": "2026-10-29",
+          "exact_source": "evidence C:\\Users\\rob\\qual\\ai115-s0-evidence",
+          "applies_to": {
+            "model_sha256": "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6"
+          }
+        },
+        {
+          "id": "e2",
+          "kind": "owner_decision",
+          "claim": "S2 (D12a b11960), S3 (Stage A) and S4 (Stage B) are not granted.",
+          "source": "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
+          "date": "2026-10-29",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "candidate; S2 onward not authorized",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [
+        "Stage B capture-split acceptance status is UNVERIFIED (docs may lag the code)"
+      ],
+      "next_test": {
+        "summary": "S2: extract the b11960 archive to an evidence-only directory and run --version/--help on the two named members.",
+        "arm_id": "AI-Q1",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/AiAssist/PR-AI-115_LFM3_Qualification_Contract.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q2.prompt-suggest-integration",
+      "version": "1",
+      "arm_id": "AI-Q2",
+      "title": "Prompt-tab Suggest -> Review -> explicit Accept",
+      "identity": {
+        "backend": "offline_ai_assist"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": false,
+        "surface": "Suggest button wired but disabled without a qualified installation",
+        "modules": [
+          "src/gui/prompt_ai_suggestions.py",
+          "src/controller/app_controller_services/ai_assist_integration.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Hermetic tests with a Python child through the real bounded runner; nothing is installed and no model has run.",
+          "source": "docs/Subsystems/AiAssist/AI_ASSIST.md",
+          "date": "2026-10-26",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "HOLD",
+      "governance": {
+        "state": "disabled until a model/runtime is qualified and a separate enablement decision is made",
+        "source": "STATUS.md"
+      },
+      "holds": [
+        "HOLD-AI-ETW-CANARY"
+      ],
+      "open_items": [],
+      "next_test": {
+        "summary": "Only after a qualified runtime and an accepted enablement decision.",
+        "arm_id": "AI-Q2",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": false
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/AiAssist/AI_ASSIST.md",
+        "STATUS.md"
+      ]
+    },
+    {
+      "id": "AI-Q3.sam21-small",
+      "version": "1",
+      "arm_id": "AI-Q3",
+      "title": "Smart Review object selection: SAM 2.1 Small (CPU child, 6,144 MB cap)",
+      "identity": {
+        "backend": "transformers CPU child",
+        "model": "facebook/sam2.1-hiera-small@ee5bba1d82bb8749febdf90f45e84b687142ba03",
+        "model_sha256": "0a4067b11ce1e23d5229203f11c718a823060d15a4b23fa2372a7d4b77cbbc60"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Review: Smart Review... (opt-in, off by default, suggestions only)",
+        "modules": [
+          "src/review/assist/worker.py",
+          "src/gui/smart_review_dialog.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "File identity, strict loading and processor semantics qualified offline on Transformers 5.17.0; real-image mask quality, GPU use and peak memory are unmeasured.",
+          "source": "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
+          "date": "2026-10-24",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "catalog needs_integration; advisory and explicit acceptance",
+        "source": "config/curated_asset_catalog.json"
+      },
+      "holds": [],
+      "open_items": [
+        "No documented owner gate exists for Smart Review physical work: needs an owner decision",
+        "No quality oracle or fixed corpus exists"
+      ],
+      "next_test": {
+        "summary": "Forward-pass smoke on one synthetic image in a contained CPU child under the 6,144 MB cap, recording peak memory and process cleanup.",
+        "arm_id": "AI-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
+        "config/curated_asset_catalog.json"
+      ]
+    },
+    {
+      "id": "AI-Q3.florence2-base-ft",
+      "version": "1",
+      "arm_id": "AI-Q3",
+      "title": "Smart Review captions: Florence-2 Base FT (CPU child, 6,144 MB cap)",
+      "identity": {
+        "backend": "transformers CPU child",
+        "model": "florence-community/Florence-2-base-ft@0b03b6f15a4a211370fb204aee4e7dd48887ea37",
+        "model_sha256": "ab06dea66b16d5e54513256d64854be2194443452fd0d84353b40a278bf87d42"
+      },
+      "reachability": {
+        "implemented": true,
+        "operator_reachable": true,
+        "surface": "Review: Smart Review... caption suggestions",
+        "modules": [
+          "src/review/assist/worker.py",
+          "src/gui/smart_review_dialog.py"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "e1",
+          "kind": "offline_contract",
+          "claim": "Offline file identity and conversion equivalence qualified; caption accuracy, time and peak memory are unmeasured.",
+          "source": "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
+          "date": "2026-10-24",
+          "applies_to": {}
+        }
+      ],
+      "qualification": {
+        "resource": "NOT TESTED",
+        "quality": "NOT TESTED",
+        "integration": "NOT TESTED"
+      },
+      "status": "NOT TESTED",
+      "governance": {
+        "state": "catalog needs_integration; advisory and explicit acceptance",
+        "source": "config/curated_asset_catalog.json"
+      },
+      "holds": [],
+      "open_items": [
+        "No documented owner gate exists for Smart Review physical work"
+      ],
+      "next_test": {
+        "summary": "Forward-pass smoke on one synthetic image in a contained CPU child, recording peak memory and process cleanup.",
+        "arm_id": "AI-Q3",
+        "stage": "canary",
+        "needs_owner_authorization": true,
+        "admissible": true
+      },
+      "confidence": "medium",
+      "sources": [
+        "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
+        "config/curated_asset_catalog.json"
+      ]
+    }
+  ]
+}
