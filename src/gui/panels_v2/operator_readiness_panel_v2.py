@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
@@ -95,6 +96,10 @@ class OperatorReadinessPanelV2(ttk.Frame):
         self.close_button.grid(row=0, column=3, padx=(6, 0))
         if on_open_diagnostics is None:
             self.diagnostics_button.state(["disabled"])
+        # A snapshot is not live: say when it was taken so a stale "held" or "ready" is not mistaken for the current state.
+        self.snapshot_var = tk.StringVar(master=self, value="")
+        self.snapshot_label = ttk.Label(header, textvariable=self.snapshot_var, anchor="w")
+        self.snapshot_label.grid(row=1, column=0, columnspan=4, sticky="w")
 
         self.body_scroll = ScrollableFrame(self)
         self.body_scroll.grid(row=1, column=0, sticky="nsew")
@@ -165,6 +170,9 @@ class OperatorReadinessPanelV2(ttk.Frame):
         if self._source_image_path_provider is not None:
             source_image_path = self._source_image_path_provider()
         self.snapshot = self.service.collect(source_image_path=source_image_path)
+        self.snapshot_var.set(
+            f"State as of {time.strftime('%H:%M:%S')}. This is a snapshot: press Refresh for the current state."
+        )
         self._render_snapshot(self.snapshot)
         return self.snapshot
 

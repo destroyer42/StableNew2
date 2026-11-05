@@ -44,7 +44,11 @@ from src.pipeline.global_prompt_policy import (
     LEGACY_POLICY_SOURCE,
     has_frozen_global_prompt_policy,
 )
-from src.pipeline.model_synchronizer import A1111ModelSynchronizer, normalize_model_name
+from src.pipeline.model_synchronizer import (
+    A1111ModelSynchronizer,
+    ModelSynchronizationError,
+    normalize_model_name,
+)
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
@@ -312,6 +316,8 @@ class Pipeline:
         self._run_started_at_monotonic: float | None = None
         self._run_model_switch_count: int = 0
         self._run_vae_switch_count: int = 0
+        # Operator-readable reason of the last verified checkpoint problem in this run (see take_model_sync_failure).
+        self._model_sync_failure_message: str | None = None
         self._stage_policy_engine = StagePolicyEngine()
 
     def _begin_run_metrics(self) -> None:
@@ -319,6 +325,17 @@ class Pipeline:
         self._run_started_at_monotonic = time.monotonic()
         self._run_model_switch_count = 0
         self._run_vae_switch_count = 0
+        self._model_sync_failure_message = None
+
+    def take_model_sync_failure(self) -> str | None:
+        """Return (and clear) the operator-readable checkpoint-mismatch reason recorded during this run.
+
+        A stage that cannot get the selected checkpoint loaded returns no output rather than raising, so the
+        runner reads the specific reason here instead of reporting a generic "no images" failure.  ``None``
+        when no verified checkpoint problem occurred (including backend-unreachable verification failures).
+        """
+        message, self._model_sync_failure_message = self._model_sync_failure_message, None
+        return message
 
     def _record_model_switch(self) -> None:
         self._run_model_switch_count += 1
@@ -999,8 +1016,12 @@ class Pipeline:
         if self._normalize_model_name(model_name):
             try:
                 synchronization = self._model_synchronizer.synchronize(str(model_name))
-            except Exception:
+            except Exception as exc:
                 self._current_model = None
+                if isinstance(exc, ModelSynchronizationError):
+                    self._model_sync_failure_message = (
+                        exc.operator_message() or self._model_sync_failure_message
+                    )
                 raise
             self._current_model = synchronization.actual_model
             model_switched = synchronization.switched

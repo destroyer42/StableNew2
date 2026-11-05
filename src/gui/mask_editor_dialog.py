@@ -13,7 +13,12 @@ from typing import Any
 from PIL import Image, ImageTk
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
-from src.controller.masked_edit_service import MaskEditPreview, MaskEditSettings, prepare_mask_edit
+from src.controller.masked_edit_service import (
+    MaskEditPreview,
+    MaskEditSettings,
+    bind_history_lineage,
+    prepare_mask_edit,
+)
 from src.gui.theme_v2 import apply_toplevel_theme
 from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunner, WorkOutcome
@@ -33,6 +38,7 @@ class MaskEditorDialog(tk.Toplevel):
         runner: BackgroundWorkRunner | None = None,
         suggested_mask: bytes | None = None,
         suggested_source_sha256: str = "",
+        lineage: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(master)
         apply_toplevel_theme(self)
@@ -46,6 +52,9 @@ class MaskEditorDialog(tk.Toplevel):
         self._image: Image.Image | None = None
         self._photo: ImageTk.PhotoImage | None = None
         self._baseline: dict[str, Any] = {}
+        self._lineage = (
+            deepcopy(lineage) if lineage else None
+        )  # this image's verified History hand-off, if any
         self._source_sha256 = ""
         self._suggested_mask = suggested_mask  # an operator-accepted Smart Review proposal; checked again once the source loads
         self._suggested_source_sha256 = suggested_source_sha256
@@ -168,6 +177,12 @@ class MaskEditorDialog(tk.Toplevel):
         with Image.open(io.BytesIO(source.data)) as image:
             pixels = image.convert("RGB")
         baseline = self._controller._extract_reprocess_baseline_from_image(self.source_path)
+        baseline = bind_history_lineage(
+            baseline,
+            source_path=self.source_path,
+            source_sha256=source.sha256,
+            lineage=self._lineage,
+        )
         return WorkOutcome((source, pixels, baseline))
 
     def _loaded(self, outcome: WorkOutcome) -> None:

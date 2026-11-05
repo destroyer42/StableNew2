@@ -1,6 +1,6 @@
 {
   "schema": "stablenew.golden_coverage_matrix",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "recorded_for": "PR-TEST-DESKTOP-830; PR-TEST-JOURNEYS-832",
   "classes": {
     "full_desktop_journey": "Driven end to end through visible controls (semantic Tk and, locally, real Win32 input) against the real GUI, compiler, NJR, JobService, queue, runner and History. Backends are loopback fakes unless a physical run says otherwise.",
@@ -176,11 +176,12 @@
         "IMG-03"
       ],
       "tests": [
-        "tests/tools/test_golden_path_journeys.py"
+        "tests/tools/test_golden_path_journeys.py",
+        "tests/gui_v2/test_masked_edit_lineage_833.py"
       ],
-      "limits": "Loopback Forge returns a synthetic image: orchestration, provenance and preservation only, never edit quality. Compare with Parent is blocked by finding GP832-F3 and stays a failing check; Extend Canvas is not driven.",
+      "limits": "Loopback Forge returns a synthetic image: orchestration, provenance and preservation only, never edit quality. The edit's parent_job_id, parent artifact digest and Compare with Parent (direct parent and child, typed differences) are checked; Extend Canvas is not driven by the journey (its lineage is covered by a deterministic test).",
       "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
-      "remaining_risk": "Edit quality, outpaint and real Forge inpaint behaviour are unverified; lineage defect GP832-F3 is unrepaired."
+      "remaining_risk": "Edit quality, outpaint and real Forge inpaint behaviour are unverified. Smart Review opens the editor without the History hand-off, so an edit started there records no parent (safe default)."
     },
     {
       "id": "motion-library-batch-convert-and-driving-video",
@@ -191,11 +192,12 @@
       ],
       "tests": [
         "tests/tools/test_golden_path_journeys.py",
-        "tests/video/test_pr_vid_motion_354_conversion.py"
+        "tests/video/test_pr_vid_motion_354_conversion.py",
+        "tests/tools/test_golden_path_blender_833.py"
       ],
-      "limits": "Conversion needs Blender (absent on this host): that lane is HOLD and never faked. Lane B imports a labelled pre-rendered clip. Prepare Motion Source is not driven.",
+      "limits": "Lane A converts a sample with a real CPU Blender only when an executable is supplied explicitly (--blender or STABLENEW_JOURNEY_BLENDER); it is verified with the bounded version check and registered inside the disposable workspace only. Without one the lane is a HOLD that names why (not supplied, missing, not Blender, unsupported version, verification failed) and no render is faked. Lane B imports a labelled pre-rendered clip and never substitutes for Lane A. Prepare Motion Source is not driven.",
       "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
-      "remaining_risk": "Conversion output quality and Blender behaviour are unverified."
+      "remaining_risk": "Conversion output quality is unverified (the check is that the MP4 decodes, its identity matches the record, the provenance names the original and the Motion Library registered it); character-mesh FBX rendering is not driven."
     },
     {
       "id": "storyboard-persistent-multi-shot-sequence",
@@ -206,11 +208,12 @@
       ],
       "tests": [
         "tests/tools/test_golden_path_journeys.py",
-        "tests/gui_v2/test_storyboard350_ui.py"
+        "tests/gui_v2/test_storyboard350_ui.py",
+        "tests/video/test_storyboard_sequence_prompts.py"
       ],
       "limits": "Fixture Comfy returns synthetic clips; Fun Control refusal is checked, strict resume and replay are not.",
       "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
-      "remaining_risk": "Real segment continuity and sequence video quality are unverified; GP832-F4 (form prompt required) is unrepaired."
+      "remaining_risk": "Real segment continuity and sequence video quality are unverified. The form-level motion prompt is no longer required when every shot has its own prompt (GP832-F4 repaired)."
     },
     {
       "id": "learning-evidence-gated-profile-publication",
@@ -235,11 +238,13 @@
       ],
       "tests": [
         "tests/tools/test_golden_path_journeys.py",
-        "tests/gui_v2/test_queue_pause_resume_journey_150.py"
+        "tests/gui_v2/test_queue_pause_resume_journey_150.py",
+        "tests/pipeline/test_checkpoint_mismatch_operator_reason.py",
+        "tests/queue/test_webui_running_claim_projection_832.py"
       ],
       "limits": "Faults are injected into the loopback backend only. Resource preflight refusal (low host RAM) is not driven.",
       "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
-      "remaining_risk": "GP832-F1 and GP832-F2 are unrepaired; real GPU loss and process-kill recovery are not exercised."
+      "remaining_risk": "GP832-F1 and GP832-F2 are repaired (checkpoint reason recorded; readiness names claimed RUNNING jobs and states it is a snapshot). GP833-F1 (no 'preparing' state for a claimed job waiting on an unreachable backend) needs an owner decision. Real GPU loss and process-kill recovery are not exercised."
     },
     {
       "id": "model-comparison-and-prompt-model-matrix",

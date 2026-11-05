@@ -6,7 +6,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from src.video.sequence_admission import read_still_size, sha256_file, workflow_segment_errors
+from src.video.sequence_admission import (
+    read_still_size,
+    segment_prompt_problem,
+    sha256_file,
+    workflow_segment_errors,
+)
 from src.video.sequence_shots import shot_problems
 from src.video.storyboard import StoryboardDraft, StoryboardError
 from src.video.workflow_frame_count import frame_count_policy, legal_frame_counts
@@ -107,7 +112,14 @@ def readiness(draft: StoryboardDraft, registry: Any, form: dict[str, Any]) -> St
         spec = registry.get(draft.workflow_id, draft.workflow_version)
         policy = frame_count_policy(spec)
         fps = int(policy["fps"]) if policy else 0
-        for shot in draft.shots:
+        form_prompt = str(form.get("prompt") or "").strip()
+        for position, shot in enumerate(draft.shots):
+            # A blank shot prompt inherits the form's; with both blank the shot is named, not the workflow.
+            prompt_problem = segment_prompt_problem(
+                spec, shot.prompt.strip() or None, form_prompt, position=position
+            )
+            if prompt_problem:
+                problems.append(prompt_problem)
             problems.extend(
                 workflow_segment_errors(
                     spec,

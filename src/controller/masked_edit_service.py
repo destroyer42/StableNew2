@@ -5,9 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from src.controller.reprocess_admission import submit_reprocess_njrs
+from src.controller.review_batch_service import require_history_iterate_identity
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.masked_inpaint import require_mask_target
 from src.image_backends.model_policy import FamilyLookup
@@ -15,6 +17,7 @@ from src.image_backends.operation_compatibility import require_njr_operation
 from src.pipeline.image_edit_inputs import EDIT_OPERATION_KEY, KEY, freeze_inputs, verified_inputs
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ImageEditSpec, ReprocessJobBuilder, ReprocessSourceItem
+from src.utils.image_metadata import ImageMetadataContractV26, read_image_metadata
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,61 @@ class MaskEditPreview:
     def submit(self, job_service: Any) -> int:
         self.require_queueable()
         return submit_reprocess_njrs(job_service, [self.job])
+
+
+def history_lineage_for(handoff: Any, path: str | Path) -> dict[str, Any] | None:
+    """The active Iterate-from-History hand-off's identity for exactly ``path`` (None for any other image).
+
+    Lookup is by the exact selected path, so a hand-off for image A is never visible to image B, and Review drops the
+    hand-off whenever a new selection is accepted.
+    """
+    by_path = dict(getattr(handoff, "source_metadata_by_path", None) or {})
+    meta = by_path.get(str(path)) or by_path.get(str(Path(path).resolve()))
+    if isinstance(meta, dict) and isinstance(meta.get("history_iterate"), dict):
+        return dict(meta)
+    return None
+
+
+def bind_history_lineage(
+    baseline: dict[str, Any],
+    *,
+    source_path: str | Path,
+    source_sha256: str,
+    lineage: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Name the History job an edit descends from, only when the hand-off provably describes exactly this image.
+
+    ``lineage`` is the verified Iterate-from-History hand-off for the selected Review image. It is trusted only for
+    the same file path and the same bytes (artifact digest) the hand-off recorded, and only when the image's own
+    embedded job id (if any) agrees. Anything else is refused, never re-attributed. Without a hand-off the baseline
+    is returned unchanged, so an image with no trustworthy originating job keeps ``parent_job_id`` unset.
+    """
+    claim = (lineage or {}).get("history_iterate")
+    if not isinstance(claim, dict):
+        return baseline
+    lineage = dict(lineage or {})
+    job_id = str(claim.get("job_id") or "")
+    if not job_id or str(lineage.get("source_job_id") or job_id) != job_id:
+        raise ValueError(
+            "The History hand-off does not name one job; reopen the image from History"
+        )
+    recorded_path = str(lineage.get("source_path") or "")
+    if not recorded_path or Path(recorded_path).resolve() != Path(source_path).resolve():
+        raise ValueError(
+            "The History hand-off belongs to a different image; reopen it from History"
+        )
+    if str(lineage.get("source_artifact_id") or "") != f"sha256:{source_sha256}":
+        raise ValueError(
+            "The recorded image changed since it was opened from History; reopen it from History"
+        )
+    embedded = read_image_metadata(Path(source_path)).get(ImageMetadataContractV26.KEY_JOB_ID)
+    existing = baseline.get("job_id")
+    if existing and str(existing) != job_id:
+        raise ValueError(
+            "Image identity contradicts the History job it was opened from; refusing to re-attribute it"
+        )
+    require_history_iterate_identity(lineage, embedded, source_sha256)
+    return {**baseline, "job_id": job_id}
 
 
 def prepare_mask_edit(

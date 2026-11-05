@@ -165,6 +165,25 @@ def workflow_segment_errors(
     return errors
 
 
+def segment_prompt_problem(spec: Any, raw_prompt: Any, base_prompt: str, *, position: int) -> str:
+    """Why segment ``position`` (0-based) has no usable motion prompt, or an empty string.
+
+    An unset prompt (``None``) inherits ``base_prompt`` (the form's Motion prompt); an explicitly empty one is
+    refused, never replaced. The text names the shot (1-based, as the operator numbers them) and the empty field."""
+
+    if "prompt" not in set(getattr(spec, "required_input_names", ())):
+        return ""
+    if str(raw_prompt if raw_prompt is not None else base_prompt).strip():
+        return ""
+    name = f"{spec.workflow_id} {spec.workflow_version} needs a prompt describing the motion"
+    if raw_prompt is None:
+        return (
+            f"Shot {position + 1}: {name}; this shot has no motion prompt and the form's Motion prompt "
+            "is empty, so there is nothing for it to inherit"
+        )
+    return f"Shot {position + 1}: {name}; an explicitly empty prompt is refused, not replaced by another"
+
+
 def _resolve_workflow(registry: Any, workflow_id: str, version: str, *, label: str) -> Any:
     """The offerable spec (approved or experimental, never disabled); governance is judged by the caller."""
 
@@ -317,11 +336,11 @@ def freeze_sequence_plan(
                 if raw.get("negative_prompt") is not None
                 else base_negative_prompt
             ).strip()
-            if "prompt" in set(getattr(spec, "required_input_names", ())) and not prompt:
-                errors.append(
-                    f"{label}: {spec.workflow_id} {spec.workflow_version} needs a prompt describing the "
-                    "motion; an explicitly empty prompt is refused, not replaced by another"
-                )
+            prompt_problem = segment_prompt_problem(
+                spec, raw.get("prompt"), base_prompt, position=position
+            )
+            if prompt_problem:
+                errors.append(prompt_problem)
         else:
             for forbidden in ("workflow_id", "workflow_version", "prompt", "negative_prompt"):
                 if str(raw.get(forbidden) or "").strip():

@@ -95,6 +95,9 @@ def _require_history_iterate_identity(
         raise ValueError("The recorded image changed since it was opened from History; reopen it from History")
 
 
+require_history_iterate_identity = _require_history_iterate_identity
+
+
 def prepare_review_batch(
     controller: Any, *, image_paths: list[str], stages: list[str], fallback_config: dict[str, Any],
     prompt_delta: str = "", negative_prompt_delta: str = "", prompt_mode: str = "append",

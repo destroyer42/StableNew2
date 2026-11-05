@@ -3,7 +3,8 @@
 In Video Workflow, expand Advanced → Multi-shot sequence. A Storyboard is editable authoring intent; saving it never queues a job.
 
 1. Choose a source image and workflow in the main form. Add 2–12 shots, each with a motion prompt, native frame length and seed intent.
-   Blank prompts inherit the form prompt. Blank shot 1 seed inherits the form seed; later blank seeds and explicit `random` resolve only at admission.
+   Blank prompts inherit the form prompt, so the form's Motion prompt may stay empty when every shot has its own; a shot left without a prompt while the form
+   prompt is also empty is refused by shot number (an explicitly empty shot prompt is refused too). Blank shot 1 seed inherits the form seed; later blank seeds and explicit `random` resolve only at admission.
 2. Enter a Storyboard title, optional notes and clip name. **Save** creates or revises the draft in `%LOCALAPPDATA%/StableNew/storyboards/`.
    **Save As / Duplicate** creates a new Storyboard ID and independent shot IDs. **Rename** changes the title and saves. There is no library-delete action.
 3. **Open** selects saved JSON from that library after restart. **Import JSON** validates an external manifest and saves an independent copy.

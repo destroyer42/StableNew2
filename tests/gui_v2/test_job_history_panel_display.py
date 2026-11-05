@@ -378,6 +378,36 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
 
         assert self.panel._extract_output_folder(entry) == "run-2"
 
+    def test_failed_job_reason_is_shown_bounded_and_only_for_failures(self) -> None:
+        """GP832-F1: the recorded failure reason is what the Status tooltip offers an operator."""
+        reason = "Checkpoint mismatch: the selected model is not active.  " + "x" * 600
+        failed = JobHistoryEntry(
+            job_id="f-1",
+            created_at=datetime.now(),
+            status=JobStatus.FAILED,
+            error_message=reason,
+            result={"success": False, "error": reason},
+        )
+        from_result = JobHistoryEntry(
+            job_id="f-2",
+            created_at=datetime.now(),
+            status=JobStatus.FAILED,
+            result={"success": False, "error": "sampler exploded"},
+        )
+        done = JobHistoryEntry(
+            job_id="ok-1",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            error_message="stale",
+        )
+
+        text = self.panel._extract_failure_reason(failed)
+
+        assert text.startswith("Checkpoint mismatch: the selected model is not active. ")
+        assert len(text) <= 400
+        assert self.panel._extract_failure_reason(from_result) == "sampler exploded"
+        assert self.panel._extract_failure_reason(done) == ""
+
 
 if __name__ == "__main__":
     unittest.main()
