@@ -1370,9 +1370,18 @@ class JobHistoryPanelV2(ttk.Frame):
         return self._usable_output_folder(entry) or ""
 
     def _on_tree_motion(self, event: tk.Event) -> None:
-        """Show tooltip with full model name and efficiency metrics on hover."""
+        """Show tooltip with full model name and efficiency metrics (or a failed job's reason) on hover."""
         item = self.history_tree.identify_row(event.y)
         column = self.history_tree.identify_column(event.x)
+
+        if item and column == "#2":  # Status column: the recorded reason of a failed job
+            failed = self._entries.get(self._item_to_job.get(item) or "")
+            reason = self._extract_failure_reason(failed) if failed else ""
+            if reason:
+                self._show_tooltip(event.x_root, event.y_root, reason)
+            else:
+                self._hide_tooltip()
+            return
 
         if not item or column != "#3":  # Model column (0-indexed: #1=time, #2=status, #3=model)
             self._hide_tooltip()
@@ -1397,6 +1406,16 @@ class JobHistoryPanelV2(ttk.Frame):
         efficiency_text = self._extract_efficiency_summary(entry)
         tooltip_text = full_model if not efficiency_text else f"{full_model}\n{efficiency_text}"
         self._show_tooltip(event.x_root, event.y_root, tooltip_text)
+
+    def _extract_failure_reason(self, entry: JobHistoryEntry) -> str:
+        """The recorded, bounded failure reason of a failed job ("" when it did not fail or none was recorded)."""
+        if self._get_display_status(entry) != "Failed":
+            return ""
+        reason = entry.error_message
+        if not reason and isinstance(entry.result, dict):
+            reason = entry.result.get("error")
+        text = " ".join(str(reason or "").split())
+        return text if len(text) <= 400 else text[:399].rstrip() + "…"
 
     def _extract_full_model(self, entry: JobHistoryEntry) -> str:
         """Extract full model name without truncation."""
