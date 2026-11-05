@@ -829,3 +829,44 @@ def test_the_native_dialog_responder_waits_for_a_dialog_that_is_still_being_buil
         responder.__exit__(None, None, None)
     assert typed == ["C:/x/draft.json"] and clicked == [12]
     assert responder.seen[0]["answer"] == "file:C:/x/draft.json" and polls["n"] >= 4
+
+
+def test_a_question_asked_before_a_file_dialog_does_not_consume_the_file_answer() -> None:
+    """Opening a draft asks "Discard the unsaved draft changes?" first; the path was meant for the dialog behind it."""
+
+    import time
+
+    from tools.operator_journey.desktop import NativeDialogResponder
+
+    state = {"dialogs": [1], "typed": [], "clicked": []}
+
+    class Win32Double:
+        def dialogs_of(self, pid: int) -> list[int]:
+            return list(state["dialogs"])
+
+        def children_of(self, hwnd: int) -> list[tuple[int, str, str]]:
+            if hwnd == 1:  # the message box
+                return [(21, "Static", "Discard the unsaved draft changes?"), (22, "Button", "&Yes"), (23, "Button", "&No")]
+            return [(31, "DirectUIHWND", ""), (32, "Edit", ""), (33, "Button", "&Open"), (34, "Button", "Cancel")]
+
+        def text(self, hwnd: int) -> str:
+            return "Unsaved Storyboard" if hwnd == 1 else "Open Storyboard"
+
+        def set_text(self, hwnd: int, value: str) -> None:
+            state["typed"].append(value)
+
+        def click_button(self, hwnd: int) -> None:
+            state["clicked"].append(hwnd)
+            if hwnd == 22:  # answering the question lets the file dialog appear
+                state["dialogs"] = [2]
+
+    responder = NativeDialogResponder(Win32Double(), 4242)
+    responder.queue("file", "C:/x/draft.json")
+    responder.__enter__()
+    try:
+        deadline = time.monotonic() + 5
+        while 33 not in state["clicked"] and time.monotonic() < deadline:
+            time.sleep(0.05)
+    finally:
+        responder.__exit__(None, None, None)
+    assert state["clicked"][:2] == [22, 33] and state["typed"] == ["C:/x/draft.json"]

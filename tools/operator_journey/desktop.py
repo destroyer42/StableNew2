@@ -1076,6 +1076,8 @@ class NativeDialogResponder:
     scripted answer is ``("button", "Yes")`` or ``("file", "C:/path/file.png")``; every dialog seen is recorded.
     """
 
+    _FILE_DIALOG_CLASSES = frozenset({"DUIViewWndClassName", "ComboBoxEx32", "SHELLDLL_DefView", "DirectUIHWND"})
+
     def __init__(self, win32: Win32, pid: int, *, default_button: str = "yes") -> None:
         self.win32, self.pid, self.default_button = win32, pid, default_button.lower()
         self.script: list[tuple[str, str]] = []
@@ -1098,48 +1100,68 @@ class NativeDialogResponder:
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            for hwnd in self.win32.dialogs_of(self.pid):
-                if hwnd in self._handled:
-                    continue
-                kids = self.win32.children_of(hwnd)
-                wants_file = bool(self.script) and self.script[0][0] == "file"
-                ready = bool(kids) and (not wants_file or any(c == "Edit" for (_h, c, _t) in kids))
-                if not ready:
-                    # The window exists before its controls do.  Answering now would consume the scripted answer
-                    # and mark the dialog done while it is still being built, leaving the application blocked on it.
-                    self._waiting[hwnd] = self._waiting.get(hwnd, 0) + 1
-                    if self._waiting[hwnd] < 100:  # ~10 s
-                        continue
-                self._handled.add(hwnd)
-                title = self.win32.text(hwnd)
-                texts = [t for (_h, c, t) in kids if c == "Static" and t]
-                edits = [h for (h, c, _t) in kids if c == "Edit"]
-                buttons = [
-                    (h, t.replace("&", "").lower()) for (h, c, t) in kids if c == "Button" and t
-                ]
-                wanted = self.script.pop(0) if self.script else None
-                record: dict[str, Any] = {
-                    "title": title,
-                    "text": " ".join(texts)[:300],
-                    "buttons": [t for _h, t in buttons],
-                    "answer": None,
-                }
-                if wanted and wanted[0] == "file" and edits:
-                    self.win32.set_text(edits[0], wanted[1])
-                    ok = next(
-                        (h for h, t in buttons if t in {"open", "save", "ok", "select folder"}),
-                        None,
-                    )
-                    if ok:
-                        self.win32.click_button(ok)
-                    record["answer"] = f"file:{wanted[1]}"
-                else:
-                    choice = wanted[1].lower() if wanted else self.default_button
-                    target = next((h for h, t in buttons if t == choice), None) or (
-                        buttons[0][0] if buttons else None
-                    )
-                    if target:
-                        self.win32.click_button(target)
-                        record["answer"] = choice
-                self.seen.append(record)
+            try:
+                self._poll()
+            except Exception as exc:  # noqa: BLE001 - a dead responder leaves the application blocked on its dialog
+                self.seen.append({"title": None, "error": f"{type(exc).__name__}: {exc}"[:300], "answer": None})
+                time.sleep(0.5)
             time.sleep(0.1)
+
+    def _poll(self) -> None:
+        present = self.win32.dialogs_of(self.pid)
+        # Window handles are recycled: a dialog that has gone must not make a later one look already answered.
+        self._handled &= set(present)
+        self._waiting = {h: n for h, n in self._waiting.items() if h in present}
+        for hwnd in present:
+            if hwnd in self._handled:
+                continue
+            kids = self.win32.children_of(hwnd)
+            wants_file = bool(self.script) and self.script[0][0] == "file"
+            is_file_dialog = any(c in self._FILE_DIALOG_CLASSES for (_h, c, _t) in kids)
+            ready = bool(kids) and (
+                not (wants_file and is_file_dialog) or any(c == "Edit" for (_h, c, _t) in kids)
+            )
+            if not ready:
+                # The window exists before its controls do.  Answering now would consume the scripted answer
+                # and mark the dialog done while it is still being built, leaving the application blocked on it.
+                self._waiting[hwnd] = self._waiting.get(hwnd, 0) + 1
+                if self._waiting[hwnd] < 100:  # ~10 s
+                    continue
+            self._handled.add(hwnd)
+            title = self.win32.text(hwnd)
+            texts = [t for (_h, c, t) in kids if c == "Static" and t]
+            edits = [h for (h, c, _t) in kids if c == "Edit"]
+            buttons = [
+                (h, t.replace("&", "").lower()) for (h, c, t) in kids if c == "Button" and t
+            ]
+            # An answer belongs to one kind of dialog: a path answers a file dialog, a button answers a message box.  A
+            # question the operator meets first (for example "Discard the unsaved draft changes?" before the file
+            # dialog) must not consume the answer meant for the dialog behind it.
+            head = self.script[0] if self.script else None
+            fits = head is not None and ((head[0] == "file") == bool(edits))
+            wanted = self.script.pop(0) if fits else None
+            record: dict[str, Any] = {
+                "title": title,
+                "text": " ".join(texts)[:300],
+                "buttons": [t for _h, t in buttons],
+                "answer": None,
+                "script_head": wanted[0] if wanted else None,
+            }
+            if wanted and wanted[0] == "file" and edits:
+                self.win32.set_text(edits[0], wanted[1])
+                ok = next(
+                    (h for h, t in buttons if t in {"open", "save", "ok", "select folder"}),
+                    None,
+                )
+                if ok:
+                    self.win32.click_button(ok)
+                record["answer"] = f"file:{wanted[1]}"
+            else:
+                choice = wanted[1].lower() if wanted else self.default_button
+                target = next((h for h, t in buttons if t == choice), None) or (
+                    buttons[0][0] if buttons else None
+                )
+                if target:
+                    self.win32.click_button(target)
+                    record["answer"] = choice
+            self.seen.append(record)
