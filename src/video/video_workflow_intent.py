@@ -92,8 +92,14 @@ def requested_controls(spec: Any, form_data: Mapping[str, Any]) -> tuple[str, ..
     return tuple(sorted(controls))
 
 
-def capability_errors(spec: Any, form_data: Mapping[str, Any]) -> list[str]:
-    """Operator-readable admission problems derived from the spec (empty when admissible)."""
+def capability_errors(
+    spec: Any, form_data: Mapping[str, Any], *, prompt_per_segment: bool = False
+) -> list[str]:
+    """Operator-readable admission problems derived from the spec (empty when admissible).
+
+    ``prompt_per_segment`` is for a multi-segment sequence only: every segment carries (or explicitly
+    inherits) its own prompt and ``freeze_sequence_plan`` refuses a segment left without one, so the
+    form-level prompt is not required here. A single video never sets it."""
 
     errors: list[str] = []
     name = spec.display_name
@@ -105,7 +111,7 @@ def capability_errors(spec: Any, form_data: Mapping[str, Any]) -> list[str]:
     required = set(spec.required_input_names)
     if "end_anchor" in required and not _text(form_data.get("end_anchor_path")):
         errors.append("Please choose an end anchor image for the video workflow.")
-    if "prompt" in required and not _text(form_data.get("prompt")):
+    if "prompt" in required and not prompt_per_segment and not _text(form_data.get("prompt")):
         errors.append(f"'{name}' needs a prompt describing the motion.")
     if "pose_video" in required and not _text(form_data.get("pose_video_path")):
         errors.append(f"'{name}' needs a driving video whose motion it transfers.")

@@ -299,7 +299,9 @@ class VideoWorkflowNjrBuilder:
             return False, f"Video workflow source image does not exist: {source}"
         return True, None
 
-    def validate_form_data(self, form_data: Mapping[str, Any]) -> tuple[bool, str | None]:
+    def validate_form_data(
+        self, form_data: Mapping[str, Any], *, prompt_per_segment: bool = False
+    ) -> tuple[bool, str | None]:
         workflow_id = str(form_data.get("workflow_id") or "").strip()
         if not workflow_id:
             return False, "Please select a video workflow."
@@ -323,7 +325,7 @@ class VideoWorkflowNjrBuilder:
             return False, str(exc)
 
         # Required inputs, accepted controls and experimental opt-in all come from the spec.
-        problems = capability_errors(spec, form_data)
+        problems = capability_errors(spec, form_data, prompt_per_segment=prompt_per_segment)
         if problems:
             return False, problems[0]
         end_anchor_text = str(form_data.get("end_anchor_path") or "").strip()
@@ -363,11 +365,17 @@ class VideoWorkflowNjrBuilder:
             )
         return True, None
 
-    def _require_valid(self, source_image_path: str | Path, form_data: Mapping[str, Any]) -> None:
+    def _require_valid(
+        self,
+        source_image_path: str | Path,
+        form_data: Mapping[str, Any],
+        *,
+        prompt_per_segment: bool = False,
+    ) -> None:
         valid, reason = self.validate_source_image(source_image_path)
         if not valid:
             raise ValueError(reason or "Video workflow source image is invalid")
-        valid, reason = self.validate_form_data(form_data)
+        valid, reason = self.validate_form_data(form_data, prompt_per_segment=prompt_per_segment)
         if not valid:
             raise ValueError(reason or "Video workflow configuration is invalid")
 
@@ -469,13 +477,17 @@ class VideoWorkflowNjrBuilder:
         form_data: Mapping[str, Any],
         *,
         shared: SharedFrozenInputs | None = None,
+        prompt_per_segment: bool = False,
     ) -> FrozenVideoInputs:
         """Validate, then freeze the admission-scoped inputs (a random seed becomes concrete).
 
         ``shared`` lets a batch reuse one hash of the source-independent inputs for every source;
-        omitted, they are frozen here exactly as a single submission always did."""
+        omitted, they are frozen here exactly as a single submission always did.
+        ``prompt_per_segment`` is set only by sequence admission (see ``capability_errors``)."""
 
-        self._require_valid(source_image_path, form_data)
+        self._require_valid(
+            source_image_path, form_data, prompt_per_segment=prompt_per_segment
+        )
         spec = self.spec_for(form_data)
         declared_inputs = set(spec.declared_input_names)
         if shared is None:
@@ -574,7 +586,13 @@ class VideoWorkflowNjrBuilder:
         job/artifact ids) are additive provenance supplied by a multi-source submission; omitted,
         the job is exactly what it always was."""
 
-        self._require_valid(frozen.source_image_path, form_data)
+        # A sequence plan was frozen by ``freeze_sequence_plan``, which already refused any segment
+        # without its own (or an inherited) prompt, so the form-level prompt is not required again.
+        self._require_valid(
+            frozen.source_image_path,
+            form_data,
+            prompt_per_segment=sequence_plan is not None,
+        )
         spec = self.spec_for(form_data)
         workflow_id = str(form_data.get("workflow_id") or "").strip()
         end_anchor_text = str(form_data.get("end_anchor_path") or "").strip()

@@ -85,7 +85,7 @@ class VideoSequenceControllerMixin:
                 form["seed"] = first["seed"]
             if first.get("frame_count") not in (None, ""):
                 form["frame_count"] = first["frame_count"]
-        frozen = self._njr_builder.freeze_inputs(source_image_path, form)
+        frozen = self._njr_builder.freeze_inputs(source_image_path, form, prompt_per_segment=True)
         if storyboard is not None and frozen.source_sha256 != storyboard.source_sha256:
             raise StoryboardError("Source changed during admission; nothing queued.")
         spec = self._njr_builder.spec_for(form)
