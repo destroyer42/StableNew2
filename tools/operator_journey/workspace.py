@@ -33,6 +33,7 @@ _ENV_KEYS = (
     "STABLENEW_WEBUI_BASE_URL",
     "STABLENEW_PROMPTPACK_DIR",
     "STABLENEW_GLOBAL_PROMPT_DIR",
+    "STABLENEW_GENERATION_PROFILE_DIR",
     "STABLENEW_INITIAL_RESOURCE_GRACE_SEC",
     "PYTEST_CURRENT_TEST",
     "STABLENEW_TEST_MODE",
@@ -96,6 +97,10 @@ class UserDataGuard:
         snapshot["output_top_level"] = (
             sorted(entry.name for entry in output.iterdir()) if output.exists() else []
         )
+        # The operator's real generation-profile store: resolved outside any activated workspace on both sides.
+        from src.generation_profiles.store import resolve_generation_profile_dir
+
+        snapshot["generation_profiles"] = _tree_signature(resolve_generation_profile_dir())
         return snapshot
 
     def capture(self) -> None:
@@ -106,7 +111,7 @@ class UserDataGuard:
         problems: list[str] = []
         if after["git_status"] != self._before.get("git_status"):
             problems.append("git status changed during the journey")
-        for key in (*_PROTECTED_DIRS, "output_top_level"):
+        for key in (*_PROTECTED_DIRS, "output_top_level", "generation_profiles"):
             if after[key] != self._before.get(key):
                 changed = _diff_keys(self._before.get(key), after[key])
                 problems.append(f"protected data changed in {key}/: {changed}")
@@ -222,6 +227,8 @@ class OperatorWorkspace:
                 "STABLENEW_PROMPTPACK_DIR": str(self.packs_dir),
                 "STABLENEW_GLOBAL_PROMPT_DIR": str(self.global_prompts_dir),
                 "STABLENEW_AI_DIR": str(self.ai_assist_dir),
+                # The per-user generation-profile store (Learning publication writes here) must never be the operator's.
+                "STABLENEW_GENERATION_PROFILE_DIR": str(self.root / "generation-profiles"),
             }
         )
         if self.startup_grace_sec is not None:

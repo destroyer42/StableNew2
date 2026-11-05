@@ -49,4 +49,19 @@ def run_advanced(journey: JourneyDef, config: RunConfig) -> JourneyEvidence:
             fake_a1111_factory=lambda: make_fake_a1111(extra_models=models),
             workspace_hook=declare,
         )
+    if journey.key == "learning-profile":
+        from tools.operator_journey.golden.fixtures import seed_declared_checkpoints
+        from tools.operator_journey.golden.lrn02 import run_lrn02
+
+        def declare_verified(workspace, fake_a, _fake_c) -> None:
+            seed_declared_checkpoints(workspace, {fake_a.model: "sdxl"}, verified=(fake_a.model,))
+
+        return run_journey_body(
+            journey.id,
+            run_lrn02,
+            config,
+            mode_label="simulated",
+            fake_a1111_factory=make_fake_a1111,
+            workspace_hook=declare_verified,
+        )
     raise KeyError(f"no runner for advanced journey {journey.key!r}")
