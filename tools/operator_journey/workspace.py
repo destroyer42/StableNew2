@@ -101,6 +101,7 @@ class UserDataGuard:
         from src.generation_profiles.store import resolve_generation_profile_dir
 
         snapshot["generation_profiles"] = _tree_signature(resolve_generation_profile_dir())
+        snapshot["user_data_stores"] = _user_store_signature()
         return snapshot
 
     def capture(self) -> None:
@@ -111,11 +112,28 @@ class UserDataGuard:
         problems: list[str] = []
         if after["git_status"] != self._before.get("git_status"):
             problems.append("git status changed during the journey")
-        for key in (*_PROTECTED_DIRS, "output_top_level", "generation_profiles"):
+        for key in (*_PROTECTED_DIRS, "output_top_level", "generation_profiles", "user_data_stores"):
             if after[key] != self._before.get(key):
                 changed = _diff_keys(self._before.get(key), after[key])
                 problems.append(f"protected data changed in {key}/: {changed}")
         return problems
+
+
+def _user_store_signature() -> dict[str, list[int]]:
+    """The operator's real Storyboard store, Motion Library settings and Blender setting (resolved unredirected)."""
+
+    from src.video.motion_library.config import config_path
+    from src.video.storyboard_store import default_root
+
+    signature = _tree_signature(default_root())
+    signature = {f"storyboards/{key}": value for key, value in signature.items()}
+    for path in (config_path(), config_path().with_name("motion_conversion.json")):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        signature[path.name] = [stat.st_size, stat.st_mtime_ns]
+    return signature
 
 
 def _diff_keys(before: Any, after: Any) -> list[str]:
@@ -213,6 +231,15 @@ class OperatorWorkspace:
         saved_defaults = ConfigManager.__init__.__defaults__
         saved_env = {key: os.environ.get(key) for key in _ENV_KEYS}
         saved_cwd = os.getcwd()
+        import src.video.motion_library.config as motion_config
+        import src.video.storyboard_store as storyboard_store
+
+        saved_user_stores = (storyboard_store.default_root, motion_config._user_data_dir)
+        # Storyboards, the Motion Library setting and the Blender setting live under the operator's
+        # %LOCALAPPDATA%\StableNew with no override; redirect their resolvers (LOCALAPPDATA itself stays: FFmpeg
+        # discovery reads it).
+        storyboard_store.default_root = lambda: self.root / "storyboards"
+        motion_config._user_data_dir = lambda *_args, **_kwargs: self.root / "user-data"
         workspace_paths._root = self.root.resolve()
         # Learning/queue jobs default their output to the cwd-relative "output"
         # directory, so the journey also runs from inside its workspace.
@@ -241,6 +268,7 @@ class OperatorWorkspace:
             yield self
         finally:
             os.chdir(saved_cwd)
+            storyboard_store.default_root, motion_config._user_data_dir = saved_user_stores
             workspace_paths._root = saved_root
             ConfigManager.__init__.__defaults__ = saved_defaults
             for key, value in saved_env.items():
