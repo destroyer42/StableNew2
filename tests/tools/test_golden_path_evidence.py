@@ -141,7 +141,14 @@ def test_shipped_registries_are_valid_and_hold_all_known_findings() -> None:
     coverage = registry.load_coverage()
     assert registry.coverage_problems(coverage) == []
     summary = registry.coverage_summary(coverage)
-    assert summary["full_desktop_journey"] == 3 and summary["untested"] >= 1
+    # The three 830 journeys stay full desktop journeys; the advanced journeys add to, never remove from, that set.
+    assert summary["full_desktop_journey"] >= 3 and summary["untested"] >= 1
+    full = {row["id"] for row in coverage["workflows"] if row["coverage"] == "full_desktop_journey"}
+    assert {
+        "image-txt2img-from-promptpack",
+        "video-wan22-ti2v-from-reference-image",
+        "learning-designed-experiment-rating-persistence",
+    } <= full
 
 
 def test_registry_validators_fail_closed() -> None:

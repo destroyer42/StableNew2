@@ -198,6 +198,27 @@ Verdicts per journey are `PASS`, `FAIL`, `HOLD` (a prerequisite is missing) and 
 
 **Friction and reachability.** A journey that passes only because the driver compensated for a product defect is recorded as such: a forced maximize, a dragged pane, a mouse release that had to follow a moving control, a retried click, a retried field entry, or a wait for a hidden control is a friction event linked to a structured finding. Reachability is `DIRECT`, `WITH_WORKAROUNDS`, `BLOCKED` or (semantic driver) `NOT_ASSESSED`; it is never inferred from a semantic run. `--layout maximized|normal|minimum` (windows driver) selects the window layout; `maximized` is the historic default and is itself recorded as a workaround. The findings are `tools/operator_journey/golden/findings.v1.json` (severity, environment, reproduction, evidence with SHA-256, repair status) and the workflow coverage matrix is `coverage_matrix.v1.json` (full desktop journey / partial journey / integration only / untested); `--check-registries` validates both, including that every referenced journey and test file exists.
 
+### 11b. Advanced golden-path journeys (PR-TEST-JOURNEYS-832)
+
+`--journey advanced` (or one of `prompt-model`, `image-edit`, `motion-assets`, `storyboard`, `learning-profile`, `recovery`) runs six more journeys through the same framework, drivers, evidence, sealed archives and comparator as section 11a. They are **simulated-lane only** (`physical=False`): `--mode physical` and `--mode readiness` refuse them with `ModeRefusal` before any plan, gate or runtime exists, and each runner aborts if handed a physical target. Backends are loopback fakes at the API boundary only. Visual quality is never claimed.
+
+| Journey | Key | What it drives | Simulated verdict (tk driver) |
+| --- | --- | --- | --- |
+| IMG-02 | `prompt-model` | PromptPack edit/reload, model profiles (SDXL, SD1, Klein exact-name fixture), effective settings, queue | PASS |
+| IMG-03 | `image-edit` | History Iterate, Edit Image in Review, masked edit with pointer strokes, frozen preview, queue, provenance, refusals | **FAIL by design**: finding GP832-F3 (`parent_job_recorded`, `compare_offered_for_the_edit` fail; the journey does not route around it) |
+| VID-02 | `motion-assets` | Motion Library, Batch Convert Motion dry run, import a labelled pre-rendered clip, Use as Driving Video, readiness | **HOLD**: no Blender on this host; conversion is never faked, lane B checks still run |
+| VID-03 | `storyboard` | Three-shot Storyboard save, close/reopen, Open, reorder, Preview, Queue Sequence, revise, Fun Control refusal | PASS |
+| LRN-02 | `learning-profile` | Controlled experiment, evidence-gated profile publication, restart, explicit reuse | PASS |
+| OPS-01 | `recovery` | Backend unreachable/dropped/rejected, changed model, close during generation, reopen and reconcile | **FAIL by design**: finding GP832-F1 (`failure_cause_visible_to_operator`); GP832-F2 is recorded as an observation |
+
+**Seams added.** `FakeA1111` gained fault injection (`inject(method, path, "drop"|"status:NNN"|"delay")`, a request log, interruptible delay), `/sdapi/v1/img2img`, and `forge=True` (answers the runtime-identity probe as Forge; the workspace then selects `webui_runtime_identity=forge_webui`). Both drivers have `drag_stroke(canvas, start, end)`; the tk driver's `is_disabled` trusts a ttk state flag over the stale `state` option. The scripted dialog seam answers `askdirectory`.
+
+**Isolation.** The workspace redirects the generation-profile store (`STABLENEW_GENERATION_PROFILE_DIR`), the Storyboard store and the Motion Library / Blender settings into the temporary workspace, and `UserDataGuard` fails a journey (`isolation_violations`) if the operator's real copies change. `LOCALAPPDATA` itself is not redirected because FFmpeg discovery uses it.
+
+**Coverage register and comparison.** `coverage_matrix.v1.json` (1.1.0) lists 27 workflows, each with coverage class, journeys, tests, `limits`, `physical_qualification` and `remaining_risk` (the validator requires the last two). Workflows without a journey are `integration_only` or `untested`, never claimed as desktop-covered. `findings.v1.json` records GP832-F1..F4 (all `UNREPAIRED`). The comparator adds `extra_interaction_count`, `lost_clicks`, `click_retries`, `forced_scroll_or_resize`, `waiting_time_s`, `gui_error_count`, `shutdown_latency_s`, `invalid_artifacts`, `wrong_job_associations` and `unexpected_queue_submissions`, and prints its `LIMITATIONS` (trace metrics are only comparable like with like; the last three count failed named checks; truncated runs are INCONCLUSIVE).
+
+**Tests.** `tests/tools/test_golden_path_advanced.py` (deterministic: definitions and routing, physical refusal, fake img2img/Forge/fault seams, store isolation and guard, registries, comparator metrics) and `test_advanced_simulated_journey_reaches_its_expected_verdict` in `tests/tools/test_golden_path_journeys.py` (display required; pins each journey's verdict and, for IMG-03, the only checks allowed to fail). When a finding is repaired, change that pin to PASS.
+
 ## 12. Hermetic seams: fakes, helpers and autouse guards
 
 Root `tests/conftest.py` [V] applies to every test:

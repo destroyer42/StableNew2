@@ -21,10 +21,11 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Directories whose contents belong to the operator, never to a journey.
 _PROTECTED_DIRS = ("state", "data", "presets", "config", "packs")
-# Immutable, checked-in manifests that Offline AI Assist reads to report its installation status (exact repo-relative
+# Immutable, checked-in manifests that Offline AI Assist reads to report its installation status, and the Forge runtime
+# manifest the Forge image backend reads when the isolated workspace selects the Forge identity (exact repo-relative
 # paths, read-only).  Nothing else under a protected directory is exempt, and a write to either is still a violation.
 _COMMITTED_READ_ONLY = frozenset(
-    {"config/managed_ai_runtime.json", "config/ai_model_registry.json"}
+    {"config/managed_ai_runtime.json", "config/ai_model_registry.json", "config/managed_forge_runtime.json"}
 )
 _ENV_KEYS = (
     "STABLENEW_AI_DIR",

@@ -387,6 +387,14 @@ def run_suite(
 
     validate_combination(mode=mode, driver=driver, plan=plan_path, env=env, layout=layout)
     chosen = select(journeys_choice)
+    if mode in {PHYSICAL, READINESS}:
+        # An advanced journey has no physical lane: it is refused here, before any plan, readiness gate or runtime.
+        unsupported = [j.id for j in chosen if not j.physical]
+        if unsupported:
+            raise ModeRefusal(
+                f"{', '.join(unsupported)} {'has' if len(unsupported) == 1 else 'have'} no physical lane (simulated and "
+                f"desktop-driver runs only); choose a journey with a physical lane for --mode {mode}"
+            )
     if mode == SIMULATED:
         return run_simulated(
             chosen,

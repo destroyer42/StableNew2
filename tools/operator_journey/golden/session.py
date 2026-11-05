@@ -361,6 +361,7 @@ class GoldenRun:
             ):
                 d.pump(0.1)
             self.faults.begin_shutdown()
+            close_started = time.monotonic()
             d.close_via_window_manager()
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
@@ -372,6 +373,7 @@ class GoldenRun:
                 time.sleep(0.02)
             else:
                 self.check(ph, "graceful_close", False, "Tk root still alive 20s after close")
+            self.ev.observe(f"shutdown_latency_s_{self.boots}", round(time.monotonic() - close_started, 3))
         except tk.TclError:
             pass
         leaked = leaked_non_daemon_threads(self._baseline_threads)
