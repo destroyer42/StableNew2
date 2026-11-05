@@ -846,8 +846,17 @@ def test_a_question_asked_before_a_file_dialog_does_not_consume_the_file_answer(
 
         def children_of(self, hwnd: int) -> list[tuple[int, str, str]]:
             if hwnd == 1:  # the message box
-                return [(21, "Static", "Discard the unsaved draft changes?"), (22, "Button", "&Yes"), (23, "Button", "&No")]
-            return [(31, "DirectUIHWND", ""), (32, "Edit", ""), (33, "Button", "&Open"), (34, "Button", "Cancel")]
+                return [
+                    (21, "Static", "Discard the unsaved draft changes?"),
+                    (22, "Button", "&Yes"),
+                    (23, "Button", "&No"),
+                ]
+            return [
+                (31, "DirectUIHWND", ""),
+                (32, "Edit", ""),
+                (33, "Button", "&Open"),
+                (34, "Button", "Cancel"),
+            ]
 
         def text(self, hwnd: int) -> str:
             return "Unsaved Storyboard" if hwnd == 1 else "Open Storyboard"

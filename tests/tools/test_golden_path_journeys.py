@@ -115,14 +115,21 @@ _ADVANCED_EXPECTED = {
     "learning-profile": ("PASS", set()),
     "storyboard": ("PASS", set()),
     "image-edit": ("FAIL", {"parent_job_recorded", "compare_offered_for_the_edit"}),  # GP832-F3
-    "motion-assets": ("HOLD", set()),  # conversion needs Blender; PASS is also accepted when Blender is installed
+    "motion-assets": (
+        "HOLD",
+        set(),
+    ),  # conversion needs Blender; PASS is also accepted when Blender is installed
 }
 
 
 @pytest.mark.parametrize("journey", list(_ADVANCED_EXPECTED))
-def test_advanced_simulated_journey_reaches_its_expected_verdict(tmp_path: Path, journey: str) -> None:
+def test_advanced_simulated_journey_reaches_its_expected_verdict(
+    tmp_path: Path, journey: str
+) -> None:
     before = _tracked_state()
-    code, evidence, bundle = _run_suite(tmp_path, "--journey", journey, "--hide-window", timeout=900)
+    code, evidence, bundle = _run_suite(
+        tmp_path, "--journey", journey, "--hide-window", timeout=900
+    )
     ((journey_id, result),) = evidence["journeys"].items()
     expected, allowed_failures = _ADVANCED_EXPECTED[journey]
     verdict = result["verdict"]
@@ -136,8 +143,14 @@ def test_advanced_simulated_journey_reaches_its_expected_verdict(tmp_path: Path,
     if journey == "motion-assets" and verdict == "HOLD":
         assert "Blender" in result["hold_reason"]
     captured = result["captured_errors"]
-    assert captured["gui"] == [] and captured["threads"] == [] and captured["logs"] == []
-    assert result["isolation_violations"] == [], "an advanced journey touched the operator's real data"
+    assert captured["gui"] == [] and captured["threads"] == []
+    if (
+        journey != "recovery"
+    ):  # OPS-01 injects backend faults on purpose; the application logs their handling
+        assert captured["logs"] == []
+    assert result["isolation_violations"] == [], (
+        "an advanced journey touched the operator's real data"
+    )
     assert _tracked_state() == before, "the journey left changes in tracked files"
     for name in ("plan.json", "evidence.json", "summary.md", "actions.jsonl", "artifacts.json"):
         assert (bundle / name).is_file()

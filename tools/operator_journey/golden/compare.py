@@ -22,7 +22,14 @@ _VERDICT_RANK = {"PASS": 0, "HOLD": 1, "FAIL": 2, "NO-GO": 3}
 _REACH_RANK = {"DIRECT": 0, "WITH_WORKAROUNDS": 1, "BLOCKED": 2}
 _TIMING_TOLERANCE = 0.15
 _TRUNCATED_BY_EARLY_STOP = frozenset(
-    {"workaround_count", "action_count", "extra_interaction_count", "lost_clicks", "click_retries", "forced_scroll_or_resize"}
+    {
+        "workaround_count",
+        "action_count",
+        "extra_interaction_count",
+        "lost_clicks",
+        "click_retries",
+        "forced_scroll_or_resize",
+    }
 )
 #: Environment fields whose difference makes timing comparisons meaningless.
 _TIMING_FACTORS = ("desktop_driver", "layout", "display", "python", "platform", "machine")
@@ -105,11 +112,32 @@ def _media(result: dict[str, Any]) -> str | None:
 #: Metrics derived from named failed checks.  They count only what the journey asserted, so a journey that does not
 #: assert a thing cannot improve or degrade on it; the comparison says so (see ``LIMITATIONS``).
 _SUBMISSION_CHECKS = (
-    "queued_nothing", "submitted_nothing", "submitted_no_job", "no_job_was_queued", "one_job_one_submission",
-    "only_new_submission", "nothing_submitted", "sent_nothing", "submit_nothing",
+    "queued_nothing",
+    "submitted_nothing",
+    "submitted_no_job",
+    "no_job_was_queued",
+    "one_job_one_submission",
+    "only_new_submission",
+    "nothing_submitted",
+    "sent_nothing",
+    "submit_nothing",
 )
-_ASSOCIATION_CHECKS = ("parent_job", "lineage", "job_association", "history_record", "same_job", "new_job_identity")
-_ARTIFACT_CHECKS = ("decodes", "decodable", "is_valid", "media_valid", "byte_identical", "overwritten")
+_ASSOCIATION_CHECKS = (
+    "parent_job",
+    "lineage",
+    "job_association",
+    "history_record",
+    "same_job",
+    "new_job_identity",
+)
+_ARTIFACT_CHECKS = (
+    "decodes",
+    "decodable",
+    "is_valid",
+    "media_valid",
+    "byte_identical",
+    "overwritten",
+)
 _WAIT_ACTIONS = {"wait_satisfied", "wait_timeout"}
 
 LIMITATIONS = (
@@ -130,7 +158,11 @@ def _waiting_seconds(trace: list[dict[str, Any]]) -> float | None:
     total, previous = 0.0, None
     for entry in trace:
         t = entry.get("t")
-        if entry.get("action") in _WAIT_ACTIONS and previous is not None and isinstance(t, (int, float)):
+        if (
+            entry.get("action") in _WAIT_ACTIONS
+            and previous is not None
+            and isinstance(t, (int, float))
+        ):
             total += max(0.0, float(t) - previous)
         if isinstance(t, (int, float)):
             previous = float(t)
@@ -138,14 +170,17 @@ def _waiting_seconds(trace: list[dict[str, Any]]) -> float | None:
 
 
 def _failed_named(checks: list[dict[str, Any]], needles: tuple[str, ...]) -> int:
-    return sum(1 for c in checks if not c.get("passed") and any(n in str(c.get("name")) for n in needles))
+    return sum(
+        1 for c in checks if not c.get("passed") and any(n in str(c.get("name")) for n in needles)
+    )
 
 
 def _shutdown_latency(result: dict[str, Any]) -> float | None:
     values = [
         o["value"]
         for o in result.get("observations", [])
-        if str(o.get("name", "")).startswith("shutdown_latency_s_") and isinstance(o.get("value"), (int, float))
+        if str(o.get("name", "")).startswith("shutdown_latency_s_")
+        and isinstance(o.get("value"), (int, float))
     ]
     return max(values) if values else None
 
@@ -176,12 +211,27 @@ def journey_metrics(result: dict[str, Any], driver: str) -> dict[str, Any]:
         "error_count": _errors(result),
         "duration_s": _seconds(result),
         "action_count": len(trace) if trace else None,
-        "extra_interaction_count": (report["workaround_count"] + sum(informational.values())) if trace else None,
-        "lost_clicks": (count("click_retried_after_no_effect") + count("expected_dialog_never_appeared")) if trace else None,
-        "click_retries": (count("click_retried_after_no_effect") + count("typing_retried_with_another_strategy")) if trace else None,
+        "extra_interaction_count": (report["workaround_count"] + sum(informational.values()))
+        if trace
+        else None,
+        "lost_clicks": (
+            count("click_retried_after_no_effect") + count("expected_dialog_never_appeared")
+        )
+        if trace
+        else None,
+        "click_retries": (
+            count("click_retried_after_no_effect") + count("typing_retried_with_another_strategy")
+        )
+        if trace
+        else None,
         "forced_scroll_or_resize": (
-            count("window_forced_maximized") + count("pane_dragged_to_reveal_controls") + informational.get("page_scrolled_with_the_wheel", 0) + informational.get("page_scrolled_with_the_scrollbar", 0)
-        ) if trace else None,
+            count("window_forced_maximized")
+            + count("pane_dragged_to_reveal_controls")
+            + informational.get("page_scrolled_with_the_wheel", 0)
+            + informational.get("page_scrolled_with_the_scrollbar", 0)
+        )
+        if trace
+        else None,
         "waiting_time_s": _waiting_seconds(trace),
         "gui_error_count": len((result.get("captured_errors") or {}).get("gui") or []),
         "shutdown_latency_s": _shutdown_latency(result),

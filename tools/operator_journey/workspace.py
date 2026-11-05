@@ -25,7 +25,11 @@ _PROTECTED_DIRS = ("state", "data", "presets", "config", "packs")
 # manifest the Forge image backend reads when the isolated workspace selects the Forge identity (exact repo-relative
 # paths, read-only).  Nothing else under a protected directory is exempt, and a write to either is still a violation.
 _COMMITTED_READ_ONLY = frozenset(
-    {"config/managed_ai_runtime.json", "config/ai_model_registry.json", "config/managed_forge_runtime.json"}
+    {
+        "config/managed_ai_runtime.json",
+        "config/ai_model_registry.json",
+        "config/managed_forge_runtime.json",
+    }
 )
 _ENV_KEYS = (
     "STABLENEW_AI_DIR",
@@ -113,7 +117,12 @@ class UserDataGuard:
         problems: list[str] = []
         if after["git_status"] != self._before.get("git_status"):
             problems.append("git status changed during the journey")
-        for key in (*_PROTECTED_DIRS, "output_top_level", "generation_profiles", "user_data_stores"):
+        for key in (
+            *_PROTECTED_DIRS,
+            "output_top_level",
+            "generation_profiles",
+            "user_data_stores",
+        ):
             if after[key] != self._before.get(key):
                 changed = _diff_keys(self._before.get(key), after[key])
                 problems.append(f"protected data changed in {key}/: {changed}")

@@ -75,7 +75,11 @@ class FakeA1111:
         }
         if self.forge:
             self.options.update(
-                {"forge_preset": "sd", "forge_additional_modules": [], "forge_unet_storage_dtype": "Automatic"}
+                {
+                    "forge_preset": "sd",
+                    "forge_additional_modules": [],
+                    "forge_unet_storage_dtype": "Automatic",
+                }
             )
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -93,7 +97,13 @@ class FakeA1111:
 
         with self._lock:
             self.faults.append(
-                {"method": method.upper(), "path": path, "effect": effect, "times": times, "delay": delay}
+                {
+                    "method": method.upper(),
+                    "path": path,
+                    "effect": effect,
+                    "times": times,
+                    "delay": delay,
+                }
             )
 
     def clear_faults(self) -> None:
@@ -313,7 +323,7 @@ class FakeA1111:
         if inits and not (width and height):
             with Image.open(io.BytesIO(base64.b64decode(inits[0]))) as init:
                 width, height = init.size
-        seed = int(payload.get("seed", -1))
+        seed = int(-1 if payload.get("seed") is None else payload["seed"])
         seed = seed if seed >= 0 else random.randint(0, 2**31 - 1)
         prompt = str(payload.get("prompt") or "")
         info = {
@@ -327,7 +337,9 @@ class FakeA1111:
             "infotexts": [prompt],
         }
         return {
-            "images": [base64.b64encode(_png_bytes(seed, prompt, width or 64, height or 64)).decode()],
+            "images": [
+                base64.b64encode(_png_bytes(seed, prompt, width or 64, height or 64)).decode()
+            ],
             "parameters": {},
             "info": json.dumps(info),
         }
@@ -338,7 +350,7 @@ class FakeA1111:
         count = max(1, int(payload.get("batch_size") or 1)) * max(
             1, int(payload.get("n_iter") or 1)
         )
-        requested = int(payload.get("seed", -1))
+        requested = int(-1 if payload.get("seed") is None else payload["seed"])
         base = requested if requested >= 0 else random.randint(0, 2**31 - 1)
         seeds = [base + index for index in range(count)]
         prompt = str(payload.get("prompt") or "")

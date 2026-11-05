@@ -510,7 +510,10 @@ class WindowsDesktopDriver(TkDriver):
         """The vertical scrollbar that drives ``container`` (a sibling in the same frame), if it is on screen."""
 
         for sibling in getattr(container.master, "winfo_children", lambda: [])():
-            if isinstance(sibling, (tk.Scrollbar, ttk.Scrollbar)) and str(sibling.cget("orient")) == "vertical":
+            if (
+                isinstance(sibling, (tk.Scrollbar, ttk.Scrollbar))
+                and str(sibling.cget("orient")) == "vertical"
+            ):
                 try:
                     if sibling.winfo_ismapped() and sibling.winfo_height() > 20:
                         return sibling
@@ -522,7 +525,8 @@ class WindowsDesktopDriver(TkDriver):
         """Click the scrollbar's trough beyond its thumb, as a person does when the wheel has no effect."""
 
         x = bar.winfo_rootx() + bar.winfo_width() // 2
-        y = bar.winfo_rooty() + (bar.winfo_height() - 8 if down else 8)
+        arrow = bar.winfo_width() + 6  # the arrow buttons are square; the trough begins beyond them
+        y = bar.winfo_rooty() + (bar.winfo_height() - arrow if down else arrow)
         self.win32.click(x, y)
 
     def _settled(self, center: Callable[[], tuple[int, int]]) -> bool:
@@ -1076,7 +1080,9 @@ class NativeDialogResponder:
     scripted answer is ``("button", "Yes")`` or ``("file", "C:/path/file.png")``; every dialog seen is recorded.
     """
 
-    _FILE_DIALOG_CLASSES = frozenset({"DUIViewWndClassName", "ComboBoxEx32", "SHELLDLL_DefView", "DirectUIHWND"})
+    _FILE_DIALOG_CLASSES = frozenset(
+        {"DUIViewWndClassName", "ComboBoxEx32", "SHELLDLL_DefView", "DirectUIHWND"}
+    )
 
     def __init__(self, win32: Win32, pid: int, *, default_button: str = "yes") -> None:
         self.win32, self.pid, self.default_button = win32, pid, default_button.lower()
@@ -1103,7 +1109,9 @@ class NativeDialogResponder:
             try:
                 self._poll()
             except Exception as exc:  # noqa: BLE001 - a dead responder leaves the application blocked on its dialog
-                self.seen.append({"title": None, "error": f"{type(exc).__name__}: {exc}"[:300], "answer": None})
+                self.seen.append(
+                    {"title": None, "error": f"{type(exc).__name__}: {exc}"[:300], "answer": None}
+                )
                 time.sleep(0.5)
             time.sleep(0.1)
 
@@ -1125,15 +1133,15 @@ class NativeDialogResponder:
                 # The window exists before its controls do.  Answering now would consume the scripted answer
                 # and mark the dialog done while it is still being built, leaving the application blocked on it.
                 self._waiting[hwnd] = self._waiting.get(hwnd, 0) + 1
-                if self._waiting[hwnd] < 100:  # ~10 s
+                if (
+                    self._waiting[hwnd] < 100 or not kids
+                ):  # ~10 s; a dialog with no controls is never given up on
                     continue
             self._handled.add(hwnd)
             title = self.win32.text(hwnd)
             texts = [t for (_h, c, t) in kids if c == "Static" and t]
             edits = [h for (h, c, _t) in kids if c == "Edit"]
-            buttons = [
-                (h, t.replace("&", "").lower()) for (h, c, t) in kids if c == "Button" and t
-            ]
+            buttons = [(h, t.replace("&", "").lower()) for (h, c, t) in kids if c == "Button" and t]
             # An answer belongs to one kind of dialog: a path answers a file dialog, a button answers a message box.  A
             # question the operator meets first (for example "Discard the unsaved draft changes?" before the file
             # dialog) must not consume the answer meant for the dialog behind it.
@@ -1157,7 +1165,9 @@ class NativeDialogResponder:
                     self.win32.click_button(ok)
                 record["answer"] = f"file:{wanted[1]}"
             else:
-                choice = wanted[1].lower() if wanted else self.default_button
+                choice = (
+                    wanted[1].lower() if wanted else ("cancel" if edits else self.default_button)
+                )
                 target = next((h for h, t in buttons if t == choice), None) or (
                     buttons[0][0] if buttons else None
                 )

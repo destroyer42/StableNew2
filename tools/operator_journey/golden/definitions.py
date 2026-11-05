@@ -307,9 +307,22 @@ OPS_01 = JourneyDef(
     physical=False,
 )
 
-ADVANCED_ORDER = ("prompt-model", "image-edit", "motion-assets", "storyboard", "learning-profile", "recovery")
-JOURNEYS = {j.key: j for j in (IMG_01, VID_01, LRN_01, IMG_02, IMG_03, VID_02, VID_03, LRN_02, OPS_01)}
-ORDER = ("image", "video", "learning")  # "all" stays the three PR-830 journeys so its baselines stay comparable
+ADVANCED_ORDER = (
+    "prompt-model",
+    "image-edit",
+    "motion-assets",
+    "storyboard",
+    "learning-profile",
+    "recovery",
+)
+JOURNEYS = {
+    j.key: j for j in (IMG_01, VID_01, LRN_01, IMG_02, IMG_03, VID_02, VID_03, LRN_02, OPS_01)
+}
+ORDER = (
+    "image",
+    "video",
+    "learning",
+)  # "all" stays the three PR-830 journeys so its baselines stay comparable
 
 
 def select(choice: str) -> list[JourneyDef]:

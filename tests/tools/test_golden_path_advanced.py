@@ -44,7 +44,9 @@ def test_every_advanced_journey_routes_to_its_own_runner(monkeypatch: pytest.Mon
 
     seen: dict[str, str] = {}
 
-    def fake_run_journey_body(journey_id: str, body: Any, config: Any, **kwargs: Any) -> JourneyEvidence:
+    def fake_run_journey_body(
+        journey_id: str, body: Any, config: Any, **kwargs: Any
+    ) -> JourneyEvidence:
         seen[journey_id] = body.__name__
         return JourneyEvidence(journey_id=journey_id, backend_mode="simulated")
 
@@ -65,15 +67,23 @@ def test_an_unknown_advanced_journey_has_no_runner() -> None:
     from tools.operator_journey.golden import advanced
 
     bogus = defs.JourneyDef(
-        key="not-a-journey", id="XXX-01", title="t", runtime_kind="forge", steps=("s",), simulated_acceptance=("a",),
-        physical_acceptance=(), physical=False,
+        key="not-a-journey",
+        id="XXX-01",
+        title="t",
+        runtime_kind="forge",
+        steps=("s",),
+        simulated_acceptance=("a",),
+        physical_acceptance=(),
+        physical=False,
     )
     with pytest.raises(KeyError):
         advanced.run_advanced(bogus, config=None)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("mode", ["physical", "readiness"])
-@pytest.mark.parametrize("choice", ["advanced", "recovery", "image-edit", "storyboard", "motion-assets"])
+@pytest.mark.parametrize(
+    "choice", ["advanced", "recovery", "image-edit", "storyboard", "motion-assets"]
+)
 def test_physical_and_readiness_modes_refuse_every_advanced_journey(
     mode: str, choice: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -85,7 +95,11 @@ def test_physical_and_readiness_modes_refuse_every_advanced_journey(
 
     with pytest.raises(ModeRefusal, match="no physical lane"):
         run_suite(
-            journeys_choice=choice, mode=mode, driver="windows", plan_path=tmp_path / "plan.json", evidence_root=tmp_path
+            journeys_choice=choice,
+            mode=mode,
+            driver="windows",
+            plan_path=tmp_path / "plan.json",
+            evidence_root=tmp_path,
         )
     assert not list(tmp_path.iterdir()), "a refused run must create nothing"
 
@@ -95,7 +109,10 @@ def test_physical_and_readiness_modes_refuse_every_advanced_journey(
 
 def _post(url: str, body: dict[str, Any]) -> tuple[int, Any]:
     request = urllib.request.Request(
-        url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST"
+        url,
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
     try:
         with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 - loopback fake
@@ -134,7 +151,9 @@ def test_fake_backend_answers_img2img_at_the_init_image_size_and_records_the_pay
         with Image.open(io.BytesIO(base64.b64decode(body["images"][0]))) as image:
             assert image.size == (96, 64)
         assert json.loads(body["info"])["seed"] == 5
-        assert [p["prompt"] for p in fake.img2img_payloads] == ["a buoy"] and not fake.txt2img_payloads
+        assert [p["prompt"] for p in fake.img2img_payloads] == [
+            "a buoy"
+        ] and not fake.txt2img_payloads
         assert not fake.unhandled
 
 
@@ -148,7 +167,11 @@ def test_fake_backend_presents_as_a1111_or_as_forge_to_the_runtime_identity_prob
 
     def identity(forge: bool) -> str:
         with FakeA1111(forge=forge) as fake:
-            return probe_runtime_identity(lambda path: _get(fake.base_url + path)[1] if _get(fake.base_url + path)[0] == 200 else None).identity
+            return probe_runtime_identity(
+                lambda path: _get(fake.base_url + path)[1]
+                if _get(fake.base_url + path)[0] == 200
+                else None
+            ).identity
 
     assert identity(False) == A1111_WEBUI_IDENTITY
     assert identity(True) == FORGE_WEBUI_IDENTITY
@@ -197,7 +220,9 @@ def test_a_ttk_flag_is_authoritative_for_whether_a_control_is_disabled() -> None
     try:
         button = ttk.Button(root, text="Preview", state="disabled")
         assert is_disabled(button)
-        button.state(["!disabled"])  # how the product enables it: the configured option stays "disabled"
+        button.state(
+            ["!disabled"]
+        )  # how the product enables it: the configured option stays "disabled"
         assert str(button.cget("state")) == "disabled"
         assert not is_disabled(button)
         button.state(["disabled"])
@@ -211,7 +236,9 @@ def test_a_ttk_flag_is_authoritative_for_whether_a_control_is_disabled() -> None
 # --- isolation of per-user stores --------------------------------------------------------------------------------------
 
 
-def test_the_workspace_redirects_storyboard_and_motion_stores_and_restores_them(tmp_path: Path) -> None:
+def test_the_workspace_redirects_storyboard_and_motion_stores_and_restores_them(
+    tmp_path: Path,
+) -> None:
     import src.video.motion_library.config as motion_config
     import src.video.storyboard_store as storyboard_store
     from tools.operator_journey.workspace import OperatorWorkspace
@@ -219,12 +246,20 @@ def test_the_workspace_redirects_storyboard_and_motion_stores_and_restores_them(
     real = (storyboard_store.default_root, motion_config._user_data_dir)
     workspace = OperatorWorkspace(root=tmp_path / "ws", webui_base_url="http://127.0.0.1:1")
     with workspace.activate():
-        assert Path(storyboard_store.default_root()).resolve().is_relative_to((tmp_path / "ws").resolve())
-        assert Path(motion_config.config_path()).resolve().is_relative_to((tmp_path / "ws").resolve())
+        assert (
+            Path(storyboard_store.default_root())
+            .resolve()
+            .is_relative_to((tmp_path / "ws").resolve())
+        )
+        assert (
+            Path(motion_config.config_path()).resolve().is_relative_to((tmp_path / "ws").resolve())
+        )
     assert (storyboard_store.default_root, motion_config._user_data_dir) == real
 
 
-def test_the_guard_reports_a_change_to_the_operators_real_stores(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_guard_reports_a_change_to_the_operators_real_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import tools.operator_journey.workspace as workspace_module
 
     store = tmp_path / "storyboards"
@@ -245,7 +280,9 @@ def test_the_guard_reports_a_change_to_the_operators_real_stores(tmp_path: Path,
 # --- registries --------------------------------------------------------------------------------------------------------
 
 
-def test_the_coverage_register_names_every_required_workflow_with_physical_status_and_risk() -> None:
+def test_the_coverage_register_names_every_required_workflow_with_physical_status_and_risk() -> (
+    None
+):
     from tools.operator_journey.golden.registry import (
         coverage_problems,
         coverage_summary,
@@ -256,9 +293,17 @@ def test_the_coverage_register_names_every_required_workflow_with_physical_statu
     assert coverage_problems(doc) == []
     rows = {row["id"]: row for row in doc["workflows"]}
     required = {
-        "model-comparison-and-prompt-model-matrix", "lora-and-embedding-experiments", "controlnet-reference-maps",
-        "smart-review", "video-experiment-ratings-and-review", "movie-clips-assembly", "multi-shot-strict-resume-and-replay",
-        "batch-operations", "offline-ai-assist", "experimental-fun-control", "other-qualified-model-families",
+        "model-comparison-and-prompt-model-matrix",
+        "lora-and-embedding-experiments",
+        "controlnet-reference-maps",
+        "smart-review",
+        "video-experiment-ratings-and-review",
+        "movie-clips-assembly",
+        "multi-shot-strict-resume-and-replay",
+        "batch-operations",
+        "offline-ai-assist",
+        "experimental-fun-control",
+        "other-qualified-model-families",
     }
     assert required <= set(rows)
     covered = {journey for row in rows.values() for journey in row["journeys"]}
@@ -276,7 +321,9 @@ def test_a_coverage_row_without_physical_status_or_risk_is_a_problem() -> None:
     row.pop("remaining_risk")
     row.pop("physical_qualification")
     problems = coverage_problems({**doc, "workflows": [row]})
-    assert any("remaining_risk" in p for p in problems) and any("physical_qualification" in p for p in problems)
+    assert any("remaining_risk" in p for p in problems) and any(
+        "physical_qualification" in p for p in problems
+    )
 
 
 def test_the_product_findings_of_the_advanced_journeys_are_registered_and_unrepaired() -> None:
@@ -335,7 +382,9 @@ def test_journey_metrics_cover_friction_waiting_errors_and_submissions() -> None
     assert metrics["shutdown_latency_s"] == 1.3
     assert metrics["unexpected_queue_submissions"] == 1
     assert metrics["wrong_job_associations"] == 1
-    assert metrics["invalid_artifacts"] == 2  # one invalid media observation + one failed decode check
+    assert (
+        metrics["invalid_artifacts"] == 2
+    )  # one invalid media observation + one failed decode check
 
 
 def test_metrics_missing_from_a_run_are_unknown_not_zero() -> None:
@@ -353,7 +402,10 @@ def test_new_metrics_are_judged_and_truncated_runs_are_inconclusive() -> None:
     assert _judge("lost_clicks", 0, 2, steady)[0] == DEGRADED
     assert _judge("unexpected_queue_submissions", 1, 0, steady)[0] == IMPROVED
     assert _judge("shutdown_latency_s", 1.0, None, steady)[0] == INCONCLUSIVE
-    assert _judge("waiting_time_s", 5.0, 9.0, {"timing_factors": ["layout"], "verdicts": {"PASS"}})[0] == INCONCLUSIVE
+    assert (
+        _judge("waiting_time_s", 5.0, 9.0, {"timing_factors": ["layout"], "verdicts": {"PASS"}})[0]
+        == INCONCLUSIVE
+    )
     truncated = {"timing_factors": [], "verdicts": {"PASS", "FAIL"}}
     assert _judge("extra_interaction_count", 1, 9, truncated)[0] == INCONCLUSIVE
     assert _judge("click_retries", 0, 3, truncated)[0] == INCONCLUSIVE
@@ -362,7 +414,9 @@ def test_new_metrics_are_judged_and_truncated_runs_are_inconclusive() -> None:
 def test_the_comparison_states_its_limitations() -> None:
     from tools.operator_journey.golden.compare import LIMITATIONS, markdown
 
-    assert len(LIMITATIONS) >= 4 and any("not comparable" in item or "like with like" in item for item in LIMITATIONS)
+    assert len(LIMITATIONS) >= 4 and any(
+        "not comparable" in item or "like with like" in item for item in LIMITATIONS
+    )
     text = markdown(
         {
             "a": {"path": "a", "integrity": "sealed"},
