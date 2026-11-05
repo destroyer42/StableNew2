@@ -91,6 +91,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="windows driver window layout: maximized (recorded workaround), normal (application startup size) or minimum",
     )
     golden.add_argument(
+        "--blender",
+        default=None,
+        metavar="EXE",
+        help=(
+            "an explicit Blender executable for VID-02's conversion lane; it is verified with the bounded version check "
+            "and registered only inside the disposable journey workspace (default: STABLENEW_JOURNEY_BLENDER, else none)"
+        ),
+    )
+    golden.add_argument(
         "--archive",
         action="store_true",
         help="archive the run into the permanent acceptance root (always done for physical runs)",
@@ -242,6 +251,7 @@ def _golden_main(parser: argparse.ArgumentParser, args: argparse.Namespace) -> i
             evidence_root=Path(root),
             hide_window=args.hide_window,
             layout=args.layout,
+            blender=args.blender,
         )
     except ModeRefusal as exc:
         print(f"refused: {exc}", file=sys.stderr)
