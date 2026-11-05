@@ -19,7 +19,7 @@
 | Lost/retried inputs | Clicks that missed or were retried | `lost_clicks`, `click_retries` |
 | Forced scroll/resize | Moves needed to reach a control | `forced_scroll_or_resize` |
 | Time to decision-ready | Time until the information needed for the next choice is on screen | new |
-| Chrome ratio | Fixed non-workspace height ÷ window height at 1280×680 | new (pixel script; EV-14 is by eye) |
+| Chrome ratio | Fixed non-workspace height ÷ window height at 1280×680 | pixel script (EV-14); denominator is client height (680 px), not the 719 px captured window |
 | Error comprehension | Participant states cause and next action from the error text, unaided | new (protocol) |
 | Perceived quality | Rating on a fixed scale after the task | new |
 | Responsiveness | Interaction latencies (filter, select, refresh) | 742/743 harness |
@@ -29,7 +29,7 @@
 
 ## 3. Baseline plan (before any prototype)
 
-**Status 2026-11-05:** B1–B5 re-authorized by the owner (DR-A18). B1 done for four retained minimum-size screenshots (EV-14: global chrome ≈36%, Learning review pane ≈62% below the fold); the other sizes and tabs remain. B2–B5 pending: B2 is a Windows desktop `SendInput` run, so it must not overlap another desktop-driving run or a full PR gate on the same machine (a gate was running in the `StableNew-main` checkout when this was written). The harness does not drive the GPU; fakes only.
+**Status 2026-11-05:** B1–B5 re-authorized by the owner (DR-A18). B1 done for four retained minimum-size screenshots (EV-14: global chrome ≈36%, Learning review pane ≈62% below the fold); the other sizes and tabs remain. B2–B5 pending: B2 is a Windows desktop `SendInput` run, so it must not overlap another desktop-driving run or a full PR gate on the same machine (a gate was running in the `StableNew-main` checkout when this was written). The harness does not drive the GPU; fakes only. **B4 (real 125%/150% display scale) changes the Windows display setting**, which GUI-COMPLETE-760 treated as out of scope and which would disturb the owner's open applications; the owner's general B1–B5 authorization is taken to cover it only once the owner confirms the moment, so B4 is asked again immediately before it runs.
 
 B1: Pixel-measure chrome ratio on retained and fresh screenshots at the five target sizes. B2: Re-run IMG-01/02/03, VID-01/02/03, LRN-01/02, OPS-01 with the Windows driver on `origin/main` and archive sealed runs with `--archive`; record action counts and navigation counts as the **current-UI baseline**. B3: Wheel-capture probe on `main` (EV-16). B4: Real 125%/150% display scale runs (the 760 gap). B5: Large-history load (N rows in a temporary repository). **Local host only; B2 uses fakes, not the GPU.**
 
@@ -40,7 +40,7 @@ B1: Pixel-measure chrome ratio on retained and fresh screenshots at the five tar
 | T1 | New pack → text → queue 4 images → open the first result |
 | T2 | Switch model and explain the effective settings aloud |
 | T3 | Open a past image → mask a region → queue → see it beside its parent |
-| T4 | Card sort of the 40 verbs the app offers into groups; first-click test for "make this image move", "find last week's best", "compare two models" |
+| T4 | Card sort of the verbs the app offers (inventory them first; the count is not yet established) into groups; first-click test for "make this image move", "find last week's best", "compare two models" |
 | T5 | Image → clip → play it → add to a movie |
 | T6 | Three-shot Storyboard → queue → resume after interruption |
 | T7 | Rate results and decide which setting to keep |

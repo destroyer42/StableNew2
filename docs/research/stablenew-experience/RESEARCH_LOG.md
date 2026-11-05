@@ -9,7 +9,7 @@ Compact, dated discovery outcomes — not a commit or PR narrative.
 | Package | PR-GUI-UX-850 (research and documentation only) |
 | Task start | 2026-11-05T10:12:27-05:00 (`2026-11-05T15:12:27Z`, first logged message) |
 | Primary session | `claude:85f4f8c8-3cc0-424a-85fa-2b755a7eb8c1` (Claude Code, fresh top-level session, configured model Sonnet 5.5) |
-| Other sessions | none (no subagents spawned) |
+| Other sessions | one read-only review sub-agent (owner-authorized, DR-A20), spawned after commit `6f8de9b2`; nothing else |
 | Host | Local Windows desktop |
 | Worktree / branch | `StableNew.worktrees/research-gui-ux-850` · `research/gui-ux-850-experience-redesign` · base `origin/main` `ed1e989f2149b01d16aef26d5f880326aeb250e0` |
 | Usage | measured with `tools/usage_report.py` at closeout over the full session window; reported in the completion line (not embedded here, to avoid a self-referential figure) |
@@ -34,11 +34,13 @@ Compact, dated discovery outcomes — not a commit or PR narrative.
 13. **PySide6 present.** `C:\Users\rob\qual\gui-port740-env` has PySide6 6.12.0 and Pillow 12.3.0 (EV-39). Nothing was installed or executed from it except the existing Pillow used for the pixel profile.
 14. **B2 deferred, deliberately.** A full PR gate (`run_pr_gate.py --full` with sharded pytest workers) was running in the `StableNew-main` checkout when B2 would have started. The Windows driver uses `SendInput` on the live desktop and could corrupt that gate's GUI tests (and be corrupted by them), so B2 waits until no gate/pytest/journey process is running. No baseline numbers are claimed.
 
+15. **Independent review (sub-agent, read-only) completed and applied.** It verified the counts, Qt numbers, archive hashes and the pixel figures, and found no wording that claims user testing. Fixes applied: chrome figures restated on client height (≈33%, not ≈36% of the 719 px capture) and Learning/Review screenshot origin (local 833 branch) disclosed; line-count bases for 54k/65.7k/68.8k labelled as not comparable; Qt table retitled so no cell reads as an operator outcome; DPI wording corrected (an app configuration choice, not a Tk limit); 742's and QT-001's own conclusions and the departure from them stated; a Tk-only layout-first arm (COA A0) and top risks added; decision-register entries marked where the research, not the owner, supplied content; the two authority conflicts (DR-A11 against `AI_ASSIST`/`STATUS` holds; DR-A13(b) against "frozen plan shown first") written down as open (DR-O11, DR-O6b). Not verified by the reviewer: the owner's chat answers, the supplied layout file, the B1 script.
+
 ## Validation record (docs only)
 
 | Check | Result |
 |---|---|
-| Link/local-path check over `docs/research/stablenew-experience/` (46+ refs) | see completion report (script kept outside the repository) |
+| Link/local-path check over `docs/research/stablenew-experience/` (48 refs, 0 problems at `6f8de9b2`) | pass (script kept outside the repository) |
 | `git diff --check` | clean |
 | Cheap CI classification (`tools/ci/validation_plan.py`) | docs-only expected; confirmed at closeout |
 | GPU/GUI journey suite | **not run** by design |

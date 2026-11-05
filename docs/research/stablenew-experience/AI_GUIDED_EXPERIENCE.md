@@ -4,7 +4,7 @@
 
 ## 0. Owner direction recorded 2026-11-05
 
-- **Model-assisted planning is wanted before offline qualification completes** (DR-A11): models are tested by being used. This research cannot lift the repository's qualification holds (`AI_ASSIST.md`, `STATUS.md`: D12b, ETW canary); how the two reconcile is DR-O11. Until then, anything model-assisted is labelled *unqualified/experimental* in this document's contracts.
+- **Model-assisted planning is wanted before offline qualification completes** (DR-A11): models are tested by being used. This research cannot lift the repository's qualification holds (`AI_ASSIST.md`: `allow_candidate=False`, `strict_offline=True`, named authorization per download and inference; `STATUS.md`: D12b, ETW canary). A Tier-2/3 plan object is not one of the three existing `AssistSuggestion` kinds, so it needs an owner-approved amendment to `AI_ASSIST` invariants 1–2 and the import ratchet, and AI yields to generation (a Tier-3 step cannot run while a job is RUNNING). How all this reconciles is DR-O11. Until then, anything model-assisted is labelled *unqualified/experimental* in this document's contracts.
 - **Approval offers two choices** (DR-A13): *Send to Preview*, or *Send to Preview and queue immediately* (equivalent to clicking Queue on the resulting preview). The AI never submits; the operator's click does, through the normal path.
 - **Telemetry:** local only, 90-day retention (DR-A12). Signals and opt-in default are open (DR-O5b).
 
@@ -58,7 +58,7 @@ T1: Which operator questions can be answered deterministically? T2: What is the 
 
 | Area | Requirement |
 |---|---|
-| Consent | Off by default; explicit opt-in; granular per signal class; revocable; visible indicator when on |
+| Consent | **PROPOSED (not owner-confirmed, DR-O5b):** off by default; explicit opt-in; granular per signal class; revocable; visible indicator when on |
 | Privacy | No prompts, paths, image/video content, model file names or hashes of user content; only event codes, counts, durations, app/feature version; local-only storage; no network |
 | Retention | **90 days, local only (owner, DR-A12)**; size cap and user-visible "view / export / delete all" proposed; deletion is real |
 | Control | Never changes settings or behavior; summaries are suggestions with cited events; uncertainty stated |
