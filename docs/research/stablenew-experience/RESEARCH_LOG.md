@@ -17,14 +17,22 @@ Compact, dated discovery outcomes — not a commit or PR narrative.
 ## 2026-11-05 — discovery outcomes
 
 1. **Source lock drift.** `origin/main` moved from the brief's `d76d1acd` to `ed1e989f` (PR #253, QUAL-SYSTEM-840); no GUI change (EV-28).
-2. **Missing source.** `layout-recommendation.md` is not on disk or in Git history; brief §5 used as its proxy (EV-27, DR-O9).
+2. **Missing source.** `layout-recommendation.md` is not on disk or in Git history; brief §5 used as its proxy (EV-27, DR-O9). *Since resolved: see item 11.*
 3. **PR-831 verified, not assumed.** Findings registry plus sealed archives show GP830-F1, F2, F3, F4, F7, F8 and I1 repaired; F5 WONTFIX as a harness assumption. Screenshot of the earlier failure (A-830m) and passing archive (A-831m) confirm LRN-01 at 1280×680 (EV-01..06). These are **not** current debt.
 4. **PR-832 defects remain open on `main`**: GP832-F1..F4 UNREPAIRED (EV-07..EV-10); classified Product ×4, plus Infra (Blender), Test gap ×2 (resource-preflight, Extend Canvas) (EV-11..13).
-5. **Unpublished PR-833 evidence found** on a local branch (not on `origin/main`): repairs F1–F4, adds GP833-F1/O1..O4 and sealed `d8e3e9d0` archives (normal/minimum/maximized all PASS across six advanced journeys). Treated as local evidence pending DR-O2.
+5. **Unpublished PR-833 evidence found** on a local branch (not on `origin/main`): repairs F1–F4, adds GP833-F1/O1..O4 and sealed `d8e3e9d0` archives (normal/minimum/maximized all PASS across six advanced journeys). Treated as local evidence pending DR-O2. *Since answered: under owner review, to be published as its own PR (DR-A9).*
 6. **Audit partially superseded.** The 2026-10-22 audit's rows for Saved Recipes, Pack Selector, img2img prominence and Output settings describe a UI replaced by UX-500/520/530 (EV-20). Re-verify each in the live app before using it as scope.
 7. **Chrome budget, by eye.** At 1280×680 the retained screenshots show header + nav + guidance ≈ 165 px and the Operator Log/Status zone ≈ 95 px of 719 (≈36%). Needs pixel measurement (EV-14).
 8. **Qt evidence reframed.** Three questions (Q-A dispatcher, Q-B performance, Q-C target experience); only Q-A and Q-B have data, both negative on operator-visible performance; Q-C is unmeasured (QT_VS_TK_COAS §1).
 9. **Tk-bound surface recount**: 140 `src` files import tkinter (≈68.8k whole-file lines); 165 test files mention it (EV-33).
+
+## 2026-11-05 — owner review round (after the first local commit `df89b877`)
+
+10. **Owner answers recorded** as DR-A8..A21 (accepted) with open follow-ups DR-O5b, O6b, O11–O15. Notably: no assistive-tech/scaling requirement *but the owner rejects "therefore no Qt"* (the G0 gate and one stop criterion were withdrawn); the 833 branch is under review and will be published separately; "preparing" job state accepted; model-assisted planning wanted before qualification finishes (conflicts with repository qualification holds, DR-O11); approval offers *Preview* or *Preview and queue immediately*; telemetry local with 90-day retention; the owner is the only test participant; the declared minimum may be raised; T1–T9 approved; sub-agent review authorized.
+11. **`layout-recommendation.md` received.** Folded in as EV-27/EV-38 and DR-P10..P12. It is assistant-authored (PR-831 session), not an owner statement.
+12. **Chrome discrepancy resolved by pixel measurement (B1, EV-14).** Global chrome ≈36% (≈164 px top + ≈97 px bottom of 719); Learning's tab-level overhead pushes the review pane to y≈447 (≈62% down; pane ≈170 px). The earlier "≈36% by eye" and the recommendation's "≈460 px" were both right for different scopes; the 460 px still holds after PR-831.
+13. **PySide6 present.** `C:\Users\rob\qual\gui-port740-env` has PySide6 6.12.0 and Pillow 12.3.0 (EV-39). Nothing was installed or executed from it except the existing Pillow used for the pixel profile.
+14. **B2 deferred, deliberately.** A full PR gate (`run_pr_gate.py --full` with sharded pytest workers) was running in the `StableNew-main` checkout when B2 would have started. The Windows driver uses `SendInput` on the live desktop and could corrupt that gate's GUI tests (and be corrupted by them), so B2 waits until no gate/pytest/journey process is running. No baseline numbers are claimed.
 
 ## Validation record (docs only)
 
@@ -38,4 +46,4 @@ Compact, dated discovery outcomes — not a commit or PR narrative.
 
 ## Not done (explicitly)
 
-No owner interview, no live-app walk-through, no prototype, no PySide6 install, no model/GPU execution, no push or PR.
+No per-workflow owner discovery, no live-app walk-through, no prototype, no PySide6 install (an existing environment was found), no model/GPU execution, no baseline run (B2–B5), no push or PR.

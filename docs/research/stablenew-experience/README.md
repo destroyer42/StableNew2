@@ -11,8 +11,8 @@ Find the simplest coherent operator experience for creating, editing, animating,
 ## What this research is not
 
 - **Not user testing.** No operator was observed. Every usability statement is either a code/doc/archive observation or an explicitly labelled hypothesis. The only operator-reported material is the owner's brief (section 5 of PR-GUI-UX-850) and the 2026-10-22 audit's `[O]` items.
-- **Not a toolkit decision.** `QT_VS_TK_COAS.md` frames the options. Nothing was installed; no PySide6 or Tk prototype was built.
-- **Not an owner-decision record.** Owner answers to workflow questions are **pending**. Anything not traceable to the owner's own words or a repository decision is marked `PENDING` or `PROPOSED`.
+- **Not a toolkit decision.** `QT_VS_TK_COAS.md` frames the options. This research installed nothing; a PySide6 6.12.0 environment from earlier work already exists on the host (EV-39). No PySide6 or Tk prototype was built.
+- **Not a workflow-discovery record yet.** The nine workflow files are still `DISCOVERY OPEN`: the owner answered the cross-cutting decision questions on 2026-11-05 (DECISION_REGISTER DR-A8..A21) but not the per-workflow discovery contracts. Anything not traceable to the owner's own words or a repository decision is marked `PENDING` or `PROPOSED`. The only usability participant is the owner (DR-A14).
 
 ## Evidence hierarchy
 
@@ -29,7 +29,7 @@ Evidence tags used throughout: **[V]** verified in source/archive this session; 
 | # | Caveat | Effect |
 |---|---|---|
 | 1 | `origin/main` is `ed1e989f` (PR #253, QUAL-SYSTEM-840). The brief verified `d76d1acd` during planning. The only commits since are PR-QUAL-SYSTEM-840's (ledger/frozen plans/gates), none GUI. | None on UX findings. |
-| 2 | The owner's `layout-recommendation.md` **was not found** on the machine (searched the repo, `~/Downloads`, Documents, Desktop, project folders). | Section 5's findings are taken from the brief's wording and cross-checked against sources; they are not quoted from the report. See EV-27. |
+| 2 | `layout-recommendation.md` was missing at first and was **re-supplied by the owner on 2026-11-05** (it is an assistant-authored recommendation from the PR-831 session, never committed). Its seven findings and seven proposals are folded in (EV-27, EV-38, DR-P10..P12); its measurements were re-checked by pixel script (EV-14). | Treat its proposals as inputs awaiting the owner's pick (DR-O14), not decisions. |
 | 3 | A local branch `fix/journeys-833-advanced-golden-path-reliability` (clone `StableNew-main`, head `b986c33c`) is **not on `origin/main` and has no remote-tracking ref** that contains it. It claims repairs for GP832-F1..F4 and sealed `d8e3e9d0` archives. | Reported as local, unpublished evidence. On `origin/main` GP832-F1..F4 are `UNREPAIRED`. See EV-07..EV-10. |
 | 4 | Sealed acceptance archives and screenshots live outside Git (`~\StableNewAcceptance\golden-paths\`). They use a **loopback fake backend** at 2560×1440, 100% scaling. | No real-DPI, real-model or physical-GPU claim is possible. |
 
@@ -50,7 +50,7 @@ Evidence tags used throughout: **[V]** verified in source/archive this session; 
 
 ## Current research phase
 
-**Phase 0 — foundation published; discovery pending.** Done: evidence reconciliation, workflow scaffolds, candidate IA/design system, COA framing, AI governance, validation plan. **Not done:** owner interviews for any of the nine workflows (every workflow record is `DISCOVERY OPEN`), any prototype, any measurement of operator task time. The next gate is an owner review of the open questions in each workflow file and `DECISION_REGISTER.md`.
+**Phase 0 — foundation published; owner decisions recorded; discovery and baselines pending.** Done: evidence reconciliation, workflow scaffolds, candidate IA/design system, COA framing, AI governance, validation plan, owner answers to the cross-cutting questions (2026-11-05), layout-recommendation intake, B1 chrome measurement. **Not done:** owner discovery for any of the nine workflows (every record is `DISCOVERY OPEN`), baselines B2–B5, any prototype, any operator task timing. Next gates: the open items DR-O5b, O6b, O11–O15 in `DECISION_REGISTER.md`, then B2 (serialized against any running gate) and the independent counter-review.
 
 ## Existing canonical documents (linked, not copied)
 

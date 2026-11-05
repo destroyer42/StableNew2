@@ -29,9 +29,11 @@
 
 ## 3. Baseline plan (before any prototype)
 
+**Status 2026-11-05:** B1–B5 re-authorized by the owner (DR-A18). B1 done for four retained minimum-size screenshots (EV-14: global chrome ≈36%, Learning review pane ≈62% below the fold); the other sizes and tabs remain. B2–B5 pending: B2 is a Windows desktop `SendInput` run, so it must not overlap another desktop-driving run or a full PR gate on the same machine (a gate was running in the `StableNew-main` checkout when this was written). The harness does not drive the GPU; fakes only.
+
 B1: Pixel-measure chrome ratio on retained and fresh screenshots at the five target sizes. B2: Re-run IMG-01/02/03, VID-01/02/03, LRN-01/02, OPS-01 with the Windows driver on `origin/main` and archive sealed runs with `--archive`; record action counts and navigation counts as the **current-UI baseline**. B3: Wheel-capture probe on `main` (EV-16). B4: Real 125%/150% display scale runs (the 760 gap). B5: Large-history load (N rows in a temporary repository). **Local host only; B2 uses fakes, not the GPU.**
 
-## 4. Task scripts (candidate; owner to approve wording)
+## 4. Task scripts (**approved by the owner 2026-11-05, DR-A21**)
 
 | ID | Script (start state → success) |
 |---|---|
@@ -49,7 +51,7 @@ Each script has a timer, stop point, allowed help policy and recorded errors. T8
 
 ## 5. Before/after methodology
 
-Same scripts, same fixtures, same display and driver, sealed archives, comparator output (improved/unchanged/degraded/inconclusive). Operator studies: ≥ 5 participants per arm for qualitative findings (this is a single-operator product, so owner sessions plus a small number of external testers is a **design choice for the owner**, DR-O7); report medians and ranges, never single-run deltas. A prototype is judged on the same scripts as the current UI and as each other COA; the prototype must declare its fake data and exclude real backends.
+Same scripts, same fixtures, same display and driver, sealed archives, comparator output (improved/unchanged/degraded/inconclusive). Operator studies: **the only participant is the owner (DR-A14).** Every usability result is therefore n = 1 operator and must say so. Replace "≥ 5 participants" with ≥ 5 repeated sessions per arm, spaced and counterbalanced (randomize arm order, vary task variants) because an expert who has seen task T1 on one arm will do better on the next; report medians and ranges, never single-run deltas, and report any practice effect observed. Nothing here supports a claim about operators other than the owner, and the owner is also the designer, so first-click and card-sort results (T4) carry expert bias; treat them as hypotheses about the owner's own mental model, which is the stated target. A prototype is judged on the same scripts as the current UI and as each other COA; the prototype must declare its fake data and exclude real backends.
 
 ## 6. Evidence retention
 

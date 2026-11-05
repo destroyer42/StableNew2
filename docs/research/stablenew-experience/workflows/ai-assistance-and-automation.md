@@ -22,7 +22,7 @@ H1: Most operator value arrives from Tier 1 deterministic explanations (why disa
 (a) Stay with deterministic explanation; defer language models. (b) Qualify the offline model, ship Tier 1 only. (c) Tier 2 plan editor on top of (b). Tier 3 only after (c) proves safe.
 
 ## Flows
-Current: operator → Suggest… (disabled) → review dialog → Accept into buffer → ordinary Preview/Queue. Ideal: PENDING.
+Current: operator → Suggest… (disabled) → review dialog → Accept into buffer → ordinary Preview/Queue. Ideal: PENDING for the workflow as a whole. **Owner direction already given (2026-11-05):** model-assisted planning wanted before qualification finishes (DR-A11); an approved plan offers *Send to Preview* or *Send to Preview and queue immediately* (DR-A13); telemetry local, 90 days (DR-A12). See AI_GUIDED_EXPERIENCE §0.
 
 ## Discovery contract — status
 1–5 PENDING · 6 Expert: model/runtime selection (held) · 7 Duplicates: none yet · 8 Reuse: prompt history for suggestion context (privacy open) · 9 This workflow *is* AI · 10 Boundaries: see AI_GUIDED §2–§4 · 11 Failure: refusals and admission outcomes use stable copy [D] · 12 Artifact: editing-buffer text / editable plan · 13 Acceptance: none.

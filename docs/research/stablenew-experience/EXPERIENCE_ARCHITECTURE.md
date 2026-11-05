@@ -68,7 +68,7 @@ stateDiagram-v2
   Completed --> [*]
 ```
 
-`Preparing` does **not exist today**; it is the open GP833-F1 owner decision (EV-09). Adding it is a lifecycle change, outside this research.
+`Preparing` does **not exist today**. The owner accepted it on 2026-11-05 ("running versus held is already a confirmed confusion", DR-A10), so the diagram is now the intended vocabulary; it still resolves GP833-F1 (EV-09) only when a separate implementation package adds the lifecycle state. Outside this research.
 
 ## 4. State boundaries (no new authorities)
 

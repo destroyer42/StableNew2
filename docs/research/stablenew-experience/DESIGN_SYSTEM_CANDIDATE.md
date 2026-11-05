@@ -19,7 +19,8 @@
 ## 2. Layout and density
 
 - **Minimum viewport target:** 1280×680 (the application's declared minimum; Windows clamps height to 680). Secondary targets: 1366×768, 1920×1080, 2560×1440; each at 100% and a *real* 125–150% display scale (not yet tested; EV-29).
-- **Chrome budget (hypothesis):** fixed non-workspace height ≤ 20% at 680 px (today ≈ 36%, EV-14, by eye). Reaching it implies merging guidance/title rows and collapsing the Operator Log to a drawer. Test with pixel measurement before and after any prototype.
+- **Chrome budget (hypothesis):** fixed non-workspace height ≤ 20% at 680 px. **Measured today (EV-14, pixel script):** global chrome ≈ 36% (title/command/nav/guidance ≈ 164 px + Operator Log/Status ≈ 97 px of 719), and on Learning the working pane starts ≈ 62% down and is ≈ 24% tall. Reaching 20% implies merging guidance/title rows and collapsing the Operator Log to a drawer (layout recommendation P2, P3). Re-measure with the same script before and after any change.
+- **Declared minimum.** The owner agreed to raise the minimum height (e.g. 680 → 760) if compaction cannot give a usable work area (DR-A16); no value is chosen (DR-O13). Rule of thumb to test: the working pane should be ≥ 300 px at the minimum (layout recommendation P2 target), versus ≈ 170 px on Learning today.
 - **Single scroll owner per workspace.** Nested scrollers (list inside canvas inside page) are allowed only if the wheel hands off at the limit (the shared router does this since 831) *and* the nested widget never fills the viewport (EV-16).
 - **Secondary panes reserve no space when empty** (brief §5); an empty pane shows a one-line state, not a frame. The Learning null-grid fix (PR-831) is the precedent.
 - Density tiers (hypothesis): Comfortable (default ≥ 1080 px height), Compact (≤ 768 px: single-column forms, summary strips). Selection by available height, not a user preference, to avoid a new settings scope.
@@ -47,7 +48,7 @@ Keep `MediaInspector` behavior (Show, Detach, Fit, 100%, zoom/pan, hide on conte
 ## 8. Keyboard and accessibility
 
 - Tab order matches visual order; a visible focus indicator on every control (Treeview gap documented). Keyboard reach of every mandatory control (GUI-COMPLETE-760 method).
-- Assistive technology: Tk exposes **no per-widget accessibility tree** (0 of 31 UIA elements named in 742); Qt exposed 104 of 110. The *requirement* is an owner product decision (DR-O1 in DECISION_REGISTER) — until stated, "accessibility" is not a goal that can select a toolkit.
+- Assistive technology: Tk exposes **no per-widget accessibility tree** (0 of 31 UIA elements named in 742); Qt exposed 104 of 110. The owner has stated **no assistive-technology requirement today** (DR-A8); accessibility is therefore a measured secondary criterion, not a gate, and also not evidence *against* Qt.
 - `SubmissionNotice.role`/`accessible_text()` is a programmatic contract only; no screen-reader claim.
 
 ## 9. Scope guard
