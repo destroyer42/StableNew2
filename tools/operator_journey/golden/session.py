@@ -253,6 +253,14 @@ class GoldenRun:
         from src.app_factory import build_v2_app
 
         self.boots += 1
+        # The real application is a new process with a fresh thread registry.  In the harness every boot after the
+        # first in this process (a reopen within a journey, or the next journey of the suite) would inherit the
+        # previous application's "shutdown requested" registry and decline every queue submission, so each boot
+        # starts from a fresh one.
+        import src.utils.thread_registry as thread_registry
+
+        thread_registry._global_registry = None
+        thread_registry.ThreadRegistry._instance = None
         root = create_root()
         self.root = root
         if self.config.hide_window:
@@ -353,6 +361,7 @@ class GoldenRun:
             ):
                 d.pump(0.1)
             self.faults.begin_shutdown()
+            close_started = time.monotonic()
             d.close_via_window_manager()
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
@@ -364,6 +373,9 @@ class GoldenRun:
                 time.sleep(0.02)
             else:
                 self.check(ph, "graceful_close", False, "Tk root still alive 20s after close")
+            self.ev.observe(
+                f"shutdown_latency_s_{self.boots}", round(time.monotonic() - close_started, 3)
+            )
         except tk.TclError:
             pass
         leaked = leaked_non_daemon_threads(self._baseline_threads)

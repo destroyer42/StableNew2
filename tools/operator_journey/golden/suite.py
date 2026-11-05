@@ -16,7 +16,7 @@ from typing import Any
 
 from tools.operator_journey.evidence import FAIL, HOLD, NO_GO, PASS, JourneyEvidence
 from tools.operator_journey.golden import SUITE_ID, SUITE_VERSION
-from tools.operator_journey.golden.definitions import JourneyDef, select
+from tools.operator_journey.golden.definitions import ADVANCED_ORDER, JourneyDef, select
 from tools.operator_journey.golden.friction import friction_report, outcomes
 from tools.operator_journey.golden.modes import (
     PHYSICAL,
@@ -100,6 +100,10 @@ def _runner(journey: JourneyDef, config: RunConfig) -> JourneyEvidence:
     from tools.operator_journey.golden.fixtures import make_fake_a1111, seed_declared_sdxl
     from tools.operator_journey.golden.session import run_journey_body
 
+    if journey.key in ADVANCED_ORDER:
+        from tools.operator_journey.golden.advanced import run_advanced
+
+        return run_advanced(journey, config)
     if journey.key == "image":
         from tools.operator_journey.golden.img01 import run_img01
 
@@ -383,6 +387,14 @@ def run_suite(
 
     validate_combination(mode=mode, driver=driver, plan=plan_path, env=env, layout=layout)
     chosen = select(journeys_choice)
+    if mode in {PHYSICAL, READINESS}:
+        # An advanced journey has no physical lane: it is refused here, before any plan, readiness gate or runtime.
+        unsupported = [j.id for j in chosen if not j.physical]
+        if unsupported:
+            raise ModeRefusal(
+                f"{', '.join(unsupported)} {'has' if len(unsupported) == 1 else 'have'} no physical lane (simulated and "
+                f"desktop-driver runs only); choose a journey with a physical lane for --mode {mode}"
+            )
     if mode == SIMULATED:
         return run_simulated(
             chosen,

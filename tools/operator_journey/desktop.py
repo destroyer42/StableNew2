@@ -499,9 +499,35 @@ class WindowsDesktopDriver(TkDriver):
                 continue
             if any(name in str(found.winfo_class()).lower() for name in self._SELF_SCROLLING):
                 continue
+            if isinstance(found, tk.Canvas) and found is not container:
+                continue  # a nested canvas (an image viewer, an inner scroll box) takes the wheel for itself
             usable.append((x, y))
         pool = usable or candidates
         return pool[skip % len(pool)]
+
+    @staticmethod
+    def _scrollbar_of(container: tk.Canvas) -> tk.Misc | None:
+        """The vertical scrollbar that drives ``container`` (a sibling in the same frame), if it is on screen."""
+
+        for sibling in getattr(container.master, "winfo_children", lambda: [])():
+            if (
+                isinstance(sibling, (tk.Scrollbar, ttk.Scrollbar))
+                and str(sibling.cget("orient")) == "vertical"
+            ):
+                try:
+                    if sibling.winfo_ismapped() and sibling.winfo_height() > 20:
+                        return sibling
+                except tk.TclError:
+                    continue
+        return None
+
+    def _page_with_scrollbar(self, bar: tk.Misc, *, down: bool) -> None:
+        """Click the scrollbar's trough beyond its thumb, as a person does when the wheel has no effect."""
+
+        x = bar.winfo_rootx() + bar.winfo_width() // 2
+        arrow = bar.winfo_width() + 6  # the arrow buttons are square; the trough begins beyond them
+        y = bar.winfo_rooty() + (bar.winfo_height() - arrow if down else arrow)
+        self.win32.click(x, y)
 
     def _settled(self, center: Callable[[], tuple[int, int]]) -> bool:
         """True once the control's screen position has stopped changing (smooth scrolling, deferred layout)."""
@@ -526,6 +552,7 @@ class WindowsDesktopDriver(TkDriver):
         point: tuple[float, float] = (0.5, 0.5),
         max_scrolls: int = 60,
         patience: float = 5.0,
+        max_reach_seconds: float = 90.0,
         locate: Callable[[], tuple[int, int]] | None = None,
     ) -> tuple[int, int]:
         """Return a clickable screen point, wheel-scrolling the enclosing canvas as a person would.
@@ -553,6 +580,10 @@ class WindowsDesktopDriver(TkDriver):
                         "waited_for_state", label=label, state=waited_for, seconds=round(waited, 2)
                     )
                 if scrolls and not self._settled(center):
+                    if time.monotonic() - started > max_reach_seconds:
+                        raise ControlUnreachable(
+                            label, "the page never stopped moving", f"after {scrolls} wheel notches"
+                        )
                     continue  # the page is still moving after the wheel: look again before pressing
                 if scrolls:
                     self.trace.record("scrolled_into_view", label=label, wheel_notches=scrolls)
@@ -560,7 +591,10 @@ class WindowsDesktopDriver(TkDriver):
             if reason.startswith(("hidden", "disabled")) and time.monotonic() - started < patience:
                 waited_for = reason.split(" ")[0]
                 continue  # the view may still be switching or a gate still resolving; a person would wait a moment
-            scrollable = ("obscured within", "outside", "off-screen")
+            # A page below its fold unmaps the controls it has scrolled out of view, so "hidden" can mean "not yet
+            # scrolled to": a person scrolls the page to find it.  A control on an unselected tab has no scrollable
+            # page that can move it, or the wheel stalls, and either way it is still reported as unreachable.
+            scrollable = ("obscured within", "outside", "off-screen", "hidden")
             container = (
                 self._scroll_container(widget) if any(k in reason for k in scrollable) else None
             )
@@ -580,9 +614,22 @@ class WindowsDesktopDriver(TkDriver):
             scrolls += notches
             self.pump(0.06)
             stalled = stalled + 1 if container.yview() == before else 0
+            if stalled >= 3:
+                # The wheel is captured (a list or tree that fills the viewport takes it): use the page scrollbar.
+                bar = self._scrollbar_of(container)
+                if bar is not None:
+                    self._page_with_scrollbar(bar, down=not above)
+                    self.pump(0.15)
+                    self.trace.record("scrolled_with_scrollbar", label=label)
+                    if container.yview() != before:
+                        stalled = 0
             if stalled >= 6:
                 raise ControlUnreachable(
-                    label, reason, f"the wheel did not move the page after {scrolls} notches"
+                    label,
+                    reason,
+                    f"the wheel did not move the page after {scrolls} notches (scroll box {container}, yview "
+                    f"{container.yview()}, wheel point ({cx},{cy}), control at y={widget.winfo_rooty()}, "
+                    f"box top={container.winfo_rooty()} height={container.winfo_height()})",
                 )
 
     def click(
@@ -977,6 +1024,18 @@ class WindowsDesktopDriver(TkDriver):
                 return
         raise ControlUnreachable(label, "the divider did not move when dragged")
 
+    def drag_stroke(
+        self, widget: tk.Misc, start: tuple[int, int], end: tuple[int, int], *, label: str
+    ) -> None:
+        """Press at ``start`` (widget coordinates), drag to ``end`` and release with the real mouse."""
+
+        x1, y1 = widget.winfo_rootx() + start[0], widget.winfo_rooty() + start[1]
+        x2, y2 = widget.winfo_rootx() + end[0], widget.winfo_rooty() + end[1]
+        self._require_reachable(widget, x1, y1, label)
+        self.win32.drag(x1, y1, x2, y2, pump=self.pump)
+        self.trace.record("drag_stroke", label=label, start=start, end=end, x=x1, y=y1)
+        self.pump(0.2)
+
     def select_listbox_row(self, listbox: tk.Listbox, index: int, *, label: str) -> None:
         def row_point() -> tuple[int, int]:
             listbox.see(index)
@@ -1021,12 +1080,17 @@ class NativeDialogResponder:
     scripted answer is ``("button", "Yes")`` or ``("file", "C:/path/file.png")``; every dialog seen is recorded.
     """
 
+    _FILE_DIALOG_CLASSES = frozenset(
+        {"DUIViewWndClassName", "ComboBoxEx32", "SHELLDLL_DefView", "DirectUIHWND"}
+    )
+
     def __init__(self, win32: Win32, pid: int, *, default_button: str = "yes") -> None:
         self.win32, self.pid, self.default_button = win32, pid, default_button.lower()
         self.script: list[tuple[str, str]] = []
         self.seen: list[dict[str, Any]] = []
         self._stop = threading.Event()
         self._handled: set[int] = set()
+        self._waiting: dict[int, int] = {}
         self._thread = threading.Thread(target=self._run, name="dialog-responder", daemon=True)
 
     def __enter__(self) -> NativeDialogResponder:
@@ -1042,40 +1106,72 @@ class NativeDialogResponder:
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            for hwnd in self.win32.dialogs_of(self.pid):
-                if hwnd in self._handled:
-                    continue
-                kids = self.win32.children_of(hwnd)
-                self._handled.add(hwnd)
-                title = self.win32.text(hwnd)
-                texts = [t for (_h, c, t) in kids if c == "Static" and t]
-                edits = [h for (h, c, _t) in kids if c == "Edit"]
-                buttons = [
-                    (h, t.replace("&", "").lower()) for (h, c, t) in kids if c == "Button" and t
-                ]
-                wanted = self.script.pop(0) if self.script else None
-                record: dict[str, Any] = {
-                    "title": title,
-                    "text": " ".join(texts)[:300],
-                    "buttons": [t for _h, t in buttons],
-                    "answer": None,
-                }
-                if wanted and wanted[0] == "file" and edits:
-                    self.win32.set_text(edits[0], wanted[1])
-                    ok = next(
-                        (h for h, t in buttons if t in {"open", "save", "ok", "select folder"}),
-                        None,
-                    )
-                    if ok:
-                        self.win32.click_button(ok)
-                    record["answer"] = f"file:{wanted[1]}"
-                else:
-                    choice = wanted[1].lower() if wanted else self.default_button
-                    target = next((h for h, t in buttons if t == choice), None) or (
-                        buttons[0][0] if buttons else None
-                    )
-                    if target:
-                        self.win32.click_button(target)
-                        record["answer"] = choice
-                self.seen.append(record)
+            try:
+                self._poll()
+            except Exception as exc:  # noqa: BLE001 - a dead responder leaves the application blocked on its dialog
+                self.seen.append(
+                    {"title": None, "error": f"{type(exc).__name__}: {exc}"[:300], "answer": None}
+                )
+                time.sleep(0.5)
             time.sleep(0.1)
+
+    def _poll(self) -> None:
+        present = self.win32.dialogs_of(self.pid)
+        # Window handles are recycled: a dialog that has gone must not make a later one look already answered.
+        self._handled &= set(present)
+        self._waiting = {h: n for h, n in self._waiting.items() if h in present}
+        for hwnd in present:
+            if hwnd in self._handled:
+                continue
+            kids = self.win32.children_of(hwnd)
+            wants_file = bool(self.script) and self.script[0][0] == "file"
+            is_file_dialog = any(c in self._FILE_DIALOG_CLASSES for (_h, c, _t) in kids)
+            ready = bool(kids) and (
+                not (wants_file and is_file_dialog) or any(c == "Edit" for (_h, c, _t) in kids)
+            )
+            if not ready:
+                # The window exists before its controls do.  Answering now would consume the scripted answer
+                # and mark the dialog done while it is still being built, leaving the application blocked on it.
+                self._waiting[hwnd] = self._waiting.get(hwnd, 0) + 1
+                if (
+                    self._waiting[hwnd] < 100 or not kids
+                ):  # ~10 s; a dialog with no controls is never given up on
+                    continue
+            self._handled.add(hwnd)
+            title = self.win32.text(hwnd)
+            texts = [t for (_h, c, t) in kids if c == "Static" and t]
+            edits = [h for (h, c, _t) in kids if c == "Edit"]
+            buttons = [(h, t.replace("&", "").lower()) for (h, c, t) in kids if c == "Button" and t]
+            # An answer belongs to one kind of dialog: a path answers a file dialog, a button answers a message box.  A
+            # question the operator meets first (for example "Discard the unsaved draft changes?" before the file
+            # dialog) must not consume the answer meant for the dialog behind it.
+            head = self.script[0] if self.script else None
+            fits = head is not None and ((head[0] == "file") == bool(edits))
+            wanted = self.script.pop(0) if fits else None
+            record: dict[str, Any] = {
+                "title": title,
+                "text": " ".join(texts)[:300],
+                "buttons": [t for _h, t in buttons],
+                "answer": None,
+                "script_head": wanted[0] if wanted else None,
+            }
+            if wanted and wanted[0] == "file" and edits:
+                self.win32.set_text(edits[0], wanted[1])
+                ok = next(
+                    (h for h, t in buttons if t in {"open", "save", "ok", "select folder"}),
+                    None,
+                )
+                if ok:
+                    self.win32.click_button(ok)
+                record["answer"] = f"file:{wanted[1]}"
+            else:
+                choice = (
+                    wanted[1].lower() if wanted else ("cancel" if edits else self.default_button)
+                )
+                target = next((h for h, t in buttons if t == choice), None) or (
+                    buttons[0][0] if buttons else None
+                )
+                if target:
+                    self.win32.click_button(target)
+                    record["answer"] = choice
+            self.seen.append(record)

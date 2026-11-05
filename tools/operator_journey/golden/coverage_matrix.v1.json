@@ -1,7 +1,7 @@
 {
   "schema": "stablenew.golden_coverage_matrix",
-  "version": "1.0.0",
-  "recorded_for": "PR-TEST-DESKTOP-830",
+  "version": "1.1.0",
+  "recorded_for": "PR-TEST-DESKTOP-830; PR-TEST-JOURNEYS-832",
   "classes": {
     "full_desktop_journey": "Driven end to end through visible controls (semantic Tk and, locally, real Win32 input) against the real GUI, compiler, NJR, JobService, queue, runner and History. Backends are loopback fakes unless a physical run says otherwise.",
     "partial_journey": "Some steps of the workflow are exercised through visible controls inside another journey, but the workflow is not driven end to end.",
@@ -20,7 +20,9 @@
       "tests": [
         "tests/tools/test_golden_path_journeys.py"
       ],
-      "limits": "Fixture backend; stages ADetailer and upscale are switched off by the journey."
+      "limits": "Fixture backend; stages ADetailer and upscale are switched off by the journey.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real WebUI, real checkpoints and real image quality are unverified by the loopback fixture."
     },
     {
       "id": "video-wan22-ti2v-from-reference-image",
@@ -32,7 +34,9 @@
       "tests": [
         "tests/tools/test_golden_path_journeys.py"
       ],
-      "limits": "Fixture Comfy backend; Preview Frozen Plan is recorded as offered, not run."
+      "limits": "Fixture Comfy backend; Preview Frozen Plan is recorded as offered, not run.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real Comfy runtime, VRAM/RAM headroom and video quality are unverified."
     },
     {
       "id": "learning-designed-experiment-rating-persistence",
@@ -45,7 +49,9 @@
         "tests/tools/test_golden_path_journeys.py",
         "tests/gui_v2/test_learning_guided_journey_590.py"
       ],
-      "limits": "Rate-step reachability depends on window height; see findings GP830-F1."
+      "limits": "Rate-step reachability depends on window height; see findings GP830-F1.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Rate-step reachability at small window heights was a defect (GP830-F1, repaired in 831); other layouts are not measured."
     },
     {
       "id": "history-browse-and-media-preview",
@@ -58,7 +64,9 @@
       "tests": [
         "tests/tools/test_golden_path_journeys.py"
       ],
-      "limits": "Open (system viewer) is verified as enabled, not clicked."
+      "limits": "Open (system viewer) is verified as enabled, not clicked.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "System-viewer launch and large-history performance are not exercised."
     },
     {
       "id": "queue-pause-resume-cancel",
@@ -68,7 +76,9 @@
       "tests": [
         "tests/gui_v2/test_queue_pause_resume_journey_150.py"
       ],
-      "limits": "No real-input desktop journey."
+      "limits": "No real-input desktop journey.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Pause/resume/cancel have no real-input journey; only OPS-01 restarts the queue."
     },
     {
       "id": "discovered-outputs-media-inspector",
@@ -78,7 +88,9 @@
       "tests": [
         "tests/tools/test_operator_journey_gui.py"
       ],
-      "limits": "Known inherited failure GP830-I1 (MediaInspector._current_path)."
+      "limits": "Known inherited failure GP830-I1 (MediaInspector._current_path).",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Inherited failure GP830-I1 keeps this unverified."
     },
     {
       "id": "adetailer-and-upscale-stages",
@@ -89,7 +101,9 @@
         "tests/gui_v2/test_adetailer_card_truth_160.py",
         "tests/gui_v2/test_advanced_upscale_stage_card_v2.py"
       ],
-      "limits": "Card rendering and truth only; not driven through a job."
+      "limits": "Card rendering and truth only; not driven through a job.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Stages are never run end to end in a journey."
     },
     {
       "id": "movie-clips-assembly",
@@ -101,7 +115,9 @@
       "tests": [
         "tests/gui_v2/test_movie_clips_tab_v2.py"
       ],
-      "limits": "VID-01 only checks the History hand-off submits nothing."
+      "limits": "VID-01 only checks the History hand-off submits nothing.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Assembly itself (encode, trim, order) has no desktop journey."
     },
     {
       "id": "photo-optimize",
@@ -112,7 +128,9 @@
         "tests/gui_v2/test_photo_optimize_tab_v2.py",
         "tests/gui_v2/test_photo_baseline_save_580.py"
       ],
-      "limits": "Known photo-optimize ordering failures noted in earlier state."
+      "limits": "Known photo-optimize ordering failures noted in earlier state.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Known ordering failures; no desktop journey."
     },
     {
       "id": "character-training-frame",
@@ -122,7 +140,9 @@
       "tests": [
         "tests/gui_v2/test_character_training_frame.py"
       ],
-      "limits": "Frame behaviour only; no training job is run."
+      "limits": "Frame behaviour only; no training job is run.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Tab is HOLD; no training job is run."
     },
     {
       "id": "physical-gpu-generation-through-the-gui",
@@ -130,7 +150,225 @@
       "coverage": "untested",
       "journeys": [],
       "tests": [],
-      "limits": "Physical mode is gated and NOT RUN for this version; no evidence exists."
+      "limits": "Physical mode is gated and NOT RUN for this version; no evidence exists.",
+      "physical_qualification": "NOT RUN: see limits.",
+      "remaining_risk": "Entire row: no physical evidence exists."
+    },
+    {
+      "id": "image-promptpack-model-profiles-effective-settings",
+      "title": "Edit and reload a PromptPack, switch model profiles, read effective settings, queue",
+      "coverage": "full_desktop_journey",
+      "journeys": [
+        "IMG-02"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py"
+      ],
+      "limits": "Fixture checkpoints are declared in the isolated AssetRegistry (no real model); Klein is the exact-name profile fixture.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real checkpoint hashing and family detection are not exercised."
+    },
+    {
+      "id": "history-iterate-masked-image-edit",
+      "title": "Open a History image in Review, paint a mask, preview the frozen job, queue, compare with parent",
+      "coverage": "partial_journey",
+      "journeys": [
+        "IMG-03"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py"
+      ],
+      "limits": "Loopback Forge returns a synthetic image: orchestration, provenance and preservation only, never edit quality. Compare with Parent is blocked by finding GP832-F3 and stays a failing check; Extend Canvas is not driven.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Edit quality, outpaint and real Forge inpaint behaviour are unverified; lineage defect GP832-F3 is unrepaired."
+    },
+    {
+      "id": "motion-library-batch-convert-and-driving-video",
+      "title": "Batch Convert Motion dry run, import a motion video, Use as Driving Video, readiness",
+      "coverage": "partial_journey",
+      "journeys": [
+        "VID-02"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py",
+        "tests/video/test_pr_vid_motion_354_conversion.py"
+      ],
+      "limits": "Conversion needs Blender (absent on this host): that lane is HOLD and never faked. Lane B imports a labelled pre-rendered clip. Prepare Motion Source is not driven.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Conversion output quality and Blender behaviour are unverified."
+    },
+    {
+      "id": "storyboard-persistent-multi-shot-sequence",
+      "title": "Author, save, reopen, reorder, preview and queue a three-shot Storyboard",
+      "coverage": "full_desktop_journey",
+      "journeys": [
+        "VID-03"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py",
+        "tests/gui_v2/test_storyboard350_ui.py"
+      ],
+      "limits": "Fixture Comfy returns synthetic clips; Fun Control refusal is checked, strict resume and replay are not.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real segment continuity and sequence video quality are unverified; GP832-F4 (form prompt required) is unrepaired."
+    },
+    {
+      "id": "learning-evidence-gated-profile-publication",
+      "title": "Rate controlled variants, review findings, publish and explicitly reuse a Learning profile",
+      "coverage": "full_desktop_journey",
+      "journeys": [
+        "LRN-02"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py"
+      ],
+      "limits": "The profile store is redirected into the isolated workspace; the checkpoint is a verified fixture (placeholder file with a real digest).",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Statistical strength of real experiments is out of scope."
+    },
+    {
+      "id": "operational-recovery-backend-faults",
+      "title": "Backend unreachable, dropped and rejected requests, changed model, close during generation, reopen and reconcile",
+      "coverage": "partial_journey",
+      "journeys": [
+        "OPS-01"
+      ],
+      "tests": [
+        "tests/tools/test_golden_path_journeys.py",
+        "tests/gui_v2/test_queue_pause_resume_journey_150.py"
+      ],
+      "limits": "Faults are injected into the loopback backend only. Resource preflight refusal (low host RAM) is not driven.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "GP832-F1 and GP832-F2 are unrepaired; real GPU loss and process-kill recovery are not exercised."
+    },
+    {
+      "id": "model-comparison-and-prompt-model-matrix",
+      "title": "Model Comparison and the Prompt x Model matrix in Learning",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_learning_prompt_model_matrix_710.py",
+        "tests/controller/test_matrix_preview_admission_560.py"
+      ],
+      "limits": "Editor, persistence and admission are tested below the desktop; no real-input journey.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real multi-model runs and cost/RAM preflight are unverified."
+    },
+    {
+      "id": "lora-and-embedding-experiments",
+      "title": "LoRA browser and Embedding experiment design",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_lora_browser_240.py",
+        "tests/gui_v2/test_embedding_design_700.py"
+      ],
+      "limits": "Widget and controller behaviour only.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "LoRA weight application on real models is unverified."
+    },
+    {
+      "id": "controlnet-reference-maps",
+      "title": "ControlNet units and reference maps",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_controlnet_guided_550.py",
+        "tests/assets/test_controlnet_structure_210.py"
+      ],
+      "limits": "The SDXL OpenPose slice merged earlier is covered below the desktop only.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real ControlNet guidance quality and Forge batch-directory behaviour are unverified."
+    },
+    {
+      "id": "smart-review",
+      "title": "Smart Review: suggested mask and caption helpers",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_smart_review_320.py"
+      ],
+      "limits": "Dialog and session behaviour; helpers are opt-in and local.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real segmentation/captioning model behaviour is unverified."
+    },
+    {
+      "id": "video-experiment-ratings-and-review",
+      "title": "Video experiment review, compare and rating",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/gui_v2/test_video_experiment_review_window_211.py"
+      ],
+      "limits": "Window and contract behaviour only.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Ratings of real generated video are unverified."
+    },
+    {
+      "id": "multi-shot-strict-resume-and-replay",
+      "title": "Strict resume and replay of a multi-shot sequence",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/pipeline/test_pr_vid_seq_330_runner.py",
+        "tests/controller/test_pipeline_replay_job_v2.py"
+      ],
+      "limits": "VID-03 runs a sequence once; resume after interruption and replay are not driven through the GUI.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Interrupted-sequence recovery on a real runtime is unverified."
+    },
+    {
+      "id": "batch-operations",
+      "title": "Batch operations over selected jobs and outputs",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/controller/test_batch_operations_service_201.py",
+        "tests/gui_v2/test_batch_operations_session_201.py"
+      ],
+      "limits": "Service and session behaviour only.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Large-batch behaviour is unverified."
+    },
+    {
+      "id": "offline-ai-assist",
+      "title": "Offline AI Assist (local model sessions)",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/ai_assist/test_contracts_validators.py"
+      ],
+      "limits": "Contract, event-log and manifest behaviour; no download or inference is run.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real model inference, download and process containment are unverified."
+    },
+    {
+      "id": "experimental-fun-control",
+      "title": "Experimental Wan2.2 Fun Control workflow",
+      "coverage": "integration_only",
+      "journeys": [],
+      "tests": [
+        "tests/video/test_pr_vid_fun_352.py",
+        "tests/video/test_pr_vid_motion_354_fun_qualification.py"
+      ],
+      "limits": "VID-02 reads its readiness and VID-03 checks that a sequence refuses it, but the workflow is never run in a journey; host RAM/GPU feasibility is NOT QUALIFIED.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Entire execution path on real hardware is unqualified."
+    },
+    {
+      "id": "other-qualified-model-families",
+      "title": "FLUX.2 Klein and Z-Image-Turbo model profiles",
+      "coverage": "partial_journey",
+      "journeys": [
+        "IMG-02"
+      ],
+      "tests": [
+        "tests/gui_v2/test_klein_profile_gui.py",
+        "tests/gui_v2/test_zimage_effective_config_159_gui.py"
+      ],
+      "limits": "IMG-02 selects the Klein exact-name fixture and reads the profile it applies; no Klein or Z-Image generation runs.",
+      "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
+      "remaining_risk": "Real generation with these families is unverified here (qualified elsewhere)."
     }
   ]
 }

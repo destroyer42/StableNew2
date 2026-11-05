@@ -322,6 +322,131 @@
         ],
         "verification": "Windows-driver journeys IMG-01, VID-01 and LRN-01 at the normal, 1280x680 minimum and maximized layouts: normal 20261104T162625Z_simulated_a18c7403_normal_acceptance_78bb76, minimum 20261104T163042Z_simulated_a18c7403_minimum_acceptance_f052d4, maximized 20261104T163431Z_simulated_a18c7403_maximized_acceptance_a550d7"
       }
+    },
+    {
+      "id": "GP832-F1",
+      "title": "A job that fails because the checkpoint changed shows only a generic failure; the cause is only in the log",
+      "severity": "minor",
+      "category": "error-reporting",
+      "area": "Queue and History, failed job detail",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "hidden Tk window (tk driver)",
+        "driver": "tk"
+      },
+      "reproduction": [
+        "Queue a job, then change the active WebUI checkpoint outside StableNew before dispatch (OPS-01 case C).",
+        "Open the queue or History row of the failed job."
+      ],
+      "expected": "The job's error message or History detail says the checkpoint no longer matches and nothing was generated.",
+      "observed": "The job fails (correctly: zero generation requests were sent) but its recorded error message and History text carry only a generic message; the checkpoint mismatch is visible only in the application log.",
+      "harness_workaround": "None. OPS-01 records the check failure failure_cause_visible_to_operator rather than reading the log.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "OPS-01 changed-model case: error message, History text and the zero-POST proof",
+          "source_hint": "gp832_tk/*/journeys/*_OPS-01_*/evidence.json"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending"
+      }
+    },
+    {
+      "id": "GP832-F2",
+      "title": "An unreachable backend leaves a job in the running state while the banner reports jobs held",
+      "severity": "major",
+      "category": "queue-state",
+      "area": "Queue, backend connectivity banner",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "hidden Tk window (tk driver)",
+        "driver": "tk"
+      },
+      "reproduction": [
+        "Stop the WebUI endpoint, queue one job and let the runner pick it up (OPS-01 case A and the in-flight cases).",
+        "Compare the queue row, the job's recorded status and the connectivity banner."
+      ],
+      "expected": "The job's visible state and the banner agree: a job that cannot be dispatched is held (queued), not running.",
+      "observed": "Observation recorded by OPS-01: while the backend is unreachable the repository status is 'running' although the banner says no jobs are running and the WebUI jobs are held. The job does complete exactly once after the backend returns.",
+      "harness_workaround": "None. The journey accepts either state while down and asserts exactly-once completion after recovery.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "OPS-01 unreachable_before_dispatch outcome (visible banner text and job statuses)",
+          "source_hint": "gp832_tk/*/journeys/*_OPS-01_*/evidence.json"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending"
+      }
+    },
+    {
+      "id": "GP832-F3",
+      "title": "A masked edit started from History does not record its parent job, so Compare with Parent is unavailable for it",
+      "severity": "major",
+      "category": "lineage",
+      "area": "History Iterate, Review Edit Mask, History Compare with Parent",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "hidden Tk window (tk driver)",
+        "driver": "tk"
+      },
+      "reproduction": [
+        "Complete a txt2img job and select it in History.",
+        "Iterate... then Edit Image in Review, then Edit Mask..., paint a region, enter an edit prompt, Preview frozen job and Add prepared job to Queue.",
+        "Select the finished edit job in History."
+      ],
+      "expected": "The edit's frozen source carries parent_job_id (the History job it was iterated from), and Compare with Parent is offered and shows parent and edit.",
+      "observed": "The edit NJR source records parent_artifact_id (the source image digest) but parent_job_id is null, so has_recorded_parent is false and Compare with Parent is disabled. The History hand-off does carry source_job_id, but MaskEditorDialog is opened with only the image path and takes parent_job_id from the image's embedded metadata, which has no job id.",
+      "harness_workaround": "None: IMG-03 keeps parent_job_recorded and compare_offered_for_the_edit as failing checks and does not queue a different edit path to obtain a parent.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "IMG-03 edit_lineage_fields observation and the two failing checks",
+          "source_hint": "gp832_tk/*/journeys/*_IMG-03_*/evidence.json"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending"
+      }
+    },
+    {
+      "id": "GP832-F4",
+      "title": "Sequence admission requires the form-level motion prompt even when every shot has its own prompt",
+      "severity": "minor",
+      "category": "ux",
+      "area": "Video Workflow, Storyboard Queue Sequence",
+      "environment": {
+        "os": "Windows 11 10.0.26100",
+        "display": "2560x1440 at 100% scaling",
+        "window": "hidden Tk window (tk driver)",
+        "driver": "tk"
+      },
+      "reproduction": [
+        "Select a prompt-directed workflow and a source image, author three shots each with a motion prompt, leave the form's own Motion prompt empty.",
+        "Queue Sequence."
+      ],
+      "expected": "Queue Sequence is admitted, or the refusal explains that the form prompt is also required and why.",
+      "observed": "Not queued: the workflow 'needs a prompt describing the motion' although all three shot prompts are filled. The message does not say the form field is the one that is empty. Filling the form prompt admits the sequence.",
+      "harness_workaround": "VID-03 types the form motion prompt as an operator would after reading the refusal.",
+      "friction_kinds": [],
+      "evidence": [
+        {
+          "description": "VID-03 first run: the Queue Sequence refusal text",
+          "source_hint": "gp832_tk/*/journeys/*_VID-03_*/evidence.json"
+        }
+      ],
+      "repair": {
+        "status": "UNREPAIRED",
+        "owner_disposition": "pending"
+      }
     }
   ]
 }

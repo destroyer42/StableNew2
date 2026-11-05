@@ -54,8 +54,9 @@ def is_disabled(widget: tk.Misc) -> bool:
 
     try:
         instate = getattr(widget, "instate", None)
-        if callable(instate) and instate(["disabled"]):
-            return True
+        if callable(instate):
+            # A ttk widget's flag is authoritative: ``state(["!disabled"])`` leaves the configured option stale.
+            return bool(instate(["disabled"]))
     except tk.TclError:
         pass
     try:
@@ -249,6 +250,22 @@ class TkDriver:
         self.trace.record(
             "drag_sash", label=label, index=index, before=before, after=int(paned.sashpos(index))
         )
+        self.pump(0.1)
+
+    def drag_stroke(
+        self, widget: tk.Misc, start: tuple[int, int], end: tuple[int, int], *, label: str
+    ) -> None:
+        """Press at ``start`` (widget coordinates), drag to ``end`` and release: a painting stroke."""
+
+        widget.event_generate("<ButtonPress-1>", x=start[0], y=start[1])
+        steps = 8
+        for i in range(1, steps + 1):
+            x = start[0] + (end[0] - start[0]) * i // steps
+            y = start[1] + (end[1] - start[1]) * i // steps
+            widget.event_generate("<B1-Motion>", x=x, y=y, state=0x100)
+            self.pump(0.01)
+        widget.event_generate("<ButtonRelease-1>", x=end[0], y=end[1])
+        self.trace.record("drag_stroke", label=label, start=start, end=end)
         self.pump(0.1)
 
     def select_listbox_row(self, listbox: tk.Listbox, index: int, *, label: str) -> None:

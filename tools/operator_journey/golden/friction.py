@@ -23,7 +23,10 @@ FRICTION_ACTIONS: dict[str, tuple[str, str | None, str]] = {
     "dialog_never_appeared": ("expected_dialog_never_appeared", None, "workaround"),
 }
 #: Ordinary operator behaviour that is worth counting but is not a workaround.
-INFORMATIONAL_ACTIONS = {"scrolled_into_view": "page_scrolled_with_the_wheel"}
+INFORMATIONAL_ACTIONS = {
+    "scrolled_into_view": "page_scrolled_with_the_wheel",
+    "scrolled_with_scrollbar": "page_scrolled_with_the_scrollbar",
+}
 
 REACHABILITY_DIRECT = "DIRECT"
 REACHABILITY_WORKAROUNDS = "WITH_WORKAROUNDS"

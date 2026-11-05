@@ -113,6 +113,9 @@ def coverage_problems(doc: dict[str, Any], repo_root: Path = REPO_ROOT) -> list[
             problems.append(f"{wid}: untested must not list journeys or tests")
         if not row.get("limits"):
             problems.append(f"{wid}: limits must be stated")
+        for key in ("physical_qualification", "remaining_risk"):
+            if not row.get(key):
+                problems.append(f"{wid}: {key} must be stated")
     return problems
 
 

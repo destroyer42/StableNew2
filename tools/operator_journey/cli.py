@@ -41,7 +41,19 @@ def build_parser() -> argparse.ArgumentParser:
     golden.add_argument(
         "--journey",
         dest="golden_journey",
-        choices=["image", "video", "learning", "all"],
+        choices=[
+            "image",
+            "video",
+            "learning",
+            "all",
+            "prompt-model",
+            "image-edit",
+            "motion-assets",
+            "storyboard",
+            "learning-profile",
+            "recovery",
+            "advanced",
+        ],
         default="all",
     )
     golden.add_argument(

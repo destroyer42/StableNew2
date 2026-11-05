@@ -21,10 +21,15 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # Directories whose contents belong to the operator, never to a journey.
 _PROTECTED_DIRS = ("state", "data", "presets", "config", "packs")
-# Immutable, checked-in manifests that Offline AI Assist reads to report its installation status (exact repo-relative
+# Immutable, checked-in manifests that Offline AI Assist reads to report its installation status, and the Forge runtime
+# manifest the Forge image backend reads when the isolated workspace selects the Forge identity (exact repo-relative
 # paths, read-only).  Nothing else under a protected directory is exempt, and a write to either is still a violation.
 _COMMITTED_READ_ONLY = frozenset(
-    {"config/managed_ai_runtime.json", "config/ai_model_registry.json"}
+    {
+        "config/managed_ai_runtime.json",
+        "config/ai_model_registry.json",
+        "config/managed_forge_runtime.json",
+    }
 )
 _ENV_KEYS = (
     "STABLENEW_AI_DIR",
@@ -33,6 +38,7 @@ _ENV_KEYS = (
     "STABLENEW_WEBUI_BASE_URL",
     "STABLENEW_PROMPTPACK_DIR",
     "STABLENEW_GLOBAL_PROMPT_DIR",
+    "STABLENEW_GENERATION_PROFILE_DIR",
     "STABLENEW_INITIAL_RESOURCE_GRACE_SEC",
     "PYTEST_CURRENT_TEST",
     "STABLENEW_TEST_MODE",
@@ -96,6 +102,11 @@ class UserDataGuard:
         snapshot["output_top_level"] = (
             sorted(entry.name for entry in output.iterdir()) if output.exists() else []
         )
+        # The operator's real generation-profile store: resolved outside any activated workspace on both sides.
+        from src.generation_profiles.store import resolve_generation_profile_dir
+
+        snapshot["generation_profiles"] = _tree_signature(resolve_generation_profile_dir())
+        snapshot["user_data_stores"] = _user_store_signature()
         return snapshot
 
     def capture(self) -> None:
@@ -106,11 +117,33 @@ class UserDataGuard:
         problems: list[str] = []
         if after["git_status"] != self._before.get("git_status"):
             problems.append("git status changed during the journey")
-        for key in (*_PROTECTED_DIRS, "output_top_level"):
+        for key in (
+            *_PROTECTED_DIRS,
+            "output_top_level",
+            "generation_profiles",
+            "user_data_stores",
+        ):
             if after[key] != self._before.get(key):
                 changed = _diff_keys(self._before.get(key), after[key])
                 problems.append(f"protected data changed in {key}/: {changed}")
         return problems
+
+
+def _user_store_signature() -> dict[str, list[int]]:
+    """The operator's real Storyboard store, Motion Library settings and Blender setting (resolved unredirected)."""
+
+    from src.video.motion_library.config import config_path
+    from src.video.storyboard_store import default_root
+
+    signature = _tree_signature(default_root())
+    signature = {f"storyboards/{key}": value for key, value in signature.items()}
+    for path in (config_path(), config_path().with_name("motion_conversion.json")):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        signature[path.name] = [stat.st_size, stat.st_mtime_ns]
+    return signature
 
 
 def _diff_keys(before: Any, after: Any) -> list[str]:
@@ -208,6 +241,15 @@ class OperatorWorkspace:
         saved_defaults = ConfigManager.__init__.__defaults__
         saved_env = {key: os.environ.get(key) for key in _ENV_KEYS}
         saved_cwd = os.getcwd()
+        import src.video.motion_library.config as motion_config
+        import src.video.storyboard_store as storyboard_store
+
+        saved_user_stores = (storyboard_store.default_root, motion_config._user_data_dir)
+        # Storyboards, the Motion Library setting and the Blender setting live under the operator's
+        # %LOCALAPPDATA%\StableNew with no override; redirect their resolvers (LOCALAPPDATA itself stays: FFmpeg
+        # discovery reads it).
+        storyboard_store.default_root = lambda: self.root / "storyboards"
+        motion_config._user_data_dir = lambda *_args, **_kwargs: self.root / "user-data"
         workspace_paths._root = self.root.resolve()
         # Learning/queue jobs default their output to the cwd-relative "output"
         # directory, so the journey also runs from inside its workspace.
@@ -222,6 +264,8 @@ class OperatorWorkspace:
                 "STABLENEW_PROMPTPACK_DIR": str(self.packs_dir),
                 "STABLENEW_GLOBAL_PROMPT_DIR": str(self.global_prompts_dir),
                 "STABLENEW_AI_DIR": str(self.ai_assist_dir),
+                # The per-user generation-profile store (Learning publication writes here) must never be the operator's.
+                "STABLENEW_GENERATION_PROFILE_DIR": str(self.root / "generation-profiles"),
             }
         )
         if self.startup_grace_sec is not None:
@@ -234,6 +278,7 @@ class OperatorWorkspace:
             yield self
         finally:
             os.chdir(saved_cwd)
+            storyboard_store.default_root, motion_config._user_data_dir = saved_user_stores
             workspace_paths._root = saved_root
             ConfigManager.__init__.__defaults__ = saved_defaults
             for key, value in saved_env.items():

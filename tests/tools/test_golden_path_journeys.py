@@ -107,6 +107,55 @@ def test_simulated_journey_passes_through_the_canonical_path(tmp_path: Path, jou
     assert "simulated_fixture" in sources or journey == "image"
 
 
+#: journey key -> (expected verdict, the only checks allowed to fail).  A product defect found by a journey is pinned here
+#: with its finding id, so the journey stays honest until the defect is repaired (then the entry changes to PASS).
+_ADVANCED_EXPECTED = {
+    "recovery": ("FAIL", {"failure_cause_visible_to_operator"}),  # GP832-F1
+    "prompt-model": ("PASS", set()),
+    "learning-profile": ("PASS", set()),
+    "storyboard": ("PASS", set()),
+    "image-edit": ("FAIL", {"parent_job_recorded", "compare_offered_for_the_edit"}),  # GP832-F3
+    "motion-assets": (
+        "HOLD",
+        set(),
+    ),  # conversion needs Blender; PASS is also accepted when Blender is installed
+}
+
+
+@pytest.mark.parametrize("journey", list(_ADVANCED_EXPECTED))
+def test_advanced_simulated_journey_reaches_its_expected_verdict(
+    tmp_path: Path, journey: str
+) -> None:
+    before = _tracked_state()
+    code, evidence, bundle = _run_suite(
+        tmp_path, "--journey", journey, "--hide-window", timeout=900
+    )
+    ((journey_id, result),) = evidence["journeys"].items()
+    expected, allowed_failures = _ADVANCED_EXPECTED[journey]
+    verdict = result["verdict"]
+    if verdict == "HOLD" and "FFmpeg is not available" in (result.get("hold_reason") or ""):
+        pytest.skip(result["hold_reason"])
+    failed = {c["name"] for c in result["checks"] if not c["passed"]}
+    acceptable = {expected, "PASS"} if journey == "motion-assets" else {expected}
+    if verdict not in acceptable or not failed <= allowed_failures:
+        _fail_with_diagnostics(result, sorted(failed))
+    assert evidence["mode"] == "simulated" and evidence["desktop_driver"] == "tk"
+    if journey == "motion-assets" and verdict == "HOLD":
+        assert "Blender" in result["hold_reason"]
+    captured = result["captured_errors"]
+    assert captured["gui"] == [] and captured["threads"] == []
+    if (
+        journey != "recovery"
+    ):  # OPS-01 injects backend faults on purpose; the application logs their handling
+        assert captured["logs"] == []
+    assert result["isolation_violations"] == [], (
+        "an advanced journey touched the operator's real data"
+    )
+    assert _tracked_state() == before, "the journey left changes in tracked files"
+    for name in ("plan.json", "evidence.json", "summary.md", "actions.jsonl", "artifacts.json"):
+        assert (bundle / name).is_file()
+
+
 def test_simulated_run_starts_no_model_runtime_and_refuses_real_backend_options(
     tmp_path: Path,
 ) -> None:
