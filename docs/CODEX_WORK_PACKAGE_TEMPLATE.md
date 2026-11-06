@@ -38,6 +38,9 @@ authorities and exact start state.
 ## Acceptance and evidence reuse
 
 - Required behavior/evidence:
+- Completion evidence expected (the PR template's Acceptance and evidence boundary fields; rule in `AGENTS.md`
+  section 8): evidence mode, evidence identity, qualification claim or N/A, what will not be demonstrated:
+- Existing qualification or test harness to reuse (before proposing a new orchestration tool):
 - Existing exact-SHA evidence reused:
 - New manual or runtime evidence:
 - Known blockers or non-blocking debt:

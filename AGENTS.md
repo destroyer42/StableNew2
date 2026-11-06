@@ -188,3 +188,18 @@ Keep it concise: outcome, branch/SHA, evidence, architecture effect, unresolved
 risk, and the next decision if one remains, plus one `Model / usage` line (host,
 actual model, effort, repair passes, result, and the tokens measured by
 `tools/usage_report.py`). Never estimate a missing value or convert tokens to a price.
+
+**Completion evidence** keeps four things apart: *implementation* (the code or
+documentation delivered), *demonstration* (tests or observed workflow behavior
+that support the claimed outcome), *qualification* (a formally accepted,
+identity-applicable verdict from the existing qualification authority) and
+*unverified or held* behavior (missing evidence, environmental limits, negative
+outcomes, pending owner authorization). They are report categories, not job
+states or a second qualification registry. A PR is complete when its evidence
+meets its authorized acceptance scope; deterministic tests, documentation
+inspection or simulation suffice where that is the scope, and physical GPU
+qualification is not a universal PR requirement. Claim QUALIFIED only with the
+applicable qualification authority and owner-accepted evidence; passing CI or a
+standalone artifact never grants qualification. Name each evidence source and
+its SHA or other identity, its known limits and any unresolved decision. The
+record is the PR template's **Acceptance and evidence boundary** section.
