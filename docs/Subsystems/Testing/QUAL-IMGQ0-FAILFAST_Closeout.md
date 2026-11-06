@@ -1,6 +1,6 @@
 # QUAL-IMGQ0-FAILFAST - IMG-Q0 fail-fast safety repair and evidence closeout
 
-Status: closed locally 2026-11-05; owner decisions of 2026-11-06 recorded in section 6. Continues `QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md` (the IMG-01 candidate
+Status: closed locally 2026-11-05; owner decisions of 2026-11-06 in section 6; second attempt (PASS) in section 8. Continues `QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md` (the IMG-01 candidate
 and its owner-authorized plan). No physical run, Forge start/stop, plan change, threshold change or evidence deletion was
 performed by this package.
 
@@ -180,3 +180,46 @@ Focused: `tests/tools/test_operator_journey_failfast.py` (10 passed), operator-j
 suites, golden-path contract/component/evidence/advanced/Blender-833 suites and the four `test_qual840_*` files (non-journey
 selection): 290 passed, 1 skipped (Blender opt-in) before the ledger edit; re-run results are in the completion report. The
 ledger live check, `ci_truth`, ruff and the canonical PR gate are reported there with their exact outcomes.
+
+## 8. Second attempt, 2026-11-06: functional PASS, safety PASS
+
+The owner authorized the 2 GB-floor plan (digest `d055e1a3cf575d6c8fa7f05ac656fc0dfa8e80892e45c273c81b315c3cc8fa7b`, frozen at
+`bb8e21d1351261b1550b4baf8d761a3b8fe89623`, clean tree) and launched it from the worktree. Archive:
+`C:\Users\rob\StableNewAcceptance\golden-paths\20261106T125628Z_physical_bb8e21d1_maximized_acceptance_f0a2bb`.
+
+- **Verified.** The harness verifier says OK; an independent re-hash found 24 listed files, 0 mismatches, nothing unlisted or
+  missing; `COMPLETE` records `MANIFEST.json` sha256 `210f4617f6c419a73dd81980178123bd5505056eb9f76e32fa1326343a2109c4`. The archived plan digest,
+  limits, job count, journeys, environment and model SHA equal the authorized plan; the authorization block is preserved
+  (approved by Rob, owner; expires 2026-11-06T20:53:40Z). Provenance reports a clean tree.
+- **Result.** Overall PASS, 17 of 17 journey checks, no abort, hold or NO-GO. Journey 127 s (12:54:20 to 12:56:27Z). Job
+  `70e4ff07...` created 12:55:47.97, started 12:55:48.90, completed 12:56:01.61 (12.7 s), no error; `submitted_once_through_job_service`,
+  `model_in_njr`, `image_decodes`, `history_artifact_is_the_job_image` and `history_record_present` all pass.
+- **Resources.** 66 samples over 133 s: available RAM 8.98 GB at start, minimum **8.61 GB**, VRAM 6,818 MiB at start and 6,962 MiB
+  peak, commit peak 27.7 GB. No limit came close: not the 2 GB floor and not the original 6 GB floor.
+- **Why the first attempt's dip did not recur.** The first attempt cold-loaded the checkpoint (VRAM 1.4 GB to 6.6 GB while RAM fell
+  to 2.63 GB). Here Forge already held the checkpoint (VRAM 6.8 GB at the start), so no load happened. This PASS therefore does not
+  show that a cold load stays above the 2 GB floor. The 2 GB floor was not what let this run pass.
+- **Image.** Unlike the first attempt this archive contains the image (`image_media_5ca779a116d8.png`, sha256
+  `5ca779a116d854059ffb70a7f2a85bf9dcf159625cf358e282a7660354f9be98`, 512x512 RGB). Observation (assistant review, not an operator verdict): a
+  lighthouse is clearly legible at upper right on a headland above a sunset sea, with brushy oil-painting strokes. The colors are
+  strongly over-saturated, with streaked, noisy edges. Prompt adherence is better than the first image; technical quality is
+  still poor, consistent with 512x512 and 6 steps. Quality stays NOT TESTED.
+- **Scheduler differed between the attempts.** The manifests show `scheduler` `Normal` in the first and `automatic` in the second
+  (same plan, prompt, seed, sampler and model), which is why the two images differ. The frozen plan does not set the scheduler. The
+  cause is not established; one candidate is that the first run started without registry evidence for the checkpoint and the
+  second did not (unverified). Image-to-image comparison across the two attempts is therefore not valid.
+- The runtime admission warning (the harness process counted as a "suspicious" StableNew-like process) repeats; it did not block the job.
+
+### 8.1 Dimensions and status (proposal, NOT accepted)
+
+Declared status and dimensions are unchanged (PARTIALLY QUALIFIED; resource PQ, quality NOT TESTED, integration PQ). Ledger
+evidence `e7` records this run as GUI-driven, verified-source, functional and safety PASS.
+
+- **Proposal 1 (recommended):** keep all dimensions as declared. One run at smoke settings with a resident checkpoint does not
+  cover the failure path of the first attempt, and quality is untested, so QUALIFIED is not available in any case.
+- **Proposal 2:** raise the integration dimension to QUALIFIED on `e7` alone (GUI to queue to backend to History, exact source). It is
+  defensible as an integration statement and is the owner's call.
+
+Remaining gap: one GUI-driven run that starts with the checkpoint not resident in Forge, under the 2 GB floor. That needs the owner
+to unload or restart the external Forge, a new frozen plan and a new authorization. No further physical run is authorized.
+The authorization file for the 2 GB plan stays valid until 2026-11-06T20:53:40Z; the typed phrase is the only gate against a repeat launch.

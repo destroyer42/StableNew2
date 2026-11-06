@@ -125,6 +125,19 @@
           "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
           "date": "2026-11-06",
           "applies_to": {}
+        },
+        {
+          "id": "e7",
+          "kind": "production_workflow",
+          "claim": "Second GUI-driven physical attempt (IMG-01, plan d055e1a3cf57, RAM floor 2 GB replacing the 6 GB floor, seed 424242, 512x512, 6 steps, one job). Functional PASS (17 checks) and safety PASS: job completed in 12.7 s through the queue, image recorded and shown in History; RAM never fell below 8.61 GB, VRAM peak 6,962 MiB, commit peak 27.7 GB. The checkpoint was already resident in Forge from the first attempt, so the cold-load RAM dip that tripped the first attempt was not exercised. Smoke settings only (ADetailer and upscale off); visual quality PENDING_OPERATOR_REVIEW; one run.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "exact_source": "repo bb8e21d1351261b1550b4baf8d761a3b8fe89623 (clean tree); sealed archive C:\\Users\\rob\\StableNewAcceptance\\golden-paths\\20261106T125628Z_physical_bb8e21d1_maximized_acceptance_f0a2bb (MANIFEST.json sha256 210f4617f6c419a73dd81980178123bd5505056eb9f76e32fa1326343a2109c4, verified)",
+          "result": "PASS_FUNCTIONAL_SAFETY",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "gui"
         }
       ],
       "qualification": {
@@ -139,18 +152,20 @@
       },
       "holds": [],
       "open_items": [
-        "PromptPack-through-GUI physical acceptance has run once and ended NO-GO (e5): host available RAM fell from 8.7 GB to 2.63 GB during the model switch against the 6 GB floor. No passing GUI-driven run exists.",
-        "The one image was reviewed 2026-11-06 (closeout record 2.2): it shows a dusk coast scene in an oil-painting style but the lighthouse is not legible and the surface is noisy and over-saturated at 512x512 / 6 steps. A recorded observation, not a quality verdict; the quality dimension stays NOT TESTED.",
-        "Owner decision 2026-11-06 (e6): the RAM floor may be decreased in a new plan. The recorded 6 GB floor and the observed 2.63 GB minimum are the reference; the new floor is 2 GB (an unauthorized plan exists). Cite it when authorizing the new plan; a new frozen plan, authorization and typed phrase are required."
+        "First GUI-driven attempt (e5, 2026-11-05) ended NO-GO: available RAM fell from 8.7 GB to 2.63 GB while Forge cold-loaded the checkpoint, against the then 6 GB floor.",
+        "Second attempt (e7, 2026-11-06, 2 GB floor) passed functionally and on safety, but with the checkpoint already resident: the cold-load RAM path is not covered under the 2 GB floor, and it is one run at smoke settings.",
+        "Both images were reviewed as observations (closeout record 2.2 and 8): over-saturated and noisy at 512x512 / 6 steps, the second shows a legible lighthouse. No quality verdict; the quality dimension stays NOT TESTED.",
+        "The two attempts dispatched different schedulers under the same frozen plan ('Normal' then 'automatic'); the plan does not freeze the scheduler. Cause not established.",
+        "Dimension changes (for example integration to QUALIFIED) are proposals in the closeout record and are not accepted."
       ],
       "next_test": {
-        "summary": "BLOCKED until the owner authorizes the new plan (an unauthorized plan with a 2 GB floor exists). After the 2026-11-05 NO-GO (e5) the owner allowed a lower host-RAM floor (e6). The replaced 6 GB floor and the 2.63 GB observed minimum are recorded in e5/e6 and the closeout record and must be cited when the new plan is authorized, so a later RAM failure can be attributed to the floor change; the plan needs its own digest, owner authorization and typed phrase.",
+        "summary": "No further physical run is authorized. The smallest remaining gap is one GUI-driven IMG-01 run that starts with the checkpoint not resident in Forge (the first attempt's failure path) under the 2 GB floor, which needs the owner to unload or restart the external Forge, a new frozen plan and a new authorization.",
         "arm_id": "IMG-Q0",
         "stage": "canary",
         "needs_owner_authorization": true,
         "admissible": true,
         "blocked": true,
-        "blocked_reason": "awaiting owner authorization of the unauthorized 2 GB-floor plan (replaces the 6 GB floor of plan 74ad40503fda); no physical run is authorized",
+        "blocked_reason": "owner decision: whether to run the cold-checkpoint repeat or accept the evidence as it stands",
         "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical --desktop-driver windows --plan <frozen, owner-authorized plan.json>"
       },
       "confidence": "medium",
