@@ -426,8 +426,10 @@ def test_the_event_loader_extracts_only_body_draft_and_head(tmp_path: Path) -> N
         ),
         (
             b"[" * 100_000 + b"]" * 100_000,
-            "EVENT_NOT_JSON",
-        ),  # deep nesting is an input error, not a crash
+            # Deep nesting is an input error, not a crash. The interpreter decides which: a RecursionError (3.14.9)
+            # is EVENT_NOT_JSON; a build that parses the depth (3.14.10) yields a list, not a pull-request event.
+            "EVENT_NOT_JSON|EVENT_NOT_PULL_REQUEST",
+        ),
     ],
     ids=lambda value: value if isinstance(value, str) else "",
 )
