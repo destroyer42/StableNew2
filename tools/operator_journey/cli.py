@@ -75,6 +75,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="frozen physical plan (readiness and physical modes)",
     )
     golden.add_argument(
+        "--launch-phrase",
+        default=None,
+        metavar="PHRASE",
+        help="physical mode without a person at the console: the digest-naming phrase ('RUN <digest12>'); accepted only when "
+        "the plan's owner authorization delegates the launch (authorization.launch), once per digest",
+    )
+    golden.add_argument(
         "--build-plan",
         type=Path,
         default=None,
@@ -236,6 +243,8 @@ def _golden_main(parser: argparse.ArgumentParser, args: argparse.Namespace) -> i
     tool = _golden_tool(args)
     if tool is not None:
         return tool
+    if args.launch_phrase is not None and args.mode != "physical":
+        parser.error("--launch-phrase applies only with --mode physical")
     if args.build_plan:
         if not args.plan_spec:
             parser.error("--build-plan needs --plan-spec")
@@ -252,6 +261,7 @@ def _golden_main(parser: argparse.ArgumentParser, args: argparse.Namespace) -> i
             hide_window=args.hide_window,
             layout=args.layout,
             blender=args.blender,
+            launch_phrase=args.launch_phrase,
         )
     except ModeRefusal as exc:
         print(f"refused: {exc}", file=sys.stderr)

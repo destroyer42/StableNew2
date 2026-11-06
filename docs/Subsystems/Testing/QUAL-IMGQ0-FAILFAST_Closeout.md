@@ -274,3 +274,24 @@ declares Forge as external. The start is a wrapper step outside Git, beside the 
   record, authorized by the owner in chat for one attempt; its digest and commit are in the plan file and the wrapper evidence, not
   here, because a plan freezes the commit and cannot be named in a file of that commit.
 - **Result.** See the ledger evidence and the next section when the run exists. Until then nothing in the ledger changes.
+
+## 11. Delegated launch (remote or agent-driven physical runs)
+
+Owner decision (chat, 2026-11-06): the owner cannot always be at the terminal and wants a physical run to be launchable remotely, or by
+the agent walking the journey in the owner's place. The harness previously refused any launch without a live console
+(`default_confirm` returns an empty string without a TTY), which is why an agent-piped phrase produced a HOLD with no generation.
+
+- **What changed.** `run_physical` accepts `launch_phrase` (CLI: `--launch-phrase "RUN <digest12>"`, physical mode only). It is honoured
+  only when the plan's owner authorization carries `launch = {mode: "delegated", delegate, owner_instruction}`: who may launch and the
+  owner's own words granting it. The authorization block is outside the digest, like the approval itself.
+- **What did not change.** Every other gate still runs first and unchanged: plan shape, authorization for this digest and journeys,
+  expiry, live environment equal to the frozen one, read-only readiness, the exact digest-naming phrase, the refusal in CI and under
+  pytest, the resource limits and the never-retry stop conditions. The typed path is unchanged and is still the default.
+- **One launch per digest.** A delegated launch exclusively creates `<digest12>.delegated-launch.json` beside the plan; a second
+  delegated launch of the same digest is a HOLD. A repeat needs a new authorization and a newly frozen plan.
+- **Attribution.** The evidence records `outcomes.launch`: `{"method": "typed"}` or `{"method": "delegated", delegate, owner_instruction}`,
+  so a reviewer can always tell who pressed the button.
+- **What this is not.** The delegate is the agent acting on the owner's chat instruction, so the owner's message is the control, not a
+  second factor. It does not make authorization automatic: no authorization block, no run.
+- **Still outside the harness.** Starting Forge (and any unload) stays with the wrapper outside Git, and the wrapper's launch step needs
+  the same delegation to be passed through (it runs the harness without `--launch-phrase` today).
