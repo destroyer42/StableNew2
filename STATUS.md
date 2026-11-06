@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-26
+Updated: 2026-11-05
 
 This file is **current state only**: baseline, supported capabilities, what is active and next, open owner
 decisions, holds and known debt. It is capped at 150 lines and checked by `tools/ci/ci_truth.py`. It does not narrate
@@ -81,8 +81,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 
 ## Active and next
 
-Active: the owner-selected product roadmap is `docs/audits/2026-10-26_product_capability_roadmap.md`; the current selected video outcome is persistent Storyboard authoring,
-with selective suffix regeneration requiring its own later contract. The 2026-10-16 audit remains structural history. Phases 0 and 1 are merged (protection and gates,
+Active: the owner-selected product roadmap is `docs/audits/2026-10-26_product_capability_roadmap.md`; its persistent Storyboard authoring outcome is implemented
+(`docs/Subsystems/Video/STORYBOARDS.md`); selective suffix regeneration needs its own later contract. The 2026-10-16 audit remains structural history. Phases 0 and 1 are merged (protection and gates,
 process isolation, startup wiring, crash-safe writes, pinned dev environment, Windows lane, ratchets). Phase 2 (docs and
 process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
 `docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done, and the eight living subsystem docs (P2-2) are written;
@@ -127,12 +127,12 @@ of the roadmap; where they conflict with this file, this file and the repository
   intermittent (a loss can come early in a run, or the GPU can be stressed for hours without one). Records:
   `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
   `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` and `docs/Subsystems/Runtime/DIAG-GPU-140_Forge_Job_Start_Device_Loss_Recurrence.md` and `docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md` (19 losses since 2026-09-07, 10 after XMP-off; the last five each 4-11 s into a Forge txt2img job, three of them within 11 hours, each failing a different CUDA call; no root cause accepted; the opt-in `tools/diagnostics/gpu_hang_recorder.py` records the hang instant, PCIe replay counter and host commit). The device-loss
-  quarantine stays the response to a loss. Tests, gates and CI still never touch a GPU or a real runtime; a package runs physical work only when its acceptance needs it.
+  quarantine stays the response to a loss. Tests, gates and CI still never touch a GPU or a real runtime; a package runs physical work only when its acceptance needs it. That general lift is not a qualification authorization: each physical qualification run (a SYSTEM-840 arm or a retained harness's physical driver) needs fresh explicit owner authorization of its exact plan (`docs/runbooks/qual_system_840.md` section 2, `docs/audits/2026-10-26_product_capability_roadmap.md` Holds).
 - Character Training is on HOLD pending a real trainer decision (no trainer is bundled; cancellation reaches only the immediate process; weight discovery can fall back to an older file). LoRA consumption is independent and stays supported: `docs/Subsystems/Training/Character_Embedding_Workflow_v2.6.md` section 0.1.
 - Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs resource and
   fault clearance first (`docs/Subsystems/Image/PR-IMG-BACKEND-QUAL-100_Forge_vs_Comfy_Still_Image_Qualification.md`).
 - Z-Image clean shutdown and repeated-run stability are unresolved; no repeat physical attempt is authorized.
-- Offline AI Assist has application-owned queue observation/shutdown and Prompt-tab Suggest/review/explicit rewrite acceptance; Suggest remains disabled without a qualified installation. Nothing is installed or physically executed, all models are NOT TESTED, and qualification remains held on D12b and a per-session ETW canary capture (`docs/runbooks/ai_qualification_etw_capture.md`; the first live canary passed 2026-10-25 under analyzer v2; the closeout repairs (protected elevated runtime, analyzer v3) need a fresh canary from a protected interpreter); a separate frozen LFM3-1.7B contract (llama.cpp b11960 or later) exists; its S0 download and S1 licence were authorized and verified on 2026-10-29 outside the repository, S2 onward is not authorized, and it needs a contract-driven harness (`docs/Subsystems/AiAssist/AI_ASSIST.md`, `PR-AI-111_Offline_Qualification.md`, `PR-AI-115_LFM3_Qualification_Contract.md`).
+- Offline AI Assist has application-owned queue observation/shutdown and Prompt-tab Suggest/review/explicit rewrite acceptance; Suggest remains disabled without a qualified installation. Nothing is installed or physically executed, all models are NOT TESTED, and qualification remains held on D12b and a per-session ETW canary capture (`docs/runbooks/ai_qualification_etw_capture.md`; the first live canary passed 2026-10-25 under analyzer v2; the closeout repairs (protected elevated runtime, analyzer v3) need a fresh canary from a protected interpreter); a separate frozen LFM3-1.7B contract (llama.cpp b11960 or later) exists; its S0 download and S1 licence were authorized and verified on 2026-10-29 outside the repository, S2 onward is not authorized; the contract-driven harness that binds runtime, model, sampling, cases and approvals is merged (`docs/work_packages/AI_QUAL_115B.md`) but has run no model, and model-quality qualification is open (`docs/Subsystems/AiAssist/AI_ASSIST.md`, `PR-AI-111_Offline_Qualification.md`, `PR-AI-115_LFM3_Qualification_Contract.md`).
 - Never push to `main`, merge, publish or mutate secrets without explicit owner approval (`AGENTS.md`).
 
 ## Known debt
