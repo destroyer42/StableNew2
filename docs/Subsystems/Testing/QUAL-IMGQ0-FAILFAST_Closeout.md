@@ -210,14 +210,14 @@ The owner authorized the 2 GB-floor plan (digest `d055e1a3cf575d6c8fa7f05ac656fc
   second did not (unverified). Image-to-image comparison across the two attempts is therefore not valid.
 - The runtime admission warning (the harness process counted as a "suspicious" StableNew-like process) repeats; it did not block the job.
 
-### 8.1 Dimensions and status (proposal, NOT accepted)
+### 8.1 Dimensions and status (owner chose: keep as declared, 2026-11-06)
 
 Declared status and dimensions are unchanged (PARTIALLY QUALIFIED; resource PQ, quality NOT TESTED, integration PQ). Ledger
 evidence `e7` records this run as GUI-driven, verified-source, functional and safety PASS.
 
-- **Proposal 1 (recommended):** keep all dimensions as declared. One run at smoke settings with a resident checkpoint does not
+- **Proposal 1 (chosen by the owner, ledger `e8`):** keep all dimensions as declared. One run at smoke settings with a resident checkpoint does not
   cover the failure path of the first attempt, and quality is untested, so QUALIFIED is not available in any case.
-- **Proposal 2:** raise the integration dimension to QUALIFIED on `e7` alone (GUI to queue to backend to History, exact source). It is
+- **Proposal 2 (not applied):** raise the integration dimension to QUALIFIED on `e7` alone (GUI to queue to backend to History, exact source). It is
   defensible as an integration statement and is the owner's call.
 
 Remaining gap: one GUI-driven run that starts with the checkpoint not resident in Forge, under the 2 GB floor. That needs the owner

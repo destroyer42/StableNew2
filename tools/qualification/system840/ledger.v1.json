@@ -138,6 +138,14 @@
             "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
           },
           "surface": "gui"
+        },
+        {
+          "id": "e8",
+          "kind": "owner_decision",
+          "claim": "Owner (in chat, 2026-11-06) chose to keep every IMG-Q0 dimension as declared after the second GUI-driven attempt (e7): resource PARTIALLY QUALIFIED, quality NOT TESTED, integration PARTIALLY QUALIFIED. Proposal 2 (integration QUALIFIED) was not applied.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -156,7 +164,7 @@
         "Second attempt (e7, 2026-11-06, 2 GB floor) passed functionally and on safety, but with the checkpoint already resident: the cold-load RAM path is not covered under the 2 GB floor, and it is one run at smoke settings.",
         "Both images were reviewed as observations (closeout record 2.2 and 8): over-saturated and noisy at 512x512 / 6 steps, the second shows a legible lighthouse. No quality verdict; the quality dimension stays NOT TESTED.",
         "The two attempts dispatched different schedulers under the same frozen plan ('Normal' then 'automatic'); the plan does not freeze the scheduler. Cause not established.",
-        "Dimension changes (for example integration to QUALIFIED) are proposals in the closeout record and are not accepted."
+        "Owner decision e8: dimensions stay as declared; the remaining gap is a cold-checkpoint-load run under the 2 GB floor, which needs the owner to unload or restart Forge, a new plan and a new authorization."
       ],
       "next_test": {
         "summary": "No further physical run is authorized. The smallest remaining gap is one GUI-driven IMG-01 run that starts with the checkpoint not resident in Forge (the first attempt's failure path) under the 2 GB floor, which needs the owner to unload or restart the external Forge, a new frozen plan and a new authorization.",
