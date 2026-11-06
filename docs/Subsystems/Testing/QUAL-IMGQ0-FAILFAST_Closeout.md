@@ -161,7 +161,14 @@ Decided by the owner in chat on 2026-11-06:
    authorization and typed phrase. The 6 GB floor was not weakened by this package.
 3. **The image was reviewed** (section 2.2); the quality dimension stays NOT TESTED.
 
-Still open: the new floor value and the new plan; whether and when to rerun (the authorization for `74ad40503fda` covered one
+The owner chose **2 GB** on 2026-11-06. A new plan with `min_available_ram_gb` 2 (every other limit, target and journey equal to
+plan `74ad40503fda`) was built after the final commit of this package and left **unauthorized**, outside Git at
+`C:\Users\rob\qual\qual860-evidence\plan_img01_floor2gb_UNAUTHORIZED.json`. A plan freezes the repository SHA, so its digest and
+commit cannot be recorded in a tracked file of that commit; read them from the plan file and the readiness summary beside it
+(`readiness_floor2gb_*.md`). The run must start from a checkout at the frozen commit, which includes the fail-fast repair. Readiness
+is read-only; no runtime was started and no run was made.
+
+Still open: the owner authorization of the new plan; whether and when to rerun (the authorization for `74ad40503fda` covered one
 attempt and is not reused).
 
 - Forge `127.0.0.1:7860` (pid 41936, started in the previous package at the owner's request) was left running; stopping it is
