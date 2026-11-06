@@ -234,7 +234,8 @@ only a checkpoint artifact. Backends are native SVD XT (`svd_native`) and approv
   `sequence_metadata`. The plan is versioned (`schema`, `policy_version`) and carries its own canonical `plan_digest`; a plan whose content no longer
   matches its digest cannot be loaded. Per segment it holds a concrete seed (a blank or `random` seed is drawn once, at admission), the exact native frame
   count, workflow id and exact version, prompt and negative prompt (the values the job really carries: a blank negative becomes the workflow's default,
-  an unset segment value inherits the job's, an explicitly empty negative stays empty and an explicitly empty prompt is refused for a workflow that needs one;
+  an unset segment value inherits the job's, an explicitly empty negative stays empty and an explicitly empty prompt is refused for a workflow that needs one, naming the shot;
+  a sequence does not also require the form-level prompt when every segment resolves to its own, while a single video still does;
   the dispatched prompt is always the frozen one), anchor policy (`carry_last_frame` or `provided`, with the image's path and SHA-256),
   and `overlap_frames` (default **1** for a carried anchor, **0** for an authored one). The plan also freezes the backend, the SVD model, the job's own
   experimental opt-in, segment 0's source image and hash, continuity and plan-origin provenance, the assembly settings and the colour-match setting.

@@ -326,15 +326,37 @@ def test_a_coverage_row_without_physical_status_or_risk_is_a_problem() -> None:
     )
 
 
-def test_the_product_findings_of_the_advanced_journeys_are_registered_and_unrepaired() -> None:
-    from tools.operator_journey.golden.registry import finding_problems, load_findings
+def test_the_product_findings_of_the_advanced_journeys_are_registered_with_their_repair_state() -> (
+    None
+):
+    from pathlib import Path
+
+    from tools.operator_journey.golden.registry import REPO_ROOT, finding_problems, load_findings
 
     doc = load_findings()
     assert finding_problems(doc) == []
     by_id = {f["id"]: f for f in doc["findings"]}
-    for fid in ("GP832-F1", "GP832-F2", "GP832-F3", "GP832-F4"):
-        assert by_id[fid]["repair"]["status"] == "UNREPAIRED", fid
     assert "parent_job_id" in by_id["GP832-F3"]["observed"]
+    # PR-QUAL-JOURNEYS-833 repaired these; each names the deterministic tests that pin the repair.
+    for fid in ("GP832-F1", "GP832-F2", "GP832-F3", "GP832-F4"):
+        repair = by_id[fid]["repair"]
+        assert repair["status"] == "REPAIRED" and repair["repaired_in"] == "PR-QUAL-JOURNEYS-833", (
+            fid
+        )
+        assert repair["regression_tests"], fid
+        assert all((Path(REPO_ROOT) / t).is_file() for t in repair["regression_tests"]), fid
+    # What stays open is stated, with its owner decision or proposed acceptance, never silently dropped.
+    assert by_id["GP833-F1"]["repair"]["status"] == "UNREPAIRED"
+    assert by_id["GP833-F1"]["repair"]["owner_disposition"] == "decision required"
+    for fid in ("GP833-O2", "GP833-O3"):
+        assert (
+            by_id[fid]["repair"]["status"] == "UNREPAIRED"
+            and by_id[fid]["repair"]["proposed_acceptance"]
+        )
+    for fid in ("GP833-O1", "GP833-O4"):
+        assert (
+            by_id[fid]["repair"]["status"] == "WONTFIX" and by_id[fid]["repair"]["classification"]
+        )
 
 
 # --- comparator metrics ------------------------------------------------------------------------------------------------

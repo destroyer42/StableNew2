@@ -12,7 +12,7 @@ from typing import Any
 from PIL import Image, ImageTk
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
-from src.controller.masked_edit_service import MaskEditPreview
+from src.controller.masked_edit_service import MaskEditPreview, bind_history_lineage
 from src.controller.outpaint_edit_service import (
     OutpaintSettings,
     describe_support,
@@ -47,6 +47,7 @@ class OutpaintDialog(tk.Toplevel):
         source_path: Path,
         controller: Any,
         runner: BackgroundWorkRunner | None = None,
+        lineage: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(master)
         apply_toplevel_theme(self)
@@ -55,6 +56,9 @@ class OutpaintDialog(tk.Toplevel):
         self.minsize(760, 560)
         self._controller = controller
         self.source_path = source_path
+        self._lineage = (
+            deepcopy(lineage) if lineage else None
+        )  # this image's verified History hand-off, if any
         self._proxy: Image.Image | None = None
         self._photo: ImageTk.PhotoImage | None = None
         self._original_size: tuple[int, int] | None = None
@@ -174,6 +178,12 @@ class OutpaintDialog(tk.Toplevel):
         proxy = pixels.copy()
         proxy.thumbnail((_PROXY_EDGE, _PROXY_EDGE))
         baseline = self._controller._extract_reprocess_baseline_from_image(self.source_path)
+        baseline = bind_history_lineage(
+            baseline,
+            source_path=self.source_path,
+            source_sha256=source.sha256,
+            lineage=self._lineage,
+        )
         model = str(baseline.get("model") or self._fallback.get("model") or "")
         options = (
             self._fallback.get("backend_options")

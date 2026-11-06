@@ -280,6 +280,13 @@ def run_img03(
     )
     run.check(
         "njr",
+        "lineage_is_bound_to_the_verified_source_artifact",
+        (njr.get("source") or {}).get("parent_artifact_id") == f"sha256:{source_identity['sha256']}"
+        and child["job_id"] != parent["job_id"],
+        f"the edit is a distinct job and its parent artifact is the source digest: {lineage}",
+    )
+    run.check(
+        "njr",
         "source_sha256_recorded",
         source_identity["sha256"] in blob,
         "the edit NJR does not freeze the source digest",
@@ -359,6 +366,14 @@ def run_img03(
             for i in viewer.tree.get_children()
         ]
         ev.observe("compare_differences", differences)
+        shown = {"parent": viewer.parent_title_var.get(), "child": viewer.child_title_var.get()}
+        ev.observe("compare_titles", shown)
+        run.check(
+            "compare",
+            "viewer_shows_the_direct_parent_and_the_edit",
+            parent["job_id"] in shown["parent"] and child["job_id"] in shown["child"],
+            f"{shown}",
+        )
         run.check(
             "compare", "viewer_lists_typed_differences", bool(differences), "no differences listed"
         )

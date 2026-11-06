@@ -405,21 +405,42 @@ class OperatorReadinessService:
             return snapshot
         return None
 
+    def _running_webui_jobs(self) -> int:
+        """WebUI jobs the queue already claimed (RUNNING): a hold never governs them, so they are reported apart."""
+
+        provider = self._webui_outage_provider
+        try:
+            snapshot = provider() if provider is not None else None
+            return int(snapshot.get("running_webui_jobs") or 0) if isinstance(snapshot, dict) else 0
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            return 0
+
     def _webui_record(self) -> OperatorReadinessRecord:
         outage = self._webui_outage()
+        running = self._running_webui_jobs()
+        claimed = (
+            f"{running} WebUI job(s) were claimed before the outage was confirmed and are still RUNNING, not held; "
+            "each returns to the queue only if nothing was dispatched, otherwise it fails with its evidence."
+        )
         if outage is not None:
             held = int(outage.get("held_webui_jobs") or 0)
             independent = int(outage.get("independent_jobs_eligible") or 0)
             reasons = (
                 str(outage.get("message") or "WebUI dispatch is held."),
                 f"{held} WebUI job(s) held in the queue; {independent} independent video job(s) still eligible.",
+                *((claimed,) if running else ()),
                 f"Recovery attempts: {int(outage.get('recovery_attempts') or 0)}; "
                 f"last result: {outage.get('last_recovery_result') or 'none'}.",
+            )
+            headline = (
+                "WebUI dispatch is held. No queued job is held yet; the job already claimed is RUNNING and ends as its failure evidence decides."
+                if running and not held
+                else "WebUI jobs are held in the queue; they stay queued and run once WebUI is verified ready."
             )
             return _action_record(
                 "webui",
                 "A1111 / WebUI",
-                "WebUI jobs are held in the queue; they stay queued and run once WebUI is verified ready.",
+                headline,
                 reasons,
                 ("Use the existing WebUI Launch or Retry controls, then refresh readiness.",),
                 "WebUIOutageCoordinator",
@@ -444,11 +465,20 @@ class OperatorReadinessService:
             )
         detail = getattr(self._webui_connection, "last_readiness_error", None)
         reason = str(detail or f"WebUI connection authority reports '{state or 'unknown'}'.")
+        pending = (
+            (
+                f"{running} WebUI job(s) already claimed are RUNNING while WebUI is not ready; no hold is in force "
+                "until the failure is classified, then each returns to the queue (only if nothing was dispatched) "
+                "or fails with its evidence.",
+            )
+            if running
+            else ()
+        )
         return _action_record(
             "webui",
             "A1111 / WebUI",
             "WebUI is not ready for the supported still-image path.",
-            (reason,),
+            (reason, *pending),
             ("Use the existing WebUI connection controls, then refresh readiness.",),
             "WebUIConnectionController",
         )

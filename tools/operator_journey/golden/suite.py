@@ -287,6 +287,7 @@ def run_simulated(
     hide_window: bool = False,
     discard_workspace: bool = False,
     layout: str = "maximized",
+    blender: str | None = None,
 ) -> tuple[str, Path]:
     run_dir = new_run_dir(evidence_root, SIMULATED)
     config = RunConfig(
@@ -295,6 +296,7 @@ def run_simulated(
         evidence_dir=run_dir / "journeys",
         hide_window=hide_window and driver == "tk",
         discard_workspace=discard_workspace,
+        extras={"blender_executable": blender} if blender else {},
     )
     results = [_runner(j, config) for j in journeys]
     overall = write_run_evidence(
@@ -382,6 +384,7 @@ def run_suite(
     confirm: Any = None,
     ctx: Any = None,
     layout: str = "maximized",
+    blender: str | None = None,
 ) -> tuple[str, Path | None]:
     """Validate the combination, then run.  Raises ``ModeRefusal`` before anything starts when it is not allowed."""
 
@@ -402,6 +405,7 @@ def run_suite(
             evidence_root=evidence_root,
             hide_window=hide_window,
             layout=layout,
+            blender=blender,
         )
     assert plan_path is not None
     if mode == READINESS:

@@ -313,6 +313,14 @@ class JobQueue:
                     for job in held
                     if self._assessment_locked(job).dependency.value == "unresolved_dependency"
                 ),
+                # RUNNING work the WebUI hold does not govern: it was claimed atomically before the outage was
+                # confirmed and keeps its lifecycle (requeue only on typed no-dispatch evidence, else FAILED).
+                "running_webui": sum(
+                    1
+                    for job in self._jobs.values()
+                    if job.status == JobStatus.RUNNING
+                    and self._assessment_locked(job).held_by_webui_outage
+                ),
                 "hold": dict(self._webui_hold) if self._webui_hold is not None else None,
                 "gpu_quarantine": (
                     copy.deepcopy(self._gpu_quarantine) if self._gpu_quarantine is not None else None

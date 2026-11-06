@@ -80,7 +80,7 @@ def _label_texts(run: GoldenRun, pattern: str) -> list[str]:
             if isinstance(widget, (ttk.Label, tk.Label)) and widget.winfo_viewable():
                 text = str(widget.cget("text"))
                 if re.search(pattern, text):
-                    found.append(text[:200])
+                    found.append(text[:700])
         except tk.TclError:
             continue
     return found
@@ -125,19 +125,62 @@ def run_ops01(
     posts = ctx.posts()
     ctx.queue_one()
     d.pump(10.0)
-    held_text = _label_texts(run, r"(?i)webui jobs are held|WebUI: Disconnected")
+    pattern = r"(?i)webui (jobs are|dispatch is) held|WebUI: Disconnected|WebUI is not ready"
+    readiness = getattr(run.window, "_operator_readiness_panel", None)
+    window_before = _label_texts(
+        run, pattern
+    )  # what an Operator Readiness window left open still shows
+    if (
+        readiness is not None
+    ):  # the operator presses Refresh: the window is a snapshot, not a live view
+        d.invoke(readiness.refresh_button, label="Operator Readiness: Refresh")
+        d.pump(1.0)
+    held_text = _label_texts(run, pattern)
+    snapshot_note = str(readiness.snapshot_var.get()) if readiness is not None else ""
     rows = ctx.new_rows()
+    outcome_statuses = [r["status"] for r in rows]
+    service = getattr(run.controller, "job_service", None)
+    try:
+        ev.observe(
+            "unreachable_projection",
+            {
+                "outage_snapshot": service.webui_outage.snapshot() if service is not None else None,
+                "dispatch_summary": service.queue.dispatch_summary()
+                if service is not None
+                else None,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - evidence only; a missing attribute must not end the journey
+        ev.observe("unreachable_projection", {"error": f"{type(exc).__name__}: {exc}"})
     ctx.outcomes["unreachable_before_dispatch"] = {
         "visible": held_text,
-        "statuses_while_down": [r["status"] for r in rows],
+        "visible_before_refresh": window_before,
+        "snapshot_note": snapshot_note,
+        "statuses_while_down": outcome_statuses,
         "queue_status": str(queue.queue_status_label.cget("text")),
     }
     run.snap("unreachable")
+    shown = " ".join(held_text).lower()
     run.check(
         "unreachable",
-        "operator_told_jobs_are_held",
-        any("held" in t for t in held_text),
+        "operator_told_the_backend_is_unavailable",
+        any(word in shown for word in ("disconnected", "not ready", "held")),
         f"{held_text}",
+    )
+    # GP832-F2: whatever the operator reads must agree with the job's real state (running, or held in the queue).
+    run.check(
+        "unreachable",
+        "banner_agrees_with_the_job_state",
+        ("running" in shown and "jobs are held in the queue" not in shown)
+        if "running" in outcome_statuses
+        else ("held" in shown if "queued" in outcome_statuses else True),
+        f"rows {outcome_statuses}; the banner reads {held_text}",
+    )
+    run.check(
+        "unreachable",
+        "readiness_window_states_it_is_a_snapshot",
+        readiness is None or "State as of" in snapshot_note,
+        f"{snapshot_note!r}",
     )
     run.check(
         "unreachable",
@@ -302,12 +345,22 @@ def run_ops01(
         ctx.outcomes["changed_model"]["posts"] == 0,
         f"{ctx.outcomes['changed_model']['posts']} POSTs",
     )
-    # The operator must be able to learn why: the cause is only in the log today (finding GP832-F1).
+    # The operator must be able to learn why without reading the log (finding GP832-F1).
     run.check(
         "changed_model",
         "failure_cause_visible_to_operator",
         "alt" in cause or "checkpoint" in cause or "model" in cause,
         f"error {row['error_message']!r}; History shows {history_text}",
+    )
+    recorded = str(row["error_message"] or "").lower()
+    run.check(
+        "changed_model",
+        "recorded_error_names_the_checkpoint_and_the_way_forward",
+        "checkpoint" in recorded
+        and "no images were generated" in recorded
+        and ("restore" in recorded or "new job" in recorded)
+        and "unreachable" not in recorded,
+        f"error {row['error_message']!r}",
     )
 
     # G/H. Close the application while a generation is in flight, then reopen and reconcile.

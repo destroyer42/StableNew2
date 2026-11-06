@@ -188,3 +188,45 @@ def test_panel_renders_all_readiness_states_and_refresh_is_read_only(
     panel.refresh()
     assert fake_service.collect_calls == 2
     assert store.load_state()["operator_readiness"] == {"intro_dismissed": True}
+
+
+@pytest.mark.gui
+def test_panel_states_that_it_is_a_snapshot_and_refresh_shows_the_current_state(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
+    """GP832-F2: a window left open must not pass an old hold off as the live state."""
+
+    held = OperatorReadinessRecord(
+        id="webui",
+        display_name="A1111 / WebUI",
+        state=OperatorReadinessState.ACTION_REQUIRED,
+        summary="WebUI jobs are held in the queue.",
+        blocking_reasons=("0 WebUI job(s) held in the queue;",),
+        operator_actions=(),
+        source="test",
+    )
+    running = OperatorReadinessRecord(
+        id="webui",
+        display_name="A1111 / WebUI",
+        state=OperatorReadinessState.ACTION_REQUIRED,
+        summary="WebUI is not ready for the supported still-image path.",
+        blocking_reasons=("1 WebUI job(s) already claimed are RUNNING while WebUI is not ready;",),
+        operator_actions=(),
+        source="test",
+    )
+    service = _FakeReadinessService(
+        OperatorReadinessSnapshot(support_surfaces=product_support_surfaces(), records=(held,))
+    )
+    panel = OperatorReadinessPanelV2(
+        tk_root, service=service, ui_state_store=UIStateStore(tmp_path / "ui_state.json")
+    )
+    panel.pack()
+    tk_root.update_idletasks()
+    assert "State as of " in panel.snapshot_var.get() and "snapshot" in panel.snapshot_var.get()
+    assert "held in the queue" in panel.record_widgets["webui"]["detail"].cget("text")
+
+    service.snapshot = OperatorReadinessSnapshot(
+        support_surfaces=product_support_surfaces(), records=(running,)
+    )
+    panel.refresh()
+    assert "RUNNING" in panel.record_widgets["webui"]["detail"].cget("text")

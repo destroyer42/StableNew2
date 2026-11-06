@@ -37,8 +37,19 @@ _SCRUBBED_ENV = (
 ProcessRunner = Callable[..., ProcessOutcome]
 
 
+#: Why a candidate was refused (``BlenderProblem.kind``), so callers can tell the causes apart without parsing the message.
+KIND_MISSING = "executable_missing"
+KIND_NOT_BLENDER = "not_blender"
+KIND_UNSUPPORTED = "unsupported_version"
+KIND_VERIFICATION = "verification_failed"
+
+
 class BlenderProblem(RuntimeError):
-    """Blender is unavailable or unsupported; the message says why."""
+    """Blender is unavailable or unsupported; the message says why and ``kind`` says which of the causes it is."""
+
+    def __init__(self, message: str, kind: str = "") -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,7 +148,7 @@ def verify_blender(
 
     path = Path(str(candidate)).expanduser()
     if argv_prefix is None and not path.is_file():
-        raise BlenderProblem(f"Blender was not found at {path}.")
+        raise BlenderProblem(f"Blender was not found at {path}.", KIND_MISSING)
     prefix = tuple(argv_prefix) if argv_prefix is not None else (str(path),)
     outcome = runner(
         [*prefix, "--background", "--factory-startup", "--version"],
@@ -146,23 +157,26 @@ def verify_blender(
         cancel=cancel,
     )
     if outcome.launch_error:
-        raise BlenderProblem(f"Blender could not be started: {outcome.launch_error}")
+        raise BlenderProblem(
+            f"Blender could not be started: {outcome.launch_error}", KIND_VERIFICATION
+        )
     if (
         outcome.timed_out
         or outcome.cancelled
         or outcome.output_truncated
         or outcome.returncode != 0
     ):
-        raise BlenderProblem("Blender did not report its version cleanly.")
+        raise BlenderProblem("Blender did not report its version cleanly.", KIND_VERIFICATION)
     text = outcome.stdout.decode("utf-8", "replace")
     version = parse_version(text)
     if version is None:
-        raise BlenderProblem("The executable did not identify itself as Blender.")
+        raise BlenderProblem("The executable did not identify itself as Blender.", KIND_NOT_BLENDER)
     if version < MINIMUM_VERSION:
         raise BlenderProblem(
             "Blender {} is older than the supported minimum {}.".format(
                 ".".join(map(str, version)), ".".join(map(str, MINIMUM_VERSION))
-            )
+            ),
+            KIND_UNSUPPORTED,
         )
     first_line = text.strip().splitlines()[0].strip() if text.strip() else ""
     return BlenderInstall(

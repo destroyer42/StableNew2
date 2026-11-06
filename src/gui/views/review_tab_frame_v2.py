@@ -1786,6 +1786,7 @@ class ReviewTabFrame(ttk.Frame):
         return payload_summary[:80] if payload_summary else "History job"
 
     def _open_mask_editor(self) -> None:
+        from src.controller.masked_edit_service import history_lineage_for
         from src.gui.mask_editor_dialog import MaskEditorDialog
 
         paths = self._get_selected_review_paths()
@@ -1799,7 +1800,12 @@ class ReviewTabFrame(ttk.Frame):
                 "Edit Mask", "The application controller is unavailable.", parent=self
             )
             return
-        MaskEditorDialog(self, source_path=paths[0], controller=self.app_controller)
+        MaskEditorDialog(
+            self,
+            source_path=paths[0],
+            controller=self.app_controller,
+            lineage=history_lineage_for(getattr(self, "_active_handoff", None), paths[0]),
+        )
 
     def _open_smart_review(self) -> None:
         from src.gui.smart_review_dialog import SmartReviewDialog, TextDraft
@@ -1831,6 +1837,7 @@ class ReviewTabFrame(ttk.Frame):
         )
 
     def _open_outpaint_editor(self) -> None:
+        from src.controller.masked_edit_service import history_lineage_for
         from src.gui.outpaint_dialog import OutpaintDialog
 
         paths = self._get_selected_review_paths()
@@ -1844,7 +1851,12 @@ class ReviewTabFrame(ttk.Frame):
                 "Extend Canvas", "The application controller is unavailable.", parent=self
             )
             return
-        OutpaintDialog(self, source_path=paths[0], controller=self.app_controller)
+        OutpaintDialog(
+            self,
+            source_path=paths[0],
+            controller=self.app_controller,
+            lineage=history_lineage_for(getattr(self, "_active_handoff", None), paths[0]),
+        )
 
     def _get_selected_review_paths(self) -> list[Path]:
         idxs = list(self.images_list.curselection())

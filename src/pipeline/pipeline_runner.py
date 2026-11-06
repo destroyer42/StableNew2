@@ -903,7 +903,7 @@ class PipelineRunner:
             # A pipeline only succeeds if the final enabled stage produced durable outputs.
             success = bool(stage_ctx.paths)
             if not success:
-                error = "No images were generated successfully"
+                error = self._no_output_reason()
             self._finalize_adaptive_refinement(metadata, stage_ctx.paths)
         except CancellationError:
             terminal_outcome = "cancelled"
@@ -950,6 +950,13 @@ class PipelineRunner:
         )
         self._last_run_result = result
         return result
+
+    def _no_output_reason(self) -> str:
+        """Why a run produced nothing: a verified checkpoint mismatch if the executor recorded one, else the generic text."""
+
+        take = getattr(self._pipeline, "take_model_sync_failure", None)
+        reason = take() if callable(take) else None  # only swaps an attribute; a stand-in pipeline may return anything
+        return reason if isinstance(reason, str) and reason.strip() else "No images were generated successfully"
 
     def _execute_stage_plan(
         self,

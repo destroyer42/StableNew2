@@ -112,3 +112,28 @@ def test_a_segment_prompt_is_never_trimmed_into_something_else_or_inherited_by_a
         "waves",
         "the person waves",
     ]  # None inherits; text is stripped once
+
+
+@needs_ffmpeg
+def test_a_blank_form_prompt_dispatches_each_shots_own_prompt_and_never_a_copy(
+    tmp_path: Path,
+) -> None:
+    # GP832-F4: every segment names its own motion prompt, so the form-level prompt may be blank.
+    prompts = ["walks forward", "turns around", "waves goodbye"]
+    _c, _s, built = _built(
+        tmp_path,
+        _intent(
+            *({"frame_count": 17, "seed": 1 + i, "prompt": text} for i, text in enumerate(prompts))
+        ),
+        prompt="",
+    )
+    assert [s.prompt for s in _plan_of(built.njr).segments] == prompts
+    assert built.njr.positive_prompt == ""
+    backend = FakeComfy()
+
+    result = _runner(tmp_path, backend).run_njr(built.njr, cancel_token=None)
+
+    assert result.success is True, result.error
+    assert [r["prompt"] for r in backend.requests] == prompts
+    assert [r["config_prompt"] for r in backend.requests] == prompts
+    assert {r["workflow_version"] for r in backend.requests} == {"1.3.0"}
