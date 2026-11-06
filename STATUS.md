@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-26
+Updated: 2026-11-05
 
 This file is **current state only**: baseline, supported capabilities, what is active and next, open owner
 decisions, holds and known debt. It is capped at 150 lines and checked by `tools/ci/ci_truth.py`. It does not narrate
@@ -81,8 +81,8 @@ The previous log-style file (about 1,700 lines of PR narrative) is preserved in 
 
 ## Active and next
 
-Active: the owner-selected product roadmap is `docs/audits/2026-10-26_product_capability_roadmap.md`; the current selected video outcome is persistent Storyboard authoring,
-with selective suffix regeneration requiring its own later contract. The 2026-10-16 audit remains structural history. Phases 0 and 1 are merged (protection and gates,
+Active: the owner-selected product roadmap is `docs/audits/2026-10-26_product_capability_roadmap.md`; persistent Storyboard authoring is delivered and selective suffix regeneration needs its own later contract. Qualification: the 50-capability ledger
+`tools/qualification/system840/ledger.v1.json` has no QUALIFIED entry and no golden-path physical run exists; the smallest candidate is IMG-01, pending owner authorization (`docs/Subsystems/Testing/QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md`). The 2026-10-16 audit remains structural history. Phases 0 and 1 are merged (protection and gates,
 process isolation, startup wiring, crash-safe writes, pinned dev environment, Windows lane, ratchets). Phase 2 (docs and
 process) is in progress: this file (P2-1) and the generated code map `docs/CODE_MAP.md` with the short task map
 `docs/CODEX_MAP.md` (P2-3) and one source for the rules in `AGENTS.md` (P2-4) are done, and the eight living subsystem docs (P2-2) are written;
@@ -126,7 +126,7 @@ of the roadmap; where they conflict with this file, this file and the repository
 - The physical-GPU hold was lifted by the owner on 2026-10-18: the owner has been running jobs, and device loss looks
   intermittent (a loss can come early in a run, or the GPU can be stressed for hours without one). Records:
   `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`,
-  `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` and `docs/Subsystems/Runtime/DIAG-GPU-140_Forge_Job_Start_Device_Loss_Recurrence.md` and `docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md` (19 losses since 2026-09-07, 10 after XMP-off; the last five each 4-11 s into a Forge txt2img job, three of them within 11 hours, each failing a different CUDA call; no root cause accepted; the opt-in `tools/diagnostics/gpu_hang_recorder.py` records the hang instant, PCIe replay counter and host commit). The device-loss
+  `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md` and `docs/Subsystems/Runtime/DIAG-GPU-140_Forge_Job_Start_Device_Loss_Recurrence.md` and `docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md` (21 loss markers since 2026-09-07 in the 2026-11-05 event log, the last on 2026-10-30 and the newest two undocumented; 19, 10 of them after XMP-off, at the last record; the last five each 4-11 s into a Forge txt2img job, three of them within 11 hours, each failing a different CUDA call; no root cause accepted; the opt-in `tools/diagnostics/gpu_hang_recorder.py` records the hang instant, PCIe replay counter and host commit). The device-loss
   quarantine stays the response to a loss. Tests, gates and CI still never touch a GPU or a real runtime; a package runs physical work only when its acceptance needs it.
 - Character Training is on HOLD pending a real trainer decision (no trainer is bundled; cancellation reaches only the immediate process; weight discovery can fall back to an older file). LoRA consumption is independent and stays supported: `docs/Subsystems/Training/Character_Embedding_Workflow_v2.6.md` section 0.1.
 - Forge-vs-Comfy still-image qualification is offline only (CONDITIONAL / INCONCLUSIVE); a Comfy image slice needs resource and

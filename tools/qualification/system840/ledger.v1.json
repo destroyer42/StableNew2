@@ -5,7 +5,13 @@
   "built_from": {
     "repo": "destroyer42/StableNew2",
     "main_sha": "d76d1acde91a64f7f513ac42cffa5baa67f519bf",
-    "state_date": "2026-11-05"
+    "state_date": "2026-11-05",
+    "reconciled": {
+      "main_sha": "a2794072a624ec75572916e403fd1f74afb19fcb",
+      "date": "2026-11-05",
+      "package": "QUAL-CLOSEOUT-860",
+      "note": "Entries re-read against current source and the sealed golden-path archives; only the entries listed in docs/Subsystems/Testing/QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md changed."
+    }
   },
   "precedence": "Current code and AGENTS.md/STATUS.md override these records; a recorded claim that differs from live code is reported by reconcile_with_live, never silently adopted.",
   "standing_holds": [
@@ -31,7 +37,7 @@
     },
     {
       "id": "HOLD-GPU-DEVICE-LOSS",
-      "reason": "Intermittent GPU device loss is unresolved (19 losses since 2026-09-07 at the last record); the dispatch quarantine stays the response and any new loss stops the campaign.",
+      "reason": "Intermittent GPU device loss is unresolved (21 NVIDIA Kernel-PnP remove-veto markers since 2026-09-07 in the 2026-11-05 event-log count; the last, 2026-10-30 18:50:44 ET, and the one on 2026-10-22 post-date the last DIAG-GPU record, which counted 19); the dispatch quarantine stays the response and any new loss stops the campaign.",
       "source": "docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md"
     }
   ],
@@ -121,7 +127,7 @@
         "stage": "canary",
         "needs_owner_authorization": true,
         "admissible": true,
-        "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical"
+        "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical --desktop-driver windows --plan <frozen, owner-authorized plan.json>"
       },
       "confidence": "medium",
       "sources": [
@@ -1108,7 +1114,7 @@
         {
           "id": "e1",
           "kind": "offline_contract",
-          "claim": "Offline lineage tests; the History-started masked edit records parent_job_id null (finding GP832-F3).",
+          "claim": "Offline lineage tests; a History-started masked edit now records the History job as parent_job_id (GP832-F3 repaired in 517868d3, journey IMG-03 PASS at d8e3e9d0 against a loopback Forge). Nothing has run physically.",
           "source": "tools/operator_journey/golden/findings.v1.json",
           "date": "2026-11-05",
           "applies_to": {}
@@ -1126,10 +1132,10 @@
       },
       "holds": [],
       "open_items": [
-        "GP832-F3 unrepaired: a History-started masked edit records no parent, so Compare with Parent is unavailable"
+        "Regenerate with Changes itself is not driven by any journey; no physical run exists"
       ],
       "next_test": {
-        "summary": "A physical Regenerate with Changes on an IMG-Q0 job, after the GP832-F3 repair decision.",
+        "summary": "A physical Regenerate with Changes on an IMG-Q0 job, after the IMG-Q0 canary passes.",
         "arm_id": "IMG-Q3",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -1161,7 +1167,7 @@
         {
           "id": "e1",
           "kind": "offline_contract",
-          "claim": "Direct pairs only; parent artifact verified by SHA-256 when recorded, otherwise labelled not independently verified.",
+          "claim": "Direct pairs only; parent artifact verified by SHA-256 when recorded, otherwise labelled not independently verified. Journey IMG-03 (loopback Forge, d8e3e9d0) checks the edit child against its recorded direct parent after the GP832-F3 repair.",
           "source": "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
           "date": "2026-10-26",
           "applies_to": {}
@@ -1179,10 +1185,10 @@
       },
       "holds": [],
       "open_items": [
-        "GP832-F3"
+        "Smart Review opens the editor without the History hand-off, so an edit started there records no parent (safe default)"
       ],
       "next_test": {
-        "summary": "Compare an IMG-Q3 edited child with its recorded parent after the F3 decision.",
+        "summary": "Compare a physically edited IMG-Q3 child with its recorded parent (after an IMG-Q3 masked edit exists).",
         "arm_id": "IMG-Q3",
         "stage": "canary",
         "needs_owner_authorization": false,
@@ -1787,28 +1793,42 @@
         {
           "id": "e1",
           "kind": "offline_contract",
-          "claim": "Journey VID-02: the Batch Convert dry run found 2 convertible and 3 ineligible; conversion was HOLD because no Blender was registered.",
+          "claim": "Journey VID-02 at 2026-11-04: the Batch Convert dry run found 2 convertible and 3 ineligible; conversion was HOLD because no Blender was supplied. Superseded by e2.",
           "source": "docs/runbooks/motion_conversion.md",
           "date": "2026-11-04",
           "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "production_workflow",
+          "surface": "driver",
+          "result": "PASS",
+          "claim": "Journey VID-02 lane A (Windows input driver, normal, 1280x680 minimum and maximized layouts): a supplied Blender 4.5.9 LTS (verified with the bounded version check) converted 2 BVH skeletons through Batch Convert; each result is a 17-frame 480x832 H.264 MP4 whose independent SHA-256 matches the record, whose provenance names the original and which the Motion Library registered and kept across a restart. FBX character-mesh rendering and output quality were not driven.",
+          "source": "tools/operator_journey/golden/findings.v1.json",
+          "date": "2026-11-05",
+          "exact_source": "repo d8e3e9d09e17e334d7f4a21f75e1101389b41703 (no src/video/motion_conversion change to a2794072); sealed archives 20261105T130629Z_simulated_d8e3e9d0_normal_acceptance_5da5c5, 20261105T132035Z_simulated_d8e3e9d0_minimum_acceptance_afbcab, 20261105T133347Z_simulated_d8e3e9d0_maximized_acceptance_00abdb under ~/StableNewAcceptance/golden-paths, re-hashed OK 2026-11-05",
+          "applies_to": {
+            "backend": "blender (owner-installed)"
+          }
         }
       ],
       "qualification": {
         "resource": "NOT TESTED",
         "quality": "NOT TESTED",
-        "integration": "NOT TESTED"
+        "integration": "PARTIALLY QUALIFIED"
       },
-      "status": "NOT TESTED",
+      "status": "PARTIALLY QUALIFIED",
       "governance": {
         "state": "supported; needs an owner-registered Blender 4.2+",
         "source": "STATUS.md"
       },
       "holds": [],
       "open_items": [
-        "Blender is not registered on this host: never fake a render"
+        "Only the BVH skeleton route was converted through the GUI; an FBX character-mesh conversion and the MP4 quality are not verified",
+        "The journey registers Blender only inside a disposable workspace; the owner app registration is separate"
       ],
       "next_test": {
-        "summary": "Register Blender, then convert one BVH and one FBX and verify the driving MP4 identity (offline CPU).",
+        "summary": "Convert one FBX through the same lane and judge the driving MP4 (offline CPU).",
         "arm_id": "VID-Q2",
         "stage": "canary",
         "needs_owner_authorization": false,
@@ -2265,7 +2285,7 @@
         {
           "id": "e1",
           "kind": "offline_contract",
-          "claim": "Journey VID-03 passed on a fixture Comfy; physical NOT RUN; finding GP832-F4 unrepaired.",
+          "claim": "Journey VID-03 passed on a fixture Comfy (finding GP832-F4 repaired in a4954e33: a blank form prompt is accepted when every shot has its own); physical NOT RUN.",
           "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
           "date": "2026-10-26",
           "applies_to": {}

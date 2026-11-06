@@ -88,9 +88,9 @@
       "tests": [
         "tests/tools/test_operator_journey_gui.py"
       ],
-      "limits": "Known inherited failure GP830-I1 (MediaInspector._current_path).",
+      "limits": "Covered below the desktop by the discovered-outputs journey test; GP830-I1 (MediaInspector._current_path) was repaired in PR-GUI-RELIABILITY-831 and the test passed again on 2026-11-05 at a2794072.",
       "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
-      "remaining_risk": "Inherited failure GP830-I1 keeps this unverified."
+      "remaining_risk": "No real-input desktop journey; the system viewer launch and large-output performance are not exercised."
     },
     {
       "id": "adetailer-and-upscale-stages",
@@ -128,9 +128,9 @@
         "tests/gui_v2/test_photo_optimize_tab_v2.py",
         "tests/gui_v2/test_photo_baseline_save_580.py"
       ],
-      "limits": "Known photo-optimize ordering failures noted in earlier state.",
+      "limits": "Tab and baseline-save tests pass (tests/gui_v2/test_photo_optimize_tab_v2.py and test_photo_baseline_save_580.py, 2026-11-05 at a2794072); no desktop journey.",
       "physical_qualification": "NOT RUN: physical mode is gated, needs a frozen plan, an authorization naming its digest and a typed launch phrase.",
-      "remaining_risk": "Known ordering failures; no desktop journey."
+      "remaining_risk": "No desktop journey; real photo-optimize output quality is unverified."
     },
     {
       "id": "character-training-frame",
