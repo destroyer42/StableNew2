@@ -328,3 +328,9 @@ same targets and limits were frozen again at the committed change and launched w
   have one PASS under the 2 GB floor. Whether to propose a dimension change, or a floor between 2 and 6 GB, is an owner decision; this
   record proposes nothing new beyond section 5.1.
 - **Forge** was left running with the checkpoint loaded.
+
+### 12.1 Owner decision after the fourth run (2026-11-06)
+
+The owner reviewed section 12 and decided: "I think the 2 gb floor is fine." Recorded as ledger evidence e11: the 2 GB host-RAM floor
+is accepted (the original 6 GB stays recorded in e6), and the dimensions stay as declared (e8). No dimension change and no intermediate
+floor is proposed. The next physical test stays unauthorized and is no longer needed for the baseline load cases; quality is still NOT TESTED.
