@@ -1,5 +1,8 @@
 """Canonical CI/testing documentation truth, checkable without the application environment (PR-DEVEX-CI-110).
 
+It also holds the PR completion-evidence record to its schema (``tools/ci/check_pr_evidence.py``) and the advisory
+evidence workflow to its trust boundary (PR-DEVEX-EVIDENCE-870).
+
 Standard library only: the docs-only cheap path of the required job runs this under the runner's system Python, and the
 pytest truth tests (``tests/system/test_ci_truth_sync_v2.py``) call the same function, so the rules live in exactly one place.
 
@@ -8,6 +11,7 @@ pytest truth tests (``tests/system/test_ci_truth_sync_v2.py``) call the same fun
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -103,6 +107,7 @@ RESTATED_RULE_MARKERS = (
     "immediately before an authorized",
     "execution profile + model",
     "cost/task",
+    "never grants qualification",
 )
 RESTATEMENT_SCOPES = ("docs/AGENT_OPERATING_MODEL.md", "docs/AI_MODEL_SELECTION.md", "docs/CODEX_WORK_PACKAGE_TEMPLATE.md", "CLAUDE.md")
 
@@ -130,6 +135,181 @@ def rules_problems(root: Path = ROOT) -> list[str]:
         for marker in RESTATED_RULE_MARKERS:
             if marker in lowered:
                 problems.append(f"{rel} restates a rule that belongs only in {RULES}: {marker!r}")
+    return problems
+
+
+#: The completion-evidence record (PR-DEVEX-EVIDENCE-870). The rule is AGENTS.md section 8; the schema is the checker's.
+PR_TEMPLATE = ".github/pull_request_template.md"
+WORK_PACKAGE_TEMPLATE = "docs/CODEX_WORK_PACKAGE_TEMPLATE.md"
+EVIDENCE_RULE_ANCHOR = "**Completion evidence**"
+#: Full-package measurement (docs/AI_MODEL_SELECTION.md); `--since-commit` is post-commit only and never a template example.
+CANONICAL_USAGE_COMMAND = "python tools/usage_report.py --since <task-start> --until <closeout-end> --session <host:id> --line"
+
+
+def _evidence_checker():
+    """The checker module, loaded from beside this file: the record's schema has one owner."""
+
+    spec = importlib.util.spec_from_file_location(
+        "check_pr_evidence_schema", Path(__file__).with_name("check_pr_evidence.py")
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def completion_evidence_problems(root: Path = ROOT) -> list[str]:
+    """The PR template carries exactly the checker's sections and fields, unfilled, plus the canonical usage command."""
+
+    template = _read(root, PR_TEMPLATE)
+    if template is None:
+        return [f"{PR_TEMPLATE} is missing"]
+    checker = _evidence_checker()
+    problems: list[str] = []
+    headings = re.findall(r"^## (.+?)\s*$", template, flags=re.MULTILINE)
+    expected = [name for name, _ in checker.SECTIONS]
+    if headings != expected:
+        problems.append(f"{PR_TEMPLATE} headings {headings} differ from the check_pr_evidence.py schema {expected}")
+    findings = checker.analyze_body(template)
+    for finding in findings:
+        if finding.code.startswith(("MISSING", "DUPLICATE")):
+            problems.append(f"{PR_TEMPLATE} {finding.code} for {finding.location} (template and checker schema disagree)")
+    placeholders = {finding.location for finding in findings if finding.code == "PLACEHOLDER"}
+    for section, fields in ((checker.EVIDENCE_SECTION, checker.EVIDENCE_FIELDS), (checker.USAGE_SECTION, checker.USAGE_FIELDS)):
+        for label, _ in fields:
+            if f"{section} / {label}" not in placeholders:
+                problems.append(f"{PR_TEMPLATE} field {section} / {label} does not carry the checker's placeholder")
+    if CANONICAL_USAGE_COMMAND not in template:
+        problems.append(f"{PR_TEMPLATE} must give the full-package usage command `{CANONICAL_USAGE_COMMAND}`")
+    if "AGENTS.md" not in template:
+        problems.append(f"{PR_TEMPLATE} must point to AGENTS.md for the completion-evidence rule")
+    problems.extend(_dead_references(root, PR_TEMPLATE, template))
+    work_package = _read(root, WORK_PACKAGE_TEMPLATE)
+    if work_package is None:
+        problems.append(f"{WORK_PACKAGE_TEMPLATE} is missing")
+    elif checker.EVIDENCE_SECTION not in work_package:
+        problems.append(f"{WORK_PACKAGE_TEMPLATE} must name the {checker.EVIDENCE_SECTION!r} record")
+    for rel, text in ((PR_TEMPLATE, template), (WORK_PACKAGE_TEMPLATE, work_package or "")):
+        if "--since-commit" in text:
+            problems.append(f"{rel} presents --since-commit (post-commit only) as package usage; use the --since/--until window")
+    if EVIDENCE_RULE_ANCHOR not in (_read(root, RULES) or ""):
+        problems.append(f"{RULES} must state the {EVIDENCE_RULE_ANCHOR} rule (section 8)")
+    return problems
+
+
+#: The advisory evidence workflow's trust boundary (PR-DEVEX-EVIDENCE-870), checked as text (no YAML parser here).
+ADVISORY_WORKFLOW = ".github/workflows/pr_evidence_advisory.yml"
+CI_WORKFLOW = ".github/workflows/ci.yml"
+ADVISORY_REQUIRED = (
+    "on:\n  pull_request:\n    types: [ opened, edited, synchronize, reopened, ready_for_review ]\n",
+    "permissions:\n  contents: read\n",
+    "persist-credentials: false",
+    'python3 tools/ci/check_pr_evidence.py --event "$GITHUB_EVENT_PATH"',
+)
+#: A privileged trigger, another ref, a widened token, a secret, a cache or a masked failure.
+ADVISORY_FORBIDDEN = (
+    "pull_request_target",
+    "issue_comment",
+    "workflow_run",
+    "head.sha",
+    "head.ref",
+    "head_ref",
+    "refs/pull/",
+    "merge_commit_sha",
+    "secrets.",
+    "github.token",
+    "github_token",
+    ": write",
+    "write-all",
+    "id-token",
+    "continue-on-error",
+    "actions/cache",
+    "pip install",
+    "github-script",
+)
+ADVISORY_EXPRESSIONS = frozenset({"${{ github.event.pull_request.number }}"})
+ADVISORY_MAX_TIMEOUT_MINUTES = 10
+#: The reviewed workflow, every non-blank line that is not a full-line comment, exactly. This allowlist is the
+#: contract: YAML has too many spellings (flow style, quoting, extra triggers or job-level permissions, a job named
+#: like a required check) for a denylist to hold. Changing the workflow means changing this text in the same reviewed
+#: diff; the checks above and below only explain which part of a mismatch matters.
+ADVISORY_CANONICAL = """\
+name: PR evidence advisory
+on:
+  pull_request:
+    types: [ opened, edited, synchronize, reopened, ready_for_review ]
+    branches: [ "**" ]
+permissions:
+  contents: read
+concurrency:
+  group: pr-evidence-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  pr-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Check out the checker (no credentials kept)
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      with:
+        persist-credentials: false
+        sparse-checkout: tools/ci
+    - name: Report completion-evidence findings (advisory)
+      run: python3 tools/ci/check_pr_evidence.py --event "$GITHUB_EVENT_PATH" --summary "$GITHUB_STEP_SUMMARY" --annotations
+"""
+
+
+def _workflow_code(text: str) -> str:
+    """ASCII-only line split: str.splitlines()/strip() treat Unicode spaces and breaks as whitespace; YAML does not."""
+
+    lines = (line.rstrip(" ") for line in text.replace("\r\n", "\n").split("\n"))
+    return "".join(f"{line}\n" for line in lines if line and not line.lstrip(" ").startswith("#"))
+
+
+def advisory_workflow_problems(text: str) -> list[str]:
+    rel = ADVISORY_WORKFLOW
+    code = _workflow_code(text)
+    problems: list[str] = []
+    if re.search(r"[^\x20-\x7e\n]", text.replace("\r\n", "\n")):
+        problems.append(f"{rel} must be printable ASCII (an invisible character can hide a command from review)")
+    if code != ADVISORY_CANONICAL:
+        problems.append(f"{rel} differs from the reviewed canonical form ADVISORY_CANONICAL in tools/ci/ci_truth.py")
+    problems.extend(f"{rel} must contain {needle!r}" for needle in ADVISORY_REQUIRED if needle not in code)
+    lowered = text.lower()  # forbidden text is refused even in a comment
+    problems.extend(f"{rel} must not contain {needle!r}" for needle in ADVISORY_FORBIDDEN if needle in lowered)
+    for expression in sorted(set(re.findall(r"\$\{\{.*?\}\}", text, flags=re.DOTALL))):
+        if expression not in ADVISORY_EXPRESSIONS:
+            problems.append(f"{rel} interpolates {expression!r}; only {sorted(ADVISORY_EXPRESSIONS)} are allowed")
+    if re.search(r"^\s+(ref|repository):", text, flags=re.MULTILINE):
+        problems.append(f"{rel} must check out the PR's own merge commit (no `ref:` or `repository:` override)")
+    for action in re.findall(r"uses:\s*(\S+)", text):
+        if not re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", action):
+            problems.append(f"{rel} action {action!r} is not pinned to a full commit SHA")
+    timeouts = [int(value) for value in re.findall(r"timeout-minutes:\s*(\d+)", text)]
+    if not timeouts or max(timeouts) > ADVISORY_MAX_TIMEOUT_MINUTES:
+        problems.append(f"{rel} needs a timeout-minutes of at most {ADVISORY_MAX_TIMEOUT_MINUTES}")
+    jobs = re.findall(r"^  [a-z][a-z0-9-]*:\s*$", text.split("\njobs:", 1)[-1], flags=re.MULTILINE)
+    if len(jobs) != 1:
+        problems.append(f"{rel} must define exactly one job")
+    return problems
+
+
+def ci_trigger_problems(text: str) -> list[str]:
+    """A PR-body edit must never rerun the census: ci.yml listens only to the default pull_request activity types."""
+
+    triggers = text.split("\non:", 1)[-1].split("\npermissions:", 1)[0]
+    return [
+        f"{CI_WORKFLOW} must not trigger on {needle!r} (a PR-body edit would rerun the census)"
+        for needle in ("edited", "ready_for_review", "pull_request_target", "types:")
+        if needle in triggers
+    ]
+
+
+def workflow_contract_problems(root: Path = ROOT) -> list[str]:
+    problems: list[str] = []
+    for rel, check in ((ADVISORY_WORKFLOW, advisory_workflow_problems), (CI_WORKFLOW, ci_trigger_problems)):
+        text = _read(root, rel)
+        problems.extend([f"{rel} is missing"] if text is None else check(text))
     return problems
 
 
@@ -166,6 +346,7 @@ def docs_truth_problems(root: Path = ROOT) -> list[str]:
     problems.extend(status_problems(root))
     problems.extend(task_map_problems(root))
     problems.extend(rules_problems(root))
+    problems.extend(completion_evidence_problems(root))
     for rel, phrases in STALE_PHRASES.items():
         text = _read(root, rel)
         if text is None:
@@ -178,7 +359,7 @@ def docs_truth_problems(root: Path = ROOT) -> list[str]:
 
 
 def main() -> int:
-    problems = docs_truth_problems()
+    problems = docs_truth_problems() + workflow_contract_problems()
     for problem in problems:
         print(f"CI truth: {problem}", file=sys.stderr)
     if not problems:

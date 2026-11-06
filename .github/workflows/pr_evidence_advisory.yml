@@ -1,0 +1,39 @@
+name: PR evidence advisory
+
+# PR-DEVEX-EVIDENCE-870. Reports missing or contradictory completion-evidence fields in the PR body
+# (tools/ci/check_pr_evidence.py). Advisory only: it is not a branch-protection check, never blocks a merge and
+# writes nothing (no comments, labels, statuses or repository changes); a malformed event fails it visibly.
+#
+# Trust boundary (tools/ci/ci_truth.py enforces this file's shape):
+#   - Unprivileged pull_request trigger, the same trust level ci.yml already gives PR code: a read-only token,
+#     no secrets, persist-credentials: false, no caches. Privileged triggers are excluded repository-wide
+#     (tests/tools/test_ci_validation_plan.py), so the checker runs from the PR's own merge commit. A PR that edits
+#     the checker changes only its own advisory result, and that edit is in the reviewed diff.
+#   - The PR body is data read from the event JSON; no expression interpolates PR content into a command.
+#   - ci.yml does not listen for `edited` or `ready_for_review`, so a body edit runs only this short job, never the census.
+on:
+  pull_request:
+    types: [ opened, edited, synchronize, reopened, ready_for_review ]
+    branches: [ "**" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-evidence-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+    - name: Check out the checker (no credentials kept)
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      with:
+        persist-credentials: false
+        sparse-checkout: tools/ci
+
+    - name: Report completion-evidence findings (advisory)
+      run: python3 tools/ci/check_pr_evidence.py --event "$GITHUB_EVENT_PATH" --summary "$GITHUB_STEP_SUMMARY" --annotations
