@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from tkinter import ttk
 from typing import Any, TypeVar
 
+from tools.operator_journey.control import JourneyControl
+
 T = TypeVar("T")
 
 
@@ -117,7 +119,11 @@ class TkDriver:
         evidence: Callable[[], Any] | None = None,
         poll: float = 0.05,
     ) -> T:
-        """Poll ``predicate`` (pumping Tk) until truthy, else raise with evidence."""
+        """Poll ``predicate`` (pumping Tk) until truthy, else raise with evidence.
+
+        A probe may fail transiently (widgets rebuild); that is retried until the deadline.  A ``JourneyControl`` (abort,
+        hold or no-go) is a decision, not a probe failure: it ends the wait immediately with its original reason.
+        """
 
         deadline = time.monotonic() + timeout
         last_error = ""
@@ -128,6 +134,14 @@ class TkDriver:
                 if value:
                     self.trace.record("wait_satisfied", description=description)
                     return value
+            except JourneyControl as stop:
+                self.trace.record(
+                    "wait_stopped",
+                    description=description,
+                    stop=type(stop).__name__,
+                    reason=str(stop)[:300],
+                )
+                raise
             except Exception as exc:  # predicate probes may race widget rebuilds
                 last_error = f"{type(exc).__name__}: {exc}"
             if time.monotonic() >= deadline:

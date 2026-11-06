@@ -104,6 +104,19 @@
           "source": "STATUS.md",
           "date": "2026-10-26",
           "applies_to": {}
+        },
+        {
+          "id": "e5",
+          "kind": "production_workflow",
+          "claim": "First GUI-driven physical attempt (IMG-01, plan 74ad40503fda, seed 424242, 512x512, 6 steps, one job). The queued job completed (1 image, 26.2 s) but the host-RAM monitor tripped at 5.26 GB available against the recorded 6 GB floor (minimum 2.63 GB, VRAM peak 8,404 MiB, commit peak 32.9 GB), and the journey never observed the terminal state because the driver swallowed the stop (repaired in the fail-fast package). Functional FAIL, resource safety NO-GO, visual quality PENDING_OPERATOR_REVIEW. A failed attempt: it supports no qualification.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-05",
+          "exact_source": "repo a2794072a624ec75572916e403fd1f74afb19fcb (working tree dirty only in presets/settings.json); sealed archive C:\\Users\\rob\\StableNewAcceptance\\golden-paths\\20261106T041636Z_physical_a2794072_maximized_acceptance_819765 (MANIFEST.json sha256 9bbb57d1ee3f78e9c54121ccc2ff549f943fe2f91e3e9b38d8b336c0c2a1d001, verified)",
+          "result": "NO-GO_FAILED_ATTEMPT",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "gui"
         }
       ],
       "qualification": {
@@ -118,22 +131,27 @@
       },
       "holds": [],
       "open_items": [
-        "PromptPack-through-GUI physical acceptance not run (coverage matrix row physical-gpu-generation-through-the-gui)",
-        "Visual quality recorded as observations, not verdicts"
+        "PromptPack-through-GUI physical acceptance has run once and ended NO-GO (e5): host available RAM fell from 8.7 GB to 2.63 GB during the model switch against the recorded 6 GB floor. No passing GUI-driven run exists.",
+        "Visual quality of the one image the job produced is PENDING_OPERATOR_REVIEW; it is not in the sealed archive (an unsealed copy with SHA-256 is recorded in the closeout record). No quality verdict exists.",
+        "The next physical test is blocked pending an owner decision on host RAM headroom (free memory or issue a new plan); the 6 GB floor is preserved and has not been weakened.",
+        "Capability-status proposal in the closeout record is not accepted; the declared status is unchanged."
       ],
       "next_test": {
-        "summary": "One GUI-driven PromptPack txt2img (ADetailer and upscale off) on Forge through the golden-path physical gate; the GUI path has never run physically.",
+        "summary": "BLOCKED pending an owner decision. After the 2026-11-05 NO-GO (e5) no further GUI-driven physical run of IMG-01 is authorized: the owner decides how to provide host RAM headroom (this host started the run at 8.7 GB available and the model switch drew it to 2.63 GB against the 6 GB floor), then a new plan with its own digest and authorization is required. The fail-fast harness defect that hid the stop is repaired; the safety limits are unchanged.",
         "arm_id": "IMG-Q0",
         "stage": "canary",
         "needs_owner_authorization": true,
         "admissible": true,
+        "blocked": true,
+        "blocked_reason": "owner decision on host RAM headroom after the IMG-Q0 NO-GO of 2026-11-05 (e5); a new frozen plan and authorization are required",
         "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical --desktop-driver windows --plan <frozen, owner-authorized plan.json>"
       },
       "confidence": "medium",
       "sources": [
         "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md",
         "docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md",
-        "STATUS.md"
+        "STATUS.md",
+        "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md"
       ]
     },
     {

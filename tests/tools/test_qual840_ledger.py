@@ -14,6 +14,7 @@ from tools.qualification.system840.ledger import (
     applicable_physical,
     derive_status,
     evidence_applies,
+    is_failed_attempt,
     load_ledger,
     reconcile_with_live,
     summarize,
@@ -178,6 +179,30 @@ def test_qualified_needs_verified_gui_production_evidence(ledger: Ledger) -> Non
 
     problems = validate_ledger(_mutated(ledger, "IMG-Q0.sdxl-forge-baseline", promote_unverified))
     assert any("unverified source" in p for p in problems)
+
+
+def test_a_failed_gui_attempt_is_history_not_qualifying_gui_evidence(ledger: Ledger) -> None:
+    """IMG-Q0 e5 is the NO-GO GUI attempt of 2026-11-05: it is on record and must never satisfy the GUI requirement."""
+
+    entry = ledger.get("IMG-Q0.sdxl-forge-baseline")
+    assert entry is not None
+    e5 = next(e for e in entry.evidence if e["id"] == "e5")
+    assert e5["surface"] == "gui" and e5 in applicable_physical(entry)
+    assert is_failed_attempt(e5) and not is_failed_attempt(
+        {"result": "CANONICAL_FORGE_BASELINE_PASS"}
+    )
+    assert entry.status == Status.PARTIALLY_QUALIFIED and entry.data["next_test"]["blocked"] is True
+
+    def promote(cap):
+        cap["qualification"] = {
+            "resource": "QUALIFIED",
+            "quality": "QUALIFIED",
+            "integration": "QUALIFIED",
+        }
+        cap["status"] = "QUALIFIED"
+
+    problems = validate_ledger(_mutated(ledger, "IMG-Q0.sdxl-forge-baseline", promote))
+    assert any("operator GUI" in p for p in problems)
 
 
 def test_hold_must_name_a_standing_hold_and_non_executable_has_no_authorizable_test(
