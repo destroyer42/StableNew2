@@ -1,6 +1,6 @@
 # QUAL-IMGQ0-FAILFAST - IMG-Q0 fail-fast safety repair and evidence closeout
 
-Status: closed locally 2026-11-05. Continues `QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md` (the IMG-01 candidate
+Status: closed locally 2026-11-05; owner decisions of 2026-11-06 recorded in section 6. Continues `QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md` (the IMG-01 candidate
 and its owner-authorized plan). No physical run, Forge start/stop, plan change, threshold change or evidence deletion was
 performed by this package.
 
@@ -49,6 +49,20 @@ copy was made outside the archive (never inside it) at `C:\Users\rob\qual\qual86
 
 These are corroboration for the operator review, not sealed evidence. The original remains at
 `%TEMP%\gpj_oma7exmo\output\Pipeline\20261105_230112_golden_img01-cyberreali-16fp-none\`.
+
+### 2.2 Image review (2026-11-06, requested by the owner; reviewed by the assistant from the unsealed copy)
+
+Observation, not an operator verdict and not a quality qualification:
+
+- Content: a dusk coastline with an orange and yellow sunset, water on the left, a dark headland with a path, grass in the
+  foreground and a small structure at upper right. The oil-painting direction of the prompt is visible (thick, brushy strokes).
+- Prompt adherence is weak: the "lighthouse" is not legible (a blocky, high-contrast shape at the cliff top).
+- Technical quality is poor: heavy over-saturation, noisy and speckled edges, and a ring-like artifact near the sun.
+- Context: the plan is a smoke test (512x512 with an SDXL checkpoint, 6 steps), far below SDXL's native resolution and a normal step
+  count, so this output tests that the GUI path dispatches and saves, not the model's quality. The result is consistent with those
+  settings and does not indicate a pipeline fault. The manifest shows the requested prompt, seed 424242 and model were applied.
+
+The ledger quality dimension stays NOT TESTED; a real quality test needs production-like settings and its own plan.
 
 ## 3. Correlated timeline
 
@@ -131,20 +145,26 @@ The ledger declares nothing beyond the failed-attempt evidence. For the owner:
 
 Either is a product-level status decision. Neither is applied.
 
-## 6. Owner decisions and outstanding review (the next physical test is BLOCKED)
+## 6. Owner decisions (the next physical test is BLOCKED until a new plan exists)
 
 The ledger `next_test` keeps `admissible: true` (it is still the smallest valid test, and the offline plan builders key on that
 field) and adds `blocked: true` with `blocked_reason`. The tooling does not enforce `blocked`; a physical run still needs a
 new frozen plan, an owner authorization and the typed phrase.
 
-1. **Host RAM headroom.** Free host memory so that the model switch cannot cross the 6 GB floor, or issue a new plan with its own
-   digest and authorization. The recorded 6 GB floor was not weakened and the verdict was not changed retroactively. Changing a
-   limit is an owner decision.
-2. **Operator review of the image** (the unsealed copy above) to set the quality dimension.
-3. **Choose Proposal A or B** for the ledger status.
-4. **Whether to rerun** once (1) is decided. The authorization for plan `74ad40503fda` covered one attempt and the plan's safety limits
-   failed it; this package does not reuse it, and a rerun needs the owner's explicit decision.
-5. Forge `127.0.0.1:7860` (pid 41936, started in the previous package at the owner's request) was left running; stopping it is
+Decided by the owner in chat on 2026-11-06:
+
+1. **Status proposal A is accepted.** `IMG-Q0` stays PARTIALLY QUALIFIED; `e5` stays a failed attempt (ledger evidence `e6`).
+2. **The host-RAM floor may be decreased** in a new plan. Reference for attribution: the NO-GO was judged against a **6 GB
+   available-RAM floor** (plan `74ad40503fda`, limit `min_available_ram_gb` 6); the host started at 8.7 GB and the lowest sample
+   was **2.63 GB**. Any later RAM trip or failure under a lower floor can be compared with these numbers. The new value is not chosen
+   yet, the sealed archive and its verdict are unchanged, and the lowered plan is a new plan: it needs its own digest, owner
+   authorization and typed phrase. The 6 GB floor was not weakened by this package.
+3. **The image was reviewed** (section 2.2); the quality dimension stays NOT TESTED.
+
+Still open: the new floor value and the new plan; whether and when to rerun (the authorization for `74ad40503fda` covered one
+attempt and is not reused).
+
+- Forge `127.0.0.1:7860` (pid 41936, started in the previous package at the owner's request) was left running; stopping it is
    an owner action.
 
 ## 7. Validation

@@ -117,6 +117,14 @@
             "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
           },
           "surface": "gui"
+        },
+        {
+          "id": "e6",
+          "kind": "owner_decision",
+          "claim": "Owner (in chat, 2026-11-06) chose Proposal A: IMG-Q0 stays PARTIALLY QUALIFIED and e5 stays a failed attempt. The host-RAM floor may be decreased in a new plan; the floor the NO-GO was judged against (6 GB available) is recorded as the reference so a later failure can be attributed to the floor change.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "applies_to": {}
         }
       ],
       "qualification": {
@@ -131,19 +139,18 @@
       },
       "holds": [],
       "open_items": [
-        "PromptPack-through-GUI physical acceptance has run once and ended NO-GO (e5): host available RAM fell from 8.7 GB to 2.63 GB during the model switch against the recorded 6 GB floor. No passing GUI-driven run exists.",
-        "Visual quality of the one image the job produced is PENDING_OPERATOR_REVIEW; it is not in the sealed archive (an unsealed copy with SHA-256 is recorded in the closeout record). No quality verdict exists.",
-        "The next physical test is blocked pending an owner decision on host RAM headroom (free memory or issue a new plan); the 6 GB floor is preserved and has not been weakened.",
-        "Capability-status proposal in the closeout record is not accepted; the declared status is unchanged."
+        "PromptPack-through-GUI physical acceptance has run once and ended NO-GO (e5): host available RAM fell from 8.7 GB to 2.63 GB during the model switch against the 6 GB floor. No passing GUI-driven run exists.",
+        "The one image was reviewed 2026-11-06 (closeout record 2.2): it shows a dusk coast scene in an oil-painting style but the lighthouse is not legible and the surface is noisy and over-saturated at 512x512 / 6 steps. A recorded observation, not a quality verdict; the quality dimension stays NOT TESTED.",
+        "Owner decision 2026-11-06 (e6): the RAM floor may be decreased in a new plan. The recorded 6 GB floor and the observed 2.63 GB minimum are the reference; the new value is not yet chosen. Cite it when authorizing the new plan; a new frozen plan, authorization and typed phrase are required."
       ],
       "next_test": {
-        "summary": "BLOCKED pending an owner decision. After the 2026-11-05 NO-GO (e5) no further GUI-driven physical run of IMG-01 is authorized: the owner decides how to provide host RAM headroom (this host started the run at 8.7 GB available and the model switch drew it to 2.63 GB against the 6 GB floor), then a new plan with its own digest and authorization is required. The fail-fast harness defect that hid the stop is repaired; the safety limits are unchanged.",
+        "summary": "BLOCKED until a new plan exists. After the 2026-11-05 NO-GO (e5) the owner allowed a lower host-RAM floor (e6). The new value is not chosen. The replaced 6 GB floor and the 2.63 GB observed minimum are recorded in e5/e6 and the closeout record and must be cited when the new plan is authorized, so a later RAM failure can be attributed to the floor change; the plan needs its own digest, owner authorization and typed phrase.",
         "arm_id": "IMG-Q0",
         "stage": "canary",
         "needs_owner_authorization": true,
         "admissible": true,
         "blocked": true,
-        "blocked_reason": "owner decision on host RAM headroom after the IMG-Q0 NO-GO of 2026-11-05 (e5); a new frozen plan and authorization are required",
+        "blocked_reason": "no new frozen plan yet: the owner allowed a lower RAM floor (e6) but has not chosen the value; the replaced 6 GB floor is recorded in e6",
         "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical --desktop-driver windows --plan <frozen, owner-authorized plan.json>"
       },
       "confidence": "medium",
