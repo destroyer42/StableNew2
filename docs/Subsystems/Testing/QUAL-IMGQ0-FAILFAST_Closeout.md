@@ -295,3 +295,36 @@ the agent walking the journey in the owner's place. The harness previously refus
   second factor. It does not make authorization automatic: no authorization block, no run.
 - **Still outside the harness.** Starting Forge (and any unload) stays with the wrapper outside Git, and the wrapper's launch step needs
   the same delegation to be passed through (it runs the harness without `--launch-phrase` today).
+
+## 12. Fourth run result, 2026-11-06: empty-GPU load, functional PASS, safety PASS (would have failed the 6 GB floor)
+
+Launch history: the wrapper run first refused (authorization expired, nothing started); the second launch started Forge cold but the
+harness returned HOLD with no generation because the phrase was piped (no console); after the delegated-launch change (section 11) the
+same targets and limits were frozen again at the committed change and launched with `--launch-phrase`. Only the last launch generated.
+
+- **Archive.** `20261106T225054Z_physical_bb4df491_maximized_acceptance_0208ef`, MANIFEST.json sha256
+  `ce365a9af773b927572aabfdb3e8a25ce4875a3bd6a3a5c6768ee860753fcff4`. The product verifier reports OK and an independent re-hash agrees.
+  The archived plan digest equals the authorized plan digest (5f401871b8ec) and its targets, limits, journeys, suite version and
+  environment equal the authorized plan. Clean tree at bb4df491. `outcomes.launch` records method `delegated`, the delegate and the
+  owner's quoted instruction.
+- **Result.** PASS: functional 17 of 17 checks, safety PASS, visual quality PENDING_OPERATOR_REVIEW. One job, 23.0 s, image 512x512
+  recorded in History; sha256 `9ddd5146b24b2dd697f925022746a68cee18d71d0c82d687194b712c7f7b05e8` equals the archived artifact record.
+  Dispatched settings: DPM++ 2M, scheduler Normal, 6 steps, CFG 7.5, seed 424242.
+- **Start state.** Forge was started fresh from the product launch profile (44 s to API ready; RAM minimum 10.37 GB, VRAM at most
+  1,491 MiB during startup, recorded in the unsealed wrapper evidence). No checkpoint was resident when the run began: VRAM 1,473 MiB.
+- **Load-time telemetry (sealed).** Available RAM 12.12 GB at start, falling from 12.0 GB at t=76 s to a minimum of 5.84 GB at t=86.6 s
+  while the checkpoint loaded (about 7 GB over 10 s), then 12.5 GB at t=88.6 s. VRAM 1,473 to a peak of 8,834 MiB. Commit used 23.7 GB
+  at start, 30.0 GB peak (limit 56.7 GB).
+- **Against the floors.** Under the original 6 GB floor this sample is NO-GO by 0.16 GB; under the 2 GB floor it is PASS with 3.84 GB of
+  headroom. The first attempt's empty-GPU load reached 2.63 GB from a starting 8.9 GB, so the minimum differs by run: 2.63 (empty GPU,
+  8.9 GB start), 5.73 (switch, 10.4 GB start), 5.84 (empty GPU, 12.1 GB start) and 8.61 GB (resident). The load costs roughly 6 to 7 GB
+  of available RAM when the start is high, and the minimum depends on what else holds memory.
+- **Image (observation, not a verdict).** Reviewed from the unsealed copy: over-saturated, high-contrast and noisy at 512x512 and
+  6 steps, an oil-painting-like coastal scene with a path in the foreground; a structure on the upper right headland is not clearly a
+  lighthouse. I did not compute similarity against the earlier images. Quality remains NOT TESTED.
+- **Unsealed copies** are under `qual860-evidence/imgq0-attempt4-unsealed` (image, manifest, run_metadata, Forge-start evidence and
+  console log).
+- **Dimensions.** Unchanged: resource PARTIALLY QUALIFIED, quality NOT TESTED, integration PARTIALLY QUALIFIED. All three load cases now
+  have one PASS under the 2 GB floor. Whether to propose a dimension change, or a floor between 2 and 6 GB, is an owner decision; this
+  record proposes nothing new beyond section 5.1.
+- **Forge** was left running with the checkpoint loaded.

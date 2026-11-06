@@ -159,6 +159,19 @@
             "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
           },
           "surface": "gui"
+        },
+        {
+          "id": "e10",
+          "kind": "production_workflow",
+          "claim": "Fourth GUI-driven physical attempt (IMG-01, plan 5f401871b8ec, 2 GB RAM floor, same targets and limits as the earlier 2 GB plans), run against a Forge freshly started from the product launch profile with no checkpoint resident (VRAM 1,473 MiB before the run), launched through the new delegated-launch path. Functional PASS (17 checks) and safety PASS: job completed in 23.0 s, image recorded in History; the checkpoint load ran inside the monitored window: RAM 12.12 GB at start, minimum 5.84 GB at t=86.6 s, back to 12.5 GB; VRAM 1,473 to 8,834 MiB; commit peak 30.0 GB. Under the original 6 GB floor this sample would have been NO-GO by 0.16 GB; it passed because of the 2 GB floor. The first attempt's cold load fell to 2.63 GB from a lower starting point (8.9 GB), so the minimum is not reproducible across runs. Smoke settings; scheduler dispatched 'Normal'; visual quality PENDING_OPERATOR_REVIEW; one run.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "exact_source": "repo bb4df491ab4ac1170f366302b929fd7bd49d765b (clean tree); sealed archive C:\\Users\\rob\\StableNewAcceptance\\golden-paths\\20261106T225054Z_physical_bb4df491_maximized_acceptance_0208ef (MANIFEST.json sha256 ce365a9af773b927572aabfdb3e8a25ce4875a3bd6a3a5c6768ee860753fcff4, verified)",
+          "result": "PASS_FUNCTIONAL_SAFETY",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "gui"
         }
       ],
       "qualification": {
@@ -174,19 +187,19 @@
       "holds": [],
       "open_items": [
         "First GUI-driven attempt (e5, 2026-11-05) ended NO-GO: available RAM fell from 8.7 GB to 2.63 GB while Forge cold-loaded the checkpoint, against the then 6 GB floor.",
-        "Second and third attempts (e7, e9, 2 GB floor) passed functionally and on safety. e7 had the checkpoint resident; e9 switched checkpoints and dipped to 5.73 GB, which the original 6 GB floor would have failed. An empty-GPU cold load under the 2 GB floor is not covered; all runs are single, at smoke settings.",
+        "Second, third and fourth attempts (e7, e9, e10, 2 GB floor) passed functionally and on safety. e7 had the checkpoint resident; e9 switched checkpoints and dipped to 5.73 GB; e10 loaded the checkpoint into an empty GPU and dipped to 5.84 GB. The original 6 GB floor would have failed e9 and e10; the first attempt's empty-GPU load fell to 2.63 GB. The load-time RAM minimum varies across runs (2.63, 5.73, 5.84 GB) and every run is a single run at smoke settings.",
         "Both images were reviewed as observations (closeout record 2.2 and 8): over-saturated and noisy at 512x512 / 6 steps, the second shows a legible lighthouse. No quality verdict; the quality dimension stays NOT TESTED.",
-        "The attempts dispatched schedulers 'Normal' (e5, e9), 'automatic' (e7) under the same frozen plan; the plan does not freeze the scheduler and the cause is not established (the 'no registry evidence' status was the same in all three).",
-        "Owner decision e8: dimensions stay as declared; the remaining gap is a cold-checkpoint-load run under the 2 GB floor, which needs the owner to unload or restart Forge, a new plan and a new authorization."
+        "The attempts dispatched schedulers 'Normal' (e5, e9, e10), 'automatic' (e7) under the same frozen plan; the plan does not freeze the scheduler and the cause is not established (the 'no registry evidence' status was the same in all runs).",
+        "Owner decision e8: dimensions stay as declared. Any dimension change after the four attempts (for example resource, or integration to QUALIFIED) is a proposal in the closeout record and has not been accepted."
       ],
       "next_test": {
-        "summary": "No further physical run is authorized. The remaining gap is a GUI-driven IMG-01 run that starts with no checkpoint resident in Forge (the first attempt's start state) under the 2 GB floor; it needs the owner to fully unload or restart the external Forge, a new frozen plan and a new authorization. Evidence e9 already covers a checkpoint switch.",
+        "summary": "No further physical run is authorized. The empty-GPU load, checkpoint switch and resident-checkpoint cases each have one PASS under the 2 GB floor (e10, e9, e7). A further run would need a new frozen plan and an owner authorization; the open question is the RAM floor and the dimensions, an owner decision, not another run.",
         "arm_id": "IMG-Q0",
         "stage": "canary",
         "needs_owner_authorization": true,
         "admissible": true,
         "blocked": true,
-        "blocked_reason": "owner decision: whether to run the cold-checkpoint repeat or accept the evidence as it stands",
+        "blocked_reason": "owner decision: whether to accept the evidence as it stands, propose a dimension change, or fix a different floor",
         "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical --desktop-driver windows --plan <frozen, owner-authorized plan.json>"
       },
       "confidence": "medium",
