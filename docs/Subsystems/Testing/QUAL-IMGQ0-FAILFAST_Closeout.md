@@ -1,6 +1,6 @@
 # QUAL-IMGQ0-FAILFAST - IMG-Q0 fail-fast safety repair and evidence closeout
 
-Status: closed locally 2026-11-05; owner decisions of 2026-11-06 in section 6; second and third attempts (PASS) in sections 8 and 9. Continues `QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md` (the IMG-01 candidate
+Status: closed locally 2026-11-05; owner decisions of 2026-11-06 in section 6; second and third attempts (PASS) in sections 8 and 9; the cold-Forge run in section 10. Continues `QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md` (the IMG-01 candidate
 and its owner-authorized plan). No physical run, Forge start/stop, plan change, threshold change or evidence deletion was
 performed by this package.
 
@@ -251,3 +251,26 @@ Archive: `C:\Users\rob\StableNewAcceptance\golden-paths\20261106T130725Z_physica
 
 The remaining gap is an empty-GPU load under the 2 GB floor (needs Forge fully unloaded or restarted by the owner, a new plan and a
 new authorization). The authorization of this plan stays valid until 2026-11-06T21:04:48Z; the typed phrase is the only gate.
+
+## 10. Fourth run: Forge started cold as part of the authorized run (owner request, 2026-11-06)
+
+The owner asked for Forge to be started as part of the authorized run, to cover the one gap left (an empty-GPU checkpoint load under
+the 2 GB floor). The harness is unchanged: it never launches Forge (`physical.py`, `webui_autostart_enabled=False`) and the plan still
+declares Forge as external. The start is a wrapper step outside Git, beside the plans:
+`C:\Users\rob\qual\qual860-evidence\run_img01_cold_forge.py <authorized plan>`.
+
+- **State found.** The owner believed Forge was closed. It was not: pid 41936 (and children 6932, 26520), the Forge started in the first
+  package at the owner's request, was serving `127.0.0.1:7860` with `cyberrealisticXL_v90-16fp` loaded (VRAM 8,751 MiB). With the owner's
+  stated intent (a cold Forge) this package stopped that process tree. Afterwards: no listener on 7860, VRAM 1,312 MiB, 14.2 GB RAM free.
+- **What the wrapper does.** It refuses unless the plan is authorized for its digest, the checkout is the frozen commit with a clean
+  tracked tree, port 7860 is free and VRAM is at most 3,000 MiB. It starts Forge from the product's pinned launch profile
+  (`resolve_default_launch_profile`, the same command as before), samples RAM and VRAM every 2 s until the API answers, records them in
+  `forge_cold_start_evidence_<time>.json` (unsealed, with the stdout and stderr logs beside it), and stops the Forge it started without
+  running the harness if available RAM falls under the plan floor during startup. Then it runs the harness unchanged and the owner
+  types the launch phrase. Forge is left running afterwards. Nothing is retried or resubmitted.
+- **Not covered by the sealed archive.** Forge's own startup RAM and VRAM are in the wrapper evidence, not in the archive, because the
+  harness monitor starts after Forge is up. The archive's ownership field will still say external.
+- **Plan.** The same limits and targets as the earlier 2 GB plans (RAM floor 2 GB, replacing 6 GB), frozen at the final commit of this
+  record, authorized by the owner in chat for one attempt; its digest and commit are in the plan file and the wrapper evidence, not
+  here, because a plan freezes the commit and cannot be named in a file of that commit.
+- **Result.** See the ledger evidence and the next section when the run exists. Until then nothing in the ledger changes.
