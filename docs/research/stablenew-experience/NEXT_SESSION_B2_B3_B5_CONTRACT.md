@@ -1,6 +1,6 @@
 # Next execution session: B2 + B3 + B5 acceptance contract
 
-**Status: contract for a future session. Nothing in it has been run.** Approved by the owner on 2026-11-05 (DR-A33) as **one bounded desktop-measurement session**, conditional on the preconditions in section 2. **B4 is not part of this session and is not approved** (section 6). No push, PR, merge, production change, GPU/Forge/SVD activity or prototype is authorized.
+**Status: executed 2026-11-05 (results in [BASELINE_B2_B3_B5_RESULTS.md](BASELINE_B2_B3_B5_RESULTS.md)); B4 not run. Original wording follows: contract for a future session.** Approved by the owner on 2026-11-05 (DR-A33) as **one bounded desktop-measurement session**, conditional on the preconditions in section 2. **B4 is not part of this session and is not approved** (section 6). No push, PR, merge, production change, GPU/Forge/SVD activity or prototype is authorized.
 
 ## 1. Fixed inputs
 

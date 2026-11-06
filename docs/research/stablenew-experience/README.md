@@ -50,6 +50,7 @@ Evidence tags used throughout: **[V]** verified in source/archive this session; 
 | [QT_PACKAGING_ASSESSMENT.md](QT_PACKAGING_ASSESSMENT.md) | Qt licensing, module and packaging assessment (partial, measured vs unavailable) |
 | [COMPARATIVE_PACKAGE_PROPOSAL.md](COMPARATIVE_PACKAGE_PROPOSAL.md) | Proposed separate COA A0 vs COA B package (not built), DPI experiment protocol, and the measured/assumed/unmeasured ledger |
 | [DECISION_HANDOFF.md](DECISION_HANDOFF.md) | Final decision handoff: round-3 dispositions, D-1 to D-5 verbatim with recommendations and conflicts, open items, session boundary |
+| [BASELINE_B2_B3_B5_RESULTS.md](BASELINE_B2_B3_B5_RESULTS.md) | Executed B2/B3/B5 baseline on `main`: sealed archives, wheel probes, large-history load |
 | [NEXT_SESSION_B2_B3_B5_CONTRACT.md](NEXT_SESSION_B2_B3_B5_CONTRACT.md) | Bounded acceptance contract and kickoff text for the next execution session (B2/B3/B5; B4 excluded) |
 | [RESEARCH_LOG.md](RESEARCH_LOG.md) | Dated discovery outcomes and session identity |
 

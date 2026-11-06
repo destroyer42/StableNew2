@@ -48,6 +48,10 @@ Compact, dated discovery outcomes — not a commit or PR narrative.
 24. **Decision handoff and next-session contract written** (`DECISION_HANDOFF.md`, `NEXT_SESSION_B2_B3_B5_CONTRACT.md`). The contract is based on the harness's own isolation (disposable workspace, real-data and Git-tree guards) and names no run in this session. **B2, B3, B5 were not run here:** the owner's preconditions require the owner's confirmation of an exclusive desktop and the session boundary assigns them to the next session.
 25. **Strict Qt set re-measured:** QtCore + QtGui + QtWidgets with the Windows platform plugin is about 38.9 MiB on disk (the earlier 58.2 MiB figure included Qt Svg and software OpenGL, both outside the owner-approved set).
 
+## 2026-11-05 — B2/B3/B5 execution session (DR-A33)
+
+Owner confirmed an exclusive desktop at 18:28:50 -05:00. Ran under the contract on `88314856` (code identical to `ed1e989f`): six sealed archives (B2), four wheel probes (B3), twelve fresh-process large-history loads (B5). No stop condition fired; no product, harness or test file was changed; B4 not run. Results and the disclosed defects in my own scratch probes: [BASELINE_B2_B3_B5_RESULTS.md](BASELINE_B2_B3_B5_RESULTS.md). Evidence rows EV-41 to EV-45; open gaps 4 and 6 updated. Surprises: VID-03 does not exercise GP832-F4 on `main`; the Job History panel is bounded at 20 rows so history size does not affect load; a single VID-01 `minimum` run took 96 s against 44-45 s elsewhere (unexplained, unrepeated).
+
 ## Final-acceptance report status (DR-A31)
 
 | # | Required report item | Status |
