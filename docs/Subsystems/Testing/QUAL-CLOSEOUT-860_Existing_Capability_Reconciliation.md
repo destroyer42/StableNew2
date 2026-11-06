@@ -216,3 +216,10 @@ Any new device loss also stops the campaign (`HOLD-GPU-DEVICE-LOSS`).
 
 Authorize the IMG-01 plan above (or decline it, or ask for a re-freeze after the documentation branch merges). Independent
 of that, the documentation branch needs a decision to publish: it is committed locally and not pushed.
+
+### 6.1 Update, 2026-11-06 (this record's decision was taken)
+
+The owner authorized the IMG-01 plan and it was run under `QUAL-IMGQ0-FAILFAST_Closeout.md`: four GUI-driven physical attempts (one NO-GO on
+the 6 GB host-RAM floor, then three functional and safety PASSes under an owner-accepted 2 GB floor). IMG-Q0 stays PARTIALLY QUALIFIED
+(quality NOT TESTED); no ledger entry is QUALIFIED. The sections above are the 2026-11-05 evidence as written; sections 3.3 and 6 are
+superseded by that closeout record. The documentation branch is published together with the fail-fast repair.
