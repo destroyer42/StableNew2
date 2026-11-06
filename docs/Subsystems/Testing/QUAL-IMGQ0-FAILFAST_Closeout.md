@@ -1,6 +1,6 @@
 # QUAL-IMGQ0-FAILFAST - IMG-Q0 fail-fast safety repair and evidence closeout
 
-Status: closed locally 2026-11-05; owner decisions of 2026-11-06 in section 6; second attempt (PASS) in section 8. Continues `QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md` (the IMG-01 candidate
+Status: closed locally 2026-11-05; owner decisions of 2026-11-06 in section 6; second and third attempts (PASS) in sections 8 and 9. Continues `QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md` (the IMG-01 candidate
 and its owner-authorized plan). No physical run, Forge start/stop, plan change, threshold change or evidence deletion was
 performed by this package.
 
@@ -206,8 +206,8 @@ The owner authorized the 2 GB-floor plan (digest `d055e1a3cf575d6c8fa7f05ac656fc
   still poor, consistent with 512x512 and 6 steps. Quality stays NOT TESTED.
 - **Scheduler differed between the attempts.** The manifests show `scheduler` `Normal` in the first and `automatic` in the second
   (same plan, prompt, seed, sampler and model), which is why the two images differ. The frozen plan does not set the scheduler. The
-  cause is not established; one candidate is that the first run started without registry evidence for the checkpoint and the
-  second did not (unverified). Image-to-image comparison across the two attempts is therefore not valid.
+  cause is not established. A candidate (no registry evidence for the checkpoint in the first run only) is refuted: all three
+  attempts report the same "No registry evidence" status. The third attempt (section 9) used `Normal` again.
 - The runtime admission warning (the harness process counted as a "suspicious" StableNew-like process) repeats; it did not block the job.
 
 ### 8.1 Dimensions and status (owner chose: keep as declared, 2026-11-06)
@@ -223,3 +223,31 @@ evidence `e7` records this run as GUI-driven, verified-source, functional and sa
 Remaining gap: one GUI-driven run that starts with the checkpoint not resident in Forge, under the 2 GB floor. That needs the owner
 to unload or restart the external Forge, a new frozen plan and a new authorization. No further physical run is authorized.
 The authorization file for the 2 GB plan stays valid until 2026-11-06T20:53:40Z; the typed phrase is the only gate against a repeat launch.
+
+## 9. Third attempt, 2026-11-06: checkpoint switch, functional PASS, safety PASS (would have failed the 6 GB floor)
+
+The owner unloaded the model by selecting a different checkpoint in the running Forge (`babesByStableYogiSDXL_v60FP32`, VRAM 6,915 MiB
+resident; not an empty GPU), then granted authorization of plan `184c94c2861399d5b9e8ebad18331fcecdf5dbed8dc70c40c1d8efd7b0108a44`
+(identical limits to the previous 2 GB plan, frozen at `d657198060b4a61cfc6bdcb9793e08c22e3f4d9c`, clean tree) and launched it.
+Archive: `C:\Users\rob\StableNewAcceptance\golden-paths\20261106T130725Z_physical_d6571980_maximized_acceptance_113001`.
+
+- **Verified.** Harness verifier OK; independent re-hash 24 files, 0 mismatches, nothing unlisted or missing; `MANIFEST.json` sha256
+  `1ef000f75c367c089a688b734a2a6e42baa68f843c214a026ae6358a7566864a`; archived plan, limits, environment, model SHA and authorization match the authorized plan.
+- **Result.** Overall PASS, 17 of 17 checks, no abort, hold or NO-GO; journey 100 s (13:05:45 to 13:07:25Z). Job `5191b642...`
+  13:06:46.89 to 13:06:59.54 (12.7 s), no error.
+- **The checkpoint switch dipped RAM under the original floor.** 53 samples over 104 s. Available RAM started at 10.42 GB and the
+  sample at monitor t=74.11 read **5.73 GB** (VRAM 2,041 MiB, commit 30.5 GB: the old checkpoint unloaded, the new one not yet on the
+  GPU); two seconds later it read 9.06 GB, then 12.42 GB with VRAM at its 8,793 MiB peak. **Exactly one sample is under 6 GB.**
+  Under the original 6 GB floor this attempt would have been NO-GO at that sample; it passed because the floor is now 2 GB. The
+  limits that did not change (VRAM 10,500 MiB, commit 40 GB) held.
+- **Attribution record.** The three attempts give the load-time RAM minimum: 2.63 GB (empty-GPU load, start 8.9 GB), 5.73 GB
+  (checkpoint switch, start 10.4 GB), none (resident, minimum 8.61 GB). A floor of 2 GB passed all three recorded patterns, but the
+  empty-GPU case sits only 0.63 GB above it.
+- **Image.** Archived, 512x512, sha256 `b54a17ff92db927aecce289689e3f23814e8af507df96ae8d87bd3921bf53976`. Observation: it shows the
+  same composition as the first attempt's image (scheduler `Normal` in both; mean absolute pixel difference 1.3 to 1.5 of 255, not
+  bit-identical, so the GPU path is not strictly deterministic). The "lighthouse" is again an illegible blocky shape at the cliff top;
+  the colors are over-saturated and the edges noisy. The second attempt's image (scheduler `automatic`) differs strongly (mean difference 50 to 66). Quality stays NOT TESTED.
+- Status, dimensions and the owner's "keep as declared" decision (`e8`) are unchanged. Ledger evidence `e9` records this run.
+
+The remaining gap is an empty-GPU load under the 2 GB floor (needs Forge fully unloaded or restarted by the owner, a new plan and a
+new authorization). The authorization of this plan stays valid until 2026-11-06T21:04:48Z; the typed phrase is the only gate.
