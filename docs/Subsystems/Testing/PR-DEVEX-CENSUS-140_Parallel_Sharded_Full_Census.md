@@ -56,3 +56,10 @@ manifests exactly, reconciled the JUnit records, found no excluded directory adm
 * The aggregate does not compare each shard's argument file with its manifest (both derive from the same function and the manifest is already compared with the recomputed partition).
 
 Shard balancing (hosted imbalance 1.17, Windows 1.30) was deliberately not pursued: the targets were exceeded, and dedicated test-performance work stops here in favor of opportunistic per-PR test hygiene.
+
+## Amendment PR-DEVEX-CENSUS-150: timing-informed weighted partition
+
+The path-hash partition above balanced file *count*, not time. Measured on hosted run 42027134293 (main `ed1e989f`, 3 shards): pytest walls 487.1 / 515.2 / 601.2 s (imbalance 1.23; the slowest shard sets the census wall). `sum(recorded file ms) + 60 ms x files`
+predicts those walls to within 1.5% (481 / 512 / 602 s), so the committed per-file durations (`tools/ci/census_timings.json`, 1,154 files, integrity digest) drive a deterministic longest-processing-time-first assignment
+(`tools/ci/census_weights.py`). Predicted slowest shard at 3 shards: 531.5 s (about 11.6% below the measured 601.2 s; the single 151 s file bounds any count above roughly 10). Everything else in this document (whole files, the active-surface
+authority, hosted jobs, the aggregate gate, local runner) is unchanged; the hosted shard count stays three. See `TESTING_AND_CI.md` section 5 for the contract and the maintenance commands.
