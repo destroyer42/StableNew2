@@ -1,8 +1,10 @@
 # Qualification and acceptance harnesses
 
 Offline-by-default, operator-only tooling that produced the qualification verdicts recorded under `docs/Subsystems/`.
-It is never part of the production path and never runs in CI against a GPU, Forge, Comfy or SVD. Each physical run needs its own
-current owner authorization (the 2026-10-18 physical-GPU hold was lifted; see `STATUS.md` Holds). This file covers `tools/qualification/` and `tools/acceptance/`.
+It is never part of the production path and never runs in CI against a GPU, Forge, Comfy or SVD. The owner's
+2026-10-18 general GPU hold lift (`STATUS.md` Holds) is not a qualification authorization: each physical run of a harness
+here or of a SYSTEM-840 arm needs fresh explicit owner authorization of its exact plan
+(`docs/runbooks/qual_system_840.md` section 2). This file grants none. It covers `tools/qualification/` and `tools/acceptance/`.
 
 ## Retention rule
 
@@ -25,7 +27,7 @@ Before deleting, find importers of every form, not only `from tools.qualificatio
 | `qualification/wan321f` | A14B feasibility proposal, safety/evidence controls and the one-shot physical adapter (one session run 2026-10-23, research closure accepted by the owner; frozen verdict INCONCLUSIVE, teardown unverified); its two known defects (teardown wait, worker-process memory) are to be addressed in the full WAN-321 implementation, which will reuse these controls | WAN-321 integration is implemented with its own verified teardown and process-tree memory sampling, or the A14B plan is rejected; preserve the verdict note |
 | `qualification/ai111` | Offline AI Assist qualification: historical screening plan, separate final-corpus freeze, verified artifact staging, baselines/scoring and blind pairing; physical driver refuses without an ACTIVE operator-run ETW capture (`capture_control.py`, protected copy on a system-wide Python, Administrator terminal, start/stop only; `capture_session.py`/`capture_analysis.py` standard-user; procedure `docs/runbooks/ai_qualification_etw_capture.md`) plus a prior passing canary capture (process and teardown evidence is owned-container-bound), and D12b (Python-child tests only; no model run) | The Offline AI Assist model and runtime are qualified or rejected and no test imports it; preserve the verdict record |
 | `qualification/vid110` | Shared monitor, Comfy client and metrics for the video and acceptance harnesses; `build_lane_a` parity test in `tests/video/test_wan22_experimental_workflow.py` | Its dependents retire; then move the parity graph into a test fixture |
-| `qualification/vid150`, `acceptance/vid130_wan_acceptance` | Wan2.2 TI2V-5B is experimental; promotion (roadmap P5-7) re-runs this acceptance; `vid150` imports `vid130` | Wan2.2 is promoted or rejected |
+| `qualification/vid150`, `acceptance/vid130_wan_acceptance` | Wan2.2 TI2V-5B acceptance and motion-characterization drivers; `vid150` imports `vid130`, and `tests/tools/test_vid130_acceptance_cleanup.py` and `tests/tools/test_vid150_qualification.py` import them. Versions 1.2.0 and 1.3.0 are now approved production workflows (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 1.1); that approval does not complete the SYSTEM-840 GUI/physical-quality qualification of those workflows | The original condition (Wan2.2 promoted or rejected) was met for 1.2.0/1.3.0 on 2026-10-20/21. Retirement is an owner decision (`STATUS.md` open decision 2); the SYSTEM-840 ledger names neither as a next test today, so re-check the ledger and every importer form first |
 | `acceptance/vid190_queue_recycling_acceptance` | Comfy runtime recycling acceptance, to re-run after P3-3/P3-4 change the managed Comfy process | P3-3 and P3-4 are accepted |
 | `qualification/vid160b`, `vid160c` | `win_memory` and telemetry imported by `img154`, `img154b`, `vid170`, `vid181`, `vid184r` | Those retire |
 | `qualification/vid170`, `vid181`, `vid184`, `vid184r`, `vid184s`, `vid192` | Wan-Animate-2 is experimental and not promotion-ready (PR-VID-185); `vid184s` imports `vid184` and `vid184r`; `vid181` and its tests are live (its frozen 480x832 envelope is asserted as a literal) | Wan-Animate-2 is promoted or rejected |

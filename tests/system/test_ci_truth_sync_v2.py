@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -281,6 +283,8 @@ def test_a_docs_edit_that_violates_current_ci_truth_is_detected(tmp_path: Path) 
         ".github/copilot-instructions.md",
         "docs/AGENT_OPERATING_MODEL.md",
         "docs/AI_MODEL_SELECTION.md",
+        ".github/pull_request_template.md",
+        "docs/CODEX_WORK_PACKAGE_TEMPLATE.md",
     ):
         target = tmp_path / rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -321,3 +325,135 @@ def test_local_pr_gate_delegates_to_each_required_authority() -> None:
     ):
         assert script in runner
     assert '("Ruff", ("ruff", "check", "."))' in runner
+
+
+# --- PR-DEVEX-EVIDENCE-870: completion-evidence record and the advisory workflow's trust boundary ---------------
+
+
+def _evidence_tree(tmp_path: Path) -> Path:
+    import shutil
+
+    for rel in (".github/pull_request_template.md", "docs/CODEX_WORK_PACKAGE_TEMPLATE.md", "AGENTS.md", "docs/AI_MODEL_SELECTION.md"):
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / rel, target)
+    return tmp_path
+
+
+def test_the_real_completion_record_and_workflows_satisfy_their_contracts() -> None:
+    truth = _truth_module()
+    assert truth.completion_evidence_problems(ROOT) == []
+    assert truth.workflow_contract_problems(ROOT) == []
+
+
+@pytest.mark.parametrize(
+    "rel, old, new, expected",
+    [
+        (".github/pull_request_template.md", "## Acceptance and evidence boundary\n", "", "headings"),
+        (".github/pull_request_template.md", "- Evidence identity:", "- Evidence id:", "MISSING_FIELD"),
+        (".github/pull_request_template.md", "<scope this evidence does not establish>", "TBD", "placeholder"),
+        (".github/pull_request_template.md", "## Follow-up\n", "## Follow-up\n\n## Follow-up\n", "headings"),
+        (
+            ".github/pull_request_template.md",
+            "--since <task-start> --until <closeout-end> --session <host:id> --line",
+            "--since-commit <first commit> --line",
+            "--since-commit",
+        ),
+        (".github/pull_request_template.md", "Per `docs/AI_MODEL_SELECTION.md`", "Per `docs/AI_MODEL_CHOICE.md`", "does not exist"),
+        ("docs/CODEX_WORK_PACKAGE_TEMPLATE.md", "--since <task-start>", "--since-commit <first> --since <task-start>", "--since-commit"),
+        ("docs/CODEX_WORK_PACKAGE_TEMPLATE.md", "Acceptance and evidence boundary", "evidence fields", "must name"),
+        ("AGENTS.md", "**Completion evidence**", "Completion evidence", "Completion evidence"),
+    ],
+    ids=lambda value: value if isinstance(value, str) and len(value) < 30 and "\n" not in value else "case",
+)
+def test_completion_record_drift_is_detected(tmp_path: Path, rel: str, old: str, new: str, expected: str) -> None:
+    root = _evidence_tree(tmp_path)
+    truth = _truth_module()
+    assert truth.completion_evidence_problems(root) == []
+    target = root / rel
+    text = target.read_text(encoding="utf-8")
+    assert old in text
+    target.write_text(text.replace(old, new, 1), encoding="utf-8")
+    problems = truth.completion_evidence_problems(root)
+    assert any(expected in problem for problem in problems), problems
+
+
+def test_procedural_docs_may_not_restate_the_qualification_rule(tmp_path: Path) -> None:
+    root = _evidence_tree(tmp_path)
+    for rel in ("CLAUDE.md", ".github/copilot-instructions.md", "docs/AGENT_OPERATING_MODEL.md"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("Follow AGENTS.md.\n", encoding="utf-8")
+    (root / "docs/AGENT_OPERATING_MODEL.md").write_text(
+        "Follow AGENTS.md. Passing CI never grants qualification.\n", encoding="utf-8"
+    )
+    assert any("AGENT_OPERATING_MODEL.md" in p and "belongs only in AGENTS.md" in p for p in _truth_module().rules_problems(root))
+
+
+ADVISORY = ".github/workflows/pr_evidence_advisory.yml"
+
+
+@pytest.mark.parametrize(
+    "old, new, expected",
+    [
+        ("  pull_request:\n", "  pull_request_target:\n", "pull_request_target"),
+        ("  pull_request:\n", "  workflow_run:\n", "workflow_run"),
+        ("      with:\n", "      with:\n        ref: ${{ github.event.pull_request.head.sha }}\n", "head.sha"),
+        ("      with:\n", "      with:\n        ref: refs/heads/other\n", "override"),
+        ("      with:\n", "      with:\n        repository: someone/fork\n", "override"),
+        ("  contents: read\n", "  contents: read\n  pull-requests: write\n", ": write"),
+        ("  contents: read\n", "  id-token: none\n  contents: read\n", "id-token"),
+        ("  contents: read\n", "  contents: write\n", "contents: read"),
+        ("        persist-credentials: false\n", "", "persist-credentials: false"),
+        (
+            'run: python3 tools/ci/check_pr_evidence.py',
+            'env:\n        TOKEN: ${{ secrets.GITHUB_TOKEN }}\n      run: python3 tools/ci/check_pr_evidence.py',
+            "secrets.",
+        ),
+        (
+            'run: python3 tools/ci/check_pr_evidence.py',
+            'run: echo "${{ github.event.pull_request.body }}" && python3 tools/ci/check_pr_evidence.py',
+            "interpolates",
+        ),
+        ("actions/checkout@11d5960a326750d5838078e36cf38b85af677262", "actions/checkout@v4", "not pinned"),
+        ("    timeout-minutes: 5\n", "    timeout-minutes: 60\n", "timeout-minutes"),
+        ("    timeout-minutes: 5\n", "    timeout-minutes: 5\n    continue-on-error: true\n", "continue-on-error"),
+        ("jobs:\n", "jobs:\n  second:\n    runs-on: ubuntu-latest\n", "exactly one job"),
+        # Security-review bypasses of a needle/denylist contract; the canonical allowlist refuses each one.
+        ('    branches: [ "**" ]\n', '    branches: [ "**" ]\n  issues:\n  workflow_dispatch:\n', "canonical"),
+        ("    timeout-minutes: 5\n", "    timeout-minutes: 5\n    permissions:\n      contents: \"write\"\n", "canonical"),
+        ("  contents: read\n", "  contents: read\n  actions:  write\n", "canonical"),
+        ("      with:\n", "      with: { ref: other }\n      with:\n", "canonical"),
+        ("      with:\n", '      with:\n        "ref": other\n', "canonical"),
+        ("        persist-credentials: false\n", "        persist-credentials: true  # persist-credentials: false\n", "canonical"),
+        ("  pr-evidence:\n", "  required:\n", "canonical"),
+        ("    runs-on: ubuntu-latest\n", "    name: full-suite\n    runs-on: ubuntu-latest\n", "canonical"),
+        (
+            '--annotations\n',
+            '--annotations\n    - run: echo "${{\n        github.event.pull_request.title }}"\n',
+            "interpolates",
+        ),
+        # NBSP before '#' reads as a comment to Python's strip but continues the run: value in YAML (reverification).
+        ("--annotations\n", "--annotations\n         #;id;curl example.invalid\n", "printable ASCII"),
+        ("--annotations\n", "--annotations       #;id\n", "printable ASCII"),
+        ("--annotations\n", "--annotations\u0085      #;id\n", "printable ASCII"),
+    ],
+    ids=lambda value: value if isinstance(value, str) and len(value) < 30 and "\n" not in value else "case",
+)
+def test_an_advisory_workflow_that_could_run_pr_code_or_widen_privilege_is_rejected(old: str, new: str, expected: str) -> None:
+    truth = _truth_module()
+    text = _read(ADVISORY)
+    assert truth.advisory_workflow_problems(text) == []
+    assert old in text
+    problems = truth.advisory_workflow_problems(text.replace(old, new, 1))
+    assert any(expected in problem for problem in problems), problems
+
+
+def test_a_pr_body_edit_never_reruns_the_census() -> None:
+    truth = _truth_module()
+    ci = _read(".github/workflows/ci.yml")
+    assert truth.ci_trigger_problems(ci) == []
+    edited = ci.replace('    branches: [ "**" ]\n', '    branches: [ "**" ]\n    types: [ opened, edited, synchronize ]\n', 1)
+    assert any("edited" in p for p in truth.ci_trigger_problems(edited))
+    # The advisory job lives in its own workflow: ci.yml's job set (and so its census) is unchanged by it.
+    assert "check_pr_evidence" not in ci
+    assert "pr-evidence" not in _ci_section("\njobs:")

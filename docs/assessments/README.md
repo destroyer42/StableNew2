@@ -46,3 +46,8 @@ index, not a schedule or authorization. Its priorities and V/D/H/R/U classificat
 inherit the cited assessment's evidence limits; governance is refreshed only to the
 verified level. Other rows require current confirmation and the full playbook
 record before selection. No Comprehensive assessment was rerun for this integration.
+
+The [2026-11-05 PR #197–256 delivery and qualification audit](2026-11-05_pr197-256_delivery_qualification_audit.md)
+is a dated evidence baseline for PR delivery, qualification and engineering efficiency (original cut `617a5aea`,
+later verification at `a2794072`). It is not a Comprehensive assessment, does not supersede `AGENTS.md`, `STATUS.md`,
+live qualification evidence or current source, and authorizes no package or protected action.

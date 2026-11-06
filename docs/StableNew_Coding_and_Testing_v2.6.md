@@ -125,7 +125,9 @@ execution is explicitly authorized.
   newer head cancels the superseded run. Physical GPU/A1111/Forge/Comfy/SVD behavior is never
   claimed by hosted CI; it stays opt-in local acceptance. See
   `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md` for the historical routing
-  design this replaced.
+  design this replaced. A separate advisory workflow (`.github/workflows/pr_evidence_advisory.yml`)
+  checks the PR body's completion-evidence fields; it never reruns the census and is not part of
+  the integration verdict.
   The `windows` job (audit P1-3) runs the OS-dependent platform contract on a Windows runner
   (`python tools/ci/run_windows_lane.py`, an explicit positive target list): process containment and
   ownership, atomic replacement and sharing violations, Windows paths and JSON-escaped backslashes,

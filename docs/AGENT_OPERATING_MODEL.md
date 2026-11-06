@@ -137,3 +137,13 @@ unrelated user work is preserved; architecture and controller impact is stated; 
 (`STATUS.md` edited in place, never narrated); security review has passed when triggered; remaining debt and risk is stated.
 Before the next functional phase, verify the exact SHA and diff and the applicable validation and CI, and update only the affected
 authority.
+
+### Filling and reading the completion record
+
+The executor fills the PR template's **Acceptance and evidence boundary** and **Model / usage** fields at closeout (rule:
+`AGENTS.md` section 8). Choose the evidence mode that actually ran; write N/A, NOT RUN, NOT TESTED, HOLD or UNAVAILABLE where
+that is the truth, and name what was not demonstrated. `python tools/ci/check_pr_evidence.py --body-file <draft.md>` lists
+missing or contradictory fields before publication; the advisory workflow repeats it on the PR. The reviewer reads the record
+as four questions: what was delivered (the diff), what demonstrates it (named tests, logs or archives at the stated SHA), whether
+a qualification verdict is claimed and owner-accepted (the checker can only flag such a claim for review), and which assertions
+have no evidence behind them. A clean advisory run means the fields are filled, not that the claims are true.
