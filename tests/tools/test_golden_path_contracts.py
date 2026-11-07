@@ -530,6 +530,119 @@ def test_authorized_matching_confirmed_plan_runs_once_with_three_outcomes(
     assert json.loads((run_dir / "artifacts.json").read_text())[0]["sha256"] == "ab"
 
 
+# --- delegated launch: the owner's authorization may delegate the launch phrase to a named delegate ------------------
+
+
+def delegate(plan: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+    approved = authorize(plan)
+    approved["authorization"]["launch"] = {
+        "mode": "delegated",
+        "delegate": "Claude Code session",
+        "owner_instruction": "I authorize the run; I need you to run this.",
+        **overrides,
+    }
+    return approved
+
+
+def ok_executor(journey, target, monitor, run_dir):
+    ev = JourneyEvidence(journey_id=journey.id, backend_mode="physical")
+    ev.observe("image_media", {"path": "x.png", "valid": True, "sha256": "ab"})
+    return ev
+
+
+def run_delegated(tmp_path, plan, probes, phrase, executor):
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan, default=str), "utf-8")
+    return run_physical(
+        path,
+        journeys=definitions.select("image"),
+        evidence_root=tmp_path / "ev",
+        ctx=ctx_for(probes),
+        executor=executor,
+        probes=probes,
+        launch_phrase=phrase,
+    )
+
+
+def test_a_delegated_launch_runs_once_and_is_attributed(tmp_path, model_file, source_file) -> None:
+    plan, probes = frozen(tmp_path, model_file, source_file)
+    approved = delegate(plan)
+    verdict, run_dir = run_delegated(
+        tmp_path, approved, probes, confirmation_phrase(plan), ok_executor
+    )
+    launch = json.loads((run_dir / "evidence.json").read_text())["outcomes"]["launch"]
+    assert verdict == PASS
+    assert launch["method"] == "delegated" and launch["delegate"] == "Claude Code session"
+    assert "authorize the run" in launch["owner_instruction"]
+    marker = tmp_path / f"{plan['digest'][:12]}.delegated-launch.json"
+    assert marker.is_file()
+    # A second delegated launch of the same digest is refused and runs nothing.
+    again, again_dir = run_delegated(tmp_path, approved, probes, confirmation_phrase(plan), boom)
+    assert again == HOLD and "already launched" in (again_dir / "summary.md").read_text()
+
+
+def test_a_typed_launch_is_recorded_as_typed(tmp_path, model_file, source_file) -> None:
+    plan, probes = frozen(tmp_path, model_file, source_file)
+    verdict, run_dir = run_gate(
+        tmp_path,
+        authorize(plan),
+        probes,
+        ctx_for(probes),
+        executor=ok_executor,
+        confirm=lambda _p: confirmation_phrase(plan),
+    )
+    assert verdict == PASS
+    assert json.loads((run_dir / "evidence.json").read_text())["outcomes"]["launch"] == {
+        "method": "typed"
+    }
+
+
+@pytest.mark.parametrize(
+    ("overrides", "phrase_ok", "message"),
+    [
+        ({"mode": "typed"}, True, "does not delegate"),
+        ({"delegate": " "}, True, "names no delegate"),
+        ({"owner_instruction": ""}, True, "quotes no owner instruction"),
+        ({}, False, "does not name this plan digest"),
+    ],
+)
+def test_a_delegated_launch_without_a_complete_delegation_or_exact_phrase_is_a_hold(
+    tmp_path, model_file, source_file, overrides, phrase_ok, message
+) -> None:
+    plan, probes = frozen(tmp_path, model_file, source_file)
+    phrase = confirmation_phrase(plan) if phrase_ok else "RUN 000000000000"
+    verdict, run_dir = run_delegated(tmp_path, delegate(plan, **overrides), probes, phrase, boom)
+    assert verdict == HOLD and message in (run_dir / "summary.md").read_text()
+    assert not list(tmp_path.glob("*.delegated-launch.json"))
+
+
+def test_a_phrase_cannot_launch_a_plan_that_did_not_delegate(
+    tmp_path, model_file, source_file
+) -> None:
+    plan, probes = frozen(tmp_path, model_file, source_file)
+    verdict, _ = run_delegated(tmp_path, authorize(plan), probes, confirmation_phrase(plan), boom)
+    assert verdict == HOLD
+
+
+def test_delegation_does_not_bypass_expiry_digest_or_environment_gates(
+    tmp_path, model_file, source_file
+) -> None:
+    plan, probes = frozen(tmp_path, model_file, source_file)
+    expired = delegate(plan)
+    expired["authorization"]["expires_at"] = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    assert run_delegated(tmp_path, expired, probes, confirmation_phrase(plan), boom)[0] == HOLD
+    drifted = make_probes(tmp_path, repo_sha=lambda: "b" * 40)
+    assert (
+        run_delegated(tmp_path, delegate(plan), drifted, confirmation_phrase(plan), boom)[0] == HOLD
+    )
+    assert not list(tmp_path.glob("*.delegated-launch.json"))
+
+
+def test_the_launch_phrase_option_applies_only_to_physical_mode() -> None:
+    with pytest.raises(SystemExit):
+        cli.main(["--suite", "golden-paths", "--launch-phrase", "RUN abc"])
+
+
 # --- 21-22, 24 stop conditions and resource evidence --------------------------------------------------------------
 
 

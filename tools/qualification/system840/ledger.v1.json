@@ -5,7 +5,13 @@
   "built_from": {
     "repo": "destroyer42/StableNew2",
     "main_sha": "d76d1acde91a64f7f513ac42cffa5baa67f519bf",
-    "state_date": "2026-11-05"
+    "state_date": "2026-11-05",
+    "reconciled": {
+      "main_sha": "a2794072a624ec75572916e403fd1f74afb19fcb",
+      "date": "2026-11-05",
+      "package": "QUAL-CLOSEOUT-860",
+      "note": "Entries re-read against current source and the sealed golden-path archives; only the entries listed in docs/Subsystems/Testing/QUAL-CLOSEOUT-860_Existing_Capability_Reconciliation.md changed."
+    }
   },
   "precedence": "Current code and AGENTS.md/STATUS.md override these records; a recorded claim that differs from live code is reported by reconcile_with_live, never silently adopted.",
   "standing_holds": [
@@ -31,7 +37,7 @@
     },
     {
       "id": "HOLD-GPU-DEVICE-LOSS",
-      "reason": "Intermittent GPU device loss is unresolved (19 losses since 2026-09-07 at the last record); the dispatch quarantine stays the response and any new loss stops the campaign.",
+      "reason": "Intermittent GPU device loss is unresolved (21 NVIDIA Kernel-PnP remove-veto markers since 2026-09-07 in the 2026-11-05 event-log count; the last, 2026-10-30 18:50:44 ET, and the one on 2026-10-22 post-date the last DIAG-GPU record, which counted 19); the dispatch quarantine stays the response and any new loss stops the campaign.",
       "source": "docs/Subsystems/Runtime/DIAG-GPU-150_Three_Losses_in_11_Hours_and_the_Hang_Recorder.md"
     }
   ],
@@ -98,6 +104,84 @@
           "source": "STATUS.md",
           "date": "2026-10-26",
           "applies_to": {}
+        },
+        {
+          "id": "e5",
+          "kind": "production_workflow",
+          "claim": "First GUI-driven physical attempt (IMG-01, plan 74ad40503fda, seed 424242, 512x512, 6 steps, one job). The queued job completed (1 image, 26.2 s) but the host-RAM monitor tripped at 5.26 GB available against the recorded 6 GB floor (minimum 2.63 GB, VRAM peak 8,404 MiB, commit peak 32.9 GB), and the journey never observed the terminal state because the driver swallowed the stop (repaired in the fail-fast package). Functional FAIL, resource safety NO-GO, visual quality PENDING_OPERATOR_REVIEW. A failed attempt: it supports no qualification.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-05",
+          "exact_source": "repo a2794072a624ec75572916e403fd1f74afb19fcb (working tree dirty only in presets/settings.json); sealed archive C:\\Users\\rob\\StableNewAcceptance\\golden-paths\\20261106T041636Z_physical_a2794072_maximized_acceptance_819765 (MANIFEST.json sha256 9bbb57d1ee3f78e9c54121ccc2ff549f943fe2f91e3e9b38d8b336c0c2a1d001, verified)",
+          "result": "NO-GO_FAILED_ATTEMPT",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "gui"
+        },
+        {
+          "id": "e6",
+          "kind": "owner_decision",
+          "claim": "Owner (in chat, 2026-11-06) chose Proposal A: IMG-Q0 stays PARTIALLY QUALIFIED and e5 stays a failed attempt. The host-RAM floor may be decreased in a new plan; the floor the NO-GO was judged against (6 GB available) is recorded as the reference so a later failure can be attributed to the floor change.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "applies_to": {}
+        },
+        {
+          "id": "e7",
+          "kind": "production_workflow",
+          "claim": "Second GUI-driven physical attempt (IMG-01, plan d055e1a3cf57, RAM floor 2 GB replacing the 6 GB floor, seed 424242, 512x512, 6 steps, one job). Functional PASS (17 checks) and safety PASS: job completed in 12.7 s through the queue, image recorded and shown in History; RAM never fell below 8.61 GB, VRAM peak 6,962 MiB, commit peak 27.7 GB. The checkpoint was already resident in Forge from the first attempt, so the cold-load RAM dip that tripped the first attempt was not exercised. Smoke settings only (ADetailer and upscale off); visual quality PENDING_OPERATOR_REVIEW; one run.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "exact_source": "repo bb8e21d1351261b1550b4baf8d761a3b8fe89623 (clean tree); sealed archive C:\\Users\\rob\\StableNewAcceptance\\golden-paths\\20261106T125628Z_physical_bb8e21d1_maximized_acceptance_f0a2bb (MANIFEST.json sha256 210f4617f6c419a73dd81980178123bd5505056eb9f76e32fa1326343a2109c4, verified)",
+          "result": "PASS_FUNCTIONAL_SAFETY",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "gui"
+        },
+        {
+          "id": "e8",
+          "kind": "owner_decision",
+          "claim": "Owner (in chat, 2026-11-06) chose to keep every IMG-Q0 dimension as declared after the second GUI-driven attempt (e7): resource PARTIALLY QUALIFIED, quality NOT TESTED, integration PARTIALLY QUALIFIED. Proposal 2 (integration QUALIFIED) was not applied.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "applies_to": {}
+        },
+        {
+          "id": "e9",
+          "kind": "production_workflow",
+          "claim": "Third GUI-driven physical attempt (IMG-01, plan 184c94c28613, 2 GB RAM floor, same limits as plan d055e1a3cf57), started with a different SDXL checkpoint resident in Forge so the run switched checkpoints. Functional PASS (17 checks) and safety PASS: job completed in 12.7 s, image recorded in History; RAM minimum 5.73 GB (one sample, during the switch; started at 10.42 GB), VRAM 6,915 to 2,041 to 8,793 MiB, commit peak 30.5 GB. Under the original 6 GB floor this sample would have been NO-GO; it passed because of the 2 GB floor. Not an empty-GPU cold load; smoke settings; visual quality PENDING_OPERATOR_REVIEW; one run.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "exact_source": "repo d657198060b4a61cfc6bdcb9793e08c22e3f4d9c (clean tree); sealed archive C:\\Users\\rob\\StableNewAcceptance\\golden-paths\\20261106T130725Z_physical_d6571980_maximized_acceptance_113001 (MANIFEST.json sha256 1ef000f75c367c089a688b734a2a6e42baa68f843c214a026ae6358a7566864a, verified)",
+          "result": "PASS_FUNCTIONAL_SAFETY",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "gui"
+        },
+        {
+          "id": "e10",
+          "kind": "production_workflow",
+          "claim": "Fourth GUI-driven physical attempt (IMG-01, plan 5f401871b8ec, 2 GB RAM floor, same targets and limits as the earlier 2 GB plans), run against a Forge freshly started from the product launch profile with no checkpoint resident (VRAM 1,473 MiB before the run), launched through the new delegated-launch path. Functional PASS (17 checks) and safety PASS: job completed in 23.0 s, image recorded in History; the checkpoint load ran inside the monitored window: RAM 12.12 GB at start, minimum 5.84 GB at t=86.6 s, back to 12.5 GB; VRAM 1,473 to 8,834 MiB; commit peak 30.0 GB. Under the original 6 GB floor this sample would have been NO-GO by 0.16 GB; it passed because of the 2 GB floor. The first attempt's cold load fell to 2.63 GB from a lower starting point (8.9 GB), so the minimum is not reproducible across runs. Smoke settings; scheduler dispatched 'Normal'; visual quality PENDING_OPERATOR_REVIEW; one run.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "exact_source": "repo bb4df491ab4ac1170f366302b929fd7bd49d765b (clean tree); sealed archive C:\\Users\\rob\\StableNewAcceptance\\golden-paths\\20261106T225054Z_physical_bb4df491_maximized_acceptance_0208ef (MANIFEST.json sha256 ce365a9af773b927572aabfdb3e8a25ce4875a3bd6a3a5c6768ee860753fcff4, verified)",
+          "result": "PASS_FUNCTIONAL_SAFETY",
+          "applies_to": {
+            "model_sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+          },
+          "surface": "gui"
+        },
+        {
+          "id": "e11",
+          "kind": "owner_decision",
+          "claim": "Owner decision (chat, 2026-11-06), after the fourth attempt (e10): the 2 GB host-RAM floor is fine. The floor stays 2 GB (the original 6 GB is recorded in e6) and the dimensions stay as declared (e8); no dimension change and no floor between 2 and 6 GB is proposed or accepted.",
+          "source": "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md",
+          "date": "2026-11-06",
+          "exact_source": "owner chat 2026-11-06 ('I think the 2 gb floor is fine.')",
+          "result": "ACCEPTED",
+          "surface": "gui"
         }
       ],
       "qualification": {
@@ -112,22 +196,28 @@
       },
       "holds": [],
       "open_items": [
-        "PromptPack-through-GUI physical acceptance not run (coverage matrix row physical-gpu-generation-through-the-gui)",
-        "Visual quality recorded as observations, not verdicts"
+        "First GUI-driven attempt (e5, 2026-11-05) ended NO-GO: available RAM fell from 8.7 GB to 2.63 GB while Forge cold-loaded the checkpoint, against the then 6 GB floor.",
+        "Second, third and fourth attempts (e7, e9, e10, 2 GB floor) passed functionally and on safety. e7 had the checkpoint resident; e9 switched checkpoints and dipped to 5.73 GB; e10 loaded the checkpoint into an empty GPU and dipped to 5.84 GB. The original 6 GB floor would have failed e9 and e10; the first attempt's empty-GPU load fell to 2.63 GB. The load-time RAM minimum varies across runs (2.63, 5.73, 5.84 GB) and every run is a single run at smoke settings.",
+        "Both images were reviewed as observations (closeout record 2.2 and 8): over-saturated and noisy at 512x512 / 6 steps, the second shows a legible lighthouse. No quality verdict; the quality dimension stays NOT TESTED.",
+        "The attempts dispatched schedulers 'Normal' (e5, e9, e10), 'automatic' (e7) under the same frozen plan; the plan does not freeze the scheduler and the cause is not established (the 'no registry evidence' status was the same in all runs).",
+        "Owner decisions e8 and e11: dimensions stay as declared and the 2 GB host-RAM floor is accepted. Any later dimension change (for example integration to QUALIFIED) would be a new owner decision; none is proposed."
       ],
       "next_test": {
-        "summary": "One GUI-driven PromptPack txt2img (ADetailer and upscale off) on Forge through the golden-path physical gate; the GUI path has never run physically.",
+        "summary": "No further physical run is authorized or needed for the baseline cases: the empty-GPU load, checkpoint switch and resident-checkpoint cases each have one PASS under the accepted 2 GB floor (e10, e9, e7). Quality is untested and every run is a single smoke run.",
         "arm_id": "IMG-Q0",
         "stage": "canary",
         "needs_owner_authorization": true,
         "admissible": true,
-        "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical"
+        "blocked": true,
+        "blocked_reason": "owner decision e11 accepted the evidence and the 2 GB floor; no further IMG-01 run is needed or authorized",
+        "harness": "python -m tools.operator_journey --suite golden-paths --journey image --mode physical --desktop-driver windows --plan <frozen, owner-authorized plan.json>"
       },
       "confidence": "medium",
       "sources": [
         "docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md",
         "docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md",
-        "STATUS.md"
+        "STATUS.md",
+        "docs/Subsystems/Testing/QUAL-IMGQ0-FAILFAST_Closeout.md"
       ]
     },
     {
@@ -1108,7 +1198,7 @@
         {
           "id": "e1",
           "kind": "offline_contract",
-          "claim": "Offline lineage tests; the History-started masked edit records parent_job_id null (finding GP832-F3).",
+          "claim": "Offline lineage tests; a History-started masked edit now records the History job as parent_job_id (GP832-F3 repaired in 517868d3, journey IMG-03 PASS at d8e3e9d0 against a loopback Forge). Nothing has run physically.",
           "source": "tools/operator_journey/golden/findings.v1.json",
           "date": "2026-11-05",
           "applies_to": {}
@@ -1126,10 +1216,10 @@
       },
       "holds": [],
       "open_items": [
-        "GP832-F3 unrepaired: a History-started masked edit records no parent, so Compare with Parent is unavailable"
+        "Regenerate with Changes itself is not driven by any journey; no physical run exists"
       ],
       "next_test": {
-        "summary": "A physical Regenerate with Changes on an IMG-Q0 job, after the GP832-F3 repair decision.",
+        "summary": "A physical Regenerate with Changes on an IMG-Q0 job, after the IMG-Q0 canary passes.",
         "arm_id": "IMG-Q3",
         "stage": "canary",
         "needs_owner_authorization": true,
@@ -1161,7 +1251,7 @@
         {
           "id": "e1",
           "kind": "offline_contract",
-          "claim": "Direct pairs only; parent artifact verified by SHA-256 when recorded, otherwise labelled not independently verified.",
+          "claim": "Direct pairs only; parent artifact verified by SHA-256 when recorded, otherwise labelled not independently verified. Journey IMG-03 (loopback Forge, d8e3e9d0) checks the edit child against its recorded direct parent after the GP832-F3 repair.",
           "source": "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
           "date": "2026-10-26",
           "applies_to": {}
@@ -1179,10 +1269,10 @@
       },
       "holds": [],
       "open_items": [
-        "GP832-F3"
+        "Smart Review opens the editor without the History hand-off, so an edit started there records no parent (safe default)"
       ],
       "next_test": {
-        "summary": "Compare an IMG-Q3 edited child with its recorded parent after the F3 decision.",
+        "summary": "Compare a physically edited IMG-Q3 child with its recorded parent (after an IMG-Q3 masked edit exists).",
         "arm_id": "IMG-Q3",
         "stage": "canary",
         "needs_owner_authorization": false,
@@ -1787,28 +1877,42 @@
         {
           "id": "e1",
           "kind": "offline_contract",
-          "claim": "Journey VID-02: the Batch Convert dry run found 2 convertible and 3 ineligible; conversion was HOLD because no Blender was registered.",
+          "claim": "Journey VID-02 at 2026-11-04: the Batch Convert dry run found 2 convertible and 3 ineligible; conversion was HOLD because no Blender was supplied. Superseded by e2.",
           "source": "docs/runbooks/motion_conversion.md",
           "date": "2026-11-04",
           "applies_to": {}
+        },
+        {
+          "id": "e2",
+          "kind": "production_workflow",
+          "surface": "driver",
+          "result": "PASS",
+          "claim": "Journey VID-02 lane A (Windows input driver, normal, 1280x680 minimum and maximized layouts): a supplied Blender 4.5.9 LTS (verified with the bounded version check) converted 2 BVH skeletons through Batch Convert; each result is a 17-frame 480x832 H.264 MP4 whose independent SHA-256 matches the record, whose provenance names the original and which the Motion Library registered and kept across a restart. FBX character-mesh rendering and output quality were not driven.",
+          "source": "tools/operator_journey/golden/findings.v1.json",
+          "date": "2026-11-05",
+          "exact_source": "repo d8e3e9d09e17e334d7f4a21f75e1101389b41703 (no src/video/motion_conversion change to a2794072); sealed archives 20261105T130629Z_simulated_d8e3e9d0_normal_acceptance_5da5c5, 20261105T132035Z_simulated_d8e3e9d0_minimum_acceptance_afbcab, 20261105T133347Z_simulated_d8e3e9d0_maximized_acceptance_00abdb under ~/StableNewAcceptance/golden-paths, re-hashed OK 2026-11-05",
+          "applies_to": {
+            "backend": "blender (owner-installed)"
+          }
         }
       ],
       "qualification": {
         "resource": "NOT TESTED",
         "quality": "NOT TESTED",
-        "integration": "NOT TESTED"
+        "integration": "PARTIALLY QUALIFIED"
       },
-      "status": "NOT TESTED",
+      "status": "PARTIALLY QUALIFIED",
       "governance": {
         "state": "supported; needs an owner-registered Blender 4.2+",
         "source": "STATUS.md"
       },
       "holds": [],
       "open_items": [
-        "Blender is not registered on this host: never fake a render"
+        "Only the BVH skeleton route was converted through the GUI; an FBX character-mesh conversion and the MP4 quality are not verified",
+        "The journey registers Blender only inside a disposable workspace; the owner app registration is separate"
       ],
       "next_test": {
-        "summary": "Register Blender, then convert one BVH and one FBX and verify the driving MP4 identity (offline CPU).",
+        "summary": "Convert one FBX through the same lane and judge the driving MP4 (offline CPU).",
         "arm_id": "VID-Q2",
         "stage": "canary",
         "needs_owner_authorization": false,
@@ -2265,7 +2369,7 @@
         {
           "id": "e1",
           "kind": "offline_contract",
-          "claim": "Journey VID-03 passed on a fixture Comfy; physical NOT RUN; finding GP832-F4 unrepaired.",
+          "claim": "Journey VID-03 passed on a fixture Comfy (finding GP832-F4 repaired in a4954e33: a blank form prompt is accepted when every shot has its own); physical NOT RUN.",
           "source": "docs/Subsystems/Video/VIDEO_PIPELINE.md",
           "date": "2026-10-26",
           "applies_to": {}

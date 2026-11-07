@@ -14,6 +14,7 @@ from tkinter import ttk
 from typing import Any
 
 from tools.operator_journey.capture import FaultCapture, leaked_non_daemon_threads, thread_snapshot
+from tools.operator_journey.control import JourneyAbort, JourneyHold, JourneyNoGo
 from tools.operator_journey.dialogs import DialogSeam, scripted_dialogs
 from tools.operator_journey.evidence import JourneyEvidence
 from tools.operator_journey.golden.frozen import PlanGate
@@ -32,18 +33,6 @@ from tools.operator_journey.workspace import (
     archive_workspace,
     repo_sha,
 )
-
-
-class JourneyAbort(RuntimeError):
-    """The journey cannot continue; the message is the failed assertion."""
-
-
-class JourneyHold(RuntimeError):
-    """A prerequisite is unmet (not a product failure)."""
-
-
-class JourneyNoGo(RuntimeError):
-    """A safety or resource condition forbids continuing."""
 
 
 @dataclass

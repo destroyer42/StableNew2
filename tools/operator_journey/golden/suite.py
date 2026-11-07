@@ -385,6 +385,7 @@ def run_suite(
     ctx: Any = None,
     layout: str = "maximized",
     blender: str | None = None,
+    launch_phrase: str | None = None,
 ) -> tuple[str, Path | None]:
     """Validate the combination, then run.  Raises ``ModeRefusal`` before anything starts when it is not allowed."""
 
@@ -413,7 +414,12 @@ def run_suite(
     from tools.operator_journey.golden.physical import run_physical
 
     return run_physical(
-        plan_path, journeys=chosen, evidence_root=evidence_root, confirm=confirm, ctx=ctx
+        plan_path,
+        journeys=chosen,
+        evidence_root=evidence_root,
+        confirm=confirm,
+        ctx=ctx,
+        launch_phrase=launch_phrase,
     )
 
 

@@ -24,6 +24,7 @@ from typing import Any
 from src.learning.lora_variant import extract_lora_tokens
 from src.learning.recommendation_engine import RecommendationEngine
 from tools.operator_journey.capture import FaultCapture, leaked_non_daemon_threads, thread_snapshot
+from tools.operator_journey.control import JourneyAbort, JourneyHold
 from tools.operator_journey.evidence import JourneyEvidence
 from tools.operator_journey.fake_a1111 import FakeA1111
 from tools.operator_journey.observe import (
@@ -67,14 +68,6 @@ PHASES = (
 _BASE_PROMPT = "operator journey test, portrait of a warrior, studio lighting"
 _STRENGTHS = (0.0, 1.0, 2.0)
 _RATINGS = (3, 4, 5)
-
-
-class JourneyAbort(RuntimeError):
-    """The journey cannot continue; the message is the failed assertion."""
-
-
-class JourneyHold(RuntimeError):
-    """A prerequisite is unmet (not a product failure)."""
 
 
 @dataclass

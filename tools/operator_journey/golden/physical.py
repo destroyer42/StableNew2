@@ -2,7 +2,8 @@
 
 Order of gates (each failure returns before anything starts): mode/CI/pytest refusal (``modes``), plan shape, current
 owner authorization of *this* digest, live environment equal to the frozen one, read-only readiness PASS, and a
-deliberate operator launch action (typed phrase naming the digest).  Only then are journeys driven through the visible
+deliberate launch action: the digest-naming phrase typed at a live console, or, only when the owner's authorization delegates
+the launch, the same phrase passed by the named delegate (once per digest; recorded as such in the evidence).  Only then are journeys driven through the visible
 Windows desktop, under a telemetry monitor that trips on the plan's own limits.
 
 The harness never starts, stops, adopts or restarts a runtime: a Forge endpoint is external (API only); managed Comfy is
@@ -48,6 +49,55 @@ _FAILURE_CLASSES = (
 
 def confirmation_phrase(plan: dict[str, Any]) -> str:
     return f"RUN {str(plan.get('digest'))[:12]}"
+
+
+def delegated_launch_problems(plan: dict[str, Any], phrase: str) -> list[str]:
+    """A launch without a person at the console is allowed only when the owner's authorization delegates it.
+
+    The authorization block (excluded from the digest, like the approval itself) must carry
+    ``launch = {"mode": "delegated", "delegate": ..., "owner_instruction": ...}``: who may launch and the owner's own words
+    granting it.  The delegate must still pass the exact digest-naming phrase, so a launch is never an accident of a flag.
+    """
+
+    launch = (plan.get("authorization") or {}).get("launch") or {}
+    problems: list[str] = []
+    if launch.get("mode") != "delegated":
+        problems.append(
+            "the authorization does not delegate the launch (authorization.launch.mode != 'delegated')"
+        )
+    if not str(launch.get("delegate") or "").strip():
+        problems.append("the authorization names no delegate")
+    if not str(launch.get("owner_instruction") or "").strip():
+        problems.append("the authorization quotes no owner instruction for the delegation")
+    if str(phrase).strip() != confirmation_phrase(plan):
+        problems.append("the launch phrase does not name this plan digest")
+    return problems
+
+
+def delegated_launch_marker(plan: dict[str, Any], plan_path: Path) -> Path:
+    return plan_path.parent / f"{str(plan.get('digest'))[:12]}.delegated-launch.json"
+
+
+def consume_delegated_launch(plan: dict[str, Any], plan_path: Path) -> Path:
+    """Record the single delegated launch of this digest.  Raises ``FileExistsError`` if it was already used."""
+
+    marker = delegated_launch_marker(plan, plan_path)
+    launch = plan["authorization"]["launch"]
+    with marker.open(
+        "x", encoding="utf-8"
+    ) as handle:  # exclusive create: a second launch can never pass
+        json.dump(
+            {
+                "digest": plan["digest"],
+                "delegate": launch["delegate"],
+                "owner_instruction": launch["owner_instruction"],
+                "approved_by": plan["authorization"].get("approved_by"),
+                "consumed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            },
+            handle,
+            indent=2,
+        )
+    return marker
 
 
 def classify_job_failure(row: dict[str, Any]) -> str | None:
@@ -219,6 +269,7 @@ def run_physical(
     ctx: ReadinessContext | None = None,
     executor: Callable[..., JourneyEvidence] | None = None,
     probes: HostProbes | None = None,
+    launch_phrase: str | None = None,
 ) -> tuple[str, Path]:
     from tools.operator_journey.golden.suite import new_run_dir, redact, write_run_evidence
 
@@ -289,15 +340,35 @@ def run_physical(
             plan,
         )
     phrase = confirmation_phrase(plan)
-    answer = (confirm or default_confirm)(
-        f"Physical GPU execution of {', '.join(wanted)} under plan {plan['digest'][:12]}.\nType '{phrase}' to launch: "
-    )
-    if str(answer).strip() != phrase:
-        return finish(
-            HOLD,
-            "no deliberate operator launch action (the confirmation phrase was not typed)",
-            plan,
+    if launch_phrase is not None:
+        delegated = delegated_launch_problems(plan, launch_phrase)
+        if delegated:
+            return finish(HOLD, "delegated launch refused: " + "; ".join(delegated), plan)
+        try:
+            consume_delegated_launch(plan, plan_path)
+        except FileExistsError:
+            return finish(
+                HOLD,
+                "delegated launch refused: this plan digest was already launched by delegation (one launch per authorization; "
+                "renew the authorization and freeze a new plan)",
+                plan,
+            )
+        outcome["launch"] = {
+            "method": "delegated",
+            "delegate": plan["authorization"]["launch"]["delegate"],
+            "owner_instruction": plan["authorization"]["launch"]["owner_instruction"],
+        }
+    else:
+        answer = (confirm or default_confirm)(
+            f"Physical GPU execution of {', '.join(wanted)} under plan {plan['digest'][:12]}.\nType '{phrase}' to launch: "
         )
+        if str(answer).strip() != phrase:
+            return finish(
+                HOLD,
+                "no deliberate operator launch action (the confirmation phrase was not typed)",
+                plan,
+            )
+        outcome["launch"] = {"method": "typed"}
 
     results: list[JourneyEvidence] = []
     run_executor = executor or real_executor

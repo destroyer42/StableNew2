@@ -120,6 +120,13 @@ def is_verified_source(item: Mapping[str, Any]) -> bool:
     return bool(exact) and not exact.lower().startswith(UNVERIFIED_PREFIX)
 
 
+def is_failed_attempt(item: Mapping[str, Any]) -> bool:
+    """A recorded attempt that ended NO-GO or FAIL: it is history, never evidence that the workflow works."""
+
+    result = str(item.get("result") or "").upper().replace("_", "-")
+    return "NO-GO" in result or "FAIL" in result
+
+
 def applicable_physical(entry: Entry) -> list[dict[str, Any]]:
     return [
         e
@@ -278,7 +285,9 @@ def _qualified_problems(entry: Entry) -> list[str]:
             f"{cid}: QUALIFIED cannot rest on physical evidence with an unverified source"
         )
     if not any(
-        evidence_kind(e) == EvidenceKind.PRODUCTION_WORKFLOW and e.get("surface") == "gui"
+        evidence_kind(e) == EvidenceKind.PRODUCTION_WORKFLOW
+        and e.get("surface") == "gui"
+        and not is_failed_attempt(e)
         for e in physical
     ):
         problems.append(
