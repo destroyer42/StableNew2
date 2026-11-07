@@ -14,6 +14,7 @@ from src.gui.views.learning_baseline_editor import LearningBaselineEditor
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.image_backends.model_policy import ModelPolicy
 from src.learning import baseline_authoring as authoring
+from src.learning import baseline_exclusions as exclusions
 from src.learning.design_estimate import estimate_design
 from src.learning.evidence_proposals import proposal_form_fields
 from src.learning.experiment_naming import build_experiment_identity
@@ -245,6 +246,7 @@ class ExperimentDesignPanel(ttk.Frame):
             input_image_provider=lambda: str(self._safe_get(getattr(self, "input_image_var", None), "")).strip(),
             policy_notes_provider=self._policy_notes,
             on_changed=self._on_baseline_changed,
+            study_provider=self._study_key,
         )
         self.baseline_editor.grid(row=0, column=0, sticky="ew")
         self.baseline_section.body.columnconfigure(0, weight=1)
@@ -493,6 +495,16 @@ class ExperimentDesignPanel(ttk.Frame):
         )
         self.cancel_evidence_button.grid(row=1, column=0, columnspan=2)
         self.cancel_evidence_button.grid_remove()
+        # Why Build Preview is disabled: the exact refusal, never a generic line (empty once it can be built).
+        self.readiness_var = tk.StringVar(value="")
+        self.readiness_label = ttk.Label(
+            button_frame,
+            textvariable=self.readiness_var,
+            wraplength=360,
+            justify="left",
+            foreground=TOKENS.colors.text_muted,
+        )
+        self.readiness_label.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
         self.summary_var = tk.StringVar(value="")
         self.summary_label = ttk.Label(
             self,
@@ -542,6 +554,8 @@ class ExperimentDesignPanel(ttk.Frame):
             variable_name = self.variable_var.get()
             if variable_name == "LoRA Strength" and self.lora_frame.winfo_manager() == "grid":
                 self._build_lora_mode_content()
+        if getattr(self, "matrix_frame", None) is not None:
+            self._sync_named_slots()
         self._refresh_identity_preview()
         self._on_grid_design_changed()
 
@@ -731,7 +745,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self._name_auto_generated = False
             position = {"prompt_slot": "One prompt slot", "lora_composition": "One LoRA position", "embedding": "One embedding position"}[self._study_mode]
             self.model_target_var.set(
-                f"{position}; registry-verified SDXL txt2img. Disable the prompt optimizer in the Learning baseline."
+                f"{position}; registry-verified SDXL txt2img."
             )
         elif self._study_mode == "matrix":
             self._enter_matrix_mode()
@@ -762,6 +776,9 @@ class ExperimentDesignPanel(ttk.Frame):
             self._on_stage_changed()
             self._on_prompt_source_changed()
             self._on_variable_changed()
+        editor = getattr(self, "baseline_editor", None)
+        if editor is not None:
+            editor.refresh()
         self._update_policy_buttons()
         self._sync_study_presentation()
         self._notify_design_changed()
@@ -1663,11 +1680,14 @@ class ExperimentDesignPanel(ttk.Frame):
             self.baseline_editor.refresh()
             self._update_policy_buttons()
             return
-        if self._is_grid():
-            self._on_grid_design_changed()
-            return
-        if self._is_model_comparison() or _matrix(self):
-            self._update_policy_buttons()
+        if self._is_grid() or self._is_model_comparison() or _matrix(self):
+            shared_editor = getattr(self, "baseline_editor", None)
+            if shared_editor is not None:
+                shared_editor.refresh()  # its "Not used by this study" control follows the baseline here too
+            if self._is_grid():
+                self._on_grid_design_changed()
+            else:
+                self._update_policy_buttons()
             return
         self._ensure_baseline()
         self._sync_target_from_baseline()
@@ -1716,34 +1736,115 @@ class ExperimentDesignPanel(ttk.Frame):
             if combo is not None:
                 combo.configure(values=capability.lora_candidates)
 
+    def _study_key(self) -> str:
+        """The study-type key ``baseline_exclusions`` and the snapshots use for the selected study."""
+        if _embedding(self):
+            return exclusions.EMBEDDING
+        if _lora_composition(self):
+            return exclusions.LORA_COMPOSITION
+        if _prompt_slot(self):
+            return exclusions.PROMPT_SLOT
+        if _matrix(self):
+            return exclusions.MATRIX
+        if self._is_grid():
+            return exclusions.GRID
+        return ""
+
+    def readiness_reason(self) -> str:
+        """Why Build Preview is unavailable for the design as it stands ("" when it can be built)."""
+        return str(getattr(self, "_readiness_reason", "") or "")
+
+    def _set_build_readiness(self, reason: str) -> None:
+        """One owner for the Build Preview state and the visible reason it is disabled."""
+        self._readiness_reason = reason
+        self.build_button.configure(state="disabled" if reason else "normal")
+        variable = getattr(self, "readiness_var", None)
+        if variable is not None:
+            variable.set(reason)
+
+    def _images_reason(self) -> tuple[int, str]:
+        try:
+            return int(self.images_var.get()), ""
+        except (tk.TclError, TypeError, ValueError):
+            return 0, "Images per value must be a whole number."
+
+    def _baseline_reason(self) -> str:
+        blockers = self._baseline_blockers()
+        return ("Learning baseline still needs: " + "; ".join(blockers)) if blockers else ""
+
+    def _exclusion_reason(self, message: str) -> str:
+        """A study refusal of an inherited baseline setting, with the Learning control that clears it."""
+        finder = getattr(self.learning_controller, "baseline_exclusions", None)
+        if callable(finder) and finder(self._study_key()):
+            return f"{message} Use Turn Off for This Study in the Learning baseline."
+        return message
+
+    def _special_readiness(self) -> str:
+        policy, controller = self._target_policy, self.learning_controller
+        if policy is None or controller is None:
+            return "Choose a registry-verified SDXL model in the Learning baseline first."
+        images, reason = self._images_reason()
+        if reason:
+            return reason
+        baseline = controller.authoring_baseline()
+        try:
+            if _embedding(self):
+                from src.learning.embedding_experiment import require_target as require_embedding
+
+                require_embedding(policy, baseline, self.embedding_frame.channel())
+            elif _lora_composition(self):
+                from src.learning.lora_composition import require_target as require_lora
+
+                require_lora(policy, baseline)
+            else:
+                from src.learning.prompt_slot_experiment import require_target as require_slot
+
+                require_slot(policy, baseline)
+        except ValueError as exc:
+            return self._exclusion_reason(str(exc))
+        return str(self._special_frame().validation_error(images) or self._baseline_reason())
+
+    def _matrix_readiness(self) -> str:
+        images, reason = self._images_reason()
+        if reason:
+            return reason
+        reason = self.matrix_frame.validation_error(images) or self._baseline_reason()
+        if reason:
+            return reason
+        authored = getattr(self.learning_controller, "authoring_baseline", None)
+        if callable(authored):
+            from src.learning.prompt_model_matrix import require_matrix_baseline
+
+            try:  # the same refusal Preview applies, reported before any evidence work starts
+                require_matrix_baseline(authored())
+            except ValueError as exc:
+                return self._exclusion_reason(str(exc))
+        return ""
+
+    def _controlled_readiness(self, capability: Any) -> str:
+        if not capability.stage_supported:
+            return "The selected stage is unavailable for this model."
+        variable = self.variable_var.get()
+        if not variable:
+            return "Choose the variable to test."
+        if variable not in capability.variables:
+            return f"{variable} is unavailable for this model/stage."
+        return self._baseline_reason()
+
+    def _checked(self, readiness: Any) -> str:
+        """Run a readiness check; a half-built form is reported, never silently treated as not ready."""
+        try:
+            return str(readiness())
+        except (AttributeError, TypeError, tk.TclError) as exc:
+            return f"The design cannot be checked yet ({exc.__class__.__name__})."
+
     def _update_policy_buttons(self) -> None:
         if getattr(self, "_comparison_readiness_busy", False):
-            self.build_button.configure(state="disabled")
+            self._set_build_readiness("Checking checkpoint evidence; wait for it or use Cancel Evidence.")
             self.run_button.configure(state="disabled")
             return
         if _special(self):
-            if _lora_composition(self):
-                from src.learning.lora_composition import require_target
-            else:
-                from src.learning.prompt_slot_experiment import require_target
-
-            try:
-                policy = self._target_policy
-                controller = self.learning_controller
-                if policy is None or controller is None:
-                    raise ValueError("Select a supported Learning baseline first")
-                if _embedding(self):
-                    from src.learning.embedding_experiment import (
-                        require_target as require_embedding_target,
-                    )
-
-                    require_embedding_target(policy, controller.authoring_baseline(), self.embedding_frame.channel())
-                else:
-                    require_target(policy, controller.authoring_baseline())
-                valid = not self._special_frame().validation_error(int(self.images_var.get())) and not self._baseline_blockers()
-            except (AttributeError, TypeError, ValueError, tk.TclError):
-                valid = False
-            self.build_button.configure(state="normal" if valid else "disabled")
+            self._set_build_readiness(self._checked(self._special_readiness))
             experiment = self._current_experiment()
             from src.learning.model_comparison import study_type
 
@@ -1752,39 +1853,31 @@ class ExperimentDesignPanel(ttk.Frame):
             self.run_button.configure(state="normal" if frozen and not self.preview_is_stale() else "disabled")
             return
         if _matrix(self):
-            try:
-                valid = not self.matrix_frame.validation_error(int(self.images_var.get())) and not self._baseline_blockers()
-            except (AttributeError, TypeError, ValueError, tk.TclError):
-                valid = False
-            self.build_button.configure(state="normal" if valid else "disabled")
+            self._set_build_readiness(self._checked(self._matrix_readiness))
             from src.learning.prompt_model_matrix import is_matrix
 
             frozen = is_matrix(self._current_experiment())
             self.run_button.configure(state="normal" if frozen and not self.preview_is_stale() else "disabled")
             return
         if self._is_grid():
-            self.build_button.configure(state="normal" if self.grid_frame.validation_error() is None else "disabled")
+            self._set_build_readiness(self.grid_frame.validation_error() or "")
             self.run_button.configure(state="normal" if self._grid_preview_fresh() else "disabled")
             return
         if self._is_model_comparison():
             valid = sum(bool(var.get()) for var in self.choice_vars.values()) >= 2
-            self.build_button.configure(state="normal" if valid else "disabled")
+            self._set_build_readiness("" if valid else "Choose at least two models to compare.")
             experiment = getattr(getattr(self.learning_controller, "learning_state", None), "current_experiment", None)
             self.run_button.configure(state="normal" if getattr(experiment, "execution_snapshot_json", "") else "disabled")
             return
         capability = self._learning_capabilities
         if capability is None:
             if getattr(self, "baseline_editor", None) is not None and getattr(self, "_built", False):
-                self.build_button.configure(state="disabled")
+                self._set_build_readiness("Choose a model in the Learning baseline first.")
                 self.run_button.configure(state="disabled")
             return
-        valid = (
-            capability.stage_supported
-            and self.variable_var.get() in capability.variables
-            and not self._baseline_blockers()
-        )
-        self.build_button.configure(state="normal" if valid else "disabled")
-        self.run_button.configure(state="normal" if valid else "disabled")
+        reason = self._controlled_readiness(capability)
+        self._set_build_readiness(reason)
+        self.run_button.configure(state="disabled" if reason else "normal")
 
     def _on_browse_input_image(self) -> None:
         selected = filedialog.askopenfilename(
@@ -1960,6 +2053,8 @@ class ExperimentDesignPanel(ttk.Frame):
         self._cancel_comparison_evidence()
         count = sum(1 for var in self.choice_vars.values() if var.get())
         self.choice_count_var.set(f"{count} items selected")
+        if _matrix(self):
+            self.matrix_frame.refresh_count()
         self._update_policy_buttons()
         self._notify_design_changed()
 
@@ -1987,9 +2082,17 @@ class ExperimentDesignPanel(ttk.Frame):
         if _special(self) or _matrix(self):
             self.custom_prompt_text.tag_configure("slot_hidden", elide=not self._comparison_show_names())
             self.custom_prompt_text.tag_add("slot_hidden", "1.0", tk.END)
+        self._sync_named_slots()
         self._refresh_identity_preview()
         self._on_grid_design_changed()
         self._notify_design_changed()
+
+    def _sync_named_slots(self) -> None:
+        """Keep the named-slot choices in step with the prompt source (no Refresh press needed)."""
+        if _prompt_slot(self):
+            self.prompt_slot_frame.sync_slots()
+        elif _matrix(self):
+            self.matrix_frame.sync_slots()
 
     def _get_prompt_preview_text(self) -> str:
         if self.prompt_source_var.get() == "custom":

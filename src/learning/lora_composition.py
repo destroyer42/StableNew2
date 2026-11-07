@@ -44,6 +44,12 @@ REPLACE = "replace"
 COMPARE = "compare"
 OPERATIONS = (ADD_REMOVE, REPLACE, COMPARE)
 OPERATION_LABELS = {ADD_REMOVE: "Add / Remove", REPLACE: "Replace", COMPARE: "Compare Candidates"}
+#: The shape each operation requires, shown beside the selector (the same rules ``validate_operation`` enforces).
+OPERATION_RULES = {
+    ADD_REMOVE: "Tests one LoRA at different strengths, including No LoRA.",
+    REPLACE: "Swaps the original LoRA for others at the same strength; include the original as the control.",
+    COMPARE: "Compares several LoRAs at the same strength; No LoRA may be included.",
+}
 MAX_STRENGTH = 2.0
 
 STATUS_COMPATIBLE = "compatible"

@@ -62,8 +62,17 @@ class LoraCompositionDesignFrame(ttk.LabelFrame):
             values=tuple(lc.OPERATION_LABELS.values()),
             state="readonly",
         )
-        self.operation_box.grid(row=1, column=0, sticky="ew", pady=3)
-        self.operation_box.bind("<<ComboboxSelected>>", lambda _e: self._changed())
+        operation = ttk.Frame(self)
+        operation.grid(row=1, column=0, sticky="ew", pady=3)
+        operation.columnconfigure(0, weight=1)
+        self.operation_box.grid(in_=operation, row=0, column=0, sticky="ew")
+        self.operation_box.lift(operation)
+        self.rule_var = tk.StringVar(value=lc.OPERATION_RULES[lc.ADD_REMOVE])
+        ttk.Label(operation, textvariable=self.rule_var, wraplength=340, justify="left").grid(
+            row=1, column=0, sticky="ew"
+        )
+        # Choosing the operation (or loading one) states its rule and re-evaluates readiness at once.
+        self.operation_var.trace_add("write", lambda *_: self._on_operation_changed())
         ttk.Label(
             self, text="Fixed LoRAs (unchanged in every variant)", wraplength=340, justify="left"
         ).grid(row=2, column=0, sticky="w")
@@ -142,6 +151,10 @@ class LoraCompositionDesignFrame(ttk.LabelFrame):
         self.negative_var.trace_add("write", lambda *_: self._changed())
         self.bind("<Destroy>", self._on_destroy, add="+")
         self._render()
+
+    def _on_operation_changed(self) -> None:
+        self.rule_var.set(lc.OPERATION_RULES.get(self.operation(), ""))
+        self._changed()
 
     # -- display -----------------------------------------------------------------------------------------------
     def _label(self, name: str) -> str:

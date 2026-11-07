@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from src.learning import baseline_authoring as authoring
+from src.learning import baseline_exclusions as exclusions
 
 
 def has_draft(state: Any) -> bool:
@@ -116,6 +117,22 @@ def edit_field(state: Any, stage: str, name: str, value: Any) -> Any:
     coerced = authoring.write_field(draft["config"], spec, text)
     authoring.record_edit(draft["authoring"], stage, name)
     return coerced
+
+
+def clear_exclusions(state: Any, study: str) -> list[str]:
+    """Turn off, in the draft only, every setting ``study`` refuses; returns what was turned off.
+
+    Each turned-off setting is recorded as a Learning edit, so the origin label no longer claims a plain copy.
+    """
+    if not has_draft(state):
+        return []
+    draft = state.baseline_draft
+    found = exclusions.present(draft["config"], study)
+    if found:
+        draft["config"] = exclusions.cleared(draft["config"], found)
+        for key in found:
+            authoring.record_edit(draft["authoring"], "txt2img", f"excluded:{key}")
+    return found
 
 
 def signature(state: Any, stage: str) -> str:

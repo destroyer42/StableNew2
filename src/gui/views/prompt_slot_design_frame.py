@@ -9,6 +9,11 @@ from typing import Any, cast
 
 from src.learning.prompt_slot_experiment import PromptSlotDesign, slots_in, validate_design
 
+SLOT_INSTRUCTIONS = (
+    "Write each slot in the prompt as [[slot_name]], for example: a portrait of a [[subject]]. Named slots follow "
+    "the prompt as you edit it. Every occurrence of the tested slot varies together."
+)
+
 
 class PromptSlotDesignFrame(ttk.LabelFrame):
     def __init__(
@@ -27,12 +32,10 @@ class PromptSlotDesignFrame(ttk.LabelFrame):
         self._candidates: list[str] = []
         self._fixed_vars: dict[str, tk.StringVar] = {}
         self.columnconfigure(0, weight=1)
-        ttk.Label(
-            self,
-            text="Choose a prompt source below, then refresh slots. Every occurrence of the tested slot varies together.",
-            wraplength=340,
-            justify="left",
-        ).grid(row=0, column=0, sticky="ew")
+        self.instructions_var = tk.StringVar(value=SLOT_INSTRUCTIONS)
+        ttk.Label(self, textvariable=self.instructions_var, wraplength=340, justify="left").grid(
+            row=0, column=0, sticky="ew"
+        )
         self.slot_var = tk.StringVar()
         self.slot_box = ttk.Combobox(self, textvariable=self.slot_var, state="readonly")
         self.slot_box.grid(row=1, column=0, sticky="ew", pady=3)
@@ -94,6 +97,19 @@ class PromptSlotDesignFrame(ttk.LabelFrame):
         if self.slot_var.get() not in slots:
             self.slot_var.set(slots[0] if len(slots) == 1 else "")
         self._fixed_fields()
+
+    def sync_slots(self) -> None:
+        """Follow the prompt source: refresh the named slots only when the template's slots changed.
+
+        The current selection is kept while the template still contains it, and a frozen source is never cleared.
+        """
+        try:
+            slots = tuple(slots_in(self._read_template()))
+        except ValueError:
+            slots = ()
+        current = self.slot_box.cget("values")
+        if slots != tuple(str(value) for value in current or ()):
+            self.refresh_slots(retain_frozen=True)
 
     def _fixed_fields(self) -> None:
         old = {key: variable.get() for key, variable in self._fixed_vars.items()}

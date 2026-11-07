@@ -17,6 +17,8 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, cast
 
+from src.learning.baseline_exclusions import hires_requested, refiner_requested
+
 if TYPE_CHECKING:
     from src.pipeline.job_models_v2 import NormalizedJobRecord
 
@@ -241,16 +243,9 @@ def require_plain_txt2img(config: Mapping[str, Any]) -> None:
                 f"Two-Axis Grid requires a txt2img-only stage chain; disable {stage} and rebuild preview"
             )
     requested = {
-        "hires fix": bool(
-            base.get("enable_hr")
-            or config.get("enable_hr")
-            or (config.get("hires_fix") or {}).get("enabled")
-        ),
-        "refiner": bool(
-            base.get("refiner_enabled")
-            or config.get("use_refiner")
-            or (config.get("refiner") or {}).get("enabled")
-        ),
+        "hires fix": hires_requested(config),
+        # includes txt2img.use_refiner, the spelling the executor honours
+        "refiner": refiner_requested(config),
         "ControlNet": any(
             "controlnet" in str(key).lower()
             and (bool(value.get("enabled")) if isinstance(value, dict) else bool(value))

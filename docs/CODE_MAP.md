@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-699 of 854 modules have a docstring.
+700 of 855 modules have a docstring.
 
 ## src/
 
@@ -545,6 +545,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `automation_modes.py`: Learning automation modes: names, labels, the default, and how a persisted choice is read back
 - `baseline_authoring.py`: Learning's independently authored experiment baseline (toolkit-neutral)
 - `baseline_draft.py`: The editable Learning baseline draft: lifecycle rules over ``LearningState.baseline_draft``
+- `baseline_exclusions.py`: Settings a controlled Learning study refuses, detected in and cleared from the Learning baseline draft only
 - `controlled_study_display.py`: Presentation dispatch for the controlled single-position studies (Prompt Slot, LoRA Composition, Embedding)
 - `dataset_builder.py`: Dataset aggregation utilities for learning groundwork
 - `design_estimate.py`: How much work a design would create, before any Preview is built
