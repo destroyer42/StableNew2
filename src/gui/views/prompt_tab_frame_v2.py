@@ -124,6 +124,7 @@ class PromptTabFrame(ttk.Frame):
         self._content_visibility_listener = None
         self._pending_visibility_refresh = False
         self._visible_pack_infos: list[PromptPackInfo] = []
+        self._pack_load_prompt_open = False
         self.workspace_state.new_pack("Untitled", slot_count=10)
         if self.app_state is not None:
             try:
@@ -1798,6 +1799,23 @@ class PromptTabFrame(ttk.Frame):
         pack_info = self._visible_pack_infos[index]
         pack_name = pack_info.name
         pack_path = pack_info.path
+
+        # Load replaces the working pack, including when it is the same pack reloaded from disk. The button and the
+        # list double-click both land here, so one guard covers both; a second activation that arrives while the
+        # question is open is ignored rather than allowed to replace the pack underneath it.
+        if self._pack_load_prompt_open:
+            return
+        if self.workspace_state.dirty:
+            self._pack_load_prompt_open = True
+            try:
+                proceed = messagebox.askyesno(
+                    "Unsaved Changes",
+                    f"Discard unsaved changes and load pack '{pack_name}'?",
+                )
+            finally:
+                self._pack_load_prompt_open = False
+            if not proceed:
+                return
 
         try:
             self.workspace_state.load_pack(str(pack_path))
