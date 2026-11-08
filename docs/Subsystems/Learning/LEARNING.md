@@ -403,15 +403,33 @@ Limits: physical GPU behaviour of a matrix was not qualified (no generation was 
 
 ### 3.15 Catalog qualification proposals
 
-The Learning header's **Model Evidence Catalog** shows cached checkpoints and a
-primary **Proposed Experiments (N)** action. Selecting a checkpoint derives the
-ordered proposals offline from its matching catalog claims, ModelPolicy, current
-resources and baseline; discovery requires no prompt dialog or network lookup.
-Evidence Details and the advanced Evidence menu retain observation/identity refresh,
-import/export, Civitai/Hugging Face lookup and accessory metadata. AssetRegistry
-remains the sole scanner/hash cache. Legacy `models/embeddings` is inactive. Worker
+The Learning header's **Model Evidence Catalog** (one window per Learning tab; a
+second request brings it forward with its state) lists every cached checkpoint once
+(a file reached through a link and its real folder is one row) with its saved
+identity, family, past queue runs, last run, experiments ready and one plain
+**Next step**, filled by a read-only background assessment; a summary line gives
+totals and columns sort. The details pane shows the selected model's identity,
+policy, catalog-derived experiments with the reason each blocked one is blocked,
+its run history beside the catalog's claims ("catalog says X; your runs mostly used
+Y") and a hint for files in a `Not Working` folder; raw JSON is a secondary button.
+Run history (`src/learning/model_run_history.py` over
+`JobRepository.read_run_evidence_page`) is observational only: counts, settings of
+completed runs and path-stripped failure messages, never a recommendation, proposal
+input or publication input. **Proposed Experiments (N)** derives the ordered
+proposals offline from catalog claims, ModelPolicy, current resources and baseline;
+discovery requires no prompt dialog or network lookup. **Scan & Verify Library**
+hashes the whole library in one cancellable pass (each finished file is persisted,
+so a later session reuses it); **Verify Selected** hashes one file, and the
+*Verify this checkpoint* next action runs it. **More…** holds the header-only quick
+scan, import/export, Civitai/Hugging Face lookup and raw data. AssetRegistry remains
+the sole scanner/hash cache; an entry hashed under a path that later became a link
+is reused (and re-keyed) only while it names the same file and matches its
+size/mtime fingerprint. Legacy `models/embeddings` is inactive. Worker
 progress/results return through Tk polling with cancellation and closed/stale-delivery
-suppression; merely opening the window starts no scan/lookup.
+suppression; selecting a row supersedes only stale per-selection planning, never a
+scan, verification, save, preview, queue preparation, lookup or import/export.
+Merely opening the window starts no scan, hash or lookup. Follow-up slices and owner
+decisions: `docs/work_packages/MEC-900_Model_Evidence_Catalog_Usability.md`.
 
 Source lookup requires confirmation of the identifier sent to Civitai or an exact
 Hugging Face repository/commit. Bounded responses become unreviewed candidates,

@@ -280,7 +280,7 @@ def test_operator_task_only_explains_the_step(tk_root, monkeypatch, tmp_path):
     owner, window = route_window(tk_root, monkeypatch, (action, unverified))
     window._open_next_action(action.action_id)
     wait_idle(tk_root, window)
-    assert "Verify identities" in window.status.get() and owner.calls == []
+    assert "Verify Selected" in window.status.get() and owner.calls == []
     window._close()
 
 

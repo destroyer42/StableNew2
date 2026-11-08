@@ -87,6 +87,26 @@ class BatchCandidatePage:
 
 
 @dataclass(frozen=True)
+class RunEvidenceRow:
+    """The columns a read-only per-model run summary needs: lifecycle status, times, NJR and error text."""
+
+    status: str
+    created_at: str | None
+    completed_at: str | None
+    njr_snapshot: str
+    error_message: str | None
+
+
+@dataclass(frozen=True)
+class RunEvidencePage:
+    """One bounded window of ``read_run_evidence_page`` (newest rowids first)."""
+
+    rows: tuple[RunEvidenceRow, ...]
+    next_cursor: int
+    exhausted: bool
+
+
+@dataclass(frozen=True)
 class ReplayChildRow:
     """A persisted job whose recorded lineage parent is another job and whose source is a history replay."""
 

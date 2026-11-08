@@ -25,6 +25,8 @@ from src.queue.job_history_store import (
     JobHistoryEntry,
     JobHistoryStore,
     ReplayChildRow,
+    RunEvidencePage,
+    RunEvidenceRow,
 )
 from src.queue.job_model import (
     Job,
@@ -842,6 +844,44 @@ class JobRepository(JobHistoryStore):
             ).fetchall()
         return BatchCandidatePage(
             rows=tuple(self._row_to_batch_candidate(row) for row in rows),
+            next_cursor=low,
+            exhausted=low <= 0,
+        )
+
+    def read_run_evidence_page(
+        self, *, before_cursor: int | None = None, window: int = 2000
+    ) -> RunEvidencePage:
+        """One bounded, read-only window (newest rowids first) of every job's status, times, NJR and error text.
+
+        Used to summarize what each checkpoint has already run (Model Evidence Catalog). Plain read of the existing
+        ``jobs`` table: no schema change, no index, no lifecycle effect. The window bounds the rowids examined, so
+        the repository lock is held briefly per call. Continue with ``before_cursor=page.next_cursor`` until
+        ``exhausted``.
+        """
+
+        size = max(1, int(window))
+        with self._lock:
+            if before_cursor is None:
+                top = self._connection.execute("SELECT COALESCE(MAX(rowid), 0) AS top FROM jobs").fetchone()["top"]
+            else:
+                top = int(before_cursor)
+            low = max(0, int(top) - size)
+            rows = self._connection.execute(
+                "SELECT status, created_at, completed_at, njr_snapshot, error_message FROM jobs "
+                "WHERE rowid > ? AND rowid <= ? ORDER BY rowid DESC",
+                (low, int(top)),
+            ).fetchall()
+        return RunEvidencePage(
+            rows=tuple(
+                RunEvidenceRow(
+                    status=str(row["status"]),
+                    created_at=row["created_at"],
+                    completed_at=row["completed_at"],
+                    njr_snapshot=str(row["njr_snapshot"] or ""),
+                    error_message=row["error_message"],
+                )
+                for row in rows
+            ),
             next_cursor=low,
             exhausted=low <= 0,
         )
