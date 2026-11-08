@@ -1,8 +1,8 @@
 # StableNew Experience Redesign — Product Decision Register
 
-**Working research identifier:** PR-GUI-UX-850  
-**Phase:** Interactive product and workflow discovery  
-**Owner-confirmed decisions:** 73  
+**Working research identifier:** PR-GUI-UX-850
+**Phase:** Interactive product and workflow discovery
+**Owner-confirmed decisions:** 73
 **Authorization:** Research and design only. No repository implementation or physical runtime testing authorized.
 
 ## Create Image — Owner Confirmed

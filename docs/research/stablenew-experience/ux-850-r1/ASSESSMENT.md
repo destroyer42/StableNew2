@@ -15,7 +15,7 @@
 
 ## Source intake and authority reconciliation
 
-The newly supplied `OWNER_DECISIONS.md` is preserved verbatim, including its proposed details and historical caveats. It contains **73 confirmed decisions**: 001–071 plus 005A and 007A. UX-DEC-072 is explicitly the next undecided question and is not counted. The five group counts reconcile exactly to 12 / 9 / 15 / 7 / 30. The matrix preserves the decision summaries; detailed proposals in the source remain proposals.
+The newly supplied `OWNER_DECISIONS.md` preserves the owner’s wording, including proposed details and historical caveats; publication normalizes line endings and trailing whitespace. It contains **73 confirmed decisions**: 001–071 plus 005A and 007A. UX-DEC-072 is explicitly the next undecided question and is not counted. The five group counts reconcile exactly to 12 / 9 / 15 / 7 / 30. The matrix preserves the decision summaries; detailed proposals in the source remain proposals.
 
 The existing `docs/research/stablenew-experience/` is substantial prior work, not an empty starting point. It already contains candidate IA, design system, nine workflow records, toolkit alternatives, owner decisions and B2/B3/B5 results. Its `DISCOVERY OPEN` labels describe its older decision cut. This assessment supplements those records; it does not silently rewrite them or reopen answered questions. In particular, lock scopes are now specified by UX-DEC-051, and the five workflow directions are supplied here.
 
@@ -131,7 +131,7 @@ Twelve-category screening coverage: product outcomes → 73-row matrix; reliabil
 
 ## Validation and evidence boundary
 
-- **Implementation delivered:** research report, verbatim register, 73-row traceability table/CSV, source/hash index, five journey/screen specifications and proposed delivery packages. No production implementation.
+- **Implementation delivered:** research report, wording-preserved register, 73-row traceability table/CSV, source/hash index, five journey/screen specifications and proposed delivery packages. No production implementation.
 - **Demonstration:** 141 selected non-GUI tests passed in 3.14 s, plus 7 exact-job Experiment Library tests passed in 2.22 s, at the locked source SHA. Portable command record and output are in `pure-tests.json`, `pure-tests.txt`, `library-tests.txt`. Test data used isolated roots. These demonstrate the named contracts, not all 73 outcomes.
 - **Qualification:** none granted or changed. No QUALIFIED claim. Existing records and current holds remain authoritative.
 - **Unverified / held:** live desktop usability, real DPI, operator timing, model quality/resources, complete CI/protection audit, independent reviewer, campaigns and new data/migration semantics.

@@ -11,7 +11,7 @@
 | [Delivery plan](DELIVERY_PLAN.md) | First candidate contract, dependencies, subsequent bounded packages and owner decisions |
 | [73-decision matrix](DECISION_TRACEABILITY.md) | One row for every confirmed decision, with current-source references |
 | [CSV matrix](DECISION_TRACEABILITY.csv) | Reusable traceability data |
-| [Verbatim owner register](OWNER_DECISIONS.md) | Supplied product-intent source, including pending UX-DEC-072 |
+| [Owner register (wording preserved)](OWNER_DECISIONS.md) | Supplied product-intent source, including pending UX-DEC-072 |
 | [Source index](SOURCE_INDEX.md) | Exact path/line anchors; JSON companion contains file hashes |
 | [Usage](USAGE.md) | Measured session/time-window telemetry and calibration limits |
 
