@@ -33,6 +33,8 @@ These G identifiers are **local research cross-references**, not new entries in 
 
 Every proposed durable type in [P1–P10](OWNERSHIP_PERSISTENCE.md#finite-proposed-durable-type-register) has exactly one candidate metadata authority and a gate above. No proposed job state, queue schema, second compiler/runner/History/cancellation/process authority is necessary to deliver D's research outcome.
 
+Late accepted A addendum supplies concrete current gaps within these gates: unguarded Prompt Load in the inspected path (G1), missing optional lineage in Smart Review's editor call (G5/G7; downstream backfill unknown), advisory catalog ID-collision replacement in a newly selected revision (G5/G6; prior snapshots retained), and profile rating pooling across qualifying experiments without a general comparability check (G6/072). These are research inputs for owner triage, not implementation authorization or demonstrated operator failures.
+
 ## D decision and stop boundary
 
 **Continue to coordinator review of this local research package.** Known future gates are deliverables, not a request to make those choices now. Implementing a new durable job state, adopting a parallel runtime authority, changing process/POST recovery policy or performing a migration would exceed D and must stop for owner architecture approval. A newly verified unmitigated data/security/process threat would also stop discretionary work; none was verified within this bounded evidence.
