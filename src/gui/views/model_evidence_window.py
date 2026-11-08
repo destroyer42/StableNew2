@@ -324,21 +324,22 @@ class ModelEvidenceWindow(tk.Toplevel):
         self.evidence_menu = tk.Menu(bar, tearoff=False)
         evidence = ttk.Menubutton(bar, text="More…", menu=self.evidence_menu)
         evidence.pack(side="right")
-        for label, command in (
+        menu_items: tuple[tuple[str, Callable[[], object]] | None, ...] = (
             ("Quick scan (no hashing; header-only)", lambda: self._refresh(False)),
-            (None, None),
+            None,
             ("Look up selected model on Civitai (sends its SHA-256)…", self._research),
             ("Look up exact Hugging Face revision…", self._hf_dialog),
             ("Import reviewed evidence catalog…", self._import),
             ("Export evidence report…", self._export),
-            (None, None),
+            None,
             ("Inspect active Learning experiment", self._inspect_active),
             ("Raw scan data (JSON)", lambda: self._show(self.census)),
-        ):
-            if label is None:
+        )
+        for item in menu_items:
+            if item is None:
                 self.evidence_menu.add_separator()
             else:
-                self.evidence_menu.add_command(label=label, command=command)
+                self.evidence_menu.add_command(label=item[0], command=item[1])
         ttk.Button(bar, text="Experiment Library", command=owner._on_open_experiment_library).pack(
             side="right", padx=4
         )
@@ -373,7 +374,7 @@ class ModelEvidenceWindow(tk.Toplevel):
             ("ready", "Ready", 55),
             ("next", "Next step", 400),
         ):
-            self.tree.heading(key, text=title, command=lambda k=key: self._sort_by(k))
+            self.tree.heading(key, text=title, command=self._sorter(key))
             self.tree.column(key, width=width, stretch=key in ("#0", "next"))
         scroll = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
@@ -770,6 +771,9 @@ class ModelEvidenceWindow(tk.Toplevel):
             if row["relative"] == selected_relative:
                 self.tree.selection_set(key)
 
+    def _sorter(self, column: str) -> Callable[[], None]:
+        return lambda: self._sort_by(column)
+
     def _sort_by(self, column: str) -> None:
         current, reverse = self._sort
         self._sort = (
@@ -912,7 +916,7 @@ class ModelEvidenceWindow(tk.Toplevel):
                     if record.compatibility and record.compatibility.family
                     else "unknown"
                 )
-                row = {
+                row: dict[str, Any] = {
                     "kind": "checkpoint",
                     "relative": f"{CHECKPOINT_ROOT_LABEL}/{relative}",
                     "family": family,
@@ -1043,9 +1047,10 @@ class ModelEvidenceWindow(tk.Toplevel):
         self.verify_button.configure(state="normal" if row else "disabled")
         self.next_button.configure(state="disabled")
         self._next_report = None
-        follow = self._next_dialog is not None and self._next_dialog.winfo_exists()
-        if follow:
-            self._next_dialog.mark_stale(
+        dialog = self._next_dialog
+        follow = dialog is not None and bool(dialog.winfo_exists())
+        if dialog is not None and follow:
+            dialog.mark_stale(
                 "The selected model changed. Updating for the new selection…"
                 if row
                 else "The selected model changed. Refresh from the new selection."
