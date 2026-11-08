@@ -37,6 +37,7 @@ Evidence tags used throughout: **[V]** verified in source/archive this session; 
 
 | Document | Content |
 |---|---|
+| [UX-850-B information architecture and operator journeys](ux850-b/README.md) | PROPOSED navigation alternatives, five detailed journeys, shared semantics, context/identity handoffs and all 73 direction placements; research only, existing tab IDs preserved |
 | [UX-850-A current repository gap assessment](ux850-a/README.md) | All 73 decisions with six evidence dimensions, current production routes, ownership, scoped gaps and method-diverse challenge at `8e1ee82b`; partial Comprehensive coverage |
 | [UX-850-R1 integrated assessment](ux-850-r1/README.md) | Later 73-decision traceability, five operator journeys, current-source feasibility and bounded delivery contracts (assessment at `3399f803`; partial evidence coverage) |
 | [EVIDENCE_REGISTER.md](EVIDENCE_REGISTER.md) | Source-backed findings with SHA/evidence location, confidence and falsification tests |
