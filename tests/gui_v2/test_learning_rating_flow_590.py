@@ -481,3 +481,69 @@ def test_recommendation_and_rating_paths_never_touch_the_runner_or_profile_store
             assert forbidden not in source, (
                 f"{module.__name__} must stay a presentation module ({forbidden})"
             )
+
+
+# -- fix/learn-evidence-consistency: a saved rating stays saved; local studies replace recommendations ---------
+
+
+def test_a_refresh_failure_after_saving_is_reported_as_saved_and_save_and_next_advances(
+    flow, monkeypatch
+) -> None:
+    _no_dialogs(monkeypatch)
+    panel = flow.panel
+
+    def broken() -> None:
+        raise RuntimeError("recommendations could not refresh")
+
+    monkeypatch.setattr(flow.controller, "refresh_recommendations", broken)
+    _select(panel, 0)
+    panel.rating_var.set(4)
+
+    panel.save_and_next()
+
+    text = panel.feedback_label.cget("text")
+    assert "Error saving rating" not in text
+    assert text.startswith("Rating saved") and "recommendations could not refresh" in text
+    assert flow.controller.get_rating_for_image(flow.images[0][0]) == 4
+    assert len(_records(flow.controller)) == 1
+    assert panel._selected_image_ref() == flow.images[0][1]  # noqa: SLF001  Save & Next moved on
+
+
+def test_a_review_display_failure_after_saving_is_not_a_failed_save(flow, monkeypatch) -> None:
+    _no_dialogs(monkeypatch)
+    panel = flow.panel
+    _select(panel, 0)
+    panel.rating_var.set(3)
+    original = panel.display_variant_results
+
+    def broken(*_args, **_kwargs) -> None:
+        raise RuntimeError("thumbnail failed")
+
+    monkeypatch.setattr(panel, "display_variant_results", broken)
+    assert panel._submit_rating() is True  # noqa: SLF001
+    monkeypatch.setattr(panel, "display_variant_results", original)
+    assert "thumbnail failed" in panel.feedback_label.cget("text")
+    assert flow.controller.get_rating_for_image(flow.images[0][0]) == 3
+
+
+def test_a_local_study_notice_replaces_shown_recommendations(flow) -> None:
+    from src.learning.learning_controller_services.controlled_studies import (
+        LOCAL_STUDY_RECOMMENDATION_NOTICE,
+    )
+
+    flow.controller.get_automation_mode = lambda: "auto"  # type: ignore[method-assign]
+    _with_pipeline(flow, _stage_cards())
+    flow.panel.update_recommendations(_controlled_recommendations(flow))
+    flow.state.current_experiment.metadata["study_type"] = "lora_composition"
+    flow.controller._recommendation_engine = SimpleNamespace(  # noqa: SLF001
+        recommend=Mock(side_effect=AssertionError("local studies never query")),
+        _cache_timestamp=1.0,
+    )
+    flow.controller._review_panel = flow.panel  # noqa: SLF001
+
+    flow.controller.refresh_recommendations()
+
+    shown = flow.panel.recommendations_text.get("1.0", "end")
+    assert LOCAL_STUDY_RECOMMENDATION_NOTICE in shown and "cfg_scale" not in shown
+    assert flow.panel.recommendation_summary_var.get() == LOCAL_STUDY_RECOMMENDATION_NOTICE
+    assert str(flow.panel.apply_button.cget("state")) == "disabled"

@@ -211,3 +211,42 @@ def test_completion_save_warning_does_not_reclassify_valid_execution_evidence(
     assert tab.learning_state.current_experiment.metadata["resume_persistence_error"]
     tab._refresh_summary()
     assert "Resume save failed" in tab._summary_var.get()
+
+
+def test_library_reads_saved_queued_jobs_by_exact_id_without_saving_or_resubmitting(
+    workspace, tmp_path
+):
+    import time
+    import tkinter as tk
+    from tkinter import ttk
+
+    root, repo, store, make_tab = workspace
+    source, _ = planned(tmp_path, repo)
+    service = RepositoryService(repo)
+    tab = make_tab(service)
+    tab.learning_controller.restore_resume_state(source.export_resume_state())
+    tab.learning_controller.run_plan()  # checkpoints the session as queued
+    experiment_id = store.load_state()["learning"]["last_experiment_id"]
+    session = tmp_path / "experiments" / experiment_id / "session.json"
+    saved_bytes = session.read_bytes()
+    for variant in tab.learning_state.plan:
+        transition(repo, variant.job_id, JobStatus.COMPLETED, result_for(tmp_path))
+
+    tab._on_open_experiment_library()
+    window = next(
+        w
+        for w in tab.winfo_children()
+        if isinstance(w, tk.Toplevel) and w.title() == "Learning Experiment Library"
+    )
+    try:
+        tree = next(w for w in window.winfo_children() if isinstance(w, ttk.Treeview))
+        deadline = time.monotonic() + 10
+        while tree.set(experiment_id, "status") == "Queued" and time.monotonic() < deadline:
+            root.update()
+            time.sleep(0.01)
+        assert tree.set(experiment_id, "status") == "Review Needed"
+        assert "completed" in tree.set(experiment_id, "history")
+        assert session.read_bytes() == saved_bytes  # the Library never saves the session
+        assert len(service.calls) == 1  # and never resubmits
+    finally:
+        window.destroy()

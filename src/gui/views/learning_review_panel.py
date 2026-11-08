@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
@@ -1035,21 +1036,31 @@ class LearningReviewPanel(ttk.Frame):
                 return False
 
         # Call controller to record rating
+        self._save_warning = ""
         controller = self._get_learning_controller()
         if controller:
             if hasattr(controller, "record_rating"):
                 try:
-                    controller.record_rating(image_ref, rating, notes, details)
-                    self.feedback_label.config(
-                        text="Rating saved successfully!", foreground="green"
-                    )
-                    # Refresh display to show new rating indicator
-                    if self.current_variant and self.current_experiment:
-                        self._active_image_ref = None
-                        self.display_variant_results(self.current_variant, self.current_experiment)
-                    return True
+                    warning = controller.record_rating(image_ref, rating, notes, details)
                 except Exception as e:
+                    # record_rating raises only when the rating was not saved.
                     self.feedback_label.config(text=f"Error saving rating: {e}", foreground="red")
+                    return False
+                # From here the rating is saved; a display that cannot refresh is reported, never as a failed save.
+                problems = [str(warning)] if isinstance(warning, str) and warning else []
+                if self.current_variant and self.current_experiment:
+                    self._active_image_ref = None
+                    try:
+                        self.display_variant_results(self.current_variant, self.current_experiment)
+                    except Exception as exc:
+                        logging.getLogger(__name__).exception("Rating saved, but the review display could not refresh")
+                        problems.append(str(exc))
+                if problems:
+                    self._save_warning = f"Rating saved; some displays could not refresh: {'; '.join(problems)}"
+                    self.feedback_label.config(text=self._save_warning, foreground="orange")
+                else:
+                    self.feedback_label.config(text="Rating saved successfully!", foreground="green")
+                return True
             else:
                 self.feedback_label.config(text="Rating system not available", foreground="red")
         else:
@@ -1064,6 +1075,10 @@ class LearningReviewPanel(ttk.Frame):
         )
         if self._submit_rating():
             self._on_next_unrated(position)
+            warning = getattr(self, "_save_warning", "")
+            if warning:
+                # Moving on redraws the label; the operator still needs to see what did not refresh.
+                self.feedback_label.config(text=warning, foreground="orange")
 
     def _save_all_drafts(self) -> None:
         """Save every rated draft of this experiment as a rating (images already rated are left alone)."""
@@ -1165,6 +1180,18 @@ class LearningReviewPanel(ttk.Frame):
         """Update the recommendations display with new data."""
         self._write_recommendation_text(recommendations)
         self._render_recommendation_summary(recommendations)
+
+    def show_recommendation_notice(self, notice: str) -> None:
+        """Replace any shown recommendations with a notice; nothing can be applied while it shows."""
+        self.recommendations_text.config(state="normal")
+        self.recommendations_text.delete(1.0, tk.END)
+        self.recommendations_text.insert(tk.END, notice)
+        self.recommendations_text.config(state="disabled")
+        if getattr(self, "recommendation_summary_var", None) is not None:
+            self.recommendation_summary_var.set(notice)
+            self.recommendation_scope_var.set("")
+            self.apply_note_var.set("")
+        self.apply_button.config(state="disabled")
 
     def _write_recommendation_text(self, recommendations: Any) -> None:
         self.recommendations_text.config(state="normal")

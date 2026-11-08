@@ -48,6 +48,8 @@ LEARNING_VARIABLES: dict[str, VariableMetadata] = {
             "step": 1,
             "default_start": 20,
             "default_end": 50,
+            # Steps are a count: every authored value is a whole number, and is stored as an int.
+            "integer": True,
         },
     ),
     "sampler": VariableMetadata(
@@ -146,6 +148,27 @@ def get_variable_metadata(variable_display_name: str) -> VariableMetadata | None
         if meta.display_name == variable_display_name:
             return meta
     return None
+
+
+def whole_number_values(meta: VariableMetadata, values: list[Any]) -> list[Any]:
+    """Return a whole-number variable's values as ints; refuse a fractional one.
+
+    Values of other variables pass through unchanged. Saved history is never rewritten; this applies only
+    to values being authored into a new Preview.
+    """
+    if not meta.constraints.get("integer"):
+        return list(values)
+    whole: list[Any] = []
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{meta.display_name} takes whole numbers; {value!r} is not a number.")
+        if not float(value).is_integer():
+            raise ValueError(
+                f"{meta.display_name} takes whole numbers; {value:g} is not one. "
+                "Use a whole-number start, end and step."
+            )
+        whole.append(int(value))
+    return whole
 
 
 def get_all_variable_names() -> list[str]:

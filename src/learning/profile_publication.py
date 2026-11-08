@@ -21,7 +21,10 @@ from src.generation_profiles.contract import (
     IDENTITY_EXACT,
     IDENTITY_MODEL,
     KIND_LEARNING,
+    SETTING_HEIGHT,
     SETTING_KEYS,
+    SETTING_STEPS,
+    SETTING_WIDTH,
     SOURCE_LEARNING,
     EvidenceNote,
     GenerationProfile,
@@ -62,13 +65,32 @@ def digest(value: Any) -> str:
 
 
 def _rank_value(item: tuple[Any, list[float]]) -> tuple[float, float, str]:
+    """Quality first (owner decision, 2026-11-07): the highest mean rating wins among the values of a
+    qualified cohort; confidence only breaks a tie, then the value's canonical text."""
     value, ratings = item
     deviation = statistics.stdev(ratings) if len(ratings) > 1 else 0.0
     return (
-        -recommendation_confidence(len(ratings), deviation, 1.0),
         -statistics.mean(ratings),
+        -recommendation_confidence(len(ratings), deviation, 1.0),
         json.dumps(value),
     )
+
+
+_WHOLE_NUMBER_SETTINGS = frozenset({SETTING_STEPS, SETTING_WIDTH, SETTING_HEIGHT})
+
+
+def _legacy_whole_number(key: str, value: Any) -> Any:
+    """Older sweeps saved whole-number settings as floats (30.0). Read them as the integer they are;
+    a fractional value (30.5) is left as it is, so the contract still refuses it. Saved ratings are
+    never rewritten."""
+    if (
+        key in _WHOLE_NUMBER_SETTINGS
+        and isinstance(value, float)
+        and math.isfinite(value)
+        and value.is_integer()
+    ):
+        return int(value)
+    return value
 
 
 def strong_match(saved: ModelIdentity, current: ModelIdentity) -> bool:
@@ -219,7 +241,7 @@ def _sample(row: Mapping[str, Any], target: ResolvedModel) -> _Sample:
     key = LEARNING_VARIABLES[variable].config_path.split(".")[-1]
     if key not in SETTING_KEYS:
         raise ProfileError("The tested variable cannot be represented by Base Generation profiles.")
-    value = validate_settings({key: meta["variant_value"]})[key]
+    value = validate_settings({key: _legacy_whole_number(key, meta["variant_value"])})[key]
     section = config["txt2img"]
     if value != section[key] or value not in snapshot["variant_values"]:
         raise ProfileError("Executed tested-variable value contradicts the frozen experiment.")
@@ -385,8 +407,9 @@ class ProfilePublicationService:
             for sample in cohort:
                 by_value[sample.value].append(sample.rating)
 
-            # Existing volume/variance score, with identical exact-context weight for each
-            # candidate. No broad prompt weighting or untested baseline parameters enter.
+            # Highest mean rating first, then the existing volume/variance confidence, with identical
+            # exact-context weight for each candidate. No broad prompt weighting or untested
+            # baseline parameters enter.
             winner = min(by_value.items(), key=_rank_value)[0]
             winning_ratings = by_value[winner]
             plan = plan_application(

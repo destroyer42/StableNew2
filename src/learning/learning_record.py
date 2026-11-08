@@ -52,6 +52,48 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+# Rating kinds where a later row for the same sample replaces the earlier one (an operator revising a
+# rating). Curation events are separate observations and are never collapsed.
+REVISABLE_RATING_KINDS = frozenset({"learning_experiment_rating", "review_tab_feedback"})
+
+
+def rating_revision_key(record: Any) -> tuple[str, str, str] | None:
+    """The sample a rating row describes, or None when the row is not a revisable rating."""
+    metadata = record.get("metadata") if isinstance(record, dict) else None
+    if not isinstance(metadata, dict):
+        return None
+    kind = str(metadata.get("record_kind") or "").strip()
+    image_path = str(metadata.get("image_path") or "").strip()
+    if kind not in REVISABLE_RATING_KINDS or not image_path:
+        return None
+    context = metadata.get("learning_context")
+    experiment_id = str(
+        metadata.get("experiment_id")
+        or (context.get("experiment_id") if isinstance(context, dict) else "")
+        or ""
+    )
+    return kind, experiment_id, image_path
+
+
+def current_rating_revisions(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep only the latest rating per sample, in append order; history on disk is unchanged.
+
+    The latest row wins even when it is incomplete or invalid, so a sample whose current rating cannot
+    be used drops out rather than falling back to the rating the operator replaced.
+    """
+    rows = list(records)
+    last: dict[tuple[str, str, str], int] = {}
+    for index, record in enumerate(rows):
+        key = rating_revision_key(record)
+        if key is not None:
+            last[key] = index
+    return [
+        record
+        for index, record in enumerate(rows)
+        if (key := rating_revision_key(record)) is None or last[key] == index
+    ]
+
+
 @dataclass
 class LearningRecord:
     """Durable record describing an executed pipeline run."""

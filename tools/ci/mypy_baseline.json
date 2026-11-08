@@ -34,7 +34,7 @@
     "src/gui/artifact_metadata_inspector_dialog.py": 1,
     "src/gui/base_generation_panel_v2.py": 12,
     "src/gui/batch_operations_panel_v2.py": 6,
-    "src/gui/controllers/learning_controller.py": 60,
+    "src/gui/controllers/learning_controller.py": 58,
     "src/gui/design_system_v2.py": 26,
     "src/gui/dialogs/multi_folder_selector.py": 16,
     "src/gui/dropdown_loader_v2.py": 1,
@@ -178,5 +178,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1472
+  "total": 1470
 }

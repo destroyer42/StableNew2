@@ -1301,17 +1301,19 @@ class LearningTabFrame(ttk.Frame):
         window.minsize(720, 300)
         window.columnconfigure(0, weight=1)
         window.rowconfigure(0, weight=1)
-        columns = ("id", "variable", "stage", "status", "variants", "images", "review", "updated")
+        columns = ("id", "variable", "stage", "status", "variants", "images", "review", "updated", "history")
         tree = ttk.Treeview(window, columns=columns, show="tree headings", selectmode="browse")
         tree.heading("#0", text="Experiment")
         headings = {
             "id": "ID", "variable": "Variable", "stage": "Stage", "status": "Status",
             "variants": "Variants", "images": "Images", "review": "Review", "updated": "Updated",
+            "history": "Job History",
         }
         for column in columns:
             tree.heading(column, text=headings[column])
             tree.column(column, width=90, anchor="w")
         tree.column("#0", width=180)
+        tree.column("history", width=260)
         tree.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
         scrollbar = ttk.Scrollbar(window, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
@@ -1320,6 +1322,9 @@ class LearningTabFrame(ttk.Frame):
             handle for handle in all_handles
             if self._payload_has_admission(self.experiment_store.load_session(handle.experiment_id))
         ]
+        from src.learning.library_status import has_open_jobs
+
+        to_check: list[tuple[str, dict[str, Any], int]] = []
         for handle in handles:
             payload = self.experiment_store.load_session(handle.experiment_id) or {}
             experiment = dict(payload.get("current_experiment") or {})
@@ -1337,8 +1342,12 @@ class LearningTabFrame(ttk.Frame):
                 values=(handle.experiment_id[-8:], experiment.get("variable_under_test", ""),
                         experiment.get("stage", ""), lifecycle,
                         len(plan), f"{completed}/{total}", f"{len(ratings)}/{completed}",
-                        handle.updated_at.replace("T", " ")[:19]),
+                        handle.updated_at.replace("T", " ")[:19],
+                        "Checking job history..." if has_open_jobs(payload) else ""),
             )
+            if has_open_jobs(payload):
+                to_check.append((handle.experiment_id, payload, len(ratings)))
+        self._refresh_library_status(tree, to_check)
         actions = ttk.Frame(window, padding=6)
         actions.grid(row=1, column=0, columnspan=2, sticky="ew")
         def _open_selected() -> None:
@@ -1351,6 +1360,46 @@ class LearningTabFrame(ttk.Frame):
         ttk.Button(actions, text="Open / Review", command=_open_selected).pack(side="left")
         ttk.Button(actions, text="New Experiment", command=lambda: (self._on_new_experiment(), window.destroy())).pack(side="right")
         tree.bind("<Double-1>", lambda _event: _open_selected())
+
+    def _refresh_library_status(self, tree: Any, to_check: list[tuple[str, dict[str, Any], int]]) -> None:
+        """Read saved queued/running jobs by exact ID off the GUI thread; never saves, tracks or replays."""
+        if not to_check:
+            return
+        import functools
+
+        from src.gui.ui_dispatcher import tk_dispatcher_for
+        from src.learning.library_status import LibraryStatus, library_status
+        from src.utils.thread_registry import get_thread_registry
+
+        execution = getattr(self.learning_controller, "execution_controller", None)
+        repository = getattr(execution, "repository", None)
+        dispatcher = tk_dispatcher_for(tree)  # the root's single pump; never a second owner
+
+        def show(experiment_id: str, status: LibraryStatus) -> None:
+            try:
+                if tree.winfo_exists() and tree.exists(experiment_id):
+                    tree.set(experiment_id, "status", status.lifecycle)
+                    tree.set(experiment_id, "history", status.note)
+            except tk.TclError:  # the Library closed while the check ran
+                pass
+
+        def work() -> None:
+            for experiment_id, payload, rating_count in to_check:
+                try:
+                    status = library_status(payload, repository, saved_rating_count=rating_count)
+                except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError):
+                    # one unreadable session never hides the others
+                    _log.exception("Library status check failed for %s", experiment_id)
+                    status = LibraryStatus("Requires Attention", "Job history could not be read; open it to reconcile.")
+                dispatcher.invoke(functools.partial(show, experiment_id, status))
+
+        try:
+            get_thread_registry().spawn(
+                target=work, name="learning-library-status", purpose="read Library job history by exact ID"
+            )
+        except RuntimeError:
+            for experiment_id, _payload, _count in to_check:
+                show(experiment_id, LibraryStatus(tree.set(experiment_id, "status"), "Job history check unavailable."))
 
     def _on_load_experiment(self) -> None:
         session_path = filedialog.askopenfilename(

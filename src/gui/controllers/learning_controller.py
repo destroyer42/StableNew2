@@ -58,8 +58,10 @@ from src.learning.experiment_freeze import (
     apply_frozen_seed_policy,
     freeze_seed_policy,
 )
+from src.learning.feedback_save import refresh_saved_feedback
 from src.learning.learning_controller_services.controlled_studies import (
-    LOCAL_ONLY_STUDIES,
+    LOCAL_STUDY_RECOMMENDATION_NOTICE,
+    reports_setting_recommendations,
 )
 from src.learning.learning_controller_services.controlled_studies import (
     rating_metadata as controlled_rating_metadata,
@@ -344,7 +346,7 @@ class LearningController:
         """
         import logging
 
-        from src.learning.variable_metadata import get_variable_metadata
+        from src.learning.variable_metadata import get_variable_metadata, whole_number_values
         from src.learning.variable_selection_contract import normalize_resource_entries
 
         logger = logging.getLogger(__name__)
@@ -362,7 +364,7 @@ class LearningController:
 
         proposal_values = explicit_values(experiment)
         if proposal_values is not None:
-            return proposal_values
+            return whole_number_values(meta, proposal_values)
 
         # Generate values based on type
         if meta.value_type == "numeric":
@@ -375,7 +377,7 @@ class LearningController:
             )
             step = float(experiment.metadata.get("step_value", meta.constraints.get("step", 1.0)))
 
-            values = self._generate_values_from_range(start, end, step)
+            values = whole_number_values(meta, self._generate_values_from_range(start, end, step))
             logger.info(
                 f"[LearningController]   Generated {len(values)} numeric values: {start} to {end}, step {step}"
             )
@@ -2376,8 +2378,13 @@ class LearningController:
         rating: int,
         notes: str = "",
         details: dict[str, Any] | None = None,
-    ) -> None:
-        """Record a rating for a learning image."""
+    ) -> str:
+        """Record a rating for a learning image.
+
+        Raises only when the rating was not saved. Once it is appended it is saved, whatever happens
+        next: a display or recommendation refresh that fails afterwards is returned as a warning
+        (empty when everything refreshed) and never reported as a failed save.
+        """
         if not self._learning_record_writer:
             raise RuntimeError("LearningRecordWriter not configured")
 
@@ -2411,19 +2418,28 @@ class LearningController:
             "context_flags": context_flags,
             "subscores": subscores,
         }
-        self.discard_review_draft(image_ref)
 
-        # Refresh recommendations with new data
-        self.refresh_recommendations()
+        def _workflow() -> None:
+            if self._is_review_complete():
+                self._set_workflow_state("completed")
+            else:
+                self._recompute_workflow_state_from_plan()
 
-        # Update plan table with new average rating
-        self._update_variant_ratings()
-        self._refresh_grid_view()
-        if self._is_review_complete():
-            self._set_workflow_state("completed")
-        else:
-            self._recompute_workflow_state_from_plan()
-        self._notify_resume_state_changed()
+        # Each derived projection refreshes on its own, so one failure neither hides the save nor skips
+        # the others.
+        problems = [
+            problem
+            for problem in (
+                refresh_saved_feedback(lambda: self.discard_review_draft(image_ref)),
+                refresh_saved_feedback(self.refresh_recommendations),
+                refresh_saved_feedback(self._update_variant_ratings),
+                refresh_saved_feedback(self._refresh_grid_view),
+                refresh_saved_feedback(_workflow),
+                refresh_saved_feedback(self._notify_resume_state_changed),
+            )
+            if problem
+        ]
+        return "; ".join(dict.fromkeys(problems))
 
     @staticmethod
     def _extract_learning_primary(config: dict[str, Any]) -> dict[str, Any]:
@@ -2440,30 +2456,21 @@ class LearningController:
         }
 
     def update_recommendations(self) -> None:
-        """Update recommendations based on latest learning data."""
+        """Update recommendations based on latest learning data.
+
+        Uses the same eligibility and query as ``get_recommendations_for_current_prompt``; a study whose
+        ratings stay local replaces any earlier recommendations with its notice instead.
+        """
         if not self._recommendation_engine:
             return
-
-        # Get current prompt and stage for recommendations
-        prompt_text = ""
-        stage = "txt2img"
-
-        if self.learning_state.current_experiment:
-            prompt_text = self.learning_state.current_experiment.prompt_text
-            stage = self.learning_state.current_experiment.stage
-        elif self.prompt_workspace_state:
-            # Fallback to current prompt workspace
-            prompt_text = self.prompt_workspace_state.get_current_prompt_text()
-            stage = "txt2img"  # Default stage
-
-        if prompt_text:
-            recommendations = self._recommendation_engine.recommend(
-                prompt_text, stage, **self._recommendation_query_context()
-            )
-
-            # Update review panel with new recommendations
-            if self._review_panel and hasattr(self._review_panel, "update_recommendations"):
-                self._review_panel.update_recommendations(recommendations)
+        panel = self._review_panel
+        if not reports_setting_recommendations(self.learning_state.current_experiment):
+            if panel is not None and hasattr(panel, "show_recommendation_notice"):
+                panel.show_recommendation_notice(LOCAL_STUDY_RECOMMENDATION_NOTICE)
+            return
+        recommendations = self.get_recommendations_for_current_prompt()
+        if recommendations is not None and panel is not None and hasattr(panel, "update_recommendations"):
+            panel.update_recommendations(recommendations)
 
     def on_job_completed_callback(self, job: Any, result: Any) -> None:
         """Legacy application notification cannot bypass the sole tracking owner."""
@@ -2472,10 +2479,8 @@ class LearningController:
         return
 
     def get_recommendations_for_current_prompt(self) -> Any | None:
-        """Get recommendations for the current prompt and stage."""
-        from src.learning.model_comparison import study_type
-
-        if self.learning_state.current_experiment and study_type(self.learning_state.current_experiment) in LOCAL_ONLY_STUDIES:
+        """Get recommendations for the current prompt and stage (None for a study whose ratings stay local)."""
+        if not reports_setting_recommendations(self.learning_state.current_experiment):
             return None
         if not self._recommendation_engine:
             return None
@@ -2694,8 +2699,6 @@ class LearningController:
                 "sidecar_path": None,
                 "error": str(exc),
             }
-        from src.learning.feedback_save import refresh_saved_feedback
-
         record.metadata["recommendation_refresh_error"] = refresh_saved_feedback(self.refresh_recommendations)
         return record
 
