@@ -885,12 +885,26 @@ class ModelEvidenceWindow(tk.Toplevel):
             lines.append("CATALOG CLAIMS (advisory; source class and confidence in brackets)")
             for name, values in sorted(assessment.catalog_claims.items()):
                 lines.append(f"  {name}: {'; '.join(values[:3])}")
-        if path is not None and "Not Working" in Path(display_name(row)).parts:
-            lines.append("")
-            lines.append(
-                "This file is in your 'Not Working' folder. Compare the catalog claims with the settings your "
-                "past runs used above: a sampler/steps/CFG mismatch or a missing component often explains artifacts."
+        not_working = "Not Working" in Path(display_name(row)).parts
+        if not_working or (history is not None and history.failed and not history.completed):
+            from src.learning.model_triage import triage
+
+            family = (
+                assessment.family.split(" ", 1)[0] if assessment else str(row.get("family") or "unknown")
             )
+            causes = triage(
+                header=row.get("header"),
+                family=family,
+                history=history,
+                civitai_base_model=base_model_hint(self._lookups.get(str(row.get("sha256") or ""))),
+            )
+            title = (
+                "WHY IT MAY NOT WORK (this file is in your 'Not Working' folder; hypotheses, not verdicts)"
+                if not_working
+                else "WHY IT MAY NOT WORK (no past run completed; hypotheses, not verdicts)"
+            )
+            # Shown right under the next step, where a 'Not Working' investigation starts.
+            lines[3:3] = [title, *("  • " + cause for cause in causes), ""]
         self._show("\n".join(lines), mode="summary")
 
     def _inspect_asset(self) -> None:

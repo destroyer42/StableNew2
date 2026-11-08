@@ -276,3 +276,22 @@ def test_confirmed_batch_lookup_saves_and_shows_results(tk_root, tmp_path, monke
     assert sent == ["a" * 64]  # only verified hashes
     assert "Not found on Civitai" in window.details.get("1.0", "end")
     window._close()
+
+
+def test_not_working_rows_show_triage_under_the_next_step(tk_root):
+    window = ModelEvidenceWindow(make_owner(tk_root))
+    row = census_row(
+        "models/Stable-diffusion/Not Working/inpaint.safetensors",
+        header={"checkpoint_architecture": "sdxl_inpaint"},
+    )
+    window.census = {"assets": [row]}
+    window._assessments = {row["relative"]: RowAssessment("Verified", "sdxl", 0, "Nothing to vary yet.")}
+    window._history, window._history_state = {}, "ready"
+    window._render_assets()
+    window._plan = lambda **_kw: None
+    window.tree.selection_set(window.tree.get_children()[0])
+    tk_root.update()
+    text = window.details.get("1.0", "end")
+    assert text.index("WHY IT MAY NOT WORK") < text.index("PAST RUNS")
+    assert "inpainting checkpoint" in text
+    window._close()
