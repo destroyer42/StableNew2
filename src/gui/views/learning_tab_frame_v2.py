@@ -1365,6 +1365,8 @@ class LearningTabFrame(ttk.Frame):
         """Read saved queued/running jobs by exact ID off the GUI thread; never saves, tracks or replays."""
         if not to_check:
             return
+        import functools
+
         from src.gui.gui_invoker import GuiInvoker
         from src.learning.library_status import LibraryStatus, library_status
         from src.utils.thread_registry import get_thread_registry
@@ -1389,7 +1391,7 @@ class LearningTabFrame(ttk.Frame):
                 except Exception:  # one unreadable session never hides the others
                     _log.exception("Library status check failed for %s", experiment_id)
                     status = LibraryStatus("Requires Attention", "Job history could not be read; open it to reconcile.")
-                invoker.invoke(lambda eid=experiment_id, st=status: show(eid, st))
+                invoker.invoke(functools.partial(show, experiment_id, status))
             invoker.invoke(invoker.dispose)  # after the queued updates; stops the pump
 
         try:
