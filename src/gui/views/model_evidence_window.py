@@ -49,6 +49,7 @@ from src.gui.views.model_evidence_proposals_dialog import (
     ModelEvidenceProposalsDialog,
     choose_prompt_context,
 )
+from src.gui.views.compatibility_probe_dialog import CompatibilityProbeDialog
 from src.gui.views.next_test_dialog import NextTestDialog
 from src.gui_v2.next_test_view import build_view, route_for
 from src.image_backends.image_backend_types import normalize_image_backend_options
@@ -210,13 +211,13 @@ def assess_row(
                 blocked = [p for p in proposals if p.document["status"] == "blocked"]
                 if target.identity.family == "unknown":
                     next_step = (
-                        "File verified, but StableNew cannot classify its family yet; no experiment can be "
-                        "proposed until it is identified."
+                        "Family unknown: run a Compatibility Probe to see what kind of model it is and "
+                        "whether it works here."
                     )
                 elif metadata and not blocked and not target.policy.qualified:
                     next_step = (
-                        f"{target.identity.family} is not a qualified family in StableNew, so no experiment "
-                        "is proposed; see past runs below."
+                        f"{target.identity.family} is not qualified in StableNew: run a Compatibility Probe "
+                        "to check it works and which settings suit it."
                     )
                 elif metadata and not blocked:
                     next_step = _short(
@@ -290,6 +291,7 @@ class ModelEvidenceWindow(tk.Toplevel):
         self._qualification_prompt: tuple[str, str, dict[str, Any]] | None = None
         self._proposal_dialog: ModelEvidenceProposalsDialog | None = None
         self._next_dialog: NextTestDialog | None = None
+        self._probe_dialog: CompatibilityProbeDialog | None = None
         self._next_report: IntelligenceReport | None = None
         self._next_when_ready = False
         self._rows: dict[str, dict[str, Any]] = {}
@@ -402,6 +404,13 @@ class ModelEvidenceWindow(tk.Toplevel):
             state="disabled",
         )
         self.next_button.pack(side="left", padx=4)
+        self.probe_button = ttk.Button(
+            actions,
+            text="Compatibility Probe…",
+            command=self._probe,
+            state="disabled",
+        )
+        self.probe_button.pack(side="left", padx=4)
         ttk.Button(actions, text="Raw Evidence (JSON)", command=self._inspect_asset).pack(
             side="left", padx=4
         )
@@ -539,6 +548,8 @@ class ModelEvidenceWindow(tk.Toplevel):
                     self.status.set(value)
                     if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
                         self._proposal_dialog.status.set(value)
+                    if self._probe_dialog is not None and self._probe_dialog.winfo_exists():
+                        self._probe_dialog.status.set(value)
                     if (
                         "stale" in str(value).casefold()
                         and self._proposal_dialog is not None
@@ -1045,7 +1056,17 @@ class ModelEvidenceWindow(tk.Toplevel):
             state="disabled",
         )
         self.verify_button.configure(state="normal" if row else "disabled")
+        self.probe_button.configure(state="normal" if row else "disabled")
         self.next_button.configure(state="disabled")
+        probe = self._probe_dialog
+        if (
+            probe is not None
+            and bool(probe.winfo_exists())
+            and (row is None or row["relative"] != getattr(probe, "relative", None))
+        ):
+            probe.mark_stale(
+                "The selected checkpoint changed. Close this probe and open one for the new selection."
+            )
         self._next_report = None
         dialog = self._next_dialog
         follow = dialog is not None and bool(dialog.winfo_exists())
@@ -1060,8 +1081,8 @@ class ModelEvidenceWindow(tk.Toplevel):
             self._next_when_ready = self._next_when_ready or follow
             self._plan(open_dialog=False)
 
-    def _capture_planning_inputs(self) -> tuple[Any, ...]:
-        row = self._selected()
+    def _capture_planning_inputs(self, row: Mapping[str, Any] | None = None) -> tuple[Any, ...]:
+        row = row or self._selected()
         if not row or row["kind"] != "checkpoint":
             raise ValueError("Select a checkpoint first.")
         controller = self.owner.learning_controller
@@ -1462,6 +1483,128 @@ class ModelEvidenceWindow(tk.Toplevel):
         self._work(
             lambda _cancelled, _p: service.saved_prompt_context(ids),
             context_ready,
+            scope=SCOPE_LIBRARY,
+        )
+
+    # ----------------------------------------------------------------- compatibility probe (MEC-901)
+
+    def _probe(self) -> None:
+        row = self._selected()
+        if not row or row["kind"] != "checkpoint":
+            self.status.set("Select a checkpoint first.")
+            return
+        controller = getattr(self.owner, "learning_controller", None)
+        if controller is None:
+            self.status.set("Learning is unavailable, so a probe cannot be prepared.")
+            return
+        from src.gui.controllers.model_evidence_probe import probe_options, sidecar_base_model
+
+        row = copy.deepcopy(row)
+        resources = capture_resources(controller)
+        history = self._history_for(row)
+        path = self._paths.get(row["relative"])
+        variant = str((row.get("header") or {}).get("checkpoint_variant") or "")
+        resolver = self._resolver()
+
+        def resolve(_cancelled: Callable[[], bool], _progress: Callable[[str], None]) -> Any:
+            return resolver.resolve(Path(row["relative"]).name), sidecar_base_model(path)
+
+        def ready(result: Any) -> None:
+            target, hint = result
+            if not target.identity.sha256:
+                self.status.set("Verify Selected first: a probe needs the checkpoint's verified SHA-256.")
+                return
+            if target.policy.qualified:
+                self.status.set(
+                    "This checkpoint has a fixed executable profile that owns its settings; no probe is needed."
+                )
+                return
+            options = probe_options(
+                family=target.identity.family,
+                variant=variant,
+                base_model_hint=hint,
+                history=history,
+                resources=resources,
+            )
+            if self._probe_dialog is not None and self._probe_dialog.winfo_exists():
+                self._probe_dialog.destroy()
+            dialog = CompatibilityProbeDialog(
+                self,
+                model=target.identity.display_name,
+                sha256=target.identity.sha256,
+                family=target.identity.family,
+                recipes=options.recipes,
+                preselected=options.preselected,
+                unavailable=options.unavailable,
+                notes=options.notes,
+                on_queue=self._queue_probe,
+            )
+            dialog.relative = row["relative"]  # type: ignore[attr-defined]
+            self._probe_dialog = dialog
+            self._keep_in_front(dialog)
+
+        self._work(resolve, ready)
+
+    def _queue_probe(self, dialog: CompatibilityProbeDialog) -> None:
+        if self._busy or dialog._stale:
+            return
+        service = getattr(self.owner, "qualification_batch", None)
+        if service is None:
+            dialog.status.set("Canonical Learning/JobService admission is unavailable.")
+            return
+        try:
+            design = dialog.design()
+        except ValueError as exc:
+            dialog.status.set(str(exc))
+            return
+        row = next(
+            (r for r in self._checkpoint_rows() if r["relative"] == getattr(dialog, "relative", None)),
+            None,
+        )
+        if row is None:
+            dialog.mark_stale("This checkpoint is no longer listed. Refresh and reopen the probe.")
+            return
+        from src.gui.controllers.model_evidence_probe import prepare_probe
+
+        inputs = self._capture_planning_inputs(row)
+        dialog.status.set("Preparing the probe Preview… (nothing is generated yet)")
+
+        def prepared(batch: Any) -> None:
+            if not dialog.winfo_exists() or dialog._stale:
+                return
+            dialog.show(batch.confirmation)
+            if not any(entry.records for entry in batch.experiments):
+                dialog.status.set("This exact probe already has jobs. Open Experiment Library to review it.")
+                return
+            generation = self._generation
+            if not messagebox.askyesno("Queue compatibility probe", batch.confirmation, parent=dialog):
+                dialog.status.set("Generation not confirmed. The probe draft is saved; zero jobs admitted.")
+                return
+            if self._closed or generation != self._generation or not dialog.winfo_exists() or dialog._stale:
+                return
+            fresh_inputs = self._capture_planning_inputs(row)
+
+            def admitted(outcome: Any) -> None:
+                self.status.set(outcome.describe())
+                if dialog.winfo_exists():
+                    dialog.status.set(outcome.describe())
+                    dialog.show(
+                        outcome.describe()
+                        + "\n\nWhen the images finish, open Experiment Library to compare the recipes, then "
+                        "record what you saw (Review Probe Result) from this catalog."
+                    )
+
+            self._work(
+                lambda cancelled, _p: service.admit(
+                    batch, self._context(fresh_inputs), confirmed=True, cancelled=cancelled
+                ),
+                admitted,
+                scope=SCOPE_LIBRARY,
+            )
+
+        self._work(
+            lambda cancelled, _p: prepare_probe(service, design, self._context(inputs), cancelled),
+            prepared,
             scope=SCOPE_LIBRARY,
         )
 

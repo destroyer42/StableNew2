@@ -26,6 +26,7 @@ STUDY_LABELS = {
     "prompt_slot": "Prompt Slot",
     "lora_composition": "LoRA Composition",
     "embedding_experiment": "Embedding",
+    "compatibility_probe": "Compatibility Probe",
 }
 
 
@@ -262,6 +263,14 @@ def build_preview_summary(
                 )
             )
             warnings.extend(section["compatibility_notes"] if show_model_names else ())
+        if study == "compatibility_probe":
+            section = snapshot["compatibility_probe"]
+            for recipe in section["recipes"]:
+                rows.append((recipe["label"], _settings_text(recipe["settings"])))
+            warnings.append(
+                "Compatibility probe: exploratory. Ratings stay with this experiment; "
+                "classification is a separate, explicit decision after you review the images."
+            )
         if study == "embedding_experiment":
             section = snapshot["embedding_experiment"]
             rows.append(
@@ -331,6 +340,11 @@ def build_preview_summary(
             if study == "lora_composition" and show_model_names
             else embedding_experiment.preview_details(snapshot["embedding_experiment"])
             if study == "embedding_experiment" and show_model_names
+            else "Prompt: "
+            + str(snapshot["compatibility_probe"]["prompt"])
+            + "\nNegative: "
+            + str(snapshot["compatibility_probe"]["negative"])
+            if study == "compatibility_probe"
             else ""
         ),
     )

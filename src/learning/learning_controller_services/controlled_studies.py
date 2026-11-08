@@ -27,6 +27,7 @@ _SERVICES = {
     "lora_composition": "lora_composition",
     "embedding_experiment": "embedding_experiment",
     "prompt_model_matrix": "prompt_model_matrix",
+    "compatibility_probe": "compatibility_probe",
 }
 #: Studies whose ratings stay experiment-local: no recommendations, Apply or profile publication.
 LOCAL_ONLY_STUDIES = frozenset(_SERVICES)

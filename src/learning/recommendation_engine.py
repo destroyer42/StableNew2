@@ -356,6 +356,7 @@ class RecommendationEngine:
                 "lora_composition",
                 "embedding_experiment",
                 "prompt_model_matrix",
+                "compatibility_probe",
             )
             if (metadata.get("study_type") in excluded_studies or
                 ((metadata.get("frozen_experiment") or {}).get("snapshot") or {}).get("study_type") in excluded_studies):

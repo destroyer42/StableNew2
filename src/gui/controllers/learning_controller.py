@@ -278,7 +278,7 @@ class LearningController:
             "selected_prompt_negative_text": negative_prompt_text,
             "selected_prompt_loras": list(experiment_data.get("selected_prompt_loras", []) or []),
             "grid": experiment_data.get("grid"),
-            **{key: copy.deepcopy(experiment_data.get(key)) for key in ("prompt_slot", "lora_composition", "embedding_experiment", "prompt_model_matrix", "evidence_proposal", "frozen_seed_policy")},
+            **{key: copy.deepcopy(experiment_data.get(key)) for key in ("prompt_slot", "lora_composition", "embedding_experiment", "prompt_model_matrix", "compatibility_probe", "evidence_proposal", "frozen_seed_policy")},
         }
 
         # Create LearningExperiment from form data

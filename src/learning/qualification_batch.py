@@ -47,7 +47,8 @@ class PreparedExperiment:
 
 @dataclass(frozen=True)
 class QualificationBatch:
-    plan: ProposalPlan
+    #: The catalog proposal plan, or None for a compatibility probe (its freshness is re-verified per NJR).
+    plan: ProposalPlan | None
     experiments: tuple[PreparedExperiment, ...]
     confirmation: str
 
@@ -292,6 +293,75 @@ class QualificationBatchService:
         )
         return QualificationBatch(plan, tuple(prepared), confirmation)
 
+    def prepare_probe(
+        self,
+        payload: dict[str, Any],
+        context: ProposalPlanningContext,
+        *,
+        cancelled: Callable[[], bool] = lambda: False,
+    ) -> QualificationBatch:
+        """Save (or reuse) one compatibility probe draft and freeze its Preview; nothing is submitted."""
+        from src.learning.compatibility_probe import STUDY_TYPE
+
+        experiment_data = payload.get("current_experiment") or {}
+        identity = str(experiment_data.get("experiment_id") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", identity):
+            raise ValueError("Invalid compatibility probe identity")
+        design = (experiment_data.get("metadata") or {}).get(STUDY_TYPE) or {}
+        if cancelled():
+            raise InterruptedError("Probe preflight cancelled; zero jobs admitted")
+        with self.store.lock:
+            saved = self.store.load_session(identity)
+            if saved is None:
+                if self.store.session_path_for(identity).exists():
+                    raise ValueError(f"{identity}: saved probe is unreadable; preserve and repair it")
+                self.store.save_session(
+                    display_name=str(experiment_data.get("name") or identity),
+                    payload=payload,
+                    experiment_id=identity,
+                    create_only=True,
+                )
+                saved = payload
+        previous = (saved.get("current_experiment") or {}).get("metadata") or {}
+        if previous.get(STUDY_TYPE) != design:
+            raise ValueError("A different probe design is saved under this identity; zero jobs admitted")
+        revision = freeze_snapshot(saved)
+        state = LearningState.from_dict(copy.deepcopy(saved))
+        experiment = state.current_experiment
+        if experiment is None or experiment.experiment_id != identity:
+            raise ValueError("Saved probe identity conflicts with its design")
+        name = experiment.name
+        if any(v.job_id or v.status != "pending" for v in state.plan):
+            return QualificationBatch(
+                None,
+                (PreparedExperiment(state, (), revision),),
+                f"{name}: this exact probe was already queued. Its jobs are preserved and nothing new "
+                "will be generated. Open Experiment Library to review it.",
+            )
+        try:
+            records, summary = self.freeze(state, context, True)
+        except (ValueError, RuntimeError, KeyError, TypeError) as exc:
+            raise ValueError(f"{name}: {exc}. Zero jobs admitted.") from exc
+        if len(records) != len(state.plan) or summary.total_images != sum(
+            v.planned_images for v in state.plan
+        ):
+            raise ValueError("Compiled NJRs disagree with the frozen probe budget")
+        work = sum(int(record.config["txt2img"]["steps"]) for record in records) * (
+            experiment.images_per_value
+        )
+        confirmation = (
+            f"Checkpoint: {context.target.identity.display_name}\n"
+            f"SHA-256: {context.target.identity.sha256}\n"
+            f"Recipes: {len(records)}; new images: {summary.total_images}\n"
+            f"Estimated denoising work: {work} steps (elapsed time unknown)\n"
+            + "\n".join(f"  {variant.param_value}" for variant in state.plan)
+            + "\n"
+            + "\n".join(dict.fromkeys(summary.warnings))
+            + "\nQueueing may start GPU generation under the current queue policy. No profile is "
+            "published and nothing is classified. Queue this probe?"
+        )
+        return QualificationBatch(None, (PreparedExperiment(state, records, revision, summary),), confirmation)
+
     def admit(
         self,
         batch: QualificationBatch,
@@ -305,7 +375,8 @@ class QualificationBatchService:
         admitted: list[str] = []
         existing: list[str] = []
         with self.execution._lock:
-            validate_current(batch.plan, context)
+            if batch.plan is not None:
+                validate_current(batch.plan, context)
             # Recheck every saved revision and compile every frozen experiment
             # before the first submission. Never rebuild accepted intent at admission.
             for entry in batch.experiments:
