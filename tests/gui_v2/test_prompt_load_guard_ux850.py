@@ -188,7 +188,10 @@ def test_accepting_the_load_button_replaces_the_pack_exactly_once(
 
     assert len(dialogs.asked) == 1
     assert len(load_calls) == 1 and load_calls[0].endswith("beta.json")
-    assert [slot.text for slot in tab.workspace_state.current_pack.slots][:2] == ["beta one", "beta two"]
+    assert [slot.text for slot in tab.workspace_state.current_pack.slots][:2] == [
+        "beta one",
+        "beta two",
+    ]
     assert tab.workspace_state.dirty is False
     assert tab.editor.get("1.0", "end").strip() == "beta one"
     assert tab.pack_name_label.cget("text") == "Editor - beta"
@@ -342,7 +345,9 @@ def test_an_unresolvable_selection_refuses_without_prompting_or_replacing(
     assert _snapshot(tab) == before
 
 
-@pytest.mark.parametrize("contents", ["{not json", json.dumps({"schema_version": 1, "pack_data": "bad"})])
+@pytest.mark.parametrize(
+    "contents", ["{not json", json.dumps({"schema_version": 1, "pack_data": "bad"})]
+)
 def test_a_malformed_pack_accepted_over_a_draft_fails_without_dropping_the_draft(
     tab: PromptTabFrame,
     tk_root: tk.Tk,
@@ -355,7 +360,9 @@ def test_a_malformed_pack_accepted_over_a_draft_fails_without_dropping_the_draft
     _type_in_editor(tab, tk_root, " edited")
     before = _snapshot(tab)
     _select(tab, "beta")
-    (packs_dir / "beta.json").write_text(contents, encoding="utf-8")  # listed, then corrupted on disk
+    (packs_dir / "beta.json").write_text(
+        contents, encoding="utf-8"
+    )  # listed, then corrupted on disk
     dialogs.answer = True
 
     tab._on_load_selected_pack()
@@ -399,7 +406,9 @@ def test_activating_load_again_while_the_prompt_is_open_does_not_bypass_it(
     _type_in_editor(tab, tk_root, " edited")
     _select(tab, "beta")
     dialogs.answer = False
-    dialogs.on_ask = tab._on_load_selected_pack  # a second activation arrives while the first prompt is open
+    dialogs.on_ask = (
+        tab._on_load_selected_pack
+    )  # a second activation arrives while the first prompt is open
 
     tab._on_load_selected_pack()
 
