@@ -37,6 +37,7 @@ Evidence tags used throughout: **[V]** verified in source/archive this session; 
 
 | Document | Content |
 |---|---|
+| [UX-850-R1 integrated assessment](ux-850-r1/README.md) | Later 73-decision traceability, five operator journeys, current-source feasibility and bounded delivery contracts (assessment at `3399f803`; partial evidence coverage) |
 | [EVIDENCE_REGISTER.md](EVIDENCE_REGISTER.md) | Source-backed findings with SHA/evidence location, confidence and falsification tests |
 | [WORKFLOW_INVENTORY.md](WORKFLOW_INVENTORY.md) | User-facing workflow inventory and issue-to-workflow matrix |
 | [workflows/](workflows/) | Nine living discovery records (scaffolds; owner answers pending) |
@@ -61,6 +62,10 @@ Evidence tags used throughout: **[V]** verified in source/archive this session; 
 B2/B3/B5 measured code at `ed1e989f` with the simulated harness and loopback fakes only (one 2560x1440 display at 100%; no real backend, GPU, real DPI or operator timing). B2's sealed suites FAIL at all three layouts: GP832-F1 (OPS-01) and GP832-F3 (IMG-03) reproduce, GP832-F2 reproduces as an observation, VID-02 is HOLD because Blender is absent, and GP832-F4 was not exercised. B3 finds the wheel captured at the inner limit for the Job History and Motion Library trees. B5 finds no N-dependent history load cost up to 50,000 rows, with the panel bounded at 20 rows. PR #254 (golden-path repairs) merged after `ed1e989f`, so these failures are not evidence about current `main` without a new run. [DECISION_HANDOFF.md](DECISION_HANDOFF.md) still says B2/B3/B5 had not run; that was true at its decision point and is kept as history.
 
 **Not done:** owner discovery for the nine workflows (every record is `DISCOVERY OPEN`); B4 (not approved); any prototype; any operator task timing; adjudication of D-1 to D-5; Qt legal review.
+
+## Later integrated assessment
+
+[UX-850-R1](ux-850-r1/README.md) preserves the subsequently supplied 73-decision owner register and maps it against `3399f803`. It supplements the historical discovery status above; UX-DEC-072 remains pending. It proposes the next bounded foundation package and grants no implementation, toolkit, runtime or merge authorization.
 
 ## Existing canonical documents (linked, not copied)
 

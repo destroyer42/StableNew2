@@ -1,0 +1,314 @@
+[
+  {
+    "id": "E01",
+    "path": "src/gui/view_contracts/task_navigation_contract.py",
+    "line": 70,
+    "sha256": "9de65b2e9af47cfa2faa2297559fd5e027c1fe552e833a08bda9f24e774094be",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E02",
+    "path": "src/gui/main_window_v2.py",
+    "line": 344,
+    "sha256": "daa808fca9c2242b88df113f009b7d323ed4831b8b67ac6b863100b9bc2d2e7b",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E03",
+    "path": "src/gui/view_contracts/window_layout_contract.py",
+    "line": 22,
+    "sha256": "d7f97d9a868274e8e421211de9ea2599ba15cf1fcf9668703b0ec478c0687fbd",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E04",
+    "path": "src/gui/widgets/scrollable_frame_v2.py",
+    "line": 159,
+    "sha256": "184516284c30cc7824c7dafb47ed8cccea5512973f61c7f6ef7855ad3f9c3fce",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E05",
+    "path": "src/controller/generation_profile_controller.py",
+    "line": 184,
+    "sha256": "2bc8a0bfaa265183b73a5195d786765bae540dc72289a33d2de7579540d0c1e9",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E06",
+    "path": "src/generation_profiles/application.py",
+    "line": 133,
+    "sha256": "fa3960c33599452d47609862274b59f9bb23421bf3bb15cd685861eabb8e296f",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E07",
+    "path": "src/generation_profiles/store.py",
+    "line": 351,
+    "sha256": "74e61d6b4225752cee49e1415f7a8cb1d996d8f7f1d639fcd6c744961252df09",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E08",
+    "path": "src/gui/prompt_workspace_state.py",
+    "line": 22,
+    "sha256": "ba1dea9187e7f2c67ed5f8023d53b174be27abb410859aed489664ccd407579d",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E09",
+    "path": "src/utils/config.py",
+    "line": 482,
+    "sha256": "0d1dc93825a25256f22395cbc56a9923d06a35ffb3d7eacc38c91dc4bff002c1",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E10",
+    "path": "src/controller/masked_edit_service.py",
+    "line": 47,
+    "sha256": "313de9d844c7ca12c22c9cf506f7b65cb0ccf58532a9ea382c23452669375a04",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E11",
+    "path": "src/gui/controllers/history_compare_service.py",
+    "line": 131,
+    "sha256": "2353cbd156c7cbd60e8475f625d3712bb3145d0b64121c1fea6e6d5cb98ef76e",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E12",
+    "path": "src/photo_optimize/store.py",
+    "line": 47,
+    "sha256": "4c234d7296d7a82aa408b334bf86cfa13eae034ac3344146ff655c3dcdde1652",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E13",
+    "path": "src/video/storyboard_store.py",
+    "line": 51,
+    "sha256": "a0ba961095d0e386f44514f564048aee6a8771932502db54a3bbb3ca380f9d52",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E14",
+    "path": "src/controller/video_sequence_controller.py",
+    "line": 129,
+    "sha256": "dd4d135f498d023ae0a19c9ef2b5d21ce905e64120f771311e934c0564f110de",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E15",
+    "path": "src/video/movie_assembly_compiler.py",
+    "line": 77,
+    "sha256": "e8fdd54b6b0e051351e9d61bba9b3c58cc5d1a9ea140119d2489269b87f0a53b",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E16",
+    "path": "src/video/sequence_resume.py",
+    "line": 235,
+    "sha256": "09eae011abbd6f761c94c05df6ccc6d210161699b0ed9d1d2a9eabc4710e8054",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E17",
+    "path": "src/queue/history_query.py",
+    "line": 41,
+    "sha256": "3233f4143036f24d97b32d0108b43dd25df461a17f4f882ed79a0195fde3ed99",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E18",
+    "path": "src/learning/profile_publication.py",
+    "line": 325,
+    "sha256": "95599f3d7d2891f29c5973b166626dc7ec3b6f9fe20cfe3ac8b5642f3cef17db",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E19",
+    "path": "src/learning/evidence_intelligence.py",
+    "line": 88,
+    "sha256": "b52f7d096d3a1ca7d118e9580a81ca684c18d4bb700b3c66db1fbed6628e5536",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E20",
+    "path": "src/learning/experiment_reconciliation.py",
+    "line": 30,
+    "sha256": "9a2c62bdd9d22e6b47047dcef1a001a54006594f91eeec4c0e40fdb3d2112e86",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E21",
+    "path": "src/learning/library_status.py",
+    "line": 44,
+    "sha256": "9da553130bc4a3ecbe799b83ab94388ced829f7f69cb590eacb4e2a2e331ccbe",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E22",
+    "path": "src/learning/learning_record.py",
+    "line": 78,
+    "sha256": "b2d64e520a1011c85f6189db63e3c6ecdceabed699ba3ba59c994b83f941930f",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E23",
+    "path": "src/controller/app_controller_services/ai_assist_integration.py",
+    "line": 82,
+    "sha256": "33f54997b6fd3f8819dac916564ee9392580fa7ccec317bf7146d7e92b00c974",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E24",
+    "path": "src/services/ui_state_store.py",
+    "line": 26,
+    "sha256": "4be7fc5d78d7a92fc9abad654d82ae0b03c35bb7f50930ee15ccc843a3602abb",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E25",
+    "path": "src/controller/job_service.py",
+    "line": 465,
+    "sha256": "30088f9c8c4099b2a9ad98d78554909cc7a5e8af01ac1b3074a138bb3f7591e4",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E26",
+    "path": "src/app_factory.py",
+    "line": 21,
+    "sha256": "7eb9e30a2267833be4af0328b9548068f137ec36800c52af74cda5fe56bac96e",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E27",
+    "path": "src/controller/app_controller.py",
+    "line": 2474,
+    "sha256": "c5d9f96458a06f230d380ce4eac453c4893808d049c2b09bacd0684339934a68",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E28",
+    "path": "docs/Subsystems/Video/MOTION_LIBRARY.md",
+    "line": 28,
+    "sha256": "6f76ccb5884704a55b740cc219b607663b261c414ef66443c1a8db3ce45d5768",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "documentary"
+  },
+  {
+    "id": "E29",
+    "path": "docs/Subsystems/GUI/PHOTO_REVIEW_REPROCESS.md",
+    "line": 114,
+    "sha256": "6f64a697ecce8626e2bb62eeacc244955fbe8bb7be4b0559be6418336b40b184",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "documentary"
+  },
+  {
+    "id": "E30",
+    "path": "docs/Subsystems/Learning/LEARNING.md",
+    "line": 605,
+    "sha256": "10028f8570fe319ccb67022c72021d0c7940cf752e6c3841adb86d2e8b3cecfe",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "documentary"
+  },
+  {
+    "id": "E31",
+    "path": "docs/research/stablenew-experience/DECISION_REGISTER.md",
+    "line": 7,
+    "sha256": "2f776edbc6575b4e8172de12ecb7832f3eb4deaf1abe57d9fdcbeda2e9211498",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "documentary"
+  },
+  {
+    "id": "E32",
+    "path": "docs/research/stablenew-experience/BASELINE_B2_B3_B5_RESULTS.md",
+    "line": 1,
+    "sha256": "c6114e11b67f8db516a35ebaea57f3517d28957cc930cba1504c8ab82381a0a1",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "documentary"
+  },
+  {
+    "id": "E33",
+    "path": "docs/Subsystems/Video/STORYBOARDS.md",
+    "line": 32,
+    "sha256": "46a39074f0e0deaebd2b338bfbbbeec87ae68a7d98a26ff3c1cfa2284997df65",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "documentary"
+  },
+  {
+    "id": "E34",
+    "path": "tools/ci/controller_surface_baseline.json",
+    "line": 5,
+    "sha256": "30125252ca19ffa35f77a5165c8cef838b18275ec3d927efcda8ce5de6c30d7f",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E35",
+    "path": "src/gui/history_browser_panel_v2.py",
+    "line": 33,
+    "sha256": "d5ec613d44304eb594acaac42aacca797eb5692a09d91e1c6c66cd4645b4b339",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E36",
+    "path": "src/learning/execution_controller.py",
+    "line": 228,
+    "sha256": "7061c734bb11b56d66328f1c39dfb795e0f3e53a33c89464d8bcf99a63eaa98d",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E37",
+    "path": "src/gui/views/storyboard_panel_actions.py",
+    "line": 52,
+    "sha256": "20eff54100d87d2c636f0950a8e73f1b57834a8ed4013ee99d7a7f677182511f",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E38",
+    "path": "src/gui/job_history_panel_v2.py",
+    "line": 143,
+    "sha256": "4c8e2d347bb33e8752ff2f3b5a1b27f9033ce83b109b815502c227d3eb5d3263",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "source"
+  },
+  {
+    "id": "E39",
+    "path": "docs/Subsystems/PromptPacks/PROMPTPACKS_AND_PROMPTING.md",
+    "line": 12,
+    "sha256": "8bd77986f64acd3c7c7d9f0bbdfa721cd59fb2ac882ff11fa9ac3e8cfcf0b41b",
+    "source_sha": "3399f8032182b65bd904f8f27818d927909cd6a3",
+    "kind": "documentary"
+  }
+]
