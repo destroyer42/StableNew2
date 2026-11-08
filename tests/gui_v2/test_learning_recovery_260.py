@@ -234,7 +234,8 @@ def test_library_reads_saved_queued_jobs_by_exact_id_without_saving_or_resubmitt
 
     tab._on_open_experiment_library()
     window = next(
-        w for w in tab.winfo_children()
+        w
+        for w in tab.winfo_children()
         if isinstance(w, tk.Toplevel) and w.title() == "Learning Experiment Library"
     )
     try:

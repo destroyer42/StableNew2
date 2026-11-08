@@ -536,7 +536,8 @@ def test_a_local_study_notice_replaces_shown_recommendations(flow) -> None:
     flow.panel.update_recommendations(_controlled_recommendations(flow))
     flow.state.current_experiment.metadata["study_type"] = "lora_composition"
     flow.controller._recommendation_engine = SimpleNamespace(  # noqa: SLF001
-        recommend=Mock(side_effect=AssertionError("local studies never query")), _cache_timestamp=1.0
+        recommend=Mock(side_effect=AssertionError("local studies never query")),
+        _cache_timestamp=1.0,
     )
     flow.controller._review_panel = flow.panel  # noqa: SLF001
 

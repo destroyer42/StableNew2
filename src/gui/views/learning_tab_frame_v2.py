@@ -1388,7 +1388,8 @@ class LearningTabFrame(ttk.Frame):
             for experiment_id, payload, rating_count in to_check:
                 try:
                     status = library_status(payload, repository, saved_rating_count=rating_count)
-                except Exception:  # one unreadable session never hides the others
+                except (OSError, RuntimeError, ValueError, TypeError, KeyError, AttributeError):
+                    # one unreadable session never hides the others
                     _log.exception("Library status check failed for %s", experiment_id)
                     status = LibraryStatus("Requires Attention", "Job history could not be read; open it to reconcile.")
                 invoker.invoke(functools.partial(show, experiment_id, status))
