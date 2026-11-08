@@ -106,6 +106,7 @@ def test_candidates_are_deliberate_ordered_and_preview_freezes(panel):
     frame.move(-1)
     assert [c["name"] for c in frame.spec()["candidates"]] == [None, B, A]
     frame.operation_var.set("Compare Candidates")
+    assert str(widget.build_button.cget("state")) == "normal", widget.readiness_reason()
     widget._on_build_preview()
     snapshot = bench.state.current_experiment.execution_snapshot_json
     assert snapshot and not widget.preview_is_stale() and not bench.service.submit_njrs.called

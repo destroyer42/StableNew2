@@ -49,6 +49,7 @@ def test_preview_freezes_and_edit_marks_stale(panel):
     for text in ("calm", "angry"):
         widget.prompt_slot_frame.value_var.set(text)
         widget.prompt_slot_frame.add()
+    assert str(widget.build_button.cget("state")) == "normal", widget.readiness_reason()
     widget._on_build_preview()
     assert bench.state.current_experiment.execution_snapshot_json
     assert not widget.preview_is_stale()

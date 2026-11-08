@@ -15,6 +15,7 @@ from typing import Any
 from src.gui.ui_tokens import TOKENS
 from src.gui.widgets.disclosure_section_v2 import DisclosureSection
 from src.learning import baseline_authoring as authoring
+from src.learning import baseline_exclusions as exclusions
 from src.learning.model_capabilities import variable_name
 from src.learning.resource_access import get_projected_resources
 
@@ -45,6 +46,7 @@ class LearningBaselineEditor(ttk.Frame):
         policy_notes_provider: Callable[[], dict[str, str]] | None = None,
         on_changed: Callable[[], None] | None = None,
         confirm: Callable[[tk.Misc], bool] = _confirm_replace,
+        study_provider: Callable[[], str] | None = None,
     ) -> None:
         super().__init__(master)
         # A stand-in controller without the baseline API leaves the editor inert instead of failing.
@@ -57,6 +59,7 @@ class LearningBaselineEditor(ttk.Frame):
         self._policy_notes_provider = policy_notes_provider or (lambda: {})
         self._on_changed = on_changed
         self._confirm = confirm
+        self._study_provider = study_provider or (lambda: "")
         self._loading = False
         self._stage = ""
         self._vars: dict[str, tk.StringVar] = {}
@@ -85,6 +88,19 @@ class LearningBaselineEditor(ttk.Frame):
         self.advanced_section.grid(row=3, column=0, sticky="ew", pady=(6, 0))
         self.advanced = self.advanced_section.body
         self.advanced.columnconfigure(1, weight=1)
+        # Settings a Pipeline copy can carry that the selected study refuses and that have no field above.
+        self.exclusions_frame = ttk.LabelFrame(self, text="Not used by this study", padding=4)
+        self.exclusions_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        self.exclusions_frame.columnconfigure(0, weight=1)
+        self.exclusions_var = tk.StringVar(value="")
+        ttk.Label(
+            self.exclusions_frame, textvariable=self.exclusions_var, wraplength=360, justify="left"
+        ).grid(row=0, column=0, sticky="ew")
+        self.exclusions_button = ttk.Button(
+            self.exclusions_frame, text="Turn Off for This Study", command=self.clear_exclusions
+        )
+        self.exclusions_button.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self.exclusions_frame.grid_remove()
         self.problems_var = tk.StringVar(value="")
         ttk.Label(
             self,
@@ -92,7 +108,7 @@ class LearningBaselineEditor(ttk.Frame):
             wraplength=360,
             justify="left",
             foreground=TOKENS.colors.status_error,
-        ).grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        ).grid(row=5, column=0, sticky="ew", pady=(6, 0))
         self.rebuild(refresh=False)
 
     # -- structure ---------------------------------------------------------------------------------------------
@@ -189,6 +205,29 @@ class LearningBaselineEditor(ttk.Frame):
         )
         problems = self.problems()
         self.problems_var.set(("Still needed: " + "; ".join(problems)) if problems else "")
+        self._refresh_exclusions(config)
+
+    def _refresh_exclusions(self, config: dict[str, Any]) -> None:
+        found = exclusions.present(config, self._study_provider() or "")
+        if not found:
+            self.exclusions_var.set("")
+            self.exclusions_frame.grid_remove()
+            return
+        self.exclusions_var.set(
+            f"On in this baseline: {exclusions.describe(found)}. This study refuses them. Turning them off "
+            "changes only the Learning baseline, never the Pipeline."
+        )
+        self.exclusions_frame.grid()
+
+    def clear_exclusions(self) -> list[str]:
+        """Turn off, in the Learning baseline only, the settings the selected study refuses."""
+        controller = self._controller
+        clear = getattr(controller, "clear_baseline_exclusions", None)
+        if not callable(clear):
+            return []
+        found = list(clear(self._study_provider() or ""))
+        self._after_change()
+        return found
 
     def problems(self) -> list[str]:
         if self._controller is None:

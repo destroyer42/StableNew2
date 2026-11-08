@@ -892,7 +892,8 @@ class LearningTabFrame(ttk.Frame):
             primary = replace(primary, enabled=False, reason="Run is not available for this design yet.")
         elif primary.enabled and primary.action == ACTION_BUILD_PREVIEW:
             if str(panel.build_button.cget("state")) == "disabled":
-                primary = replace(primary, enabled=False, reason="Complete the design to build a Preview.")
+                reason = getattr(panel, "readiness_reason", lambda: "")() or "Complete the design to build a Preview."
+                primary = replace(primary, enabled=False, reason=reason)
         return replace(projection, primary=primary), facts
 
     def _refresh_guide(self, *, force: bool = False) -> None:

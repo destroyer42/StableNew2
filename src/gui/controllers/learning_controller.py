@@ -38,6 +38,7 @@ from src.gui_v2.adapters.learning_adapter_v2 import (
 )
 from src.learning import baseline_authoring as authoring
 from src.learning import baseline_draft as draft_service
+from src.learning import baseline_exclusions as exclusions_service
 from src.learning.automation_modes import DEFAULT_AUTOMATION_MODE
 from src.learning.design_estimate import range_values
 from src.learning.discovered_review_models import (
@@ -1599,6 +1600,17 @@ class LearningController:
     def update_baseline_field(self, stage: str, name: str, value: Any) -> Any:
         """Edit one Learning-owned setting; the Pipeline is never touched."""
         return draft_service.edit_field(self.learning_state, stage, name, value)
+
+    def baseline_exclusions(self, study: str) -> list[str]:
+        """Settings in the Learning baseline that ``study`` refuses (see ``baseline_exclusions.STUDY_EXCLUSIONS``)."""
+        return exclusions_service.present(self.authoring_baseline(), study)
+
+    def clear_baseline_exclusions(self, study: str) -> list[str]:
+        """Turn off, in the Learning baseline only, the settings ``study`` refuses; the Pipeline is never touched."""
+        found = draft_service.clear_exclusions(self.learning_state, study)
+        if found:
+            self._notify_resume_state_changed()
+        return found
 
     def baseline_blockers(self, stage: str, input_image_path: str = "") -> list[str]:
         """What stops the current Learning baseline from defining an executable experiment."""
