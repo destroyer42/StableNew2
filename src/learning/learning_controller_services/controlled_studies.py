@@ -31,6 +31,24 @@ _SERVICES = {
 #: Studies whose ratings stay experiment-local: no recommendations, Apply or profile publication.
 LOCAL_ONLY_STUDIES = frozenset(_SERVICES)
 
+LOCAL_STUDY_RECOMMENDATION_NOTICE = (
+    "This study's ratings stay with this experiment. It reports a local conclusion, "
+    "not setting recommendations, Apply or profiles."
+)
+
+
+def reports_setting_recommendations(experiment: Any) -> bool:
+    """Whether setting recommendations may be shown for this experiment (None: no experiment open).
+
+    The one eligibility rule for every recommendation entry point, so a refresh can never show what the
+    getter (and Apply) refuses.
+    """
+    if experiment is None:
+        return True
+    from src.learning.model_comparison import study_type
+
+    return study_type(experiment) not in LOCAL_ONLY_STUDIES
+
 
 def service_for(study: str) -> ControlledStudyService | None:
     """The coordination module (``build_plan`` / ``build_variant``) of a controlled study, else None."""

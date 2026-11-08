@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-699 of 854 modules have a docstring.
+700 of 855 modules have a docstring.
 
 ## src/
 
@@ -589,6 +589,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_record.py`: Learning record models and persistence helpers
 - `learning_record_builder.py`: Helper for constructing LearningRecord instances from pipeline runs
 - `learning_runner.py`: Learning runner stub implementation
+- `library_status.py`: Experiment Library status from exact recorded job IDs; a read-only projection
 - `lora_composition.py`: Controlled LoRA composition: one designated LoRA position varies, every other input is frozen
 - `lora_inventory.py`: Registry-backed LoRA identity and compatibility projection for Learning composition
 - `lora_variable_service.py`: (no docstring)

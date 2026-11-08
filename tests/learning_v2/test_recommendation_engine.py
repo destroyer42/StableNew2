@@ -125,23 +125,22 @@ class TestRecommendationEngine(unittest.TestCase):
 
         recommendations = self.engine.recommend("test prompt", "txt2img")
 
-        # Should recommend the most confident sampler (Euler a has 2 samples, higher confidence)
+        # Quality first (owner decision, 2026-11-07): the best-rated sampler wins even with fewer samples.
         sampler_rec = recommendations.get_best_for_parameter("sampler")
         self.assertIsNotNone(sampler_rec)
-        self.assertEqual(sampler_rec.recommended_value, "Euler a")
-        self.assertEqual(sampler_rec.sample_count, 2)
-        self.assertEqual(sampler_rec.mean_rating, 3.5)
+        self.assertEqual(sampler_rec.recommended_value, "DPM++ 2M Karras")
+        self.assertEqual(sampler_rec.sample_count, 1)
+        self.assertEqual(sampler_rec.mean_rating, 5.0)
 
     def test_confidence_calculation(self):
-        """Test confidence score calculation."""
-        # Create records with varying sample counts
+        """Confidence grows with samples and breaks a tie between equally rated values."""
         records = [
             # High confidence: many samples, consistent rating
-            self._create_test_record(rating=4, sampler="Euler a"),
-            self._create_test_record(rating=4, sampler="Euler a"),
             self._create_test_record(rating=5, sampler="Euler a"),
-            self._create_test_record(rating=4, sampler="Euler a"),
-            # Low confidence: few samples
+            self._create_test_record(rating=5, sampler="Euler a"),
+            self._create_test_record(rating=5, sampler="Euler a"),
+            self._create_test_record(rating=5, sampler="Euler a"),
+            # Same mean, low confidence: few samples
             self._create_test_record(rating=5, sampler="DPM++ 2M Karras"),
         ]
 
@@ -175,11 +174,9 @@ class TestRecommendationEngine(unittest.TestCase):
 
         steps_rec = recommendations.get_best_for_parameter("steps")
         self.assertIsNotNone(steps_rec)
-        self.assertEqual(
-            steps_rec.recommended_value, 20
-        )  # Most reliable value (2 samples, mean 4.0)
-        self.assertEqual(steps_rec.sample_count, 2)
-        self.assertEqual(steps_rec.mean_rating, 4.0)
+        self.assertEqual(steps_rec.recommended_value, 30)  # best rated (quality first)
+        self.assertEqual(steps_rec.sample_count, 1)
+        self.assertEqual(steps_rec.mean_rating, 5.0)
 
     def test_experiment_variable_tracking(self):
         """Test that experiment variables are properly tracked."""

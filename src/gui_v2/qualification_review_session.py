@@ -77,7 +77,7 @@ class QualificationReviewSession:
         if saved and not confirm(ref):
             return False, "Override cancelled; draft retained."
         try:
-            self.controller.record_rating(
+            warning = self.controller.record_rating(
                 ref,
                 rating,
                 str(payload.get("notes") or ""),
@@ -89,6 +89,9 @@ class QualificationReviewSession:
             )
         except (OSError, RuntimeError, ValueError) as exc:
             return False, f"Not saved: {exc}. Draft retained."
+        if isinstance(warning, str) and warning:
+            # The rating is saved; only a derived display failed to refresh afterwards.
+            return True, f"Saved; some displays could not refresh: {warning}"
         return True, "Saved successfully."
 
     def remember(self, pair: QualificationPair) -> None:

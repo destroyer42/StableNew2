@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from src.learning.evidence_revision import evidence_revision
+from src.learning.learning_record import current_rating_revisions
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
 
 logger = logging.getLogger(__name__)
@@ -339,10 +340,14 @@ class RecommendationEngine:
         return records
 
     def _score_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Filter and score records that have user ratings."""
+        """Filter and score records that have user ratings.
+
+        A revised rating replaces the earlier one for the same sample before any filtering, so a
+        replaced rating never adds volume and an unusable latest revision removes the sample.
+        """
         scored_records = []
 
-        for record in records:
+        for record in current_rating_revisions(records):
             metadata = record.get("metadata", {})
             excluded_studies = (
                 "model_comparison",
@@ -745,8 +750,9 @@ class RecommendationEngine:
             if not value_ratings:
                 continue
 
-            # Find the value with highest confidence score
+            # Find the value with the highest mean rating
             best_value = None
+            best_weighted = 0.0
             best_confidence = 0.0
             best_mean = 0.0
             best_stddev = 0.0
@@ -777,11 +783,17 @@ class RecommendationEngine:
                     )
                 confidence = recommendation_confidence(count, stddev, context_confidence)
 
-                # Select based on confidence, break ties by highest rating
-                if confidence > best_confidence or (
-                    confidence == best_confidence and raw_mean > best_mean
+                # Quality first (owner decision, 2026-11-07): the highest mean rating wins, with each
+                # rating weighted by how closely its context matches the query (equal contexts give
+                # exactly the plain mean). Confidence only breaks ties, then sample count; it still
+                # decides the evidence tier elsewhere.
+                if best_value is None or (mean_rating, confidence, count) > (
+                    best_weighted,
+                    best_confidence,
+                    best_count,
                 ):
                     best_value = value
+                    best_weighted = mean_rating
                     best_confidence = confidence
                     best_mean = raw_mean
                     best_stddev = stddev
