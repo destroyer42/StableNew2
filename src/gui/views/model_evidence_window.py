@@ -32,6 +32,14 @@ from src.generation_profiles.evidence_catalog import (
     operator_catalog_root,
     select_operator_catalog,
 )
+from src.generation_profiles.civitai_lookups import (
+    LookupStore,
+    LookupSummary,
+    base_model_hint,
+    batch_lookup,
+    describe_result,
+    disclosure,
+)
 from src.generation_profiles.evidence_refresh import EvidenceRefresh, Lookup
 from src.generation_profiles.evidence_report import build_report, export_report
 from src.generation_profiles.identity import ModelIdentityResolver, RegistryShaLookup
@@ -302,6 +310,8 @@ class ModelEvidenceWindow(tk.Toplevel):
         self._verdict_dialog: ProbeVerdictDialog | None = None
         self.verdicts = VerdictStore()
         self._verdicts: dict[str, ProbeVerdict] = self.verdicts.load_all()
+        self.lookups = LookupStore()
+        self._lookups: dict[str, dict[str, Any]] = self.lookups.load_all()
         self._next_report: IntelligenceReport | None = None
         self._next_when_ready = False
         self._rows: dict[str, dict[str, Any]] = {}
@@ -331,6 +341,7 @@ class ModelEvidenceWindow(tk.Toplevel):
             bar, text="Verify Selected", command=self._verify_selected, state="disabled"
         )
         self.verify_button.pack(side="left", padx=4)
+        ttk.Button(bar, text="Civitai Lookup…", command=self._batch_lookup).pack(side="left")
         ttk.Button(bar, text="Cancel", command=self._cancel_work).pack(side="left")
         ttk.Button(bar, text="Refresh", command=self._reload).pack(side="left", padx=4)
         self.evidence_menu = tk.Menu(bar, tearoff=False)
@@ -518,7 +529,7 @@ class ModelEvidenceWindow(tk.Toplevel):
                 event = (
                     generation,
                     "cancelled"
-                    if cancel.is_set() and not isinstance(result, BatchOutcome)
+                    if cancel.is_set() and not isinstance(result, (BatchOutcome, LookupSummary))
                     else "done",
                     result,
                     success,
@@ -848,8 +859,22 @@ class ModelEvidenceWindow(tk.Toplevel):
             lines.append("  No jobs in history for this checkpoint name.")
         else:
             lines.extend("  " + line for line in history.describe())
+            from src.gui.controllers.model_evidence_probe import history_recipe
+
+            usual = history_recipe(history)
+            if usual is not None:
+                lines.append(
+                    "  Your usual settings: "
+                    + usual.label.removeprefix("Your usual settings (").removesuffix(")")
+                    + ". Offered as a Compatibility Probe recipe; not a recommendation."
+                )
             if assessment is not None:
                 lines.extend(compare_with_history(assessment.catalog_claims, history))
+        lookup = describe_result(self._lookups.get(str(row.get("sha256") or "")))
+        if lookup:
+            lines.append("")
+            lines.append("CIVITAI (looked up by SHA-256; unreviewed identification, never settings)")
+            lines.append("  " + lookup)
         verdict = self._verdicts.get(str(row.get("sha256") or ""))
         if verdict is not None:
             lines.append("")
@@ -1542,8 +1567,10 @@ class ModelEvidenceWindow(tk.Toplevel):
         variant = str((row.get("header") or {}).get("checkpoint_variant") or "")
         resolver = self._resolver()
 
+        looked_up = base_model_hint(self._lookups.get(str(row.get("sha256") or "")))
+
         def resolve(_cancelled: Callable[[], bool], _progress: Callable[[str], None]) -> Any:
-            return resolver.resolve(Path(row["relative"]).name), sidecar_base_model(path)
+            return resolver.resolve(Path(row["relative"]).name), sidecar_base_model(path) or looked_up
 
         def ready(result: Any) -> None:
             target, hint = result
@@ -1769,6 +1796,8 @@ class ModelEvidenceWindow(tk.Toplevel):
             cancelled: Callable[[], bool], _progress: Callable[[str], None]
         ) -> dict[str, Any]:
             result = self._lookup.refresh(lookup, confirmed=True, cancelled=cancelled)
+            if lookup.service == "civitai" and result["status"] in ("candidate", "service_error"):
+                self.lookups.save(lookup.identifier, result)
             if result["status"] == "candidate" and not cancelled():
                 root = operator_catalog_root() / "lookups"
                 root.mkdir(parents=True, exist_ok=True)
@@ -1780,7 +1809,46 @@ class ModelEvidenceWindow(tk.Toplevel):
                 )
             return result
 
-        self._work(research, self._show, scope=SCOPE_LIBRARY)
+        def shown(result: Any) -> None:
+            self._lookups = self.lookups.load_all()
+            self._show(result)
+
+        self._work(research, shown, scope=SCOPE_LIBRARY)
+
+    def _batch_lookup(self) -> None:
+        rows = [
+            row
+            for row in self._checkpoint_rows()
+            if row.get("identity_status") == "verified" and row.get("sha256")
+        ]
+        names = {str(row["sha256"]): display_name(row) for row in rows}
+        pending = [sha for sha in names if sha not in self._lookups]
+        hashes = pending or list(names)
+        if not hashes:
+            self.status.set("Verify checkpoints first (Scan & Verify Library); lookups use verified SHA-256s.")
+            return
+        if not messagebox.askyesno(
+            "Civitai lookup: external disclosure", disclosure(hashes, names), parent=self
+        ):
+            self.status.set("Nothing was sent.")
+            return
+
+        def run(cancelled: Callable[[], bool], progress: Callable[[str], None]) -> LookupSummary:
+            return batch_lookup(
+                hashes,
+                store=self.lookups,
+                refresh=self._lookup,
+                confirmed=True,
+                cancelled=cancelled,
+                progress=progress,
+            )
+
+        def done(summary: LookupSummary) -> None:
+            self._lookups = self.lookups.load_all()
+            self.status.set(summary.describe())
+            self._render_details()
+
+        self._work(run, done, scope=SCOPE_LIBRARY)
 
     def _research(self) -> None:
         row = self._selected()

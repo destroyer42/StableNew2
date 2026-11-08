@@ -213,3 +213,66 @@ def test_declined_classification_writes_nothing(tk_root, tmp_path, monkeypatch):
     assert asked and not (tmp_path / "m.civitai.info").exists() and verified == []
     assert window.verdicts.load("a" * 64) is None
     window._close()
+
+
+def test_details_show_your_usual_settings_as_a_probe_recipe(tk_root):
+    window = ModelEvidenceWindow(make_owner(tk_root))
+    row = census_row()
+    window.census = {"assets": [row]}
+    window._history = {"test": HISTORY}
+    window._history_state = "ready"
+    window._render_assets()
+    window._plan = lambda **_kw: None
+    window.tree.selection_set(window.tree.get_children()[0])
+    tk_root.update()
+    text = window.details.get("1.0", "end")
+    assert "Your usual settings: 1024×1024, DPM++ 2M Karras, 36 steps, CFG 8.1" in text
+    assert "not a recommendation" in text
+    window._close()
+
+
+# ----------------------------------------------------------------- MEC-903 batch Civitai lookup
+
+
+def lookup_window(tk_root, tmp_path, monkeypatch, *, confirm):
+    from src.generation_profiles.civitai_lookups import LookupStore, LookupSummary
+
+    asked, sent = [], []
+    monkeypatch.setattr(module.messagebox, "askyesno", lambda *a, **k: asked.append(a) or confirm)
+
+    def fake_batch(hashes, *, store, **_kw):
+        sent.extend(hashes)
+        store.save(hashes[0], {"status": "service_error", "http_status": 404})
+        return LookupSummary(not_found=1)
+
+    monkeypatch.setattr(module, "batch_lookup", fake_batch)
+    window = ModelEvidenceWindow(make_owner(tk_root))
+    window.lookups = LookupStore(tmp_path / "lookups")
+    window._lookups = {}
+    rows = [
+        census_row(sha256="a" * 64, identity_status="verified"),
+        census_row("models/Stable-diffusion/unverified.safetensors"),
+    ]
+    window.census = {"assets": rows}
+    window._render_assets()
+    window._plan = lambda **_kw: None
+    window.tree.selection_set(window.tree.get_children()[0])
+    tk_root.update()
+    return window, asked, sent
+
+
+def test_batch_lookup_sends_nothing_without_confirmation(tk_root, tmp_path, monkeypatch):
+    window, asked, sent = lookup_window(tk_root, tmp_path, monkeypatch, confirm=False)
+    window._batch_lookup()
+    assert "Send 1 SHA-256 hash" in asked[0][1] and sent == []
+    assert window.status.get() == "Nothing was sent."
+    window._close()
+
+
+def test_confirmed_batch_lookup_saves_and_shows_results(tk_root, tmp_path, monkeypatch):
+    window, _asked, sent = lookup_window(tk_root, tmp_path, monkeypatch, confirm=True)
+    window._batch_lookup()
+    pump(tk_root, lambda: "Civitai lookup" in window.status.get())
+    assert sent == ["a" * 64]  # only verified hashes
+    assert "Not found on Civitai" in window.details.get("1.0", "end")
+    window._close()
