@@ -85,7 +85,9 @@ def probe_options(
     schedulers = list(resources.get("schedulers") or ())
     notes: list[str] = []
     if base_model_hint:
-        notes.append(f"Civitai sidecar says base model: {base_model_hint}. Its lineage is listed first.")
+        notes.append(
+            f"Civitai sidecar says base model: {base_model_hint}. Its lineage is listed first."
+        )
     if variant:
         notes.append(f"File header variant: {variant}.")
     if usual is not None:
@@ -162,9 +164,7 @@ def probe_sessions(store: Any, sha256: str) -> tuple[ProbeSession, ...]:
 
 def describe_sessions(sessions: Sequence[ProbeSession]) -> str:
     if not sessions:
-        return (
-            "No probe of this checkpoint is saved yet. You can still record a verdict from what you already know."
-        )
+        return "No probe of this checkpoint is saved yet. You can still record a verdict from what you already know."
     lines = []
     for session in sessions:
         lines.append(f"{session.name}  [{session.experiment_id}]")
@@ -175,14 +175,18 @@ def describe_sessions(sessions: Sequence[ProbeSession]) -> str:
     return "\n".join(lines)
 
 
-def prepare_probe(service: Any, design: ProbeDesign, context: ProposalPlanningContext, cancelled: Any) -> Any:
+def prepare_probe(
+    service: Any, design: ProbeDesign, context: ProposalPlanningContext, cancelled: Any
+) -> Any:
     """Save (or reuse) the probe draft and freeze its Preview; nothing is submitted here."""
     if context.target.identity.sha256 != design.sha256:
         raise ValueError(
             "The selected checkpoint's verified identity changed since the probe was designed. Reopen the probe."
         )
     if context.target.policy.qualified:
-        raise ValueError("This checkpoint has a fixed executable profile; it does not need a probe.")
+        raise ValueError(
+            "This checkpoint has a fixed executable profile; it does not need a probe."
+        )
     payload = probe_payload(
         design,
         probe_baseline(context.baseline, context.target),

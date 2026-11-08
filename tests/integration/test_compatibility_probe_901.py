@@ -35,7 +35,9 @@ from tests.learning_v2.test_profile_publication_660 import make_publication
 def probe_env(tmp_path, monkeypatch):
     context = context_fixture.__wrapped__(tmp_path)
     resolver = make_publication(tmp_path).resolver
-    monkeypatch.setattr("src.generation_profiles.identity.ModelIdentityResolver", lambda **_: resolver)
+    monkeypatch.setattr(
+        "src.generation_profiles.identity.ModelIdentityResolver", lambda **_: resolver
+    )
     context = replace(
         context,
         baseline={
@@ -72,7 +74,9 @@ def design(context, recipes=None, images=2):
 
 def payload(context, probe):
     return probe_payload(
-        probe, probe_baseline(context.baseline, context.target), context.target.identity.display_name
+        probe,
+        probe_baseline(context.baseline, context.target),
+        context.target.identity.display_name,
     )
 
 
@@ -102,7 +106,10 @@ def test_probe_preview_confirms_then_admits_each_recipe_once(probe_env):
     assert "nothing is classified" in batch.confirmation
     (entry,) = batch.experiments
     configs = [record.config["txt2img"] for record in entry.records]
-    assert [(c["steps"], c["cfg_scale"], c["width"]) for c in configs] == [(30, 6.0, 1024), (25, 7.0, 512)]
+    assert [(c["steps"], c["cfg_scale"], c["width"]) for c in configs] == [
+        (30, 6.0, 1024),
+        (25, 7.0, 512),
+    ]
     assert {c["sampler_name"] for c in configs} == {"DPM++ 2M", "Euler a"}
     for record in entry.records:
         assert record.positive_prompt == probe.prompt
@@ -115,8 +122,13 @@ def test_probe_preview_confirms_then_admits_each_recipe_once(probe_env):
     assert outcome.admitted == (probe.experiment_id,)
     assert env.repository.count() == 2
     saved = env.store.load_session(probe.experiment_id)
-    assert saved["current_experiment"]["metadata"]["qualification_batch"]["admission"] == "confirmed"
-    assert json.loads(saved["current_experiment"]["execution_snapshot_json"])["study_type"] == STUDY_TYPE
+    assert (
+        saved["current_experiment"]["metadata"]["qualification_batch"]["admission"] == "confirmed"
+    )
+    assert (
+        json.loads(saved["current_experiment"]["execution_snapshot_json"])["study_type"]
+        == STUDY_TYPE
+    )
 
     from src.gui.controllers.model_evidence_probe import describe_sessions, probe_sessions
 
@@ -127,7 +139,9 @@ def test_probe_preview_confirms_then_admits_each_recipe_once(probe_env):
 
     again = env.coordinator.prepare_probe(payload(env.context, probe), env.context)
     assert "already queued" in again.confirmation
-    assert env.coordinator.admit(again, env.context, confirmed=True).existing == (probe.experiment_id,)
+    assert env.coordinator.admit(again, env.context, confirmed=True).existing == (
+        probe.experiment_id,
+    )
     assert env.repository.count() == 2
 
 

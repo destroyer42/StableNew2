@@ -56,7 +56,9 @@ class ProbeVerdictDialog(tk.Toplevel):
         radios = ttk.Frame(form)
         radios.grid(row=0, column=1, sticky="w")
         for key, label in RUNS_LABELS.items():
-            ttk.Radiobutton(radios, text=label, value=key, variable=self.runs).pack(side="left", padx=4)
+            ttk.Radiobutton(radios, text=label, value=key, variable=self.runs).pack(
+                side="left", padx=4
+            )
         ttk.Label(form, text="Looks like").grid(row=1, column=0, sticky="w")
         self._lineage_keys = {label: key for key, (label, _base) in LINEAGES.items()}
         self.lineage = tk.StringVar(

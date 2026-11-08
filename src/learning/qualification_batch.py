@@ -314,7 +314,9 @@ class QualificationBatchService:
             saved = self.store.load_session(identity)
             if saved is None:
                 if self.store.session_path_for(identity).exists():
-                    raise ValueError(f"{identity}: saved probe is unreadable; preserve and repair it")
+                    raise ValueError(
+                        f"{identity}: saved probe is unreadable; preserve and repair it"
+                    )
                 self.store.save_session(
                     display_name=str(experiment_data.get("name") or identity),
                     payload=payload,
@@ -324,7 +326,9 @@ class QualificationBatchService:
                 saved = payload
         previous = (saved.get("current_experiment") or {}).get("metadata") or {}
         if previous.get(STUDY_TYPE) != design:
-            raise ValueError("A different probe design is saved under this identity; zero jobs admitted")
+            raise ValueError(
+                "A different probe design is saved under this identity; zero jobs admitted"
+            )
         revision = freeze_snapshot(saved)
         state = LearningState.from_dict(copy.deepcopy(saved))
         experiment = state.current_experiment
@@ -360,7 +364,9 @@ class QualificationBatchService:
             + "\nQueueing may start GPU generation under the current queue policy. No profile is "
             "published and nothing is classified. Queue this probe?"
         )
-        return QualificationBatch(None, (PreparedExperiment(state, records, revision, summary),), confirmation)
+        return QualificationBatch(
+            None, (PreparedExperiment(state, records, revision, summary),), confirmation
+        )
 
     def admit(
         self,

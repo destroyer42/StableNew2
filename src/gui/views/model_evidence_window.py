@@ -873,7 +873,9 @@ class ModelEvidenceWindow(tk.Toplevel):
         lookup = describe_result(self._lookups.get(str(row.get("sha256") or "")))
         if lookup:
             lines.append("")
-            lines.append("CIVITAI (looked up by SHA-256; unreviewed identification, never settings)")
+            lines.append(
+                "CIVITAI (looked up by SHA-256; unreviewed identification, never settings)"
+            )
             lines.append("  " + lookup)
         verdict = self._verdicts.get(str(row.get("sha256") or ""))
         if verdict is not None:
@@ -890,7 +892,9 @@ class ModelEvidenceWindow(tk.Toplevel):
             from src.learning.model_triage import triage
 
             family = (
-                assessment.family.split(" ", 1)[0] if assessment else str(row.get("family") or "unknown")
+                assessment.family.split(" ", 1)[0]
+                if assessment
+                else str(row.get("family") or "unknown")
             )
             causes = triage(
                 header=row.get("header"),
@@ -1131,7 +1135,9 @@ class ModelEvidenceWindow(tk.Toplevel):
             and bool(verdict_dialog.winfo_exists())
             and (row is None or row.get("sha256") != verdict_dialog.sha256)
         ):
-            verdict_dialog.mark_stale("The selected checkpoint changed. Close this review and open one for it.")
+            verdict_dialog.mark_stale(
+                "The selected checkpoint changed. Close this review and open one for it."
+            )
         self.next_button.configure(state="disabled")
         probe = self._probe_dialog
         if (
@@ -1584,12 +1590,16 @@ class ModelEvidenceWindow(tk.Toplevel):
         looked_up = base_model_hint(self._lookups.get(str(row.get("sha256") or "")))
 
         def resolve(_cancelled: Callable[[], bool], _progress: Callable[[str], None]) -> Any:
-            return resolver.resolve(Path(row["relative"]).name), sidecar_base_model(path) or looked_up
+            return resolver.resolve(Path(row["relative"]).name), sidecar_base_model(
+                path
+            ) or looked_up
 
         def ready(result: Any) -> None:
             target, hint = result
             if not target.identity.sha256:
-                self.status.set("Verify Selected first: a probe needs the checkpoint's verified SHA-256.")
+                self.status.set(
+                    "Verify Selected first: a probe needs the checkpoint's verified SHA-256."
+                )
                 return
             if target.policy.qualified:
                 self.status.set(
@@ -1635,7 +1645,11 @@ class ModelEvidenceWindow(tk.Toplevel):
             dialog.status.set(str(exc))
             return
         row = next(
-            (r for r in self._checkpoint_rows() if r["relative"] == getattr(dialog, "relative", None)),
+            (
+                r
+                for r in self._checkpoint_rows()
+                if r["relative"] == getattr(dialog, "relative", None)
+            ),
             None,
         )
         if row is None:
@@ -1651,13 +1665,24 @@ class ModelEvidenceWindow(tk.Toplevel):
                 return
             dialog.show(batch.confirmation)
             if not any(entry.records for entry in batch.experiments):
-                dialog.status.set("This exact probe already has jobs. Open Experiment Library to review it.")
+                dialog.status.set(
+                    "This exact probe already has jobs. Open Experiment Library to review it."
+                )
                 return
             generation = self._generation
-            if not messagebox.askyesno("Queue compatibility probe", batch.confirmation, parent=dialog):
-                dialog.status.set("Generation not confirmed. The probe draft is saved; zero jobs admitted.")
+            if not messagebox.askyesno(
+                "Queue compatibility probe", batch.confirmation, parent=dialog
+            ):
+                dialog.status.set(
+                    "Generation not confirmed. The probe draft is saved; zero jobs admitted."
+                )
                 return
-            if self._closed or generation != self._generation or not dialog.winfo_exists() or dialog._stale:
+            if (
+                self._closed
+                or generation != self._generation
+                or not dialog.winfo_exists()
+                or dialog._stale
+            ):
                 return
             fresh_inputs = self._capture_planning_inputs(row)
 
@@ -1691,7 +1716,9 @@ class ModelEvidenceWindow(tk.Toplevel):
         row = self._selected()
         sha = str((row or {}).get("sha256") or "")
         if not row or not sha:
-            self.status.set("Verify Selected first: a verdict is recorded against the checkpoint's SHA-256.")
+            self.status.set(
+                "Verify Selected first: a verdict is recorded against the checkpoint's SHA-256."
+            )
             return
         service = getattr(self.owner, "qualification_batch", None)
         store = getattr(service, "store", None)
@@ -1729,7 +1756,9 @@ class ModelEvidenceWindow(tk.Toplevel):
             dialog.status.set(f"Verdict not saved: {exc}")
             return None
         self._verdicts[verdict.sha256] = verdict
-        dialog.status.set("Verdict saved (advisory). It is shown in the catalog; nothing else changed.")
+        dialog.status.set(
+            "Verdict saved (advisory). It is shown in the catalog; nothing else changed."
+        )
         self._render_assets()
         self._render_details()
         return verdict
@@ -1839,7 +1868,9 @@ class ModelEvidenceWindow(tk.Toplevel):
         pending = [sha for sha in names if sha not in self._lookups]
         hashes = pending or list(names)
         if not hashes:
-            self.status.set("Verify checkpoints first (Scan & Verify Library); lookups use verified SHA-256s.")
+            self.status.set(
+                "Verify checkpoints first (Scan & Verify Library); lookups use verified SHA-256s."
+            )
             return
         if not messagebox.askyesno(
             "Civitai lookup: external disclosure", disclosure(hashes, names), parent=self

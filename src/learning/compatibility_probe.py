@@ -62,7 +62,9 @@ class ProbeRecipe:
         }
 
 
-def _recipe(key: str, label: str, lineage: str, source: str, note: str, **settings: Any) -> ProbeRecipe:
+def _recipe(
+    key: str, label: str, lineage: str, source: str, note: str, **settings: Any
+) -> ProbeRecipe:
     return ProbeRecipe(key, label, lineage, settings, source, note)
 
 
@@ -190,7 +192,11 @@ _BASE_MODEL_HINTS: tuple[tuple[str, str], ...] = (
 )
 
 
-def recipe_from_history(settings: Mapping[str, Sequence[tuple[str, int]]], resolution: Sequence[tuple[str, int]], completed: int) -> ProbeRecipe | None:
+def recipe_from_history(
+    settings: Mapping[str, Sequence[tuple[str, int]]],
+    resolution: Sequence[tuple[str, int]],
+    completed: int,
+) -> ProbeRecipe | None:
     """MEC-905: the settings most of the operator's completed runs used, as one explicit recipe."""
     if completed < HISTORY_MIN_RUNS:
         return None
@@ -265,10 +271,21 @@ def match_inventory(
         folded = next((item for item in available if item.casefold() == wanted.casefold()), None)
         found = exact or folded
         if found is None:
-            return None, f"{recipe.label}: {name.replace('_', ' ')} '{wanted}' is not available in this backend."
+            return (
+                None,
+                f"{recipe.label}: {name.replace('_', ' ')} '{wanted}' is not available in this backend.",
+            )
         settings[name] = found
     return (
-        ProbeRecipe(recipe.key, recipe.label, recipe.lineage, settings, recipe.source, recipe.note, recipe.origin),
+        ProbeRecipe(
+            recipe.key,
+            recipe.label,
+            recipe.lineage,
+            settings,
+            recipe.source,
+            recipe.note,
+            recipe.origin,
+        ),
         "",
     )
 
@@ -373,7 +390,9 @@ def probe_baseline(baseline: Mapping[str, Any], target: Any) -> dict[str, Any]:
     return authoring.finalize_for_stage(result, "txt2img")
 
 
-def probe_payload(design: ProbeDesign, baseline: Mapping[str, Any], display_name: str) -> dict[str, Any]:
+def probe_payload(
+    design: ProbeDesign, baseline: Mapping[str, Any], display_name: str
+) -> dict[str, Any]:
     """The Learning session draft a probe is saved as before its Preview is built (same shape as a proposal)."""
     from src.gui.learning_state import LearningExperiment, LearningState
     from src.learning import baseline_authoring as authoring

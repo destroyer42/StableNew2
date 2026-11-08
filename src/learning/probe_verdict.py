@@ -119,7 +119,10 @@ class VerdictStore:
         verdict.validate()
         if not verdict.recorded_at:
             verdict = ProbeVerdict(
-                **{**asdict(verdict), "recorded_at": datetime.now(UTC).isoformat(timespec="seconds")}
+                **{
+                    **asdict(verdict),
+                    "recorded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                }
             )
         self.root.mkdir(parents=True, exist_ok=True)
         atomic_write_text(
@@ -163,7 +166,9 @@ def classification_sidecar(model_path: Path, verdict: ProbeVerdict) -> tuple[Pat
     if not label:
         raise ValueError("Choose the lineage the probe showed before classifying.")
     if verdict.runs == RUNS_NO:
-        raise ValueError("The verdict says this checkpoint does not work here; it is not classified.")
+        raise ValueError(
+            "The verdict says this checkpoint does not work here; it is not classified."
+        )
     present = existing_sidecars(model_path)
     if present:
         raise ValueError(

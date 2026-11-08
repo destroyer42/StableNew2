@@ -58,8 +58,13 @@ def require_probe_target(policy: Any, baseline: dict[str, Any], spec: dict[str, 
     for recipe in spec["recipes"]:
         for name, value in recipe["settings"].items():
             control = policy.control(name, "txt2img")
-            if getattr(getattr(control, "mode", None), "value", "") == "fixed" and control.value != value:
-                raise ValueError(f"{recipe['label']}: the model policy fixes {name} at {control.value}.")
+            if (
+                getattr(getattr(control, "mode", None), "value", "") == "fixed"
+                and control.value != value
+            ):
+                raise ValueError(
+                    f"{recipe['label']}: the model policy fixes {name} at {control.value}."
+                )
     if any(
         bool((section.get("prompt_optimizer") or {}).get("enabled"))
         for section in (baseline, baseline.get("txt2img") or {})
@@ -162,7 +167,9 @@ def build_plan(controller: Any, experiment: Any) -> None:
             "The probe checkpoint is not the verified file it was designed for. Verify it again, then rebuild."
         )
     baseline = authoring.finalize_for_stage(baseline, "txt2img")
-    problems = authoring.baseline_problems(apply_recipe(copy.deepcopy(baseline), spec["recipes"][0]["settings"]), "txt2img")
+    problems = authoring.baseline_problems(
+        apply_recipe(copy.deepcopy(baseline), spec["recipes"][0]["settings"]), "txt2img"
+    )
     if problems:
         raise ValueError("The probe baseline is incomplete: " + "; ".join(problems))
     values = [recipe["label"] for recipe in spec["recipes"]]
@@ -246,7 +253,9 @@ def build_variant(controller: Any, experiment: Any, variant: Any) -> NormalizedJ
         raise ValueError("The probe checkpoint's model policy changed. Rebuild the probe.")
     identity = _identity(model, policy)
     if not identity.sha256 or identity.sha256 != spec["sha256"]:
-        raise ValueError("The probe checkpoint is no longer the verified file. Nothing was admitted.")
+        raise ValueError(
+            "The probe checkpoint is no longer the verified file. Nothing was admitted."
+        )
     index = snapshot["variant_values"].index(variant.param_value)
     if (
         variant.experiment_id != snapshot["experiment_id"]

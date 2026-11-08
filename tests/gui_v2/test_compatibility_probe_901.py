@@ -42,7 +42,9 @@ def test_options_put_your_usual_settings_first_and_match_backend_spelling():
     assert "sdxl_turbo" in options.preselected and len(options.preselected) <= 4
     sd15 = next(r for r in options.recipes if r.key == "sd15")
     assert sd15.settings["scheduler"] == "automatic"  # the backend's own spelling, not a substitute
-    assert any("Simple" in problem for problem in options.unavailable)  # flux's scheduler is missing
+    assert any(
+        "Simple" in problem for problem in options.unavailable
+    )  # flux's scheduler is missing
     assert any("not a recommendation" in note for note in options.notes)
 
 
@@ -164,7 +166,9 @@ def review_window(tk_root, tmp_path, monkeypatch, *, confirm=True):
     window._verdicts = {}
     model = tmp_path / "m.safetensors"
     model.write_bytes(b"x")
-    row = census_row("models/Stable-diffusion/m.safetensors", sha256="a" * 64, identity_status="verified")
+    row = census_row(
+        "models/Stable-diffusion/m.safetensors", sha256="a" * 64, identity_status="verified"
+    )
     window.census = {"assets": [row]}
     window._paths = {row["relative"]: model}
     window._render_assets()
@@ -183,13 +187,20 @@ def test_saved_verdict_is_advisory_and_shown_in_the_catalog(tk_root, tmp_path, m
     view.lineage.set("SD 1.5")
     view.notes.insert("1.0", "faces clean at 512")
     window._assessments = {
-        "models/Stable-diffusion/m.safetensors": RowAssessment("Verified", "unknown", 0, "Family unknown.")
+        "models/Stable-diffusion/m.safetensors": RowAssessment(
+            "Verified", "unknown", 0, "Family unknown."
+        )
     }
     window._save_verdict(view)
     assert window.verdicts.load("a" * 64).lineage == "sd15"
     assert "YOUR PROBE VERDICT" in window.details.get("1.0", "end")
-    assert "Your verdict: Works; looks like SD 1.5" in window.tree.item(window.tree.get_children()[0], "values")[5]
-    assert not list(tmp_path.glob("*.civitai.info"))  # a verdict alone writes nothing next to the model
+    assert (
+        "Your verdict: Works; looks like SD 1.5"
+        in window.tree.item(window.tree.get_children()[0], "values")[5]
+    )
+    assert not list(
+        tmp_path.glob("*.civitai.info")
+    )  # a verdict alone writes nothing next to the model
     window._close()
 
 
@@ -207,7 +218,9 @@ def test_classification_writes_sidecar_only_after_confirmation(tk_root, tmp_path
 
 
 def test_declined_classification_writes_nothing(tk_root, tmp_path, monkeypatch):
-    window, view, _model, asked, verified = review_window(tk_root, tmp_path, monkeypatch, confirm=False)
+    window, view, _model, asked, verified = review_window(
+        tk_root, tmp_path, monkeypatch, confirm=False
+    )
     view.lineage.set("SDXL")
     window._classify(view)
     assert asked and not (tmp_path / "m.civitai.info").exists() and verified == []
@@ -285,7 +298,9 @@ def test_not_working_rows_show_triage_under_the_next_step(tk_root):
         header={"checkpoint_architecture": "sdxl_inpaint"},
     )
     window.census = {"assets": [row]}
-    window._assessments = {row["relative"]: RowAssessment("Verified", "sdxl", 0, "Nothing to vary yet.")}
+    window._assessments = {
+        row["relative"]: RowAssessment("Verified", "sdxl", 0, "Nothing to vary yet.")
+    }
     window._history, window._history_state = {}, "ready"
     window._render_assets()
     window._plan = lambda **_kw: None

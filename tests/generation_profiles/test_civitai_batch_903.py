@@ -22,7 +22,11 @@ def version(sha, base="SD 1.5", **extra):
         "name": "v2 pruned",
         "baseModel": base,
         "baseModelType": "Standard",
-        "model": {"name": "Dream Mix", "type": "Checkpoint", "description": "<p>prompt: secret</p>"},
+        "model": {
+            "name": "Dream Mix",
+            "type": "Checkpoint",
+            "description": "<p>prompt: secret</p>",
+        },
         "trainedWords": ["secret"],
         "files": [{"hashes": {"SHA256": sha.upper()}}],
         **extra,
@@ -42,7 +46,12 @@ class Clock:
 
 def test_identification_keeps_short_labels_and_drops_text_urls_and_settings():
     facts = civitai_identification(
-        version(A, base="Pony", name="v1 https://evil.example", model={"name": "A\nB\x00C", "type": "Checkpoint"})
+        version(
+            A,
+            base="Pony",
+            name="v1 https://evil.example",
+            model={"name": "A\nB\x00C", "type": "Checkpoint"},
+        )
     )
     assert facts == {
         "base_model": "Pony",

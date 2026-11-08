@@ -20,7 +20,10 @@ _ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "Past runs ran out of GPU memory. Try a smaller size or Forge's low-VRAM options; the model itself may be fine.",
     ),
     (
-        re.compile(r"dependenc|text.?encoder|clip.*(missing|not found)|vae.*(missing|not found)|not selected", re.I),
+        re.compile(
+            r"dependenc|text.?encoder|clip.*(missing|not found)|vae.*(missing|not found)|not selected",
+            re.I,
+        ),
         "Past failures mention missing components (text encoder / VAE). Diffusion-only files need those selected "
         "separately in Forge.",
     ),
@@ -39,8 +42,15 @@ _ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
 )
 
-_LINEAGE_FAMILY = (("pony", "sdxl"), ("illustrious", "sdxl"), ("sdxl", "sdxl"), ("flux", "flux"), ("sd 1", "sd1"),
-                   ("sd 2", "sd2"), ("sd 3", "sd3"))
+_LINEAGE_FAMILY = (
+    ("pony", "sdxl"),
+    ("illustrious", "sdxl"),
+    ("sdxl", "sdxl"),
+    ("flux", "flux"),
+    ("sd 1", "sd1"),
+    ("sd 2", "sd2"),
+    ("sd 3", "sd3"),
+)
 
 
 def _family_of_label(label: str) -> str:
@@ -102,7 +112,11 @@ def triage(
         used = _top(history, "steps")
         causes.append(
             "Turbo distilled model: it expects about 1–4 steps, CFG about 1 and 512×512"
-            + (f"; your completed runs mostly used {used} steps, which over-cooks it." if used else ".")
+            + (
+                f"; your completed runs mostly used {used} steps, which over-cooks it."
+                if used
+                else "."
+            )
         )
     lineage = _family_of_label(civitai_base_model)
     if lineage and family and family not in ("unknown",) and lineage != family:

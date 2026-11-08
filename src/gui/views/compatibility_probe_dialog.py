@@ -77,7 +77,9 @@ class CompatibilityProbeDialog(tk.Toplevel):
             ttk.Checkbutton(row, text=recipe.label, variable=var).pack(side="left")
             ttk.Label(row, text="   " + recipe_line(recipe), foreground="#555").pack(side="left")
             ttk.Label(
-                box, text="      " + recipe.note + f" Source: {recipe.source}", wraplength=820,
+                box,
+                text="      " + recipe.note + f" Source: {recipe.source}",
+                wraplength=820,
                 foreground="#777",
             ).pack(anchor="w")
         for problem in unavailable:
@@ -96,7 +98,11 @@ class CompatibilityProbeDialog(tk.Toplevel):
         ttk.Label(form, text="Images per recipe").grid(row=2, column=0, sticky="w")
         self.images = tk.IntVar(value=DEFAULT_IMAGES_PER_RECIPE)
         ttk.Spinbox(
-            form, from_=1, to=MAX_IMAGES_PER_RECIPE, textvariable=self.images, width=4,
+            form,
+            from_=1,
+            to=MAX_IMAGES_PER_RECIPE,
+            textvariable=self.images,
+            width=4,
             command=self._update_total,
         ).grid(row=2, column=1, sticky="w", padx=4)
         self.total = tk.StringVar()
