@@ -45,6 +45,10 @@ class PromptModelMatrixDesignFrame(PromptSlotDesignFrame):
 
     def _render(self) -> None:
         super()._render()
+        self.refresh_count()
+
+    def refresh_count(self) -> None:
+        """Re-state the cell count; called when candidates or the panel's model checklist change."""
         prompts, models = len(self._candidates), self._selected_models()
         self.count_var.set(
             f"{prompts} prompts x {models} models = {prompts * models} cells. Choose {MIN_PROMPTS}-{MAX_PROMPTS} "

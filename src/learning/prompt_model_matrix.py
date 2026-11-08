@@ -22,6 +22,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
+from src.learning.baseline_exclusions import hires_requested, refiner_requested
 from src.learning.model_comparison import (
     arm_njr,
     build_arm,
@@ -108,17 +109,9 @@ def excluded_conditioning(config: Mapping[str, Any]) -> list[str]:
         found.append("aesthetic conditioning")
     if str(base.get("hypernetwork") or "none").lower() not in {"", "none"}:
         found.append("hypernetwork")
-    if (
-        base.get("enable_hr")
-        or config.get("enable_hr")
-        or (config.get("hires_fix") or {}).get("enabled")
-    ):
+    if hires_requested(config):
         found.append("hires fix")
-    if (
-        base.get("refiner_enabled")
-        or config.get("use_refiner")
-        or (config.get("refiner") or {}).get("enabled")
-    ):
+    if refiner_requested(config):  # includes txt2img.use_refiner, the spelling the executor honours
         found.append("refiner")
     if any(
         "controlnet" in str(key).lower()
