@@ -1367,14 +1367,13 @@ class LearningTabFrame(ttk.Frame):
             return
         import functools
 
-        from src.gui.gui_invoker import GuiInvoker
+        from src.gui.ui_dispatcher import tk_dispatcher_for
         from src.learning.library_status import LibraryStatus, library_status
         from src.utils.thread_registry import get_thread_registry
 
         execution = getattr(self.learning_controller, "execution_controller", None)
         repository = getattr(execution, "repository", None)
-        invoker = GuiInvoker(tree)
-        tree.bind("<Destroy>", lambda _event: invoker.dispose(), add=True)
+        dispatcher = tk_dispatcher_for(tree)  # the root's single pump; never a second owner
 
         def show(experiment_id: str, status: LibraryStatus) -> None:
             try:
@@ -1392,8 +1391,7 @@ class LearningTabFrame(ttk.Frame):
                     # one unreadable session never hides the others
                     _log.exception("Library status check failed for %s", experiment_id)
                     status = LibraryStatus("Requires Attention", "Job history could not be read; open it to reconcile.")
-                invoker.invoke(functools.partial(show, experiment_id, status))
-            invoker.invoke(invoker.dispose)  # after the queued updates; stops the pump
+                dispatcher.invoke(functools.partial(show, experiment_id, status))
 
         try:
             get_thread_registry().spawn(
