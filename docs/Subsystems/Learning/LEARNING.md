@@ -431,6 +431,30 @@ scan, verification, save, preview, queue preparation, lookup or import/export.
 Merely opening the window starts no scan, hash or lookup. Follow-up slices and owner
 decisions: `docs/work_packages/MEC-900_Model_Evidence_Catalog_Usability.md`.
 
+**Compatibility Probe…** (MEC-901) answers "does this checkpoint run here, and what
+kind of model is it?" for a verified checkpoint without a fixed executable profile,
+including unqualified and unknown families (owner decision D1). It is the
+`compatibility_probe` controlled study (`src/learning/compatibility_probe.py`,
+`learning_controller_services/compatibility_probe.py`): one prompt and one seed
+cohort under 2–4 source-cited lineage recipes (sampler, scheduler, steps, CFG, size),
+txt2img only, with the model's own VAE and no adapters, secondary stages, global
+prompt additions or prompt optimizer. The policy (policy id, family, evidence) and
+the byte identity are frozen at Preview and re-verified per NJR. Admission is
+`QualificationBatchService.prepare_probe` → `admit` after the confirmation. Ratings
+are experiment-local (`LOCAL_ONLY_STUDIES`; `RecommendationEngine` excludes the
+study). "Your usual settings" (MEC-905, `recipe_from_history`, at least 3 agreeing
+completed runs) is offered as an explicit recipe, never applied silently.
+**Review Probe Result…** (MEC-902, `src/learning/probe_verdict.py`) stores an
+advisory verdict per SHA-256 under the operator catalog root. **Apply
+Classification…** is a separate confirmed step that creates a `.civitai.info`
+sidecar (a `baseModel` label plus StableNew provenance) only when none exists. Family
+therefore still comes only from registry evidence (invariant 4). **Civitai Lookup…**
+(MEC-903, `src/generation_profiles/civitai_lookups.py`) sends the listed verified
+hashes after disclosure, rate-limited and cancellable, and keeps only sanitized
+identification facts (base model, names, type) as unreviewed display and recipe-order
+hints. For "Not Working" files or ones that never completed, `src/learning/model_triage.py`
+(MEC-904) lists hypotheses from header structure, past-run errors and Civitai lineage.
+
 Source lookup requires confirmation of the identifier sent to Civitai or an exact
 Hugging Face repository/commit. Bounded responses become unreviewed candidates,
 never executable recipes. Schema-validated reviewed claims can be imported into

@@ -99,7 +99,8 @@ def _label(value: Any, limit: int = 120) -> str:
 
 def civitai_identification(data: dict[str, Any]) -> dict[str, str]:
     """Identification facts only (base model, names, type); never prompts, descriptions, URLs or settings."""
-    model = data.get("model") if isinstance(data.get("model"), dict) else {}
+    raw_model = data.get("model")
+    model: dict[str, Any] = raw_model if isinstance(raw_model, dict) else {}
     facts = {
         "base_model": _label(data.get("baseModel"), 64),
         "base_model_type": _label(data.get("baseModelType"), 32),

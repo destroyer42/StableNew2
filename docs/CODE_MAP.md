@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-702 of 857 modules have a docstring.
+710 of 865 modules have a docstring.
 
 ## src/
 
@@ -201,6 +201,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Model-aware generation-settings profiles (PR-IMG-PROFILE-630)
 - `application.py`: Deterministic planning of how a profile lands on the working Base Generation settings (PR-IMG-PROFILE-630)
+- `civitai_lookups.py`: Civitai lookups by verified SHA-256, one stored result per checkpoint (MEC-903, owner decision D4)
 - `contract.py`: Typed, versioned generation-settings profile contract (PR-IMG-PROFILE-630)
 - `evidence_baseline.py`: Curated research seeds; subtype records never attach by filename hints
 - `evidence_catalog.py`: Versioned, source-cited advisory evidence
@@ -282,6 +283,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_profile_publication.py`: Small UI adapter for explicit publication, using existing background/record/profile owners
 - `learning_stored_drafts.py`: Commit rated review drafts that are sitting in saved Learning sessions (every experiment but the open one)
 - `model_evidence_next_test.py`: Adapter between the Model Evidence window and the read-only Learning intelligence service
+- `model_evidence_probe.py`: Window-independent helpers for the catalog's Compatibility Probe (MEC-901 / MEC-905)
 - `model_evidence_proposals.py`: Proposal draft/Preview adapter; never binds JobService or changes the visible Learning state
 - `qualification_review.py`: Worker-only qualification follow-up validation through existing catalog/compiler seams
 - `video_workspace_handoff.py`: (no docstring)
@@ -389,6 +391,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Views package for GUI v2
 - `character_training_frame.py`: (no docstring)
+- `compatibility_probe_dialog.py`: Compatibility probe dialog (MEC-901): choose 2–4 lineage recipes, a prompt and an image budget, then queue
 - `diagnostics_dashboard_v2.py`: Diagnostics dashboard for StableNew V2
 - `discovered_review_inbox_panel.py`: DiscoveredReviewInboxPanel — lists discovered groups with status controls
 - `discovered_review_table.py`: DiscoveredReviewTable — shows all items in a discovered group for comparison
@@ -419,6 +422,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `photo_optimize_scope.py`: Photo editing/review orchestration in the existing view and worker seams
 - `photo_optimize_tab_frame_v2.py`: (no docstring)
 - `pipeline_tab_frame_v2.py`: (no docstring)
+- `probe_verdict_dialog.py`: Review Probe Result dialog (MEC-902): record an advisory verdict, then optionally classify explicitly
 - `prompt_model_matrix_design_frame.py`: Prompt x Model Matrix authoring: the Prompt Slot candidate editor with the matrix's own bounds and shared-set…
 - `prompt_slot_design_frame.py`: Ordered Prompt Slot authoring inside the existing scrollable Learning Design surface
 - `prompt_tab_frame_v2.py`: Prompt Tab Frame v2.6 - Main prompt editing interface with matrix integration
@@ -546,6 +550,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `baseline_authoring.py`: Learning's independently authored experiment baseline (toolkit-neutral)
 - `baseline_draft.py`: The editable Learning baseline draft: lifecycle rules over ``LearningState.baseline_draft``
 - `baseline_exclusions.py`: Settings a controlled Learning study refuses, detected in and cleared from the Learning baseline draft only
+- `compatibility_probe.py`: Compatibility probe design (MEC-901): "does this checkpoint run here, and what kind of model is it?"
 - `controlled_study_display.py`: Presentation dispatch for the controlled single-position studies (Prompt Slot, LoRA Composition, Embedding)
 - `dataset_builder.py`: Dataset aggregation utilities for learning groundwork
 - `design_estimate.py`: How much work a design would create, before any Preview is built
@@ -601,6 +606,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `model_policy_service.py`: Learning policy validation and compile delegation; never an execution authority
 - `model_profiles.py`: Model Profiles & Style-Aware Defaults (V2-P1)
 - `model_run_history.py`: Per-checkpoint summary of past queue jobs, for display in the Model Evidence Catalog
+- `model_triage.py`: Likely causes for a checkpoint that does not work (MEC-904), from facts StableNew already holds
 - `next_actions.py`: Deterministic gap classification and ranking of suggested next actions
 - `ordinary_njr.py`: Materialise one ordinary (single-variable) Learning variant into the canonical NJR
 - `ordinary_prompt_freeze.py`: Ordinary Learning executor-base freeze and explicit saved-preview admission
@@ -609,6 +615,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `output_scanner.py`: OutputScanner — manifest-first artifact scanner
 - `preference_evidence.py`: Read-only preference summary from saved Learning ratings
 - `preview_summary.py`: Structured, read-only summary of what a frozen Preview would submit
+- `probe_verdict.py`: Operator verdicts on compatibility probes (MEC-902) and the explicit classification they may lead to
 - `profile_publication.py`: Field-specific controlled evidence -> advisory profile; no execution or rating authority
 - `prompt_model_matrix.py`: Bounded Prompt x Model study: plan once, freeze every cell, materialize ordinary immutable NJRs
 - `prompt_model_matrix_results.py`: Toolkit-neutral Prompt x Model results: the same ``GridModel`` the Two-Axis Grid view and contact sheet render
@@ -635,6 +642,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/learning/learning_controller_services/
 
 - `__init__.py`: learning_controller_services — extracted service helpers for LearningController
+- `compatibility_probe.py`: Compatibility probe coordination (MEC-901) over the existing snapshot, ordinary NJR and Learning state owners
 - `controlled_studies.py`: Dispatch for the controlled single-position studies; each owns its own snapshot, NJR and evidence service
 - `embedding_experiment.py`: Embedding experiment coordination over existing snapshot, ordinary NJR and Learning state owners
 - `experiment_persistence.py`: experiment_persistence — pure serialisation helpers for LearningController resume state

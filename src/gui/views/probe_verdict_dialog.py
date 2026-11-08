@@ -23,7 +23,7 @@ class ProbeVerdictDialog(tk.Toplevel):
         recipes: Sequence[str],
         probe_ids: Sequence[str],
         existing: ProbeVerdict | None,
-        on_save: Callable[[ProbeVerdictDialog], None],
+        on_save: Callable[[ProbeVerdictDialog], object],
         on_classify: Callable[[ProbeVerdictDialog], None],
         on_library: Callable[[], object],
     ) -> None:

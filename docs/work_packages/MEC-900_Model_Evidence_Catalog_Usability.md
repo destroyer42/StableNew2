@@ -134,3 +134,48 @@ Suggested order: **MEC-901 → 902** (they deliver the "run it, look, learn what
 Tests: `tests/assets/test_registry_linked_library_900.py`, `tests/learning_v2/test_model_run_history_900.py`,
 `tests/gui_v2/test_model_evidence_catalog_900.py`, plus the existing 760/800/810/830 suites (updated where the
 intended UI changed).
+
+## 8. Follow-up slices delivered (MEC-901 to MEC-905)
+
+Owner answers: **D1 yes**, **D3 advisory first, with classification as an explicit operator decision after review**,
+**D4 yes**. Defaults used for the decisions not answered: D2 (2–4 recipes × 2 images, the same seeds for every recipe;
+at most 4 images per recipe), D5 (history appears as an explicit, labelled recipe and is never applied silently) and
+D6 (nothing is ever moved out of "Not Working").
+
+| Slice | What the operator gets | Where |
+|---|---|---|
+| MEC-901 Compatibility probe | **Compatibility Probe…** on any verified checkpoint that has no fixed executable profile: tick 2–4 lineage recipes (SD 1.5, SD 1.5 portrait, SD 2.x, SDXL, SDXL Lightning, SDXL Turbo, Flux; each cites its source), edit the prompt, choose images per recipe and see the total. **Queue Probe…** freezes a Preview, shows the checkpoint SHA-256, image count and step work, and admits only after confirmation. Repeating the same design never reruns it. | `src/learning/compatibility_probe.py` (recipes, design), `learning_controller_services/compatibility_probe.py` (local-only controlled study), `QualificationBatchService.prepare_probe`, `src/gui/controllers/model_evidence_probe.py`, `src/gui/views/compatibility_probe_dialog.py` |
+| MEC-902 Verdict and classification | **Review Probe Result…** lists the probe runs and records *works / works with artifacts / does not work*, *looks like* (SD 1.5, SD 2.x, SDXL, Pony, Illustrious, Turbo, Lightning, Flux, not sure), best recipe and notes. The verdict is advisory, shown in the row and details. **Apply Classification…** is the separate explicit step: it creates `<model>.civitai.info` with a `baseModel` label that the existing registry family evidence maps to the right family, plus a `stablenew_operator_classification` provenance block. It is created only when no sidecar exists (never overwritten), after the exact path and content are confirmed; then Verify Selected re-reads the file. Deleting the file undoes it. | `src/learning/probe_verdict.py`, `src/gui/views/probe_verdict_dialog.py` |
+| MEC-903 Civitai batch | **Civitai Lookup…** sends the verified SHA-256s not yet looked up (all of them when every one has been), after a disclosure that lists them. One request per rate-limit slot, cancellable, each definite answer saved per checkpoint. Only sanitized identification facts are kept: base model, model and version name, type. They are shown as unreviewed, order the probe recipes, and feed triage. They are never settings, family evidence or recommendations. A 404 is shown as "not found on Civitai" with its usual reasons. | `src/generation_profiles/civitai_lookups.py`, `evidence_refresh.civitai_identification` |
+| MEC-904 "Not Working" triage | For files in "Not Working" (or with no completed run), **WHY IT MAY NOT WORK** appears under the next step. It covers: inpainting / refiner / quantized / diffusion-only / truncated headers, Turbo against the steps your runs used, past-run error patterns (missing components, out of memory, shape mismatch, LoRA family, connection), and a Civitai lineage that disagrees with StableNew's family. Each list ends in a probe. | `src/learning/model_triage.py` |
+| MEC-905 History hints | When at least 3 completed runs agree, "Your usual settings (…)" is offered (and preselected) as a probe recipe and shown in details, labelled *not a recommendation*. It is not used as a proposal control value. | `recipe_from_history`, `model_evidence_probe.history_recipe` |
+
+Deviations from the section 5 sketch, and why:
+
+- A verdict is its own advisory file (`<operator catalog>/verdicts/<sha>.json`), not an `operator_observation` claim
+  in a catalog revision. Catalog revisions stay limited to reviewed source claims, and invariant 4 is unchanged: family
+  changes only through registry evidence that the operator chose to create.
+- Civitai trigger words and publisher-stated sampler/steps/CFG are not imported. They are settings and must pass the
+  existing reviewed-import path. Only identification facts are stored.
+- A probe is a controlled study (like Prompt Slot), not a P0 proposal type. This keeps the planner's proposal
+  contract unchanged and makes ratings experiment-local (`LOCAL_ONLY_STUDIES`, excluded by `RecommendationEngine`).
+- There is no "probe all unknown models" batch yet. Each probe is confirmed per model.
+
+Acceptance (follow-up slices):
+
+- A verified, not profile-owned checkpoint can be probed with 2–4 recipes. The probe runs txt2img only, with the
+  model's own VAE, no LoRA/ADetailer/hires/upscale, no global prompt additions or prompt optimizer, and one common seed.
+  The confirmation shows the checkpoint SHA-256 and image count. Nothing is admitted without confirmation, and a
+  repeat preserves the existing jobs.
+- A changed or unverified file, or a model policy change after Preview, refuses admission.
+- A verdict never writes next to the model. Classification writes only after confirmation, only when no sidecar
+  exists, and the written label maps to the intended family through the existing evidence code.
+- The batch lookup sends nothing without confirmation, only verified hashes, and stops on Cancel.
+- Triage and history hints are displayed only.
+
+Tests: `tests/integration/test_compatibility_probe_901.py`, `tests/gui_v2/test_compatibility_probe_901.py`,
+`tests/learning_v2/test_probe_verdict_902.py`, `tests/generation_profiles/test_civitai_batch_903.py`,
+`tests/learning_v2/test_model_triage_904.py`.
+
+Not demonstrated: a probe rendered by the owner's live Forge; interactive review in the live app; real Civitai
+responses (the batch was exercised with recorded-shape fakes).

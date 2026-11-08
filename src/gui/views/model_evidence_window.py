@@ -26,12 +26,6 @@ from typing import Any
 from src.assets.checkpoint_structure import checkpoint_variant_from_metadata
 from src.assets.evidence_census import CensusBudget, refresh_census
 from src.assets.registry import AssetKind, AssetRegistry
-from src.generation_profiles.evidence_catalog import (
-    EvidenceCatalog,
-    load_operator_catalog,
-    operator_catalog_root,
-    select_operator_catalog,
-)
 from src.generation_profiles.civitai_lookups import (
     LookupStore,
     LookupSummary,
@@ -39,6 +33,12 @@ from src.generation_profiles.civitai_lookups import (
     batch_lookup,
     describe_result,
     disclosure,
+)
+from src.generation_profiles.evidence_catalog import (
+    EvidenceCatalog,
+    load_operator_catalog,
+    operator_catalog_root,
+    select_operator_catalog,
 )
 from src.generation_profiles.evidence_refresh import EvidenceRefresh, Lookup
 from src.generation_profiles.evidence_report import build_report, export_report
@@ -53,11 +53,11 @@ from src.gui.controllers.model_evidence_proposals import (
     preview_selected,
     save_drafts,
 )
+from src.gui.views.compatibility_probe_dialog import CompatibilityProbeDialog
 from src.gui.views.model_evidence_proposals_dialog import (
     ModelEvidenceProposalsDialog,
     choose_prompt_context,
 )
-from src.gui.views.compatibility_probe_dialog import CompatibilityProbeDialog
 from src.gui.views.next_test_dialog import NextTestDialog
 from src.gui.views.probe_verdict_dialog import ProbeVerdictDialog
 from src.gui_v2.next_test_view import build_view, route_for
@@ -110,7 +110,8 @@ _COMPARED_FIELDS = (
 HOW_TO = (
     "1  Scan & Verify Library (once; hashes are saved and reused next session)   "
     "2  Select a checkpoint to see its identity, past runs and catalog evidence   "
-    "3  Proposed Experiments saves, previews or queues the ones marked ready. Nothing generates without your confirmation."
+    "3  Proposed Experiments for ready models; Compatibility Probe for unknown or Not Working ones. "
+    "Nothing generates without your confirmation."
 )
 
 
@@ -841,7 +842,6 @@ class ModelEvidenceWindow(tk.Toplevel):
         row = self._selected()
         if row is None:
             return
-        path = self._paths.get(row["relative"])
         lines = [display_name(row), ""]
         assessment = self._assessments.get(row["relative"])
         if assessment is None:
