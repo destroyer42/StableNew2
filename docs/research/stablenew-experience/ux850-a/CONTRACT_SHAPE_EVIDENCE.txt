@@ -1,0 +1,74 @@
+Documentary AST shape capture at 8e1ee82b5fd8cc18437274e86e9af4f59938a799; 2026-11-08 UTC.
+No application module was imported/executed. Same-author method-diverse challenge, not independent reviewer sign-off.
+
+src/controller/masked_edit_service.py
+  class MaskEditSettings:24 fields=['prompt', 'denoise', 'mask_blur', 'padding', 'only_masked']; methods=['validate']
+  class MaskEditPreview:43 fields=['job', 'source_path']; methods=['require_queueable', 'submit']
+  def history_lineage_for:58 args=['handoff', 'path']
+  def bind_history_lineage:71 args=['baseline', 'source_path', 'source_sha256', 'lineage']
+  def prepare_mask_edit:113 args=['source_path', 'source_sha256', 'mask_data', 'settings', 'fallback_config', 'baseline', 'family_lookup']
+  def build_frozen_edit_preview:144 args=['source_path', 'prompt', 'denoise', 'fallback_config', 'baseline', 'family_lookup', 'pack_name', 'freeze', 'edit_spec', 'lineage_sha', 'operation']
+
+src/gui_v2/mask_editor_state.py
+  class MaskViewport:11 fields=['scale', 'x', 'y']; methods=['image_point', 'zoom', 'fit']
+  class MaskDocument:30 fields=[]; methods=['__init__', 'checkpoint', 'paint', 'clear', 'undo', 'redo', 'render']
+
+src/video/movie_assembly_compiler.py
+  class MovieAssemblyAdmissionError:65 fields=[]; methods=[]
+  class AssemblyIntentClip:70 fields=['path', 'duration_seconds']; methods=[]
+  class MovieAssemblyIntent:77 fields=['clips', 'mode', 'fps', 'resolution', 'still_seconds', 'transition_seconds', 'codec', 'quality', 'audio_path', 'audio_fade_out_seconds', 'clip_name']; methods=[]
+  class VideoFacts:96 fields=['width', 'height', 'duration_seconds', 'fps']; methods=[]
+  def probe_video:108 args=['path']
+  def probe_audio_duration:128 args=['path', 'ffprobe']
+  def oriented_image_size:185 args=['path']
+  def resolve_target_size:199 args=['resolution', 'first_clip_size']
+  def sanitize_clip_name:224 args=['name']
+  def _hash:231 args=['hash_file', 'path']
+  def _freeze_clip:238 args=['index', 'item', 'intent', 'probe', 'hash_file']
+  def _freeze_audio:289 args=['intent', 'probe', 'hash_file']
+  def freeze_movie_assembly:311 args=['intent', 'video_probe', 'audio_probe', 'hash_file']
+  def build_movie_assembly_njr:378 args=['spec', 'output_dir', 'output_route', 'builder']
+
+src/video/storyboard.py
+  class StoryboardError:21 fields=[]; methods=[]
+  def timestamp:25 args=[]
+  def check_id:29 args=['value']
+  def _fields:37 args=['data', 'allowed', 'label']
+  def _text:42 args=['value']
+  def _hash:48 args=['value']
+  class StoryboardDraft:56 fields=['storyboard_id', 'title', 'created_at', 'updated_at', 'revision', 'source_path', 'source_sha256', 'backend', 'workflow_id', 'workflow_version', 'settings', 'shots', 'clip_name', 'notes', 'origin_job_id', 'origin_plan_digest', 'schema']; methods=['new', 'to_dict', 'from_dict', 'duplicate', 'fingerprint', 'move']
+
+src/generation_profiles/application.py
+  class SettingNote:66 fields=['key', 'status', 'message', 'old', 'new']; methods=[]
+  class ApplicationPlan:75 fields=['status', 'profile', 'changes', 'notes', 'message']; methods=['conflicts', 'note_for']
+  def _same:95 args=['left', 'right']
+  def policy_blocks:104 args=['policy', 'key', 'value']
+  def _allowed_geometry:120 args=['policy']
+  def plan_application:133 args=['profile', 'match', 'working', 'policy', 'catalogs', 'previous_family', 'current_family', 'missing_ref']
+  def _carry_over:270 args=['notes', 'changes', 'working', 'policy', 'catalogs', 'family_changed', 'covered', 'recommended']
+  def _label:337 args=['key']
+  def _show:341 args=['value']
+
+src/learning/profile_publication.py
+  def digest:61 args=['value']
+  def _rank_value:67 args=['item']
+  def _legacy_whole_number:82 args=['key', 'value']
+  def strong_match:96 args=['saved', 'current']
+  class Finding:117 fields=['setting', 'value', 'experiment_count', 'sample_count', 'tested_values', 'mean_rating', 'rating_stddev', 'evidence_digest']; methods=['rationale']
+  class PublicationProposal:138 fields=['model', 'experiment_id', 'findings', 'excluded', 'blockers', 'evidence_digest', 'experiment_count', 'sample_count', 'lineages', 'target_context', 'prior_publications']; methods=['settings', 'ready', 'already_published', 'differences']
+  class _Sample:182 fields=['identity', 'experiment', 'setting', 'value', 'rating', 'context', 'proof', 'seeds']; methods=[]
+  def _sample:193 args=['row', 'target']
+  def controlled_sample:316 args=['row', 'target']
+  class ProfilePublicationService:325 fields=[]; methods=['__init__', 'evaluate', 'publish', '_publish']
+
+src/learning/evidence_intelligence.py
+  class IntelligenceSources:49 fields=['context', 'rating_log', 'experiments', 'publication_service']; methods=[]
+  def load_sources:56 args=['context', 'records_path', 'store', 'publication_service']
+  def _publication:69 args=['sources', 'problems']
+  def assess:88 args=['sources']
+
+src/learning/qualification_batch.py
+  class PreparedExperiment:41 fields=['state', 'records', 'saved_revision', 'summary']; methods=[]
+  class QualificationBatch:49 fields=['plan', 'experiments', 'confirmation']; methods=[]
+  class BatchOutcome:56 fields=['admitted', 'existing', 'stopped']; methods=['describe']
+  class QualificationBatchService:73 fields=[]; methods=['__init__', 'guard_admission', 'checkpoint', 'saved_prompt_context', 'restore', 'prepare', 'admit']
