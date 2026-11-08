@@ -26,6 +26,14 @@ from typing import Any
 from src.assets.checkpoint_structure import checkpoint_variant_from_metadata
 from src.assets.evidence_census import CensusBudget, refresh_census
 from src.assets.registry import AssetKind, AssetRegistry
+from src.generation_profiles.civitai_lookups import (
+    LookupStore,
+    LookupSummary,
+    base_model_hint,
+    batch_lookup,
+    describe_result,
+    disclosure,
+)
 from src.generation_profiles.evidence_catalog import (
     EvidenceCatalog,
     load_operator_catalog,
@@ -45,11 +53,13 @@ from src.gui.controllers.model_evidence_proposals import (
     preview_selected,
     save_drafts,
 )
+from src.gui.views.compatibility_probe_dialog import CompatibilityProbeDialog
 from src.gui.views.model_evidence_proposals_dialog import (
     ModelEvidenceProposalsDialog,
     choose_prompt_context,
 )
 from src.gui.views.next_test_dialog import NextTestDialog
+from src.gui.views.probe_verdict_dialog import ProbeVerdictDialog
 from src.gui_v2.next_test_view import build_view, route_for
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import RegistryFamilyLookup
@@ -73,6 +83,12 @@ from src.learning.intelligence_contracts import (
     IntelligenceReport,
 )
 from src.learning.model_run_history import ModelRunSummary, read_run_history
+from src.learning.probe_verdict import (
+    ProbeVerdict,
+    VerdictStore,
+    classification_sidecar,
+    write_classification,
+)
 from src.learning.qualification_batch import BatchOutcome
 from src.learning.setting_evidence import inspect_experiment
 from src.utils.atomic_io import atomic_write_text
@@ -94,7 +110,8 @@ _COMPARED_FIELDS = (
 HOW_TO = (
     "1  Scan & Verify Library (once; hashes are saved and reused next session)   "
     "2  Select a checkpoint to see its identity, past runs and catalog evidence   "
-    "3  Proposed Experiments saves, previews or queues the ones marked ready. Nothing generates without your confirmation."
+    "3  Proposed Experiments for ready models; Compatibility Probe for unknown or Not Working ones. "
+    "Nothing generates without your confirmation."
 )
 
 
@@ -210,13 +227,13 @@ def assess_row(
                 blocked = [p for p in proposals if p.document["status"] == "blocked"]
                 if target.identity.family == "unknown":
                     next_step = (
-                        "File verified, but StableNew cannot classify its family yet; no experiment can be "
-                        "proposed until it is identified."
+                        "Family unknown: run a Compatibility Probe to see what kind of model it is and "
+                        "whether it works here."
                     )
                 elif metadata and not blocked and not target.policy.qualified:
                     next_step = (
-                        f"{target.identity.family} is not a qualified family in StableNew, so no experiment "
-                        "is proposed; see past runs below."
+                        f"{target.identity.family} is not qualified in StableNew: run a Compatibility Probe "
+                        "to check it works and which settings suit it."
                     )
                 elif metadata and not blocked:
                     next_step = _short(
@@ -290,6 +307,12 @@ class ModelEvidenceWindow(tk.Toplevel):
         self._qualification_prompt: tuple[str, str, dict[str, Any]] | None = None
         self._proposal_dialog: ModelEvidenceProposalsDialog | None = None
         self._next_dialog: NextTestDialog | None = None
+        self._probe_dialog: CompatibilityProbeDialog | None = None
+        self._verdict_dialog: ProbeVerdictDialog | None = None
+        self.verdicts = VerdictStore()
+        self._verdicts: dict[str, ProbeVerdict] = self.verdicts.load_all()
+        self.lookups = LookupStore()
+        self._lookups: dict[str, dict[str, Any]] = self.lookups.load_all()
         self._next_report: IntelligenceReport | None = None
         self._next_when_ready = False
         self._rows: dict[str, dict[str, Any]] = {}
@@ -319,6 +342,7 @@ class ModelEvidenceWindow(tk.Toplevel):
             bar, text="Verify Selected", command=self._verify_selected, state="disabled"
         )
         self.verify_button.pack(side="left", padx=4)
+        ttk.Button(bar, text="Civitai Lookup…", command=self._batch_lookup).pack(side="left")
         ttk.Button(bar, text="Cancel", command=self._cancel_work).pack(side="left")
         ttk.Button(bar, text="Refresh", command=self._reload).pack(side="left", padx=4)
         self.evidence_menu = tk.Menu(bar, tearoff=False)
@@ -402,6 +426,20 @@ class ModelEvidenceWindow(tk.Toplevel):
             state="disabled",
         )
         self.next_button.pack(side="left", padx=4)
+        self.probe_button = ttk.Button(
+            actions,
+            text="Compatibility Probe…",
+            command=self._probe,
+            state="disabled",
+        )
+        self.probe_button.pack(side="left", padx=4)
+        self.review_button = ttk.Button(
+            actions,
+            text="Review Probe Result…",
+            command=self._review_probe,
+            state="disabled",
+        )
+        self.review_button.pack(side="left", padx=4)
         ttk.Button(actions, text="Raw Evidence (JSON)", command=self._inspect_asset).pack(
             side="left", padx=4
         )
@@ -492,7 +530,7 @@ class ModelEvidenceWindow(tk.Toplevel):
                 event = (
                     generation,
                     "cancelled"
-                    if cancel.is_set() and not isinstance(result, BatchOutcome)
+                    if cancel.is_set() and not isinstance(result, (BatchOutcome, LookupSummary))
                     else "done",
                     result,
                     success,
@@ -539,6 +577,8 @@ class ModelEvidenceWindow(tk.Toplevel):
                     self.status.set(value)
                     if self._proposal_dialog is not None and self._proposal_dialog.winfo_exists():
                         self._proposal_dialog.status.set(value)
+                    if self._probe_dialog is not None and self._probe_dialog.winfo_exists():
+                        self._probe_dialog.status.set(value)
                     if (
                         "stale" in str(value).casefold()
                         and self._proposal_dialog is not None
@@ -719,13 +759,19 @@ class ModelEvidenceWindow(tk.Toplevel):
             )
             return (identity, row.get("family", "unknown"), runs, last, "…", warning + "Assessing…")
         ready = "" if assessment.ready is None else str(assessment.ready)
+        verdict = self._verdicts.get(str(row.get("sha256") or ""))
+        next_step = assessment.next_step
+        if verdict is not None:
+            next_step = f"Your verdict: {verdict.describe()[0]}. " + (
+                "" if assessment.ready else next_step
+            )
         return (
             assessment.identity,
             assessment.family,
             runs,
             last,
             ready,
-            warning + assessment.next_step,
+            warning + next_step,
         )
 
     def _render_assets(self) -> None:
@@ -796,7 +842,6 @@ class ModelEvidenceWindow(tk.Toplevel):
         row = self._selected()
         if row is None:
             return
-        path = self._paths.get(row["relative"])
         lines = [display_name(row), ""]
         assessment = self._assessments.get(row["relative"])
         if assessment is None:
@@ -814,19 +859,56 @@ class ModelEvidenceWindow(tk.Toplevel):
             lines.append("  No jobs in history for this checkpoint name.")
         else:
             lines.extend("  " + line for line in history.describe())
+            from src.gui.controllers.model_evidence_probe import history_recipe
+
+            usual = history_recipe(history)
+            if usual is not None:
+                lines.append(
+                    "  Your usual settings: "
+                    + usual.label.removeprefix("Your usual settings (").removesuffix(")")
+                    + ". Offered as a Compatibility Probe recipe; not a recommendation."
+                )
             if assessment is not None:
                 lines.extend(compare_with_history(assessment.catalog_claims, history))
+        lookup = describe_result(self._lookups.get(str(row.get("sha256") or "")))
+        if lookup:
+            lines.append("")
+            lines.append(
+                "CIVITAI (looked up by SHA-256; unreviewed identification, never settings)"
+            )
+            lines.append("  " + lookup)
+        verdict = self._verdicts.get(str(row.get("sha256") or ""))
+        if verdict is not None:
+            lines.append("")
+            lines.append("YOUR PROBE VERDICT (advisory; changes nothing until you classify)")
+            lines.extend("  " + line for line in verdict.describe())
         if assessment is not None and assessment.catalog_claims:
             lines.append("")
             lines.append("CATALOG CLAIMS (advisory; source class and confidence in brackets)")
             for name, values in sorted(assessment.catalog_claims.items()):
                 lines.append(f"  {name}: {'; '.join(values[:3])}")
-        if path is not None and "Not Working" in Path(display_name(row)).parts:
-            lines.append("")
-            lines.append(
-                "This file is in your 'Not Working' folder. Compare the catalog claims with the settings your "
-                "past runs used above: a sampler/steps/CFG mismatch or a missing component often explains artifacts."
+        not_working = "Not Working" in Path(display_name(row)).parts
+        if not_working or (history is not None and history.failed and not history.completed):
+            from src.learning.model_triage import triage
+
+            family = (
+                assessment.family.split(" ", 1)[0]
+                if assessment
+                else str(row.get("family") or "unknown")
             )
+            causes = triage(
+                header=row.get("header"),
+                family=family,
+                history=history,
+                civitai_base_model=base_model_hint(self._lookups.get(str(row.get("sha256") or ""))),
+            )
+            title = (
+                "WHY IT MAY NOT WORK (this file is in your 'Not Working' folder; hypotheses, not verdicts)"
+                if not_working
+                else "WHY IT MAY NOT WORK (no past run completed; hypotheses, not verdicts)"
+            )
+            # Shown right under the next step, where a 'Not Working' investigation starts.
+            lines[3:3] = [title, *("  • " + cause for cause in causes), ""]
         self._show("\n".join(lines), mode="summary")
 
     def _inspect_asset(self) -> None:
@@ -1045,7 +1127,27 @@ class ModelEvidenceWindow(tk.Toplevel):
             state="disabled",
         )
         self.verify_button.configure(state="normal" if row else "disabled")
+        self.probe_button.configure(state="normal" if row else "disabled")
+        self.review_button.configure(state="normal" if row and row.get("sha256") else "disabled")
+        verdict_dialog = self._verdict_dialog
+        if (
+            verdict_dialog is not None
+            and bool(verdict_dialog.winfo_exists())
+            and (row is None or row.get("sha256") != verdict_dialog.sha256)
+        ):
+            verdict_dialog.mark_stale(
+                "The selected checkpoint changed. Close this review and open one for it."
+            )
         self.next_button.configure(state="disabled")
+        probe = self._probe_dialog
+        if (
+            probe is not None
+            and bool(probe.winfo_exists())
+            and (row is None or row["relative"] != getattr(probe, "relative", None))
+        ):
+            probe.mark_stale(
+                "The selected checkpoint changed. Close this probe and open one for the new selection."
+            )
         self._next_report = None
         dialog = self._next_dialog
         follow = dialog is not None and bool(dialog.winfo_exists())
@@ -1060,8 +1162,8 @@ class ModelEvidenceWindow(tk.Toplevel):
             self._next_when_ready = self._next_when_ready or follow
             self._plan(open_dialog=False)
 
-    def _capture_planning_inputs(self) -> tuple[Any, ...]:
-        row = self._selected()
+    def _capture_planning_inputs(self, row: Mapping[str, Any] | None = None) -> tuple[Any, ...]:
+        row = row or self._selected()
         if not row or row["kind"] != "checkpoint":
             raise ValueError("Select a checkpoint first.")
         controller = self.owner.learning_controller
@@ -1465,6 +1567,237 @@ class ModelEvidenceWindow(tk.Toplevel):
             scope=SCOPE_LIBRARY,
         )
 
+    # ----------------------------------------------------------------- compatibility probe (MEC-901)
+
+    def _probe(self) -> None:
+        row = self._selected()
+        if not row or row["kind"] != "checkpoint":
+            self.status.set("Select a checkpoint first.")
+            return
+        controller = getattr(self.owner, "learning_controller", None)
+        if controller is None:
+            self.status.set("Learning is unavailable, so a probe cannot be prepared.")
+            return
+        from src.gui.controllers.model_evidence_probe import probe_options, sidecar_base_model
+
+        row = copy.deepcopy(row)
+        resources = capture_resources(controller)
+        history = self._history_for(row)
+        path = self._paths.get(row["relative"])
+        variant = str((row.get("header") or {}).get("checkpoint_variant") or "")
+        resolver = self._resolver()
+
+        looked_up = base_model_hint(self._lookups.get(str(row.get("sha256") or "")))
+
+        def resolve(_cancelled: Callable[[], bool], _progress: Callable[[str], None]) -> Any:
+            return resolver.resolve(Path(row["relative"]).name), sidecar_base_model(
+                path
+            ) or looked_up
+
+        def ready(result: Any) -> None:
+            target, hint = result
+            if not target.identity.sha256:
+                self.status.set(
+                    "Verify Selected first: a probe needs the checkpoint's verified SHA-256."
+                )
+                return
+            if target.policy.qualified:
+                self.status.set(
+                    "This checkpoint has a fixed executable profile that owns its settings; no probe is needed."
+                )
+                return
+            options = probe_options(
+                family=target.identity.family,
+                variant=variant,
+                base_model_hint=hint,
+                history=history,
+                resources=resources,
+            )
+            if self._probe_dialog is not None and self._probe_dialog.winfo_exists():
+                self._probe_dialog.destroy()
+            dialog = CompatibilityProbeDialog(
+                self,
+                model=target.identity.display_name,
+                sha256=target.identity.sha256,
+                family=target.identity.family,
+                recipes=options.recipes,
+                preselected=options.preselected,
+                unavailable=options.unavailable,
+                notes=options.notes,
+                on_queue=self._queue_probe,
+            )
+            dialog.relative = row["relative"]  # type: ignore[attr-defined]
+            self._probe_dialog = dialog
+            self._keep_in_front(dialog)
+
+        self._work(resolve, ready)
+
+    def _queue_probe(self, dialog: CompatibilityProbeDialog) -> None:
+        if self._busy or dialog._stale:
+            return
+        service = getattr(self.owner, "qualification_batch", None)
+        if service is None:
+            dialog.status.set("Canonical Learning/JobService admission is unavailable.")
+            return
+        try:
+            design = dialog.design()
+        except ValueError as exc:
+            dialog.status.set(str(exc))
+            return
+        row = next(
+            (
+                r
+                for r in self._checkpoint_rows()
+                if r["relative"] == getattr(dialog, "relative", None)
+            ),
+            None,
+        )
+        if row is None:
+            dialog.mark_stale("This checkpoint is no longer listed. Refresh and reopen the probe.")
+            return
+        from src.gui.controllers.model_evidence_probe import prepare_probe
+
+        inputs = self._capture_planning_inputs(row)
+        dialog.status.set("Preparing the probe Preview… (nothing is generated yet)")
+
+        def prepared(batch: Any) -> None:
+            if not dialog.winfo_exists() or dialog._stale:
+                return
+            dialog.show(batch.confirmation)
+            if not any(entry.records for entry in batch.experiments):
+                dialog.status.set(
+                    "This exact probe already has jobs. Open Experiment Library to review it."
+                )
+                return
+            generation = self._generation
+            if not messagebox.askyesno(
+                "Queue compatibility probe", batch.confirmation, parent=dialog
+            ):
+                dialog.status.set(
+                    "Generation not confirmed. The probe draft is saved; zero jobs admitted."
+                )
+                return
+            if (
+                self._closed
+                or generation != self._generation
+                or not dialog.winfo_exists()
+                or dialog._stale
+            ):
+                return
+            fresh_inputs = self._capture_planning_inputs(row)
+
+            def admitted(outcome: Any) -> None:
+                self.status.set(outcome.describe())
+                if dialog.winfo_exists():
+                    dialog.status.set(outcome.describe())
+                    dialog.show(
+                        outcome.describe()
+                        + "\n\nWhen the images finish, open Experiment Library to compare the recipes, then "
+                        "record what you saw (Review Probe Result) from this catalog."
+                    )
+
+            self._work(
+                lambda cancelled, _p: service.admit(
+                    batch, self._context(fresh_inputs), confirmed=True, cancelled=cancelled
+                ),
+                admitted,
+                scope=SCOPE_LIBRARY,
+            )
+
+        self._work(
+            lambda cancelled, _p: prepare_probe(service, design, self._context(inputs), cancelled),
+            prepared,
+            scope=SCOPE_LIBRARY,
+        )
+
+    # ----------------------------------------------------------------- probe review (MEC-902)
+
+    def _review_probe(self) -> None:
+        row = self._selected()
+        sha = str((row or {}).get("sha256") or "")
+        if not row or not sha:
+            self.status.set(
+                "Verify Selected first: a verdict is recorded against the checkpoint's SHA-256."
+            )
+            return
+        service = getattr(self.owner, "qualification_batch", None)
+        store = getattr(service, "store", None)
+        from src.gui.controllers.model_evidence_probe import describe_sessions, probe_sessions
+
+        def load(_cancelled: Callable[[], bool], _progress: Callable[[str], None]) -> Any:
+            return probe_sessions(store, sha) if store is not None else ()
+
+        def ready(sessions: Any) -> None:
+            if self._verdict_dialog is not None and self._verdict_dialog.winfo_exists():
+                self._verdict_dialog.destroy()
+            recipes = list(dict.fromkeys(label for s in sessions for label in s.recipes))
+            dialog = ProbeVerdictDialog(
+                self,
+                model=display_name(row),
+                sha256=sha,
+                summary=describe_sessions(sessions),
+                recipes=recipes,
+                probe_ids=[s.experiment_id for s in sessions],
+                existing=self._verdicts.get(sha),
+                on_save=self._save_verdict,
+                on_classify=self._classify,
+                on_library=self.owner._on_open_experiment_library,
+            )
+            dialog.relative = row["relative"]  # type: ignore[attr-defined]
+            self._verdict_dialog = dialog
+            self._keep_in_front(dialog)
+
+        self._work(load, ready)
+
+    def _save_verdict(self, dialog: ProbeVerdictDialog) -> ProbeVerdict | None:
+        try:
+            verdict = self.verdicts.save(dialog.verdict())
+        except (OSError, ValueError) as exc:
+            dialog.status.set(f"Verdict not saved: {exc}")
+            return None
+        self._verdicts[verdict.sha256] = verdict
+        dialog.status.set(
+            "Verdict saved (advisory). It is shown in the catalog; nothing else changed."
+        )
+        self._render_assets()
+        self._render_details()
+        return verdict
+
+    def _classify(self, dialog: ProbeVerdictDialog) -> None:
+        if dialog._stale or self._busy:
+            return
+        path = self._paths.get(str(getattr(dialog, "relative", "")))
+        if path is None:
+            dialog.status.set("The checkpoint file is not available; refresh the catalog.")
+            return
+        try:
+            verdict = dialog.verdict()
+            target, document = classification_sidecar(path, verdict)
+        except ValueError as exc:
+            dialog.status.set(str(exc))
+            return
+        text = json.dumps(document, indent=2)
+        if not messagebox.askyesno(
+            "Apply classification",
+            f"Create this file next to the checkpoint?\n\n{target}\n\n{text}\n\n"
+            "StableNew then reads its base model as family evidence. Delete the file to undo.",
+            parent=dialog,
+        ):
+            dialog.status.set("Not classified. Nothing was written.")
+            return
+        try:
+            write_classification(target, document)
+        except FileExistsError:
+            dialog.status.set(f"{target.name} appeared meanwhile; it was not replaced.")
+            return
+        except OSError as exc:
+            dialog.status.set(f"Could not write {target.name}: {exc}")
+            return
+        if self._save_verdict(dialog) is None:
+            return
+        dialog.status.set(f"Classified: wrote {target.name}. Re-reading this checkpoint…")
+        self._verify_selected()
+
     def _open_draft(self, dialog: ModelEvidenceProposalsDialog) -> None:
         selected = dialog.tree.selection()
         if not selected or selected[0] not in dialog.proposals:
@@ -1506,6 +1839,8 @@ class ModelEvidenceWindow(tk.Toplevel):
             cancelled: Callable[[], bool], _progress: Callable[[str], None]
         ) -> dict[str, Any]:
             result = self._lookup.refresh(lookup, confirmed=True, cancelled=cancelled)
+            if lookup.service == "civitai" and result["status"] in ("candidate", "service_error"):
+                self.lookups.save(lookup.identifier, result)
             if result["status"] == "candidate" and not cancelled():
                 root = operator_catalog_root() / "lookups"
                 root.mkdir(parents=True, exist_ok=True)
@@ -1517,7 +1852,48 @@ class ModelEvidenceWindow(tk.Toplevel):
                 )
             return result
 
-        self._work(research, self._show, scope=SCOPE_LIBRARY)
+        def shown(result: Any) -> None:
+            self._lookups = self.lookups.load_all()
+            self._show(result)
+
+        self._work(research, shown, scope=SCOPE_LIBRARY)
+
+    def _batch_lookup(self) -> None:
+        rows = [
+            row
+            for row in self._checkpoint_rows()
+            if row.get("identity_status") == "verified" and row.get("sha256")
+        ]
+        names = {str(row["sha256"]): display_name(row) for row in rows}
+        pending = [sha for sha in names if sha not in self._lookups]
+        hashes = pending or list(names)
+        if not hashes:
+            self.status.set(
+                "Verify checkpoints first (Scan & Verify Library); lookups use verified SHA-256s."
+            )
+            return
+        if not messagebox.askyesno(
+            "Civitai lookup: external disclosure", disclosure(hashes, names), parent=self
+        ):
+            self.status.set("Nothing was sent.")
+            return
+
+        def run(cancelled: Callable[[], bool], progress: Callable[[str], None]) -> LookupSummary:
+            return batch_lookup(
+                hashes,
+                store=self.lookups,
+                refresh=self._lookup,
+                confirmed=True,
+                cancelled=cancelled,
+                progress=progress,
+            )
+
+        def done(summary: LookupSummary) -> None:
+            self._lookups = self.lookups.load_all()
+            self.status.set(summary.describe())
+            self._render_details()
+
+        self._work(run, done, scope=SCOPE_LIBRARY)
 
     def _research(self) -> None:
         row = self._selected()

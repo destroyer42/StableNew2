@@ -45,6 +45,10 @@ def compile_qualification_state(
     cast(Any, controller)._evidence_identity_resolver = lambda _name: context.target
     if build:
         controller.build_plan(experiment)
+        # Controlled studies prepare on a copy and publish it only when the whole Preview succeeds.
+        experiment = state.current_experiment
+        if experiment is None:
+            raise ValueError("Qualification experiment unavailable")
     records = (
         ExperimentAdmissionService()
         .compile_all(state.plan, lambda variant: controller._build_variant_njr(variant, experiment))

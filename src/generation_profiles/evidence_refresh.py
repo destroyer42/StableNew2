@@ -84,6 +84,33 @@ def public_get(url: str, *, cancelled: Callable[[], bool] = lambda: False) -> di
     return data
 
 
+_SAFE_TEXT = re.compile(r"[^\w .,:;()+&'/#-]", re.UNICODE)
+
+
+def _label(value: Any, limit: int = 120) -> str:
+    """A short, single-line, URL-free display label from untrusted service text ('' when unusable)."""
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.split())
+    if "://" in text or "www." in text.casefold():
+        return ""
+    return _SAFE_TEXT.sub("", text)[:limit].strip()
+
+
+def civitai_identification(data: dict[str, Any]) -> dict[str, str]:
+    """Identification facts only (base model, names, type); never prompts, descriptions, URLs or settings."""
+    raw_model = data.get("model")
+    model: dict[str, Any] = raw_model if isinstance(raw_model, dict) else {}
+    facts = {
+        "base_model": _label(data.get("baseModel"), 64),
+        "base_model_type": _label(data.get("baseModelType"), 32),
+        "model_name": _label(model.get("name")),
+        "version_name": _label(data.get("name")),
+        "model_type": _label(model.get("type"), 32),
+    }
+    return {key: value for key, value in facts.items() if value}
+
+
 class EvidenceRefresh:
     def __init__(
         self,
@@ -141,6 +168,11 @@ class EvidenceRefresh:
                 if lookup.service == "civitai" and isinstance(data.get("id"), int)
                 else None,
                 "recommendation_status": "unreviewed; no executable defaults imported",
+                **(
+                    {"identification": civitai_identification(data)}
+                    if lookup.service == "civitai" and matched
+                    else {}
+                ),
             }
         except HTTPError as exc:
             if exc.code == 429:
