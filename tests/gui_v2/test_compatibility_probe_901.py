@@ -11,7 +11,7 @@ from src.gui.controllers import model_evidence_probe as probe_module
 from src.gui.controllers.model_evidence_probe import probe_options, sidecar_base_model
 from src.gui.views import model_evidence_window as module
 from src.gui.views.compatibility_probe_dialog import CompatibilityProbeDialog
-from src.gui.views.model_evidence_window import ModelEvidenceWindow
+from src.gui.views.model_evidence_window import ModelEvidenceWindow, RowAssessment
 from src.learning.compatibility_probe import RECIPES
 from src.learning.model_run_history import ModelRunSummary
 from tests.gui_v2.test_model_evidence_catalog_900 import census_row, make_owner, pump
@@ -148,4 +148,68 @@ def test_selecting_another_checkpoint_makes_the_probe_stale(tk_root, monkeypatch
     window._queue_probe(view)
     tk_root.update()
     assert calls.prepared == []
+    window._close()
+
+
+# ----------------------------------------------------------------- MEC-902 review and explicit classification
+
+
+def review_window(tk_root, tmp_path, monkeypatch, *, confirm=True):
+    from src.learning.probe_verdict import VerdictStore
+
+    asked = []
+    monkeypatch.setattr(module.messagebox, "askyesno", lambda *a, **k: asked.append(a) or confirm)
+    window = ModelEvidenceWindow(make_owner(tk_root))
+    window.verdicts = VerdictStore(tmp_path / "verdicts")
+    window._verdicts = {}
+    model = tmp_path / "m.safetensors"
+    model.write_bytes(b"x")
+    row = census_row("models/Stable-diffusion/m.safetensors", sha256="a" * 64, identity_status="verified")
+    window.census = {"assets": [row]}
+    window._paths = {row["relative"]: model}
+    window._render_assets()
+    window._plan = lambda **_kw: None
+    window.tree.selection_set(window.tree.get_children()[0])
+    tk_root.update()  # the selection event runs before the operator can press a button
+    verified = []
+    window._verify_selected = lambda: verified.append(True)
+    window._review_probe()
+    pump(tk_root, lambda: window._verdict_dialog is not None)
+    return window, window._verdict_dialog, model, asked, verified
+
+
+def test_saved_verdict_is_advisory_and_shown_in_the_catalog(tk_root, tmp_path, monkeypatch):
+    window, view, model, _asked, _verified = review_window(tk_root, tmp_path, monkeypatch)
+    view.lineage.set("SD 1.5")
+    view.notes.insert("1.0", "faces clean at 512")
+    window._assessments = {
+        "models/Stable-diffusion/m.safetensors": RowAssessment("Verified", "unknown", 0, "Family unknown.")
+    }
+    window._save_verdict(view)
+    assert window.verdicts.load("a" * 64).lineage == "sd15"
+    assert "YOUR PROBE VERDICT" in window.details.get("1.0", "end")
+    assert "Your verdict: Works; looks like SD 1.5" in window.tree.item(window.tree.get_children()[0], "values")[5]
+    assert not list(tmp_path.glob("*.civitai.info"))  # a verdict alone writes nothing next to the model
+    window._close()
+
+
+def test_classification_writes_sidecar_only_after_confirmation(tk_root, tmp_path, monkeypatch):
+    window, view, model, asked, verified = review_window(tk_root, tmp_path, monkeypatch)
+    view.lineage.set("Pony (SDXL-based)")
+    window._classify(view)
+    sidecar = tmp_path / "m.civitai.info"
+    assert asked and str(sidecar) in asked[0][1]
+    assert json.loads(sidecar.read_text(encoding="utf-8"))["baseModel"] == "SDXL 1.0 (Pony)"
+    assert verified == [True] and window.verdicts.load("a" * 64).lineage == "pony"
+    window._classify(view)  # a second attempt never overwrites
+    assert "never overwrites" in view.status.get()
+    window._close()
+
+
+def test_declined_classification_writes_nothing(tk_root, tmp_path, monkeypatch):
+    window, view, _model, asked, verified = review_window(tk_root, tmp_path, monkeypatch, confirm=False)
+    view.lineage.set("SDXL")
+    window._classify(view)
+    assert asked and not (tmp_path / "m.civitai.info").exists() and verified == []
+    assert window.verdicts.load("a" * 64) is None
     window._close()

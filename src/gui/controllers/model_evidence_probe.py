@@ -117,6 +117,64 @@ def probe_options(
     return ProbeOptions(tuple(recipes), preselected, tuple(unavailable), tuple(notes))
 
 
+@dataclass(frozen=True)
+class ProbeSession:
+    experiment_id: str
+    name: str
+    recipes: tuple[str, ...]
+    statuses: tuple[tuple[str, str, int], ...]  # (recipe, status, images)
+
+
+def probe_sessions(store: Any, sha256: str) -> tuple[ProbeSession, ...]:
+    """Saved probe experiments for one checkpoint, read from the Experiment Library (no repository writes)."""
+    from src.learning.compatibility_probe import STUDY_TYPE
+
+    if not sha256:
+        return ()
+    prefix = f"probe-{sha256[:12]}-"
+    found = []
+    for handle in store.list_handles():
+        if not handle.experiment_id.startswith(prefix):
+            continue
+        payload = store.load_session(handle.experiment_id) or {}
+        experiment = payload.get("current_experiment") or {}
+        design = (experiment.get("metadata") or {}).get(STUDY_TYPE) or {}
+        if design.get("sha256") != sha256:
+            continue
+        plan = payload.get("plan") or []
+        found.append(
+            ProbeSession(
+                handle.experiment_id,
+                str(experiment.get("name") or handle.display_name),
+                tuple(str(recipe.get("label")) for recipe in design.get("recipes") or ()),
+                tuple(
+                    (
+                        str(variant.get("param_value")),
+                        str(variant.get("status") or "pending"),
+                        len(variant.get("image_refs") or ()),
+                    )
+                    for variant in plan
+                ),
+            )
+        )
+    return tuple(found)
+
+
+def describe_sessions(sessions: Sequence[ProbeSession]) -> str:
+    if not sessions:
+        return (
+            "No probe of this checkpoint is saved yet. You can still record a verdict from what you already know."
+        )
+    lines = []
+    for session in sessions:
+        lines.append(f"{session.name}  [{session.experiment_id}]")
+        if not session.statuses:
+            lines.append("  saved, not queued")
+        for recipe, status, images in session.statuses:
+            lines.append(f"  {status:<10} {images} images  {recipe}")
+    return "\n".join(lines)
+
+
 def prepare_probe(service: Any, design: ProbeDesign, context: ProposalPlanningContext, cancelled: Any) -> Any:
     """Save (or reuse) the probe draft and freeze its Preview; nothing is submitted here."""
     if context.target.identity.sha256 != design.sha256:

@@ -51,6 +51,7 @@ from src.gui.views.model_evidence_proposals_dialog import (
 )
 from src.gui.views.compatibility_probe_dialog import CompatibilityProbeDialog
 from src.gui.views.next_test_dialog import NextTestDialog
+from src.gui.views.probe_verdict_dialog import ProbeVerdictDialog
 from src.gui_v2.next_test_view import build_view, route_for
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import RegistryFamilyLookup
@@ -74,6 +75,12 @@ from src.learning.intelligence_contracts import (
     IntelligenceReport,
 )
 from src.learning.model_run_history import ModelRunSummary, read_run_history
+from src.learning.probe_verdict import (
+    ProbeVerdict,
+    VerdictStore,
+    classification_sidecar,
+    write_classification,
+)
 from src.learning.qualification_batch import BatchOutcome
 from src.learning.setting_evidence import inspect_experiment
 from src.utils.atomic_io import atomic_write_text
@@ -292,6 +299,9 @@ class ModelEvidenceWindow(tk.Toplevel):
         self._proposal_dialog: ModelEvidenceProposalsDialog | None = None
         self._next_dialog: NextTestDialog | None = None
         self._probe_dialog: CompatibilityProbeDialog | None = None
+        self._verdict_dialog: ProbeVerdictDialog | None = None
+        self.verdicts = VerdictStore()
+        self._verdicts: dict[str, ProbeVerdict] = self.verdicts.load_all()
         self._next_report: IntelligenceReport | None = None
         self._next_when_ready = False
         self._rows: dict[str, dict[str, Any]] = {}
@@ -411,6 +421,13 @@ class ModelEvidenceWindow(tk.Toplevel):
             state="disabled",
         )
         self.probe_button.pack(side="left", padx=4)
+        self.review_button = ttk.Button(
+            actions,
+            text="Review Probe Result…",
+            command=self._review_probe,
+            state="disabled",
+        )
+        self.review_button.pack(side="left", padx=4)
         ttk.Button(actions, text="Raw Evidence (JSON)", command=self._inspect_asset).pack(
             side="left", padx=4
         )
@@ -730,13 +747,19 @@ class ModelEvidenceWindow(tk.Toplevel):
             )
             return (identity, row.get("family", "unknown"), runs, last, "…", warning + "Assessing…")
         ready = "" if assessment.ready is None else str(assessment.ready)
+        verdict = self._verdicts.get(str(row.get("sha256") or ""))
+        next_step = assessment.next_step
+        if verdict is not None:
+            next_step = f"Your verdict: {verdict.describe()[0]}. " + (
+                "" if assessment.ready else next_step
+            )
         return (
             assessment.identity,
             assessment.family,
             runs,
             last,
             ready,
-            warning + assessment.next_step,
+            warning + next_step,
         )
 
     def _render_assets(self) -> None:
@@ -827,6 +850,11 @@ class ModelEvidenceWindow(tk.Toplevel):
             lines.extend("  " + line for line in history.describe())
             if assessment is not None:
                 lines.extend(compare_with_history(assessment.catalog_claims, history))
+        verdict = self._verdicts.get(str(row.get("sha256") or ""))
+        if verdict is not None:
+            lines.append("")
+            lines.append("YOUR PROBE VERDICT (advisory; changes nothing until you classify)")
+            lines.extend("  " + line for line in verdict.describe())
         if assessment is not None and assessment.catalog_claims:
             lines.append("")
             lines.append("CATALOG CLAIMS (advisory; source class and confidence in brackets)")
@@ -1057,6 +1085,14 @@ class ModelEvidenceWindow(tk.Toplevel):
         )
         self.verify_button.configure(state="normal" if row else "disabled")
         self.probe_button.configure(state="normal" if row else "disabled")
+        self.review_button.configure(state="normal" if row and row.get("sha256") else "disabled")
+        verdict_dialog = self._verdict_dialog
+        if (
+            verdict_dialog is not None
+            and bool(verdict_dialog.winfo_exists())
+            and (row is None or row.get("sha256") != verdict_dialog.sha256)
+        ):
+            verdict_dialog.mark_stale("The selected checkpoint changed. Close this review and open one for it.")
         self.next_button.configure(state="disabled")
         probe = self._probe_dialog
         if (
@@ -1607,6 +1643,90 @@ class ModelEvidenceWindow(tk.Toplevel):
             prepared,
             scope=SCOPE_LIBRARY,
         )
+
+    # ----------------------------------------------------------------- probe review (MEC-902)
+
+    def _review_probe(self) -> None:
+        row = self._selected()
+        sha = str((row or {}).get("sha256") or "")
+        if not row or not sha:
+            self.status.set("Verify Selected first: a verdict is recorded against the checkpoint's SHA-256.")
+            return
+        service = getattr(self.owner, "qualification_batch", None)
+        store = getattr(service, "store", None)
+        from src.gui.controllers.model_evidence_probe import describe_sessions, probe_sessions
+
+        def load(_cancelled: Callable[[], bool], _progress: Callable[[str], None]) -> Any:
+            return probe_sessions(store, sha) if store is not None else ()
+
+        def ready(sessions: Any) -> None:
+            if self._verdict_dialog is not None and self._verdict_dialog.winfo_exists():
+                self._verdict_dialog.destroy()
+            recipes = list(dict.fromkeys(label for s in sessions for label in s.recipes))
+            dialog = ProbeVerdictDialog(
+                self,
+                model=display_name(row),
+                sha256=sha,
+                summary=describe_sessions(sessions),
+                recipes=recipes,
+                probe_ids=[s.experiment_id for s in sessions],
+                existing=self._verdicts.get(sha),
+                on_save=self._save_verdict,
+                on_classify=self._classify,
+                on_library=self.owner._on_open_experiment_library,
+            )
+            dialog.relative = row["relative"]  # type: ignore[attr-defined]
+            self._verdict_dialog = dialog
+            self._keep_in_front(dialog)
+
+        self._work(load, ready)
+
+    def _save_verdict(self, dialog: ProbeVerdictDialog) -> ProbeVerdict | None:
+        try:
+            verdict = self.verdicts.save(dialog.verdict())
+        except (OSError, ValueError) as exc:
+            dialog.status.set(f"Verdict not saved: {exc}")
+            return None
+        self._verdicts[verdict.sha256] = verdict
+        dialog.status.set("Verdict saved (advisory). It is shown in the catalog; nothing else changed.")
+        self._render_assets()
+        self._render_details()
+        return verdict
+
+    def _classify(self, dialog: ProbeVerdictDialog) -> None:
+        if dialog._stale or self._busy:
+            return
+        path = self._paths.get(str(getattr(dialog, "relative", "")))
+        if path is None:
+            dialog.status.set("The checkpoint file is not available; refresh the catalog.")
+            return
+        try:
+            verdict = dialog.verdict()
+            target, document = classification_sidecar(path, verdict)
+        except ValueError as exc:
+            dialog.status.set(str(exc))
+            return
+        text = json.dumps(document, indent=2)
+        if not messagebox.askyesno(
+            "Apply classification",
+            f"Create this file next to the checkpoint?\n\n{target}\n\n{text}\n\n"
+            "StableNew then reads its base model as family evidence. Delete the file to undo.",
+            parent=dialog,
+        ):
+            dialog.status.set("Not classified. Nothing was written.")
+            return
+        try:
+            write_classification(target, document)
+        except FileExistsError:
+            dialog.status.set(f"{target.name} appeared meanwhile; it was not replaced.")
+            return
+        except OSError as exc:
+            dialog.status.set(f"Could not write {target.name}: {exc}")
+            return
+        if self._save_verdict(dialog) is None:
+            return
+        dialog.status.set(f"Classified: wrote {target.name}. Re-reading this checkpoint…")
+        self._verify_selected()
 
     def _open_draft(self, dialog: ModelEvidenceProposalsDialog) -> None:
         selected = dialog.tree.selection()

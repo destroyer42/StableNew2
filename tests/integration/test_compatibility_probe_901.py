@@ -118,6 +118,13 @@ def test_probe_preview_confirms_then_admits_each_recipe_once(probe_env):
     assert saved["current_experiment"]["metadata"]["qualification_batch"]["admission"] == "confirmed"
     assert json.loads(saved["current_experiment"]["execution_snapshot_json"])["study_type"] == STUDY_TYPE
 
+    from src.gui.controllers.model_evidence_probe import describe_sessions, probe_sessions
+
+    (session,) = probe_sessions(env.store, probe.sha256)
+    assert session.experiment_id == probe.experiment_id and len(session.statuses) == 2
+    assert probe_sessions(env.store, "e" * 64) == ()
+    assert RECIPES["sdxl"].label in describe_sessions([session])
+
     again = env.coordinator.prepare_probe(payload(env.context, probe), env.context)
     assert "already queued" in again.confirmation
     assert env.coordinator.admit(again, env.context, confirmed=True).existing == (probe.experiment_id,)
