@@ -27,6 +27,7 @@ Evidence cut: `main` at `8e1ee82b5fd8cc18437274e86e9af4f59938a799`, fetched and 
 | Findings, dependencies, twelve-category/eight-control coverage and unknowns | [GAPS_RISKS_UNKNOWNS.md](GAPS_RISKS_UNKNOWNS.md) |
 | Prioritized inputs for downstream Lanes B–F | [LANE_FINDINGS.md](LANE_FINDINGS.md) |
 | Actual method-diverse challenge, corrections, scoped absence searches and rerun | [INDEPENDENT_CRITIQUE.md](INDEPENDENT_CRITIQUE.md) |
+| Five additional source-verified findings added after merge (read-only addendum) | [ADDENDUM_SOURCE_FINDINGS.md](ADDENDUM_SOURCE_FINDINGS.md) |
 
 ## Main conclusions and evidence boundary
 
