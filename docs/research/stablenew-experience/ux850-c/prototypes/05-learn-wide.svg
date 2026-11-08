@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="680" viewBox="0 0 1280 680" role="img" aria-labelledby="title desc">
+<title id="title">PROPOSED J5 Learn / experiment to explicit reuse — 1280 x 680</title>
+<desc id="desc">Static research wireframe, not running Tk. EXISTING labels name capability foundations; all arrangement is PROPOSED. FUTURE-GATED notes are noninteractive. Numbers identify shared regions; scroll continuation is schematic.</desc>
+<style>text{font-family:Segoe UI,Arial,sans-serif;fill:#FFFFFF;font-size:13.333px}.heading{font-size:16px;font-weight:bold}.muted{fill:#CCCCCC}.disabled{fill:#777777}.dark{fill:#000000}.bold{font-weight:bold}</style>
+<rect x="0" y="0" width="1280" height="680" rx="4" fill="#121212" stroke="#121212"/>
+<text x="16" y="24" class="heading" data-max-width="1248">UX-850-C | PROPOSED Windows desktop wireframe</text>
+<text x="16" y="44" class="muted" data-max-width="1248">J5 Learn / experiment to explicit reuse | static artifact; actual Tk/DPI unverified</text>
+<rect x="12" y="56" width="1256" height="36" rx="4" fill="#1E1E1E" stroke="#777777" data-component="01-navigation" data-status="proposed"/>
+<text x="24" y="79" class="" data-max-width="1232">1  Create     Edit     Motion     Learn     Advanced [HOLD]     |     Queue / Settings</text>
+<rect x="12" y="100" width="1256" height="64" rx="4" fill="#1E1E1E" stroke="#777777" data-component="02-context" data-status="proposed"/>
+<text x="24" y="121" class="bold" data-max-width="1232">2  Learn &gt; Learning | design, review, findings and profile detail</text>
+<text x="24" y="145" class="muted" data-max-width="1232">EXISTING experiment E7 r2 | baseline M1 | rating revision 3 | 4 exact jobs</text>
+<rect x="12" y="172" width="1256" height="44" rx="4" fill="#1E1E1E" stroke="#FFC805" data-component="03-notice" data-status="proposed"/>
+<text x="24" y="190" class="" data-max-width="1232">3  Warning: evidence insufficient for a conclusion. Preserve observations and scope.</text>
+<rect x="12" y="224" width="524" height="344" rx="4" fill="#1E1E1E" stroke="#777777" data-component="04-scroll-body" data-status="proposed"/>
+<text x="24" y="250" class="heading" data-max-width="500">4  Independent design</text>
+<rect x="24" y="264" width="500" height="40" rx="4" fill="#1E1E1E" stroke="#777777"/>
+<text x="36" y="282" class="" data-max-width="476">Goal / model baseline / variable / seeds; exclusions visible</text>
+<rect x="24" y="312" width="500" height="40" rx="4" fill="#1E1E1E" stroke="#777777"/>
+<text x="36" y="330" class="" data-max-width="476">Preview study: variant count and actual admission scope</text>
+<rect x="24" y="360" width="500" height="40" rx="4" fill="#1E1E1E" stroke="#777777"/>
+<text x="36" y="378" class="" data-max-width="476">Advanced [collapsed]: study types, Library, discovered outputs</text>
+<rect x="24" y="408" width="500" height="40" rx="4" fill="#1E1E1E" stroke="#777777"/>
+<text x="36" y="426" class="" data-max-width="476">Campaign dashboard: FUTURE-GATED text only; no run control</text>
+<text x="24" y="556" class="muted" data-max-width="500">Vertical page scroll; active hidden values stay summarized.</text>
+<rect x="548" y="224" width="720" height="344" rx="4" fill="#1E1E1E" stroke="#777777" data-component="05-inspection" data-status="proposed"/>
+<text x="560" y="250" class="heading" data-max-width="696">5  Review, findings, reuse</text>
+<rect x="560" y="264" width="696" height="96" rx="4" fill="#121212" stroke="#777777" data-component="media-placeholder" data-status="proposed"/>
+<rect x="572" y="274" width="228" height="72" rx="4" fill="#2B2B2B" stroke="#777777"/>
+<text x="584" y="301" class="muted" data-max-width="204">A: matched seed / job</text>
+<text x="584" y="326" class="muted" data-max-width="204">Rating / revision / exclusion</text>
+<rect x="812" y="274" width="228" height="72" rx="4" fill="#2B2B2B" stroke="#777777"/>
+<text x="824" y="301" class="muted" data-max-width="204">B: matched seed / job</text>
+<text x="824" y="326" class="muted" data-max-width="204">Rating / revision / exclusion</text>
+<text x="560" y="383" class="" data-max-width="696">Pair artifacts; missing readback is exclusion, not poor quality</text>
+<text x="560" y="414" class="" data-max-width="696">Save rating: durable outcome separate from refresh</text>
+<text x="560" y="445" class="" data-max-width="696">Publish eligible profile, then separately select/apply in Create</text>
+<rect x="12" y="576" width="1256" height="64" rx="4" fill="#1E1E1E" stroke="#777777" data-component="06-action-strip" data-status="proposed"/>
+<text x="24" y="594" class="muted" data-max-width="1232">6  Persistent actions | labels name their actual scope; no execution from navigation</text>
+<rect x="24" y="601" width="128" height="32" rx="4" fill="#FFC805" stroke="#FFC805" data-component="action-0" data-status="proposed" data-state="enabled-schematic"/>
+<text x="36" y="622" class="dark bold" data-max-width="104">Preview Study</text>
+<rect x="160" y="601" width="120" height="32" rx="4" fill="#1E1E1E" stroke="#CCCCCC" data-component="action-1" data-status="proposed" data-state="enabled-schematic"/>
+<text x="172" y="622" class="" data-max-width="96">Save Ratings</text>
+<rect x="288" y="601" width="144" height="32" rx="4" fill="#1E1E1E" stroke="#CCCCCC" data-component="action-2" data-status="proposed" data-state="enabled-schematic"/>
+<text x="300" y="622" class="" data-max-width="120">Review Findings</text>
+<rect x="440" y="601" width="144" height="32" rx="4" fill="#1E1E1E" stroke="#CCCCCC" data-component="action-3" data-status="proposed" data-state="enabled-schematic"/>
+<text x="452" y="622" class="" data-max-width="120">Profile Details</text>
+<text x="16" y="661" class="muted" data-max-width="1248">FUTURE-GATED: evaluators, campaign budgets and conclusion sufficiency (072 pending).</text>
+<text x="16" y="677" class="muted" data-max-width="1248">PROPOSED layout | EXISTING capability foundations | FUTURE-GATED notes are inactive | see PROTOTYPES.md</text>
+</svg>
