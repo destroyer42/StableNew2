@@ -74,7 +74,7 @@ CONFIRMATION = {
     ACTION_COMPLETE_RATINGS: "Rate each unrated image in Learning Review and save the rating.",
     ACTION_INVESTIGATE_EXECUTION: "Open the experiment, use Inspect active experiment, then decide on a rerun.",
     ACTION_REVIEW_RECOMMENDATION: "Review the qualified findings; Apply or publication needs your explicit confirmation.",
-    ACTION_RESOLVE_IDENTITY: "Choose Evidence… > Verify identities (bounded) for this checkpoint.",
+    ACTION_RESOLVE_IDENTITY: "Press Verify Selected (or Scan & Verify Library) to identify this checkpoint's file.",
     ACTION_RESEARCH_EVIDENCE: "Choose a lookup or import a reviewed catalog from Evidence…; claims stay unreviewed until you accept them.",
     ACTION_NO_SAFE_EXPERIMENT: "",
 }

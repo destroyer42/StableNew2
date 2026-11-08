@@ -116,10 +116,12 @@ def test_discovery_needs_no_prompt_or_lookup_and_maintenance_is_secondary(ui, mo
     labels = [
         window.evidence_menu.entrycget(i, "label")
         for i in range(window.evidence_menu.index("end") + 1)
+        if window.evidence_menu.type(i) != "separator"
     ]
     assert any("Hugging Face" in label for label in labels)
     assert any("Import" in label for label in labels)
-    assert not window._details_host.winfo_manager()
+    # MEC-900: the details pane shows the readable per-model summary; raw JSON is an explicit secondary action.
+    assert window._details_mode == "summary"
 
 
 def test_queue_to_learning_persists_drafts_only_and_preserves_active_state(ui):

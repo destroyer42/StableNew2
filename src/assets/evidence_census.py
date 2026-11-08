@@ -58,7 +58,7 @@ def refresh_census(
                 def on_bytes(_path: Path, done: int, total: int, label: str = relative) -> None:
                     nonlocal read
                     read = done
-                    progress(f"{label}: {done}/{total} bytes")
+                    progress(f"{label}: hashing {done / 1e9:.1f} of {total / 1e9:.1f} GB")
 
                 try:
                     result = registry.refresh(

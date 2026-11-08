@@ -311,6 +311,8 @@ class AssetRegistry:
         )
         self.cache_path = Path(cache_path) if cache_path else workspace_paths.asset_registry_cache()
         self._entries: dict[str, dict[str, Any]] = {}
+        #: Alias cache keys (an unresolved path) re-keyed by the current refresh: alias -> resolved key.
+        self._superseded_aliases: dict[str, str] = {}
         self._loaded = False
         self._snapshot = AssetRegistrySnapshot(())
         self._cache_state = CacheState.UNLOADED
@@ -372,11 +374,39 @@ class AssetRegistry:
                      for kind, path in self.supported_roots() if path not in known)
         return tuple(roots)
 
+    def _cached_entry(self, path: Path) -> tuple[str | None, dict[str, Any] | None]:
+        """The cache entry for one file: under its resolved key, else under the path it was hashed through.
+
+        Entries are keyed by the resolved path. A library folder that later became a link (for example a
+        ``models`` folder moved to another drive and replaced by a junction) leaves its earlier entries keyed by the
+        unresolved path, so the resolved lookup misses and every file would be hashed again. Such an alias entry is
+        returned only when it names this same file; callers still apply the size/mtime fingerprint rule, so it is
+        trusted exactly as much as an entry under the resolved key. Never hashes, never writes.
+        """
+
+        resolved = str(path.resolve())
+        cached = self._entries.get(resolved)
+        if cached is not None:
+            return resolved, cached
+        for alias in dict.fromkeys((str(path), str(path.absolute()))):
+            if alias == resolved:
+                continue
+            candidate = self._entries.get(alias)
+            if candidate is None:
+                continue
+            try:
+                same_file = Path(alias).resolve() == path.resolve()
+            except OSError:
+                same_file = False
+            if same_file:
+                return alias, candidate
+        return None, None
+
     def verified_sha256(self, path: Path) -> str | None:
         """The cached SHA-256 of one exact file, only while its size/mtime fingerprint still matches; never hashes."""
 
         self._load()
-        cached = self._entries.get(str(path.resolve()))
+        _key, cached = self._cached_entry(path)
         try:
             stat = path.stat()
         except OSError:
@@ -497,6 +527,12 @@ class AssetRegistry:
             if cancelled and cancelled():
                 raise InterruptedError("Checkpoint evidence refresh cancelled")
             self._entries.update(entries)
+            for alias, resolved in self._superseded_aliases.items():
+                # Retire an alias only when it still describes the same bytes the resolved entry now holds.
+                retired, current = self._entries.get(alias), self._entries.get(resolved)
+                if retired and current and retired.get("sha256") == current.get("sha256"):
+                    self._entries.pop(alias, None)
+            self._superseded_aliases = {}
             self._snapshot = self._make_snapshot()
             self._save()
 
@@ -531,7 +567,7 @@ class AssetRegistry:
             stat = path.stat()
         except OSError:
             return CheckpointStatus(CheckpointMiss.FILE_UNAVAILABLE, self._cache_state)
-        cached = self._entries.get(str(path.resolve()))
+        _key, cached = self._cached_entry(path)
         reason = self._identity_reason(cached, AssetKind.CHECKPOINT, stat)
         if reason is not CheckpointMiss.CURRENT:
             return CheckpointStatus(reason, self._cache_state)
@@ -643,6 +679,7 @@ class AssetRegistry:
     ) -> tuple[dict[str, dict[str, Any]], int, int]:
         selected = set(kinds) if kinds is not None else set(_DEFAULT_REFRESH_KINDS)
         next_entries: dict[str, dict[str, Any]] = {}
+        self._superseded_aliases = {}
         computed = hits = 0
         roots_and_paths: list[tuple[AssetKind, Path, Iterable[Path]]]
         if observed_files is not None:
@@ -698,7 +735,7 @@ class AssetRegistry:
                 stat = path.stat()
                 if kind in _AUXILIARY_KINDS and stat.st_size > AUXILIARY_MAX_BYTES:
                     raise ValueError("Auxiliary asset exceeds the size limit")
-                cached = self._entries.get(key)
+                found_key, cached = self._cached_entry(path)
                 if read_only:
                     # Browsing never follows model/sidecar aliases outside the configured library.
                     if not path.resolve().is_relative_to(root.resolve()):
@@ -742,6 +779,11 @@ class AssetRegistry:
                     counters.header_reads += 1
                 if model_valid and cached is not None:
                     entry = dict(cached)
+                    if found_key != key:
+                        # Re-key an alias entry under the resolved path; the alias is retired at commit.
+                        entry["path"], entry["root"] = key, str(root.resolve())
+                        if found_key is not None:
+                            self._superseded_aliases[found_key] = key
                     entry.update(sidecar_fields)
                     if header_fields is not None:
                         entry.update(header_fields)

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-701 of 856 modules have a docstring.
+702 of 857 modules have a docstring.
 
 ## src/
 
@@ -600,6 +600,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `model_evidence_readiness.py`: Worker-only readiness for selected runtime checkpoints, using AssetRegistry
 - `model_policy_service.py`: Learning policy validation and compile delegation; never an execution authority
 - `model_profiles.py`: Model Profiles & Style-Aware Defaults (V2-P1)
+- `model_run_history.py`: Per-checkpoint summary of past queue jobs, for display in the Model Evidence Catalog
 - `next_actions.py`: Deterministic gap classification and ranking of suggested next actions
 - `ordinary_njr.py`: Materialise one ordinary (single-variable) Learning variant into the canonical NJR
 - `ordinary_prompt_freeze.py`: Ordinary Learning executor-base freeze and explicit saved-preview admission
