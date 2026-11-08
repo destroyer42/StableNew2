@@ -1,0 +1,25 @@
+{
+  "command": [
+    ".venv/Scripts/python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/gui_v2/test_task_navigation_contract_410.py",
+    "tests/generation_profiles/test_profile_service.py",
+    "tests/learning_v2/test_profile_publication_660.py",
+    "tests/video/test_storyboard_drafts.py",
+    "--basetemp",
+    "<isolated-temporary-root>",
+    "-p",
+    "no:cacheprovider",
+    "--tb=short"
+  ],
+  "returncode": 0,
+  "files": [
+    "tests/gui_v2/test_task_navigation_contract_410.py",
+    "tests/generation_profiles/test_profile_service.py",
+    "tests/learning_v2/test_profile_publication_660.py",
+    "tests/video/test_storyboard_drafts.py"
+  ],
+  "publication_note": "Portable rendering of the executed command; local absolute interpreter/temp paths redacted. Original record retained in local assessment artifacts."
+}

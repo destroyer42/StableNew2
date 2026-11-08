@@ -1,0 +1,7 @@
+Redacted incident excerpt from the assessment validation attempt.
+Original machine-local log is retained outside Git.
+
+Windows fatal exception: code 0xc0000008
+At tkinter.update_idletasks, invoked by tests/gui_v2/test_window_layout_normalization_v2.py:54
+No complete test-suite verdict was produced for that attempt.
+GUI testing stopped; subsequent explicitly non-GUI runs passed 141 + 7 tests.
