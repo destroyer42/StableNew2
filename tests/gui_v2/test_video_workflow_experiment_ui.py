@@ -283,7 +283,7 @@ def _ready_tab(tk_root, tmp_path):
     tab.pose_video_var.set(str(clip))
     tab.seed_var.set("11")
     tab._set_text_value(tab.prompt_text, "a woman in a navy top")
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     panel = tab.experiment_panel
     runner = _ManualRunner()
     panel._runner = runner
@@ -334,9 +334,9 @@ def test_tab_preview_queue_and_invalidation_flow(tk_root, tmp_path):
     tab._set_text_value(tab.prompt_text, "a woman in a navy top")
     panel._on_preview()
     runner.drain()
-    tab.experimental_opt_in_var.set(False)  # opt-in is part of the previewed inputs
+    tab.workflow_var.set(tab.workflow_var.get())  # opt-in is part of the previewed inputs
     assert str(panel.queue_button.cget("state")) == "disabled"
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
 
     panel._on_preview()
     runner.drain()
@@ -345,7 +345,9 @@ def test_tab_preview_queue_and_invalidation_flow(tk_root, tmp_path):
     assert len(service.calls) == 1 and len(service.calls[0]) == 2
     assert "Queued 2 experiment jobs" in tab.status_var.get()
     assert app.syncs == [threading.get_ident()]  # queue-state refresh ran on the Tk thread
-    assert tab.experimental_opt_in_var.get() is True  # never silently enabled or cleared by it
+    assert (
+        tab._experimental_selection_confirmed() is True
+    )  # never silently enabled or cleared by it
 
 
 @pytest.mark.gui
@@ -597,7 +599,7 @@ def test_normal_queue_button_is_unchanged_when_experiment_mode_is_off(tk_root, t
     tab.source_image_var.set(str(source))
     tab.pose_video_var.set(str(clip))
     tab._set_text_value(tab.prompt_text, "a woman in a navy top")
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     assert tab.experiment_panel.enabled_var.get() is False
 
     import tkinter.messagebox as messagebox

@@ -22,7 +22,9 @@ from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.comfy_healthcheck import wait_for_comfy_ready
 from src.video.comfy_process_manager import (
+    ComfyProcessConfig,
     ComfyProcessManager,
+    ComfyStartupError,
     build_default_comfy_process_config,
     get_global_comfy_process_manager,
 )
@@ -33,6 +35,11 @@ from src.video.frames_out import (
     encode_frames_out,
     frames_output_fps,
     natural_frame_order,
+)
+from src.video.managed_comfy_runtime import (
+    missing_required_flags,
+    plan_comfy_launch,
+    workflow_launch_requirements,
 )
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_backend_types import (
@@ -570,7 +577,7 @@ class ComfyWorkflowVideoBackend:
         if not transition.ready:
             raise RuntimeTransitionError(transition)
 
-        runtime_base_url = self._ensure_runtime_ready()
+        runtime_base_url = self._ensure_runtime_ready(_required_launch_flags(spec))
         client = self._client or ComfyApiClient(base_url=runtime_base_url)
 
         object_info = client.get_object_info()
@@ -971,43 +978,39 @@ class ComfyWorkflowVideoBackend:
         return None
 
     def _resolve_process_manager(self) -> ComfyProcessManager | None:
-        return (
-            self._process_manager
-            or self._managed_process_manager
-            or get_global_comfy_process_manager()
-        )
+        if self._process_manager is not None:
+            return self._process_manager
+        if self._managed_process_manager is None:
+            # Keep the owner across release/relaunch cycles so the same manager keeps
+            # serving transitions, shutdown and the next job's launch.
+            self._managed_process_manager = get_global_comfy_process_manager()
+        return self._managed_process_manager
 
     def _verify_required_launch_flags(self, spec: Any) -> None:
-        """Refuse unless the StableNew-managed ComfyUI command carries every declared flag.
+        """Refuse a known incompatible launch before runtime handoff or release."""
 
-        The command checked is the one StableNew launches (the resolved manager's, or the default
-        managed configuration's).  A runtime StableNew does not launch cannot have its flags
-        verified, so it is refused rather than assumed; nothing is started, stopped or changed.
-        """
-
-        required = _required_launch_flags(spec)
+        manager = self._resolve_process_manager()
+        config = getattr(manager, "config", None) if manager is not None else build_default_comfy_process_config()
+        command = getattr(config, "command", ()) or ()
+        required = workflow_launch_requirements(command, _required_launch_flags(spec))
         if not required:
             return
-        manager = self._resolve_process_manager()
-        config = getattr(manager, "_config", None) if manager is not None else None
-        if config is None and manager is None:
-            config = build_default_comfy_process_config()
-        command = list(getattr(config, "command", None) or [])
-        if not command:
-            raise RuntimeError(
-                f"Workflow '{spec.workflow_id}' requires a StableNew-managed ComfyUI launched with "
-                f"{' '.join(required)}; no managed launch configuration is available and an "
-                "external runtime's launch flags cannot be verified. In Engine Settings > Video "
-                "runtime (ComfyUI), choose 'Use managed install' and restart StableNew."
-            )
-        missing = [flag for flag in required if flag not in command]
-        if missing:
-            raise RuntimeError(
-                f"Workflow '{spec.workflow_id}' requires the managed ComfyUI to be launched with "
-                f"{' '.join(missing)}, which the configured comfy_command does not include. In "
-                "Engine Settings > Video runtime (ComfyUI), choose 'Add required flags' (or 'Use "
-                "managed install') and restart StableNew; StableNew does not rewrite it on its own."
-            )
+        running = getattr(manager, "running_command", ()) or ()
+        if running:
+            verified = getattr(manager, "verified_launch_flags", ()) or ()
+            missing = missing_required_flags(verified, required)
+            if missing:
+                raise ComfyStartupError(
+                    f"The running StableNew-owned ComfyUI lacks verified launch flags {' '.join(missing)}. "
+                    "Wait for the current runtime to be released, then retry."
+                )
+            return
+        if isinstance(config, ComfyProcessConfig) and not config.autostart_enabled:
+            raise ComfyStartupError("This workflow requires a StableNew-owned ComfyUI, but automatic start is off.")
+        try:
+            plan_comfy_launch(command, getattr(config, "working_dir", None), required)
+        except ValueError as exc:
+            raise ComfyStartupError(f"Workflow '{spec.workflow_id}': {exc}") from exc
 
     def _release_owned_runtime(self) -> dict[str, Any]:
         """Stop the managed Comfy only when StableNew owns its process; report what happened.
@@ -1054,21 +1057,18 @@ class ComfyWorkflowVideoBackend:
             "released": released,
         }
 
-    def _ensure_runtime_ready(self) -> str:
+    def _ensure_runtime_ready(self, required_flags: Sequence[str] = ()) -> str:
         manager = self._resolve_process_manager()
-        if manager is not None and self._process_manager is None:
-            # Keep one owner object across release/relaunch cycles: after a per-job release the
-            # same manager relaunches (and re-registers itself), so the app's exit cleanup and
-            # runtime transitions keep tracking the process StableNew owns.
-            self._managed_process_manager = manager
         if manager is None:
-            if self._client is not None:
+            if self._client is not None and not required_flags:
                 wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
                 return self._base_url
             default_config = build_default_comfy_process_config()
             if default_config is not None:
                 manager = ComfyProcessManager(default_config)
                 self._managed_process_manager = manager
+            elif required_flags:
+                raise ComfyStartupError("A StableNew-managed ComfyUI launch command is required.")
             else:
                 try:
                     wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
@@ -1076,9 +1076,20 @@ class ComfyWorkflowVideoBackend:
                 except Exception as exc:
                     raise RuntimeError(_build_missing_runtime_message(self._base_url, exc)) from exc
         if manager is not None:
-            if not manager.ensure_running():
+            config = getattr(manager, "config", None)
+            base_url = str(getattr(config or getattr(manager, "_config", None), "base_url", "") or "").strip()
+            if isinstance(config, ComfyProcessConfig) and not config.autostart_enabled and not manager.is_running():
+                if required_flags:
+                    raise ComfyStartupError("This workflow requires a StableNew-owned ComfyUI, but automatic start is off.")
+                wait_for_comfy_ready(base_url or self._base_url, timeout=15.0, poll_interval=0.5)
+                return base_url or self._base_url
+            ready = (
+                manager.ensure_running(required_flags=required_flags)
+                if required_flags
+                else manager.ensure_running()
+            )
+            if not ready:
                 raise RuntimeError("Managed ComfyUI process failed to become healthy")
-            base_url = str(getattr(getattr(manager, "_config", None), "base_url", "") or "").strip()
             return base_url or self._base_url
         wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
         return self._base_url

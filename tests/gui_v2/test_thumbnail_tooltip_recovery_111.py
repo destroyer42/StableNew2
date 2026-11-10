@@ -253,10 +253,6 @@ def video_tab(shown_root: tk.Tk):
     tab.destroy()
 
 
-def _opt_in_visible(tab: VideoWorkflowTabFrameV2) -> bool:
-    return bool(tab.experimental_opt_in_check.winfo_ismapped())
-
-
 def _select(tab: VideoWorkflowTabFrameV2, workflow: str, root: tk.Tk) -> None:
     tab.workflow_var.set(workflow)
     _settle(root, 80)
@@ -265,35 +261,35 @@ def _select(tab: VideoWorkflowTabFrameV2, workflow: str, root: tk.Tk) -> None:
 def test_opt_in_is_never_carried_across_workflow_switches(shown_root: tk.Tk, video_tab) -> None:
     tab, _controller = video_tab
     assert tab.workflow_var.get() == "exp_a"
-    assert _opt_in_visible(tab) and tab.experimental_opt_in_var.get() is False  # visible, initially unchecked
+    assert tab._experimental_selection_confirmed() is False  # a default is not an explicit selection
 
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     _select(tab, "plain", shown_root)
-    assert not _opt_in_visible(tab) and tab.experimental_opt_in_var.get() is False  # hidden and cleared
+    assert tab._experimental_selection_confirmed() is False is False  # cleared on selection change
 
     _select(tab, "exp_a", shown_root)
-    assert _opt_in_visible(tab) and tab.experimental_opt_in_var.get() is False  # back again: still not authorised
+    assert tab._experimental_selection_confirmed() is False  # back again: still not authorised
 
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     _select(tab, "exp_b", shown_root)  # experimental -> a different experimental workflow
-    assert _opt_in_visible(tab) and tab.experimental_opt_in_var.get() is False
+    assert tab._experimental_selection_confirmed() is False
 
 
 def test_ordinary_edits_do_not_revoke_a_deliberate_opt_in(shown_root: tk.Tk, video_tab) -> None:
     tab, _controller = video_tab
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     tab.seed_var.set("1234")
     tab.motion_profile_var.set("dynamic")
     tab.output_route_var.set("Testing")
     tab.set_source_image_path("C:/tmp/other.png")
     _settle(shown_root, 120)
     assert tab.workflow_var.get() == "exp_a"
-    assert tab.experimental_opt_in_var.get() is True  # same workflow identity: the choice stands
+    assert tab._experimental_selection_confirmed() is True  # same workflow identity: the choice stands
 
 
 def test_submissions_carry_the_explicit_per_job_authorisation(shown_root: tk.Tk, video_tab) -> None:
     tab, controller = video_tab
-    tab.experimental_opt_in_var.set(True)
+    tab.workflow_combo.event_generate("<<ComboboxSelected>>")
     tab.queue_workflow_button.invoke()
     assert controller.submissions[-1]["workflow_id"] == "exp_a"
     assert controller.submissions[-1]["experimental_opt_in"] is True
@@ -305,7 +301,7 @@ def test_submissions_carry_the_explicit_per_job_authorisation(shown_root: tk.Tk,
     tab.queue_workflow_button.invoke()
     assert len(controller.submissions) == 1
 
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     assert str(tab.queue_workflow_button.cget("state")) == "normal"
     tab.queue_workflow_button.invoke()
     assert controller.submissions[-1]["workflow_id"] == "exp_b"
@@ -325,22 +321,22 @@ def _queue_state(tab: VideoWorkflowTabFrameV2) -> str:
     return str(tab.queue_workflow_button.cget("state"))
 
 
-def test_queue_is_disabled_with_an_inline_reason_until_the_opt_in_is_ticked(
+def test_queue_is_disabled_with_an_inline_reason_until_the_workflow_is_explicitly_selected(
     shown_root: tk.Tk, video_tab
 ) -> None:
     tab, _controller = video_tab
     assert tab.workflow_var.get() == "exp_a"
     assert _queue_state(tab) == "disabled"
-    assert "experimental opt-in" in tab.queue_block_reason_var.get()
+    assert "Choose this experimental workflow" in tab.queue_block_reason_var.get()
     assert tab.queue_block_label.winfo_ismapped()  # the reason is visible, not only a tooltip
     assert tab.queue_block_label.master is tab.queue_workflow_button.master  # same row as the button
 
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     _settle(shown_root, 60)
     assert _queue_state(tab) == "normal"
     assert tab.queue_block_reason_var.get() == "" and not tab.queue_block_label.winfo_ismapped()
 
-    tab.experimental_opt_in_var.set(False)  # taking the authorisation back closes the gate again
+    tab.workflow_var.set(tab.workflow_var.get())  # taking the authorisation back closes the gate again
     _settle(shown_root, 60)
     assert _queue_state(tab) == "disabled" and tab.queue_block_label.winfo_ismapped()
 
@@ -350,11 +346,10 @@ def test_an_approved_workflow_needs_no_opt_in_and_queue_stays_enabled(
 ) -> None:
     tab, _controller = video_tab
     _select(tab, "plain", shown_root)
-    assert not _opt_in_visible(tab)
     assert _queue_state(tab) == "normal"
     assert tab.queue_block_reason_var.get() == "" and not tab.queue_block_label.winfo_ismapped()
 
-    _select(tab, "exp_b", shown_root)  # back to a gated workflow: disabled again until ticked
+    _select(tab, "exp_b", shown_root)  # back to a gated workflow: disabled again until deliberately selected
     assert _queue_state(tab) == "disabled" and tab.queue_block_label.winfo_ismapped()
     _select(tab, "plain", shown_root)
     assert _queue_state(tab) == "normal" and not tab.queue_block_label.winfo_ismapped()
@@ -364,20 +359,20 @@ def test_the_gate_follows_a_switch_between_experimental_workflows_and_is_never_r
     shown_root: tk.Tk, video_tab
 ) -> None:
     tab, _controller = video_tab
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     _settle(shown_root, 60)
     assert _queue_state(tab) == "normal"
 
     _select(tab, "exp_b", shown_root)  # a different experimental workflow never inherits the opt-in
-    assert _queue_state(tab) == "disabled" and "experimental opt-in" in tab.queue_block_reason_var.get()
+    assert _queue_state(tab) == "disabled" and "Choose this experimental workflow" in tab.queue_block_reason_var.get()
 
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     _settle(shown_root, 60)
     assert _queue_state(tab) == "normal"
     # Saved state never carries the authorisation: a restore leaves the gate closed again.
     tab.restore_video_workflow_state({"workflow_id": "exp_b", "experimental_opt_in": True})
     _settle(shown_root, 60)
-    assert tab.experimental_opt_in_var.get() is False
+    assert tab._experimental_selection_confirmed() is False
     assert _queue_state(tab) == "disabled"
     assert "experimental_opt_in" not in tab.get_video_workflow_state()  # not part of saved state
 
@@ -394,7 +389,7 @@ def test_batch_mode_still_disables_queue_independently_of_the_opt_in(
     assert _queue_state(tab) == "normal"
 
     _select(tab, "exp_a", shown_root)
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     tab._on_batch_mode_change(True)
     assert _queue_state(tab) == "disabled"  # an opt-in does not lift the batch-mode disable
     tab._on_batch_mode_change(False)

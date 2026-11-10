@@ -76,7 +76,7 @@ config exist. Exit 0 is clean; 1 is drift (each problem listed); 2 is an unreada
 
 ## Launch
 
-Do not start it by hand for StableNew work. StableNew launches it through `ComfyProcessManager`, from the
+StableNew launches ComfyUI on demand through `ComfyProcessManager` when a queued video workflow needs it, using the
 managed-Comfy configuration in StableNew's own machine-local `presets/settings.json`. That file's
 `comfy_command` array is the supported way to configure the managed runtime: each executable and argument is
 its own array element, so a path containing spaces is represented correctly.
@@ -85,8 +85,8 @@ its own array element, so a path containing spaces is represented correctly.
 StableNew reads `config/managed_comfy_runtime.json`, finds `<release>-py<minor>` under the install root, checks the
 interpreter, source version, runtime folders and model path config (file checks only; it imports nothing and
 starts nothing), and fills `comfy_command`, `comfy_workdir` and `comfy_base_url` with exactly the command the
-verifier prints below, keeping the port of the configured URL. **Add required flags** appends only the missing
-contract flags to a custom command. Nothing is written until **Save & Close**, and a restart applies it. If the
+verifier prints below, keeping the port of the configured URL. StableNew applies required flags automatically
+when it launches ComfyUI. Save changes with **Save & Close**. Restart StableNew to replace an already registered launcher. If the
 installation is not found, the dialog lists what is missing and changes nothing.
 
 **By hand (equivalent):**
@@ -103,29 +103,26 @@ installation is not found, the dialog lists what is missing and changes nothing.
    the port, the StableNew-owned input/output/temp/user folders, the model path config, and the required flags
    `--disable-pinned-memory` and `--disable-auto-launch`.
 2. In `presets/settings.json`, set `comfy_command` to those array elements, one element per string, unchanged and
-   in order. Do not drop `--disable-pinned-memory` (the Wan-Animate-2 workflows refuse to run on a runtime that
-   cannot prove it) or `--disable-auto-launch`.
+   in order.
 3. Set `comfy_workdir` to the install's `source` folder.
 4. Keep `comfy_base_url` and the command's `--port` aligned (same loopback port).
 
-`STABLENEW_COMFY_COMMAND` is **not** the recommended path for the managed runtime. Both startup readers
-(`src/main.py` and `src/video/comfy_process_manager.py`) split it on whitespace, so it cannot hold the JSON
+`STABLENEW_COMFY_COMMAND` is **not** the recommended path for the managed runtime. The launch resolver
+(`src/video/comfy_process_manager.py`) will split it on whitespace, so it cannot hold the JSON
 array above and cannot represent an executable or argument path containing spaces; do not paste the verifier's
-output into it. If it is set in the environment it overrides the settings array at app startup, so leave
+output into it. If it is set in the environment it overrides the settings array when StableNew configures the launcher, so leave
 it unset when using the settings configuration. When it is set and differs from the saved command, Engine
 Settings and the Video Workflow runtime readiness strip say that the command comes from the environment and that
 the saved one is not in force; StableNew never edits the variable, so remove or change it outside StableNew and
 restart.
 
-**When a video workflow is blocked on the launch command.** The Video Workflow tab's runtime readiness strip names
-the reason (no command, a missing required flag, or a launcher that has not applied a saved change). For a
-problem Engine Settings can fix it shows **Fix ComfyUI Setup**, which only opens Engine Settings > Video runtime
-(ComfyUI) with the reason at the top; the repair is still your click on **Use managed install** or **Add required
-flags** and **Save & Close**. It is never shown for RAM, GPU memory, node or model-file blockers. A saved change is
-**not** active until StableNew restarts: the strip keeps blocking on the launcher this session started and says so,
-and Refresh cannot apply it. A ComfyUI that StableNew did not launch cannot have its flags verified, so a workflow
-that requires them stays blocked while it is serving; stop it yourself and let StableNew start its own. If
-**Save & Close** cannot write the settings, the dialog stays open and says so instead of closing.
+**When a video workflow is blocked on the launch command.** The Runtime readiness strip reports missing configuration,
+unsupported switches, and whether a serving runtime can prove its launch flags. A successful offline CLI check
+verifies the declared arguments only. If the configured launcher cannot be inspected, select a compatible direct
+Python launch for ComfyUI's `main.py`. A running owned process with incompatible flags stays in place until its
+existing lifecycle releases it. When an external ComfyUI occupies the endpoint, workflows that require verified flags
+must wait for that runtime to finish and its operator to close it. **Fix ComfyUI Setup** opens Engine Settings when a
+launch command is missing.
 
 Do **not** commit the result: the paths are machine-specific and the repository default `presets/settings.json`
 is unchanged.

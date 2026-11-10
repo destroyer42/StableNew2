@@ -158,7 +158,7 @@ def test_a_still_experimental_ti2v_1_1_0_job_runs_with_its_recorded_opt_in_and_i
     # Admission still refuses an un-opted-in 1.1.0 job before it can be queued.
     controller = _video_controller(tmp_path, service)
     ok, reason = controller.validate_form_data(_form("1.1.0"))
-    assert not ok and "Enable experimental workflow" in str(reason)
+    assert not ok and "Choose it explicitly" in str(reason)
     ok, reason = controller.validate_form_data(_form("1.2.0"))
     assert ok, reason
     service.runner.stop()

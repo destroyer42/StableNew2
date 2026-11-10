@@ -529,11 +529,8 @@ def test_runbook_does_not_recommend_the_whitespace_split_command_environment_ove
             assert "not** the recommended path" in squashed and "split it on whitespace" in squashed
             assert "leave it unset" in squashed
             assert "do not paste the verifier's output into it" in squashed
-    # The source claims the runbook makes are true: both readers really use a plain whitespace split.
-    for source in (ROOT / "src" / "main.py", ROOT / "src" / "video" / "comfy_process_manager.py"):
-        assert 'os.getenv("STABLENEW_COMFY_COMMAND", "").split()' in source.read_text(encoding="utf-8").replace(
-            "os.environ.get(", "os.getenv("
-        )
+    source = ROOT / "src" / "video" / "comfy_process_manager.py"
+    assert 'os.environ.get("STABLENEW_COMFY_COMMAND", "").split()' in source.read_text(encoding="utf-8")
     for other in ("STABLENEW_COMFY_WORKDIR", "STABLENEW_COMFY_BASE_URL"):
         assert other not in text  # one supported configuration path, not a mix of authorities
 

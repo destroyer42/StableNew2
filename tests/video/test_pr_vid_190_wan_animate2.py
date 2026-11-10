@@ -19,6 +19,7 @@ from src.controller.video_workflow_controller import VideoWorkflowController
 from src.pipeline.result_contract_v26 import collect_canonical_artifacts
 from src.queue.job_model import JobStatus
 from src.video import ComfyWorkflowVideoBackend, VideoExecutionRequest
+from src.video.comfy_process_manager import ComfyProcessConfig, ComfyProcessManager
 from src.video.video_backend_types import (
     CONTROL_NEGATIVE_PROMPT,
     CONTROL_POSE_VIDEO,
@@ -39,12 +40,12 @@ from src.video.workflow_frame_count import frame_count_projection, legal_frame_c
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import build_default_workflow_registry
 from tests.integration.test_pr_vid_120_neutral_video_queue import _build_stack
+from tests.video.test_comfy_process_manager import _FakeManaged, fake_comfy_command
 from tests.video.test_pr_vid_190_comfy_lifecycle_frame_count import _FakeManager, _no_transition
 from tests.video.test_wan22_experimental_workflow import _driver_probe, _FakeComfy, _stats
 
 # Optional machine-local PR-VID-184 evidence; the parity test skips when it is not provided.
 QUALIFIED_GRAPH = Path(os.environ.get("STABLENEW_VID184_QUALIFIED_GRAPH", "__unset__"))
-MANAGED_COMMAND = ["python.exe", "main.py", "--port", "8000", "--disable-pinned-memory"]
 
 
 def _spec(workflow_id: str):
@@ -77,9 +78,11 @@ class _AnimateComfy(_FakeComfy):
 
 
 class _ManagedFake(_FakeManager):
-    def __init__(self, *, command=None, **kw) -> None:
+    def __init__(self, root: Path, *, supported: bool = True, **kw) -> None:
         super().__init__(**kw)
-        self._config = SimpleNamespace(base_url="http://x", command=list(command or MANAGED_COMMAND))
+        switches = ("--disable-pinned-memory",) if supported else ()
+        command = fake_comfy_command(root, *switches)
+        self.config = SimpleNamespace(base_url="http://x", command=list(command))
 
 
 def _backend(client, manager, *, ram: float = 24.0) -> ComfyWorkflowVideoBackend:
@@ -308,15 +311,26 @@ def test_a_driving_video_is_refused_by_the_prompt_only_workflow(tmp_path) -> Non
 # ---------------------------------------------------------------- backend: launch policy, staging
 
 
-def test_missing_pinned_memory_flag_refuses_before_any_runtime_start(tmp_path) -> None:
-    manager = _ManagedFake(command=["python.exe", "main.py", "--port", "8000"])
+def test_unsupported_pinned_memory_flag_refuses_before_any_runtime_start(tmp_path) -> None:
+    manager = _ManagedFake(tmp_path, supported=False)
     client = _AnimateComfy(tmp_path)
     with pytest.raises(RuntimeError, match="--disable-pinned-memory") as refused:
         _backend(client, manager).execute(None, _request(tmp_path, WAN_ANIMATE2_PROMPT_ID))
     assert manager.starts == 0 and client.queued == []
-    # PR-VID-UX-310: the refusal names the screen and the one-click fix that exist.
-    assert "Engine Settings > Video runtime (ComfyUI)" in str(refused.value)
-    assert "Add required flags" in str(refused.value)
+    assert "cli_args.py does not support" in str(refused.value)
+    assert "Select a compatible ComfyUI installation" in str(refused.value)
+
+
+def test_running_incompatible_owner_is_left_alone_before_dispatch(tmp_path) -> None:
+    manager = _ManagedFake(tmp_path, running=True)
+    manager.running_command = tuple(manager.config.command)
+    client = _AnimateComfy(tmp_path)
+
+    with pytest.raises(RuntimeError, match="running StableNew-owned ComfyUI lacks"):
+        _backend(client, manager).execute(None, _request(tmp_path, WAN_ANIMATE2_PROMPT_ID))
+
+    assert manager.running and manager.stops == 0
+    assert client.queued == [] and client.uploaded == []
 
 
 def test_an_unverifiable_external_runtime_is_refused(tmp_path, monkeypatch) -> None:
@@ -332,12 +346,25 @@ def test_an_unverifiable_external_runtime_is_refused(tmp_path, monkeypatch) -> N
     )
     with pytest.raises(RuntimeError, match="cannot be verified") as refused:
         backend.execute(None, _request(tmp_path, WAN_ANIMATE2_PROMPT_ID))
-    assert "Use managed install" in str(refused.value)
+    assert "Configure a StableNew-managed ComfyUI" in str(refused.value)
     assert client.queued == [] and client.uploaded == []
 
 
-def test_prompt_job_runs_releases_the_runtime_and_records_no_driving_video(tmp_path) -> None:
-    manager = _ManagedFake()
+def test_prompt_job_applies_missing_flags_launches_and_releases_the_owned_runtime(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("src.video.comfy_process_manager.wait_for_comfy_ready", lambda *_a, **_kw: True)
+    required = "--disable-pinned-memory"
+    base = fake_comfy_command(tmp_path, required)
+    children = []
+
+    def fake_child(command, **kwargs):
+        child = _FakeManaged(command, **kwargs)
+        children.append(child)
+        return child
+
+    manager = ComfyProcessManager(
+        ComfyProcessConfig(command=list(base), autostart_enabled=True),
+        process_factory=fake_child,
+    )
     client = _AnimateComfy(tmp_path)
     result = _backend(client, manager).execute(None, _request(tmp_path, WAN_ANIMATE2_PROMPT_ID, frame_count=81))
     prompt = client.queued[0]["prompt"]
@@ -345,7 +372,10 @@ def test_prompt_job_runs_releases_the_runtime_and_records_no_driving_video(tmp_p
     assert prompt["10"]["inputs"]["length"] == 81
     assert (prompt["10"]["inputs"]["width"], prompt["10"]["inputs"]["height"]) == (480, 832)
     assert "pose_video" not in prompt["10"]["inputs"] and "18" not in prompt
-    assert manager.stops == 1 and not manager.running
+    [child] = children
+    assert child.command == [*base, required]
+    assert child.stopped and not manager.is_running()
+    assert manager.config.command == list(base)
     manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
     assert "pose_video" not in manifest and manifest["frame_count"] == 81
 
@@ -353,7 +383,7 @@ def test_prompt_job_runs_releases_the_runtime_and_records_no_driving_video(tmp_p
 def test_driving_video_is_staged_as_a_copy_and_recorded_in_provenance(tmp_path) -> None:
     clip = _driving_clip(tmp_path)
     before = clip.read_bytes()
-    manager = _ManagedFake()
+    manager = _ManagedFake(tmp_path)
     client = _AnimateComfy(tmp_path)
     result = _backend(client, manager).execute(
         None, _request(tmp_path, WAN_ANIMATE2_DRIVE_ID, driving=clip)
@@ -374,7 +404,7 @@ def test_changed_driving_video_is_refused_before_upload_or_queue(tmp_path) -> No
     clip = _driving_clip(tmp_path)
     request = _request(tmp_path, WAN_ANIMATE2_DRIVE_ID, driving=clip)
     clip.write_bytes(b"different driving clip")
-    manager = _ManagedFake()
+    manager = _ManagedFake(tmp_path)
     client = _AnimateComfy(tmp_path)
 
     with pytest.raises(ValueError, match="changed since queue admission"):
@@ -399,7 +429,7 @@ def test_compiled_driving_graph_binds_the_frozen_length_and_geometry(tmp_path) -
 
 
 def test_three_queued_animate_jobs_complete_serially_without_manual_teardown(tmp_path) -> None:
-    manager = _ManagedFake()
+    manager = _ManagedFake(tmp_path)
     client = _AnimateComfy(tmp_path)
     repository, queue, service, _ = _build_stack(tmp_path, [_backend(client, manager)])
     app = SimpleNamespace(job_service=service, output_dir=str(tmp_path / "output"))
@@ -468,7 +498,7 @@ class _EchoingLoadVideoComfy(_AnimateComfy):
 
 def test_input_previews_are_never_downloaded_or_treated_as_the_artifact(tmp_path) -> None:
     client = _EchoingLoadVideoComfy(tmp_path)
-    result = _backend(client, _ManagedFake()).execute(
+    result = _backend(client, _ManagedFake(tmp_path)).execute(
         None, _request(tmp_path, WAN_ANIMATE2_DRIVE_ID, driving=_driving_clip(tmp_path))
     )
     assert client.downloaded == ["wan_animate2_job_00001_.mp4"]

@@ -24,6 +24,7 @@ from src.video.workflow_preflight import (
     evaluate_workflow_preflight,
 )
 from src.video.workflow_registry import build_default_workflow_registry
+from tests.video.test_comfy_process_manager import fake_comfy_command
 
 TI2V = ("wan22_ti2v_5b_i2v_v1", "1.2.0")
 ANIMATE = ("wan_animate2_drive_i2v_v1", "1.2.0")
@@ -101,13 +102,13 @@ def test_an_idle_machine_is_queueable_and_the_runtime_only_gates_are_unknown() -
     assert result.queueable and result.block_reason == ""
     states = {gate.id: gate.state for gate in result.gates}
     assert states == {
-        "runtime": GATE_OK,
+        "runtime": GATE_UNKNOWN,
         "nodes": GATE_UNKNOWN,
         "model_files": GATE_UNKNOWN,
         "vram": GATE_OK,
         "ram": GATE_OK,
     }
-    assert "will start it" in _gate(result, "runtime").detail
+    assert "Runtime health is unverified" in _gate(result, "runtime").detail
     files = _gate(result, "model_files").detail
     assert "wan2.2_ti2v_5B_fp16.safetensors" in files and "SHA-256 456f901338bd9ead" in files
 
@@ -117,22 +118,25 @@ def test_an_idle_machine_is_queueable_and_the_runtime_only_gates_are_unknown() -
 # ---------------------------------------------------------------------------
 
 
-def test_missing_launch_flags_block_queue_and_name_the_fix() -> None:
+def test_unsupported_launch_flag_blocks_queue_and_names_the_fix(tmp_path) -> None:
     spec = _spec(ANIMATE)
-
-    result = evaluate_workflow_preflight(spec, _probes(spec, command=("python", "main.py")))
-
+    result = evaluate_workflow_preflight(spec, _probes(spec, command=fake_comfy_command(tmp_path)))
     gate = _gate(result, "launch_flags")
     assert gate.state == GATE_BLOCKED and "--disable-pinned-memory" in gate.detail
     assert not result.queueable
-    assert result.block_reason.startswith("Queue is off: Launch flags:")
-    assert "Add required flags" in result.block_reason
+    assert "Select a compatible ComfyUI installation" in result.block_reason
 
 
-def test_flags_present_pass_and_a_workflow_without_flags_has_no_such_gate() -> None:
+def test_supported_missing_flags_pass_and_a_workflow_without_flags_has_no_such_gate(
+    tmp_path,
+) -> None:
     animate = _spec(ANIMATE)
-    ok = evaluate_workflow_preflight(animate, _probes(animate))
-    assert _gate(ok, "launch_flags").state == GATE_OK
+    command = fake_comfy_command(tmp_path, *FLAGS)
+    ok = evaluate_workflow_preflight(animate, _probes(animate, command=command))
+    assert (
+        _gate(ok, "launch_flags").state == GATE_OK
+        and "at launch" in _gate(ok, "launch_flags").detail
+    )
     ti2v = _spec(TI2V)
     assert "launch_flags" not in {
         g.id for g in evaluate_workflow_preflight(ti2v, _probes(ti2v)).gates
@@ -145,7 +149,7 @@ def test_a_running_comfy_with_no_command_cannot_prove_its_flags() -> None:
     result = evaluate_workflow_preflight(spec, _probes(spec, command=(), state="healthy"))
 
     gate = _gate(result, "launch_flags")
-    assert gate.state == GATE_BLOCKED and "cannot have its flags verified" in gate.detail
+    assert gate.state == GATE_BLOCKED and "launch flags cannot be verified" in gate.detail
 
 
 # ---------------------------------------------------------------------------
@@ -267,11 +271,11 @@ def test_memory_comfy_already_holds_counts_toward_the_gpu_floor() -> None:
     assert _gate(result, "vram").state == GATE_OK
 
 
-def test_the_first_blocked_gate_is_the_one_queue_reports() -> None:
+def test_the_first_blocked_gate_is_the_one_queue_reports(tmp_path) -> None:
     spec = _spec(ANIMATE)
 
     result = evaluate_workflow_preflight(
-        spec, _probes(spec, command=("python", "main.py"), ram_gb=1.0, vram=(12282.0, 100.0))
+        spec, _probes(spec, command=fake_comfy_command(tmp_path), ram_gb=1.0, vram=(12282.0, 100.0))
     )
 
     assert [g.id for g in result.blocking][:1] == ["launch_flags"]
@@ -291,7 +295,7 @@ def test_a_probe_that_raises_is_treated_as_an_endpoint_that_is_not_serving() -> 
     result = evaluate_workflow_preflight(spec, probes)
 
     assert result.runtime_state == "free"
-    assert _gate(result, "runtime").state == GATE_OK
+    assert _gate(result, "runtime").state == GATE_UNKNOWN
 
 
 # ---------------------------------------------------------------------------

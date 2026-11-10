@@ -53,7 +53,6 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "SingleInstanceLock", _FakeSingleInstanceLock)
     monkeypatch.setattr(main_module, "_register_emergency_cleanup", lambda _window: None)
     monkeypatch.setattr(main_module, "_async_bootstrap_webui", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(main_module, "_async_bootstrap_comfy", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(main_module, "graceful_exit", lambda *args, **kwargs: None)
 
     def _fake_build_v2_app(**kwargs):
