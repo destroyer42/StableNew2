@@ -10,12 +10,17 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
+from src.controller.webui_connection_controller import (
+    WebUIConnectionController,
+    WebUIConnectionState,
+)
 from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunResult
 from src.queue.job_model import Job
@@ -108,23 +113,25 @@ def test_app_controller_adopts_pipeline_controller_queue_stack(tmp_path: Path) -
 
 def test_pipeline_controller_routes_jobs_through_job_service(
     job_service_with_stub_runner_factory,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """PipelineController submits normalized jobs via JobService only."""
+    """PipelineController admits the preview NJR through the canonical JobService boundary."""
+    service, queue, _ = job_service_with_stub_runner_factory
+    submit = Mock(wraps=service.submit_njrs)
+    monkeypatch.setattr(service, "submit_njrs", submit)
+    connection = Mock(spec=WebUIConnectionController)
+    connection.ensure_connected.return_value = WebUIConnectionState.READY
+    controller = PipelineController(job_service=service, webui_connection_controller=connection)
+    record = _make_dummy_record()
+    monkeypatch.setattr(controller, "get_preview_jobs", lambda: [record])
 
-    service, _, _ = job_service_with_stub_runner_factory
-    submitted: list[str] = []
-    original_submit = JobService.submit_job_with_run_mode.__get__(service, JobService)
+    assert controller.start_pipeline_v2()
 
-    def tracking_submit(job: Job, *args: object, **kwargs: object) -> None:
-        submitted.append(job.job_id)
-        original_submit(job, *args, **kwargs)
-
-    service.submit_job_with_run_mode = tracking_submit  # type: ignore[assignment]
-    controller = PipelineController(job_service=service)
-    controller._build_normalized_jobs_from_state = lambda *_: [_make_dummy_record()]
-
-    controller._last_run_config = {"prompt_pack_id": "test-pack-core"}
-    controller.start_pipeline_v2()
+    submit.assert_called_once()
+    assert list(submit.call_args.args[0]) == [record]
+    stored = queue.repository.get_job_model(record.job_id)
+    assert stored is not None
+    assert stored._normalized_record == record
 
 
 def test_njr_backed_job_uses_njr_execution_path(tmp_path: Path) -> None:
