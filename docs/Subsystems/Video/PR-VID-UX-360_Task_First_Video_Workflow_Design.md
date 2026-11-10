@@ -1,0 +1,161 @@
+# PR-VID-UX-360: Task-first Video Workflow tab (design)
+
+Date: 2026-11-09. Status: **design, awaiting owner review**. Base: `main` at `5348745f`.
+Scope: the Video Workflow tab only. SVD Img2Vid and Movie Clips are unchanged.
+
+## 1. Problem
+
+The Video Workflow tab has a Basic/Advanced split (PR-VID-UX-313) but is still hard to use:
+
+- The first choice is a workflow name, which asks the operator to know model families.
+- Fifteen-plus controls and panels are always visible, including Motion Library, the batch strip, the overview panel,
+  Effective settings and "Use native SVD instead".
+- One "Advanced options" disclosure holds fourteen unrelated things: anchors, driving video, seed, RIFE, output route,
+  negative prompt, motion readiness, motion preparation, conditioning, workflow controls, help, Compare one control,
+  the eval kit and the multi-shot sequence.
+- Choosing a workflow configures nothing beyond the declared default length.
+
+## 2. Goal and success criteria
+
+The operator says what they want to make; the tab picks the engine, fills the settings and shows only what that task
+needs.
+
+- Default task, image already loaded: **3 actions or fewer** to a queued clip (task is preselected, type a prompt, Queue).
+- Default task fits without scrolling at the 1280x800 layout used by the GUI layout tests.
+- Every automatic choice is visible, carries a one-line reason and can be overridden.
+- No change to what is submitted for the same operator choices: the form state, NJR, admission and replay are unchanged.
+
+## 3. Non-goals
+
+- No change to `VideoWorkflowNjrBuilder`, the compiler, admission, the queue, governance or the catalog specs.
+- No new tuning numbers. Suggestions use only values the catalog already declares and rules already shipped.
+- No automatic opt-in and no silent routing. An experimental engine still needs this job's own opt-in.
+- No merging of SVD or Movie Clips into this tab. "Use native SVD instead" moves into the engine chooser.
+- No AI-assisted workflow choice (`AI_ASSIST` section 10 stays as is).
+
+## 4. Tasks
+
+A task is an operator intent. It is not persisted in a job and never reaches the NJR.
+
+| Task id | Label | Eligible engines (from the workflow record) | Inputs shown |
+|---|---|---|---|
+| `animate` | Animate from a prompt | `form_visibility.pose_video` is false | prompt |
+| `follow_clip` | Follow a driving clip | `form_visibility.pose_video` is true | prompt, driving clip, Motion Library, motion readiness, Prepare Motion Source |
+| `sequence` | Multi-shot sequence | same as `animate`, and `form_visibility.frame_count` is true | shot list (existing sequence panel) |
+| `batch` | Many images | same as `animate` | batch source table (existing batch panel) |
+
+Engine choice within a task, in order:
+
+1. The operator's pinned engine, if it is eligible for the task.
+2. The first eligible engine that is `approved` and not experimental (catalog order, the rule
+   `workflow_picker.recommended_workflow_id` already uses).
+3. Otherwise the first eligible engine without an `admission_block_reason`. It is experimental, so the opt-in is shown
+   and Queue stays disabled until it is ticked.
+4. Otherwise the first eligible engine, with its block reason shown. If none is eligible the task is listed disabled
+   with "No installed workflow supports this."
+
+Nothing in this logic names a workflow or a model.
+
+## 5. Suggested settings
+
+Computed by a pure function from the selected task and the engine's record. Each suggestion is `(field, value, reason)`.
+
+| Field | Suggested value | Source |
+|---|---|---|
+| Engine | per section 4 | governance state and capability projection |
+| Length | the declared default | `frame_count.default` |
+| Motion | `gentle` (current default), only when the engine declares `motion_profile` | `build_default_form_state` |
+| Smooth with RIFE | on when RIFE resolves on this machine, else off with the reason | existing PR-VID-SMOOTH-302 discovery |
+| Seed | blank (random, frozen at submit) | existing behaviour |
+| Negative prompt | blank, shown as "engine default applies" when the engine declares one | `default_negative_prompt` |
+| Workflow controls | each control's declared default | `operator_controls` |
+| Fixed settings | listed read-only | `operator_projection.fixed_settings` |
+
+**Pinning.** A field the operator edits is pinned. Changing task or engine re-suggests only unpinned fields. A pinned
+value that the new engine cannot accept (for example a length it does not offer) is replaced by the suggestion and the
+summary line says so. "Reset to suggested" clears all pins. Pins are session state and are not saved.
+
+**Smoothing default.** Today `smooth_var` is a saved preference that defaults to off. With this change a saved explicit
+choice is still honoured; only an operator with no saved choice gets the suggestion.
+
+## 6. Layout
+
+Fixed header (never scrolls):
+
+1. Source image: path, Browse, Use Latest Output.
+2. Task selector: four radio-style buttons in one row.
+3. Queue button, the experimental opt-in (only when needed), the block reason with its fix action, status, the
+   submission notice.
+
+Scrolling body:
+
+4. Task inputs (section 4).
+5. **Suggested settings** line, for example `Wan2.2 TI2V-5B · 3.4 s · gentle · smoothed · random seed`, with **Change**.
+   Expanded it shows Engine (the current workflow picker, plus "Use native SVD instead"), Length, Motion, Smooth, Seed,
+   Negative and any workflow controls, each with its reason, and "Reset to suggested".
+6. Runtime readiness strip (unchanged; shown only when it has something to say).
+7. Named disclosures, collapsed:
+   - **Keyframes and conditioning**: end and mid anchors, camera, depth, ControlNet. Hidden entirely when the engine
+     declares none of them.
+   - **Compare and evaluate**: Compare one control, eval kit.
+   - **Details**: effective settings, Preview Frozen Plan, output route, source summary, workflow help, tab overview.
+8. Recent outputs.
+
+Disclosure rules:
+
+- A disclosure opens itself only when it contains a required input that is empty.
+- A collapsed disclosure that hides non-default values shows "modified" in its header (the existing conditioning
+  header behaviour, generalised).
+- Motion Library, motion readiness and Prepare Motion Source exist only in `follow_clip`.
+- The batch strip and table exist only in `batch`; the sequence panel only in `sequence`.
+
+## 7. Components
+
+| Unit | Kind | Responsibility |
+|---|---|---|
+| `src/video/workflow_tasks.py` | new, pure | Task definitions; `eligible_workflows(task, records)`; `choose_workflow(task, records, pinned)`; `suggest_settings(task, record, rife_available)`; `infer_task(record, state)`. No Tk, no I/O. |
+| `src/gui/views/video_workflow_task_panel_v2.py` | new | Task selector and the Suggested settings line and editor. Reads and writes the tab's existing Tk variables; owns pin state. |
+| `src/gui/views/video_workflow_tab_frame_v2.py` | changed | Layout only: sections 6 and the per-task show/hide. Existing widget attributes (`workflow_combo`, `queue_workflow_button`, `advanced_section`, the panel attributes) keep their names so handoffs and tests keep working; `advanced_section` becomes the Suggested settings editor. |
+| `src/controller/video_workflow_controller.py` | changed, small | Exposes RIFE availability for the suggestion through an existing capability lookup. No new admission or build path. Controller surface ceilings are not raised. |
+
+Data flow: workflow records → `workflow_tasks` → task panel sets the existing Tk variables →
+`get_video_workflow_state()` (unchanged shape) → controller → NJR builder. The task never leaves the GUI.
+
+## 8. State and compatibility
+
+- Saved tab state gains an optional `task` key. Absent or unknown: `infer_task` picks `follow_clip` when the saved
+  engine accepts a driving clip, otherwise `animate`. `sequence` and `batch` are never inferred.
+- `restore_video_workflow_state` treats every restored value as pinned, so a restore never silently changes settings.
+- Make Video handoffs call `apply_make_video_defaults` as today; it additionally selects `animate`.
+- Motion Library "Use as Driving Video" and the Review batch handoff switch to `follow_clip` and `batch` respectively.
+- The experimental opt-in is still cleared on any engine change and never restored.
+
+## 9. Errors and edge cases
+
+- Engine blocked by policy or readiness: Queue disabled, reason inline, "Fix setup" where the readiness strip offers it.
+- Switching task while a batch step is running is refused with the existing message (`_leave_batch_mode`).
+- Switching away from `follow_clip` clears the driving-clip field, as a workflow change does today.
+- Workflow records fail to load: the task selector is disabled and the status line says why.
+
+## 10. Testing
+
+- `tests/video/test_workflow_tasks.py`: eligibility per task; engine choice order including pinned, approved,
+  experimental-only and all-blocked; suggestions and reasons; pin replacement when a value is illegal; `infer_task`.
+  Uses plain record dicts; asserts no workflow or model name is referenced by the module.
+- `tests/gui_v2/test_pr_vid_ux_360_task_first.py`: per-task visibility; default-task action count; pinning survives a
+  task switch; "Reset to suggested"; state round-trip with and without `task`; handoffs select the right task; opt-in
+  never auto-ticked; submitted state for unchanged choices equals today's.
+- Existing video GUI tests updated only where they assert the old layout. Controller and architecture ratchets unchanged.
+- Not covered by tests: interactive Tk acceptance on the desktop, which needs an operator run.
+
+## 11. Risks
+
+- `codex/vid-ux-workflow-runtime` (`499ae3c7`, unmerged) edits the same tab file and six of its GUI tests. Whichever
+  lands second rebases; this design does not depend on it.
+- The tab file is 1,757 lines; moving layout out of it is part of the work, not a separate refactor.
+- Hiding Motion Library outside `follow_clip` removes a browse-only use. It stays reachable by choosing that task.
+
+## 12. Docs impact when this lands
+
+`VIDEO_PIPELINE.md` section 4 (operator surface), `STATUS.md` video capability line, and the W4 research note's
+"Flows" entry.
