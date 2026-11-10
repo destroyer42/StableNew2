@@ -85,6 +85,41 @@ MODELS: tuple[ModelFixture, ...] = (
 MODEL_BY_KEY = {model.key: model for model in MODELS}
 SETTING_FIELDS = tuple(Settings.__dataclass_fields__.keys())
 
+# Settings an operator edits in ordinary use vs. optional overrides disclosed under Advanced.
+BASIC_SETTINGS = ("steps", "cfg", "seed", "batch")
+ADVANCED_SETTINGS = ("sampler", "scheduler", "width", "height")
+
+SOURCE_FREE = "free"
+
+
+@dataclass(frozen=True)
+class PackFixture:
+    """A fictional PromptPack used to demonstrate source selection. Not a real pack or schema."""
+
+    key: str
+    label: str
+    pack_name: str
+    prompt: str
+    negative: str
+    slots: tuple[tuple[str, str], ...]
+
+
+PACKS: tuple[PackFixture, ...] = (
+    PackFixture(
+        "pack-portraits", "Explorer portraits (fixture pack)", "Explorer portraits",
+        "A cinematic portrait of an imaginary {subject}, detailed eyes, {lighting}",
+        "low detail, distorted anatomy",
+        (("subject", "explorer"), ("lighting", "soft daylight")),
+    ),
+    PackFixture(
+        "pack-landscapes", "Landscape studies (fixture pack)", "Landscape studies",
+        "A wide landscape of {terrain} at {time_of_day}, {mood} atmosphere",
+        "",
+        (("terrain", "mountains"), ("time_of_day", "dawn"), ("mood", "calm")),
+    ),
+)
+PACK_BY_KEY = {pack.key: pack for pack in PACKS}
+
 # Illustrative "Learning-informed" deltas. Not evidence of any real profile.
 PROFILE_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {
     ("fixture-sdxl", PROFILE_LEARNING): {"steps": 32, "cfg": 6.5},
@@ -137,10 +172,37 @@ class Preview:
     text: str
     errors: tuple[str, ...]
     warnings: tuple[str, ...]
+    data: dict[str, Any] = field(default_factory=dict)
 
     @property
     def ready(self) -> bool:
         return not self.errors
+
+
+def _flatten(data: dict[str, Any], prefix: str = "") -> dict[str, Any]:
+    flat: dict[str, Any] = {}
+    for key, value in data.items():
+        if isinstance(value, dict):
+            flat.update(_flatten(value, f"{prefix}{key}."))
+        else:
+            flat[f"{prefix}{key}"] = value
+    return flat
+
+
+def changed_fields(before: dict[str, Any], after: dict[str, Any]) -> tuple[str, ...]:
+    """Dotted names of draft fields that differ between two ``stable_data`` snapshots."""
+    old, new = _flatten(before), _flatten(after)
+    return tuple(sorted(key for key in {*old, *new} if old.get(key) != new.get(key)))
+
+
+@dataclass(frozen=True)
+class ResultTile:
+    """One placeholder entry in the mock result gallery (never a real image)."""
+
+    index: int
+    label: str
+    size: str
+    seed: str
 
 
 @dataclass(frozen=True)
@@ -150,10 +212,12 @@ class DemoReceipt:
     revision: int
     preview_fingerprint: str
     message: str = "DEMO ONLY: No job submitted and no image generated."
+    tiles: tuple[ResultTile, ...] = ()
 
 
 @dataclass
 class CreateDraft:
+    source_key: str = SOURCE_FREE
     pack_name: str = "Untitled exploration"
     prompt: str = "A cinematic portrait of an imaginary {subject}, detailed eyes, {lighting}"
     negative: str = "low detail, distorted anatomy"
@@ -179,6 +243,7 @@ class CreateDraft:
 
     def stable_data(self) -> dict[str, Any]:
         return {
+            "source_key": self.source_key,
             "pack_name": self.pack_name,
             "prompt": self.prompt,
             "negative": self.negative,
@@ -252,6 +317,39 @@ class CreateSession:
     def differs_from_recommended(self, name: str) -> bool:
         return getattr(self.draft.settings, name) != getattr(self.recommended, name)
 
+    def setting_origin(self, name: str) -> str:
+        """Why a setting has its value: ``locked``, ``manual`` override, or ``recommended``."""
+        if name in self.draft.locked_fields:
+            return "locked"
+        if name in self.draft.manual_fields:
+            return "manual"
+        return "recommended"
+
+    @property
+    def pack_modified(self) -> bool:
+        """True when a fixture pack is the source but the working draft no longer matches it."""
+        pack = PACK_BY_KEY.get(self.draft.source_key)
+        if pack is None:
+            return False
+        d = self.draft
+        return (d.prompt, d.negative, d.slots) != (pack.prompt, pack.negative, dict(pack.slots))
+
+    @property
+    def source_label(self) -> str:
+        pack = PACK_BY_KEY.get(self.draft.source_key)
+        if pack is None:
+            return "Free prompt · unsaved working draft"
+        return f"{pack.label} · " + ("modified, unsaved working edits" if self.pack_modified else "unmodified")
+
+    def stale_reasons(self) -> tuple[str, ...]:
+        """Which draft fields changed since the preview was built (empty if current or no preview)."""
+        if self.preview is None or self.is_preview_current:
+            return ()
+        changed = changed_fields(self.preview.data, self.draft.stable_data())
+        if any(name.startswith("settings.") for name in changed):
+            changed = tuple(name for name in changed if name != "manual_fields")  # derived from the setting edit
+        return tuple("locks" if n == "locked_fields" else "overrides" if n == "manual_fields" else n for n in changed)
+
     @property
     def is_preview_current(self) -> bool:
         return self.preview is not None and self.preview.fingerprint == self.draft.fingerprint()
@@ -321,6 +419,22 @@ class CreateSession:
         if name in self.draft.slots:
             del self.draft.slots[name]
             self._changed((f"Removed slot '{name}'.",))
+
+    def select_source(self, key: str) -> None:
+        """Choose the prompt source: a fixture PromptPack (loads its template) or a free prompt."""
+        if key != SOURCE_FREE and key not in PACK_BY_KEY:
+            raise ValueError(f"Unknown prompt source: {key}")
+        if key == self.draft.source_key:
+            return
+        if key == SOURCE_FREE:
+            self.draft.source_key = key
+            self._changed(("Prompt source set to a free prompt; the working text was kept.",))
+            return
+        pack = PACK_BY_KEY[key]
+        self.draft.source_key = key
+        self.draft.pack_name, self.draft.prompt, self.draft.negative = pack.pack_name, pack.prompt, pack.negative
+        self.draft.slots = dict(pack.slots)
+        self._changed((f"Loaded fixture {pack.label}: prompt, negative prompt and slots replaced (undo available).",))
 
     def set_adetailer_enabled(self, enabled: bool) -> None:
         if self.draft.adetailer_enabled != enabled:
@@ -463,6 +577,8 @@ class CreateSession:
             warnings.append("This size is outside the fixture's illustrative characterization; treat it as unverified, not proven incompatible.")
         if d.profile_source.startswith("Learning"):
             warnings.append("Learning-informed selection is a UI fixture, not evidence of an existing qualified profile.")
+        if self.pack_modified:
+            warnings.append("Working edits differ from the fixture pack; nothing is saved to any pack store.")
         if d.locked_fields:
             warnings.append("Draft-only locks: " + ", ".join(sorted(d.locked_fields)))
         all_unresolved = list(unresolved)
@@ -494,6 +610,7 @@ class CreateSession:
         lines = [
             "MOCK PREVIEW — NOT AN NJR OR EXECUTION APPROVAL",
             "",
+            f"Source: {self.source_label}",
             f"Pack: {d.pack_name or '(unsaved draft)'}",
             f"Model: {model.label}",
             f"Profile: {d.profile_source}",
@@ -515,7 +632,7 @@ class CreateSession:
             "",
             "No model validation, pack compilation, randomization or generation is performed.",
         ]
-        self.preview = Preview(d.fingerprint(), self.revision, "\n".join(lines), errors, warnings)
+        self.preview = Preview(d.fingerprint(), self.revision, "\n".join(lines), errors, warnings, d.stable_data())
         self.demo_receipt = None
         return self.preview
 
@@ -523,7 +640,17 @@ class CreateSession:
         if not self.can_simulate_admission:
             raise RuntimeError("Preview is missing, stale, or contains an invalid DEMO condition")
         assert self.preview is not None
-        self.demo_receipt = DemoReceipt(self.revision, self.preview.fingerprint)
+        s = self.draft.settings
+        tiles = tuple(
+            ResultTile(
+                index=i + 1,
+                label=f"MOCK IMAGE {i + 1} OF {s.batch}",
+                size=f"{s.width} × {s.height}",
+                seed="random at run time" if s.seed == -1 else str(s.seed + i),
+            )
+            for i in range(s.batch)
+        )
+        self.demo_receipt = DemoReceipt(self.revision, self.preview.fingerprint, tiles=tiles)
         return self.demo_receipt
 
     def reset(self) -> None:

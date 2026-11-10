@@ -39,7 +39,18 @@ _MODE_TIPS = {
     SIZE_LOCKED: "Lock size: freeze the current docked width, or the floating window size, until unlocked.",
     SIZE_FILL: "Fill: docked, take all space the Create workspace does not need; floating, fill the screen.",
 }
-_KIND_COLORS = {"draft": COLORS.muted, "preview": COLORS.success, "stale": COLORS.accent, "receipt": COLORS.success}
+
+
+def _faint(alpha: int) -> QColor:
+    """Theme text colour at low opacity (grid lines and diagonals of the placeholder frame)."""
+    color = QColor(COLORS.text)
+    color.setAlpha(alpha)
+    return color
+
+
+def _kind_color(kind: str) -> str:
+    """Frame-kind colour from the *active* theme (read at paint time so theme changes apply live)."""
+    return {"draft": COLORS.muted, "preview": COLORS.success, "stale": COLORS.accent, "receipt": COLORS.success}[kind]
 
 
 # ----------------------------------------------------------------------- viewer
@@ -148,6 +159,12 @@ class ZoomView(QGraphicsView):
         event.accept()
 
     # ------------------------------------------------------------------- scene
+    def restyle(self) -> None:
+        """Re-read the active theme (background brush and placeholder colours)."""
+        self.setBackgroundBrush(QBrush(QColor(COLORS.field)))
+        if self._frame is not None:
+            self._build_scene(self._frame)
+
     def set_frame(self, frame: OutputFrame) -> None:
         if frame == self._frame:
             return
@@ -178,7 +195,7 @@ class ZoomView(QGraphicsView):
             pen.setCosmetic(True)  # constant on-screen thickness at any zoom
             return pen
 
-        grid = cosmetic(QColor(255, 255, 255, 30))
+        grid = cosmetic(_faint(30))
         step = 64.0
         x = step
         while x < w:
@@ -188,11 +205,11 @@ class ZoomView(QGraphicsView):
         while y < h:
             scene.addLine(0, y, w, y, grid)
             y += step
-        diag = cosmetic(QColor(255, 255, 255, 46))
+        diag = cosmetic(_faint(46))
         scene.addLine(0, 0, w, h, diag)
         scene.addLine(w, 0, 0, h, diag)
 
-        color = QColor(_KIND_COLORS[frame.kind])
+        color = QColor(_kind_color(frame.kind))
         # State is carried by line style and words as well as colour.
         style = Qt.PenStyle.DashLine if frame.kind in ("draft", "stale") else Qt.PenStyle.SolidLine
         scene.addPath(outline, cosmetic(color, 3, style), QBrush(Qt.BrushStyle.NoBrush))
@@ -428,6 +445,9 @@ class OutputDock(QDockWidget):
     def set_frame(self, frame: OutputFrame) -> None:
         self.panel.view.set_frame(frame)
         self.panel.refresh_status()
+
+    def restyle(self) -> None:
+        self.panel.view.restyle()
 
     # ------------------------------------------------------------------ actions
     def _add_zoom_actions(self) -> None:

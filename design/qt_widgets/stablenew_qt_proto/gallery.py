@@ -1,41 +1,56 @@
-"""Executable style and component catalog for native PySide6 Widgets."""
+"""Executable component catalog plus the Theme Studio for native PySide6 Widgets."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
+    QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from .components import (
-    ActionStrip, Disclosure, IssueList, NoticeBanner, ResponsiveGrid, SectionCard,
+    fit_segment, FormTextEdit, ActionStrip, Disclosure, IssueList, NoticeBanner, ResponsiveGrid, ResultGallery, SectionCard,
     SettingField, StatusChip, stacked_label,
 )
-from .tokens import COLORS, CONTRAST_PAIRS, RADIUS, SPACE, contrast_ratio
+from .domain import ResultTile
+from .theme import Theme, contrast_checks
+from .theme_store import ThemeLibrary
+from .theme_studio import ThemeStudio
+from .tokens import COLORS, RADIUS, SPACE, active_theme, contrast_ratio
+
+PAGE_COMPONENTS = "components"
+PAGE_STUDIO = "studio"
 
 
-class ComponentGallery(QScrollArea):
+class ComponentsPage(QScrollArea):
+    """Static catalog of every reusable component, rebuilt whenever the applied theme changes."""
+
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.rebuild()
+
+    def rebuild(self) -> None:
         body = QWidget()
         root = QVBoxLayout(body)
         root.setContentsMargins(SPACE.gutter, SPACE.gutter, SPACE.gutter, SPACE.gutter)
         root.setSpacing(SPACE.md)
-        title = QLabel("Qt Widgets — Component Library")
-        title.setProperty("role", "heading")
-        root.addWidget(title)
-        hint = QLabel("Prototype-only, source-owned components. Changes here do not affect production StableNew or Figma.")
+        theme = active_theme()
+        hint = QLabel(
+            f"Active theme: {theme.name} ({theme.kind}, fingerprint {theme.fingerprint()[:10]}). "
+            "Prototype-only, source-owned components. Changes here do not affect production StableNew or Figma."
+        )
         hint.setProperty("role", "muted")
         hint.setWordWrap(True)
         root.addWidget(hint)
 
-        card = SectionCard("Theme tokens", "Blue theme with rounded geometry. Ratios are computed from the token values (WCAG 2.x).")
+        card = SectionCard("Theme tokens", "Values come from the active JSON theme. Ratios are computed (WCAG 2.x).")
         swatches = ResponsiveGrid(min_column_width=150)
-        for name in ("background", "surface", "field", "selected", "border", "strong_border", "accent", "danger", "success"):
+        for name in ("background", "surface", "field", "selected", "border", "strong_border", "accent", "danger", "success", "danger_fill"):
             value = getattr(COLORS, name)
             tile = QLabel(f"{name}\n{value}")
             tile.setMinimumHeight(54)
@@ -46,12 +61,10 @@ class ComponentGallery(QScrollArea):
             )
             swatches.add(tile)
         card.add(swatches)
-        ratios = QLabel(
-            "\n".join(
-                f"{label}: {contrast_ratio(fg, bg):.1f}:1 (needs {need:g}:1) {'PASS' if contrast_ratio(fg, bg) >= need else 'FAIL'}"
-                for label, fg, bg, need in CONTRAST_PAIRS
-            )
-        )
+        checks = contrast_checks(theme)
+        ratios = QLabel("\n".join(
+            f"{c.label}: {c.ratio:.1f}:1 (needs {c.minimum:g}:1) {'PASS' if c.passed else 'FAIL'}" for c in checks
+        ))
         ratios.setProperty("role", "muted")
         ratios.setWordWrap(True)
         card.add(ratios)
@@ -66,22 +79,22 @@ class ComponentGallery(QScrollArea):
         combo = QComboBox()
         combo.addItems(["Model default (fixture)", "Learning-informed (fixture)"])
         card.add(stacked_label("Example choice", combo))
-        card.add(stacked_label("Example multi-line text", QPlainTextEdit("Rounded, focus-ringed editor")))
+        card.add(stacked_label("Example multi-line text", FormTextEdit("Rounded, focus-ringed editor")))
         root.addWidget(card)
 
-        card = SectionCard("Setting field and responsive grid", "Lock, reset-to-recommended and a visible recommendation; columns reflow with width and never clip.")
+        card = SectionCard("Setting field and responsive grid", "Lock, reset-to-recommended, a visible recommendation and its origin; columns reflow with width and never clip.")
         grid = ResponsiveGrid(min_column_width=190)
         steps = QSpinBox()
         steps.setRange(1, 150)
         steps.setValue(40)
         field = SettingField("steps", "Steps", steps)
-        field.set_state(locked=False, differs=True, recommended="28")
+        field.set_state(locked=False, differs=True, recommended="28", origin="manual")
         field.resetRequested.connect(lambda: (steps.setValue(28), field.set_state(locked=field.lock.isChecked(), differs=False, recommended="28")))
         grid.add(field)
         cfg = QDoubleSpinBox()
         cfg.setValue(7.0)
         other = SettingField("cfg", "CFG", cfg)
-        other.set_state(locked=True, differs=False, recommended="7")
+        other.set_state(locked=True, differs=False, recommended="7", origin="locked")
         grid.add(other)
         grid.add(SettingField("sampler", "Disabled example", _disabled_combo()))
         card.add(grid)
@@ -110,22 +123,77 @@ class ComponentGallery(QScrollArea):
         root.addWidget(card)
 
         card = SectionCard("Progressive disclosure", "The collapsed heading must identify what remains available.")
-        disclosure = Disclosure("More details", "Example of optional controls, with keyboard-accessible expansion.")
+        disclosure = Disclosure("More details · 1 optional stage enabled", "Example of optional controls, with keyboard-accessible expansion.")
         disclosure.add(QCheckBox("Enable optional mock stage"))
-        disclosure.add(stacked_label("Additional notes", QPlainTextEdit()))
+        disclosure.add(stacked_label("Additional notes", FormTextEdit()))
         card.add(disclosure)
         root.addWidget(card)
 
-        card = SectionCard("Action hierarchy", "A fixed action strip keeps essential actions reachable.")
+        card = SectionCard("Action hierarchy", "A fixed action strip keeps essential actions reachable; one primary per region; danger only for destructive actions.")
         actions = ActionStrip()
         secondary = actions.add_action("Review")
+        destructive = actions.add_action("Delete saved")
+        destructive.setProperty("role", "danger")
         primary = actions.add_action("Primary action", primary=True)
         primary.setEnabled(False)
         secondary.clicked.connect(lambda: (actions.status.setText("Review clicked (gallery demo only)"), primary.setEnabled(True)))
         card.add(actions)
         root.addWidget(card)
+
+        card = SectionCard("Mock result gallery", "Placeholder tiles from a simulated admission; they are labels, never generated images.")
+        gallery = ResultGallery()
+        gallery.set_tiles(tuple(ResultTile(i, f"MOCK IMAGE {i} OF 3", "1024 × 1024", str(1000 + i)) for i in (1, 2, 3)))
+        card.add(gallery)
+        root.addWidget(card)
         root.addStretch(1)
         self.setWidget(body)
+
+
+class ComponentGallery(QWidget):
+    """Component catalog and Theme Studio behind one header toggle."""
+
+    def __init__(
+        self, library: ThemeLibrary | None = None, theme: Theme | None = None,
+        apply_callback: Callable[[Theme], None] | None = None, parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self.library = library or ThemeLibrary()
+        root = QVBoxLayout(self)
+        root.setContentsMargins(SPACE.gutter, SPACE.gutter, SPACE.gutter, 0)
+        root.setSpacing(SPACE.sm)
+        head = QHBoxLayout()
+        title = QLabel("Qt Widgets — Component Library")
+        title.setProperty("role", "heading")
+        head.addWidget(title)
+        head.addStretch(1)
+        self.group = QButtonGroup(self)
+        self.page_buttons: dict[str, QPushButton] = {}
+        for key, label in ((PAGE_COMPONENTS, "Components"), (PAGE_STUDIO, "Theme Studio")):
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setProperty("role", "segment")
+            fit_segment(button)
+            button.setAccessibleName(f"Library page: {label}")
+            self.group.addButton(button)
+            self.page_buttons[key] = button
+            head.addWidget(button)
+            button.clicked.connect(lambda _c=False, k=key: self.show_page(k))
+        root.addLayout(head)
+        self.stack = QStackedWidget()
+        self.components_page = ComponentsPage()
+        self.studio = ThemeStudio(self.library, theme or active_theme(), apply_callback)
+        self.stack.addWidget(self.components_page)
+        self.stack.addWidget(self.studio)
+        root.addWidget(self.stack, 1)
+        self.show_page(PAGE_COMPONENTS)
+
+    def show_page(self, key: str) -> None:
+        self.page_buttons[key].setChecked(True)
+        self.stack.setCurrentIndex(0 if key == PAGE_COMPONENTS else 1)
+
+    def rebuild_components(self) -> None:
+        """Re-create the catalog after the applied theme changed (spacing is read at build time)."""
+        self.components_page.rebuild()
 
 
 def _disabled_combo() -> QComboBox:

@@ -6,14 +6,45 @@ No StableNew production modules, backend clients or job services are imported.
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, Qt, Signal
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
-    QCheckBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+    QCheckBox, QFrame, QPlainTextEdit, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy,
     QToolButton, QVBoxLayout, QWidget, QGridLayout,
 )
 
 from .tokens import SPACE
 
 LEVELS = ("info", "warning", "blocked", "success")
+
+
+class FormTextEdit(QPlainTextEdit):
+    """Multi-line editor where Tab moves focus (it would otherwise insert a tab and trap the keyboard)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setTabChangesFocus(True)
+
+
+def fit_segment(button: QPushButton) -> None:
+    """Segmented buttons turn bold when checked; reserve the bold width so the label never clips."""
+    font = button.font()
+    font.setBold(True)
+    button.setMinimumWidth(QFontMetrics(font).horizontalAdvance(button.text()) + 44)
+
+
+def reveal(scroll: QScrollArea, widget: QWidget, margin: int = 8) -> None:
+    """Scroll so the *whole* widget is inside the viewport (QScrollArea.ensureWidgetVisible only
+    guarantees the cursor rectangle of input widgets). Widgets taller than the viewport align their top."""
+    body = scroll.widget()
+    if body is None or not body.isAncestorOf(widget):
+        return
+    top = widget.mapTo(body, widget.rect().topLeft()).y()
+    bottom = top + widget.height()
+    bar, view_h = scroll.verticalScrollBar(), scroll.viewport().height()
+    if widget.height() + 2 * margin >= view_h or top - margin < bar.value():
+        bar.setValue(max(0, top - margin))
+    elif bottom + margin > bar.value() + view_h:
+        bar.setValue(bottom + margin - view_h)
 
 
 def repolish(widget: QWidget) -> None:
@@ -159,6 +190,12 @@ class Disclosure(QWidget):
         self.toggle.setChecked(False)
         self.toggle.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         outer.addWidget(self.toggle)
+        # Wrapping summary of enabled/non-default hidden content (never ellipsized, never hover-only).
+        self.summary = QLabel("")
+        self.summary.setProperty("role", "muted")
+        self.summary.setWordWrap(True)
+        self.summary.hide()
+        outer.addWidget(self.summary)
         if subtitle:
             note = QLabel(subtitle)
             note.setProperty("role", "muted")
@@ -172,6 +209,15 @@ class Disclosure(QWidget):
         outer.addWidget(self.body)
         self.toggle.toggled.connect(self._on_toggled)
         self._on_toggled(False)
+
+    def set_summary(self, text: str) -> None:
+        self.summary.setText(text)
+        self.summary.setVisible(bool(text))
+
+    def set_title(self, title: str) -> None:
+        """Update the header text (it names enabled hidden content, see DESIGN_SYSTEM_CANDIDATE section 3)."""
+        self._title = title
+        self._on_toggled(self.toggle.isChecked())
 
     def _on_toggled(self, open_: bool) -> None:
         self.body.setVisible(open_)
@@ -270,6 +316,13 @@ class ResponsiveGrid(QWidget):
         self._items.append(widget)
         self._reflow(force=True)
 
+    def clear(self) -> None:
+        for item in self._items:
+            self._grid.removeWidget(item)
+            item.deleteLater()
+        self._items = []
+        self._columns = 0
+
     def _wanted_columns(self) -> int:
         usable = max(self.width(), self.min_column_width)
         return max(1, min(len(self._items) or 1, usable // self.min_column_width))
@@ -335,11 +388,44 @@ class SettingField(QWidget):
         self.recommendation.setProperty("role", "muted")
         lay.addWidget(self.recommendation)
 
-    def set_state(self, *, locked: bool, differs: bool, recommended: str) -> None:
+    def set_state(self, *, locked: bool, differs: bool, recommended: str, origin: str = "") -> None:
         self.lock.blockSignals(True)
         self.lock.setChecked(locked)
         self.lock.blockSignals(False)
         self.reset_button.setEnabled(differs)
-        self.recommendation.setText(f"Recommended: {recommended}" + (" · differs" if differs else ""))
+        origin_text = {"locked": " · locked", "manual": " · manual override"}.get(origin, "")
+        self.recommendation.setText(f"Recommended: {recommended}" + (" · differs" if differs else "") + origin_text)
         self.recommendation.setProperty("level", "warning" if differs else "info")
         repolish(self.recommendation)
+
+
+class ResultGallery(QFrame):
+    """Mock result tiles for a simulated admission. Tiles are labelled placeholders, never images."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(SPACE.sm)
+        self.caption = QLabel("No simulated result.")
+        self.caption.setProperty("role", "muted")
+        self.caption.setWordWrap(True)
+        self._layout.addWidget(self.caption)
+        self.grid = ResponsiveGrid(min_column_width=140)
+        self._layout.addWidget(self.grid)
+        self.tiles: list[QLabel] = []
+
+    def set_tiles(self, tiles: tuple) -> None:
+        self.grid.clear()
+        self.tiles = []
+        self.caption.setText(
+            f"{len(tiles)} placeholder tile(s) from a simulated admission. No image exists." if tiles
+            else "No simulated result."
+        )
+        for tile in tiles:
+            label = QLabel("\n".join((tile.label, tile.size, f"seed: {tile.seed}")))
+            label.setProperty("role", "tile")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setAccessibleName(f"{tile.label}, {tile.size}, seed {tile.seed} (placeholder)")
+            self.grid.add(label)
+            self.tiles.append(label)

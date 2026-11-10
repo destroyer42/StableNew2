@@ -39,7 +39,15 @@ class OutputDisplayTests(unittest.TestCase):
         window.resize(width, height)
         window.show()
         self.settle()
-        self.addCleanup(window.close)
+
+        def dispose():
+            # Really delete the window: live widgets slow every later application stylesheet change.
+            window.close()
+            window.deleteLater()
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            self.app.processEvents()
+
+        self.addCleanup(dispose)
         return window, window.output_dock
 
     @staticmethod

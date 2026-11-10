@@ -5,7 +5,9 @@ Standalone demonstration. No StableNew production imports or side effects.
 
 from __future__ import annotations
 
+import argparse
 import sys
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
@@ -13,19 +15,24 @@ from PySide6.QtWidgets import (
     QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
 
+from .components import fit_segment
 from .create_view import CreateView
 from .gallery import ComponentGallery
 from .output_display import OutputDock
 from .output_model import SIZE_FILL, fill_width, frame_from_session
-from .tokens import SPACE, make_stylesheet
+from .theme import Theme
+from .theme_store import ThemeLibrary
+from .tokens import SPACE, active_theme, make_stylesheet, set_active_theme
 
 WORKSPACE_MIN_WIDTH = 880   # Create workspace (nav + form + review) never gets narrower than this
 WORKSPACE_FILL_WIDTH = 900  # width the workspace keeps while the Output Display is in Fill mode
 
 
 class PrototypeWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, library: ThemeLibrary | None = None, theme: Theme | None = None):
         super().__init__()
+        self.library = library or ThemeLibrary()
+        self.theme = theme or active_theme()
         self.setWindowTitle("StableNew · Independent Qt Widgets Assessment")
         self.resize(1440, 900)
         # Height is explicit; the minimum width comes from the layout (workspace + Output Display).
@@ -45,7 +52,7 @@ class PrototypeWindow(QMainWindow):
         self.output_toggle.setCheckable(True)
         self.output_toggle.setChecked(True)
         self.output_toggle.setProperty("role", "segment")
-        self.output_toggle.setMinimumWidth(150)
+        fit_segment(self.output_toggle)
         self.output_toggle.setToolTip("Show or collapse the Output Display (Ctrl+3)")
         self.output_toggle.setAccessibleName("Output Display visible")
         header.addWidget(self.output_toggle)
@@ -67,7 +74,8 @@ class PrototypeWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.create_view = CreateView()
         self.pages.addWidget(self.create_view)
-        self.pages.addWidget(ComponentGallery())
+        self.gallery = ComponentGallery(self.library, self.theme, apply_callback=self.apply_theme)
+        self.pages.addWidget(self.gallery)
         splitter.addWidget(self.pages)
         splitter.setSizes([185, 1200])
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
@@ -83,6 +91,26 @@ class PrototypeWindow(QMainWindow):
         gallery.triggered.connect(lambda: self.nav.setCurrentRow(1))
         self.addAction(gallery)
         self._build_output_display()
+
+    # ------------------------------------------------------------------- theme
+    def apply_theme(self, theme: Theme) -> None:
+        """Restyle the whole prototype with ``theme`` (spacing is re-read by rebuilding the Create view)."""
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, theme)
+        self.theme = theme
+        old = self.create_view
+        new = CreateView(session=old.session, layout_design=old.layout_design)
+        index = self.pages.indexOf(old)
+        self.pages.insertWidget(index, new)
+        self.pages.removeWidget(old)
+        old.deleteLater()
+        self.create_view = new
+        new.stateSynced.connect(self._refresh_output)
+        self.pages.setCurrentIndex(self.nav.currentRow())
+        self.gallery.rebuild_components()
+        self.output_dock.restyle()
+        self._refresh_output()
 
     # ---------------------------------------------------------- Output Display
     def _build_output_display(self) -> None:
@@ -139,16 +167,26 @@ class PrototypeWindow(QMainWindow):
             self.apply_output_fill()
 
 
-def apply_theme(app: QApplication) -> None:
+def apply_theme(app: QApplication, theme: Theme | None = None) -> None:
+    """Make ``theme`` (default: the active theme) the application style. Pure presentation."""
+    if theme is not None:
+        set_active_theme(theme)
     app.setStyle("Fusion")
     app.setStyleSheet(make_stylesheet())
 
 
 def main(argv: list[str] | None = None) -> int:
-    app = QApplication(list(sys.argv if argv is None else argv))
+    parser = argparse.ArgumentParser(description="Isolated StableNew Qt Widgets design prototype")
+    parser.add_argument("--theme", help="theme id to start with (default: the remembered theme, else blue-modern)")
+    parser.add_argument("--layout", choices=("scroll", "split"), default="split", help="initial Create layout design")
+    args, qt_args = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
+    app = QApplication([sys.argv[0], *qt_args])
     app.setApplicationName("StableNew Qt Design Assessment (isolated)")
-    apply_theme(app)
-    window = PrototypeWindow()
+    library = ThemeLibrary()
+    theme = library.get(args.theme) if args.theme else library.load_active()
+    apply_theme(app, theme)
+    window = PrototypeWindow(library, theme)
+    window.create_view.set_layout_design(args.layout)
     window.show()
     return app.exec()
 

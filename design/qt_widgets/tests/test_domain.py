@@ -176,7 +176,11 @@ class CreateSessionTests(unittest.TestCase):
     def test_mock_receipt_is_not_actual_queue_or_history(self):
         self.session.build_preview()
         r = self.session.simulate_admission()
-        self.assertEqual(sorted(r.__dict__), ["message", "preview_fingerprint", "revision"])
+        # QT-DS-01 added placeholder ``tiles`` for the mock result gallery; no job/queue identity may appear.
+        self.assertEqual(sorted(r.__dict__), ["message", "preview_fingerprint", "revision", "tiles"])
+        for tile in r.tiles:
+            self.assertEqual(sorted(tile.__dict__), ["index", "label", "seed", "size"])
+            self.assertTrue(tile.label.startswith("MOCK IMAGE"))
 
 
 if __name__ == "__main__":

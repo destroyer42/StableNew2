@@ -43,7 +43,15 @@ class QtWidgetSmokeTests(unittest.TestCase):
         window.resize(width, height)
         window.show()
         self.app.processEvents()
-        self.addCleanup(window.close)
+
+        def dispose():
+            # Really delete the window: live widgets slow every later application stylesheet change.
+            window.close()
+            window.deleteLater()
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            self.app.processEvents()
+
+        self.addCleanup(dispose)
         return window, window.pages.widget(0)
 
     def test_stylesheet_parses_without_warnings(self):

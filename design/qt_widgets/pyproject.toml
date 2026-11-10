@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stablenew-qt-prototype-assessment"
-version = "0.3.0"
-description = "Isolated, non-generating PySide6 Qt Widgets prototype for the StableNew Create UX"
+version = "0.4.0"
+description = "Isolated, non-generating PySide6 Qt Widgets prototype and component-design workspace for the StableNew UX"
 requires-python = ">=3.14,<3.15"
 license = { text = "Private assessment - no standalone redistribution license selected" }
 dependencies = ["PySide6==6.12.0"]
@@ -14,4 +14,4 @@ dependencies = ["PySide6==6.12.0"]
 include = ["stablenew_qt_proto*"]
 
 [tool.setuptools.package-data]
-stablenew_qt_proto = ["assets/*.svg"]
+stablenew_qt_proto = ["assets/*.svg", "themes/*.theme.json"]

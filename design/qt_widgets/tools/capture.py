@@ -26,6 +26,10 @@ def main() -> int:
     parser.add_argument("--sizes", nargs="+", default=["1280x680", "1440x900"])
     parser.add_argument("--scale", type=float, default=1.0, help="QT_SCALE_FACTOR to emulate display scaling")
     parser.add_argument("--offscreen", action="store_true")
+    parser.add_argument("--layout", choices=("scroll", "split"), default="split", help="Create layout design")
+    parser.add_argument("--theme", default="blue-modern", help="reference theme id")
+    parser.add_argument("--prefix", default="", help="file-name prefix, e.g. 'split_'")
+    parser.add_argument("--studio", action="store_true", help="also capture the Theme Studio and component pages")
     args = parser.parse_args()
 
     if args.offscreen:
@@ -37,10 +41,11 @@ def main() -> int:
     from PySide6.QtWidgets import QApplication
 
     from stablenew_qt_proto.app import PrototypeWindow, apply_theme
+    from stablenew_qt_proto.tokens import reference_theme
 
     args.out.mkdir(parents=True, exist_ok=True)
     app = QApplication([])
-    apply_theme(app)
+    apply_theme(app, reference_theme(args.theme))
     suffix = f"@{args.scale:g}x" if args.scale != 1.0 else ""
     for size in args.sizes:
         width, height = (int(part) for part in size.split("x"))
@@ -48,13 +53,14 @@ def main() -> int:
         window.resize(width, height)
         window.show()
         app.processEvents()
+        window.create_view.set_layout_design(args.layout)
         if width < 1200:  # an expanded Output Display needs ~1192 px; small windows use the collapsed rail
             window.output_dock.set_collapsed(True)
             for _ in range(6):
                 app.processEvents()
         view = window.pages.widget(0)
         bar = view.form_scroll.verticalScrollBar()
-        tag = f"{size}{suffix}"
+        tag = f"{args.prefix}{size}{suffix}"
         print(
             f"{tag}: form viewport {view.form_scroll.viewport().width()}x{view.form_scroll.viewport().height()}, "
             f"content {view.form_scroll.widget().width()}x{view.form_scroll.widget().height()}, "
@@ -77,8 +83,14 @@ def main() -> int:
         window.nav.setCurrentRow(1)
         app.processEvents()
         window.grab().save(str(args.out / f"library_{tag}.png"))
+        if args.studio:
+            window.gallery.show_page("studio")
+            for _ in range(6):
+                app.processEvents()
+            window.grab().save(str(args.out / f"studio_{tag}.png"))
         window.close()
-        capture_dock(app, args.out, width, height, tag)
+        if not args.studio:
+            capture_dock(app, args.out, width, height, tag)
     return 0
 
 
