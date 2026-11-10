@@ -146,9 +146,9 @@ def test_a_still_experimental_workflow_is_refused_without_its_opt_in(
     form = {**PROMPT_FORM, "pose_video_path": ""}
 
     errors = capability_errors(spec, form)
-    assert any("Enable experimental workflow" in error for error in errors)
+    assert any("Choose it explicitly" in error for error in errors)
     ticked = capability_errors(spec, {**form, EXPERIMENTAL_OPT_IN_FIELD: True})
-    assert not any("Enable experimental workflow" in error for error in ticked)
+    assert not any("Choose it explicitly" in error for error in ticked)
     assert form_visibility(spec)["experimental"] is True
 
 

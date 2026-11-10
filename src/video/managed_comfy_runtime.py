@@ -13,9 +13,11 @@ Only the standard library is imported, so detection is cheap and import-safe.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
+import shutil
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -240,7 +242,7 @@ def detect_managed_comfy(
     )
 
 
-def missing_required_flags(command: Sequence[str], required: Iterable[str]) -> list[str]:
+def missing_required_flags(command: Iterable[str], required: Iterable[str]) -> list[str]:
     present = set(command)
     return [flag for flag in required if flag not in present]
 
@@ -275,6 +277,119 @@ def assess_comfy_command(
     return ComfyLaunchAssessment(
         kind=kind, missing_flags=tuple(missing_required_flags(parts, contract.required_flags))
     )
+
+
+def workflow_launch_requirements(
+    command: Sequence[str],
+    workflow_flags: Sequence[str],
+    contract: ManagedComfyContract | None = None,
+) -> tuple[str, ...]:
+    """The workflow's switches plus the installation contract for the managed command."""
+
+    if not command:
+        return tuple(workflow_flags)
+    contract = contract or load_managed_comfy_contract()
+    managed_flags = (
+        contract.required_flags if assess_comfy_command(command, contract).kind == "managed" else ()
+    )
+    return tuple(dict.fromkeys((*managed_flags, *workflow_flags)))
+
+
+def plan_comfy_launch(
+    command: Sequence[str], workdir: str | None, required: Sequence[str]
+) -> tuple[str, ...]:
+    """Resolve and verify a new argv without executing the interpreter, ComfyUI or custom nodes."""
+
+    if not required:
+        return tuple(command)
+    if not command:
+        raise ValueError(
+            "External ComfyUI flags cannot be verified. Configure a StableNew-managed ComfyUI launch command."
+        )
+
+    # Inspect the parser next to the actual script, not a similarly named install or a wrapper
+    # whose argument forwarding cannot be determined without running it.
+    interpreter = Path(command[0])
+    python_name = r"python(?:\d+(?:\.\d+)?)?(?:\.exe)?"
+    executable = (
+        shutil.which(command[0])
+        if re.fullmatch(python_name, interpreter.name, re.IGNORECASE)
+        else None
+    )
+    script_index = 1
+    while script_index < len(command) and command[script_index] in {"-B", "-E", "-s", "-u"}:
+        script_index += 1
+    if (
+        not executable
+        or not re.fullmatch(python_name, Path(executable).name, re.IGNORECASE)
+        or script_index >= len(command)
+        or Path(command[script_index]).name != "main.py"
+        or "--" in command[script_index + 1 :]
+    ):
+        raise ValueError(
+            f"Cannot verify ComfyUI support for {' '.join(required)} from this launch command. "
+            "Configure a direct Python command for ComfyUI main.py with a valid interpreter."
+        )
+
+    cwd = Path(workdir or ".")
+    if not cwd.is_dir():
+        raise ValueError(
+            f"ComfyUI launch directory {cwd} does not exist. Repair the selected install."
+        )
+    main = cwd / command[script_index]
+    try:
+        main = main.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(
+            f"Cannot resolve the configured ComfyUI entrypoint {main}: {exc}."
+        ) from exc
+    parser_path = main.parent / "comfy" / "cli_args.py"
+    try:
+        entry = ast.parse(main.read_bytes(), filename=str(main))
+        parser = ast.parse(parser_path.read_bytes(), filename=str(parser_path))
+    except (OSError, SyntaxError, ValueError) as exc:
+        raise ValueError(
+            f"Cannot read ComfyUI's CLI at {parser_path}: {exc}. Repair the selected install."
+        ) from exc
+    if not any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "comfy.cli_args"
+        and any(alias.name == "args" for alias in node.names)
+        for node in entry.body
+    ):
+        raise ValueError(
+            f"{main} does not expose the ComfyUI CLI. Configure a direct ComfyUI launch."
+        )
+    supported: set[str] = set()
+    for node in parser.body:
+        if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        if not (
+            isinstance(call.func, ast.Attribute)
+            and call.func.attr == "add_argument"
+            and isinstance(call.func.value, ast.Name)
+            and call.func.value.id == "parser"
+        ):
+            continue
+        if any(
+            kw.arg == "action"
+            and isinstance(kw.value, ast.Constant)
+            and kw.value.value == "store_true"
+            for kw in call.keywords
+        ):
+            supported.update(
+                arg.value
+                for arg in call.args
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+            )
+    unsupported = missing_required_flags(supported, required)
+    if unsupported:
+        raise ValueError(
+            f"ComfyUI at {parser_path} does not support {' '.join(unsupported)}. "
+            "Select a compatible ComfyUI installation."
+        )
+    return tuple(with_required_flags((str(Path(executable).absolute()), *command[1:]), required))
 
 
 __all__ = [

@@ -519,7 +519,7 @@ class _VideoController:
         return "job-video-1"
 
 
-def test_video_workflow_action_and_experimental_opt_in_are_always_visible_and_associated(laptop_root: tk.Tk) -> None:
+def test_video_workflow_action_remains_visible_after_explicit_experimental_selection(laptop_root: tk.Tk) -> None:
     controller = _VideoController(experimental=True)
     tab = VideoWorkflowTabFrameV2(laptop_root, app_controller=controller, app_state=SimpleNamespace())
     tab.pack(fill="both", expand=True)
@@ -527,18 +527,15 @@ def test_video_workflow_action_and_experimental_opt_in_are_always_visible_and_as
         tab.source_image_var.set("C:/tmp/source.png")
         _settle(laptop_root, 250)
         scroll = tab._body_scroll
-        for widget in (tab.queue_workflow_button, tab.experimental_opt_in_check):
-            assert widget.winfo_ismapped()
-            assert not _is_under(widget, scroll.inner)  # outside the scrolling form
-        # The opt-in sits in the same row as the button it authorises.
-        assert tab.experimental_opt_in_check.master is tab.queue_workflow_button.master
-        assert abs(_rect(tab.experimental_opt_in_check)[1] - _rect(tab.queue_workflow_button)[1]) < 40
+        assert tab.queue_workflow_button.winfo_ismapped()
+        assert not _is_under(tab.queue_workflow_button, scroll.inner)
+        assert tab.queue_workflow_button.instate(["disabled"])
+        tab.workflow_combo.event_generate("<<ComboboxSelected>>")
 
         scroll._canvas.yview_moveto(1.0)
         _settle(laptop_root, 60)
-        assert tab.queue_workflow_button.winfo_ismapped() and tab.experimental_opt_in_check.winfo_ismapped()
+        assert tab.queue_workflow_button.winfo_ismapped()
 
-        tab.experimental_opt_in_var.set(True)
         tab.queue_workflow_button.invoke()
         assert len(controller.submissions) == 1  # one click, one existing submission callback
         assert controller.submissions[0]["experimental_opt_in"] is True
@@ -546,7 +543,7 @@ def test_video_workflow_action_and_experimental_opt_in_are_always_visible_and_as
         tab.destroy()
 
 
-def test_video_workflow_hides_the_opt_in_for_a_non_experimental_workflow(laptop_root: tk.Tk) -> None:
+def test_approved_video_workflow_can_queue_without_explicit_selection(laptop_root: tk.Tk) -> None:
     tab = VideoWorkflowTabFrameV2(
         laptop_root, app_controller=_VideoController(experimental=False), app_state=SimpleNamespace()
     )
@@ -554,7 +551,7 @@ def test_video_workflow_hides_the_opt_in_for_a_non_experimental_workflow(laptop_
     try:
         _settle(laptop_root, 200)
         assert tab.queue_workflow_button.winfo_ismapped()
-        assert not tab.experimental_opt_in_check.winfo_ismapped()
+        assert tab.queue_workflow_button.instate(["!disabled"])
     finally:
         tab.destroy()
 

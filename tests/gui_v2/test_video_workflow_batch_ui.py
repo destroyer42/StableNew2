@@ -277,7 +277,6 @@ def _tab(tk_root, tmp_path, count=3):
     tab.workflow_var.set(TI2V_ID)
     tab._refresh_workspace_summary()
     tab._set_text_value(tab.prompt_text, "slow cinematic turn")
-    tab.experimental_opt_in_var.set(True)
     panel = tab.batch_panel
     runner = _ManualRunner()
     panel._runner = runner
@@ -453,7 +452,10 @@ def test_preview_and_queue_run_off_the_callback_and_refresh_queue_on_tk(tk_root,
     assert len(service.calls) == 1 and len(service.calls[0]) == 3
     assert app.syncs == [threading.get_ident()]  # refreshed on the Tk thread
     assert "Queued 3 video jobs as batch" in tab.status_var.get()
-    assert tab.experimental_opt_in_var.get() is True
+    assert all(
+        record.config["video_workflow"]["video_execution"]["experimental_opt_in"] is False
+        for record in service.calls[0]
+    )
 
 
 @pytest.mark.gui

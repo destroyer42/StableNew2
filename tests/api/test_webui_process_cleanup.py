@@ -162,7 +162,7 @@ def test_emergency_cleanup_is_ownership_scoped(monkeypatch) -> None:
     unmanaged_webui = Mock(owns_process=False)
     unmanaged_comfy = Mock(owns_process=False)
     monkeypatch.setattr(main_module, "_webui_manager_global", unmanaged_webui)
-    monkeypatch.setattr(main_module, "_comfy_manager_global", unmanaged_comfy)
+    monkeypatch.setattr(main_module, "get_global_comfy_process_manager", lambda: unmanaged_comfy)
 
     main_module._emergency_webui_cleanup()
     main_module._emergency_comfy_cleanup()
@@ -177,7 +177,7 @@ def test_emergency_cleanup_stops_owned_managers(monkeypatch) -> None:
     owned_webui = Mock(owns_process=True)
     owned_comfy = Mock(owns_process=True)
     monkeypatch.setattr(main_module, "_webui_manager_global", owned_webui)
-    monkeypatch.setattr(main_module, "_comfy_manager_global", owned_comfy)
+    monkeypatch.setattr(main_module, "get_global_comfy_process_manager", lambda: owned_comfy)
 
     main_module._emergency_webui_cleanup()
     main_module._emergency_comfy_cleanup()
@@ -186,27 +186,22 @@ def test_emergency_cleanup_stops_owned_managers(monkeypatch) -> None:
     owned_comfy.stop.assert_called_once_with(grace_seconds=1.0)
 
 
-def test_emergency_registration_is_isolated_and_idempotent(monkeypatch) -> None:
+def test_webui_emergency_registration_is_isolated_and_idempotent(monkeypatch) -> None:
     import src.main as main_module
 
     callbacks = []
     window = Mock()
     window.webui_process_manager = Mock(owns_process=False)
-    window.comfy_process_manager = Mock(owns_process=False)
     monkeypatch.setattr(main_module, "_emergency_cleanup_registered", False)
     monkeypatch.setattr(main_module, "_webui_manager_global", None)
-    monkeypatch.setattr(main_module, "_comfy_manager_global", None)
     register = Mock(side_effect=callbacks.append)
     monkeypatch.setattr(main_module.atexit, "register", register)
 
     main_module._register_emergency_cleanup(window)
     main_module._register_emergency_cleanup(window)
 
-    assert callbacks == [
-        main_module._emergency_webui_cleanup,
-        main_module._emergency_comfy_cleanup,
-    ]
-    assert register.call_count == 2
+    assert callbacks == [main_module._emergency_webui_cleanup]
+    assert main_module._webui_manager_global is window.webui_process_manager
 
 
 def test_external_comfy_process_survives_shutdown(monkeypatch) -> None:

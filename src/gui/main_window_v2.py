@@ -1530,13 +1530,11 @@ class MainWindowV2:
             pass
 
         try:
-            comfy_manager = getattr(self, "comfy_process_manager", None)
-            if comfy_manager:
-                stop = getattr(comfy_manager, "shutdown", None) or getattr(
-                    comfy_manager, "stop", None
-                )
-                if callable(stop):
-                    stop()
+            from src.video.comfy_process_manager import get_global_comfy_process_manager
+
+            comfy_manager = get_global_comfy_process_manager()
+            if comfy_manager is not None and comfy_manager.owns_process:
+                comfy_manager.stop()
         except Exception:
             pass
 

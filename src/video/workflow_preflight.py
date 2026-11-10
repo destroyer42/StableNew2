@@ -8,8 +8,8 @@ data, so the Video Workflow tab can show each gate and keep Queue disabled with 
 
 It observes only. It never queues a prompt, starts, stops or adopts a process, writes a file or changes a setting: the
 only network traffic is ``GET`` of ComfyUI's own ``/system_stats`` and ``/object_info`` on an endpoint that is already
-serving, and the only host reads are RAM, the NVIDIA driver's memory figures and the configured launch command. A gate it
-cannot answer without starting something is ``unknown`` (shown, never blocking); only a *proven* shortfall is ``blocked``.
+serving. It also reads host RAM, NVIDIA driver memory, local model evidence, and the selected launcher's CLI declarations.
+A gate it cannot answer without starting something is ``unknown``. Only a proven shortfall is ``blocked``.
 """
 
 from __future__ import annotations
@@ -21,13 +21,16 @@ from typing import Any
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.comfy_runtime_setup import (
     ACTION_FIX_COMFY_SETUP,
-    ENV_COMMAND_VARIABLE,
-    SOURCE_ENVIRONMENT,
     ComfyLaunchFacts,
-    command_missing_flags,
     setup_notices,
 )
-from src.video.managed_comfy_runtime import ManagedComfyContract, assess_comfy_command
+from src.video.managed_comfy_runtime import (
+    ManagedComfyContract,
+    assess_comfy_command,
+    missing_required_flags,
+    plan_comfy_launch,
+    workflow_launch_requirements,
+)
 from src.video.workflow_asset_integrity import configured_asset_issues
 from src.video.workflow_readiness import WorkflowResourceReadiness, required_launch_flags
 
@@ -146,85 +149,57 @@ def _launch_facts(probes: PreflightProbes) -> ComfyLaunchFacts:
 
 
 def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> PreflightGate | None:
-    """Required launch flags, judged on the command a launch from this process would run and on who owns a serving endpoint.
-
-    The saved command is never evidence about a process StableNew did not launch, and a saved change is never
-    evidence about the launcher this session already registered.
-    """
-
-    required = required_launch_flags(spec)
-    if not required:
-        return None
-    flags = " ".join(required)
+    workflow_flags = required_launch_flags(spec)
     facts = _launch_facts(probes)
-    in_force = facts.command_in_force
-    if not in_force:
+    command = facts.command_in_force
+    if state == ENDPOINT_HEALTHY and not facts.owns_runtime:
+        if not workflow_flags:
+            return None
         return PreflightGate(
             "launch_flags",
             "Launch flags",
             GATE_BLOCKED,
-            f"this workflow needs a StableNew-launched ComfyUI started with {flags}, and no launch "
-            "command is configured"
-            + (
-                " (a ComfyUI that is already running cannot have its flags verified)."
-                if state == ENDPOINT_HEALTHY
-                else "."
-            ),
-            f"Open {ENGINE_SETTINGS_HINT} and choose the managed install.",
-            ACTION_FIX_COMFY_SETUP,
+            f"An external ComfyUI is serving. Its launch flags cannot be verified ({' '.join(workflow_flags)} required).",
+            "Close the external runtime when its work is complete, then refresh.",
         )
-    missing = command_missing_flags(in_force, required)
-    if missing:
-        missing_text = " ".join(missing)
-        if facts.active_command is not None and not command_missing_flags(
-            facts.effective_command, required
-        ):
-            return PreflightGate(
-                "launch_flags",
-                "Launch flags",
-                GATE_BLOCKED,
-                f"the ComfyUI launcher of this session was started without {missing_text}; the saved "
-                "command has it, but StableNew has not applied it yet.",
-                "Restart StableNew to apply the saved command.",
-            )
-        if facts.effective_source == SOURCE_ENVIRONMENT:
-            return PreflightGate(
-                "launch_flags",
-                "Launch flags",
-                GATE_BLOCKED,
-                f"the ComfyUI command from {ENV_COMMAND_VARIABLE} (it overrides Engine Settings) is "
-                f"missing {missing_text}.",
-                f"Remove or change {ENV_COMMAND_VARIABLE} outside StableNew and restart StableNew.",
-            )
+    if workflow_flags and not command:
         return PreflightGate(
             "launch_flags",
             "Launch flags",
             GATE_BLOCKED,
-            f"the configured ComfyUI command is missing {missing_text}.",
-            f"Open {ENGINE_SETTINGS_HINT} and use Add required flags.",
+            f"This workflow needs {' '.join(workflow_flags)}, and no launch command is configured.",
+            f"Open {ENGINE_SETTINGS_HINT} and choose a compatible managed install.",
             ACTION_FIX_COMFY_SETUP,
         )
-    if state == ENDPOINT_HEALTHY:
+    try:
+        required = workflow_launch_requirements(command, workflow_flags, probes.managed_contract)
+        if not required:
+            return None
         if facts.owns_runtime:
+            missing = missing_required_flags(facts.verified_launch_flags, required)
+            if missing:
+                return PreflightGate(
+                    "launch_flags",
+                    "Launch flags",
+                    GATE_BLOCKED,
+                    f"The running StableNew-owned ComfyUI lacks verified launch flags {' '.join(missing)}.",
+                    "Wait for the current runtime to be released, then refresh.",
+                )
             return PreflightGate(
                 "launch_flags",
                 "Launch flags",
                 GATE_OK,
-                f"the ComfyUI StableNew launched is serving and its command carries {flags}.",
+                f"The owned ComfyUI launch used {' '.join(required)}.",
             )
-        return PreflightGate(
-            "launch_flags",
-            "Launch flags",
-            GATE_BLOCKED,
-            "a ComfyUI that StableNew did not launch is serving, so its launch flags cannot be verified "
-            f"({flags} is needed); StableNew will not adopt, stop or restart it.",
-            "Stop that ComfyUI yourself and refresh; StableNew then starts its own from the configured command.",
-        )
+        config = probes.extras.get("process_config")
+        plan_comfy_launch(command, getattr(config, "working_dir", None), required)
+    except ValueError as exc:
+        return PreflightGate("launch_flags", "Launch flags", GATE_BLOCKED, str(exc))
     return PreflightGate(
         "launch_flags",
         "Launch flags",
         GATE_OK,
-        f"{flags} present in the command StableNew will launch.",
+        f"CLI support checked offline. StableNew will apply {' '.join(required)} at launch.",
     )
 
 
@@ -257,7 +232,8 @@ def _runtime_gate(probes: PreflightProbes, state: str) -> PreflightGate:
             "ComfyUI",
             GATE_BLOCKED,
             f"ComfyUI is not running at {url} and automatic start is off.",
-            f"Turn on automatic start in {ENGINE_SETTINGS_HINT}, or start ComfyUI yourself.",
+            "Allow automatic launch in the ComfyUI configuration (comfy_autostart_enabled or "
+            "STABLENEW_COMFY_AUTOSTART), then refresh.",
         )
     assessment = (
         assess_comfy_command(command, probes.managed_contract)
@@ -270,8 +246,8 @@ def _runtime_gate(probes: PreflightProbes, state: str) -> PreflightGate:
     return PreflightGate(
         "runtime",
         "ComfyUI",
-        GATE_OK,
-        f"not running; StableNew will start it from {which} at {url}.",
+        GATE_UNKNOWN,
+        f"Configured to start from {which} at {url}. Runtime health is unverified until launch.",
     )
 
 
@@ -474,11 +450,13 @@ def default_preflight_probes(
     from src.video.comfy_healthcheck import probe_comfy_endpoint
     from src.video.comfy_process_manager import (
         build_default_comfy_process_config,
+        get_registered_comfy_launch_config,
         read_comfy_launch_facts,
     )
     from src.video.workflow_readiness import _driver_gpu_memory_mib
 
-    config = build_default_comfy_process_config(config_manager)
+    config = get_registered_comfy_launch_config() if comfy_command is None else None
+    config = config or build_default_comfy_process_config(config_manager)
     launch = read_comfy_launch_facts(config_manager)
     command = (
         tuple(comfy_command)

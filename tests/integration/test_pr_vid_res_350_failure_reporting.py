@@ -9,6 +9,7 @@ from src.controller.video_workflow_controller import VideoWorkflowController
 from src.queue.job_model import JobStatus
 from tests.integration.test_pr_vid_120_neutral_video_queue import _build_stack
 from tests.pipeline.test_pr_vid_seq_330_runner import _intent
+from tests.video.test_comfy_process_manager import fake_comfy_command
 from tests.video.test_pr_vid_ux_311_preflight import _probes
 from tests.video.test_wan22_experimental_workflow import _backend, _FakeComfy
 
@@ -80,9 +81,10 @@ def test_all_admission_paths_persist_njrs_despite_transient_memory_pressure(
 ):
     client = _FakeComfy(tmp_path)
     repository, queue, service, _controller = _build_stack(tmp_path, [_backend(client)])
+    command = fake_comfy_command(tmp_path / "comfy", "--disable-pinned-memory")
     controller = VideoWorkflowController(
         app_controller=SimpleNamespace(job_service=service, output_dir=str(tmp_path / "output")),
-        preflight_probes=lambda: _probes(ram_gb=0.5, vram=(12282, 500)),
+        preflight_probes=lambda: _probes(command=command, ram_gb=0.5, vram=(12282, 500)),
     )
     source = tmp_path / "source.png"
     Image.new("RGB", (32, 32), "navy").save(source)

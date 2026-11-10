@@ -176,9 +176,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.status_var = tk.StringVar(value="Ready to queue a workflow-driven video job.")
         self.workflow_detail_var = tk.StringVar(value="No workflow selected.")
-        # Per-job authorization for an experimental workflow: off by default, never restored
-        # from saved state and never a global setting.
-        self.experimental_opt_in_var = tk.BooleanVar(value=False)
+        self._explicit_workflow_selection: tuple[str, str] | None = None
         # Optional RIFE smoothing of the finished clip (a saved preference, unlike the per-job opt-in).
         self.smooth_var = tk.BooleanVar(value=False)
         # Why Queue is disabled for the selected workflow (empty when it is not). Batch mode also
@@ -286,12 +284,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.output_route_var,
         ):
             variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
-        # Any execution-affecting edit (including the per-job opt-in and the prompts) drops a
-        # preview, which must then be rebuilt.
-        self.experimental_opt_in_var.trace_add(
-            "write", lambda *_args: self._invalidate_experiment_preview()
-        )
-        self.experimental_opt_in_var.trace_add("write", lambda *_args: self._refresh_queue_gate())
         self.smooth_var.trace_add("write", lambda *_args: self._refresh_advanced_status())
         self.negative_prompt_text.bind(
             "<KeyRelease>", lambda _e: self._refresh_advanced_status(), add="+"
@@ -362,8 +354,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.use_latest_output_button,
             "Load the newest compatible image output into this workflow tab. This prepares the source input only; it does not queue the workflow yet.",
         )
-        # PR-GUI-110: the primary action, its experimental opt-in and the status share one fixed row above the
-        # scrolling form. It is the same button and callback as before, just never scrolled out of view.
+        # Keep the primary action and its status visible above the scrolling form.
         action_bar = ttk.Frame(header, style="Panel.TFrame")
         action_bar.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(6, 0))
         self._action_bar = action_bar
@@ -385,16 +376,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.status_label.pack(side="left", fill="x", expand=True, padx=(12, 0))
         bind_wraplength(self.status_label)
-        self.experimental_opt_in_check = ttk.Checkbutton(
-            action_bar,
-            text="Enable experimental workflow for this job",
-            style="Dark.TCheckbutton",
-            variable=self.experimental_opt_in_var,
-        )
-        # Packed next to the button only while an experimental workflow is selected
-        # (see _apply_workflow_capabilities).
-        # The reason label is packed after the opt-in only while Queue waits for it
-        # (see _refresh_queue_gate).
         self.queue_block_label = ttk.Label(
             action_bar, textvariable=self.queue_block_reason_var, style="Muted.TLabel"
         )
@@ -469,6 +450,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 help_key="workflow",
             ),
         )
+        self.workflow_combo.bind("<<ComboboxSelected>>", self._on_workflow_selected, add="+")
         ttk.Label(
             body,
             textvariable=self.workflow_detail_var,
@@ -908,7 +890,23 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.workflow_var.set(workflow_id)
 
     def _on_workflow_id_changed(self) -> None:
+        self._explicit_workflow_selection = None
         self._sync_workflow_label()
+        self._invalidate_experiment_preview()
+        self._refresh_queue_gate()
+
+    def _on_workflow_selected(self, _event: tk.Event) -> None:
+        # Only the picker's selection event is evidence of operator intent. A StringVar
+        # trace also runs for defaults, restored forms and other programmatic writes.
+        self._explicit_workflow_selection = self._selected_workflow_identity()
+        self._invalidate_experiment_preview()
+        self._refresh_queue_gate()
+
+    def _experimental_selection_confirmed(self) -> bool:
+        meta = self._workflow_map.get(self.workflow_var.get(), {})
+        return bool(meta.get("experimental")) and (
+            self._explicit_workflow_selection == self._selected_workflow_identity()
+        )
 
     def apply_make_video_defaults(self) -> str:
         """Preselect the recommended approved workflow for a Make Video handoff.
@@ -926,6 +924,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         if recommended and recommended in self._workflow_map and not keeps_choice:
             self.workflow_var.set(recommended)
+        elif current.get("experimental"):
+            self._explicit_workflow_selection = None
+            self._invalidate_experiment_preview()
+            self._refresh_queue_gate()
         self.submission_notice.clear()
         return self.workflow_var.get().strip()
 
@@ -1057,9 +1059,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state["operator_controls"] = self.workflow_controls_panel.get_values()
         if for_submission:
             # The per-job authorization is only ever part of a submission, never saved state.
-            state["experimental_opt_in"] = bool(
-                workflow_meta.get("experimental") and self.experimental_opt_in_var.get()
-            )
+            state["experimental_opt_in"] = self._experimental_selection_confirmed()
         return state
 
     def restore_video_workflow_state(self, state: dict[str, Any] | None) -> None:
@@ -1094,7 +1094,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._set_text_value(self.prompt_text, str(state.get("prompt") or ""))
         self._set_text_value(self.negative_prompt_text, str(state.get("negative_prompt") or ""))
         self._source_bundle = None
-        self.experimental_opt_in_var.set(False)  # authorization is per job, never restored
         self._refresh_workspace_summary()
         self._select_frame_count(state.get("frame_count"))
         interpolation = state.get("interpolation")
@@ -1104,8 +1103,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.workflow_controls_panel.set_values(state.get("operator_controls"))
 
     def _apply_workflow_capabilities(self, workflow_meta: dict[str, Any]) -> None:
-        """Show/enable only the inputs the selected workflow declares, and the experimental
-        opt-in only for an experimental workflow (unchecked whenever the selection changes)."""
+        """Show and enable the inputs declared by the selected workflow."""
 
         visible = dict(workflow_meta.get("form_visibility") or {})
 
@@ -1171,29 +1169,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.conditioning_section.grid_remove()
         if bool(visible.get("pose_video", False)) or workflow_meta.get("operator_controls"):
             self.advanced_section.set_expanded(True)  # required inputs must not hide behind a header
-        experimental = bool(workflow_meta.get("experimental"))
-        if experimental:
-            self.experimental_opt_in_check.pack(
-                side="left", padx=(12, 0), before=self.status_label
-            )
-        else:
-            self.experimental_opt_in_check.pack_forget()
-            self.experimental_opt_in_var.set(False)
         self._refresh_queue_gate()
 
     def _queue_block_reason(self) -> str:
-        """Why the selected workflow cannot be queued yet, or an empty string.
-
-        An approved workflow needs no opt-in. A still-experimental one runs only with this job's
-        own opt-in, so Queue stays disabled until it is ticked rather than failing after the click.
-        The controller still refuses an un-opted-in experimental job (defence in depth)."""
+        """Why the selected workflow cannot be queued yet, or an empty string."""
 
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
         policy_reason = (workflow_meta.get("operator_projection") or {}).get("admission_block_reason")
         if policy_reason:
             return str(policy_reason)
-        if workflow_meta.get("experimental") and not self.experimental_opt_in_var.get():
-            return "Queue is off until you tick the experimental opt-in for this job."
+        if workflow_meta.get("experimental") and not self._experimental_selection_confirmed():
+            return "Choose this experimental workflow in the picker to enable Queue."
         runtime_reason = self._runtime_readiness_session.block_reason()
         if runtime_reason:
             # The full reason, and what to do about it, is in the Runtime readiness strip below.
@@ -1248,14 +1234,18 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
     def _refresh_workspace_summary(self) -> None:
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
-        if workflow_meta.get("workflow_id") != getattr(self, "_capability_workflow_id", None):
-            self._capability_workflow_id = workflow_meta.get("workflow_id")
-            self.experimental_opt_in_var.set(False)  # a new selection never inherits opt-in
+        identity = self._selected_workflow_identity()
+        if identity != getattr(self, "_capability_workflow_identity", None):
+            self._explicit_workflow_selection = None
+            self._capability_workflow_identity = identity
             self._apply_workflow_capabilities(workflow_meta)
             strip = getattr(self, "runtime_readiness_strip", None)
             if strip is not None and self.winfo_ismapped():
                 strip.request_refresh()  # a hidden tab probes nothing; showing it does (_on_tab_shown)
-        self.workflow_detail_var.set(format_workflow_capability_label(workflow_meta))
+        detail = format_workflow_capability_label(workflow_meta)
+        if workflow_meta.get("experimental"):
+            detail += " Choosing this workflow and selecting Queue authorizes experimental execution for the job."
+        self.workflow_detail_var.set(detail)
         summary = summarize_video_workflow_source(
             source_image_path=self.source_image_var.get().strip(),
             workflow_spec=workflow_meta,

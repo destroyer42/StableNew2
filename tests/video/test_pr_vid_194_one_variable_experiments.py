@@ -581,7 +581,9 @@ def test_experiment_jobs_run_through_the_real_queue_with_distinct_controls(tmp_p
     )
 
     client = _AnimateComfy(tmp_path)
-    repository, queue, service, _ = _build_stack(tmp_path, [_backend(client, _ManagedFake())])
+    repository, queue, service, _ = _build_stack(
+        tmp_path, [_backend(client, _ManagedFake(tmp_path))]
+    )
     app = SimpleNamespace(job_service=service, output_dir=str(tmp_path / "output"))
     controller = VideoWorkflowController(app_controller=app)
     try:
@@ -677,7 +679,7 @@ def test_a_repository_failure_on_a_later_arm_leaves_zero_arms_admitted_or_runnab
     from tests.video.test_pr_vid_190_wan_animate2 import _AnimateComfy, _backend, _ManagedFake
 
     repository, queue, service, _ = _build_stack(
-        tmp_path, [_backend(_AnimateComfy(tmp_path), _ManagedFake())]
+        tmp_path, [_backend(_AnimateComfy(tmp_path), _ManagedFake(tmp_path))]
     )
     app = SimpleNamespace(job_service=service, output_dir=str(tmp_path / "output"))
     controller = VideoWorkflowController(app_controller=app)

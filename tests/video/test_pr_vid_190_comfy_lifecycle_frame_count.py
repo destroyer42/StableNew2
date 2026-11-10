@@ -78,7 +78,7 @@ class _FakeManager:
     def is_running(self) -> bool:
         return self.running
 
-    def ensure_running(self) -> bool:
+    def ensure_running(self, *, required_flags=()) -> bool:
         if not self.running:
             self.starts += 1
             self.running = True
