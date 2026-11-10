@@ -8,24 +8,64 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel,
-    QLineEdit, QPlainTextEdit, QPushButton, QScrollArea, QSpinBox, QSplitter,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QApplication,
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .components import (
-    FormTextEdit, ActionStrip, Disclosure, IssueList, NoWheelUnlessFocused, NoticeBanner,
-    ResponsiveGrid, ResultGallery, SectionCard, SettingField, StatusChip, fit_segment, guard_wheel, reveal, stacked_label,
+    ActionStrip,
+    Disclosure,
+    FormTextEdit,
+    IssueList,
+    NoticeBanner,
+    NoWheelUnlessFocused,
+    ResponsiveGrid,
+    ResultGallery,
+    SectionCard,
+    SettingField,
+    StatusChip,
+    fit_segment,
+    guard_wheel,
+    reveal,
+    stacked_label,
 )
 from .domain import (
-    ADVANCED_SETTINGS, BASIC_SETTINGS, MODELS, PACKS, PROFILES, SAMPLERS, SCHEDULERS, SETTING_FIELDS,
-    SETTING_LABELS, SETTING_RANGES, SOURCE_FREE, CreateSession, expand_prompt, format_setting,
+    ADVANCED_SETTINGS,
+    BASIC_SETTINGS,
+    MODELS,
+    PACKS,
+    PROFILES,
+    SAMPLERS,
+    SCHEDULERS,
+    SETTING_FIELDS,
+    SETTING_LABELS,
+    SETTING_RANGES,
+    SOURCE_FREE,
+    CreateSession,
+    expand_prompt,
+    format_setting,
     referenced_slots,
 )
 from .tokens import SPACE
 
 LAYOUT_SCROLL = "scroll"  # design A: one vertically scrolling column, preview/result last
-LAYOUT_SPLIT = "split"    # design B: authoring column + persistent summary/preview/result pane
+LAYOUT_SPLIT = "split"  # design B: authoring column + persistent summary/preview/result pane
 LAYOUT_DESIGNS = (LAYOUT_SCROLL, LAYOUT_SPLIT)
 LAYOUT_LABELS = {LAYOUT_SCROLL: "Scrolling form", LAYOUT_SPLIT: "Split workspace"}
 
@@ -45,10 +85,17 @@ class CreateView(QWidget):
     button says 'Simulate'. The app never contacts or imports StableNew.
     """
 
-    stateSynced = Signal()  # emitted after every view/session synchronization (Output Display listens)
+    stateSynced = (
+        Signal()
+    )  # emitted after every view/session synchronization (Output Display listens)
 
-    def __init__(self, parent: QWidget | None = None, *, session: CreateSession | None = None,
-                 layout_design: str = LAYOUT_SPLIT):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        session: CreateSession | None = None,
+        layout_design: str = LAYOUT_SPLIT,
+    ):
         super().__init__(parent)
         if layout_design not in LAYOUT_DESIGNS:
             raise ValueError(f"Unknown layout design: {layout_design}")
@@ -79,7 +126,9 @@ class CreateView(QWidget):
             button.setProperty("role", "segment")
             fit_segment(button)
             button.setAccessibleName(f"Layout: {LAYOUT_LABELS[design]}")
-            button.setToolTip("Compare Create layouts: one scrolling column, or authoring plus a persistent summary and preview pane.")
+            button.setToolTip(
+                "Compare Create layouts: one scrolling column, or authoring plus a persistent summary and preview pane."
+            )
             self.layout_group.addButton(button)
             self.layout_buttons[design] = button
             head.addWidget(button)
@@ -87,7 +136,10 @@ class CreateView(QWidget):
         root.addLayout(head)
 
         self.banner = NoticeBanner()
-        self.banner.set_message("DEMO ONLY", "No model is loaded. Preview and admission are simulated; nothing is persisted.")
+        self.banner.set_message(
+            "DEMO ONLY",
+            "No model is loaded. Preview and admission are simulated; nothing is persisted.",
+        )
         root.addWidget(self.banner)
 
         split = QSplitter(Qt.Orientation.Horizontal)
@@ -122,7 +174,9 @@ class CreateView(QWidget):
         self.undo_button.setToolTip("Undo the last draft change (Alt+Z)")
         self.redo_button.setToolTip("Redo (Alt+Y)")
         self.preview_button.setToolTip("Build the display-only preview (Ctrl+Enter)")
-        self.admit_button.setToolTip("Simulate admission of a current, ready preview (Ctrl+Shift+Enter)")
+        self.admit_button.setToolTip(
+            "Simulate admission of a current, ready preview (Ctrl+Shift+Enter)"
+        )
         root.addWidget(self.actions)
         self.undo_button.clicked.connect(self._undo)
         self.redo_button.clicked.connect(self._redo)
@@ -201,10 +255,13 @@ class CreateView(QWidget):
         self.source_combo.setAccessibleName("Prompt source")
         guard_wheel(self.source_combo, self._wheel_guard)
         self.source_combo.currentIndexChanged.connect(self._source_changed)
-        card.add(stacked_label(
-            "Prompt source", self.source_combo,
-            help_text="Fixture packs are invented demonstrations. Choosing one replaces the working text (Undo restores it).",
-        ))
+        card.add(
+            stacked_label(
+                "Prompt source",
+                self.source_combo,
+                help_text="Fixture packs are invented demonstrations. Choosing one replaces the working text (Undo restores it).",
+            )
+        )
         self.pack_name = QLineEdit()
         self.pack_name.setPlaceholderText("Working draft name")
         self.pack_name.setAccessibleName("Pack name")
@@ -216,7 +273,9 @@ class CreateView(QWidget):
         self.prompt_text.setMaximumHeight(120)
         self.prompt_text.setPlaceholderText("Describe your subject, composition and intent")
         self.prompt_text.setAccessibleName("Main prompt")
-        self.prompt_text.textChanged.connect(lambda: self._set_text("prompt", self.prompt_text.toPlainText()))
+        self.prompt_text.textChanged.connect(
+            lambda: self._set_text("prompt", self.prompt_text.toPlainText())
+        )
         card.add(stacked_label("Main prompt", self.prompt_text))
         self.prompt_meta = QLabel("")
         self.prompt_meta.setProperty("role", "muted")
@@ -227,14 +286,22 @@ class CreateView(QWidget):
         self.resolved_text.setMinimumHeight(52)
         self.resolved_text.setMaximumHeight(80)
         self.resolved_text.setAccessibleName("Resolved prompt (read-only)")
-        card.add(stacked_label("Resolved prompt · slots substituted, read-only", self.resolved_text))
+        card.add(
+            stacked_label("Resolved prompt · slots substituted, read-only", self.resolved_text)
+        )
 
         self.negative_text = FormTextEdit()
         self.negative_text.setMinimumHeight(52)
         self.negative_text.setMaximumHeight(80)
         self.negative_text.setAccessibleName("Negative prompt")
-        self.negative_text.textChanged.connect(lambda: self._set_text("negative", self.negative_text.toPlainText()))
-        card.add(stacked_label("Negative prompt (availability depends on model fixture)", self.negative_text))
+        self.negative_text.textChanged.connect(
+            lambda: self._set_text("negative", self.negative_text.toPlainText())
+        )
+        card.add(
+            stacked_label(
+                "Negative prompt (availability depends on model fixture)", self.negative_text
+            )
+        )
 
         self.slots = QTableWidget(0, 2)
         self.slots.setHorizontalHeaderLabels(["Slot", "Value"])
@@ -259,7 +326,10 @@ class CreateView(QWidget):
         self.form_layout.addWidget(card)
 
     def _build_model_section(self) -> None:
-        card = SectionCard("02 · Model and settings source", "Fixture profiles demonstrate recommendation and override behavior; they do not assert model capabilities.")
+        card = SectionCard(
+            "02 · Model and settings source",
+            "Fixture profiles demonstrate recommendation and override behavior; they do not assert model capabilities.",
+        )
         self.model_combo = QComboBox()
         for model in MODELS:
             self.model_combo.addItem(model.label, model.key)
@@ -272,15 +342,20 @@ class CreateView(QWidget):
         self.profile_combo.setAccessibleName("Settings source")
         guard_wheel(self.profile_combo, self._wheel_guard)
         self.profile_combo.currentTextChanged.connect(self._profile_changed)
-        card.add(stacked_label(
-            "Settings source", self.profile_combo,
-            help_text="Learning-informed is a selectable state illustration, not a real qualified recommendation.",
-        ))
+        card.add(
+            stacked_label(
+                "Settings source",
+                self.profile_combo,
+                help_text="Learning-informed is a selectable state illustration, not a real qualified recommendation.",
+            )
+        )
         self.change_detail = QLabel("No model/profile changes to review.")
         self.change_detail.setProperty("role", "muted")
         self.change_detail.setWordWrap(True)
         card.add(self.change_detail)
-        log = Disclosure("Change log", "Every draft change this session, newest first. In memory only.")
+        log = Disclosure(
+            "Change log", "Every draft change this session, newest first. In memory only."
+        )
         self.change_log_view = FormTextEdit()
         self.change_log_view.setReadOnly(True)
         self.change_log_view.setMinimumHeight(110)
@@ -295,14 +370,18 @@ class CreateView(QWidget):
         if name in ("sampler", "scheduler"):
             editor = QComboBox()
             editor.addItems(SAMPLERS if name == "sampler" else SCHEDULERS)
-            editor.currentTextChanged.connect(lambda value, field=name: self._setting_changed(field, value))
+            editor.currentTextChanged.connect(
+                lambda value, field=name: self._setting_changed(field, value)
+            )
         elif name == "cfg":
             editor = QDoubleSpinBox()
             low, high = SETTING_RANGES[name]
             editor.setRange(low, high)
             editor.setDecimals(1)
             editor.setSingleStep(0.5)
-            editor.valueChanged.connect(lambda value, field=name: self._setting_changed(field, value))
+            editor.valueChanged.connect(
+                lambda value, field=name: self._setting_changed(field, value)
+            )
         else:
             editor = QSpinBox()
             low, high = SETTING_RANGES[name]
@@ -310,7 +389,9 @@ class CreateView(QWidget):
             editor.setSingleStep(64 if name in ("width", "height") else 1)
             if name == "seed":
                 editor.setSpecialValueText("Random")
-            editor.valueChanged.connect(lambda value, field=name: self._setting_changed(field, value))
+            editor.valueChanged.connect(
+                lambda value, field=name: self._setting_changed(field, value)
+            )
         guard_wheel(editor, self._wheel_guard)
         editor.setAccessibleName(SETTING_LABELS[name])
         return editor
@@ -345,8 +426,12 @@ class CreateView(QWidget):
             for name in names:
                 editor = self._make_editor(name)
                 field = SettingField(name, SETTING_LABELS[name], editor)
-                field.lockToggled.connect(lambda checked, field_name=name: self._lock_changed(field_name, checked))
-                field.resetRequested.connect(lambda field_name=name: self._reset_setting(field_name))
+                field.lockToggled.connect(
+                    lambda checked, field_name=name: self._lock_changed(field_name, checked)
+                )
+                field.resetRequested.connect(
+                    lambda field_name=name: self._reset_setting(field_name)
+                )
                 self.setting_inputs[name] = editor
                 self.lock_inputs[name] = field.lock
                 self.setting_fields[name] = field
@@ -366,16 +451,26 @@ class CreateView(QWidget):
         self.form_layout.addWidget(card)
 
     def _build_advanced_section(self) -> None:
-        card = SectionCard("04 · Additional prompt channels", "Advanced details remain available without obscuring the primary Create action.")
-        self.advanced_summary = QLabel("Global: off · ADetailer: off · LoRA: none · Embeddings: none")
+        card = SectionCard(
+            "04 · Additional prompt channels",
+            "Advanced details remain available without obscuring the primary Create action.",
+        )
+        self.advanced_summary = QLabel(
+            "Global: off · ADetailer: off · LoRA: none · Embeddings: none"
+        )
         self.advanced_summary.setProperty("role", "muted")
         self.advanced_summary.setWordWrap(True)
         card.add(self.advanced_summary)
-        advanced = Disclosure("Advanced prompt channels", "These are authoring demonstrations, not compiled production stages.")
+        advanced = Disclosure(
+            "Advanced prompt channels",
+            "These are authoring demonstrations, not compiled production stages.",
+        )
         self.global_text = FormTextEdit()
         self.global_text.setFixedHeight(62)
         self.global_text.setAccessibleName("Global prompt")
-        self.global_text.textChanged.connect(lambda: self._set_text("global_prompt", self.global_text.toPlainText()))
+        self.global_text.textChanged.connect(
+            lambda: self._set_text("global_prompt", self.global_text.toPlainText())
+        )
         advanced.add(stacked_label("Global prompt", self.global_text))
         self.adetailer_check = QCheckBox("Enable ADetailer (demo only)")
         self.adetailer_check.toggled.connect(self._adetailer_changed)
@@ -383,7 +478,9 @@ class CreateView(QWidget):
         self.adetailer_text = FormTextEdit()
         self.adetailer_text.setFixedHeight(62)
         self.adetailer_text.setAccessibleName("ADetailer prompt")
-        self.adetailer_text.textChanged.connect(lambda: self._set_text("adetailer_prompt", self.adetailer_text.toPlainText()))
+        self.adetailer_text.textChanged.connect(
+            lambda: self._set_text("adetailer_prompt", self.adetailer_text.toPlainText())
+        )
         advanced.add(stacked_label("ADetailer prompt", self.adetailer_text))
         self.lora_text = QLineEdit()
         self.lora_text.setPlaceholderText("LoRA references, not resolved")
@@ -427,7 +524,9 @@ class CreateView(QWidget):
         self.review_layout.addWidget(self.stale_label)
         self.issue_list = IssueList()
         self.review_layout.addWidget(self.issue_list)
-        review_guide = QLabel("Preview is a display-only snapshot. It is NOT the compiler's NJR Preview and grants no execution authority.")
+        review_guide = QLabel(
+            "Preview is a display-only snapshot. It is NOT the compiler's NJR Preview and grants no execution authority."
+        )
         review_guide.setProperty("role", "muted")
         review_guide.setWordWrap(True)
         self.review_layout.addWidget(review_guide)
@@ -437,7 +536,9 @@ class CreateView(QWidget):
         self.preview_text.setAccessibleName("Mock preview and effective setting summary")
         self.review_layout.addWidget(self.preview_text, 1)
         self.result_card = SectionCard("Mock result", "No real image generated, no job ID issued.")
-        self.result_text = QLabel("This panel will display the simulated admission acknowledgement.")
+        self.result_text = QLabel(
+            "This panel will display the simulated admission acknowledgement."
+        )
         self.result_text.setWordWrap(True)
         self.result_card.add(self.result_text)
         self.result_gallery = ResultGallery()
@@ -519,7 +620,9 @@ class CreateView(QWidget):
                 names.append(name)
                 new_slots[name] = value
         if len(names) != len(set(names)):
-            self.banner.set_message("DUPLICATE SLOT", "Slot names must be unique; the edit was not applied.", "blocked")
+            self.banner.set_message(
+                "DUPLICATE SLOT", "Slot names must be unique; the edit was not applied.", "blocked"
+            )
             return
         try:
             self.session.replace_slots(new_slots)
@@ -538,7 +641,9 @@ class CreateView(QWidget):
     def _remove_slot(self) -> None:
         row = self.slots.currentRow()
         if row < 0:
-            self.banner.set_message("SELECT SLOT", "Select a row before removing a slot from the mock draft.", "warning")
+            self.banner.set_message(
+                "SELECT SLOT", "Select a row before removing a slot from the mock draft.", "warning"
+            )
             return
         item = self.slots.item(row, 0)
         if item:
@@ -561,7 +666,11 @@ class CreateView(QWidget):
         if preview.errors:
             self.banner.set_message("MOCK PREVIEW REFUSED", "; ".join(preview.errors), "blocked")
         else:
-            self.banner.set_message("MOCK PREVIEW READY", "This is a display-only summary. No NJR has been compiled.", "success")
+            self.banner.set_message(
+                "MOCK PREVIEW READY",
+                "This is a display-only summary. No NJR has been compiled.",
+                "success",
+            )
 
     def _simulate_admission(self) -> None:
         try:
@@ -577,7 +686,11 @@ class CreateView(QWidget):
         # Undoable, so no modal confirmation is needed (and nothing can hang a test run).
         self.session.reset()
         self._sync_view()
-        self.banner.set_message("DEMO RESET", "The local mock draft has been reset; use Undo to restore it. Nothing was persisted.", "warning")
+        self.banner.set_message(
+            "DEMO RESET",
+            "The local mock draft has been reset; use Undo to restore it. Nothing was persisted.",
+            "warning",
+        )
 
     # ------------------------------------------------------------------- sync
     def _refresh_size_presets(self) -> None:
@@ -590,7 +703,10 @@ class CreateView(QWidget):
             self._size_model_key = model.key
         s = self.session.draft.settings
         wanted = f"{s.width}x{s.height}"
-        index = next((i for i in range(self.size_combo.count()) if self.size_combo.itemData(i) == wanted), self.size_combo.count() - 1)
+        index = next(
+            (i for i in range(self.size_combo.count()) if self.size_combo.itemData(i) == wanted),
+            self.size_combo.count() - 1,
+        )
         self.size_combo.setCurrentIndex(index)
 
     def _sync_view(self) -> None:
@@ -615,9 +731,19 @@ class CreateView(QWidget):
                         widget.setText(value)
             self.adetailer_check.setChecked(d.adetailer_enabled)
             self.source_combo.setCurrentIndex(
-                next(i for i in range(self.source_combo.count()) if self.source_combo.itemData(i) == d.source_key)
+                next(
+                    i
+                    for i in range(self.source_combo.count())
+                    if self.source_combo.itemData(i) == d.source_key
+                )
             )
-            self.model_combo.setCurrentIndex(next(i for i in range(self.model_combo.count()) if self.model_combo.itemData(i) == d.model_key))
+            self.model_combo.setCurrentIndex(
+                next(
+                    i
+                    for i in range(self.model_combo.count())
+                    if self.model_combo.itemData(i) == d.model_key
+                )
+            )
             self.profile_combo.setCurrentText(d.profile_source)
             self._refresh_size_presets()
             recommended = self.session.recommended
@@ -635,7 +761,11 @@ class CreateView(QWidget):
                     origin=self.session.setting_origin(name),
                 )
             self.reset_unlocked_button.setEnabled(
-                any(self.session.differs_from_recommended(n) for n in SETTING_FIELDS if n not in d.locked_fields)
+                any(
+                    self.session.differs_from_recommended(n)
+                    for n in SETTING_FIELDS
+                    if n not in d.locked_fields
+                )
             )
             current_slots = [
                 (
@@ -656,21 +786,35 @@ class CreateView(QWidget):
             used = len(referenced_slots(d.prompt) & set(d.slots))
             self.prompt_meta.setText(
                 f"{words} words · {used} of {len(d.slots)} slots used"
-                + (f" · unresolved: {', '.join('{' + n + '}' for n in unresolved)}" if unresolved else "")
+                + (
+                    f" · unresolved: {', '.join('{' + n + '}' for n in unresolved)}"
+                    if unresolved
+                    else ""
+                )
             )
             log = self.session.change_log
             self.change_detail.setText(
-                f"Latest change (r{log[-1][0]}): {log[-1][1]}" if log else "No model/profile changes to review."
+                f"Latest change (r{log[-1][0]}): {log[-1][1]}"
+                if log
+                else "No model/profile changes to review."
             )
-            self.change_log_view.setPlainText("\n".join(f"r{rev} · {note}" for rev, note in reversed(log)))
+            self.change_log_view.setPlainText(
+                "\n".join(f"r{rev} · {note}" for rev, note in reversed(log))
+            )
             self.advanced_summary.setText(
                 f"Global: {'set' if d.global_prompt else 'off'} · ADetailer: {'on' if d.adetailer_enabled else 'off'} · "
                 f"LoRA: {'noted' if d.loras else 'none'} · Embeddings: {'noted' if d.embeddings else 'none'}"
             )
-            hidden_diffs = [n for n in ADVANCED_SETTINGS if self.session.differs_from_recommended(n)]
+            hidden_diffs = [
+                n for n in ADVANCED_SETTINGS if self.session.differs_from_recommended(n)
+            ]
             self.advanced_settings.set_summary(
                 f"{d.settings.sampler} / {d.settings.scheduler} · {d.settings.width} × {d.settings.height}"
-                + (f" · {len(hidden_diffs)} differ from recommended" if hidden_diffs else " · all as recommended")
+                + (
+                    f" · {len(hidden_diffs)} differ from recommended"
+                    if hidden_diffs
+                    else " · all as recommended"
+                )
             )
             model = next(m for m in MODELS if m.key == d.model_key)
             overrides = sorted(d.manual_fields)
@@ -683,13 +827,20 @@ class CreateView(QWidget):
             )
             stale = self.session.stale_reasons()
             self.stale_label.setText(
-                "Stale because the draft changed: " + ", ".join(name.removeprefix("settings.") for name in stale) if stale else ""
+                "Stale because the draft changed: "
+                + ", ".join(name.removeprefix("settings.") for name in stale)
+                if stale
+                else ""
             )
             self.stale_label.setVisible(bool(stale))
-            self.result_gallery.set_tiles(self.session.demo_receipt.tiles if self.session.demo_receipt else ())
+            self.result_gallery.set_tiles(
+                self.session.demo_receipt.tiles if self.session.demo_receipt else ()
+            )
             preview = self.session.preview
             if preview is None:
-                self.preview_text.setPlainText("Not previewed yet.\n\nEdit the mock draft, then choose Build mock preview.\n\nThere is no real model or backend in this assessment.")
+                self.preview_text.setPlainText(
+                    "Not previewed yet.\n\nEdit the mock draft, then choose Build mock preview.\n\nThere is no real model or backend in this assessment."
+                )
                 self.review_state.setText("Preview state: Not built")
                 self.preview_chip.set_status("NOT BUILT", "info")
                 self.issue_list.set_issues((), (), empty="Build a preview to run the mock checks")
@@ -707,7 +858,9 @@ class CreateView(QWidget):
                     self.preview_chip.set_status("BLOCKED", "blocked")
                 else:
                     self.preview_chip.set_status("CURRENT · READY", "success")
-                self.issue_list.set_issues(preview.errors, preview.warnings, empty="No mock issues found")
+                self.issue_list.set_issues(
+                    preview.errors, preview.warnings, empty="No mock issues found"
+                )
             self.admit_button.setEnabled(self.session.can_simulate_admission)
             self.undo_button.setEnabled(self.session.can_undo)
             self.redo_button.setEnabled(self.session.can_redo)
@@ -715,9 +868,14 @@ class CreateView(QWidget):
                 f"Revision {self.session.revision} · "
                 + ("Mock preview current" if self.session.is_preview_current else "Preview needed")
             )
-            self.actions.status.setToolTip("Mock only: no production queue, job or image is involved.")
+            self.actions.status.setToolTip(
+                "Mock only: no production queue, job or image is involved."
+            )
             if self.session.demo_receipt:
-                self.result_text.setText(self.session.demo_receipt.message + "\n\nThis is NOT a persisted job or gallery artifact.")
+                self.result_text.setText(
+                    self.session.demo_receipt.message
+                    + "\n\nThis is NOT a persisted job or gallery artifact."
+                )
             else:
                 self.result_text.setText("No simulated receipt. No image has been created.")
         finally:

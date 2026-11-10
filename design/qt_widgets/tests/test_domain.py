@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import unittest
+from dataclasses import replace
 
-from stablenew_qt_proto.domain import CreateSession, CreateDraft, MODEL_BY_KEY
+from stablenew_qt_proto.domain import MODEL_BY_KEY, CreateDraft, CreateSession
 
 
 class CreateSessionTests(unittest.TestCase):
@@ -108,7 +108,9 @@ class CreateSessionTests(unittest.TestCase):
 
     def test_learning_source_is_labeled_unqualified(self):
         self.session.set_profile_source("Learning-informed (fixture)")
-        self.assertTrue(any("not evidence" in w.lower() for w in self.session.build_preview().warnings))
+        self.assertTrue(
+            any("not evidence" in w.lower() for w in self.session.build_preview().warnings)
+        )
 
     def test_text_field_rejects_unknown_name(self):
         with self.assertRaises(ValueError):
@@ -177,7 +179,9 @@ class CreateSessionTests(unittest.TestCase):
         self.session.build_preview()
         r = self.session.simulate_admission()
         # QT-DS-01 added placeholder ``tiles`` for the mock result gallery; no job/queue identity may appear.
-        self.assertEqual(sorted(r.__dict__), ["message", "preview_fingerprint", "revision", "tiles"])
+        self.assertEqual(
+            sorted(r.__dict__), ["message", "preview_fingerprint", "revision", "tiles"]
+        )
         for tile in r.tiles:
             self.assertEqual(sorted(tile.__dict__), ["index", "label", "seed", "size"])
             self.assertTrue(tile.label.startswith("MOCK IMAGE"))

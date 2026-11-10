@@ -11,8 +11,16 @@ import sys
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QApplication, QHBoxLayout, QLabel, QListWidget, QMainWindow, QPushButton,
-    QSplitter, QStackedWidget, QVBoxLayout, QWidget,
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QPushButton,
+    QSplitter,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .components import fit_segment
@@ -24,7 +32,7 @@ from .theme import Theme
 from .theme_store import ThemeLibrary
 from .tokens import SPACE, active_theme, make_stylesheet, set_active_theme
 
-WORKSPACE_MIN_WIDTH = 880   # Create workspace (nav + form + review) never gets narrower than this
+WORKSPACE_MIN_WIDTH = 880  # Create workspace (nav + form + review) never gets narrower than this
 WORKSPACE_FILL_WIDTH = 900  # width the workspace keeps while the Output Display is in Fill mode
 
 
@@ -80,7 +88,9 @@ class PrototypeWindow(QMainWindow):
         splitter.setSizes([185, 1200])
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
-        self.statusBar().showMessage("Prototype uses demonstration fixtures only; all settings and receipts are in memory.")
+        self.statusBar().showMessage(
+            "Prototype uses demonstration fixtures only; all settings and receipts are in memory."
+        )
         self.statusBar().setSizeGripEnabled(True)
         shortcut = QAction("Switch to Create", self)
         shortcut.setShortcut("Ctrl+1")
@@ -158,7 +168,9 @@ class PrototypeWindow(QMainWindow):
 
     def _size_dock_initially(self) -> None:
         if not self.output_dock.isFloating() and not self.output_dock.collapsed:
-            self.resizeDocks([self.output_dock], [self.output_dock.DEFAULT_WIDTH], Qt.Orientation.Horizontal)
+            self.resizeDocks(
+                [self.output_dock], [self.output_dock.DEFAULT_WIDTH], Qt.Orientation.Horizontal
+            )
         self.apply_output_fill()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 (Qt API)
@@ -177,8 +189,15 @@ def apply_theme(app: QApplication, theme: Theme | None = None) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Isolated StableNew Qt Widgets design prototype")
-    parser.add_argument("--theme", help="theme id to start with (default: the remembered theme, else blue-modern)")
-    parser.add_argument("--layout", choices=("scroll", "split"), default="split", help="initial Create layout design")
+    parser.add_argument(
+        "--theme", help="theme id to start with (default: the remembered theme, else blue-modern)"
+    )
+    parser.add_argument(
+        "--layout",
+        choices=("scroll", "split"),
+        default="split",
+        help="initial Create layout design",
+    )
     args, qt_args = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
     app = QApplication([sys.argv[0], *qt_args])
     app.setApplicationName("StableNew Qt Design Assessment (isolated)")

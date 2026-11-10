@@ -6,13 +6,35 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .components import (
-    fit_segment, FormTextEdit, ActionStrip, Disclosure, IssueList, NoticeBanner, ResponsiveGrid, ResultGallery, SectionCard,
-    SettingField, StatusChip, stacked_label,
+    ActionStrip,
+    Disclosure,
+    FormTextEdit,
+    IssueList,
+    NoticeBanner,
+    ResponsiveGrid,
+    ResultGallery,
+    SectionCard,
+    SettingField,
+    StatusChip,
+    fit_segment,
+    stacked_label,
 )
 from .domain import ResultTile
 from .theme import Theme, contrast_checks
@@ -48,13 +70,31 @@ class ComponentsPage(QScrollArea):
         hint.setWordWrap(True)
         root.addWidget(hint)
 
-        card = SectionCard("Theme tokens", "Values come from the active JSON theme. Ratios are computed (WCAG 2.x).")
+        card = SectionCard(
+            "Theme tokens",
+            "Values come from the active JSON theme. Ratios are computed (WCAG 2.x).",
+        )
         swatches = ResponsiveGrid(min_column_width=150)
-        for name in ("background", "surface", "field", "selected", "border", "strong_border", "accent", "danger", "success", "danger_fill"):
+        for name in (
+            "background",
+            "surface",
+            "field",
+            "selected",
+            "border",
+            "strong_border",
+            "accent",
+            "danger",
+            "success",
+            "danger_fill",
+        ):
             value = getattr(COLORS, name)
             tile = QLabel(f"{name}\n{value}")
             tile.setMinimumHeight(54)
-            on = COLORS.on_accent if contrast_ratio(COLORS.on_accent, value) > contrast_ratio(COLORS.text, value) else COLORS.text
+            on = (
+                COLORS.on_accent
+                if contrast_ratio(COLORS.on_accent, value) > contrast_ratio(COLORS.text, value)
+                else COLORS.text
+            )
             tile.setStyleSheet(
                 f"background: {value}; color: {on}; border: 1px solid {COLORS.strong_border}; "
                 f"border-radius: {RADIUS.control}px; padding: 6px 10px;"
@@ -62,34 +102,57 @@ class ComponentsPage(QScrollArea):
             swatches.add(tile)
         card.add(swatches)
         checks = contrast_checks(theme)
-        ratios = QLabel("\n".join(
-            f"{c.label}: {c.ratio:.1f}:1 (needs {c.minimum:g}:1) {'PASS' if c.passed else 'FAIL'}" for c in checks
-        ))
+        ratios = QLabel(
+            "\n".join(
+                f"{c.label}: {c.ratio:.1f}:1 (needs {c.minimum:g}:1) {'PASS' if c.passed else 'FAIL'}"
+                for c in checks
+            )
+        )
         ratios.setProperty("role", "muted")
         ratios.setWordWrap(True)
         card.add(ratios)
-        radii = QLabel(f"Radii (px): control {RADIUS.control} · button {RADIUS.button} · card {RADIUS.card} · chip {RADIUS.chip}")
+        radii = QLabel(
+            f"Radii (px): control {RADIUS.control} · button {RADIUS.button} · card {RADIUS.card} · chip {RADIUS.chip}"
+        )
         radii.setProperty("role", "muted")
         card.add(radii)
         root.addWidget(card)
 
-        card = SectionCard("Cards and labeled inputs", "Reusable `SectionCard` and `stacked_label` primitives.")
+        card = SectionCard(
+            "Cards and labeled inputs", "Reusable `SectionCard` and `stacked_label` primitives."
+        )
         text = QLineEdit("Example value")
-        card.add(stacked_label("Example label", text, help_text="Visible guidance survives when tooltips are unavailable."))
+        card.add(
+            stacked_label(
+                "Example label",
+                text,
+                help_text="Visible guidance survives when tooltips are unavailable.",
+            )
+        )
         combo = QComboBox()
         combo.addItems(["Model default (fixture)", "Learning-informed (fixture)"])
         card.add(stacked_label("Example choice", combo))
-        card.add(stacked_label("Example multi-line text", FormTextEdit("Rounded, focus-ringed editor")))
+        card.add(
+            stacked_label("Example multi-line text", FormTextEdit("Rounded, focus-ringed editor"))
+        )
         root.addWidget(card)
 
-        card = SectionCard("Setting field and responsive grid", "Lock, reset-to-recommended, a visible recommendation and its origin; columns reflow with width and never clip.")
+        card = SectionCard(
+            "Setting field and responsive grid",
+            "Lock, reset-to-recommended, a visible recommendation and its origin; columns reflow with width and never clip.",
+        )
         grid = ResponsiveGrid(min_column_width=190)
         steps = QSpinBox()
         steps.setRange(1, 150)
         steps.setValue(40)
         field = SettingField("steps", "Steps", steps)
         field.set_state(locked=False, differs=True, recommended="28", origin="manual")
-        field.resetRequested.connect(lambda: (steps.setValue(28), field.set_state(locked=field.lock.isChecked(), differs=False, recommended="28")))
+        field.resetRequested.connect(
+            lambda: (
+                steps.setValue(28),
+                field.set_state(locked=field.lock.isChecked(), differs=False, recommended="28"),
+            )
+        )
         grid.add(field)
         cfg = QDoubleSpinBox()
         cfg.setValue(7.0)
@@ -100,7 +163,9 @@ class ComponentsPage(QScrollArea):
         card.add(grid)
         root.addWidget(card)
 
-        card = SectionCard("Notifications and status", "Every status includes words, not color alone.")
+        card = SectionCard(
+            "Notifications and status", "Every status includes words, not color alone."
+        )
         for heading, message, level in (
             ("INFO", "Fixture settings are illustrative, not qualified.", "info"),
             ("WARNING", "A displayed summary could be stale after editing.", "warning"),
@@ -113,36 +178,64 @@ class ComponentsPage(QScrollArea):
         chips = QWidget()
         row = QHBoxLayout(chips)
         row.setContentsMargins(0, 0, 0, 0)
-        for text_, level in (("NOT BUILT", "info"), ("STALE", "warning"), ("BLOCKED", "blocked"), ("CURRENT · READY", "success")):
+        for text_, level in (
+            ("NOT BUILT", "info"),
+            ("STALE", "warning"),
+            ("BLOCKED", "blocked"),
+            ("CURRENT · READY", "success"),
+        ):
             row.addWidget(StatusChip(text_, level))
         row.addStretch(1)
         card.add(chips)
         issues = IssueList()
-        issues.set_issues(("Prompt is empty.",), ("Size is outside the fixture's characterization.",))
+        issues.set_issues(
+            ("Prompt is empty.",), ("Size is outside the fixture's characterization.",)
+        )
         card.add(issues)
         root.addWidget(card)
 
-        card = SectionCard("Progressive disclosure", "The collapsed heading must identify what remains available.")
-        disclosure = Disclosure("More details · 1 optional stage enabled", "Example of optional controls, with keyboard-accessible expansion.")
+        card = SectionCard(
+            "Progressive disclosure", "The collapsed heading must identify what remains available."
+        )
+        disclosure = Disclosure(
+            "More details · 1 optional stage enabled",
+            "Example of optional controls, with keyboard-accessible expansion.",
+        )
         disclosure.add(QCheckBox("Enable optional mock stage"))
         disclosure.add(stacked_label("Additional notes", FormTextEdit()))
         card.add(disclosure)
         root.addWidget(card)
 
-        card = SectionCard("Action hierarchy", "A fixed action strip keeps essential actions reachable; one primary per region; danger only for destructive actions.")
+        card = SectionCard(
+            "Action hierarchy",
+            "A fixed action strip keeps essential actions reachable; one primary per region; danger only for destructive actions.",
+        )
         actions = ActionStrip()
         secondary = actions.add_action("Review")
         destructive = actions.add_action("Delete saved")
         destructive.setProperty("role", "danger")
         primary = actions.add_action("Primary action", primary=True)
         primary.setEnabled(False)
-        secondary.clicked.connect(lambda: (actions.status.setText("Review clicked (gallery demo only)"), primary.setEnabled(True)))
+        secondary.clicked.connect(
+            lambda: (
+                actions.status.setText("Review clicked (gallery demo only)"),
+                primary.setEnabled(True),
+            )
+        )
         card.add(actions)
         root.addWidget(card)
 
-        card = SectionCard("Mock result gallery", "Placeholder tiles from a simulated admission; they are labels, never generated images.")
+        card = SectionCard(
+            "Mock result gallery",
+            "Placeholder tiles from a simulated admission; they are labels, never generated images.",
+        )
         gallery = ResultGallery()
-        gallery.set_tiles(tuple(ResultTile(i, f"MOCK IMAGE {i} OF 3", "1024 × 1024", str(1000 + i)) for i in (1, 2, 3)))
+        gallery.set_tiles(
+            tuple(
+                ResultTile(i, f"MOCK IMAGE {i} OF 3", "1024 × 1024", str(1000 + i))
+                for i in (1, 2, 3)
+            )
+        )
         card.add(gallery)
         root.addWidget(card)
         root.addStretch(1)
@@ -153,8 +246,11 @@ class ComponentGallery(QWidget):
     """Component catalog and Theme Studio behind one header toggle."""
 
     def __init__(
-        self, library: ThemeLibrary | None = None, theme: Theme | None = None,
-        apply_callback: Callable[[Theme], None] | None = None, parent: QWidget | None = None,
+        self,
+        library: ThemeLibrary | None = None,
+        theme: Theme | None = None,
+        apply_callback: Callable[[Theme], None] | None = None,
+        parent: QWidget | None = None,
     ):
         super().__init__(parent)
         self.library = library or ThemeLibrary()

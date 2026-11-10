@@ -24,8 +24,21 @@ SCHEMA_VERSION = 1
 MAX_THEME_BYTES = 128 * 1024
 
 COLOR_ROLES: tuple[str, ...] = (
-    "background", "surface", "field", "selected", "border", "strong_border", "text", "muted",
-    "disabled", "accent", "on_accent", "danger", "success", "danger_fill", "on_danger",
+    "background",
+    "surface",
+    "field",
+    "selected",
+    "border",
+    "strong_border",
+    "text",
+    "muted",
+    "disabled",
+    "accent",
+    "on_accent",
+    "danger",
+    "success",
+    "danger_fill",
+    "on_danger",
 )
 STATE_DEFAULTS: dict[str, str] = {
     "button_hover_border": "accent",
@@ -49,8 +62,20 @@ _NOTE_KEY = re.compile(r"^[a-z_]+(\.[a-z_]+)?$")
 
 # (min, max) inclusive integer ranges for every numeric field.
 RANGES: dict[str, dict[str, tuple[int, int]]] = {
-    "typography": {"body_pt": (8, 16), "small_pt": (7, 14), "section_pt": (8, 20), "heading_pt": (9, 28)},
-    "spacing": {"xs": (0, 16), "sm": (0, 24), "md": (0, 32), "gutter": (0, 48), "xl": (0, 64), "control_min_height": (24, 64)},
+    "typography": {
+        "body_pt": (8, 16),
+        "small_pt": (7, 14),
+        "section_pt": (8, 20),
+        "heading_pt": (9, 28),
+    },
+    "spacing": {
+        "xs": (0, 16),
+        "sm": (0, 24),
+        "md": (0, 32),
+        "gutter": (0, 48),
+        "xl": (0, 64),
+        "control_min_height": (24, 64),
+    },
     "borders": {"control_width": (1, 4), "card_width": (0, 4)},
     "radius": {"control": (0, 24), "button": (0, 24), "card": (0, 32), "chip": (0, 32)},
 }
@@ -153,8 +178,12 @@ class Theme:
         scale = 0.75
         s = self.spacing
         return Metrics(
-            xs=round(s.xs * scale), sm=round(s.sm * scale), md=round(s.md * scale),
-            gutter=round(s.gutter * scale), xl=round(s.xl * scale), control_min_height=s.control_min_height,
+            xs=round(s.xs * scale),
+            sm=round(s.sm * scale),
+            md=round(s.md * scale),
+            gutter=round(s.gutter * scale),
+            xl=round(s.xl * scale),
+            control_min_height=s.control_min_height,
         )
 
     def state_color(self, key: str) -> str:
@@ -183,15 +212,21 @@ def parse_theme_json(text: str) -> Theme:
     if len(text.encode("utf-8")) > MAX_THEME_BYTES:
         raise ThemeError([f"theme file exceeds {MAX_THEME_BYTES // 1024} KiB"])
     try:
-        data = json.loads(text, object_pairs_hook=_reject_duplicates, parse_constant=_reject_constant)
+        data = json.loads(
+            text, object_pairs_hook=_reject_duplicates, parse_constant=_reject_constant
+        )
     except ThemeError:
         raise
     except json.JSONDecodeError as exc:
-        raise ThemeError([f"not valid JSON: {exc.msg} (line {exc.lineno}, column {exc.colno})"]) from None
+        raise ThemeError(
+            [f"not valid JSON: {exc.msg} (line {exc.lineno}, column {exc.colno})"]
+        ) from None
     return theme_from_dict(data)
 
 
-def _check_section(data: Mapping[str, Any], name: str, keys: tuple[str, ...], errors: list[str]) -> dict[str, Any]:
+def _check_section(
+    data: Mapping[str, Any], name: str, keys: tuple[str, ...], errors: list[str]
+) -> dict[str, Any]:
     section = data.get(name)
     if not isinstance(section, dict):
         errors.append(f"'{name}' must be an object")
@@ -213,8 +248,23 @@ def theme_from_dict(data: Any) -> Theme:
     errors: list[str] = []
     if not isinstance(data, dict):
         raise ThemeError(["theme must be a JSON object"])
-    top = ("schema", "schema_version", "id", "name", "description", "kind", "base_id", "colors",
-           "typography", "spacing", "density", "borders", "radius", "states", "provenance")
+    top = (
+        "schema",
+        "schema_version",
+        "id",
+        "name",
+        "description",
+        "kind",
+        "base_id",
+        "colors",
+        "typography",
+        "spacing",
+        "density",
+        "borders",
+        "radius",
+        "states",
+        "provenance",
+    )
     for key in data:
         if key not in top:
             errors.append(f"{key}: unknown top-level key")
@@ -226,7 +276,11 @@ def theme_from_dict(data: Any) -> Theme:
     elif version != SCHEMA_VERSION:
         errors.append(
             f"schema_version {version} is not supported (this prototype reads version {SCHEMA_VERSION}); "
-            + ("it was written by a newer prototype" if version > SCHEMA_VERSION else "no migration exists")
+            + (
+                "it was written by a newer prototype"
+                if version > SCHEMA_VERSION
+                else "no migration exists"
+            )
         )
     theme_id, name = data.get("id"), data.get("name")
     if not isinstance(theme_id, str) or not _ID.match(theme_id):
@@ -252,14 +306,25 @@ def theme_from_dict(data: Any) -> Theme:
         if role in colors and (not isinstance(value, str) or not _HEX.match(value)):
             errors.append(f"colors.{role}: '{value}' is not a #RRGGBB colour")
 
-    typo = _check_section(data, "typography", ("family", "body_pt", "small_pt", "section_pt", "heading_pt", "emphasis_weight"), errors)
+    typo = _check_section(
+        data,
+        "typography",
+        ("family", "body_pt", "small_pt", "section_pt", "heading_pt", "emphasis_weight"),
+        errors,
+    )
     family = typo.get("family")
     if "family" in typo and (not isinstance(family, str) or not _FAMILY.match(family)):
-        errors.append("typography.family must be 1-64 letters, digits, spaces, dots, hyphens or underscores")
+        errors.append(
+            "typography.family must be 1-64 letters, digits, spaces, dots, hyphens or underscores"
+        )
     if "emphasis_weight" in typo and typo["emphasis_weight"] not in WEIGHTS:
         errors.append(f"typography.emphasis_weight must be one of {WEIGHTS}")
     sections: dict[str, dict[str, Any]] = {"typography": typo}
-    for section, keys in (("spacing", tuple(RANGES["spacing"])), ("borders", tuple(RANGES["borders"])), ("radius", tuple(RANGES["radius"]))):
+    for section, keys in (
+        ("spacing", tuple(RANGES["spacing"])),
+        ("borders", tuple(RANGES["borders"])),
+        ("radius", tuple(RANGES["radius"])),
+    ):
         sections[section] = _check_section(data, section, keys, errors)
     for section, limits in RANGES.items():
         values = sections[section]
@@ -283,13 +348,31 @@ def theme_from_dict(data: Any) -> Theme:
     if errors:
         raise ThemeError(errors)
     return Theme(
-        id=theme_id, name=name.strip(), description=description, kind=kind, base_id=base_id,
+        id=theme_id,
+        name=name.strip(),
+        description=description,
+        kind=kind,
+        base_id=base_id,
         palette=Palette(**{role: colors[role].upper() for role in COLOR_ROLES}),
-        typography=Typography(**{key: typo[key] for key in ("family", "body_pt", "small_pt", "section_pt", "heading_pt", "emphasis_weight")}),
-        spacing=Metrics(**{key: sections["spacing"][key] for key in RANGES["spacing"]}), density=density,
+        typography=Typography(
+            **{
+                key: typo[key]
+                for key in (
+                    "family",
+                    "body_pt",
+                    "small_pt",
+                    "section_pt",
+                    "heading_pt",
+                    "emphasis_weight",
+                )
+            }
+        ),
+        spacing=Metrics(**{key: sections["spacing"][key] for key in RANGES["spacing"]}),
+        density=density,
         borders=Borders(**{key: sections["borders"][key] for key in RANGES["borders"]}),
         radius=Radius(**{key: sections["radius"][key] for key in RANGES["radius"]}),
-        states=States(**{key: states[key] for key in STATE_DEFAULTS}), provenance=dict(provenance),
+        states=States(**{key: states[key] for key in STATE_DEFAULTS}),
+        provenance=dict(provenance),
     )
 
 
@@ -298,11 +381,21 @@ def theme_to_dict(theme: Theme) -> dict[str, Any]:
         return {f.name: getattr(obj, f.name) for f in fields(obj)}
 
     return {
-        "schema": SCHEMA, "schema_version": theme.schema_version, "id": theme.id, "name": theme.name,
-        "description": theme.description, "kind": theme.kind, "base_id": theme.base_id,
-        "colors": section(theme.palette), "typography": section(theme.typography),
-        "spacing": section(theme.spacing), "density": theme.density, "borders": section(theme.borders),
-        "radius": section(theme.radius), "states": section(theme.states), "provenance": dict(theme.provenance),
+        "schema": SCHEMA,
+        "schema_version": theme.schema_version,
+        "id": theme.id,
+        "name": theme.name,
+        "description": theme.description,
+        "kind": theme.kind,
+        "base_id": theme.base_id,
+        "colors": section(theme.palette),
+        "typography": section(theme.typography),
+        "spacing": section(theme.spacing),
+        "density": theme.density,
+        "borders": section(theme.borders),
+        "radius": section(theme.radius),
+        "states": section(theme.states),
+        "provenance": dict(theme.provenance),
     }
 
 
@@ -311,7 +404,14 @@ def canonical_json(theme: Theme) -> str:
 
 
 _WINDOWS_RESERVED = frozenset(
-    ["con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))]
+    [
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        *(f"com{i}" for i in range(1, 10)),
+        *(f"lpt{i}" for i in range(1, 10)),
+    ]
 )
 
 
@@ -381,7 +481,9 @@ def contrast_checks(theme: Theme) -> tuple[ContrastCheck, ...]:
         ("Primary focus edge on background", primary_ring, p.background, 3.0),
         ("Selected-item edge on selected", selected_ring, p.selected, 3.0),
     )
-    return tuple(ContrastCheck(label, fg, bg, need, contrast_ratio(fg, bg)) for label, fg, bg, need in pairs)
+    return tuple(
+        ContrastCheck(label, fg, bg, need, contrast_ratio(fg, bg)) for label, fg, bg, need in pairs
+    )
 
 
 def failing_checks(theme: Theme) -> tuple[ContrastCheck, ...]:
@@ -407,7 +509,12 @@ class ThemeEditor:
         self._data = theme_to_dict(theme)
         if theme.kind == "reference":
             # Editing never silently mutates a shipped preset: the first edit yields a user copy.
-            self._data.update(kind="user", base_id=theme.id, id=f"{theme.id}-copy"[:48], name=f"{theme.name} (edited copy)"[:60])
+            self._data.update(
+                kind="user",
+                base_id=theme.id,
+                id=f"{theme.id}-copy"[:48],
+                name=f"{theme.name} (edited copy)"[:60],
+            )
         self.draft = theme
         self.errors: list[str] = []
 
@@ -483,13 +590,29 @@ def build_stylesheet(theme: Theme, asset_dir: Path) -> str:
     """
     c, r, t, b = theme.palette, theme.radius, theme.typography, theme.borders
     s, pad = theme.spacing, _PAD[theme.density]
-    bw, cw, emph, h = b.control_width, b.card_width, t.emphasis_weight, theme.spacing.control_min_height
-    hover_b, in_hover = theme.state_color("button_hover_border"), theme.state_color("input_hover_border")
+    bw, cw, emph, h = (
+        b.control_width,
+        b.card_width,
+        t.emphasis_weight,
+        theme.spacing.control_min_height,
+    )
+    hover_b, in_hover = (
+        theme.state_color("button_hover_border"),
+        theme.state_color("input_hover_border"),
+    )
     focus_b, pressed = theme.state_color("focus_border"), theme.state_color("pressed_background")
-    p_hover, p_focus = theme.state_color("primary_hover_border"), theme.state_color("primary_focus_border")
+    p_hover, p_focus = (
+        theme.state_color("primary_hover_border"),
+        theme.state_color("primary_focus_border"),
+    )
     sel_b, hover_fill = theme.state_color("selected_item_border"), theme.state_color("hover_fill")
     asset = lambda name: 'url("' + (asset_dir / name).as_posix() + '")'  # noqa: E731
-    up, down, chevron, check = asset("arrow_up.svg"), asset("arrow_down.svg"), asset("chevron_down.svg"), asset("check.svg")
+    up, down, chevron, check = (
+        asset("arrow_up.svg"),
+        asset("arrow_down.svg"),
+        asset("chevron_down.svg"),
+        asset("check.svg"),
+    )
     seg_h = max(24, h - 4)
     inputs = "QLineEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QComboBox"
     return f"""

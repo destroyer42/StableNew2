@@ -99,10 +99,14 @@ class ThemeLibrary:
             raise ThemeStoreError("Enter a theme name of 1-60 characters.")
         slug = slugify(name)
         if slug in self.references:
-            raise ThemeStoreError(f"'{slug}' is a shipped reference preset and cannot be overwritten; choose another name.")
+            raise ThemeStoreError(
+                f"'{slug}' is a shipped reference preset and cannot be overwritten; choose another name."
+            )
         target = self.path_for(slug)
         if target.exists() and not overwrite:
-            raise ThemeStoreError(f"A saved theme '{slug}' already exists; confirm overwrite to replace it.")
+            raise ThemeStoreError(
+                f"A saved theme '{slug}' already exists; confirm overwrite to replace it."
+            )
         base_id = theme.base_id or (theme.id if theme.kind == "reference" else None)
         saved = replace(theme, id=slug, name=name, kind="user", base_id=base_id)
         try:
@@ -131,8 +135,14 @@ class ThemeLibrary:
             resolved = path.resolve()
             for reference_dir in (Path(__file__).resolve().parent / "themes",):
                 if resolved.parent == reference_dir:
-                    raise ThemeStoreError("Exports cannot be written into the shipped themes folder.")
-            exported = replace(theme, kind="user", base_id=theme.base_id or (theme.id if theme.kind == "reference" else None))
+                    raise ThemeStoreError(
+                        "Exports cannot be written into the shipped themes folder."
+                    )
+            exported = replace(
+                theme,
+                kind="user",
+                base_id=theme.base_id or (theme.id if theme.kind == "reference" else None),
+            )
             _atomic_write(path, canonical_json(exported))
         except OSError as exc:
             raise ThemeStoreError(f"Could not export: {exc}") from exc
@@ -177,7 +187,9 @@ class ThemeLibrary:
     def set_active(self, theme: Theme) -> None:
         """Remember a *saved or reference* theme as the one to restore next launch."""
         if theme.id not in self.all_themes() or self.get(theme.id) != theme:
-            raise ThemeStoreError("Only a saved or shipped theme can be restored at launch; use Save As first.")
+            raise ThemeStoreError(
+                "Only a saved or shipped theme can be restored at launch; use Save As first."
+            )
         try:
             _atomic_write(self._state_path(), json.dumps({"active": theme.id}) + "\n")
         except OSError as exc:

@@ -87,16 +87,24 @@ class QtWidgetSmokeTests(unittest.TestCase):
         self.assertLessEqual(bottom, window.height())
         for button in (view.undo_button, view.reset_button, view.preview_button, view.admit_button):
             self.assertTrue(button.isVisible())
-            self.assertLessEqual(button.mapTo(window, button.rect().bottomRight()).x(), window.width())
+            self.assertLessEqual(
+                button.mapTo(window, button.rect().bottomRight()).x(), window.width()
+            )
 
     def test_no_horizontal_clipping_at_target_and_minimum_sizes(self):
         for width, height in ((1280, 680), (1440, 900), (960, 600)):
             window, view = self.make(width, height)
-            if width < 1200:  # the expanded Output Display needs >= ~1200 px; collapse it for small windows
+            if (
+                width < 1200
+            ):  # the expanded Output Display needs >= ~1200 px; collapse it for small windows
                 window.output_dock.set_collapsed(True)
                 self.app.processEvents()
             for scroll in view.findChildren(QScrollArea):
-                self.assertLessEqual(scroll.widget().minimumSizeHint().width(), scroll.viewport().width(), f"{width}x{height}")
+                self.assertLessEqual(
+                    scroll.widget().minimumSizeHint().width(),
+                    scroll.viewport().width(),
+                    f"{width}x{height}",
+                )
             self.assertLessEqual(window.minimumSizeHint().width(), window.width())
             self.assertLessEqual(window.minimumSizeHint().height(), window.height())
 
@@ -159,8 +167,14 @@ class QtWidgetSmokeTests(unittest.TestCase):
         spin = view.setting_inputs["steps"]
         spin.clearFocus()
         wheel = QWheelEvent(
-            QPointF(5, 5), QPointF(5, 5), QPointF(0, 0).toPoint(), QPointF(0, 120).toPoint(),
-            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False,
+            QPointF(5, 5),
+            QPointF(5, 5),
+            QPointF(0, 0).toPoint(),
+            QPointF(0, 120).toPoint(),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
         )
         self.assertTrue(view._wheel_guard.eventFilter(spin, wheel))
         self.assertFalse(wheel.isAccepted())  # parent scroll area gets it
@@ -170,7 +184,9 @@ class QtWidgetSmokeTests(unittest.TestCase):
         _, view = self.make()
         for name in ("sampler", "scheduler"):
             self.assertFalse(view.setting_inputs[name].isEditable())
-        self.assertTrue(all(isinstance(view.setting_inputs[n], QComboBox) for n in ("sampler", "scheduler")))
+        self.assertTrue(
+            all(isinstance(view.setting_inputs[n], QComboBox) for n in ("sampler", "scheduler"))
+        )
 
     def test_keyboard_shortcut_actions_exist(self):
         _, view = self.make()

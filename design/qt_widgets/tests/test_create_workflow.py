@@ -5,8 +5,14 @@ from __future__ import annotations
 import unittest
 
 from stablenew_qt_proto.domain import (
-    ADVANCED_SETTINGS, BASIC_SETTINGS, PACKS, PROFILE_LEARNING, SETTING_FIELDS, SOURCE_FREE,
-    CreateSession, changed_fields,
+    ADVANCED_SETTINGS,
+    BASIC_SETTINGS,
+    PACKS,
+    PROFILE_LEARNING,
+    SETTING_FIELDS,
+    SOURCE_FREE,
+    CreateSession,
+    changed_fields,
 )
 
 
@@ -24,13 +30,18 @@ class PromptSourceTests(unittest.TestCase):
         pack = PACKS[1]
         self.session.select_source(pack.key)
         d = self.session.draft
-        self.assertEqual((d.prompt, d.negative, d.slots, d.pack_name), (pack.prompt, pack.negative, dict(pack.slots), pack.pack_name))
+        self.assertEqual(
+            (d.prompt, d.negative, d.slots, d.pack_name),
+            (pack.prompt, pack.negative, dict(pack.slots), pack.pack_name),
+        )
         self.assertEqual(self.session.revision, revision + 1)
         self.assertFalse(self.session.pack_modified)
         self.assertIn("unmodified", self.session.source_label)
         self.assertTrue(self.session.undo())
-        self.assertEqual((self.session.draft.prompt, self.session.draft.slots, self.session.draft.source_key),
-                         (before.prompt, before.slots, SOURCE_FREE))
+        self.assertEqual(
+            (self.session.draft.prompt, self.session.draft.slots, self.session.draft.source_key),
+            (before.prompt, before.slots, SOURCE_FREE),
+        )
 
     def test_editing_after_loading_a_pack_is_reported_as_modified_and_unsaved(self):
         self.session.select_source(PACKS[0].key)
@@ -38,7 +49,9 @@ class PromptSourceTests(unittest.TestCase):
         self.assertTrue(self.session.pack_modified)
         self.assertIn("modified, unsaved", self.session.source_label)
         self.session.build_preview()
-        self.assertTrue(any("differ from the fixture pack" in w for w in self.session.preview.warnings))
+        self.assertTrue(
+            any("differ from the fixture pack" in w for w in self.session.preview.warnings)
+        )
         self.assertIn("Source:", self.session.preview.text)
 
     def test_free_prompt_keeps_working_text_and_unknown_sources_are_refused(self):
@@ -68,7 +81,9 @@ class PromptSourceTests(unittest.TestCase):
         self.assertEqual(resolved, "A wide landscape of mountains at dawn, calm atmosphere")
         self.assertEqual(unresolved, ())
         self.session.remove_slot("mood")
-        self.assertEqual(expand_prompt(self.session.draft.prompt, self.session.draft.slots)[1], ("mood",))
+        self.assertEqual(
+            expand_prompt(self.session.draft.prompt, self.session.draft.slots)[1], ("mood",)
+        )
 
 
 class OverridePrecedenceTests(unittest.TestCase):
@@ -85,18 +100,24 @@ class OverridePrecedenceTests(unittest.TestCase):
         self.assertEqual(self.session.setting_origin("steps"), "recommended")
 
     def test_lock_beats_manual_beats_recommendation_across_model_and_profile_changes(self):
-        self.session.set_setting("steps", 40)           # manual
+        self.session.set_setting("steps", 40)  # manual
         self.session.set_setting("cfg", 9.0)
-        self.session.toggle_lock("cfg", True)           # locked (also manual)
+        self.session.toggle_lock("cfg", True)  # locked (also manual)
         self.session.switch_model("fixture-flux")
-        self.assertEqual((self.session.draft.settings.steps, self.session.draft.settings.cfg), (40, 9.0))
-        self.assertEqual(self.session.draft.settings.sampler, "Euler")  # untouched fields follow the new model
+        self.assertEqual(
+            (self.session.draft.settings.steps, self.session.draft.settings.cfg), (40, 9.0)
+        )
+        self.assertEqual(
+            self.session.draft.settings.sampler, "Euler"
+        )  # untouched fields follow the new model
         self.session.set_profile_source(PROFILE_LEARNING)
-        self.assertEqual(self.session.draft.settings.steps, 40)  # manual survives the profile change
+        self.assertEqual(
+            self.session.draft.settings.steps, 40
+        )  # manual survives the profile change
         self.session.reset_unlocked_settings()
         self.assertEqual(self.session.draft.settings.steps, self.session.recommended.steps)
         self.assertEqual(self.session.draft.settings.cfg, 9.0)  # lock survives reset-unlocked
-        self.session.reset_setting("cfg")                        # an explicit single reset overrides a lock
+        self.session.reset_setting("cfg")  # an explicit single reset overrides a lock
         self.assertEqual(self.session.draft.settings.cfg, self.session.recommended.cfg)
 
     def test_unlocked_unchanged_values_follow_the_recommendation(self):
@@ -129,7 +150,9 @@ class PreviewFreshnessAndRefusalTests(unittest.TestCase):
         self.assertTrue(self.session.is_preview_current)
 
     def test_changed_fields_helper(self):
-        self.assertEqual(changed_fields({"a": {"b": 1, "c": 2}}, {"a": {"b": 1, "c": 3}, "d": 4}), ("a.c", "d"))
+        self.assertEqual(
+            changed_fields({"a": {"b": 1, "c": 2}}, {"a": {"b": 1, "c": 3}, "d": 4}), ("a.c", "d")
+        )
 
     def test_admission_is_refused_without_preview_when_stale_and_when_invalid(self):
         with self.assertRaisesRegex(RuntimeError, "missing, stale, or contains an invalid"):
@@ -168,7 +191,9 @@ class SimulatedResultTests(unittest.TestCase):
         session.build_preview()
         receipt = session.simulate_admission()
         self.assertEqual([t.seed for t in receipt.tiles], ["100", "101", "102"])
-        self.assertTrue(all(t.label.startswith("MOCK IMAGE") and "OF 3" in t.label for t in receipt.tiles))
+        self.assertTrue(
+            all(t.label.startswith("MOCK IMAGE") and "OF 3" in t.label for t in receipt.tiles)
+        )
         self.assertEqual({t.size for t in receipt.tiles}, {"1024 × 1024"})
         text = repr(receipt).lower()
         for word in ("job_id", "queue", "njr", "artifact", "path"):
@@ -182,8 +207,20 @@ class SimulatedResultTests(unittest.TestCase):
 
     def test_session_exposes_no_submission_surface(self):
         public = {name for name in dir(CreateSession) if not name.startswith("_")}
-        for forbidden in ("submit", "enqueue", "run", "queue", "dispatch", "save", "persist", "write"):
-            self.assertFalse([n for n in public if forbidden in n.lower() and n != "simulate_admission"], forbidden)
+        for forbidden in (
+            "submit",
+            "enqueue",
+            "run",
+            "queue",
+            "dispatch",
+            "save",
+            "persist",
+            "write",
+        ):
+            self.assertFalse(
+                [n for n in public if forbidden in n.lower() and n != "simulate_admission"],
+                forbidden,
+            )
 
 
 if __name__ == "__main__":

@@ -6,9 +6,21 @@ import unittest
 
 from stablenew_qt_proto.domain import CreateSession
 from stablenew_qt_proto.output_model import (
-    MAX_ZOOM, MIN_ZOOM, SIZE_FILL, SIZE_FREE, SIZE_LOCKED, SIZE_MODES, SLIDER_STEPS,
-    clamp_zoom, fill_width, fit_factor, format_zoom, frame_from_session, slider_to_zoom,
-    step_zoom, zoom_to_slider,
+    MAX_ZOOM,
+    MIN_ZOOM,
+    SIZE_FILL,
+    SIZE_FREE,
+    SIZE_LOCKED,
+    SIZE_MODES,
+    SLIDER_STEPS,
+    clamp_zoom,
+    fill_width,
+    fit_factor,
+    format_zoom,
+    frame_from_session,
+    slider_to_zoom,
+    step_zoom,
+    zoom_to_slider,
 )
 
 
@@ -78,7 +90,10 @@ class FrameTests(unittest.TestCase):
         session = CreateSession()
         frame = frame_from_session(session)
         self.assertEqual(frame.kind, "draft")
-        self.assertEqual((frame.width, frame.height), (session.draft.settings.width, session.draft.settings.height))
+        self.assertEqual(
+            (frame.width, frame.height),
+            (session.draft.settings.width, session.draft.settings.height),
+        )
         self.assertIn("explorer", frame.lines[0])  # {subject} resolved
         self.assertEqual(frame.lines[-1], "No image generated")
 

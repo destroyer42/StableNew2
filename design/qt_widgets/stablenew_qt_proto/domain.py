@@ -8,10 +8,10 @@ settings or compatibility claims for installed Stable Diffusion models.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, replace
 import hashlib
 import json
 import re
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 PROFILE_DEFAULT = "Model default (fixture)"
@@ -106,13 +106,17 @@ class PackFixture:
 
 PACKS: tuple[PackFixture, ...] = (
     PackFixture(
-        "pack-portraits", "Explorer portraits (fixture pack)", "Explorer portraits",
+        "pack-portraits",
+        "Explorer portraits (fixture pack)",
+        "Explorer portraits",
         "A cinematic portrait of an imaginary {subject}, detailed eyes, {lighting}",
         "low detail, distorted anatomy",
         (("subject", "explorer"), ("lighting", "soft daylight")),
     ),
     PackFixture(
-        "pack-landscapes", "Landscape studies (fixture pack)", "Landscape studies",
+        "pack-landscapes",
+        "Landscape studies (fixture pack)",
+        "Landscape studies",
         "A wide landscape of {terrain} at {time_of_day}, {mood} atmosphere",
         "",
         (("terrain", "mountains"), ("time_of_day", "dawn"), ("mood", "calm")),
@@ -221,7 +225,9 @@ class CreateDraft:
     pack_name: str = "Untitled exploration"
     prompt: str = "A cinematic portrait of an imaginary {subject}, detailed eyes, {lighting}"
     negative: str = "low detail, distorted anatomy"
-    slots: dict[str, str] = field(default_factory=lambda: {"subject": "explorer", "lighting": "soft daylight"})
+    slots: dict[str, str] = field(
+        default_factory=lambda: {"subject": "explorer", "lighting": "soft daylight"}
+    )
     global_prompt: str = ""
     adetailer_prompt: str = ""
     adetailer_enabled: bool = False
@@ -233,7 +239,7 @@ class CreateDraft:
     locked_fields: set[str] = field(default_factory=set)
     manual_fields: set[str] = field(default_factory=set)
 
-    def clone(self) -> "CreateDraft":
+    def clone(self) -> CreateDraft:
         return replace(
             self,
             slots=dict(self.slots),
@@ -265,7 +271,15 @@ class CreateDraft:
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
-_TEXT_FIELDS = {"pack_name", "prompt", "negative", "global_prompt", "adetailer_prompt", "loras", "embeddings"}
+_TEXT_FIELDS = {
+    "pack_name",
+    "prompt",
+    "negative",
+    "global_prompt",
+    "adetailer_prompt",
+    "loras",
+    "embeddings",
+}
 _UNDO_LIMIT = 100
 _LOG_LIMIT = 200
 
@@ -339,7 +353,9 @@ class CreateSession:
         pack = PACK_BY_KEY.get(self.draft.source_key)
         if pack is None:
             return "Free prompt · unsaved working draft"
-        return f"{pack.label} · " + ("modified, unsaved working edits" if self.pack_modified else "unmodified")
+        return f"{pack.label} · " + (
+            "modified, unsaved working edits" if self.pack_modified else "unmodified"
+        )
 
     def stale_reasons(self) -> tuple[str, ...]:
         """Which draft fields changed since the preview was built (empty if current or no preview)."""
@@ -347,8 +363,13 @@ class CreateSession:
             return ()
         changed = changed_fields(self.preview.data, self.draft.stable_data())
         if any(name.startswith("settings.") for name in changed):
-            changed = tuple(name for name in changed if name != "manual_fields")  # derived from the setting edit
-        return tuple("locks" if n == "locked_fields" else "overrides" if n == "manual_fields" else n for n in changed)
+            changed = tuple(
+                name for name in changed if name != "manual_fields"
+            )  # derived from the setting edit
+        return tuple(
+            "locks" if n == "locked_fields" else "overrides" if n == "manual_fields" else n
+            for n in changed
+        )
 
     @property
     def is_preview_current(self) -> bool:
@@ -432,9 +453,17 @@ class CreateSession:
             return
         pack = PACK_BY_KEY[key]
         self.draft.source_key = key
-        self.draft.pack_name, self.draft.prompt, self.draft.negative = pack.pack_name, pack.prompt, pack.negative
+        self.draft.pack_name, self.draft.prompt, self.draft.negative = (
+            pack.pack_name,
+            pack.prompt,
+            pack.negative,
+        )
         self.draft.slots = dict(pack.slots)
-        self._changed((f"Loaded fixture {pack.label}: prompt, negative prompt and slots replaced (undo available).",))
+        self._changed(
+            (
+                f"Loaded fixture {pack.label}: prompt, negative prompt and slots replaced (undo available).",
+            )
+        )
 
     def set_adetailer_enabled(self, enabled: bool) -> None:
         if self.draft.adetailer_enabled != enabled:
@@ -444,10 +473,16 @@ class CreateSession:
     def toggle_lock(self, name: str, locked: bool) -> None:
         if name not in SETTING_FIELDS:
             raise ValueError(f"Unknown setting: {name}")
-        next_locks = self.draft.locked_fields | {name} if locked else self.draft.locked_fields - {name}
+        next_locks = (
+            self.draft.locked_fields | {name} if locked else self.draft.locked_fields - {name}
+        )
         if next_locks != self.draft.locked_fields:
             self.draft.locked_fields = next_locks
-            self._changed((f"{SETTING_LABELS[name]} {'locked' if locked else 'unlocked'} in this draft only.",))
+            self._changed(
+                (
+                    f"{SETTING_LABELS[name]} {'locked' if locked else 'unlocked'} in this draft only.",
+                )
+            )
 
     def _apply_settings(self, **values: Any) -> None:
         """Set one or more settings as a manual edit (single revision)."""
@@ -467,7 +502,10 @@ class CreateSession:
             raise ValueError(f"Unknown setting: {name}")
         if getattr(self.draft.settings, name) != value:
             self._apply_settings(**{name: value})
-            self._changed((f"{SETTING_LABELS[name]} set to {format_setting(name, value)}.",), key=f"set:{name}")
+            self._changed(
+                (f"{SETTING_LABELS[name]} set to {format_setting(name, value)}.",),
+                key=f"set:{name}",
+            )
 
     def apply_size(self, width: int, height: int) -> None:
         s = self.draft.settings
@@ -483,14 +521,17 @@ class CreateSession:
         if getattr(self.draft.settings, name) != rec:
             self.draft.settings = replace(self.draft.settings, **{name: rec})
             self.draft.manual_fields.discard(name)
-            self._changed((f"{SETTING_LABELS[name]} reset to recommended {format_setting(name, rec)}.",))
+            self._changed(
+                (f"{SETTING_LABELS[name]} reset to recommended {format_setting(name, rec)}.",)
+            )
 
     def reset_unlocked_settings(self) -> None:
         rec = self.recommended
         values = {
             n: getattr(rec, n)
             for n in SETTING_FIELDS
-            if n not in self.draft.locked_fields and getattr(self.draft.settings, n) != getattr(rec, n)
+            if n not in self.draft.locked_fields
+            and getattr(self.draft.settings, n) != getattr(rec, n)
         }
         if values:
             self.draft.settings = replace(self.draft.settings, **values)
@@ -536,9 +577,13 @@ class CreateSession:
         if self.draft.model_key == key:
             return
         incoming = MODEL_BY_KEY[key]
-        notes = self._rebase(key, self.draft.profile_source, f"Changed model fixture to {incoming.label}.")
+        notes = self._rebase(
+            key, self.draft.profile_source, f"Changed model fixture to {incoming.label}."
+        )
         if self.draft.negative.strip() and not incoming.allows_negative:
-            notes.append("Negative prompt is unsupported by this DEMO fixture; edit it before a ready preview.")
+            notes.append(
+                "Negative prompt is unsupported by this DEMO fixture; edit it before a ready preview."
+            )
         self._changed(tuple(notes))
 
     def set_profile_source(self, source: str) -> None:
@@ -572,13 +617,21 @@ class CreateSession:
             if not low <= value <= high:
                 errors.append(f"{SETTING_LABELS[name]} must be between {low:g} and {high:g}.")
         if d.negative.strip() and not model.allows_negative:
-            errors.append("This fictional model fixture does not accept a negative prompt; no automatic deletion was performed.")
+            errors.append(
+                "This fictional model fixture does not accept a negative prompt; no automatic deletion was performed."
+            )
         if (s.width, s.height) not in model.characterized_sizes:
-            warnings.append("This size is outside the fixture's illustrative characterization; treat it as unverified, not proven incompatible.")
+            warnings.append(
+                "This size is outside the fixture's illustrative characterization; treat it as unverified, not proven incompatible."
+            )
         if d.profile_source.startswith("Learning"):
-            warnings.append("Learning-informed selection is a UI fixture, not evidence of an existing qualified profile.")
+            warnings.append(
+                "Learning-informed selection is a UI fixture, not evidence of an existing qualified profile."
+            )
         if self.pack_modified:
-            warnings.append("Working edits differ from the fixture pack; nothing is saved to any pack store.")
+            warnings.append(
+                "Working edits differ from the fixture pack; nothing is saved to any pack store."
+            )
         if d.locked_fields:
             warnings.append("Draft-only locks: " + ", ".join(sorted(d.locked_fields)))
         all_unresolved = list(unresolved)
@@ -587,13 +640,22 @@ class CreateSession:
                 if name not in all_unresolved:
                     all_unresolved.append(name)
         if all_unresolved:
-            warnings.append("Unresolved placeholders will appear literally: " + ", ".join("{" + n + "}" for n in all_unresolved))
-        unused = sorted(set(d.slots) - referenced_slots(d.prompt, d.negative, d.global_prompt, d.adetailer_prompt))
+            warnings.append(
+                "Unresolved placeholders will appear literally: "
+                + ", ".join("{" + n + "}" for n in all_unresolved)
+            )
+        unused = sorted(
+            set(d.slots)
+            - referenced_slots(d.prompt, d.negative, d.global_prompt, d.adetailer_prompt)
+        )
         if unused:
             warnings.append("Slots defined but not referenced by any prompt: " + ", ".join(unused))
         bad_names = sorted(name for name in d.slots if not _SLOT_NAME.match(name))
         if bad_names:
-            warnings.append("Slot names that cannot be used as {placeholders}: " + ", ".join(repr(n) for n in bad_names))
+            warnings.append(
+                "Slot names that cannot be used as {placeholders}: "
+                + ", ".join(repr(n) for n in bad_names)
+            )
         return tuple(errors), tuple(warnings)
 
     def build_preview(self) -> Preview:
@@ -632,7 +694,9 @@ class CreateSession:
             "",
             "No model validation, pack compilation, randomization or generation is performed.",
         ]
-        self.preview = Preview(d.fingerprint(), self.revision, "\n".join(lines), errors, warnings, d.stable_data())
+        self.preview = Preview(
+            d.fingerprint(), self.revision, "\n".join(lines), errors, warnings, d.stable_data()
+        )
         self.demo_receipt = None
         return self.preview
 

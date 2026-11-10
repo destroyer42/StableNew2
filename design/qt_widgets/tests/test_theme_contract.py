@@ -11,9 +11,19 @@ from dataclasses import replace
 from pathlib import Path
 
 from stablenew_qt_proto.theme import (
-    COLOR_ROLES, MAX_THEME_BYTES, SCHEMA_VERSION, STATE_DEFAULTS, ThemeEditor, ThemeError,
-    build_stylesheet, canonical_json, contrast_checks, contrast_ratio, failing_checks,
-    parse_theme_json, theme_to_dict,
+    COLOR_ROLES,
+    MAX_THEME_BYTES,
+    SCHEMA_VERSION,
+    STATE_DEFAULTS,
+    ThemeEditor,
+    ThemeError,
+    build_stylesheet,
+    canonical_json,
+    contrast_checks,
+    contrast_ratio,
+    failing_checks,
+    parse_theme_json,
+    theme_to_dict,
 )
 from stablenew_qt_proto.tokens import ASSET_DIR, THEME_DIR, reference_themes
 
@@ -27,9 +37,19 @@ TOKENS_MD = REPO_ROOT / "docs" / "research" / "stablenew-experience" / "ux850-c"
 
 # Accepted prototype v0.3.0 Blue palette (tokens.py of the verbatim import).
 V03_BLUE = {
-    "background": "#0E2A55", "surface": "#163F7C", "field": "#0A2147", "selected": "#1E5AA8",
-    "border": "#3E70B8", "strong_border": "#8FB4E8", "text": "#FFFFFF", "muted": "#C6D8F2",
-    "disabled": "#9DB5D6", "accent": "#FFC805", "on_accent": "#0A1A33", "danger": "#FF8A91", "success": "#7EE0A8",
+    "background": "#0E2A55",
+    "surface": "#163F7C",
+    "field": "#0A2147",
+    "selected": "#1E5AA8",
+    "border": "#3E70B8",
+    "strong_border": "#8FB4E8",
+    "text": "#FFFFFF",
+    "muted": "#C6D8F2",
+    "disabled": "#9DB5D6",
+    "accent": "#FFC805",
+    "on_accent": "#0A1A33",
+    "danger": "#FF8A91",
+    "success": "#7EE0A8",
 }
 
 
@@ -63,14 +83,23 @@ class ReferencePresetTests(unittest.TestCase):
 
     def test_reference_files_are_pinned(self):
         for name, pinned in REFERENCE_SHA256.items():
-            content = (THEME_DIR / name).read_bytes().replace(bytes([13, 10]), bytes([10]))  # autocrlf-safe
+            content = (
+                (THEME_DIR / name).read_bytes().replace(bytes([13, 10]), bytes([10]))
+            )  # autocrlf-safe
             digest = hashlib.sha256(content).hexdigest()
-            self.assertEqual(digest, pinned, f"{name} changed: update the pin only for a deliberate preset change")
+            self.assertEqual(
+                digest,
+                pinned,
+                f"{name} changed: update the pin only for a deliberate preset change",
+            )
 
     def test_blue_modern_matches_accepted_prototype_values(self):
         for role, value in V03_BLUE.items():
             self.assertEqual(getattr(blue().palette, role), value, role)
-        self.assertEqual((blue().radius.control, blue().radius.button, blue().radius.card, blue().radius.chip), (8, 10, 14, 12))
+        self.assertEqual(
+            (blue().radius.control, blue().radius.button, blue().radius.card, blue().radius.chip),
+            (8, 10, 14, 12),
+        )
 
     def test_presets_meet_every_contrast_requirement(self):
         for theme in reference_themes().values():
@@ -82,7 +111,17 @@ class ReferencePresetTests(unittest.TestCase):
             self.skipTest("research TOKENS.md not present in this checkout")
         text = TOKENS_MD.read_text(encoding="utf-8").upper()
         p = concept().palette
-        for value in (p.background, p.surface, p.selected, p.border, p.text, p.muted, p.disabled, p.accent, p.danger_fill):
+        for value in (
+            p.background,
+            p.surface,
+            p.selected,
+            p.border,
+            p.text,
+            p.muted,
+            p.disabled,
+            p.accent,
+            p.danger_fill,
+        ):
             self.assertIn(value, text, value)
 
     def test_concept_a_declares_what_is_not_verified(self):
@@ -123,7 +162,16 @@ class StrictValidationTests(unittest.TestCase):
         self.assertGreaterEqual(len(errors_for(data)), 3)
 
     def test_colour_format(self):
-        for bad in ("FFC805", "#FFC80", "#FFC8055", "#GGGGGG", "rgb(1,2,3)", 0xFFC805, None, "#FFC805; x"):
+        for bad in (
+            "FFC805",
+            "#FFC80",
+            "#FFC8055",
+            "#GGGGGG",
+            "rgb(1,2,3)",
+            0xFFC805,
+            None,
+            "#FFC805; x",
+        ):
             data = raw()
             data["colors"]["accent"] = bad
             self.assertTrue(errors_for(data), repr(bad))
@@ -132,16 +180,32 @@ class StrictValidationTests(unittest.TestCase):
         self.assertEqual(parse_theme_json(json.dumps(data)).palette.accent, "#FFC806")
 
     def test_numeric_ranges_and_types(self):
-        cases = (("spacing", "md", 33), ("spacing", "control_min_height", 23), ("borders", "control_width", 0),
-                 ("radius", "card", 33), ("typography", "body_pt", 7), ("typography", "body_pt", 10.5),
-                 ("spacing", "xs", True), ("spacing", "xs", "4"))
+        cases = (
+            ("spacing", "md", 33),
+            ("spacing", "control_min_height", 23),
+            ("borders", "control_width", 0),
+            ("radius", "card", 33),
+            ("typography", "body_pt", 7),
+            ("typography", "body_pt", 10.5),
+            ("spacing", "xs", True),
+            ("spacing", "xs", "4"),
+        )
         for section, key, value in cases:
             data = raw()
             data[section][key] = value
             self.assertTrue(errors_for(data), (section, key, value))
 
     def test_font_family_cannot_inject_stylesheet_syntax(self):
-        for bad in ("Segoe UI; } QWidget { color: red", "A{B}", "x'y", 'x"y', "", "a" * 65, "\\ttf", "../x"):
+        for bad in (
+            "Segoe UI; } QWidget { color: red",
+            "A{B}",
+            "x'y",
+            'x"y',
+            "",
+            "a" * 65,
+            "\\ttf",
+            "../x",
+        ):
             data = raw()
             data["typography"]["family"] = bad
             self.assertTrue(errors_for(data), repr(bad))
@@ -154,9 +218,13 @@ class StrictValidationTests(unittest.TestCase):
         self.assertTrue(errors_for(data))
 
     def test_schema_and_version(self):
-        for mutate in (lambda d: d.update(schema="other"), lambda d: d.update(schema_version=0),
-                       lambda d: d.update(schema_version=SCHEMA_VERSION + 1), lambda d: d.update(schema_version="1"),
-                       lambda d: d.pop("schema")):
+        for mutate in (
+            lambda d: d.update(schema="other"),
+            lambda d: d.update(schema_version=0),
+            lambda d: d.update(schema_version=SCHEMA_VERSION + 1),
+            lambda d: d.update(schema_version="1"),
+            lambda d: d.pop("schema"),
+        ):
             data = raw()
             mutate(data)
             self.assertTrue(errors_for(data))
@@ -175,8 +243,16 @@ class StrictValidationTests(unittest.TestCase):
         self.assertIn("exceeds", caught.exception.errors[0])
 
     def test_identity_fields(self):
-        for key, bad in (("id", "Has Space"), ("id", ""), ("id", "x" * 49), ("name", ""), ("name", "n" * 61),
-                         ("kind", "admin"), ("base_id", "BAD ID"), ("description", "d" * 601)):
+        for key, bad in (
+            ("id", "Has Space"),
+            ("id", ""),
+            ("id", "x" * 49),
+            ("name", ""),
+            ("name", "n" * 61),
+            ("kind", "admin"),
+            ("base_id", "BAD ID"),
+            ("description", "d" * 601),
+        ):
             data = raw()
             data[key] = bad
             self.assertTrue(errors_for(data), (key, bad))
@@ -217,15 +293,34 @@ class EditorTests(unittest.TestCase):
 
     def test_every_section_is_editable(self):
         editor = ThemeEditor(blue())
-        edits = (("colors", "muted", "#CCDDEE"), ("typography", "family", "Arial"), ("typography", "body_pt", 11),
-                 ("typography", "emphasis_weight", "normal"), ("spacing", "gutter", 20), ("borders", "control_width", 3),
-                 ("radius", "chip", 6), ("states", "focus_border", "text"), ("", "density", "compact"))
+        edits = (
+            ("colors", "muted", "#CCDDEE"),
+            ("typography", "family", "Arial"),
+            ("typography", "body_pt", 11),
+            ("typography", "emphasis_weight", "normal"),
+            ("spacing", "gutter", 20),
+            ("borders", "control_width", 3),
+            ("radius", "chip", 6),
+            ("states", "focus_border", "text"),
+            ("", "density", "compact"),
+        )
         for section, key, value in edits:
             self.assertTrue(editor.set(section, key, value), (section, key))
         d = editor.draft
-        self.assertEqual((d.palette.muted, d.typography.family, d.typography.body_pt, d.typography.emphasis_weight, d.spacing.gutter,
-                          d.borders.control_width, d.radius.chip, d.states.focus_border, d.density),
-                         ("#CCDDEE", "Arial", 11, "normal", 20, 3, 6, "text", "compact"))
+        self.assertEqual(
+            (
+                d.palette.muted,
+                d.typography.family,
+                d.typography.body_pt,
+                d.typography.emphasis_weight,
+                d.spacing.gutter,
+                d.borders.control_width,
+                d.radius.chip,
+                d.states.focus_border,
+                d.density,
+            ),
+            ("#CCDDEE", "Arial", 11, "normal", 20, 3, 6, "text", "compact"),
+        )
 
     def test_rename_derives_a_safe_id(self):
         editor = ThemeEditor(blue())
@@ -240,7 +335,9 @@ class DensityAndContrastTests(unittest.TestCase):
         self.assertEqual(comfortable.metrics(), comfortable.spacing)
         for key in ("sm", "md", "gutter", "xl"):
             self.assertLess(getattr(compact.metrics(), key), getattr(comfortable.spacing, key), key)
-        self.assertEqual(compact.metrics().control_min_height, comfortable.spacing.control_min_height)
+        self.assertEqual(
+            compact.metrics().control_min_height, comfortable.spacing.control_min_height
+        )
 
     def test_contrast_function_known_values(self):
         self.assertAlmostEqual(contrast_ratio("#FFFFFF", "#000000"), 21.0, places=1)
@@ -257,7 +354,13 @@ class DensityAndContrastTests(unittest.TestCase):
 
     def test_every_state_role_has_a_contrast_or_text_check(self):
         labels = " ".join(c.label for c in contrast_checks(blue()))
-        for fragment in ("Focus edge", "Input hover edge", "Primary focus edge", "Selected-item edge", "Danger action label"):
+        for fragment in (
+            "Focus edge",
+            "Input hover edge",
+            "Primary focus edge",
+            "Selected-item edge",
+            "Danger action label",
+        ):
             self.assertIn(fragment, labels)
 
 
@@ -282,15 +385,24 @@ class StylesheetTests(unittest.TestCase):
         editor = ThemeEditor(blue())
         editor.set("states", "button_hover_border", "success")
         css = build_stylesheet(editor.draft, ASSET_DIR)
-        rule = re.search(r"QPushButton:hover, QPushButton\[state='hover'\] \{([^}]*)\}", css).group(1)
+        rule = re.search(r"QPushButton:hover, QPushButton\[state='hover'\] \{([^}]*)\}", css).group(
+            1
+        )
         self.assertIn(editor.draft.palette.success, rule)
 
     def test_forced_state_selectors_exist_for_the_state_matrix(self):
         css = build_stylesheet(blue(), ASSET_DIR)
-        for selector in ("QPushButton[state='hover']", "QPushButton[state='focus']", "QPushButton[state='pressed']",
-                         "QPushButton[role='primary'][state='hover']", "QPushButton[role='danger'][state='focus']",
-                         "QLineEdit[state='hover']", "QLineEdit[state='focus']", "QCheckBox[state='focus']",
-                         "QCheckBox[state='hover']::indicator"):
+        for selector in (
+            "QPushButton[state='hover']",
+            "QPushButton[state='focus']",
+            "QPushButton[state='pressed']",
+            "QPushButton[role='primary'][state='hover']",
+            "QPushButton[role='danger'][state='focus']",
+            "QLineEdit[state='hover']",
+            "QLineEdit[state='focus']",
+            "QCheckBox[state='focus']",
+            "QCheckBox[state='hover']::indicator",
+        ):
             self.assertIn(selector, css)
 
     def test_density_changes_padding_and_family_is_quoted(self):

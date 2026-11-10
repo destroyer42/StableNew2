@@ -18,17 +18,50 @@ import html
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
-    QAction, QBrush, QColor, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QTransform,
+    QAction,
+    QBrush,
+    QColor,
+    QKeySequence,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QTransform,
 )
 from PySide6.QtWidgets import (
-    QButtonGroup, QDockWidget, QFrame, QGraphicsScene, QGraphicsView, QGraphicsTextItem, QHBoxLayout,
-    QLabel, QMainWindow, QPushButton, QSlider, QToolButton, QVBoxLayout, QWidget,
+    QButtonGroup,
+    QDockWidget,
+    QFrame,
+    QGraphicsScene,
+    QGraphicsTextItem,
+    QGraphicsView,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QSlider,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .components import repolish
 from .output_model import (
-    SIZE_FILL, SIZE_FREE, SIZE_LOCKED, SIZE_MODES, SLIDER_STEPS, ZOOM_CUSTOM, ZOOM_FIT, ZOOM_STEP,
-    OutputFrame, clamp_zoom, fit_factor, format_zoom, slider_to_zoom, step_zoom, zoom_to_slider,
+    SIZE_FILL,
+    SIZE_FREE,
+    SIZE_LOCKED,
+    SIZE_MODES,
+    SLIDER_STEPS,
+    ZOOM_CUSTOM,
+    ZOOM_FIT,
+    ZOOM_STEP,
+    OutputFrame,
+    clamp_zoom,
+    fit_factor,
+    format_zoom,
+    slider_to_zoom,
+    step_zoom,
+    zoom_to_slider,
 )
 from .tokens import COLORS, SPACE
 
@@ -50,7 +83,12 @@ def _faint(alpha: int) -> QColor:
 
 def _kind_color(kind: str) -> str:
     """Frame-kind colour from the *active* theme (read at paint time so theme changes apply live)."""
-    return {"draft": COLORS.muted, "preview": COLORS.success, "stale": COLORS.accent, "receipt": COLORS.success}[kind]
+    return {
+        "draft": COLORS.muted,
+        "preview": COLORS.success,
+        "stale": COLORS.accent,
+        "receipt": COLORS.success,
+    }[kind]
 
 
 # ----------------------------------------------------------------------- viewer
@@ -68,7 +106,8 @@ class ZoomView(QGraphicsView):
         self.setScene(self._scene)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setRenderHints(
-            QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing
+            QPainter.RenderHint.Antialiasing
+            | QPainter.RenderHint.TextAntialiasing
             | QPainter.RenderHint.SmoothPixmapTransform
         )
         self.setBackgroundBrush(QBrush(QColor(COLORS.field)))
@@ -78,7 +117,9 @@ class ZoomView(QGraphicsView):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(160, 140)
         self.setAccessibleName("Output display viewer")
-        self.setToolTip("Ctrl+wheel zooms at the pointer · drag to pan · double-click toggles Fit / 100%")
+        self.setToolTip(
+            "Ctrl+wheel zooms at the pointer · drag to pan · double-click toggles Fit / 100%"
+        )
         self._frame: OutputFrame | None = None
         self._zoom = 1.0
         self._mode = ZOOM_FIT
@@ -122,7 +163,9 @@ class ZoomView(QGraphicsView):
 
     def _fit_zoom(self) -> float:
         rect = self.sceneRect()
-        return fit_factor(self.viewport().width(), self.viewport().height(), rect.width(), rect.height())
+        return fit_factor(
+            self.viewport().width(), self.viewport().height(), rect.width(), rect.height()
+        )
 
     def _apply(self, zoom: float, mode: str) -> None:
         zoom = clamp_zoom(zoom)
@@ -131,7 +174,11 @@ class ZoomView(QGraphicsView):
         self.zoomChanged.emit(zoom, mode)
 
     def _set_scrollbars(self) -> None:
-        policy = Qt.ScrollBarPolicy.ScrollBarAlwaysOff if self._mode == ZOOM_FIT else Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        policy = (
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            if self._mode == ZOOM_FIT
+            else Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
         self.setHorizontalScrollBarPolicy(policy)
         self.setVerticalScrollBarPolicy(policy)
 
@@ -190,7 +237,9 @@ class ZoomView(QGraphicsView):
         gradient.setColorAt(1.0, QColor(COLORS.surface))
         scene.addPath(outline, QPen(Qt.PenStyle.NoPen), QBrush(gradient))
 
-        def cosmetic(color: QColor, width: int = 1, style: Qt.PenStyle = Qt.PenStyle.SolidLine) -> QPen:
+        def cosmetic(
+            color: QColor, width: int = 1, style: Qt.PenStyle = Qt.PenStyle.SolidLine
+        ) -> QPen:
             pen = QPen(color, width, style)
             pen.setCosmetic(True)  # constant on-screen thickness at any zoom
             return pen
@@ -226,7 +275,9 @@ class ZoomView(QGraphicsView):
             f"<div style='font-size:{base:.1f}px; color:{COLORS.muted};'>{body}</div></div>"
         )
         text.setTextWidth(w * 0.84)
-        text.setPos((w - text.boundingRect().width()) / 2, max(0.0, (h - text.boundingRect().height()) / 2))
+        text.setPos(
+            (w - text.boundingRect().width()) / 2, max(0.0, (h - text.boundingRect().height()) / 2)
+        )
         scene.addItem(text)
 
 
@@ -255,7 +306,7 @@ class _RailLabel(QWidget):
 class DockTitleBar(QFrame):
     """Custom title bar: draggable (empty space falls through to the dock)."""
 
-    def __init__(self, dock: "OutputDock"):
+    def __init__(self, dock: OutputDock):
         super().__init__(dock)
         self.setProperty("role", "dockbar")
         row = QHBoxLayout(self)
@@ -325,7 +376,13 @@ class OutputPanel(QFrame):
         self.actual_button = self._zoom_button("100%", "Actual size (Ctrl+0)")
         self.fit_button = self._zoom_button("Fit", "Fit the whole frame (Ctrl+9)")
         self.fit_button.setCheckable(True)
-        for widget in (self.zoom_out_button, self.slider, self.zoom_in_button, self.actual_button, self.fit_button):
+        for widget in (
+            self.zoom_out_button,
+            self.slider,
+            self.zoom_in_button,
+            self.actual_button,
+            self.fit_button,
+        ):
             zoom_row.addWidget(widget, 1 if widget is self.slider else 0)
         col.addLayout(zoom_row)
 
@@ -374,7 +431,9 @@ class OutputPanel(QFrame):
         if frame is None:
             self.status.setText(f"Zoom {zoom}")
         else:
-            self.status.setText(f"{frame.title.title()} · {frame.dimensions} · zoom {zoom} · placeholder, no image")
+            self.status.setText(
+                f"{frame.title.title()} · {frame.dimensions} · zoom {zoom} · placeholder, no image"
+            )
 
 
 # ----------------------------------------------------------------------- dock
@@ -392,15 +451,20 @@ class OutputDock(QDockWidget):
     def __init__(self, parent: QWidget | None = None):
         super().__init__("Output Display", parent)
         self.setObjectName("OutputDock")
-        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
-        self.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        self.setAllowedAreas(
+            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
+        )
+        self.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
         self.setAccessibleName("Output Display")
         self._size_mode = SIZE_FREE
         self._collapsed = False
-        self._restore_width = self.DEFAULT_WIDTH     # docked width to return to
+        self._restore_width = self.DEFAULT_WIDTH  # docked width to return to
         self._locked_width = self.DEFAULT_WIDTH
-        self._locked_size = QSize(520, 560)           # floating size when locked
-        self._float_geometry = None                   # saved before Fill takes the screen
+        self._locked_size = QSize(520, 560)  # floating size when locked
+        self._float_geometry = None  # saved before Fill takes the screen
         self._fill_callback = None
 
         self.title_bar = DockTitleBar(self)
@@ -474,7 +538,12 @@ class OutputDock(QDockWidget):
             else:
                 self._locked_width = max(self.MIN_EXPANDED_WIDTH, self.width())
                 self._locked_size = self.size()
-        if previous == SIZE_FILL and mode != SIZE_FILL and self.isFloating() and self._float_geometry is not None:
+        if (
+            previous == SIZE_FILL
+            and mode != SIZE_FILL
+            and self.isFloating()
+            and self._float_geometry is not None
+        ):
             self.setGeometry(self._float_geometry)
             self._float_geometry = None
         self._size_mode = mode
@@ -573,8 +642,11 @@ class OutputDock(QDockWidget):
         self.title_bar.title.setVisible(not rail)
         self.title_bar.float_button.setVisible(not rail)
         self.title_bar.float_button.setText("Dock" if floating else "Undock")
-        right = self.parentWidget() is not None and isinstance(self.parentWidget(), QMainWindow) and \
-            self.parentWidget().dockWidgetArea(self) == Qt.DockWidgetArea.RightDockWidgetArea
+        right = (
+            self.parentWidget() is not None
+            and isinstance(self.parentWidget(), QMainWindow)
+            and self.parentWidget().dockWidgetArea(self) == Qt.DockWidgetArea.RightDockWidgetArea
+        )
         if floating:
             arrow = "▾" if self._collapsed else "▴"
         elif right:
@@ -585,7 +657,9 @@ class OutputDock(QDockWidget):
         verb = "Expand" if self._collapsed else "Collapse"
         self.title_bar.collapse_button.setToolTip(f"{verb} the Output Display (Ctrl+3)")
         layout = self.title_bar.layout()
-        layout.setContentsMargins(SPACE.xs if rail else SPACE.md, SPACE.xs, SPACE.xs if rail else SPACE.sm, SPACE.xs)
+        layout.setContentsMargins(
+            SPACE.xs if rail else SPACE.md, SPACE.xs, SPACE.xs if rail else SPACE.sm, SPACE.xs
+        )
         repolish(self.title_bar)
 
     def sizeHint(self) -> QSize:  # noqa: N802 (Qt API)

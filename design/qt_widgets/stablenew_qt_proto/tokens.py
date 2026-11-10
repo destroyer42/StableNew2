@@ -30,9 +30,22 @@ ASSET_FILES = ("arrow_up.svg", "arrow_down.svg", "chevron_down.svg", "check.svg"
 DEFAULT_THEME_ID = "blue-modern"
 
 __all__ = [
-    "ASSET_DIR", "ASSET_FILES", "COLORS", "CONTRAST_PAIRS", "RADIUS", "SPACE", "THEME_DIR",
-    "active_theme", "asset_url", "contrast_ratio", "luminance", "make_stylesheet",
-    "preview_theme", "reference_theme", "reference_themes", "set_active_theme",
+    "ASSET_DIR",
+    "ASSET_FILES",
+    "COLORS",
+    "CONTRAST_PAIRS",
+    "RADIUS",
+    "SPACE",
+    "THEME_DIR",
+    "active_theme",
+    "asset_url",
+    "contrast_ratio",
+    "luminance",
+    "make_stylesheet",
+    "preview_theme",
+    "reference_theme",
+    "reference_themes",
+    "set_active_theme",
 ]
 
 
@@ -105,4 +118,3 @@ def asset_url(name: str, directory: Path = ASSET_DIR) -> str:
 def make_stylesheet(asset_dir: Path = ASSET_DIR, theme: Theme | None = None) -> str:
     """Widget stylesheet for ``theme`` (default: the active theme); never touches the GUI."""
     return build_stylesheet(theme or _active, asset_dir)
-

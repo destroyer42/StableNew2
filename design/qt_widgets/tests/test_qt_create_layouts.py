@@ -84,7 +84,9 @@ class LayoutMeasurementTests(CreateCase):
             self.assertEqual(report["horizontal_overflow"], [], design)
             self.assertEqual(report["keyboard"]["required_missing_from_chain"], [], design)
             # Redo is legitimately disabled until something has been undone.
-            self.assertEqual(report["keyboard"]["required_disabled_in_state"], ["redo_button"], design)
+            self.assertEqual(
+                report["keyboard"]["required_disabled_in_state"], ["redo_button"], design
+            )
             self.assertEqual(report["keyboard"]["focus_out_of_view"], 0, design)
             self.assertTrue(report["keyboard"]["preview_before_actions"], design)
             self.assertTrue(report["min_hint_fits"], design)
@@ -104,13 +106,18 @@ class LayoutMeasurementTests(CreateCase):
         window, _view = self.make(1280, 680)
         keyboard = probe(window)["keyboard"]
         self.assertEqual(keyboard["required_missing_from_chain"], [])
-        self.assertEqual(sorted(keyboard["required_disabled_in_state"]),
-                         ["admit_button", "redo_button", "reset_unlocked_button", "undo_button"])
+        self.assertEqual(
+            sorted(keyboard["required_disabled_in_state"]),
+            ["admit_button", "redo_button", "reset_unlocked_button", "undo_button"],
+        )
 
     def test_split_keeps_summary_preview_state_and_primary_actions_visible_without_scrolling(self):
         window, _view = self.make(1280, 680, design=LAYOUT_SPLIT)
         persistent = probe(window, with_keyboard=False)["persistent_without_scroll"]
-        self.assertEqual(persistent, {"preview_chip": True, "summary": True, "preview_button": True, "admit_button": True})
+        self.assertEqual(
+            persistent,
+            {"preview_chip": True, "summary": True, "preview_button": True, "admit_button": True},
+        )
 
     def test_scroll_design_buries_the_summary_below_the_form(self):
         window, _view = self.make(1280, 680, design=LAYOUT_SCROLL)
@@ -136,7 +143,9 @@ class LayoutMeasurementTests(CreateCase):
                 self.assertEqual(report["horizontal_overflow"], [], f"{design}@{width}")
                 self.assertEqual(report["unreachable"], [], f"{design}@{width}")
                 columns.append(view.settings_grid.columns)
-            self.assertEqual(columns, sorted(columns), design)  # wider windows never use fewer columns
+            self.assertEqual(
+                columns, sorted(columns), design
+            )  # wider windows never use fewer columns
             self.assertGreater(columns[-1], columns[0])
 
     def test_collapsing_the_output_display_gives_the_form_more_room(self):
@@ -181,15 +190,27 @@ class LayoutBehaviourTests(CreateCase):
             view.advanced_settings.toggle.setChecked(True)
             view.channels_disclosure.toggle.setChecked(True)
             self.pump()
-            for target in (view.lora_text, view.setting_inputs["batch"], view.source_combo, view.embedding_text):
+            for target in (
+                view.lora_text,
+                view.setting_inputs["batch"],
+                view.source_combo,
+                view.embedding_text,
+            ):
                 target.setFocus()
                 self.pump()
-                scroll = view.form_scroll if view.form_scroll.widget().isAncestorOf(target) else view.review_scroll
+                scroll = (
+                    view.form_scroll
+                    if view.form_scroll.widget().isAncestorOf(target)
+                    else view.review_scroll
+                )
                 self.assertTrue(scroll.widget().isAncestorOf(target))
                 viewport = scroll.viewport()
                 top = target.mapTo(viewport, target.rect().topLeft()).y()
                 bottom = target.mapTo(viewport, target.rect().bottomRight()).y()
-                self.assertTrue(0 <= top and bottom <= viewport.height(), f"{design}: {target.metaObject().className()}")
+                self.assertTrue(
+                    0 <= top and bottom <= viewport.height(),
+                    f"{design}: {target.metaObject().className()}",
+                )
 
     def test_tab_leaves_the_multiline_prompt_instead_of_trapping_focus(self):
         window, view = self.make()
@@ -285,7 +306,11 @@ class WorkflowThroughTheUiTests(CreateCase):
         _window, view = self.make()
         view.setting_inputs["steps"].setValue(41)
         view.lock_inputs["cfg"].setChecked(True)
-        flux = next(i for i in range(view.model_combo.count()) if view.model_combo.itemData(i) == "fixture-flux")
+        flux = next(
+            i
+            for i in range(view.model_combo.count())
+            if view.model_combo.itemData(i) == "fixture-flux"
+        )
         view.model_combo.setCurrentIndex(flux)
         self.pump()
         self.assertEqual(view.setting_inputs["steps"].value(), 41)
@@ -337,12 +362,22 @@ class WorkflowThroughTheUiTests(CreateCase):
     def test_mock_status_is_labelled_on_every_screen_region(self):
         window, view = self.make()
         self.assertIn("DEMO ONLY", view.banner.message.text())
-        self.assertIn("NO BACKEND", " ".join(label.text() for label in window.findChildren(type(view.prompt_meta))))
-        self.assertIn("NOT the compiler's NJR Preview", " ".join(label.text() for label in view.review.findChildren(type(view.prompt_meta))))
+        self.assertIn(
+            "NO BACKEND",
+            " ".join(label.text() for label in window.findChildren(type(view.prompt_meta))),
+        )
+        self.assertIn(
+            "NOT the compiler's NJR Preview",
+            " ".join(label.text() for label in view.review.findChildren(type(view.prompt_meta))),
+        )
         view.preview_button.click()
         view.admit_button.click()
         self.assertIn("No job submitted", view.session.demo_receipt.message)
-        self.assertIn("No real image generated", view.result_card.findChildren(type(view.prompt_meta))[0].text() + " No real image generated")
+        self.assertIn(
+            "No real image generated",
+            view.result_card.findChildren(type(view.prompt_meta))[0].text()
+            + " No real image generated",
+        )
 
 
 class SimulatedOnlyTests(CreateCase):
@@ -350,8 +385,12 @@ class SimulatedOnlyTests(CreateCase):
         def refuse(*_a, **_k):
             raise AssertionError("production/runtime access attempted")
 
-        with mock.patch.object(socket.socket, "connect", refuse), mock.patch.object(socket, "create_connection", refuse), \
-                mock.patch.object(subprocess, "Popen", refuse), mock.patch.object(os, "system", refuse):
+        with (
+            mock.patch.object(socket.socket, "connect", refuse),
+            mock.patch.object(socket, "create_connection", refuse),
+            mock.patch.object(subprocess, "Popen", refuse),
+            mock.patch.object(os, "system", refuse),
+        ):
             window, view = self.make()
             view.source_combo.setCurrentIndex(1)
             view.setting_inputs["batch"].setValue(2)
@@ -365,9 +404,18 @@ class SimulatedOnlyTests(CreateCase):
             studio.apply()
             self.pump()
         self.assertEqual(len(window.create_view.result_gallery.tiles), 2)
-        leaked = sorted(name for name in sys.modules if name.split(".")[0] in {"src", "sqlite3", "requests", "tkinter", "torch"})
+        leaked = sorted(
+            name
+            for name in sys.modules
+            if name.split(".")[0] in {"src", "sqlite3", "requests", "tkinter", "torch"}
+        )
         self.assertEqual(leaked, [])
-        self.assertTrue(all(p.parent == Path(self._tmp.name) / "themes" for p in (Path(self._tmp.name) / "themes").iterdir()))
+        self.assertTrue(
+            all(
+                p.parent == Path(self._tmp.name) / "themes"
+                for p in (Path(self._tmp.name) / "themes").iterdir()
+            )
+        )
 
 
 class ComboSanityTests(CreateCase):

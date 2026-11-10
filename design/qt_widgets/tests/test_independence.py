@@ -74,7 +74,10 @@ class ProductionRuntimeIndependenceTests(unittest.TestCase):
     def test_full_pure_flow_with_production_runtimes_unavailable(self):
         result = subprocess.run(
             [sys.executable, "-I", "-c", GUARDED_FLOW, str(ROOT)],
-            capture_output=True, text=True, timeout=120, check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("INDEPENDENT-OK", result.stdout)
@@ -94,7 +97,13 @@ class ProductionRuntimeIndependenceTests(unittest.TestCase):
                 print("BLOCKED")
             """
         )
-        result = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True, timeout=60, check=False)
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", probe],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
         self.assertIn("BLOCKED", result.stdout)
 
     def test_package_sources_import_only_allowed_modules(self):
@@ -105,11 +114,20 @@ class ProductionRuntimeIndependenceTests(unittest.TestCase):
         for path in (ROOT / "stablenew_qt_proto").glob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
-                names = [a.name for a in node.names] if isinstance(node, ast.Import) else (
-                    [node.module or ""] if isinstance(node, ast.ImportFrom) and node.level == 0 else [])
+                names = (
+                    [a.name for a in node.names]
+                    if isinstance(node, ast.Import)
+                    else (
+                        [node.module or ""]
+                        if isinstance(node, ast.ImportFrom) and node.level == 0
+                        else []
+                    )
+                )
                 for name in names:
                     root = name.split(".")[0]
-                    self.assertTrue(root in stdlib or root in allowed_third_party, f"{path.name}: {name}")
+                    self.assertTrue(
+                        root in stdlib or root in allowed_third_party, f"{path.name}: {name}"
+                    )
 
 
 if __name__ == "__main__":

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import unittest
+from dataclasses import replace
 
 from stablenew_qt_proto.domain import (
-    PROFILE_LEARNING, SAMPLERS, CreateDraft, CreateSession, expand_prompt,
+    PROFILE_LEARNING,
+    SAMPLERS,
+    CreateDraft,
+    CreateSession,
+    expand_prompt,
     recommended_settings,
 )
 
@@ -185,7 +189,9 @@ class PlaceholderTests(unittest.TestCase):
     def test_preview_shows_resolved_prompt(self):
         s = CreateSession()
         preview = s.build_preview()
-        self.assertIn("Prompt resolved: A cinematic portrait of an imaginary explorer", preview.text)
+        self.assertIn(
+            "Prompt resolved: A cinematic portrait of an imaginary explorer", preview.text
+        )
 
     def test_unresolved_placeholder_warns_not_blocks(self):
         s = CreateSession()

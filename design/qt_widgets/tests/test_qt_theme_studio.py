@@ -20,7 +20,12 @@ try:
     from stablenew_qt_proto.theme import canonical_json, failing_checks
     from stablenew_qt_proto.theme_store import ThemeLibrary
     from stablenew_qt_proto.theme_studio import ThemeStudio
-    from stablenew_qt_proto.tokens import COLORS, SPACE, THEME_DIR, reference_themes, set_active_theme
+    from stablenew_qt_proto.tokens import (
+        COLORS,
+        SPACE,
+        THEME_DIR,
+        reference_themes,
+    )
 except ImportError:
     QApplication = None
 
@@ -59,11 +64,13 @@ class StudioCase(unittest.TestCase):
 
     def dispose(self, widget):
         """Close and really delete a widget: every live widget makes the next stylesheet change slower."""
+
         def _dispose():
             widget.close()
             widget.deleteLater()
             QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
             self.app.processEvents()
+
         self.addCleanup(_dispose)
 
     def pump(self):
@@ -80,8 +87,12 @@ class EditingTests(StudioCase):
         self.assertTrue(self.studio.edit("colors", "accent", "#FFC806"))
         self.pump()
         draft = self.studio.draft
-        self.assertEqual((draft.kind, draft.base_id, draft.palette.accent), ("user", "blue-modern", "#FFC806"))
-        self.assertEqual(reference_themes()["blue-modern"], before)  # the shipped preset is immutable
+        self.assertEqual(
+            (draft.kind, draft.base_id, draft.palette.accent), ("user", "blue-modern", "#FFC806")
+        )
+        self.assertEqual(
+            reference_themes()["blue-modern"], before
+        )  # the shipped preset is immutable
         self.assertIn("UNSAVED EDITS", self.notice())
         self.assertEqual(self.lib.user_themes(), {})
         primary = self.studio.preview.matrix_widgets[("Primary", "Default")]
@@ -114,7 +125,10 @@ class EditingTests(StudioCase):
         self.pump()
         hover = self.studio.preview.matrix_widgets[("Primary", "Hover")]
         self.assertEqual(edge_colour(hover), self.studio.draft.palette.danger_fill.upper())
-        self.assertEqual({t for t, _s in self.studio.preview.matrix_widgets}, {"Button", "Primary", "Danger", "Input", "Checkbox"})
+        self.assertEqual(
+            {t for t, _s in self.studio.preview.matrix_widgets},
+            {"Button", "Primary", "Danger", "Input", "Checkbox"},
+        )
 
     def test_density_and_spacing_reach_the_preview_but_not_the_hit_target(self):
         spacing_before = self.studio.preview._layout.spacing()
@@ -192,7 +206,9 @@ class GuardTests(StudioCase):
         self.assertEqual(self.studio.draft, self.refs["concept-a"])
 
     def test_reference_presets_are_selectable_and_labelled_read_only(self):
-        labels = [self.studio.preset_combo.itemText(i) for i in range(self.studio.preset_combo.count())]
+        labels = [
+            self.studio.preset_combo.itemText(i) for i in range(self.studio.preset_combo.count())
+        ]
         self.assertEqual(sum("reference (read-only)" in label for label in labels), 2)
         self.assertIn("REFERENCE", self.notice())
         self.assertFalse(self.studio.delete_button.isEnabled())
@@ -302,7 +318,9 @@ class PersistenceTests(StudioCase):
 class ResponsiveStudioTests(StudioCase):
     def test_wide_shows_both_columns_and_narrow_shows_one_at_a_time(self):
         self.assertFalse(self.studio.compact)
-        self.assertTrue(self.studio.editor_column.isVisible() and self.studio.preview_column.isVisible())
+        self.assertTrue(
+            self.studio.editor_column.isVisible() and self.studio.preview_column.isVisible()
+        )
         self.studio.resize(640, 700)
         self.pump()
         self.assertTrue(self.studio.compact)
@@ -316,7 +334,9 @@ class ResponsiveStudioTests(StudioCase):
         self.studio.resize(1180, 760)
         self.pump()
         self.assertFalse(self.studio.compact)
-        self.assertTrue(self.studio.editor_column.isVisible() and self.studio.preview_column.isVisible())
+        self.assertTrue(
+            self.studio.editor_column.isVisible() and self.studio.preview_column.isVisible()
+        )
 
 
 class WindowThemeTests(StudioCase):
@@ -377,7 +397,11 @@ class WindowThemeTests(StudioCase):
         from PySide6.QtCore import qInstallMessageHandler
 
         warnings: list[str] = []
-        qInstallMessageHandler(lambda _m, _c, text: warnings.append(text) if "tylesheet" in text or "parse" in text.lower() else None)
+        qInstallMessageHandler(
+            lambda _m, _c, text: warnings.append(text)
+            if "tylesheet" in text or "parse" in text.lower()
+            else None
+        )
         try:
             window = self.make_window()
             for theme_id in ("concept-a", "blue-modern"):

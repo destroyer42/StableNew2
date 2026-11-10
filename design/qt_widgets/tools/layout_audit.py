@@ -24,7 +24,6 @@ DEFAULT_SIZES = ("1280x680", "960x600", "1440x900", "1920x1080")
 
 def run(sizes: list[str], layouts: list[str], docks: list[str], theme_id: str) -> list[dict]:
     from PySide6.QtWidgets import QApplication
-
     from stablenew_qt_proto.app import PrototypeWindow, apply_theme
     from stablenew_qt_proto.layout_probe import probe, pump
     from stablenew_qt_proto.tokens import reference_theme
@@ -53,9 +52,11 @@ def run(sizes: list[str], layouts: list[str], docks: list[str], theme_id: str) -
 
 def markdown(rows: list[dict], meta: dict) -> str:
     lines = [
-        f"# Create layout audit ({meta['platform_note']})", "",
+        f"# Create layout audit ({meta['platform_note']})",
+        "",
         f"Theme `{meta['theme']}` · Qt platform `{meta['qpa']}` · scale {meta['scale']} "
-        f"({'SIMULATED via QT_SCALE_FACTOR' if meta['scale'] != 1.0 else 'native display scale'}) · {meta['python']}", "",
+        f"({'SIMULATED via QT_SCALE_FACTOR' if meta['scale'] != 1.0 else 'native display scale'}) · {meta['python']}",
+        "",
         "| Layout | Window | Output Display | Form viewport | Form screens | Unreachable | Clipped/overflow | Task scroll actions | Form scroll (viewports) | Summary/preview/primary without scrolling | Tab stops · missing · out of view |",
         "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
@@ -82,7 +83,9 @@ def main() -> int:
     parser.add_argument("--docks", nargs="+", default=["expanded", "collapsed"])
     parser.add_argument("--theme", default="blue-modern")
     parser.add_argument("--scale", type=float, default=1.0)
-    parser.add_argument("--offscreen", action="store_true", help="headless; text metrics are NOT representative")
+    parser.add_argument(
+        "--offscreen", action="store_true", help="headless; text metrics are NOT representative"
+    )
     parser.add_argument("--name", default="layout_audit")
     args = parser.parse_args()
     if args.offscreen:
@@ -95,16 +98,25 @@ def main() -> int:
 
     screen = QGuiApplication.primaryScreen()
     meta = {
-        "theme": args.theme, "qpa": QGuiApplication.platformName(), "scale": args.scale,
-        "python": platform.python_version(), "os": platform.platform(),
+        "theme": args.theme,
+        "qpa": QGuiApplication.platformName(),
+        "scale": args.scale,
+        "python": platform.python_version(),
+        "os": platform.platform(),
         "platform_note": "headless, not representative" if args.offscreen else "native platform",
-        "screen": None if screen is None else {
-            "name": screen.name(), "geometry": [screen.geometry().width(), screen.geometry().height()],
-            "devicePixelRatio": screen.devicePixelRatio(), "logicalDpi": screen.logicalDotsPerInch(),
+        "screen": None
+        if screen is None
+        else {
+            "name": screen.name(),
+            "geometry": [screen.geometry().width(), screen.geometry().height()],
+            "devicePixelRatio": screen.devicePixelRatio(),
+            "logicalDpi": screen.logicalDotsPerInch(),
         },
     }
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / f"{args.name}.json").write_text(json.dumps({"meta": meta, "rows": rows}, indent=2), encoding="utf-8")
+    (args.out / f"{args.name}.json").write_text(
+        json.dumps({"meta": meta, "rows": rows}, indent=2), encoding="utf-8"
+    )
     (args.out / f"{args.name}.md").write_text(markdown(rows, meta), encoding="utf-8")
     print(markdown(rows, meta))
     return 0

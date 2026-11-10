@@ -11,7 +11,11 @@ from pathlib import Path
 
 from stablenew_qt_proto.theme import MAX_THEME_BYTES, ThemeEditor, ThemeError, canonical_json
 from stablenew_qt_proto.theme_store import (
-    ENV_THEME_DIR, SUFFIX, ThemeLibrary, ThemeStoreError, default_user_theme_dir,
+    ENV_THEME_DIR,
+    SUFFIX,
+    ThemeLibrary,
+    ThemeStoreError,
+    default_user_theme_dir,
 )
 from stablenew_qt_proto.tokens import THEME_DIR, reference_themes
 
@@ -36,7 +40,9 @@ class StoreCase(unittest.TestCase):
 class SaveRestoreTests(StoreCase):
     def test_save_then_restore_in_a_fresh_library(self):
         saved = self.lib.save_as(self.edited(accent="#FFC806"), "Warm Accent")
-        self.assertEqual((saved.id, saved.kind, saved.base_id), ("warm-accent", "user", "blue-modern"))
+        self.assertEqual(
+            (saved.id, saved.kind, saved.base_id), ("warm-accent", "user", "blue-modern")
+        )
         fresh = ThemeLibrary(self.dir)
         self.assertEqual(fresh.get("warm-accent"), saved)
         self.assertEqual(fresh.get("warm-accent").palette.accent, "#FFC806")
@@ -119,7 +125,12 @@ class ActiveThemeTests(StoreCase):
 
     def test_corrupt_or_stale_state_falls_back_to_default(self):
         self.dir.mkdir()
-        for content in ("not json", "[]", json.dumps({"active": 5}), json.dumps({"active": "deleted-theme"})):
+        for content in (
+            "not json",
+            "[]",
+            json.dumps({"active": 5}),
+            json.dumps({"active": "deleted-theme"}),
+        ):
             (self.dir / "active-theme.json").write_text(content, encoding="utf-8")
             self.assertEqual(self.lib.load_active(), self.blue, content)
 
@@ -127,7 +138,9 @@ class ActiveThemeTests(StoreCase):
         self.dir.mkdir()
         (self.dir / ("broken" + SUFFIX)).write_text("{", encoding="utf-8")
         wrong_kind = json.loads(canonical_json(self.blue))
-        (self.dir / ("fake" + SUFFIX)).write_text(json.dumps(wrong_kind), encoding="utf-8")  # kind: reference
+        (self.dir / ("fake" + SUFFIX)).write_text(
+            json.dumps(wrong_kind), encoding="utf-8"
+        )  # kind: reference
         self.assertEqual(self.lib.user_themes(), {})
         self.assertEqual(set(self.lib.invalid_files()), {"broken" + SUFFIX, "fake" + SUFFIX})
         self.assertEqual(self.lib.load_active(), self.blue)
@@ -159,7 +172,9 @@ class ExportImportTests(StoreCase):
     def test_imported_reference_claim_is_downgraded_and_id_collisions_are_renamed(self):
         source = self.dir.parent / "claims.json"
         source.parent.mkdir(parents=True, exist_ok=True)
-        source.write_text(canonical_json(self.blue), encoding="utf-8")  # kind: reference, id: blue-modern
+        source.write_text(
+            canonical_json(self.blue), encoding="utf-8"
+        )  # kind: reference, id: blue-modern
         imported = self.lib.import_from(source)
         self.assertEqual(imported.kind, "user")
         self.assertNotIn(imported.id, self.lib.references)
@@ -218,9 +233,18 @@ class ProductionIsolationTests(unittest.TestCase):
                 os.environ[ENV_THEME_DIR] = previous
 
     def test_store_module_never_names_production_settings(self):
-        source = (Path(__file__).resolve().parents[1] / "stablenew_qt_proto" / "theme_store.py").read_text(encoding="utf-8")
+        source = (
+            Path(__file__).resolve().parents[1] / "stablenew_qt_proto" / "theme_store.py"
+        ).read_text(encoding="utf-8")
         code = source.split('"""', 2)[2]  # skip the module docstring, which names what is excluded
-        for forbidden in ('"presets"', "presets/", "settings.json", "ui_tokens", "design_values", "config/"):
+        for forbidden in (
+            '"presets"',
+            "presets/",
+            "settings.json",
+            "ui_tokens",
+            "design_values",
+            "config/",
+        ):
             self.assertFalse(forbidden in code, forbidden)
 
 

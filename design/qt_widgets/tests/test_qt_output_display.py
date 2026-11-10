@@ -15,7 +15,13 @@ try:
     from PySide6.QtWidgets import QApplication, QScrollArea
     from stablenew_qt_proto.app import PrototypeWindow, apply_theme
     from stablenew_qt_proto.output_model import (
-        MAX_ZOOM, MIN_ZOOM, SIZE_FILL, SIZE_FREE, SIZE_LOCKED, ZOOM_CUSTOM, ZOOM_FIT,
+        MAX_ZOOM,
+        MIN_ZOOM,
+        SIZE_FILL,
+        SIZE_FREE,
+        SIZE_LOCKED,
+        ZOOM_CUSTOM,
+        ZOOM_FIT,
     )
 except ImportError:
     QApplication = None
@@ -58,8 +64,14 @@ class OutputDisplayTests(unittest.TestCase):
     def wheel(delta: int, modifiers=Qt.KeyboardModifier.NoModifier) -> QWheelEvent:
         pos = QPointF(40, 40)
         return QWheelEvent(
-            pos, pos, QPointF(0, 0).toPoint(), QPointF(0, delta).toPoint(),
-            Qt.MouseButton.NoButton, modifiers, Qt.ScrollPhase.NoScrollPhase, False,
+            pos,
+            pos,
+            QPointF(0, 0).toPoint(),
+            QPointF(0, delta).toPoint(),
+            Qt.MouseButton.NoButton,
+            modifiers,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
         )
 
     # ------------------------------------------------------------- placement
@@ -78,12 +90,18 @@ class OutputDisplayTests(unittest.TestCase):
         self.assertLessEqual(window.minimumSizeHint().width(), 1280)
         self.assertEqual(window.width(), 1280)
         view = window.create_view
-        self.assertLessEqual(view.actions.mapTo(window, view.actions.rect().bottomLeft()).y(), window.height())
+        self.assertLessEqual(
+            view.actions.mapTo(window, view.actions.rect().bottomLeft()).y(), window.height()
+        )
         for button in (view.undo_button, view.reset_button, view.preview_button, view.admit_button):
-            self.assertLessEqual(button.mapTo(window, button.rect().bottomRight()).x(), window.width())
+            self.assertLessEqual(
+                button.mapTo(window, button.rect().bottomRight()).x(), window.width()
+            )
             self.assertGreaterEqual(button.width(), button.minimumWidth())
         for scroll in view.findChildren(QScrollArea):
-            self.assertLessEqual(scroll.widget().minimumSizeHint().width(), scroll.viewport().width())
+            self.assertLessEqual(
+                scroll.widget().minimumSizeHint().width(), scroll.viewport().width()
+            )
 
     def test_dock_can_be_moved_to_the_left_but_not_the_bottom(self):
         window, dock = self.make()
@@ -104,7 +122,9 @@ class OutputDisplayTests(unittest.TestCase):
         self.assertIn("explorer", frame.lines[0])
         view.setting_inputs["width"].setValue(768)
         view.setting_inputs["height"].setValue(1344)
-        self.assertEqual((dock.view.frame_content.width, dock.view.frame_content.height), (768, 1344))
+        self.assertEqual(
+            (dock.view.frame_content.width, dock.view.frame_content.height), (768, 1344)
+        )
         self.assertIn("768 × 1344", dock.panel.status.text())
         view.preview_button.click()
         self.assertEqual(dock.view.frame_content.kind, "preview")
@@ -125,7 +145,9 @@ class OutputDisplayTests(unittest.TestCase):
         self.assertEqual(dock.width(), dock.RAIL_WIDTH)
         self.assertFalse(dock.panel.isVisible())
         self.assertTrue(dock.rail.isVisible())
-        self.assertGreater(window.create_view.width(), window_center_before)  # workspace reclaims space
+        self.assertGreater(
+            window.create_view.width(), window_center_before
+        )  # workspace reclaims space
         self.assertFalse(window.output_toggle.isChecked())
         dock.set_collapsed(False)
         self.settle()
@@ -271,14 +293,18 @@ class OutputDisplayTests(unittest.TestCase):
         self.settle()
         dock.resize(900, 900)
         self.settle()
-        self.assertEqual((dock.width(), dock.height()), (free_geometry.width(), free_geometry.height()))
+        self.assertEqual(
+            (dock.width(), dock.height()), (free_geometry.width(), free_geometry.height())
+        )
         dock.set_size_mode(SIZE_FILL)
         self.settle()
         available = dock.screen().availableGeometry()
         self.assertEqual(dock.geometry(), available)
         dock.set_size_mode(SIZE_FREE)
         self.settle()
-        self.assertEqual((dock.width(), dock.height()), (free_geometry.width(), free_geometry.height()))
+        self.assertEqual(
+            (dock.width(), dock.height()), (free_geometry.width(), free_geometry.height())
+        )
 
     def test_mode_buttons_reflect_state(self):
         _, dock = self.make()
@@ -352,8 +378,12 @@ class OutputDisplayTests(unittest.TestCase):
         _, dock = self.make()
         view = dock.view
         event = QMouseEvent(
-            QEvent.Type.MouseButtonDblClick, QPointF(30, 30), QPointF(30, 30),
-            Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+            QEvent.Type.MouseButtonDblClick,
+            QPointF(30, 30),
+            QPointF(30, 30),
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
         )
         view.mouseDoubleClickEvent(event)
         self.assertEqual((view.mode, view.zoom), (ZOOM_CUSTOM, 1.0))
@@ -388,7 +418,9 @@ class OutputDisplayTests(unittest.TestCase):
         self.settle()
         self.assertLessEqual(window.minimumSizeHint().width(), 960)
         for scroll in window.create_view.findChildren(QScrollArea):
-            self.assertLessEqual(scroll.widget().minimumSizeHint().width(), scroll.viewport().width())
+            self.assertLessEqual(
+                scroll.widget().minimumSizeHint().width(), scroll.viewport().width()
+            )
 
     def test_long_prompt_does_not_break_the_frame(self):
         window, dock = self.make()

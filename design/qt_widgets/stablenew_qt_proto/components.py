@@ -8,8 +8,18 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
-    QCheckBox, QFrame, QPlainTextEdit, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy,
-    QToolButton, QVBoxLayout, QWidget, QGridLayout,
+    QCheckBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .tokens import SPACE
@@ -83,7 +93,11 @@ class NoWheelUnlessFocused(QObject):
     surrounding scroll area scrolls instead of silently changing a value."""
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 (Qt API)
-        if event.type() == QEvent.Type.Wheel and isinstance(watched, QWidget) and not watched.hasFocus():
+        if (
+            event.type() == QEvent.Type.Wheel
+            and isinstance(watched, QWidget)
+            and not watched.hasFocus()
+        ):
             event.ignore()  # propagate to the parent scroll area
             return True
         return False
@@ -160,12 +174,16 @@ class IssueList(QWidget):
         self._layout.setSpacing(SPACE.sm)
         self.banners: list[NoticeBanner] = []
 
-    def set_issues(self, errors: tuple[str, ...], warnings: tuple[str, ...], *, empty: str = "No issues found") -> None:
+    def set_issues(
+        self, errors: tuple[str, ...], warnings: tuple[str, ...], *, empty: str = "No issues found"
+    ) -> None:
         for banner in self.banners:
             self._layout.removeWidget(banner)
             banner.deleteLater()
         self.banners = []
-        entries = [("BLOCKED", text, "blocked") for text in errors] + [("WARNING", text, "warning") for text in warnings]
+        entries = [("BLOCKED", text, "blocked") for text in errors] + [
+            ("WARNING", text, "warning") for text in warnings
+        ]
         if not entries:
             entries = [("OK", empty, "success")]
         for status, text, level in entries:
@@ -274,10 +292,18 @@ class ActionStrip(QFrame):
     def resizeEvent(self, event) -> None:  # noqa: N802 (Qt API)
         super().resizeEvent(event)
         margins = self._grid.contentsMargins()
-        needed = self._buttons.sizeHint().width() + self.STATUS_MIN_WIDTH + self._grid.spacing() + margins.left() + margins.right()
+        needed = (
+            self._buttons.sizeHint().width()
+            + self.STATUS_MIN_WIDTH
+            + self._grid.spacing()
+            + margins.left()
+            + margins.right()
+        )
         # Hysteresis avoids flip-flopping while the layout settles.
-        stacked = self.width() < needed if self._stacked is None else (
-            self.width() < needed + (24 if self._stacked else 0)
+        stacked = (
+            self.width() < needed
+            if self._stacked is None
+            else (self.width() < needed + (24 if self._stacked else 0))
         )
         self._place(stacked=stacked)
 
@@ -298,7 +324,13 @@ class ResponsiveGrid(QWidget):
     on narrow ones, without a horizontal scroll bar.
     """
 
-    def __init__(self, min_column_width: int = 190, parent: QWidget | None = None, *, column_gap: int = SPACE.md):
+    def __init__(
+        self,
+        min_column_width: int = 190,
+        parent: QWidget | None = None,
+        *,
+        column_gap: int = SPACE.md,
+    ):
         super().__init__(parent)
         self.min_column_width = min_column_width
         self._items: list[QWidget] = []
@@ -378,7 +410,9 @@ class SettingField(QWidget):
         self.reset_button.clicked.connect(self.resetRequested)
         head.addWidget(self.reset_button)
         self.lock = QCheckBox("Lock")
-        self.lock.setToolTip(f"Keep {title} unchanged when the model or settings source changes (this draft only)")
+        self.lock.setToolTip(
+            f"Keep {title} unchanged when the model or settings source changes (this draft only)"
+        )
         self.lock.setAccessibleName(f"Lock {title} in draft")
         self.lock.toggled.connect(self.lockToggled)
         head.addWidget(self.lock)
@@ -394,7 +428,9 @@ class SettingField(QWidget):
         self.lock.blockSignals(False)
         self.reset_button.setEnabled(differs)
         origin_text = {"locked": " · locked", "manual": " · manual override"}.get(origin, "")
-        self.recommendation.setText(f"Recommended: {recommended}" + (" · differs" if differs else "") + origin_text)
+        self.recommendation.setText(
+            f"Recommended: {recommended}" + (" · differs" if differs else "") + origin_text
+        )
         self.recommendation.setProperty("level", "warning" if differs else "info")
         repolish(self.recommendation)
 
@@ -419,7 +455,8 @@ class ResultGallery(QFrame):
         self.grid.clear()
         self.tiles = []
         self.caption.setText(
-            f"{len(tiles)} placeholder tile(s) from a simulated admission. No image exists." if tiles
+            f"{len(tiles)} placeholder tile(s) from a simulated admission. No image exists."
+            if tiles
             else "No simulated result."
         )
         for tile in tiles:

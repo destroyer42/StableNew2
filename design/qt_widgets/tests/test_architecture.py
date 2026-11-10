@@ -3,13 +3,27 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / "stablenew_qt_proto"
 FORBIDDEN_IMPORT_ROOTS = {
-    "src", "controller", "pipeline", "queue", "history", "tkinter", "requests", "httpx", "subprocess",
-    "socket", "sqlite3", "torch", "diffusers", "comfy", "webbrowser", "ctypes",
+    "src",
+    "controller",
+    "pipeline",
+    "queue",
+    "history",
+    "tkinter",
+    "requests",
+    "httpx",
+    "subprocess",
+    "socket",
+    "sqlite3",
+    "torch",
+    "diffusers",
+    "comfy",
+    "webbrowser",
+    "ctypes",
 }
 
 
@@ -25,7 +39,11 @@ class IsolationTests(unittest.TestCase):
                 else:
                     continue
                 for name in names:
-                    self.assertNotIn(name.split(".")[0], FORBIDDEN_IMPORT_ROOTS, f"Forbidden import in {path}: {name}")
+                    self.assertNotIn(
+                        name.split(".")[0],
+                        FORBIDDEN_IMPORT_ROOTS,
+                        f"Forbidden import in {path}: {name}",
+                    )
 
     def test_only_app_imports_gui_on_launch(self):
         path = ROOT / "domain.py"
@@ -37,7 +55,13 @@ class IsolationTests(unittest.TestCase):
         for path in ROOT.rglob("*.py"):
             if path.name == "domain.py":
                 code = path.read_text(encoding="utf-8")
-                for forbidden in ("JobService.submit_njrs(", "PipelineRunner.run_njr(", "open(", "connect(", "requests.get("):
+                for forbidden in (
+                    "JobService.submit_njrs(",
+                    "PipelineRunner.run_njr(",
+                    "open(",
+                    "connect(",
+                    "requests.get(",
+                ):
                     self.assertNotIn(forbidden, code)
 
 

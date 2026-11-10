@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import unittest
+from pathlib import Path
 
 from stablenew_qt_proto.tokens import (
-    ASSET_DIR, ASSET_FILES, COLORS, CONTRAST_PAIRS, RADIUS, contrast_ratio, make_stylesheet,
+    ASSET_DIR,
+    ASSET_FILES,
+    COLORS,
+    CONTRAST_PAIRS,
+    RADIUS,
+    contrast_ratio,
+    make_stylesheet,
 )
 
 

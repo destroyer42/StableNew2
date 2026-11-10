@@ -15,7 +15,17 @@ SOURCES = sorted(p for p in PACKAGE.glob("*.py"))
 BUILDER = "theme.py"
 # Modules that may build a one-off inline stylesheet, but only from theme values (f-string placeholders).
 INLINE_FROM_TOKENS = {"gallery.py", "theme_studio.py", "output_display.py"}
-CSS_PROPERTIES = ("font-size", "font-family", "font-weight", "border-radius", "border:", "border-color", "background:", "color:", "padding:")
+CSS_PROPERTIES = (
+    "font-size",
+    "font-family",
+    "font-weight",
+    "border-radius",
+    "border:",
+    "border-color",
+    "background:",
+    "color:",
+    "padding:",
+)
 
 
 def code_lines(path: Path):
@@ -30,7 +40,9 @@ class NoHardCodedThemeValues(unittest.TestCase):
     def test_no_hex_colour_literals_in_python_sources(self):
         for path in SOURCES:
             for number, line in code_lines(path):
-                self.assertIsNone(re.search(r"#[0-9A-Fa-f]{6}\b", line), f"{path.name}:{number}: {line.strip()}")
+                self.assertIsNone(
+                    re.search(r"#[0-9A-Fa-f]{6}\b", line), f"{path.name}:{number}: {line.strip()}"
+                )
 
     def test_no_rgb_named_colour_or_qcolor_literals(self):
         for path in SOURCES:
@@ -44,34 +56,57 @@ class NoHardCodedThemeValues(unittest.TestCase):
             if path.name == BUILDER:
                 continue
             for number, line in code_lines(path):
-                if (any(prop in line for prop in CSS_PROPERTIES) and "setProperty" not in line
-                        and not line.lstrip().startswith("def ") and ('"' in line or "'" in line)):
-                    self.assertIn(path.name, INLINE_FROM_TOKENS, f"{path.name}:{number}: {line.strip()}")
-                    self.assertIn("{", line, f"inline style must interpolate theme values: {path.name}:{number}")
+                if (
+                    any(prop in line for prop in CSS_PROPERTIES)
+                    and "setProperty" not in line
+                    and not line.lstrip().startswith("def ")
+                    and ('"' in line or "'" in line)
+                ):
+                    self.assertIn(
+                        path.name, INLINE_FROM_TOKENS, f"{path.name}:{number}: {line.strip()}"
+                    )
+                    self.assertIn(
+                        "{",
+                        line,
+                        f"inline style must interpolate theme values: {path.name}:{number}",
+                    )
 
     def test_no_literal_fonts_or_point_sizes(self):
         for path in SOURCES:
             for number, line in code_lines(path):
                 self.assertNotRegex(line, r"\bQFont\(", f"{path.name}:{number}")
-                self.assertNotRegex(line, r"setPointSize|setFamily|setPixelSize", f"{path.name}:{number}")
+                self.assertNotRegex(
+                    line, r"setPointSize|setFamily|setPixelSize", f"{path.name}:{number}"
+                )
 
     def test_theme_json_files_are_the_only_colour_sources(self):
         themes = sorted((PACKAGE / "themes").glob("*.theme.json"))
-        self.assertEqual({p.name for p in themes}, {"blue-modern.theme.json", "concept-a.theme.json"})
+        self.assertEqual(
+            {p.name for p in themes}, {"blue-modern.theme.json", "concept-a.theme.json"}
+        )
 
 
 class ComponentStyleConsistency(unittest.TestCase):
     def setUp(self):
-        self.css = {tid: build_stylesheet(theme, ASSET_DIR) for tid, theme in reference_themes().items()}
+        self.css = {
+            tid: build_stylesheet(theme, ASSET_DIR) for tid, theme in reference_themes().items()
+        }
 
     def test_every_role_used_by_a_component_has_a_style_rule(self):
         used: set[str] = set()
         for path in SOURCES:
-            used.update(re.findall(r"""setProperty\(\s*["']role["']\s*,\s*["']([a-z-]+)["']""", path.read_text(encoding="utf-8")))
+            used.update(
+                re.findall(
+                    r"""setProperty\(\s*["']role["']\s*,\s*["']([a-z-]+)["']""",
+                    path.read_text(encoding="utf-8"),
+                )
+            )
         self.assertGreaterEqual(len(used), 12)
         for tid, css in self.css.items():
             for role in sorted(used):
-                self.assertIn(f"[role='{role}']", css, f"{tid}: role '{role}' has no stylesheet rule")
+                self.assertIn(
+                    f"[role='{role}']", css, f"{tid}: role '{role}' has no stylesheet rule"
+                )
 
     def test_every_notice_and_chip_level_is_styled(self):
         from stablenew_qt_proto.components import LEVELS
@@ -98,13 +133,22 @@ class ComponentStyleConsistency(unittest.TestCase):
         for tid, css in self.css.items():
             for selector, states in required.items():
                 for state in states:
-                    self.assertRegex(css, re.escape(selector) + r"[^{}]*:" + state, f"{tid}: {selector}:{state}")
+                    self.assertRegex(
+                        css, re.escape(selector) + r"[^{}]*:" + state, f"{tid}: {selector}:{state}"
+                    )
 
     def test_focus_and_hover_never_change_border_width_or_layout(self):
         for tid, css in self.css.items():
             for selectors, body in re.findall(r"([^{}]+)\{([^}]*)\}", css):
-                if re.search(r":(hover|focus|pressed)|\[state=", selectors) and "::" not in selectors:
-                    self.assertNotRegex(body, r"border:\s*\d|border-width|padding|margin|min-height", f"{tid}: {selectors.strip()}")
+                if (
+                    re.search(r":(hover|focus|pressed)|\[state=", selectors)
+                    and "::" not in selectors
+                ):
+                    self.assertNotRegex(
+                        body,
+                        r"border:\s*\d|border-width|padding|margin|min-height",
+                        f"{tid}: {selectors.strip()}",
+                    )
 
     def test_state_selectors_are_driven_by_state_roles_not_literals(self):
         for tid, theme in reference_themes().items():
@@ -115,7 +159,12 @@ class ComponentStyleConsistency(unittest.TestCase):
 
     def test_geometry_is_theme_driven(self):
         for tid, theme in reference_themes().items():
-            for radius in {theme.radius.control, theme.radius.button, theme.radius.card, theme.radius.chip}:
+            for radius in {
+                theme.radius.control,
+                theme.radius.button,
+                theme.radius.card,
+                theme.radius.chip,
+            }:
                 self.assertIn(f"border-radius: {radius}px", self.css[tid])
             self.assertIn(f"min-height: {theme.spacing.control_min_height}px", self.css[tid])
 

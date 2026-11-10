@@ -22,14 +22,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", required=True, type=Path, help="directory for PNG output (created)")
+    parser.add_argument(
+        "--out", required=True, type=Path, help="directory for PNG output (created)"
+    )
     parser.add_argument("--sizes", nargs="+", default=["1280x680", "1440x900"])
-    parser.add_argument("--scale", type=float, default=1.0, help="QT_SCALE_FACTOR to emulate display scaling")
+    parser.add_argument(
+        "--scale", type=float, default=1.0, help="QT_SCALE_FACTOR to emulate display scaling"
+    )
     parser.add_argument("--offscreen", action="store_true")
-    parser.add_argument("--layout", choices=("scroll", "split"), default="split", help="Create layout design")
+    parser.add_argument(
+        "--layout", choices=("scroll", "split"), default="split", help="Create layout design"
+    )
     parser.add_argument("--theme", default="blue-modern", help="reference theme id")
     parser.add_argument("--prefix", default="", help="file-name prefix, e.g. 'split_'")
-    parser.add_argument("--studio", action="store_true", help="also capture the Theme Studio and component pages")
+    parser.add_argument(
+        "--studio", action="store_true", help="also capture the Theme Studio and component pages"
+    )
     args = parser.parse_args()
 
     if args.offscreen:
@@ -39,7 +47,6 @@ def main() -> int:
     sys.path.insert(0, str(ROOT))
 
     from PySide6.QtWidgets import QApplication
-
     from stablenew_qt_proto.app import PrototypeWindow, apply_theme
     from stablenew_qt_proto.tokens import reference_theme
 
@@ -54,7 +61,9 @@ def main() -> int:
         window.show()
         app.processEvents()
         window.create_view.set_layout_design(args.layout)
-        if width < 1200:  # an expanded Output Display needs ~1192 px; small windows use the collapsed rail
+        if (
+            width < 1200
+        ):  # an expanded Output Display needs ~1192 px; small windows use the collapsed rail
             window.output_dock.set_collapsed(True)
             for _ in range(6):
                 app.processEvents()
@@ -97,7 +106,6 @@ def main() -> int:
 def capture_dock(app, out: Path, width: int, height: int, tag: str) -> None:
     """Output Display states: docked, zoomed, Fill, collapsed rail, floating (and floating-collapsed)."""
     from PySide6.QtCore import Qt
-
     from stablenew_qt_proto.app import PrototypeWindow
     from stablenew_qt_proto.output_model import SIZE_FILL, SIZE_FREE
 

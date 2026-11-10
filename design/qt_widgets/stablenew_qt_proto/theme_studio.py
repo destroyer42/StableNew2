@@ -15,16 +15,47 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFontDatabase
 from PySide6.QtWidgets import (
-    QButtonGroup, QColorDialog, QComboBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox, QSplitter, QVBoxLayout, QWidget,
+    QButtonGroup,
+    QColorDialog,
+    QComboBox,
+    QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .components import (
-    fit_segment, FormTextEdit, Disclosure, NoticeBanner, SectionCard, SettingField, StatusChip, repolish, stacked_label,
+    Disclosure,
+    FormTextEdit,
+    NoticeBanner,
+    SectionCard,
+    SettingField,
+    StatusChip,
+    fit_segment,
+    repolish,
+    stacked_label,
 )
 from .theme import (
-    COLOR_ROLES, DENSITIES, RANGES, STATE_DEFAULTS, WEIGHTS, Theme, ThemeEditor, ThemeError,
-    build_stylesheet, contrast_checks, failing_checks, slugify,
+    COLOR_ROLES,
+    DENSITIES,
+    RANGES,
+    STATE_DEFAULTS,
+    WEIGHTS,
+    Theme,
+    ThemeEditor,
+    ThemeError,
+    build_stylesheet,
+    contrast_checks,
+    failing_checks,
+    slugify,
 )
 from .theme_store import ThemeLibrary, ThemeStoreError
 from .tokens import ASSET_DIR, preview_theme
@@ -64,13 +95,24 @@ class ThemePreview(QFrame):
         heading = QLabel(f"{theme.name} · live preview")
         heading.setProperty("role", "heading")
         self._layout.addWidget(heading)
-        muted = QLabel("Supporting text uses the muted role. Preview styling comes only from the draft theme.")
+        muted = QLabel(
+            "Supporting text uses the muted role. Preview styling comes only from the draft theme."
+        )
         muted.setProperty("role", "muted")
         muted.setWordWrap(True)
         self._layout.addWidget(muted)
 
-        card = SectionCard("Card · inputs and actions", "A reusable section card with a labelled input and action hierarchy.")
-        card.add(stacked_label("Text input", QLineEdit("Example value"), help_text="Guidance stays visible without a tooltip."))
+        card = SectionCard(
+            "Card · inputs and actions",
+            "A reusable section card with a labelled input and action hierarchy.",
+        )
+        card.add(
+            stacked_label(
+                "Text input",
+                QLineEdit("Example value"),
+                help_text="Guidance stays visible without a tooltip.",
+            )
+        )
         combo = QComboBox()
         combo.addItems(["First choice", "Second choice"])
         card.add(stacked_label("Choice", combo))
@@ -97,8 +139,10 @@ class ThemePreview(QFrame):
 
         notices = SectionCard("Status · words, not colour alone")
         for status, text, level in (
-            ("INFO", "Informational notice.", "info"), ("WARNING", "Attention needed.", "warning"),
-            ("BLOCKED", "Cannot proceed.", "blocked"), ("OK", "Ready.", "success"),
+            ("INFO", "Informational notice.", "info"),
+            ("WARNING", "Attention needed.", "warning"),
+            ("BLOCKED", "Cannot proceed.", "blocked"),
+            ("OK", "Ready.", "success"),
         ):
             banner = NoticeBanner()
             banner.set_message(status, text, level)
@@ -106,7 +150,12 @@ class ThemePreview(QFrame):
         chips = QWidget()
         chip_row = QHBoxLayout(chips)
         chip_row.setContentsMargins(0, 0, 0, 0)
-        for text, level in (("NOT BUILT", "info"), ("STALE", "warning"), ("BLOCKED", "blocked"), ("READY", "success")):
+        for text, level in (
+            ("NOT BUILT", "info"),
+            ("STALE", "warning"),
+            ("BLOCKED", "blocked"),
+            ("READY", "success"),
+        ):
             chip_row.addWidget(StatusChip(text, level))
         chip_row.addStretch(1)
         notices.add(chips)
@@ -114,14 +163,23 @@ class ThemePreview(QFrame):
         notices.add(disclosure)
         self._layout.addWidget(notices)
 
-        matrix = SectionCard("Component states", "Hover, focus and pressed are forced so every state can be inspected at once.")
+        matrix = SectionCard(
+            "Component states",
+            "Hover, focus and pressed are forced so every state can be inspected at once.",
+        )
         grid = QGridLayout()
         grid.setHorizontalSpacing(theme.metrics().sm)
         for col, name in enumerate(STATE_COLUMNS, start=1):
             label = QLabel(name)
             label.setProperty("role", "muted")
             grid.addWidget(label, 0, col)
-        rows = (("Button", None), ("Primary", "primary"), ("Danger", "danger"), ("Input", "input"), ("Checkbox", "check"))
+        rows = (
+            ("Button", None),
+            ("Primary", "primary"),
+            ("Danger", "danger"),
+            ("Input", "input"),
+            ("Checkbox", "check"),
+        )
         for r_index, (title, kind) in enumerate(rows, start=1):
             grid.addWidget(QLabel(title), r_index, 0)
             for c_index, state in enumerate(STATE_COLUMNS, start=1):
@@ -166,7 +224,10 @@ def _delete_layout(layout) -> None:
 
 class ThemeStudio(QWidget):
     def __init__(
-        self, library: ThemeLibrary, applied: Theme, apply_callback: Callable[[Theme], None] | None = None,
+        self,
+        library: ThemeLibrary,
+        applied: Theme,
+        apply_callback: Callable[[Theme], None] | None = None,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -250,7 +311,10 @@ class ThemeStudio(QWidget):
         col.setContentsMargins(8, 8, 8, 16)
         col.setSpacing(12)
 
-        head = SectionCard("Theme", "Pick a preset, edit values below, then Apply, Save As or Export. Shipped presets are read-only.")
+        head = SectionCard(
+            "Theme",
+            "Pick a preset, edit values below, then Apply, Save As or Export. Shipped presets are read-only.",
+        )
         self.preset_combo = QComboBox()
         self.preset_combo.setAccessibleName("Theme preset")
         self.preset_combo.activated.connect(self._preset_activated)
@@ -275,8 +339,17 @@ class ThemeStudio(QWidget):
         self.export_button = QPushButton("Export…")
         self.import_button = QPushButton("Import…")
         self.delete_button = QPushButton("Delete saved")
-        for index, button in enumerate((self.apply_button, self.revert_button, self.reset_button,
-                                        self.save_button, self.export_button, self.import_button, self.delete_button)):
+        for index, button in enumerate(
+            (
+                self.apply_button,
+                self.revert_button,
+                self.reset_button,
+                self.save_button,
+                self.export_button,
+                self.import_button,
+                self.delete_button,
+            )
+        ):
             grid.addWidget(button, index // 2, index % 2)
         head.add(actions)
         self.apply_button.clicked.connect(self.apply)
@@ -288,7 +361,9 @@ class ThemeStudio(QWidget):
         self.delete_button.clicked.connect(self.delete_selected)
         col.addWidget(head)
 
-        colors = SectionCard("Semantic colours", "#RRGGBB. Each role feeds the stylesheet; contrast is checked live.")
+        colors = SectionCard(
+            "Semantic colours", "#RRGGBB. Each role feeds the stylesheet; contrast is checked live."
+        )
         for role in COLOR_ROLES:
             row = QWidget()
             lay = QHBoxLayout(row)
@@ -317,23 +392,40 @@ class ThemeStudio(QWidget):
         typo = SectionCard("Typography")
         self.family_combo = QComboBox()
         self.family_combo.setAccessibleName("Font family")
-        self.family_combo.activated.connect(lambda _i: self._edit("typography", "family", self.family_combo.currentText()))
+        self.family_combo.activated.connect(
+            lambda _i: self._edit("typography", "family", self.family_combo.currentText())
+        )
         typo.add(stacked_label("Font family", self.family_combo))
         self.fields[("typography", "family")] = self.family_combo
-        for key, title in (("body_pt", "Body size (pt)"), ("small_pt", "Small size (pt)"),
-                           ("section_pt", "Section heading size (pt)"), ("heading_pt", "Page heading size (pt)")):
+        for key, title in (
+            ("body_pt", "Body size (pt)"),
+            ("small_pt", "Small size (pt)"),
+            ("section_pt", "Section heading size (pt)"),
+            ("heading_pt", "Page heading size (pt)"),
+        ):
             typo.add(stacked_label(title, self._spin("typography", key)))
         weight = QComboBox()
         weight.addItems(WEIGHTS)
         weight.setAccessibleName("Emphasis weight")
-        weight.activated.connect(lambda _i: self._edit("typography", "emphasis_weight", weight.currentText()))
+        weight.activated.connect(
+            lambda _i: self._edit("typography", "emphasis_weight", weight.currentText())
+        )
         self.fields[("typography", "emphasis_weight")] = weight
         typo.add(stacked_label("Emphasis weight", weight))
         col.addWidget(typo)
 
-        spacing = SectionCard("Spacing and density", "Compact density scales layout gaps by 0.75; the control minimum height is never reduced by density.")
-        for key, title in (("xs", "Extra small gap"), ("sm", "Small gap"), ("md", "Medium gap"),
-                           ("gutter", "Page gutter"), ("xl", "Extra large gap"), ("control_min_height", "Control minimum height")):
+        spacing = SectionCard(
+            "Spacing and density",
+            "Compact density scales layout gaps by 0.75; the control minimum height is never reduced by density.",
+        )
+        for key, title in (
+            ("xs", "Extra small gap"),
+            ("sm", "Small gap"),
+            ("md", "Medium gap"),
+            ("gutter", "Page gutter"),
+            ("xl", "Extra large gap"),
+            ("control_min_height", "Control minimum height"),
+        ):
             spacing.add(stacked_label(f"{title} (px)", self._spin("spacing", key)))
         density = QComboBox()
         density.addItems(DENSITIES)
@@ -344,18 +436,28 @@ class ThemeStudio(QWidget):
         col.addWidget(spacing)
 
         shape = SectionCard("Borders and corner radius")
-        for section, key, title in (("borders", "control_width", "Control border width (px)"), ("borders", "card_width", "Card border width (px)"),
-                                    ("radius", "control", "Control radius (px)"), ("radius", "button", "Button radius (px)"),
-                                    ("radius", "card", "Card radius (px)"), ("radius", "chip", "Chip radius (px)")):
+        for section, key, title in (
+            ("borders", "control_width", "Control border width (px)"),
+            ("borders", "card_width", "Card border width (px)"),
+            ("radius", "control", "Control radius (px)"),
+            ("radius", "button", "Button radius (px)"),
+            ("radius", "card", "Card radius (px)"),
+            ("radius", "chip", "Chip radius (px)"),
+        ):
             shape.add(stacked_label(title, self._spin(section, key)))
         col.addWidget(shape)
 
-        states = Disclosure("Component state appearance", "Which colour role each state uses. Pick a role, not a literal colour.")
+        states = Disclosure(
+            "Component state appearance",
+            "Which colour role each state uses. Pick a role, not a literal colour.",
+        )
         for key in STATE_DEFAULTS:
             combo = QComboBox()
             combo.addItems(COLOR_ROLES)
             combo.setAccessibleName(f"State {key}")
-            combo.activated.connect(lambda _i, k=key, c=combo: self._edit("states", k, c.currentText()))
+            combo.activated.connect(
+                lambda _i, k=key, c=combo: self._edit("states", k, c.currentText())
+            )
             self.fields[("states", key)] = combo
             states.add(stacked_label(key.replace("_", " "), combo))
         col.addWidget(states)
@@ -374,7 +476,10 @@ class ThemeStudio(QWidget):
         col.setSpacing(12)
         self.preview = ThemePreview()
         col.addWidget(self.preview)
-        diag = SectionCard("Contrast diagnostics", "WCAG 2.x ratios of the draft. Targets: text 4.5:1 (primary label 7:1), outlines and focus edges 3:1.")
+        diag = SectionCard(
+            "Contrast diagnostics",
+            "WCAG 2.x ratios of the draft. Targets: text 4.5:1 (primary label 7:1), outlines and focus edges 3:1.",
+        )
         self.diagnostics = FormTextEdit()
         self.diagnostics.setReadOnly(True)
         self.diagnostics.setMinimumHeight(230)
@@ -447,7 +552,9 @@ class ThemeStudio(QWidget):
             for role in COLOR_ROLES:
                 value = getattr(d.palette, role)
                 self.fields[("colors", role)].setText(value)
-                self.color_swatches[role].setStyleSheet(f"background: {value}; border: 1px solid {d.palette.strong_border}; border-radius: 4px;")
+                self.color_swatches[role].setStyleSheet(
+                    f"background: {value}; border: 1px solid {d.palette.strong_border}; border-radius: 4px;"
+                )
             index = self.family_combo.findText(d.typography.family)
             if index < 0:
                 self.family_combo.addItem(d.typography.family)
@@ -456,7 +563,9 @@ class ThemeStudio(QWidget):
             for section in ("typography", "spacing", "borders", "radius"):
                 for key in RANGES[section]:
                     self.fields[(section, key)].setValue(getattr(getattr(d, section), key))
-            self.fields[("typography", "emphasis_weight")].setCurrentText(d.typography.emphasis_weight)
+            self.fields[("typography", "emphasis_weight")].setCurrentText(
+                d.typography.emphasis_weight
+            )
             self.fields[("", "density")].setCurrentText(d.density)
             for key in STATE_DEFAULTS:
                 self.fields[("states", key)].setCurrentText(getattr(d.states, key))
@@ -474,7 +583,14 @@ class ThemeStudio(QWidget):
         for theme in self.library.user_themes().values():
             self.preset_combo.addItem(f"{theme.name} · saved", theme.id)
         target = select or self.editor.base.id
-        index = next((i for i in range(self.preset_combo.count()) if self.preset_combo.itemData(i) == target), 0)
+        index = next(
+            (
+                i
+                for i in range(self.preset_combo.count())
+                if self.preset_combo.itemData(i) == target
+            ),
+            0,
+        )
         self.preset_combo.setCurrentIndex(index)
         self.preset_combo.blockSignals(False)
 
@@ -488,13 +604,19 @@ class ThemeStudio(QWidget):
         ed, d = self.editor, self.editor.draft
         self._sync_color_swatches()
         if ed.errors:
-            self._say("INVALID EDIT", "; ".join(ed.errors) + " — the preview still shows the last valid draft.", "blocked")
+            self._say(
+                "INVALID EDIT",
+                "; ".join(ed.errors) + " — the preview still shows the last valid draft.",
+                "blocked",
+            )
         failing = failing_checks(d)
         checks = contrast_checks(d)
-        self.diagnostics.setPlainText("\n".join(
-            f"{'PASS' if c.passed else 'FAIL'}  {c.label}: {c.ratio:.1f}:1 (needs {c.minimum:g}:1)  {c.foreground} on {c.background}"
-            for c in checks
-        ))
+        self.diagnostics.setPlainText(
+            "\n".join(
+                f"{'PASS' if c.passed else 'FAIL'}  {c.label}: {c.ratio:.1f}:1 (needs {c.minimum:g}:1)  {c.foreground} on {c.background}"
+                for c in checks
+            )
+        )
         if failing:
             self.contrast_chip.set_status(f"CONTRAST · {len(failing)} FAIL", "blocked")
         else:
@@ -507,12 +629,27 @@ class ThemeStudio(QWidget):
         self.export_button.setEnabled(not blocked)
         self.revert_button.setEnabled(dirty)
         self.reset_button.setEnabled(dirty or d.base_id is not None)
-        self.delete_button.setEnabled(d.kind == "user" and d.id in self.library.user_themes() and not dirty)
+        self.delete_button.setEnabled(
+            d.kind == "user" and d.id in self.library.user_themes() and not dirty
+        )
         if not ed.errors:
             if ed.base.kind == "reference" and not dirty:
-                self._say("REFERENCE", f"{d.name} is a shipped read-only preset. Editing creates an unsaved user copy.", "info")
+                self._say(
+                    "REFERENCE",
+                    f"{d.name} is a shipped read-only preset. Editing creates an unsaved user copy.",
+                    "info",
+                )
             elif dirty:
-                self._say("UNSAVED EDITS", f"'{d.name}' has unsaved changes" + (f" ({len(failing)} contrast check(s) fail: Apply, Save As and Export are blocked)." if failing else "."), "warning")
+                self._say(
+                    "UNSAVED EDITS",
+                    f"'{d.name}' has unsaved changes"
+                    + (
+                        f" ({len(failing)} contrast check(s) fail: Apply, Save As and Export are blocked)."
+                        if failing
+                        else "."
+                    ),
+                    "warning",
+                )
             else:
                 self._say("SAVED THEME", f"{d.name} matches its saved file.", "success")
         if not self.name_edit.text().strip() or self.name_edit.property("auto") == "true":
@@ -522,12 +659,18 @@ class ThemeStudio(QWidget):
     def _sync_color_swatches(self) -> None:
         d = self.draft
         for role, swatch in self.color_swatches.items():
-            swatch.setStyleSheet(f"background: {getattr(d.palette, role)}; border: 1px solid {d.palette.strong_border}; border-radius: 4px;")
+            swatch.setStyleSheet(
+                f"background: {getattr(d.palette, role)}; border: 1px solid {d.palette.strong_border}; border-radius: 4px;"
+            )
 
     # ---------------------------------------------------------------- actions
     def select_preset(self, theme_id: str, *, discard: bool = False) -> bool:
         if self.editor.is_dirty and not discard:
-            self._say("UNSAVED EDITS", "Save As or Revert before switching presets (or switch with discard).", "warning")
+            self._say(
+                "UNSAVED EDITS",
+                "Save As or Revert before switching presets (or switch with discard).",
+                "warning",
+            )
             self._reload_presets()
             return False
         self.editor.load(self.library.get(theme_id))
@@ -557,30 +700,49 @@ class ThemeStudio(QWidget):
     def apply(self) -> bool:
         failing = failing_checks(self.draft)
         if self.editor.errors or failing:
-            self._say("APPLY REFUSED", "Fix the invalid values or failing contrast checks first: " + ", ".join(c.label for c in failing[:3]), "blocked")
+            self._say(
+                "APPLY REFUSED",
+                "Fix the invalid values or failing contrast checks first: "
+                + ", ".join(c.label for c in failing[:3]),
+                "blocked",
+            )
             return False
         self.applied_theme = self.draft
         if self.apply_callback is not None:
             self.apply_callback(self.draft)
         try:
             self.library.set_active(self.draft)
-            self._say("APPLIED", f"{self.draft.name} applied and remembered for next launch.", "success")
+            self._say(
+                "APPLIED", f"{self.draft.name} applied and remembered for next launch.", "success"
+            )
         except ThemeStoreError:
-            self._say("APPLIED · SESSION ONLY", f"{self.draft.name} is applied to this session; Save As to restore it next launch.", "warning")
+            self._say(
+                "APPLIED · SESSION ONLY",
+                f"{self.draft.name} is applied to this session; Save As to restore it next launch.",
+                "warning",
+            )
         return True
 
     def save_as(self, name: str | None = None, *, overwrite: bool = False) -> Theme | None:
         name = (name if name is not None else self.name_edit.text()).strip()
         if self.editor.errors or failing_checks(self.draft):
-            self._say("SAVE REFUSED", "Fix invalid values or failing contrast checks before saving.", "blocked")
+            self._say(
+                "SAVE REFUSED",
+                "Fix invalid values or failing contrast checks before saving.",
+                "blocked",
+            )
             return None
         slug = slugify(name)
         try:
-            saved = self.library.save_as(self.draft, name, overwrite=overwrite or self._pending_overwrite == slug)
+            saved = self.library.save_as(
+                self.draft, name, overwrite=overwrite or self._pending_overwrite == slug
+            )
         except ThemeStoreError as exc:
             if "already exists" in str(exc):
                 self._pending_overwrite = slug
-                self._say("CONFIRM OVERWRITE", f"{exc} Press Save As again to overwrite.", "warning")
+                self._say(
+                    "CONFIRM OVERWRITE", f"{exc} Press Save As again to overwrite.", "warning"
+                )
             else:
                 self._say("SAVE REFUSED", str(exc), "blocked")
             return None
@@ -590,35 +752,55 @@ class ThemeStudio(QWidget):
         self._reload_presets(saved.id)
         self._sync_widgets()
         self._refresh()
-        self._say("SAVED", f"Saved '{saved.name}' as {self.library.path_for(saved.id).name}. It is not applied until you press Apply.", "success")
+        self._say(
+            "SAVED",
+            f"Saved '{saved.name}' as {self.library.path_for(saved.id).name}. It is not applied until you press Apply.",
+            "success",
+        )
         return saved
 
     def export_to(self, path: Path) -> bool:
         if self.editor.errors or failing_checks(self.draft):
-            self._say("EXPORT REFUSED", "Fix invalid values or failing contrast checks before exporting.", "blocked")
+            self._say(
+                "EXPORT REFUSED",
+                "Fix invalid values or failing contrast checks before exporting.",
+                "blocked",
+            )
             return False
         try:
             self.library.export_to(self.draft, Path(path))
         except ThemeStoreError as exc:
             self._say("EXPORT REFUSED", str(exc), "blocked")
             return False
-        self._say("EXPORTED", f"Wrote {Path(path).name}. Production settings were not touched.", "success")
+        self._say(
+            "EXPORTED", f"Wrote {Path(path).name}. Production settings were not touched.", "success"
+        )
         return True
 
     def import_from(self, path: Path) -> bool:
         """Load a theme file into the draft (validated, never auto-saved or applied)."""
         if self.editor.is_dirty:
-            self._say("UNSAVED EDITS", "Save As or Revert before importing over unsaved edits.", "warning")
+            self._say(
+                "UNSAVED EDITS", "Save As or Revert before importing over unsaved edits.", "warning"
+            )
             return False
         try:
             theme = self.library.import_from(Path(path))
         except ThemeError as exc:
-            self._say("IMPORT REFUSED", "; ".join(exc.errors[:4]) + (" …" if len(exc.errors) > 4 else ""), "blocked")
+            self._say(
+                "IMPORT REFUSED",
+                "; ".join(exc.errors[:4]) + (" …" if len(exc.errors) > 4 else ""),
+                "blocked",
+            )
             return False
         self.editor.load(theme)
         self._sync_widgets()
         self._refresh()
-        self._say("IMPORTED", f"'{theme.name}' was validated and loaded as an unsaved draft. Use Save As to keep it.", "success")
+        self._say(
+            "IMPORTED",
+            f"'{theme.name}' was validated and loaded as an unsaved draft. Use Save As to keep it.",
+            "success",
+        )
         return True
 
     def delete_selected(self) -> bool:
@@ -635,7 +817,9 @@ class ThemeStudio(QWidget):
         return True
 
     def _export_clicked(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Export theme", f"{self.draft.id}.json", "Theme JSON (*.json)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export theme", f"{self.draft.id}.json", "Theme JSON (*.json)"
+        )
         if path:
             self.export_to(Path(path))
 

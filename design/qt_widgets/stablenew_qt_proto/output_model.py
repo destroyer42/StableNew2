@@ -16,12 +16,12 @@ MAX_ZOOM = 16.0
 ZOOM_STEP = 1.25
 SLIDER_STEPS = 1000
 
-SIZE_FREE = "free"      # user drags the splitter/dock edge
+SIZE_FREE = "free"  # user drags the splitter/dock edge
 SIZE_LOCKED = "locked"  # width (or floating size) frozen until unlocked
-SIZE_FILL = "fill"      # takes all space the Create workspace does not need
+SIZE_FILL = "fill"  # takes all space the Create workspace does not need
 SIZE_MODES = (SIZE_FREE, SIZE_LOCKED, SIZE_FILL)
 
-ZOOM_FIT = "fit"        # re-fits whenever the viewport resizes
+ZOOM_FIT = "fit"  # re-fits whenever the viewport resizes
 ZOOM_CUSTOM = "custom"  # explicit factor; includes 100%
 
 
@@ -41,7 +41,9 @@ def step_zoom(zoom: float, direction: int) -> float:
     return clamp_zoom(target)
 
 
-def fit_factor(view_w: float, view_h: float, content_w: float, content_h: float, margin: float = 0.0) -> float:
+def fit_factor(
+    view_w: float, view_h: float, content_w: float, content_h: float, margin: float = 0.0
+) -> float:
     """Largest zoom at which the whole content fits the viewport (upscaling allowed)."""
     if content_w <= 0 or content_h <= 0:
         return 1.0
@@ -66,7 +68,9 @@ def format_zoom(zoom: float) -> str:
     return f"{percent:.0f}%" if percent >= 10 else f"{percent:.1f}%"
 
 
-def fill_width(window_width: int, workspace_width: int, minimum: int, maximum: int | None = None) -> int:
+def fill_width(
+    window_width: int, workspace_width: int, minimum: int, maximum: int | None = None
+) -> int:
     """Width the dock takes in Fill mode: everything the workspace does not need."""
     width = max(minimum, window_width - workspace_width)
     return min(width, maximum) if maximum else width
