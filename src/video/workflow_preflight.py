@@ -26,6 +26,7 @@ from src.video.comfy_runtime_setup import (
 )
 from src.video.managed_comfy_runtime import (
     ManagedComfyContract,
+    UnsupportedConfiguredComfyFlag,
     assess_comfy_command,
     missing_required_flags,
     plan_comfy_launch,
@@ -173,7 +174,7 @@ def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> Prefli
         )
     try:
         required = workflow_launch_requirements(command, workflow_flags, probes.managed_contract)
-        if not required:
+        if not required and (state != ENDPOINT_FREE or not probes.autostart or facts.owns_runtime):
             return None
         if facts.owns_runtime:
             missing = missing_required_flags(facts.verified_launch_flags, required)
@@ -193,8 +194,19 @@ def _launch_flags_gate(spec: Any, probes: PreflightProbes, state: str) -> Prefli
             )
         config = probes.extras.get("process_config")
         plan_comfy_launch(command, getattr(config, "working_dir", None), required)
+    except UnsupportedConfiguredComfyFlag as exc:
+        return PreflightGate(
+            "launch_flags",
+            "Launch flags",
+            GATE_BLOCKED,
+            str(exc),
+            f"Open {ENGINE_SETTINGS_HINT} to review the launch command.",
+            ACTION_FIX_COMFY_SETUP,
+        )
     except ValueError as exc:
         return PreflightGate("launch_flags", "Launch flags", GATE_BLOCKED, str(exc))
+    if not required:
+        return None
     return PreflightGate(
         "launch_flags",
         "Launch flags",

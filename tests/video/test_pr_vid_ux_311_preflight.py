@@ -12,7 +12,13 @@ from typing import Any
 
 import pytest
 
+from src.video.comfy_process_manager import (
+    ComfyProcessConfig,
+    ComfyProcessManager,
+    ComfyStartupError,
+)
 from src.video.comfy_runtime_setup import ComfyLaunchFacts
+from src.video.comfy_workflow_backend import ComfyWorkflowVideoBackend
 from src.video.managed_comfy_runtime import ManagedComfyContract
 from src.video.workflow_preflight import (
     GATE_ADVISORY,
@@ -150,6 +156,26 @@ def test_a_running_comfy_with_no_command_cannot_prove_its_flags() -> None:
 
     gate = _gate(result, "launch_flags")
     assert gate.state == GATE_BLOCKED and "launch flags cannot be verified" in gate.detail
+
+
+def test_ti2v_blocks_unsupported_saved_flag_before_queue_and_runtime_handoff(tmp_path) -> None:
+    spec = _spec(("wan22_ti2v_5b_i2v_v1", "1.3.0"))
+    clean = (*fake_comfy_command(tmp_path, "--disable-auto-launch"), "--disable-auto-launch")
+    configured = (*clean, "--disable-pinned-memory")
+    result = evaluate_workflow_preflight(spec, _probes(spec, command=configured))
+    assert not result.queueable and result.setup_repair_available
+    assert "does not support --disable-pinned-memory" in result.block_reason
+    assert evaluate_workflow_preflight(spec, _probes(spec, command=clean)).queueable
+    assert evaluate_workflow_preflight(
+        spec, _probes(spec, command=configured, state="healthy")
+    ).queueable
+
+    config = ComfyProcessConfig(command=list(configured), autostart_enabled=True)
+    manager = ComfyProcessManager(config)
+    backend = ComfyWorkflowVideoBackend(client=SimpleNamespace(), process_manager=manager)
+    with pytest.raises(ComfyStartupError, match="does not support --disable-pinned-memory"):
+        backend._verify_required_launch_flags(spec)
+    assert not manager.owns_process
 
 
 # ---------------------------------------------------------------------------

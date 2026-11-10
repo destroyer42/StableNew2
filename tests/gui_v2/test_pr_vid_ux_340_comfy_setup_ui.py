@@ -297,6 +297,29 @@ def test_add_required_flags_is_exactly_once_and_changes_nothing_else(
         dialog.master.destroy()
 
 
+def test_legacy_comfy_repair_removes_only_the_unsupported_flag(tmp_path, tk_root) -> None:
+    from tests.video.test_comfy_process_manager import fake_comfy_command
+
+    clean = [*fake_comfy_command(tmp_path, "--disable-auto-launch"), "--disable-auto-launch"]
+    dialog = _dialog(tk_root, _manager(tmp_path, comfy_command=[*clean, PIN]))
+    try:
+        assert dialog.add_comfy_flags_button.cget("text") == "Remove unsupported flag"
+        assert not dialog.comfy_settings_changed()
+
+        dialog.add_comfy_flags_button.invoke()
+
+        assert dialog.collect_values()["comfy_command"] == clean
+        assert dialog.add_comfy_flags_button.instate(["disabled"])
+        dialog.add_required_comfy_flags()
+        assert dialog.comfy_command() == clean
+        assert (
+            "Choose a compatible install for workflows that require it."
+            in dialog.comfy_status_text()
+        )
+    finally:
+        dialog.master.destroy()
+
+
 def test_a_missing_installation_lists_what_is_missing_inline_and_changes_nothing(
     tmp_path, tk_root
 ) -> None:

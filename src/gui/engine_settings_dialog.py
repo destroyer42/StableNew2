@@ -31,12 +31,15 @@ from src.video.comfy_runtime_setup import (
     restart_pending_notice,
 )
 from src.video.managed_comfy_runtime import (
+    PINNED_MEMORY_FLAG,
     ManagedComfyContract,
     ManagedComfyContractError,
     ManagedComfyDetection,
+    UnsupportedConfiguredComfyFlag,
     assess_comfy_command,
     detect_managed_comfy,
     load_managed_comfy_contract,
+    plan_comfy_launch,
     port_from_base_url,
     with_required_flags,
 )
@@ -352,12 +355,12 @@ class EngineSettingsDialog(ttk.Frame):
         except Exception:  # noqa: BLE001 - unreadable facts are simply not shown
             return ComfyLaunchFacts()
 
-    def comfy_status_text(self) -> str:
+    def comfy_status_text(self, *, launch_issue: str | None = None) -> str:
         facts = self._safe_launch_facts()
         parts = []
         if self._comfy_repair_reason:
             parts.append(f"Why you are here: {self._comfy_repair_reason}")
-        parts.append(self._comfy_assessment_text())
+        parts.append(self._comfy_assessment_text(launch_issue))
         if self._comfy_detection_note:
             parts.append(self._comfy_detection_note)
         parts.extend(
@@ -367,7 +370,7 @@ class EngineSettingsDialog(ttk.Frame):
         )
         return "\n".join(parts)
 
-    def _comfy_assessment_text(self) -> str:
+    def _comfy_assessment_text(self, launch_issue: str | None) -> str:
         contract = self._comfy_contract
         if contract is None:
             return f"Managed ComfyUI contract unavailable: {self._comfy_contract_error}"
@@ -383,6 +386,17 @@ class EngineSettingsDialog(ttk.Frame):
             if assessment.kind == "managed"
             else "Custom ComfyUI command"
         )
+        if launch_issue is None:
+            launch_issue = self._comfy_pin_issue()
+        if launch_issue:
+            if PINNED_MEMORY_FLAG in self._comfy_command:
+                return (
+                    f"{source}. {launch_issue} Use Remove unsupported flag, then save and restart."
+                )
+            return (
+                f"{source}. This install cannot accept {PINNED_MEMORY_FLAG}. "
+                "Choose a compatible install for workflows that require it."
+            )
         if assessment.missing_flags:
             return (
                 f"{source}. Missing required flags: {' '.join(assessment.missing_flags)}; workflows that "
@@ -394,7 +408,9 @@ class EngineSettingsDialog(ttk.Frame):
         self._comfy_command_text_var.set(
             " ".join(self._comfy_command) if self._comfy_command else "(none)"
         )
-        self._comfy_status_var.set(self.comfy_status_text())
+        launch_issue = self._comfy_pin_issue()
+        self._comfy_status_var.set(self.comfy_status_text(launch_issue=launch_issue))
+        can_remove = bool(launch_issue and PINNED_MEMORY_FLAG in self._comfy_command)
         contract = self._comfy_contract
         missing = bool(
             contract is not None
@@ -405,7 +421,14 @@ class EngineSettingsDialog(ttk.Frame):
             self.use_managed_comfy_button.state(
                 ["!disabled"] if contract is not None else ["disabled"]
             )
-            self.add_comfy_flags_button.state(["!disabled"] if missing else ["disabled"])
+            self.add_comfy_flags_button.configure(
+                text="Remove unsupported flag" if can_remove else "Add required flags",
+                command=self._remove_unsupported_comfy_flag
+                if can_remove
+                else self.add_required_comfy_flags,
+            )
+            can_edit_flags = can_remove or (missing and not launch_issue)
+            self.add_comfy_flags_button.state(["!disabled"] if can_edit_flags else ["disabled"])
             self.clear_comfy_command_button.state(
                 ["!disabled"] if self._comfy_command else ["disabled"]
             )
@@ -444,9 +467,26 @@ class EngineSettingsDialog(ttk.Frame):
 
     def add_required_comfy_flags(self) -> None:
         contract = self._comfy_contract
-        if contract is None or not self._comfy_command:
+        if contract is None or not self._comfy_command or self._comfy_pin_issue():
             return
         self._comfy_command = with_required_flags(self._comfy_command, contract.required_flags)
+        self._refresh_comfy_labels()
+
+    def _comfy_pin_issue(self) -> str:
+        contract = self._comfy_contract
+        if contract is None or assess_comfy_command(self._comfy_command, contract).kind != "custom":
+            return ""
+        candidate = with_required_flags(self._comfy_command, (PINNED_MEMORY_FLAG,))
+        try:
+            plan_comfy_launch(candidate, self._comfy_workdir, ())
+        except UnsupportedConfiguredComfyFlag as exc:
+            return str(exc)
+        return ""
+
+    def _remove_unsupported_comfy_flag(self) -> None:
+        if not self._comfy_pin_issue():
+            return
+        self._comfy_command = [part for part in self._comfy_command if part != PINNED_MEMORY_FLAG]
         self._refresh_comfy_labels()
 
     def clear_comfy_command(self) -> None:

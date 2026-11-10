@@ -151,6 +151,24 @@ def test_running_comfy_without_verified_flags_is_left_alone(tmp_path, flag_in_ar
     assert manager.verified_launch_flags == ()
 
 
+def test_legacy_configured_flag_blocks_start_even_without_a_workflow_requirement(tmp_path) -> None:
+    command = [
+        *fake_comfy_command(tmp_path, "--disable-auto-launch"),
+        "--disable-auto-launch",
+        "--disable-pinned-memory",
+    ]
+    manager = _manager(ComfyProcessConfig(command=command))
+
+    with pytest.raises(ComfyStartupError, match="does not support --disable-pinned-memory"):
+        manager.start()
+
+    assert _FakeManaged.instances == []
+    assert manager.config.command == command
+    manager.config.command = command[:-1]
+    manager.start()
+    assert _FakeManaged.instances[0].command == command[:-1]
+
+
 def test_comfy_process_manager_start_invokes_the_managed_process_with_config() -> None:
     cfg = ComfyProcessConfig(
         command=["python", "main.py"],
