@@ -21,7 +21,8 @@ The operator says what they want to make; the tab picks the engine, fills the se
 needs.
 
 - Default task, image already loaded: **3 actions or fewer** to a queued clip (task is preselected, type a prompt, Queue).
-- Default task fits without scrolling at the 1280x800 layout used by the GUI layout tests.
+- Default task fits without scrolling at the smallest window size the existing GUI layout tests exercise (the plan
+  confirms the exact size).
 - Every automatic choice is visible, carries a one-line reason and can be overridden.
 - No change to what is submitted for the same operator choices: the form state, NJR, admission and replay are unchanged.
 
@@ -116,7 +117,7 @@ Disclosure rules:
 | `src/video/workflow_tasks.py` | new, pure | Task definitions; `eligible_workflows(task, records)`; `choose_workflow(task, records, pinned)`; `suggest_settings(task, record, rife_available)`; `infer_task(record, state)`. No Tk, no I/O. |
 | `src/gui/views/video_workflow_task_panel_v2.py` | new | Task selector and the Suggested settings line and editor. Reads and writes the tab's existing Tk variables; owns pin state. |
 | `src/gui/views/video_workflow_tab_frame_v2.py` | changed | Layout only: sections 6 and the per-task show/hide. Existing widget attributes (`workflow_combo`, `queue_workflow_button`, `advanced_section`, the panel attributes) keep their names so handoffs and tests keep working; `advanced_section` becomes the Suggested settings editor. |
-| `src/controller/video_workflow_controller.py` | changed, small | Exposes RIFE availability for the suggestion through an existing capability lookup. No new admission or build path. Controller surface ceilings are not raised. |
+| `src/controller/video_workflow_controller.py` | changed, small | Exposes RIFE availability for the suggestion, reusing the PR-VID-SMOOTH-302 discovery (the plan locates the exact call). No new admission or build path. Controller surface ceilings are not raised. |
 
 Data flow: workflow records → `workflow_tasks` → task panel sets the existing Tk variables →
 `get_video_workflow_state()` (unchanged shape) → controller → NJR builder. The task never leaves the GUI.
