@@ -41,29 +41,43 @@ Layout of a saved user theme: `design/qt_widgets/user_themes/<slug>.theme.json` 
 
 ## 4. Create Image — the mock journey
 
-1. **Prompt source:** *Free prompt* or a fixture PromptPack. Choosing a pack replaces the working text
-   in one undoable step; editing it afterwards shows *modified, unsaved*.
-2. Edit the **Main prompt**; `{slot}` placeholders resolve from the **PromptPack slots** table, and
-   the **Resolved prompt** (read-only) shows the result. Tab leaves every editor (it does not insert tabs).
-3. **Model** and **settings source:** switch fixtures; unlocked, untouched values follow the new
-   recommendation, manual and locked values are kept, and the change log says why.
-4. **Effective settings:** steps, CFG, seed, batch are always shown; *Advanced settings* (sampler,
-   scheduler, size) is collapsed with a one-line summary that says if any differ from the recommendation.
-   Each field shows its origin (recommended / manual / locked), **↺** resets one, **Reset unlocked to
-   recommended** resets the rest, **Lock** protects a value.
-5. **Build mock preview:** the chip becomes READY (or BLOCKED with named reasons). Change anything and
-   it becomes **STALE** with *Stale because the draft changed: …* naming the fields; **Simulate
-   admission** is then disabled and refuses if forced.
-6. **Simulate admission:** a banner states *SIMULATED ONLY — no job submitted and no image generated*;
-   the result card shows one placeholder tile per batch image ("MOCK IMAGE n OF N", seed, size) and
-   scrolls into view. Editing afterwards clears the receipt.
-7. **Undo / Redo / Reset demo draft** (reset is undoable). Nothing is saved.
+1. In **Create Image**, start with the **Main prompt** or choose a fixture from **Prompt source**.
+   Choosing a pack replaces the working text in one undoable step. The review pane shows whether
+   it is modified and unsaved.
+2. Open **Prompt details and slots** to name the working draft, edit negative text and slot rows,
+   or read the resolved prompt. Write a reference such as **{subject}** in the main prompt.
+   Tab leaves the multi-line editor.
+3. Choose a **Model fixture** and **Profile fixture** alongside the prompt. Model default and
+   Learning-informed both use invented recommendations. Untouched settings follow the new
+   recommendation. Locked and manual values are retained where they differ from it. Open
+   **Change log** to see what was proposed and what was retained.
+4. Review the **Size preset**, steps, CFG, seed and batch count. A field labels its origin.
+   **Lock** protects a value across fixture changes, **↺** resets a field, and **Reset unlocked
+   settings** returns unlocked values to the recommendation. Expand **Advanced settings** for
+   sampler, scheduler and exact dimensions. To resolve an unsupported locked value, choose a
+   supported option or reset that field explicitly. A custom size can be unverified without
+   being unsupported.
+5. Read the effective configuration and fixture issues in **Review & results**. **Build Preview**
+   (Ctrl+Enter) checks the draft and shows the display-only snapshot. The chip above the panes
+   indicates **NOT BUILT**, **CURRENT · READY**, **BLOCKED** or **STALE**. A change to the draft
+   calls for reviewing the current settings and rebuilding a stale preview.
+6. Choose **Simulate admission** (Ctrl+Shift+Enter) after reviewing a ready, current Preview.
+   The chip changes to **SIMULATED · RECEIPT**, the review pane shows its revision and fixture
+   provenance, and the result card shows placeholder tiles. The same preview produces one
+   receipt. Editing clears that receipt and keeps the draft editable.
+7. Continue editing, or choose **Reset draft** to start from the default fixture. **Undo** and
+   **Redo** (Alt+Z and Alt+Y) apply to the in-memory draft.
+
+The Output Display starts collapsed. In a wide Create workspace, drag the handles between the
+authoring, settings and review panes to resize them. At compact widths the settings follow the
+prompt in the left pane, with review on the right. Preview status and actions stay outside the
+scroll areas.
 
 ## 5. Comparing layouts
 
-Use **Layout → Scrolling form / Split workspace** in the Create header. State, undo history and the
-preview are preserved on switch. Collapse the Output Display to give either layout more room.
-Measured results: [LAYOUT_EVALUATION](LAYOUT_EVALUATION.md). Reproduce them with `tools/layout_audit.py`.
+Launch with **--layout scroll** for the vertical comparison. The responsive split is the default.
+[Responsive Create design and evidence](RESPONSIVE_CREATE.md) describes the comparison and
+links the captures. Use **tools/layout_audit.py** to reproduce the geometry measurements.
 
 ## 6. What this walkthrough cannot show
 

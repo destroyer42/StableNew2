@@ -411,11 +411,11 @@ class WindowThemeTests(StudioCase):
         from stablenew_qt_proto.theme import ThemeEditor
 
         editor = ThemeEditor(editor_theme)
-        editor.set("spacing", "md", 24)
+        editor.set("spacing", "sm", 16)
         window.apply_theme(editor.draft)
         self.pump()
-        self.assertEqual(SPACE.md, 24)
-        self.assertEqual(window.create_view.form_layout.spacing(), 24)
+        self.assertEqual(SPACE.sm, 16)
+        self.assertEqual(window.create_view.form_layout.spacing(), 16)
 
     def test_studio_apply_drives_the_window_and_is_remembered(self):
         window = self.make_window()

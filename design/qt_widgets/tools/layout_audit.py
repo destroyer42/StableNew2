@@ -40,6 +40,7 @@ def run(
             for layout in layouts:
                 for state in states:
                     window = PrototypeWindow()
+                    window.output_toggle.setChecked(dock == "expanded")
                     window.resize(width, height)
                     window.show()
                     pump(app)
@@ -67,7 +68,7 @@ def markdown(rows: list[dict], meta: dict) -> str:
         f"Theme `{meta['theme']}` · Qt platform `{meta['qpa']}` · scale {meta['scale']} "
         f"({'SIMULATED via QT_SCALE_FACTOR' if meta['scale'] != 1.0 else 'native display scale'}) · {meta['python']}",
         "",
-        "| Layout | State | Requested → actual | Output Display | Form viewport | Form screens | Unreachable | Clipped/overflow | Task scroll actions | Form scroll (viewports) | Summary/preview/primary without scrolling | Tab stops · missing · out of view · preview before actions |",
+        "| Layout | State | Requested → actual | Output Display | Form viewport | Form height | Required in view | Unreachable | Clipped text / overflow | Task scroll actions | Task scroll px (form/settings/review) | Summary/preview/primary without scrolling | Tab stops · missing · out of view · preview before actions |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
@@ -77,9 +78,11 @@ def markdown(rows: list[dict], meta: dict) -> str:
         lines.append(
             f"| {r['layout']} | {r['state']} | {r['requested_size']} → {r['window'][0]}×{r['window'][1]}"
             f"{' (clamped by minimum size)' if r['size_clamped'] else ''} | {r['output_display']} | "
-            f"{r['form_viewport'][0]}×{r['form_viewport'][1]} | {r['form_screens']} | "
-            f"{', '.join(r['unreachable']) or 'none'} | {', '.join(r['horizontal_overflow']) or 'none'} | "
-            f"{tp['scroll_actions']} | {tp['form_scroll_viewports']} | "
+            f"{r['form_viewport'][0]}×{r['form_viewport'][1]} | {r['form_content_height']} | "
+            f"{len(r['visible_required_controls'])}/{len(r['controls'])} | "
+            f"{', '.join(r['unreachable']) or 'none'} | "
+            f"{len(r['clipped_text'])} / {len(r['horizontal_overflow'])} | "
+            f"{tp['scroll_actions']} | {tp['form_scroll_px']}/{tp['settings_scroll_px']}/{tp['review_scroll_px']} | "
             f"{'yes' if all(persist.values()) else 'no: ' + ', '.join(k for k, v in persist.items() if not v)} | "
             f"{kb.get('tab_stops', '-')} · {len(kb.get('required_missing_from_chain', []))} · {kb.get('focus_out_of_view', '-')} · "
             f"{'yes' if kb.get('preview_before_actions') else 'no'} |"

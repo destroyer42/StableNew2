@@ -58,7 +58,7 @@ class PrototypeWindow(QMainWindow):
         header.addStretch(1)
         self.output_toggle = QPushButton("Output Display")
         self.output_toggle.setCheckable(True)
-        self.output_toggle.setChecked(True)
+        self.output_toggle.setChecked(False)
         self.output_toggle.setProperty("role", "segment")
         fit_segment(self.output_toggle)
         self.output_toggle.setToolTip("Show or collapse the Output Display (Ctrl+3)")
@@ -88,10 +88,6 @@ class PrototypeWindow(QMainWindow):
         splitter.setSizes([185, 1200])
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
-        self.statusBar().showMessage(
-            "Prototype uses demonstration fixtures only. Drafts and receipts stay in memory; only Theme Studio writes theme files, when you ask."
-        )
-        self.statusBar().setSizeGripEnabled(True)
         shortcut = QAction("Switch to Create", self)
         shortcut.setShortcut("Ctrl+1")
         shortcut.triggered.connect(lambda: self.nav.setCurrentRow(0))
@@ -126,6 +122,7 @@ class PrototypeWindow(QMainWindow):
     def _build_output_display(self) -> None:
         self.output_dock = OutputDock(self)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.output_dock)
+        self.output_dock.set_collapsed(not self.output_toggle.isChecked())
         self.output_dock.set_fill_callback(self.apply_output_fill)
         self.create_view.stateSynced.connect(self._refresh_output)
         self._refresh_output()
@@ -196,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
         "--layout",
         choices=("scroll", "split"),
         default="split",
-        help="initial Create layout design",
+        help="Create layout for design comparison (default: responsive split)",
     )
     args, qt_args = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
     app = QApplication([sys.argv[0], *qt_args])

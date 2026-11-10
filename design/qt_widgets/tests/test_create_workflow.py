@@ -175,6 +175,39 @@ class PreviewFreshnessAndRefusalTests(unittest.TestCase):
         self.assertFalse(self.session.can_simulate_admission)
         self.assertTrue(any("negative prompt" in e for e in self.session.preview.errors))
 
+    def test_same_preview_can_only_produce_one_receipt(self):
+        session = self.session
+        session.build_preview()
+        receipt = session.simulate_admission()
+        self.assertFalse(session.can_simulate_admission)
+        self.assertIs(session.simulate_admission(), receipt)
+        session.build_preview()
+        self.assertFalse(session.can_simulate_admission)
+        self.assertIs(session.simulate_admission(), receipt)
+        session.set_setting("batch", 2)
+        with self.assertRaises(RuntimeError):
+            session.simulate_admission()
+        session.build_preview()
+        self.assertIsNot(session.simulate_admission(), receipt)
+
+    def test_incompatible_locked_values_require_explicit_correction(self):
+        session = self.session
+        session.toggle_lock("sampler", True)
+        session.toggle_lock("scheduler", True)
+        session.switch_model("fixture-flux")
+        session.set_text("negative", "")
+        blocked = session.build_preview()
+        self.assertEqual(len(blocked.errors), 2)
+        self.assertTrue(all("locked in this draft" in error for error in blocked.errors))
+        self.assertEqual(session.draft.settings.sampler, "DPM++ 2M")
+        self.assertEqual(session.draft.settings.scheduler, "Karras")
+        with self.assertRaises(RuntimeError):
+            session.simulate_admission()
+        session.reset_setting("sampler")
+        session.reset_setting("scheduler")
+        self.assertEqual(session.draft.locked_fields, {"sampler", "scheduler"})
+        self.assertTrue(session.build_preview().ready)
+
     def test_editing_after_admission_clears_the_receipt(self):
         self.session.build_preview()
         self.session.simulate_admission()

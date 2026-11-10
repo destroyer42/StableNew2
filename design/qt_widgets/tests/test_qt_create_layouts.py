@@ -22,7 +22,7 @@ try:
     from stablenew_qt_proto.app import PrototypeWindow, apply_theme
     from stablenew_qt_proto.create_view import LAYOUT_DESIGNS, LAYOUT_SCROLL, LAYOUT_SPLIT
     from stablenew_qt_proto.domain import PACKS, SOURCE_FREE
-    from stablenew_qt_proto.layout_probe import REQUIRED_CONTROLS, probe
+    from stablenew_qt_proto.layout_probe import REQUIRED_CONTROLS, probe, text_clipping
     from stablenew_qt_proto.theme_store import ThemeLibrary
     from stablenew_qt_proto.tokens import reference_themes
 except ImportError:
@@ -47,15 +47,15 @@ class CreateCase(unittest.TestCase):
         for _ in range(rounds):
             self.app.processEvents()
 
-    def make(self, width=1280, height=680, *, design=None, dock=True):
+    def make(self, width=1280, height=680, *, design=None, dock=False, theme="blue-modern"):
         design = design or LAYOUT_SPLIT
-        window = PrototypeWindow(library=self.library, theme=reference_themes()["blue-modern"])
+        active = reference_themes()[theme]
+        apply_theme(self.app, active)
+        window = PrototypeWindow(library=self.library, theme=active)
+        window.output_toggle.setChecked(dock)
         window.resize(width, height)
         window.show()
         self.pump()
-        if not dock:
-            window.output_toggle.setChecked(False)
-            self.pump()  # the minimum width only drops once the dock has collapsed
         window.create_view.set_layout_design(design)
         window.resize(width, height)
         self.pump()
@@ -124,7 +124,30 @@ class LayoutMeasurementTests(CreateCase):
         window, _view = self.make(1280, 680, design=LAYOUT_SCROLL)
         persistent = probe(window, with_keyboard=False)["persistent_without_scroll"]
         self.assertFalse(persistent["summary"])
-        self.assertFalse(persistent["preview_chip"])
+        self.assertTrue(persistent["preview_chip"])
+
+    def test_split_starts_with_the_core_journey_in_view_at_1280(self):
+        window, view = self.make(1280, 680)
+        report = probe(window, with_keyboard=False)
+        self.assertTrue(view.settings_scroll.isVisible())
+        self.assertTrue(window.output_dock.collapsed)
+        self.assertEqual(report["task_path"]["scroll_actions"], 0)
+        self.assertLessEqual(
+            {
+                "source_combo",
+                "prompt_text",
+                "model_combo",
+                "profile_combo",
+                "size_combo",
+                "setting:steps",
+                "setting:cfg",
+                "setting:seed",
+                "setting:batch",
+                "preview_button",
+                "admit_button",
+            },
+            set(report["visible_required_controls"]),
+        )
 
     def test_task_path_needs_few_scroll_actions_in_both_designs(self):
         for design in LAYOUT_DESIGNS:
@@ -134,27 +157,42 @@ class LayoutMeasurementTests(CreateCase):
             self.assertLessEqual(path["scroll_actions"], 4, design)
 
     def test_resizing_never_introduces_horizontal_overflow(self):
+        sizes = ((960, 600), (1280, 680), (1366, 768), (1920, 1080))
         for design in LAYOUT_DESIGNS:
-            window, view = self.make(1280, 680, design=design)
-            columns = []
-            for width in (1200, 1280, 1440, 1700, 1920):
-                window.resize(width, 760)
-                self.pump()
-                report = probe(window, with_keyboard=False)
-                self.assertEqual(report["horizontal_overflow"], [], f"{design}@{width}")
-                self.assertEqual(report["unreachable"], [], f"{design}@{width}")
-                columns.append(view.settings_grid.columns)
-            self.assertEqual(
-                columns, sorted(columns), design
-            )  # wider windows never use fewer columns
-            self.assertGreater(columns[-1], columns[0])
+            for theme in ("blue-modern", "concept-a"):
+                window, view = self.make(design=design, theme=theme)
+                for width, height in sizes:
+                    window.resize(width, height)
+                    self.pump()
+                    case = f"{design}/{theme}@{width}x{height}"
+                    report = probe(window, with_keyboard=False)
+                    self.assertEqual(report["window"], [width, height], case)
+                    self.assertEqual(report["horizontal_overflow"], [], case)
+                    self.assertEqual(report["unreachable"], [], case)
+                    self.assertEqual(report["clipped_text"], [], case)
+                    for disclosure in (
+                        view.prompt_details,
+                        view.advanced_settings,
+                        view.channels_disclosure,
+                    ):
+                        disclosure.toggle.setChecked(True)
+                    self.pump()
+                    self.assertEqual(text_clipping(view), [], case)
+                    for disclosure in (
+                        view.prompt_details,
+                        view.advanced_settings,
+                        view.channels_disclosure,
+                    ):
+                        disclosure.toggle.setChecked(False)
 
     def test_collapsing_the_output_display_gives_the_form_more_room(self):
-        window, view = self.make(1280, 680, design=LAYOUT_SPLIT)
-        with_dock = view.form_scroll.viewport().width()
+        window, view = self.make(1280, 680, design=LAYOUT_SPLIT, dock=True)
+        with_dock = view.width()
+        self.assertFalse(view.settings_scroll.isVisible())
         window.output_toggle.setChecked(False)
         self.pump()
-        self.assertGreater(view.form_scroll.viewport().width(), with_dock)
+        self.assertGreater(view.width(), with_dock)
+        self.assertTrue(view.settings_scroll.isVisible())
 
 
 class LayoutBehaviourTests(CreateCase):
@@ -167,7 +205,7 @@ class LayoutBehaviourTests(CreateCase):
         session, revision = view.session, view.session.revision
         self.assertTrue(session.is_preview_current)
         for design in (LAYOUT_SCROLL, LAYOUT_SPLIT, LAYOUT_SCROLL):
-            view.layout_buttons[design].click()
+            view.set_layout_design(design)
             self.pump()
             self.assertEqual(view.layout_design, design)
             self.assertIs(view.session, session)
@@ -179,6 +217,44 @@ class LayoutBehaviourTests(CreateCase):
             self.assertTrue(view.admit_button.isEnabled())
             self.assertEqual(view.review.parentWidget() is not None, True)
             self.assertEqual(view.review_scroll.isVisible(), design == LAYOUT_SPLIT)
+
+    def test_resizing_reflows_settings_without_losing_focus_or_the_draft(self):
+        window, view = self.make()
+        field = view.setting_inputs["steps"]
+        field.setValue(39)
+        field.setFocus()
+        self.pump()
+        for width, height, wide in ((960, 600, False), (1280, 680, True), (1366, 768, True)):
+            window.resize(width, height)
+            self.pump()
+            self.assertEqual(view.settings_scroll.isVisible(), wide)
+            self.assertEqual(field.value(), 39)
+            self.assertTrue(field.hasFocus())
+
+    def test_keyboard_order_and_mock_shortcuts(self):
+        window, view = self.make()
+        view.source_combo.setFocus()
+        self.pump()
+        for expected in (view.prompt_text, view.model_combo, view.profile_combo):
+            QTest.keyClick(QApplication.focusWidget(), Qt.Key.Key_Tab)
+            self.pump()
+            self.assertIs(QApplication.focusWidget(), expected)
+        QTest.keyClick(view.profile_combo, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+        self.pump()
+        self.assertTrue(view.admit_button.isEnabled())
+        for _ in range(2):
+            QTest.keyClick(
+                view.profile_combo,
+                Qt.Key.Key_Return,
+                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+            )
+        self.pump()
+        receipt = view.session.demo_receipt
+        self.assertIsNotNone(receipt)
+        self.assertIs(view.session.simulate_admission(), receipt)
+        self.assertFalse(view.admit_button.isEnabled())
+        self.assertTrue(view.result_card.isVisible())
+        self.assertTrue(window.output_dock.collapsed)
 
     def test_unknown_layout_is_rejected(self):
         _window, view = self.make()
@@ -199,10 +275,10 @@ class LayoutBehaviourTests(CreateCase):
             ):
                 target.setFocus()
                 self.pump()
-                scroll = (
-                    view.form_scroll
-                    if view.form_scroll.widget().isAncestorOf(target)
-                    else view.review_scroll
+                scroll = next(
+                    pane
+                    for pane in view.scroll_areas
+                    if pane.widget() is not None and pane.widget().isAncestorOf(target)
                 )
                 self.assertTrue(scroll.widget().isAncestorOf(target))
                 viewport = scroll.viewport()
@@ -215,6 +291,9 @@ class LayoutBehaviourTests(CreateCase):
 
     def test_tab_leaves_the_multiline_prompt_instead_of_trapping_focus(self):
         window, view = self.make()
+        view.prompt_details.toggle.setChecked(True)
+        view.channels_disclosure.toggle.setChecked(True)
+        self.pump()
         for editor in (view.prompt_text, view.negative_text, view.global_text):
             editor.setFocus()
             self.pump()
@@ -291,6 +370,29 @@ class WorkflowThroughTheUiTests(CreateCase):
         self.assertIn("STALE", view.preview_chip.text())
         self.assertIn("Stale because the draft changed", view.stale_label.text())
         self.assertTrue(view.stale_label.isVisibleTo(view.window()))
+
+    def test_locked_sampler_conflict_stays_visible_until_explicitly_resolved(self):
+        _window, view = self.make()
+        view.lock_inputs["sampler"].setChecked(True)
+        view.model_combo.setCurrentIndex(1)
+        combo = view.setting_inputs["sampler"]
+        self.assertEqual(combo.currentData(), "DPM++ 2M")
+        self.assertIn("unsupported", combo.currentText())
+        view.advanced_settings.toggle.setChecked(True)
+        self.pump()
+        self.assertEqual(text_clipping(view), [])
+        self.assertIn("locked in this draft", view.banner.message.text())
+        view.preview_button.click()
+        self.assertEqual(view.preview_chip.text(), "BLOCKED")
+        self.assertFalse(view.admit_button.isEnabled())
+        view.negative_text.clear()
+        self.assertIn("Sampler", view.banner.message.text())
+        view.setting_fields["sampler"].reset_button.click()
+        self.assertTrue(view.lock_inputs["sampler"].isChecked())
+        self.assertEqual(combo.currentData(), "Euler")
+        self.assertEqual(combo.findData("DPM++ 2M"), -1)
+        view.preview_button.click()
+        self.assertTrue(view.admit_button.isEnabled())
 
     def test_setting_origin_is_visible_and_reset_returns_to_recommended(self):
         _window, view = self.make()

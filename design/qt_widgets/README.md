@@ -56,6 +56,10 @@ cd design\qt_widgets
 & $py -m stablenew_qt_proto.app --theme concept-a --layout scroll
 ```
 
+The [responsive Create design](docs/RESPONSIVE_CREATE.md) records the default split workspace, the
+vertical comparison, and the baseline, measurements and screenshots. The Output Display starts
+collapsed; Ctrl+3 toggles it.
+
 ## Test
 
 ```powershell

@@ -186,6 +186,7 @@ class IssueList(QWidget):
     ) -> None:
         for banner in self.banners:
             self._layout.removeWidget(banner)
+            banner.hide()
             banner.deleteLater()
         self.banners = []
         entries = [("BLOCKED", text, "blocked") for text in errors] + [
@@ -358,6 +359,7 @@ class ResponsiveGrid(QWidget):
     def clear(self) -> None:
         for item in self._items:
             self._grid.removeWidget(item)
+            item.hide()
             item.deleteLater()
         self._items = []
         self._columns = 0
@@ -407,15 +409,9 @@ class SettingField(QWidget):
         head = QHBoxLayout()
         head.setSpacing(SPACE.xs)
         self.title = QLabel(title)
+        self.title.setWordWrap(True)
         self.title.setBuddy(editor)
         head.addWidget(self.title, 1)
-        self.reset_button = QToolButton()
-        self.reset_button.setProperty("role", "reset")
-        self.reset_button.setText("↺")
-        self.reset_button.setToolTip(f"Reset {title} to the recommended value")
-        self.reset_button.setAccessibleName(f"Reset {title} to recommended")
-        self.reset_button.clicked.connect(self.resetRequested)
-        head.addWidget(self.reset_button)
         self.lock = QCheckBox("Lock")
         self.lock.setToolTip(
             f"Keep {title} unchanged when the model or settings source changes (this draft only)"
@@ -425,19 +421,31 @@ class SettingField(QWidget):
         head.addWidget(self.lock)
         lay.addLayout(head)
         lay.addWidget(editor)
+        footer = QHBoxLayout()
+        footer.setSpacing(SPACE.xs)
         self.recommendation = QLabel("")
         self.recommendation.setProperty("role", "muted")
-        lay.addWidget(self.recommendation)
+        self.recommendation.setWordWrap(True)
+        footer.addWidget(self.recommendation, 1)
+        self.reset_button = QToolButton()
+        self.reset_button.setProperty("role", "reset")
+        self.reset_button.setText("↺")
+        self.reset_button.setToolTip(f"Reset {title} to the recommended value")
+        self.reset_button.setAccessibleName(f"Reset {title} to recommended")
+        self.reset_button.clicked.connect(self.resetRequested)
+        footer.addWidget(self.reset_button)
+        lay.addLayout(footer)
 
     def set_state(self, *, locked: bool, differs: bool, recommended: str, origin: str = "") -> None:
         self.lock.blockSignals(True)
         self.lock.setChecked(locked)
         self.lock.blockSignals(False)
         self.reset_button.setEnabled(differs)
-        origin_text = {"locked": " · locked", "manual": " · manual override"}.get(origin, "")
+        origin_text = {"locked": "Locked", "manual": "Manual"}.get(origin, "Recommended")
         self.recommendation.setText(
-            f"Recommended: {recommended}" + (" · differs" if differs else "") + origin_text
+            f"{origin_text} · rec. {recommended}" if differs else origin_text
         )
+        self.recommendation.setToolTip(f"{origin_text}. Fixture recommendation: {recommended}.")
         self.recommendation.setProperty("level", "warning" if differs else "info")
         repolish(self.recommendation)
 
@@ -457,8 +465,12 @@ class ResultGallery(QFrame):
         self.grid = ResponsiveGrid(min_column_width=140)
         self._layout.addWidget(self.grid)
         self.tiles: list[QLabel] = []
+        self._tiles_data: tuple = ()
 
     def set_tiles(self, tiles: tuple) -> None:
+        if tiles == self._tiles_data:
+            return
+        self._tiles_data = tiles
         self.grid.clear()
         self.tiles = []
         self.caption.setText(

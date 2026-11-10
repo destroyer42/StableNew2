@@ -42,6 +42,7 @@ class OutputDisplayTests(unittest.TestCase):
 
     def make(self, width=1440, height=800):
         window = PrototypeWindow()
+        window.output_toggle.setChecked(True)
         window.resize(width, height)
         window.show()
         self.settle()
@@ -77,7 +78,7 @@ class OutputDisplayTests(unittest.TestCase):
         )
 
     # ------------------------------------------------------------- placement
-    def test_dock_sits_right_of_the_workspace_and_starts_expanded(self):
+    def test_expanded_dock_sits_right_of_the_workspace(self):
         window, dock = self.make()
         self.assertTrue(dock.isVisible())
         self.assertFalse(dock.isFloating())
@@ -100,7 +101,7 @@ class OutputDisplayTests(unittest.TestCase):
                 button.mapTo(window, button.rect().bottomRight()).x(), window.width()
             )
             self.assertGreaterEqual(button.width(), button.minimumWidth())
-        for scroll in view.findChildren(QScrollArea):
+        for scroll in (pane for pane in view.findChildren(QScrollArea) if pane.isVisible()):
             self.assertLessEqual(
                 scroll.widget().minimumSizeHint().width(), scroll.viewport().width()
             )
@@ -419,7 +420,9 @@ class OutputDisplayTests(unittest.TestCase):
         dock.set_collapsed(True)
         self.settle()
         self.assertLessEqual(window.minimumSizeHint().width(), 960)
-        for scroll in window.create_view.findChildren(QScrollArea):
+        for scroll in (
+            pane for pane in window.create_view.findChildren(QScrollArea) if pane.isVisible()
+        ):
             self.assertLessEqual(
                 scroll.widget().minimumSizeHint().width(), scroll.viewport().width()
             )
