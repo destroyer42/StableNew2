@@ -102,10 +102,22 @@ execution is explicitly authorized.
 
 ## Validation levels
 
-- **Level 1 - focused development validation.** While implementing or repairing,
-  run only the deterministic tests relevant to the changed behavior, quietly
-  (`python -m pytest -q <targets>`). Do not run the whole repository merely
-  because source changed.
+- **Level 1 - focused development validation.** Run these commands from the
+  repository root with the pinned project Python. In Windows PowerShell, use
+  the active environment's `python` or replace `python` below with
+  `& .\.venv\Scripts\python.exe` if the environment is in `.venv`. Run these
+  checks independently of the optional commit-time hooks.
+  1. After a coherent batch of Python edits, run
+     `python -m ruff check --force-exclude -- <paths>` with the edited Python
+     paths (including new files, quoted if they contain spaces). Then run
+     `python tools/ci/run_ruff_ratchets.py` to catch formatting and exception
+     regressions against the same baseline as CI before running tests.
+  2. When changes can affect application types, run
+     `python tools/ci/run_mypy_ratchet.py` once the implementation is coherent,
+     ahead of the final gate. This checks the import graph with the same strict
+     settings and per-file baseline as CI.
+  3. Run the deterministic tests relevant to the changed behavior with
+     `python -m pytest -q <targets>`.
 - **Level 2 - final local PR gate.** Near final verification run
   `python tools/ci/run_pr_gate.py` once. It remains the local authority for
   repository completeness, the controller ratchet, Ruff, the mypy smoke, isolated
