@@ -53,23 +53,23 @@ stays outside the inspector scroll area. Comparison replaces the canvas in the s
 **Alternative B · Adjustable inspector.** Run with `--edit-layout inspector` to put source
 and mode in a dedicated left rail. It keeps those controls grouped and saves 2 px of height
 at each size. The extra rail costs 204 px of canvas width at every measured size. At 960×600
-it reduces the canvas from 482×263 to 278×265, which leaves a much smaller fitted image.
-At 1280×680, A provides 770×343 compared with 566×345 in B. Both layouts needed no scrolling
+it reduces the canvas from 482×285 to 278×287, which leaves a much smaller fitted image.
+At 1280×680, A provides 770×365 compared with 566×367 in B. Both layouts needed no scrolling
 to reach Advanced at 1280×680. A therefore keeps the source controls in the heading and
 allocates the width to the image.
 
 | Native Windows client | A canvas | B canvas |
 |---|---:|---:|
-| 960×600 | 482×263 | 278×265 |
-| 1280×680 | 770×343 | 566×345 |
-| 1366×768 | 856×431 | 652×433 |
-| 1440×900 | 925×563 | 721×565 |
-| 1920×1080 | 1354×743 | 1150×745 |
+| 960×600 | 482×285 | 278×287 |
+| 1280×680 | 770×365 | 566×367 |
+| 1366×768 | 856×453 | 652×455 |
+| 1440×900 | 925×585 | 721×587 |
+| 1920×1080 | 1354×765 | 1150×767 |
 
-Both reference themes produced the dimensions above. In 20 native masked-edit layout cases,
+Both reference themes produced the dimensions above after the rebase onto QT-DS-02. In 20 native masked-edit layout cases,
 all client sizes matched their request. The probe found no clipped persistent controls,
 horizontal inspector overflow or missing enabled Tab stops. Advanced was reachable with up to
-70 px of vertical scrolling at 960×600. The native interaction tests cover keyboard selection,
+48 px of vertical scrolling at 960×600. The native interaction tests cover keyboard selection,
 Tab and Shift+Tab, focus, pointer gestures, wheel behavior, replacement, mask cancellation,
 resize, theme switching and window destruction. These are scripted walkthroughs and reachability
 measurements. Operator preference and task-time comparisons still need human sessions.

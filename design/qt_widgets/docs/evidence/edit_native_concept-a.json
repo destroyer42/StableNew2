@@ -7,7 +7,7 @@
     "os": "Windows-11-10.0.26100-SP0",
     "platform_note": "native platform",
     "screen": {
-      "name": "ASUS VG32VQ1B",
+      "name": "\\\\.\\DISPLAY6",
       "geometry": [
         2560,
         1440
@@ -25,18 +25,18 @@
       ],
       "canvas": [
         482,
-        263
+        285
       ],
       "inspector_viewport": [
         238,
-        383
+        405
       ],
       "settings_scroll_px": {
         "profile": 0,
         "region": 0,
         "prompt": 0,
-        "negative": 18,
-        "advanced": 70
+        "negative": 0,
+        "advanced": 48
       },
       "horizontal_overflow_px": 0,
       "clipped": [],
@@ -53,18 +53,18 @@
       ],
       "canvas": [
         278,
-        265
+        287
       ],
       "inspector_viewport": [
         238,
-        385
+        407
       ],
       "settings_scroll_px": {
         "profile": 0,
         "region": 0,
         "prompt": 0,
-        "negative": 16,
-        "advanced": 68
+        "negative": 0,
+        "advanced": 46
       },
       "horizontal_overflow_px": 0,
       "clipped": [],
@@ -81,11 +81,11 @@
       ],
       "canvas": [
         770,
-        343
+        365
       ],
       "inspector_viewport": [
-        270,
-        463
+        282,
+        485
       ],
       "settings_scroll_px": {
         "profile": 0,
@@ -109,11 +109,11 @@
       ],
       "canvas": [
         566,
-        345
+        367
       ],
       "inspector_viewport": [
-        270,
-        465
+        282,
+        487
       ],
       "settings_scroll_px": {
         "profile": 0,
@@ -137,11 +137,11 @@
       ],
       "canvas": [
         856,
-        431
+        453
       ],
       "inspector_viewport": [
         282,
-        551
+        573
       ],
       "settings_scroll_px": {
         "profile": 0,
@@ -165,11 +165,11 @@
       ],
       "canvas": [
         652,
-        433
+        455
       ],
       "inspector_viewport": [
         282,
-        553
+        575
       ],
       "settings_scroll_px": {
         "profile": 0,
@@ -193,11 +193,11 @@
       ],
       "canvas": [
         925,
-        563
+        585
       ],
       "inspector_viewport": [
         282,
-        683
+        705
       ],
       "settings_scroll_px": {
         "profile": 0,
@@ -221,11 +221,11 @@
       ],
       "canvas": [
         721,
-        565
+        587
       ],
       "inspector_viewport": [
         282,
-        685
+        707
       ],
       "settings_scroll_px": {
         "profile": 0,
@@ -249,11 +249,11 @@
       ],
       "canvas": [
         1354,
-        743
+        765
       ],
       "inspector_viewport": [
         282,
-        863
+        885
       ],
       "settings_scroll_px": {
         "profile": 0,
@@ -277,11 +277,11 @@
       ],
       "canvas": [
         1150,
-        745
+        767
       ],
       "inspector_viewport": [
         282,
-        865
+        887
       ],
       "settings_scroll_px": {
         "profile": 0,

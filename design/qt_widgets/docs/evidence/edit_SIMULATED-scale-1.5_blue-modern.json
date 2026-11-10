@@ -7,7 +7,7 @@
     "os": "Windows-11-10.0.26100-SP0",
     "platform_note": "native platform, simulated scaling",
     "screen": {
-      "name": "ASUS VG32VQ1B",
+      "name": "\\\\.\\DISPLAY6",
       "geometry": [
         1707,
         960
@@ -25,11 +25,11 @@
       ],
       "canvas": [
         774,
-        341
+        363
       ],
       "inspector_viewport": [
         266,
-        463
+        485
       ],
       "settings_scroll_px": {
         "profile": 0,

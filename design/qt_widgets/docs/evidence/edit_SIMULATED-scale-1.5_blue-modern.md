@@ -4,4 +4,4 @@ Theme `blue-modern` · Qt platform `windows` · requested scale 1.5 · screen DP
 
 | Layout | Requested → actual client | Canvas | Inspector | Scroll to advanced | Clipped | Horizontal overflow | Tab stops · missing | Preview |
 |---|---|---|---|---|---|---|---|---|
-| editor | 1280x680 → 1280×680 | 774×341 | 266×463 | 0 px | none | 0 px | 22 · none | Current / ready |
+| editor | 1280x680 → 1280×680 | 774×363 | 266×485 | 0 px | none | 0 px | 22 · none | Current / ready |
