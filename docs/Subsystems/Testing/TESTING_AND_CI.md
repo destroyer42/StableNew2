@@ -147,7 +147,7 @@ Trap: the dead-reference scan treats every whitespace-free backticked token with
 
 | Goal | Command |
 |---|---|
-| Focused (Level 1) | `python -m pytest -q <files or node ids>` from the repo root; start here, do not run the whole tree because source changed |
+| Focused (Level 1) | Run the early Ruff checks, applicable mypy ratchet, and targeted pytest from the [Level 1 workflow](../../StableNew_Coding_and_Testing_v2.6.md#validation-levels). |
 | Final local gate (Level 2) | `python tools/ci/run_pr_gate.py` once, near the end; reuse exact-source green evidence, do not rerun after docs-only edits |
 | One gate step | the script in the section 4 table, directly |
 | Full census | `python tools/ci/run_sharded_census.py` (section 5) |
