@@ -1,4 +1,4 @@
-# StableNew — Qt Widgets design workspace (QT-DS-01, v0.4)
+# StableNew — Qt Widgets design workspace
 
 A permanent, source-maintained place to prototype and compare **Qt Widgets** components, themes and
 layouts for StableNew. It is a **design aid**: not production code, not an integrated StableNew
@@ -9,6 +9,7 @@ prototype lives in [`docs/research/stablenew-experience/`](../../docs/research/s
 and is **not** duplicated here; this workspace only links to it:
 
 - [UX-850-B J1 Create journey](../../docs/research/stablenew-experience/ux850-b/JOURNEYS.md)
+- [UX-850-B J2 Edit journey](../../docs/research/stablenew-experience/ux850-b/JOURNEYS.md#j2-edit--selected-asset-to-compared-derived-result)
 - [UX-850-C component roles](../../docs/research/stablenew-experience/ux850-c/COMPONENTS.md) and
   [token roles](../../docs/research/stablenew-experience/ux850-c/TOKENS.md)
 - [UX-850-D state authority](../../docs/research/stablenew-experience/ux850-d/README.md)
@@ -26,6 +27,8 @@ and is **not** duplicated here; this workspace only links to it:
 | `stablenew_qt_proto/theme_studio.py`, `gallery.py` | Component library page + **Theme Studio** (live preview, state matrix, contrast diagnostics) |
 | `stablenew_qt_proto/components.py`, `create_view.py`, `output_display.py` | Reusable components, the mock Create workflow (two layouts), the Output Display dock |
 | `stablenew_qt_proto/domain.py`, `output_model.py` | Pure in-memory mock domain (fixtures, recommendations, locks, preview freshness) |
+| `stablenew_qt_proto/edit_domain.py` | Edit source catalog, region and mask revisions, Preview checks and frozen mock candidates |
+| `stablenew_qt_proto/edit_components.py`, `edit_view.py` | Source picker, image canvas, shared zoom controls, comparison viewer and Edit workspace |
 | `stablenew_qt_proto/layout_probe.py`, `tools/layout_audit.py`, `tools/capture.py` | Deterministic layout measurement, evidence tables, screenshots |
 | `tests/` | Pure tests plus opt-in native Qt tests |
 | `docs/` | [WALKTHROUGH](docs/WALKTHROUGH.md), [LAYOUT_EVALUATION](docs/LAYOUT_EVALUATION.md), [THEME_CONTRACT](docs/THEME_CONTRACT.md), [ASSESSMENT](docs/ASSESSMENT.md) (demonstrated vs unverified), [TRACEABILITY](docs/TRACEABILITY.md), [IMPORT_RECORD](docs/IMPORT_RECORD.md), `evidence/`, `screenshots/` |
@@ -54,6 +57,7 @@ $py = 'C:\Users\rob\qual.__moved_to_D\gui-port740-env\Scripts\python.exe'   # re
 cd design\qt_widgets
 & $py -m stablenew_qt_proto.app                    # remembered theme, split Create layout
 & $py -m stablenew_qt_proto.app --theme concept-a --layout scroll
+& $py -m stablenew_qt_proto.app --theme blue-modern --edit-layout inspector
 ```
 
 The [responsive Create design](docs/RESPONSIVE_CREATE.md) records the default split workspace, the
@@ -76,6 +80,8 @@ representative.
 ```powershell
 & $py tools/layout_audit.py --out docs/evidence --sizes 1280x680 960x600 1440x900 --name my_audit
 & $py tools/capture.py --out captures --sizes 1280x680 --layout split --prefix split_ --studio
+& $py tools/layout_audit.py --out docs/evidence --edit-layouts editor inspector --sizes 960x600 1280x680 1366x768 1440x900 1920x1080 --name edit_native_blue-modern
+& $py tools/capture.py --out captures --sizes 1280x680 --edit-layout editor --edit-states masked extend compare blocked
 ```
 
 `--scale` sets `QT_SCALE_FACTOR` and is **simulated** scaling (reported as such). Real per-monitor
@@ -85,6 +91,10 @@ representative.
 
 [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md) is a step-by-step tour: component gallery, Theme Studio
 (edit, preview, contrast, save, restore, export, import), the Create journey and the two layouts.
+
+[Edit & Improve](docs/EDIT_WORKFLOW.md) covers the five Edit walkthroughs, shortcuts, native
+layout measurements and screenshots, UX decision traceability, and boundaries for production.
+Use **Ctrl+4** to open Edit or **Edit linked fixture** in a simulated Create result.
 
 ## Limits that matter
 

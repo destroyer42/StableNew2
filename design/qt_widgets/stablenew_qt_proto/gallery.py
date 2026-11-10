@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -37,6 +38,8 @@ from .components import (
     stacked_label,
 )
 from .domain import ResultTile
+from .edit_components import CompareViewer, ImageCanvas, SourcePicker, ZoomControls, fixture_image
+from .edit_domain import CREATE_SOURCE, EditRefused, suggest_mask
 from .theme import Theme, contrast_checks
 from .theme_store import ThemeLibrary
 from .theme_studio import ThemeStudio
@@ -238,6 +241,46 @@ class ComponentsPage(QScrollArea):
             )
         )
         card.add(gallery)
+        root.addWidget(card)
+
+        card = SectionCard(
+            "Image canvas & source picker",
+            "The gallery shows a simulated mask overlay. Try fit, zoom, pan or an unavailable source.",
+        )
+        picker = SourcePicker()
+        canvas = ImageCanvas()
+        canvas.setMinimumHeight(215)
+        status = NoticeBanner()
+
+        def show_fixture(index: int) -> None:
+            key = picker.itemData(index)
+            canvas.set_edit_state(0, b"", 0, None)
+            try:
+                canvas.set_image(fixture_image(key) if key else QImage())
+                status.set_message("Fixture", key or "No selection")
+            except EditRefused as exc:
+                canvas.set_image(QImage())
+                status.set_message("Unavailable", str(exc), "blocked")
+            if key == CREATE_SOURCE:
+                canvas.set_edit_state(1, suggest_mask(key), 8, None)
+
+        picker.currentIndexChanged.connect(show_fixture)
+        picker.setCurrentIndex(picker.findData(CREATE_SOURCE))
+        card.add(picker)
+        card.add(status)
+        card.add(ZoomControls(canvas))
+        card.add(canvas)
+        root.addWidget(card)
+
+        card = SectionCard("Comparison viewer", "Recorded fixture pair with shared zoom controls.")
+        compare = CompareViewer()
+        compare.set_pair(
+            fixture_image("history:ridge-16"),
+            fixture_image("history:ridge-17"),
+            "Verified fixture parent · history:ridge-16",
+            "Fixture child · history:ridge-17",
+        )
+        card.add(compare)
         root.addWidget(card)
         root.addStretch(1)
         self.setWidget(body)

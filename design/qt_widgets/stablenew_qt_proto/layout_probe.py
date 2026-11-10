@@ -9,10 +9,13 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QScrollArea, QWidget
 
 from .components import reveal
 from .create_view import CreateView
+from .edit_domain import CREATE_SOURCE, Mode
 
 # Controls an operator must be able to reach to complete the Create task (attribute name on CreateView).
 REQUIRED_CONTROLS: tuple[str, ...] = (
@@ -347,8 +350,132 @@ def _in_view_unscrolled(view: CreateView, widget: QWidget) -> bool:
         return False
     scroll = _scroll_of(view, widget)
     area = scroll.viewport() if scroll is not None else view.window()
+    return _contained(widget, area)
+
+
+def _contained(widget: QWidget, area: QWidget) -> bool:
+    if not widget.isVisibleTo(area):
+        return False
     tl, br = (
         widget.mapTo(area, widget.rect().topLeft()),
         widget.mapTo(area, widget.rect().bottomRight()),
     )
     return tl.x() >= 0 and tl.y() >= 0 and br.x() <= area.width() and br.y() <= area.height()
+
+
+def prime_edit(window, size: tuple[int, int], state: str = "masked") -> None:
+    """Prepare an Edit evidence case, including a native pointer stroke in Masked Edit."""
+    app = QApplication.instance()
+    view = window.edit_view
+    window.nav.setCurrentRow(window.pages.indexOf(view))
+    window.show()
+    pump(app)
+    window.resize(*size)
+    window.activateWindow()
+    pump(app)
+    view.select_source(CREATE_SOURCE)
+    view.mode.setCurrentText(Mode.EXTEND if state in ("extend", "blocked") else Mode.MASKED)
+    QTest.keyClicks(view.prompt, "Warm the light on the ridgeline")
+    if state in ("extend", "blocked"):
+        view.margins["left"].setValue(96 if state == "extend" else 0)
+        view.margins["top"].setValue(48 if state == "extend" else 0)
+        if state == "blocked":
+            view.margins["right"].setValue(0)
+    else:
+        pump(app)
+        canvas = view.canvas
+        tx = canvas.transform()
+        start = QPoint(round(tx.left + 170 * tx.scale), round(tx.top + 260 * tx.scale))
+        end = QPoint(round(tx.left + 410 * tx.scale), round(tx.top + 222 * tx.scale))
+        view.brush.setValue(28)
+        QTest.mousePress(canvas, Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(canvas, end)
+        QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=end)
+    view.preview_button.click()
+    if state == "compare":
+        view.admit_button.click()
+    elif state != "blocked":
+        view.inspector.setCurrentWidget(view.settings_scroll)
+    pump(app)
+
+
+def probe_edit(window) -> dict[str, Any]:
+    """Measure persistent Edit controls, inspector overflow and the enabled Tab chain."""
+    view = window.edit_view
+    controls = {
+        "source": view.picker,
+        "mode": view.mode,
+        "inspector": view.inspector_toggle,
+        "canvas": view.canvas,
+        "fit": view.zoom.buttons["Fit to Window"],
+        "actual_size": view.zoom.buttons["100%"],
+        "zoom_in": view.zoom.buttons["Zoom in"],
+        "zoom_out": view.zoom.buttons["Zoom out"],
+        "tool": view.tool,
+        "brush": view.brush,
+        "undo": view.undo,
+        "redo": view.redo,
+        "clear_mask": view.clear_mask,
+        "build_preview": view.preview_button,
+        "simulated_admission": view.admit_button,
+        "compare": view.compare_button,
+    }
+
+    def visible_through_parents(widget: QWidget) -> bool:
+        area = widget.parentWidget()
+        while area is not None:
+            if not _contained(widget, area):
+                return False
+            if area is window:
+                break
+            area = area.parentWidget()
+        return True
+
+    clipped = [name for name, widget in controls.items() if not visible_through_parents(widget)]
+    app = QApplication.instance()
+    scroll = view.settings_scroll
+    inspector_controls = {
+        "profile": view.profile,
+        "region": view.region,
+        "prompt": view.prompt,
+        "negative": view.negative,
+        "advanced": view.advanced.toggle,
+    }
+    task_scroll = {}
+    for name, widget in inspector_controls.items():
+        scroll.verticalScrollBar().setValue(0)
+        reveal(scroll, widget)
+        task_scroll[name] = scroll.verticalScrollBar().value()
+    scroll.verticalScrollBar().setValue(0)
+    view.picker.setFocus()
+    pump(app, 2)
+    seen = []
+    for _ in range(100):
+        focus = app.focusWidget()
+        if focus is None or focus in seen:
+            break
+        seen.append(focus)
+        window.focusNextChild()
+        pump(app, 1)
+    required = {
+        name: widget
+        for name, widget in (controls | inspector_controls).items()
+        if widget.isEnabled() and widget.isVisibleTo(window)
+    }
+    missing = [
+        name
+        for name, widget in required.items()
+        if not any(w is widget or widget.isAncestorOf(w) for w in seen)
+    ]
+    return {
+        "layout": view.layout_design,
+        "window": window.size().toTuple(),
+        "canvas": view.canvas.size().toTuple(),
+        "inspector_viewport": scroll.viewport().size().toTuple(),
+        "settings_scroll_px": task_scroll,
+        "horizontal_overflow_px": max(0, scroll.widget().width() - scroll.viewport().width()),
+        "clipped": clipped,
+        "tab_stops": len(seen),
+        "missing_tab_stops": missing,
+        "preview": view.session.status,
+    }

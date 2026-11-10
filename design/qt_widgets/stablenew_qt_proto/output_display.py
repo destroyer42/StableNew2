@@ -565,7 +565,7 @@ class OutputDock(QDockWidget):
         self.refresh_constraints()
         self.collapsedChanged.emit(collapsed)
         if not collapsed:
-            QTimer.singleShot(0, self._restore_expanded_size)
+            QTimer.singleShot(0, self, self._restore_expanded_size)
         self._run_fill()
 
     def fill_floating(self, rect) -> None:

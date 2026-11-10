@@ -90,11 +90,59 @@ def markdown(rows: list[dict], meta: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def run_edit(sizes: list[str], layouts: list[str], theme_id: str) -> list[dict]:
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QApplication
+    from stablenew_qt_proto.app import PrototypeWindow, apply_theme
+    from stablenew_qt_proto.layout_probe import prime_edit, probe_edit, pump
+    from stablenew_qt_proto.tokens import reference_theme
+
+    app = QApplication.instance() or QApplication([])
+    apply_theme(app, reference_theme(theme_id))
+    rows = []
+    for size in sizes:
+        width, height = map(int, size.split("x"))
+        for layout in layouts:
+            window = PrototypeWindow(edit_layout=layout)
+            prime_edit(window, (width, height))
+            row = probe_edit(window)
+            row["requested_size"] = size
+            rows.append(row)
+            window.close()
+            window.deleteLater()
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            pump(app, 2)
+    return rows
+
+
+def edit_markdown(rows: list[dict], meta: dict) -> str:
+    lines = [
+        f"# Edit layout audit ({meta['platform_note']})",
+        "",
+        f"Theme `{meta['theme']}` · Qt platform `{meta['qpa']}` · requested scale {meta['scale']} · "
+        f"screen DPR {meta['screen']['devicePixelRatio']} · Python {meta['python']}",
+        "",
+        "| Layout | Requested → actual client | Canvas | Inspector | Scroll to advanced | Clipped | Horizontal overflow | Tab stops · missing | Preview |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for r in rows:
+        width, height = r["window"]
+        lines.append(
+            f"| {r['layout']} | {r['requested_size']} → {width}×{height} | "
+            f"{r['canvas'][0]}×{r['canvas'][1]} | {r['inspector_viewport'][0]}×{r['inspector_viewport'][1]} | "
+            f"{r['settings_scroll_px']['advanced']} px | "
+            f"{', '.join(r['clipped']) or 'none'} | {r['horizontal_overflow_px']} px | "
+            f"{r['tab_stops']} · {', '.join(r['missing_tab_stops']) or 'none'} | {r['preview']} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--sizes", nargs="+", default=list(DEFAULT_SIZES))
     parser.add_argument("--layouts", nargs="+", default=["scroll", "split"])
+    parser.add_argument("--edit-layouts", nargs="+", choices=["editor", "inspector"])
     parser.add_argument("--docks", nargs="+", default=["expanded", "collapsed"])
     parser.add_argument(
         "--states", nargs="+", default=["fresh", "primed"], choices=["fresh", "primed"]
@@ -111,7 +159,10 @@ def main() -> int:
     if args.scale != 1.0:
         os.environ["QT_SCALE_FACTOR"] = str(args.scale)
     sys.path.insert(0, str(ROOT))
-    rows = run(args.sizes, args.layouts, args.docks, args.states, args.theme)
+    if args.edit_layouts:
+        rows = run_edit(args.sizes, args.edit_layouts, args.theme)
+    else:
+        rows = run(args.sizes, args.layouts, args.docks, args.states, args.theme)
     from PySide6.QtGui import QGuiApplication
 
     screen = QGuiApplication.primaryScreen()
@@ -131,13 +182,16 @@ def main() -> int:
             "logicalDpi": screen.logicalDotsPerInch(),
         },
     }
+    if args.scale != 1.0:
+        meta["platform_note"] += ", simulated scaling"
+    report = edit_markdown(rows, meta) if args.edit_layouts else markdown(rows, meta)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / f"{args.name}.json").write_text(
         json.dumps({"meta": meta, "rows": rows}, indent=2), encoding="utf-8"
     )
-    (args.out / f"{args.name}.md").write_text(markdown(rows, meta), encoding="utf-8")
+    (args.out / f"{args.name}.md").write_text(report, encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")  # the table contains arrows and multiplication signs
-    print(markdown(rows, meta))
+    print(report)
     return 0
 
 
