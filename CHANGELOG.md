@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- **[PR-VID-UX-360] Task-first Video Workflow tab** - The Video Workflow form now asks what to make
+  (animate an image, follow a driving clip, multi-shot sequence, many images), picks the engine and
+  suggests length, motion, smoothing, seed and negative prompt with reasons, and keeps everything else
+  behind one Settings line and three named disclosures. RIFE smoothing is suggested on when RIFE is
+  found (never inside a sequence). Operator edits are pinned; the submitted form, NJR builder and
+  admission are unchanged. No physical run made.
+
 - **[PR-MVP-070] Native SVD XT vertical slice** - Accepted the canonical
   queue-first native SVD XT path through artifacts, history, and replay, with
   a conservative 14-frame approximately 12GB recommendation. Corrected exact

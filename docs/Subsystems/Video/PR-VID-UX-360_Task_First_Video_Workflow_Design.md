@@ -88,21 +88,24 @@ Fixed header (never scrolls):
 
 1. Source image: path, Browse, Use Latest Output.
 2. Task selector: four radio-style buttons in one row.
-3. Queue button, the experimental opt-in (only when needed), the block reason with its fix action, status, the
-   submission notice.
+3. Queue button, Preview Frozen Plan, the experimental opt-in (only when needed), the block reason with its fix
+   action, status, the submission notice, the batch strip (`batch` only) and the source summary (what the job
+   will read stays in view, the PR-GUI-110 contract).
 
 Scrolling body:
 
 4. Task inputs (section 4).
 5. **Suggested settings** line, for example `Wan2.2 TI2V-5B · 3.4 s · gentle · smoothed · random seed`, with **Change**.
    Expanded it shows Engine (the current workflow picker, plus "Use native SVD instead"), Length, Motion, Smooth, Seed,
-   Negative and any workflow controls, each with its reason, and "Reset to suggested".
+   Negative and any workflow controls, the reasons as one list above them, and "Reset to suggested". The Engine
+   picker lists the engines that can serve the selected task; choosing an engine the tab is given from elsewhere
+   (a handoff, a restore) moves the task to match it.
 6. Runtime readiness strip (unchanged; shown only when it has something to say).
 7. Named disclosures, collapsed:
    - **Keyframes and conditioning**: end and mid anchors, camera, depth, ControlNet. Hidden entirely when the engine
      declares none of them.
    - **Compare and evaluate**: Compare one control, eval kit.
-   - **Details**: effective settings, Preview Frozen Plan, output route, source summary, workflow help, tab overview.
+   - **Details**: effective settings, output route, workflow help, tab overview.
 8. Recent outputs.
 
 Disclosure rules:
@@ -111,7 +114,8 @@ Disclosure rules:
 - A collapsed disclosure that hides non-default values shows "modified" in its header (the existing conditioning
   header behaviour, generalised).
 - Motion Library, motion readiness and Prepare Motion Source exist only in `follow_clip`.
-- The batch strip and table exist only in `batch`; the sequence panel only in `sequence`.
+- The batch strip and table show in `batch`, and for as long as a batch is in force; the sequence panel only in
+  `sequence`.
 
 ## 7. Components
 
@@ -120,7 +124,7 @@ Disclosure rules:
 | `src/video/workflow_tasks.py` | new, pure | Task definitions; `eligible_workflows(task, records)`; `choose_workflow(task, records, pinned)`; `suggest_settings(task, record, rife_available)`; `infer_task(record, state)`. No Tk, no I/O. |
 | `src/gui/views/video_workflow_task_panel_v2.py` | new | Task selector and the Suggested settings line and editor. Reads and writes the tab's existing Tk variables; owns pin state. |
 | `src/gui/views/video_workflow_tab_frame_v2.py` | changed | Layout only: sections 6 and the per-task show/hide. Existing widget attributes (`workflow_combo`, `queue_workflow_button`, `advanced_section`, the panel attributes) keep their names so handoffs and tests keep working; `advanced_section` becomes the Suggested settings editor. |
-| `src/controller/video_workflow_controller.py` | changed, small | Adds `rife_available()`, a thin wrapper over `rife_runtime.find_rife_executable()` (the same call the NJR builder uses at admission). No new admission or build path. Controller surface ceilings are not raised. |
+| `src/controller/video_preflight_controller.py` | changed, small | The controller's read-only readiness mixin adds `rife_available()`, a thin wrapper over `rife_runtime.find_rife_executable()` (the same call the NJR builder uses at admission). No new admission or build path. Controller surface ceilings are not raised: `video_workflow_controller.py` itself is unchanged in size. |
 
 Data flow: workflow records → `workflow_tasks` → task panel sets the existing Tk variables →
 `get_video_workflow_state()` (unchanged shape) → controller → NJR builder. The task never leaves the GUI.
@@ -128,9 +132,13 @@ Data flow: workflow records → `workflow_tasks` → task panel sets the existin
 ## 8. State and compatibility
 
 - Saved tab state gains an optional `task` key. Absent or unknown: `infer_task` picks `follow_clip` when the saved
-  engine accepts a driving clip, otherwise `animate`. `sequence` and `batch` are never inferred.
+  engine accepts a driving clip, otherwise `animate`. `sequence` and `batch` are never inferred. A snapshot
+  without a task keeps the current task when the saved engine can serve it.
+- A saved workflow that is no longer installed is shown as saved under `animate` and is never swapped for
+  another engine; choosing a task again picks an installed one.
 - `restore_video_workflow_state` treats every restored value as pinned, so a restore never silently changes settings.
-- Make Video handoffs call `apply_make_video_defaults` as today; it additionally selects `animate`.
+- Make Video handoffs call `apply_make_video_defaults` as today; it additionally leaves `follow_clip` and
+  `sequence` for `animate`. Use Latest Output and a single-image choice leave `batch`.
 - Motion Library "Use as Driving Video" and the Review batch handoff switch to `follow_clip` and `batch` respectively.
 - The experimental opt-in is still cleared on any engine change and never restored.
 

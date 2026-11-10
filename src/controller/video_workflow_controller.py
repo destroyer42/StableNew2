@@ -11,7 +11,6 @@ from src.controller.video_workflow_mixins import VideoWorkflowMixins
 from src.state.output_routing import OUTPUT_ROUTE_REPROCESS
 from src.video.driving_video_inspection import inspect_driving_video as _inspect_video
 from src.video.motion_source_preparation import prepare_for_form
-from src.video.rife_runtime import find_rife_executable
 from src.video.video_workflow_batch import (
     BatchAdmissionResult,
     BatchPlan,
@@ -93,14 +92,6 @@ class VideoWorkflowController(VideoWorkflowMixins):
                 }
             )
         return records
-
-    def rife_available(self) -> bool:
-        """Whether RIFE smoothing can run here: the discovery the NJR builder uses at admission."""
-
-        try:
-            return find_rife_executable() is not None
-        except Exception:
-            return False
 
     def build_default_form_state(self) -> dict[str, Any]:
         specs = self.list_workflow_specs()

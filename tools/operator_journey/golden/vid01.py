@@ -104,14 +104,19 @@ def run_vid01(
         )
         run.snap("source")
 
-        # 3-4. Workflow, motion prompt, length.
+        # 3-4. Engine, motion prompt, length.
+        if not tab.advanced_section.is_expanded():
+            # The engine and its settings are filled in for the task; an operator who wants a specific one opens
+            # the Settings editor with "Change".
+            d.invoke(tab.suggested_line.change_button, label="Settings: Change")
+            d.pump(0.5)
         labels = [str(v) for v in tab.workflow_combo.cget("values")]
         wanted = next((v for v in labels if "TI2V-5B" in v), None)
         if wanted is None:
             raise JourneyHold(
                 f"the picker does not offer {workflow_id} {workflow_version}: {labels}"
             )
-        d.select_combobox(tab.workflow_combo, wanted, label="Workflow")
+        d.select_combobox(tab.workflow_combo, wanted, label="Engine")
         d.type_in_text(tab.prompt_text, motion_prompt, label="Motion prompt")
         lengths = [str(v) for v in tab.frame_count_combo.cget("values")]
         run.require("length", "legal_lengths_offered", bool(lengths), "no frame counts offered")
@@ -135,6 +140,12 @@ def run_vid01(
         ev.observe("requested_length", chosen_length)
         if tab.seed_var.get() != str(seed):
             d.set_variable(tab.seed_var, str(seed), label="Seed")
+        # Smoothing is suggested whenever RIFE is installed.  This journey proves the workflow's own clip, so it
+        # runs unsmoothed on every host unless the frozen plan asks for smoothing.
+        wanted_smooth = bool(frozen_settings.get("smooth", False))
+        if bool(tab.smooth_var.get()) != wanted_smooth:
+            d.invoke(tab.smooth_check, label="Smooth motion")
+        ev.observe("requested_smoothing", wanted_smooth)
 
         # 5-6. Source preparation and readiness are shown; Queue must be enabled by the real gates.
         d.pump(1.0)

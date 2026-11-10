@@ -229,7 +229,8 @@ def _default_length(record: Mapping[str, Any]) -> int | None:
         return None
     projection = record.get("frame_count")
     try:
-        default = int(projection.get("default")) if isinstance(projection, Mapping) else None
+        raw: Any = projection.get("default") if isinstance(projection, Mapping) else None
+        default = int(raw) if raw is not None else None
     except (TypeError, ValueError):
         default = None
     return default if default in lengths else lengths[0]
@@ -283,7 +284,7 @@ def reconcile(
             values[field] = suggestion.value
             continue
         if field == FIELD_LENGTH:
-            kept = current.get(field)
+            kept: Any = current.get(field)
             try:
                 legal = int(kept) in legal_lengths
             except (TypeError, ValueError):

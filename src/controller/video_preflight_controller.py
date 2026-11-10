@@ -10,6 +10,7 @@ from collections.abc import Callable
 from functools import partial
 from typing import Any
 
+from src.video.rife_runtime import find_rife_executable
 from src.video.workflow_preflight import (
     PreflightProbes,
     WorkflowPreflight,
@@ -40,3 +41,11 @@ class VideoPreflightControllerMixin:
             config_manager=getattr(self._app_controller, "_config_manager", None),
         )
         return evaluate_workflow_preflight(spec, probes())
+
+    def rife_available(self) -> bool:
+        """Whether RIFE smoothing can run here: the discovery the NJR builder uses at admission."""
+
+        try:
+            return find_rife_executable() is not None
+        except (OSError, ValueError):  # an unreadable tools folder or a malformed configured path
+            return False

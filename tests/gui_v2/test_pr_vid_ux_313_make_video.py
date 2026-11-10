@@ -234,6 +234,9 @@ def test_make_video_keeps_an_approved_choice_and_never_carries_an_opt_in(env) ->
 
 
 def test_an_experimental_workflow_stays_selectable_and_needs_its_own_opt_in(env) -> None:
+    # PR-VID-UX-360: the picker offers the engines for the selected task; driving-clip engines are
+    # offered under "Follow a driving clip".
+    assert env.tab.select_task("follow_clip")
     labels = list(env.tab.workflow_combo["values"])
     assert any("(Experimental" in label or "(experimental)" in label for label in labels)
     experimental_label = next(label for label in labels if "Driving Video" in label)
@@ -284,29 +287,32 @@ def _under(widget: tk.Misc, ancestor: tk.Misc) -> bool:
 
 
 def test_basic_controls_are_separate_from_the_collapsed_advanced_options(env) -> None:
+    # PR-VID-UX-360 regrouped the form: the prompt and readiness stay in the open; the engine and its
+    # settings sit in the Settings editor; everything else has a named, collapsed disclosure.
     tab = env.tab
-    advanced = tab._advanced_frame
+    sections = (
+        tab.advanced_section,
+        tab.keyframes_section,
+        tab.compare_section,
+        tab.details_section,
+    )
+    for widget in (tab.prompt_text, tab.runtime_readiness_strip, tab.suggested_line):
+        assert not any(_under(widget, section) for section in sections)
     for widget in (
         tab.workflow_combo,
         tab.frame_count_combo,
-        tab.prompt_text,
-        tab.runtime_readiness_strip,
-    ):
-        assert not _under(widget, advanced)
-    for widget in (
-        tab.end_anchor_entry,
-        tab.mid_anchors_entry,
         tab.seed_entry,
         tab.negative_prompt_text,
         tab.smooth_check,
-        tab.conditioning_section,
         tab.workflow_controls_panel,
-        tab.experiment_panel,
-        tab.eval_panel,
+        tab.use_svd_button,
     ):
-        assert _under(widget, advanced)
-    assert tab.advanced_section.is_expanded() is False
-    assert tab.use_svd_button.winfo_exists()
+        assert _under(widget, tab._advanced_frame)
+    for widget in (tab.end_anchor_entry, tab.mid_anchors_entry, tab.conditioning_section):
+        assert _under(widget, tab.keyframes_section)
+    for widget in (tab.experiment_panel, tab.eval_panel):
+        assert _under(widget, tab.compare_section)
+    assert all(section.is_expanded() is False for section in sections)
 
 
 def test_advanced_values_survive_collapse_and_are_announced(env) -> None:
@@ -314,8 +320,10 @@ def test_advanced_values_survive_collapse_and_are_announced(env) -> None:
     tab.seed_var.set("123")
     tab.smooth_var.set(True)
     tab._set_text_value(tab.negative_prompt_text, "blurry")
-    header = tab.advanced_section.header_text()
-    assert "seed" in header and "smoothing" in header and "negative prompt" in header
+    # A collapsed Settings editor says it holds the operator's own values (PR-VID-UX-360).
+    assert "modified" in tab.advanced_section.header_text()
+    summary = tab.suggested_line.summary_var.get()
+    assert "seed 123" in summary and "smoothed" in summary
 
     state = tab.get_video_workflow_state()  # collapsed: every value is still read and submitted
     assert state["seed"] == "123" and state["negative_prompt"] == "blurry"
@@ -336,9 +344,11 @@ def test_conditioning_fields_are_hidden_unless_the_workflow_declares_them(env) -
 
 def test_advanced_opens_by_itself_for_a_workflow_that_requires_a_driving_video(env) -> None:
     tab = env.tab
-    assert tab.advanced_section.is_expanded() is False
+    # PR-VID-UX-360: the driving clip is a task input shown in the open, so nothing has to pop open.
+    assert tab.follow_clip_frame.winfo_manager() == ""
     tab.workflow_var.set(ANIMATE2_ID)
-    assert tab.advanced_section.is_expanded() is True
+    assert tab.current_task() == "follow_clip"
+    assert tab.follow_clip_frame.winfo_manager() == "grid"
     assert tab.pose_video_frame.winfo_manager() == "grid"
 
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import tkinter as tk
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from functools import partial
 from tkinter import ttk
 from typing import Any
 
@@ -40,7 +41,7 @@ class WorkflowTaskSelector(ttk.Frame):
                 value=task.task_id,
                 variable=self.task_var,
                 style="Dark.TRadiobutton",
-                command=lambda task_id=task.task_id: self._on_click(task_id),
+                command=partial(self._on_click, task.task_id),
             )
             button.pack(side="left", padx=(0, 12))
             self.buttons[task.task_id] = button

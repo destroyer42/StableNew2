@@ -232,9 +232,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # Transient, unsaved "Compare one control" state; previewing/queueing is delegated to the
         # Video Workflow controller, which owns the NJR build and the single admission.
         self._experiment_session = VideoExperimentSession(
-            resolve_baseline=lambda form, name: self._experiment_controller().resolve_experiment_baseline(
-                form, name
-            ),
+            resolve_baseline=lambda form,
+            name: self._experiment_controller().resolve_experiment_baseline(form, name),
             build_preview=lambda **kw: self._experiment_controller().preview_experiment(**kw),
             submit_plan=lambda plan: self._experiment_controller().submit_experiment(plan),
         )
@@ -342,14 +341,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._refresh_workspace_summary()
         self.on_content_visibility_mode_changed()
         # From here on a write to one of these is the operator's (or a restore's) own choice.
-        for field, variable in (
+        watched: tuple[tuple[str, tk.Variable], ...] = (
             (FIELD_ENGINE, self.workflow_var),
             (FIELD_LENGTH, self.frame_count_var),
             (FIELD_MOTION, self.motion_profile_var),
             (FIELD_SMOOTH, self.smooth_var),
             (FIELD_SEED, self.seed_var),
-        ):
-            self._pins.watch(field, variable)
+        )
+        for field, watched_variable in watched:
+            self._pins.watch(field, watched_variable)
         for sequence in ("<KeyRelease>", "<<Paste>>", "<<Cut>>"):
             self.negative_prompt_text.bind(
                 sequence, lambda _e: self._pins.pin(FIELD_NEGATIVE), add="+"
@@ -427,8 +427,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             command=self._on_submit,
         )
         self.queue_workflow_button.pack(side="left")
-        self.frozen_plan_button = ttk.Button(action_bar, text="Preview Frozen Plan",
-                                             command=self._preview_frozen_plan, style="Dark.TButton")
+        self.frozen_plan_button = ttk.Button(
+            action_bar,
+            text="Preview Frozen Plan",
+            command=self._preview_frozen_plan,
+            style="Dark.TButton",
+        )
         self.queue_workflow_tooltip = attach_tooltip(
             self.queue_workflow_button,
             "Queue a workflow-driven video job using the selected workflow, anchors, prompts, and route shown in this tab.",
@@ -456,6 +460,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # an accepted job is acknowledged with a "View in queue" action instead of a blocking dialog.
         self.submission_notice = SubmissionNotice(header)
         self.submission_notice.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        # PR-GUI-110: what the job will read stays in view; row 4 is the batch source strip.
+        self.source_summary_label = ttk.Label(
+            header, textvariable=self.source_summary_var, style="Muted.TLabel", justify="left"
+        )
+        self.source_summary_label.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        bind_wraplength(self.source_summary_label)
         self._header_frame = header
 
     def _build_body(self) -> None:
@@ -463,7 +473,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._body_scroll = ScrollableFrame(self, style="Panel.TFrame")
         self._body_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
         self._body_scroll.inner.columnconfigure(0, weight=1)
-        body = ttk.Frame(self._body_scroll.inner, style="Panel.TFrame", padding=8)
+        # No padding under the lowest panel: scrolled to the end, Recent outputs sits flush with the viewport.
+        body = ttk.Frame(self._body_scroll.inner, style="Panel.TFrame", padding=(8, 8, 8, 0))
         body.grid(row=1, column=0, sticky="nsew")
         # Multi-source batch: a one-row source strip in the fixed header (shown for the batch task), its
         # Preview/Queue buttons in the header's action bar, and the (taller) source table at the top of the
@@ -525,7 +536,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             add_to_library=self._add_output_to_library,
             on_library_changed=self._refresh_motion_library,
         )
-        self.recent_outputs_panel.grid(row=9, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.recent_outputs_panel.grid(row=9, column=0, columnspan=4, sticky="ew")
 
     def _build_task_inputs(self, body: ttk.Frame) -> None:
         """Rows 0-1: the prompt (every task) and the driving-clip inputs (their own task)."""
@@ -896,11 +907,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.details_section.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         details = self.details_section.body
         configure_grid_columns(details, self._form_columns)
-        self.source_summary_label = ttk.Label(
-            details, textvariable=self.source_summary_var, style="Muted.TLabel", justify="left"
-        )
-        self.source_summary_label.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 6))
-        bind_wraplength(self.source_summary_label)
         # The effective-settings string repeats what the form shows, so it is disclosed on demand.
         self.effective_settings_section = DisclosureSection(details, title="Effective settings")
         self.effective_settings_section.grid(
@@ -1242,15 +1248,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._refresh_advanced_status()
 
     def _restore_task_and_engine(self, state: Mapping[str, Any]) -> None:
-        """Select the saved engine and its task; an engine no longer installed falls back to the
-        recommended one.  A snapshot without a task keeps the current task when the engine can serve it."""
+        """Select the saved engine and its task.  A snapshot without a task keeps the current task when
+        the engine can serve it.  A workflow that is no longer installed is shown as saved under the
+        plain image-to-video task: it is never swapped for another engine behind the operator's back."""
 
-        records = list(self._workflow_map.values())
-        record = self._workflow_map.get(str(state.get("workflow_id") or "").strip())
+        saved_id = str(state.get("workflow_id") or "").strip()
+        record = self._workflow_map.get(saved_id)
         if record is None:
-            fallback = choose_workflow(TASK_ANIMATE, records)
-            record = self._workflow_map.get(fallback.workflow_id) if fallback is not None else None
-        if record is None:
+            if self._task != TASK_BATCH or self._leave_batch_mode():
+                self._adopt_task(TASK_ANIMATE)
+            if saved_id:
+                self.workflow_var.set(saved_id)
             return
         task = infer_task(record, state.get("task") or self._task)
         self.select_task(task, pinned_workflow_id=str(record["workflow_id"]))
@@ -1330,13 +1338,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             for control in workflow_meta.get("operator_controls") or ()
         )
         if required_control:
-            self.advanced_section.set_expanded(True)  # required inputs must not hide behind a header
+            self.advanced_section.set_expanded(
+                True
+            )  # required inputs must not hide behind a header
             self._sync_settings_editor_label()
         experimental = bool(workflow_meta.get("experimental"))
         if experimental:
-            self.experimental_opt_in_check.pack(
-                side="left", padx=(12, 0), before=self.status_label
-            )
+            self.experimental_opt_in_check.pack(side="left", padx=(12, 0), before=self.status_label)
         else:
             self.experimental_opt_in_check.pack_forget()
             self.experimental_opt_in_var.set(False)
@@ -1350,7 +1358,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         The controller still refuses an un-opted-in experimental job (defence in depth)."""
 
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
-        policy_reason = (workflow_meta.get("operator_projection") or {}).get("admission_block_reason")
+        policy_reason = (workflow_meta.get("operator_projection") or {}).get(
+            "admission_block_reason"
+        )
         if policy_reason:
             return str(policy_reason)
         if workflow_meta.get("experimental") and not self.experimental_opt_in_var.get():
@@ -1501,7 +1511,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if self._frame_count_labels and self.frame_count_var.get():
             effective_parts.append(f"length={self.frame_count_var.get()}")
         effective_parts.extend(self.workflow_controls_panel.summary_parts())
-        if not visible or visible.get("camera_intent", False) or visible.get("depth_conditioning", False):
+        if (
+            not visible
+            or visible.get("camera_intent", False)
+            or visible.get("depth_conditioning", False)
+        ):
             effective_parts.extend((conditioning_depth, camera_summary, control_summary))
         fixed_settings = dict(workflow_meta.get("operator_projection") or {}).get("fixed_settings")
         if isinstance(fixed_settings, dict):
@@ -1517,9 +1531,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if isinstance(submitted_source, dict):
             target = dict(submitted_source.get("target_dimensions") or {})
             if target.get("width") and target.get("height"):
-                effective_parts.append(
-                    f"submitted target={target['width']}x{target['height']}"
-                )
+                effective_parts.append(f"submitted target={target['width']}x{target['height']}")
         self.effective_settings_var.set("Effective settings: " + " | ".join(effective_parts))
         self.effective_settings_section.set_status(" | ".join(effective_parts[:2])[:72])
         self._refresh_conditioning_status(workflow_meta)
@@ -1642,7 +1654,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         records = list(self._workflow_map.values())
         eligible = {record["workflow_id"] for record in eligible_workflows(self._task, records)}
         self.workflow_combo["values"] = [
-            label for label, workflow_id in self._workflow_label_to_id.items() if workflow_id in eligible
+            label
+            for label, workflow_id in self._workflow_label_to_id.items()
+            if workflow_id in eligible
         ]
         self.task_selector.set_availability(
             {
@@ -1653,10 +1667,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
     def _rife_available(self) -> bool:
         getter = getattr(self._experiment_controller(), "rife_available", None)
-        try:
-            return bool(getter()) if callable(getter) else False
-        except Exception:
-            return False
+        return bool(getter()) if callable(getter) else False  # the controller's check never raises
 
     def _apply_suggestions(self, kept_length: int | None = None) -> None:
         """Fill every setting the operator has not edited from what the engine declares, with reasons."""
@@ -1676,7 +1687,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             )
             with self._pins.applying():
                 if FIELD_LENGTH in self._pins.pinned and FIELD_LENGTH not in values:
-                    self._select_frame_count(kept_length)  # an engine change reset it to the default
+                    self._select_frame_count(
+                        kept_length
+                    )  # an engine change reset it to the default
                 for field, value in values.items():
                     self._write_suggested(field, value)
             self._suggestion_notes = notes
@@ -1713,14 +1726,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         workflow_id = self.workflow_var.get().strip()
         workflow_meta = self._workflow_map.get(workflow_id, {})
         visible = dict(workflow_meta.get("form_visibility") or {})
-        shows = (lambda key: bool(visible.get(key, False))) if visible else (lambda key: True)
+
+        def shows(key: str) -> bool:
+            return bool(visible.get(key, False)) if visible else True
+
         seed = self.seed_var.get().strip()
         smooth = bool(self.smooth_var.get())
         line.set_summary(
             [
                 self._workflow_id_to_label.get(workflow_id) or workflow_id or "No engine",
                 self.frame_count_var.get() if self._frame_count_labels else "",
-                f"{self.motion_profile_var.get().strip()} motion" if shows("motion_profile") else "",
+                f"{self.motion_profile_var.get().strip()} motion"
+                if shows("motion_profile")
+                else "",
                 "smoothed" if smooth else "not smoothed",
                 (f"seed {seed}" if seed else "random seed") if shows("seed") else "",
             ]
@@ -1807,7 +1825,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         opener(
             focus_video_runtime=True,
             comfy_repair_reason=view.repair_reason if view else "",
-            on_closed=lambda: strip.request_refresh(force=True),  # shows a restart-pending save at once
+            on_closed=lambda: strip.request_refresh(
+                force=True
+            ),  # shows a restart-pending save at once
         )
 
     # ------------------------------------------------------------------ Motion Library
@@ -1851,7 +1871,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             pass
         self._motion_conversion_dialog = MotionConversionDialog(
             self,
-            ports=self._library_controller().motion_conversion_ports(self._selected_workflow_identity),
+            ports=self._library_controller().motion_conversion_ports(
+                self._selected_workflow_identity
+            ),
             on_accepted=lambda asset_id: self.motion_library_panel.focus_asset(asset_id),
         )
 
@@ -1879,7 +1901,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             if window is None or not window.winfo_exists():
                 window = ConditioningPreviewWindow(
                     self,
-                    preview=lambda path, sha, size, cancel: self._library_controller().motion_conditioning_preview(
+                    preview=lambda path,
+                    sha,
+                    size,
+                    cancel: self._library_controller().motion_conditioning_preview(
                         path, sha, size, cancel
                     ),
                 )
@@ -1891,7 +1916,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         asset = detail.asset
         portrait = not asset.width or not asset.height or asset.height >= asset.width
         size = (480, 832) if portrait else (832, 480)
-        window.show_clip(detail.media_path, asset.sha256, size, f"{asset.display_name} - {size[0]}x{size[1]}")
+        window.show_clip(
+            detail.media_path, asset.sha256, size, f"{asset.display_name} - {size[0]}x{size[1]}"
+        )
 
     def _selected_workflow_identity(self) -> tuple[str, str]:
         meta = self._workflow_map.get(self.workflow_var.get().strip(), {})
@@ -2189,7 +2216,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.submission_notice.show_error(message)
 
     def _current_lineage(self) -> dict[str, str]:
-        if self._source_lineage and self.source_image_var.get().strip() == self._source_lineage_path:
+        if (
+            self._source_lineage
+            and self.source_image_var.get().strip() == self._source_lineage_path
+        ):
             return dict(self._source_lineage)
         return {}
 

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "format": {
     "metric": "files `ruff format --check` would reformat",
-    "total": 380,
+    "total": 379,
     "files": [
       "src/api/forge_client.py",
       "src/api/webui_failure_evidence.py",
@@ -61,7 +61,6 @@
       "src/gui/views/prompt_tab_frame_v2.py",
       "src/gui/views/svd_tab_frame_v2.py",
       "src/gui/views/video_workflow_motion_readiness_panel_v2.py",
-      "src/gui/views/video_workflow_tab_frame_v2.py",
       "src/gui/widgets/openpose_picker_panel.py",
       "src/gui/zimage_optional_control_projection.py",
       "src/gui_v2/adaptation_notice.py",

@@ -256,7 +256,8 @@ def test_submitted_form_carries_no_task_and_the_same_fields(env):
 def test_keyframes_section_is_hidden_when_the_engine_declares_none(env):
     visible = env.tab._workflow_map[TI2V_ID]["form_visibility"]
     declares = any(
-        visible.get(key) for key in ("end_anchor", "mid_anchors", "camera_intent", "depth_conditioning")
+        visible.get(key)
+        for key in ("end_anchor", "mid_anchors", "camera_intent", "depth_conditioning")
     )
     assert bool(env.tab.keyframes_section.winfo_manager()) is declares
 
@@ -311,9 +312,14 @@ def test_restore_without_task_keeps_a_task_the_engine_can_serve(env):
     assert env.tab.current_task() == "sequence"
 
 
-def test_unknown_task_or_workflow_falls_back(env):
-    env.tab.restore_video_workflow_state({"workflow_id": "gone_v9", "task": "nonsense"})
+def test_unknown_task_falls_back_and_a_retired_workflow_is_shown_not_swapped(env):
+    env.tab.restore_video_workflow_state({"workflow_id": TI2V_ID, "task": "nonsense"})
     assert env.tab.current_task() == "animate"
+    env.tab.select_task("follow_clip")
+    env.tab.restore_video_workflow_state({"workflow_id": "gone_v9", "task": "follow_clip"})
+    assert env.tab.current_task() == "animate"
+    assert env.tab.workflow_var.get() == "gone_v9"  # never silently replaced by another engine
+    assert env.tab.select_task("animate")  # choosing the task again picks an installed engine
     assert env.tab.workflow_var.get() == TI2V_ID
 
 
