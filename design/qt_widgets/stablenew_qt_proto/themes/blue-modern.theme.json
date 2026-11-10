@@ -1,0 +1,68 @@
+{
+  "schema": "stablenew.qt-design-theme",
+  "schema_version": 1,
+  "id": "blue-modern",
+  "name": "Blue Modern",
+  "description": "Reference preset: the blue, rounded theme of the accepted prototype v0.3.0 (values copied from its tokens.py). Shipped read-only.",
+  "kind": "reference",
+  "base_id": null,
+  "colors": {
+    "background": "#0E2A55",
+    "surface": "#163F7C",
+    "field": "#0A2147",
+    "selected": "#1E5AA8",
+    "border": "#3E70B8",
+    "strong_border": "#8FB4E8",
+    "text": "#FFFFFF",
+    "muted": "#C6D8F2",
+    "disabled": "#9DB5D6",
+    "accent": "#FFC805",
+    "on_accent": "#0A1A33",
+    "danger": "#FF8A91",
+    "success": "#7EE0A8",
+    "danger_fill": "#D9363E",
+    "on_danger": "#FFFFFF"
+  },
+  "typography": {
+    "family": "Segoe UI",
+    "body_pt": 10,
+    "small_pt": 9,
+    "section_pt": 11,
+    "heading_pt": 12,
+    "emphasis_weight": "bold"
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "gutter": 16,
+    "xl": 24,
+    "control_min_height": 32
+  },
+  "density": "comfortable",
+  "borders": {
+    "control_width": 2,
+    "card_width": 1
+  },
+  "radius": {
+    "control": 8,
+    "button": 10,
+    "card": 14,
+    "chip": 12
+  },
+  "states": {
+    "button_hover_border": "accent",
+    "input_hover_border": "strong_border",
+    "focus_border": "accent",
+    "pressed_background": "surface",
+    "primary_hover_border": "text",
+    "primary_focus_border": "text",
+    "selected_item_border": "accent",
+    "hover_fill": "selected"
+  },
+  "provenance": {
+    "colors": "Copied unchanged from the accepted prototype v0.3.0 (stablenew_qt_proto/tokens.py).",
+    "colors.danger_fill": "New in QT-DS-01: the production danger fill value from UX-850-C TOKENS.md (white label 4.6:1).",
+    "radius": "Copied from the accepted prototype v0.3.0 (owner-requested rounded corners)."
+  }
+}

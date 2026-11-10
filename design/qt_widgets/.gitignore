@@ -1,0 +1,6 @@
+# Per-user saved themes (Theme Studio "Save As") and runtime state never belong in the repository.
+user_themes/
+__pycache__/
+*.pyc
+# Scratch captures; deliberate evidence lives under docs/screenshots/ and docs/evidence/.
+captures/

@@ -1,0 +1,2 @@
+# Prototype-only environment. Does NOT modify StableNew production requirements.
+PySide6==6.12.0

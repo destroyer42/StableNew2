@@ -1,0 +1,84 @@
+{
+  "schema": "stablenew.qt-design-theme",
+  "schema_version": 1,
+  "id": "concept-a",
+  "name": "Concept A (reconstructed)",
+  "description": "Reference preset: a dark, gold-accent reconstruction from UX-850-C TOKENS.md role values. NOT verified against the Figma Concept A file (it could not be read); see provenance for which values are documented and which are mapped or invented.",
+  "kind": "reference",
+  "base_id": null,
+  "colors": {
+    "background": "#121212",
+    "surface": "#1E1E1E",
+    "field": "#121212",
+    "selected": "#2B2B2B",
+    "border": "#2D2D2D",
+    "strong_border": "#777777",
+    "text": "#FFFFFF",
+    "muted": "#CCCCCC",
+    "disabled": "#777777",
+    "accent": "#FFC805",
+    "on_accent": "#000000",
+    "danger": "#FF6B72",
+    "success": "#7EE0A8",
+    "danger_fill": "#D9363E",
+    "on_danger": "#FFFFFF"
+  },
+  "typography": {
+    "family": "Segoe UI",
+    "body_pt": 10,
+    "small_pt": 9,
+    "section_pt": 11,
+    "heading_pt": 12,
+    "emphasis_weight": "bold"
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "gutter": 16,
+    "xl": 24,
+    "control_min_height": 32
+  },
+  "density": "comfortable",
+  "borders": {
+    "control_width": 2,
+    "card_width": 1
+  },
+  "radius": {
+    "control": 4,
+    "button": 4,
+    "card": 8,
+    "chip": 8
+  },
+  "states": {
+    "button_hover_border": "accent",
+    "input_hover_border": "strong_border",
+    "focus_border": "accent",
+    "pressed_background": "surface",
+    "primary_hover_border": "text",
+    "primary_focus_border": "text",
+    "selected_item_border": "accent",
+    "hover_fill": "selected"
+  },
+  "provenance": {
+    "colors.background": "Verified: page #121212 (TOKENS.md).",
+    "colors.surface": "Verified: panel #1E1E1E (TOKENS.md).",
+    "colors.selected": "Verified: selected surface #2B2B2B (TOKENS.md).",
+    "colors.field": "Mapped, not documented: input fill reuses the page colour #121212 as an inset on cards.",
+    "colors.border": "Verified: subtle decorative border #2D2D2D (TOKENS.md); too faint for a necessary interactive outline.",
+    "colors.strong_border": "Verified colour, mapped role: TOKENS.md names #777777 as the prototype outline that meets 3:1.",
+    "colors.text": "Verified: body #FFFFFF.",
+    "colors.muted": "Verified: supporting #CCCCCC.",
+    "colors.disabled": "Verified: disabled #777777.",
+    "colors.accent": "Verified: primary action / focus gold #FFC805.",
+    "colors.on_accent": "Verified: black label on gold.",
+    "colors.danger": "Invented: lighter red for text/borders on dark. The production fill #D9363E is only 4.0:1 on #121212, below the 4.5:1 text target.",
+    "colors.success": "Invented: not documented in the research values; copied from Blue Modern.",
+    "colors.danger_fill": "Verified: destructive fill #D9363E with white label (TOKENS.md).",
+    "colors.on_danger": "Verified: white label.",
+    "typography": "Verified: Segoe UI 10/11/12 pt (small 9 pt mapped from the production type scale).",
+    "spacing": "Verified: 4/8/12 steps; gutter 16 is the TOKENS.md proposed composed page gutter; xl 24 is the semantic xl; control minimum 32 is the TOKENS.md proposal.",
+    "borders": "Mapped: 2 px outer focus cue proposed in TOKENS.md.",
+    "radius": "Mapped, not documented in research: 4/8/12 radii of the production design values, applied as 4/4/8/8."
+  }
+}
