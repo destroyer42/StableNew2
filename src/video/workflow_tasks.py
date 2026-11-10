@@ -12,7 +12,7 @@ the job's own opt-in.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -167,4 +167,158 @@ __all__ = [
     "choose_workflow",
     "eligible_workflows",
     "infer_task",
+]
+
+
+# ---------------------------------------------------------------- suggested settings and pins
+#
+# A suggestion is a value the form may fill in for the operator, with the reason it was picked.  Values
+# come only from what the selected record declares and from whether the smoothing runtime was found; no
+# tuning number is invented here.  A field the operator edited is *pinned* and is left alone unless the
+# selected engine cannot accept the value.
+
+FIELD_ENGINE = "workflow_id"
+FIELD_LENGTH = "frame_count"
+FIELD_MOTION = "motion_profile"
+FIELD_SMOOTH = "smooth"
+FIELD_SEED = "seed"
+FIELD_NEGATIVE = "negative_prompt"
+
+DEFAULT_MOTION_PROFILE = "gentle"
+
+REASON_LENGTH = "The engine's default length."
+REASON_MOTION = "A safe starting point."
+REASON_SMOOTH_ON = "Smoother playback; RIFE was found."
+REASON_SMOOTH_NO_RUNTIME = (
+    "Off: RIFE was not found. Put a RIFE release in tools/rife to enable smoothing."
+)
+REASON_SMOOTH_SEQUENCE = "Off: smoothing is not applied inside a sequence."
+REASON_SEED = "Random; the seed is recorded with the job."
+REASON_NEGATIVE = "Left empty; the engine's own default applies."
+
+WARNING_SMOOTH_SEQUENCE = (
+    "Smoothing cannot run inside a sequence; turn it off to queue this sequence."
+)
+WARNING_SMOOTH_NO_RUNTIME = (
+    "Smoothing cannot run: RIFE was not found. Turn it off, or put a RIFE release in tools/rife."
+)
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    field: str
+    value: Any
+    reason: str
+
+
+def _legal_lengths(record: Mapping[str, Any]) -> list[int]:
+    projection = record.get("frame_count")
+    choices = projection.get("choices") if isinstance(projection, Mapping) else None
+    lengths: list[int] = []
+    for choice in choices or ():
+        try:
+            lengths.append(int(choice["frames"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return lengths
+
+
+def _default_length(record: Mapping[str, Any]) -> int | None:
+    lengths = _legal_lengths(record)
+    if not lengths:
+        return None
+    projection = record.get("frame_count")
+    try:
+        default = int(projection.get("default")) if isinstance(projection, Mapping) else None
+    except (TypeError, ValueError):
+        default = None
+    return default if default in lengths else lengths[0]
+
+
+def suggest_settings(
+    task_id: str, record: Mapping[str, Any], *, rife_available: bool
+) -> dict[str, Suggestion]:
+    """Suggested value and reason per form field, for ``task_id`` on the engine ``record`` describes."""
+
+    visible = _visibility(record)
+    suggestions: dict[str, Suggestion] = {}
+
+    def add(field: str, value: Any, reason: str) -> None:
+        suggestions[field] = Suggestion(field, value, reason)
+
+    length = _default_length(record)
+    if length is not None and visible.get("frame_count", True):
+        add(FIELD_LENGTH, length, REASON_LENGTH)
+    if visible.get("motion_profile", True):
+        add(FIELD_MOTION, DEFAULT_MOTION_PROFILE, REASON_MOTION)
+    if task_id == TASK_SEQUENCE:
+        add(FIELD_SMOOTH, False, REASON_SMOOTH_SEQUENCE)
+    elif rife_available:
+        add(FIELD_SMOOTH, True, REASON_SMOOTH_ON)
+    else:
+        add(FIELD_SMOOTH, False, REASON_SMOOTH_NO_RUNTIME)
+    if visible.get("seed", True):
+        add(FIELD_SEED, "", REASON_SEED)
+    add(FIELD_NEGATIVE, "", REASON_NEGATIVE)
+    return suggestions
+
+
+def reconcile(
+    current: Mapping[str, Any],
+    pinned: Collection[str],
+    suggestions: Mapping[str, Suggestion],
+    record: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Values to write into the form, and a note for each pinned value that had to be replaced.
+
+    An unpinned field takes its suggestion.  A pinned field keeps the operator's value unless the engine
+    cannot accept it (today: a length the engine does not offer), in which case the suggestion replaces
+    it and the note says so."""
+
+    values: dict[str, Any] = {}
+    notes: list[str] = []
+    legal_lengths = _legal_lengths(record)
+    for field, suggestion in suggestions.items():
+        if field not in pinned:
+            values[field] = suggestion.value
+            continue
+        if field == FIELD_LENGTH:
+            kept = current.get(field)
+            try:
+                legal = int(kept) in legal_lengths
+            except (TypeError, ValueError):
+                legal = False
+            if not legal:
+                values[field] = suggestion.value
+                notes.append(
+                    f"Length {kept} frames is not offered by this engine; "
+                    f"using {suggestion.value} frames."
+                )
+    return values, notes
+
+
+def smoothing_warning(task_id: str, smooth_on: bool, *, rife_available: bool) -> str:
+    """Why a smoothing choice the operator made cannot run, or an empty string.  Never changes it."""
+
+    if not smooth_on:
+        return ""
+    if task_id == TASK_SEQUENCE:
+        return WARNING_SMOOTH_SEQUENCE
+    if not rife_available:
+        return WARNING_SMOOTH_NO_RUNTIME
+    return ""
+
+
+__all__ += [
+    "DEFAULT_MOTION_PROFILE",
+    "FIELD_ENGINE",
+    "FIELD_LENGTH",
+    "FIELD_MOTION",
+    "FIELD_NEGATIVE",
+    "FIELD_SEED",
+    "FIELD_SMOOTH",
+    "Suggestion",
+    "reconcile",
+    "smoothing_warning",
+    "suggest_settings",
 ]

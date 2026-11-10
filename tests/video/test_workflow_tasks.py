@@ -118,3 +118,64 @@ def test_infer_task():
 def test_module_names_no_workflow_or_model():
     text = Path(workflow_tasks.__file__).read_text(encoding="utf-8").lower()
     assert not any(word in text for word in ("wan", "ti2v", "animate2", "svd", "comfy"))
+
+
+# ---------------------------------------------------------------- suggested settings and pins
+
+
+def _suggest(task_id: str, rec: dict[str, Any], *, rife: bool = True):
+    return workflow_tasks.suggest_settings(task_id, rec, rife_available=rife)
+
+
+def test_suggestions_come_from_the_record():
+    s = _suggest(TASK_ANIMATE, _rec("a", approved=True))
+    assert s[workflow_tasks.FIELD_LENGTH].value == 81
+    assert s[workflow_tasks.FIELD_SMOOTH].value is True
+    assert s[workflow_tasks.FIELD_SEED].value == ""
+    assert s[workflow_tasks.FIELD_NEGATIVE].value == ""
+    assert s[workflow_tasks.FIELD_MOTION].value == "gentle"
+    assert all(item.reason and item.field == key for key, item in s.items())
+
+
+def test_no_length_suggestion_without_a_frame_count_policy():
+    s = _suggest(TASK_ANIMATE, _rec("a", frame_count=False))
+    assert workflow_tasks.FIELD_LENGTH not in s
+
+
+def test_motion_only_when_declared():
+    rec = _rec("a")
+    rec["form_visibility"]["motion_profile"] = False
+    assert workflow_tasks.FIELD_MOTION not in _suggest(TASK_ANIMATE, rec)
+
+
+def test_smoothing_off_without_rife_and_in_a_sequence():
+    rec = _rec("a", approved=True)
+    missing = _suggest(TASK_ANIMATE, rec, rife=False)[workflow_tasks.FIELD_SMOOTH]
+    assert missing.value is False and "tools/rife" in missing.reason
+    seq = _suggest(TASK_SEQUENCE, rec)[workflow_tasks.FIELD_SMOOTH]
+    assert seq.value is False and "sequence" in seq.reason
+
+
+def test_reconcile_keeps_legal_pins_and_replaces_illegal_ones():
+    rec = _rec("a")
+    s = _suggest(TASK_ANIMATE, rec)
+    length, smooth = workflow_tasks.FIELD_LENGTH, workflow_tasks.FIELD_SMOOTH
+    values, notes = workflow_tasks.reconcile({length: 49, smooth: False}, {length, smooth}, s, rec)
+    assert length not in values and smooth not in values and notes == []
+    values, notes = workflow_tasks.reconcile({length: 33}, {length}, s, rec)
+    assert values[length] == 81 and len(notes) == 1 and "33" in notes[0]
+
+
+def test_reconcile_applies_every_unpinned_suggestion():
+    rec = _rec("a")
+    s = _suggest(TASK_ANIMATE, rec)
+    values, notes = workflow_tasks.reconcile({}, set(), s, rec)
+    assert values == {key: item.value for key, item in s.items()} and notes == []
+
+
+def test_pinned_smoothing_without_rife_is_kept_and_warned():
+    warn = workflow_tasks.smoothing_warning
+    assert warn(TASK_ANIMATE, True, rife_available=False).startswith("Smoothing cannot run")
+    assert warn(TASK_ANIMATE, True, rife_available=True) == ""
+    assert warn(TASK_ANIMATE, False, rife_available=False) == ""
+    assert "sequence" in warn(TASK_SEQUENCE, True, rife_available=True)
