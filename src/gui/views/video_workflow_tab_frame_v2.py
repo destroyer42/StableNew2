@@ -151,6 +151,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._task = TASK_ANIMATE
         self._pins = PinTracker()
         self._suggestion_notes: list[str] = []
+        self._engine_by_task: dict[str, str] = {}
         self._rife_found = False
 
         defaults = self._load_defaults()
@@ -558,12 +559,24 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.prompt_text,
         )
 
-        # "Follow a driving clip" only: the clip, its readiness and preparation, and the Motion Library.
-        clip = ttk.Frame(body, style="Panel.TFrame")
-        clip.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        # Row 1 stacks the driving clip, the source/motion readiness and the clip tools.  The clip and its
+        # tools belong to "Follow a driving clip"; readiness (the exact source crop, motion guidance) serves
+        # every engine that declares it, so it is not tied to that task.
+        inputs = ttk.Frame(body, style="Panel.TFrame")
+        inputs.grid(row=1, column=0, columnspan=4, sticky="ew")
+        inputs.columnconfigure(0, weight=1)
+        # A permanent empty row keeps the stack shrinking when everything else in it is hidden.
+        ttk.Frame(inputs, style="Panel.TFrame", height=0).grid(row=3, column=0, sticky="ew")
+        clip = ttk.Frame(inputs, style="Panel.TFrame")
+        clip.grid(row=0, column=0, sticky="ew")
         clip.columnconfigure(0, weight=1)
         clip.grid_remove()
         self.follow_clip_frame = clip
+        tools = ttk.Frame(inputs, style="Panel.TFrame")
+        tools.grid(row=2, column=0, sticky="ew")
+        tools.columnconfigure(0, weight=1)
+        tools.grid_remove()
+        self.follow_clip_tools = tools
         self.pose_video_frame = ttk.Frame(clip, style="Panel.TFrame")
         self.pose_video_frame.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         pose_video_label = ttk.Label(
@@ -588,11 +601,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         # PR-VID-196: exact prepared-source preview, bounded driving-video facts, geometry/timing
         # advisories and workflow-aware motion guidance.  Read-only; hidden until there is content.
-        motion_container = ttk.Frame(clip, style="Panel.TFrame")
-        motion_container.grid(row=1, column=0, sticky="ew")
-        motion_container.columnconfigure(0, weight=1)
         self.motion_readiness_panel = WorkflowMotionReadinessPanel(
-            motion_container,
+            inputs,
             session=self._motion_readiness_session,
             read_inputs=self._read_motion_readiness_inputs,
         )
@@ -600,18 +610,18 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.motion_readiness_panel.grid_remove()
         # PR-VID-MOTION-210: optional exact preparation of the driving clip for this workflow.
         self.motion_prep_panel = WorkflowMotionPreparationPanel(
-            motion_container,
+            tools,
             session=self._motion_prep_session,
             read_form=self._read_motion_prep_form,
             on_change=self._invalidate_experiment_preview,
         )
-        self.motion_prep_panel.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        self.motion_prep_panel.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         self.motion_prep_panel.grid_remove()
         # PR-VID-MOTION-LIB-353: local motion-reference catalog; Use as Driving Video fills the
         # driving-video field above and nothing else.
         self._recent_controller = self._experiment_controller()
         self.motion_library_panel = WorkflowMotionLibraryPanel(
-            clip,
+            tools,
             ports=self._motion_library_ports(),
             mode_provider=lambda: str(
                 getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw"
@@ -622,7 +632,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             on_batch_convert=self._open_motion_batch,
             on_preview_conditioning=self._open_conditioning_preview,
         )
-        self.motion_library_panel.grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        self.motion_library_panel.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 
     def _build_sequence_panel(self, body: ttk.Frame) -> None:
         """Row 2, built after the Settings editor because the panel reads the form as it is created."""
@@ -638,7 +648,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             frame_counts=lambda: dict(self._frame_count_labels),
             block_reason=self._queue_block_reason,
             on_queued=self._on_sequence_queued,
-            restore_form=self.restore_video_workflow_state,
+            restore_form=self._restore_form_for_storyboard,
         )
         self.sequence_panel.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.sequence_panel.grid_remove()
@@ -1247,6 +1257,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._apply_suggestions()
         self._refresh_advanced_status()
 
+    def _restore_form_for_storyboard(self, state: dict[str, Any]) -> None:
+        """A Storyboard restores the form from any task (Job History opens one), so its task comes too."""
+
+        self.restore_video_workflow_state({**state, "task": TASK_SEQUENCE})
+
     def _restore_task_and_engine(self, state: Mapping[str, Any]) -> None:
         """Select the saved engine and its task.  A snapshot without a task keeps the current task when
         the engine can serve it.  A workflow that is no longer installed is shown as saved under the
@@ -1254,11 +1269,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         saved_id = str(state.get("workflow_id") or "").strip()
         record = self._workflow_map.get(saved_id)
+        if not saved_id:
+            return
         if record is None:
             if self._task != TASK_BATCH or self._leave_batch_mode():
                 self._adopt_task(TASK_ANIMATE)
-            if saved_id:
-                self.workflow_var.set(saved_id)
+            self.workflow_var.set(saved_id)
             return
         task = infer_task(record, state.get("task") or self._task)
         self.select_task(task, pinned_workflow_id=str(record["workflow_id"]))
@@ -1585,15 +1601,25 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.task_selector.set_task(self._task)
             return False
         records = list(self._workflow_map.values())
-        pinned = pinned_workflow_id or (
-            self.workflow_var.get().strip() if FIELD_ENGINE in self._pins.pinned else ""
-        )
+        current = self.workflow_var.get().strip()
+        if FIELD_ENGINE in self._pins.pinned and current:
+            self._engine_by_task[self._task] = (
+                current  # the operator's pick for the task being left
+            )
+        pinned = pinned_workflow_id or self._engine_by_task.get(task_id, "")
+        if not pinned and FIELD_ENGINE in self._pins.pinned:
+            pinned = current
         choice = choose_workflow(task_id, records, pinned)
         if choice is None:
             self.task_selector.set_task(self._task)
             self.status_var.set(NO_ENGINE_MESSAGE)
             return False
         self._adopt_task(task_id)
+        # The engine counts as the operator's own only when it is the one they picked for this task.
+        if pinned and choice.workflow_id == pinned:
+            self._pins.pinned.add(FIELD_ENGINE)
+        else:
+            self._pins.pinned.discard(FIELD_ENGINE)
         if choice.workflow_id != self.workflow_var.get().strip():
             with self._pins.applying():
                 self.workflow_var.set(choice.workflow_id)  # capabilities and suggestions follow
@@ -1626,8 +1652,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.motion_prep_panel.refresh()
         if task_id == TASK_FOLLOW_CLIP:
             self.follow_clip_frame.grid()
+            self.follow_clip_tools.grid()
         else:
             self.follow_clip_frame.grid_remove()
+            self.follow_clip_tools.grid_remove()
         if task_id == TASK_SEQUENCE:
             self.sequence_panel.grid()
         else:
@@ -1636,12 +1664,13 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._sync_engine_choices()
 
     def _sync_batch_strip(self) -> None:
-        """The batch source strip shows for the batch task, and whenever a batch is in force."""
+        """The batch source strip shows for the batch task, for the driving-clip task (many images can
+        share one clip), and whenever a batch is in force."""
 
         panel = getattr(self, "batch_panel", None)
         if panel is None:
             return
-        if self._task == TASK_BATCH or self._batch_session.active:
+        if self._task in (TASK_BATCH, TASK_FOLLOW_CLIP) or self._batch_session.active:
             panel.grid()
         else:
             panel.grid_remove()
@@ -1763,6 +1792,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         """Forget every operator edit to the settings and take the suggestions again."""
 
         self._pins.clear()
+        self._engine_by_task.clear()
         self.select_task(self._task)
 
     def _refresh_conditioning_status(self, workflow_meta: dict[str, Any]) -> None:
@@ -2084,8 +2114,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         """Accept an ordered Review selection as batch sources (intent only; nothing is queued)."""
 
         accepted = self.batch_panel.set_review_selection(list(paths), dict(lineage_by_path or {}))
-        if accepted and self._task != TASK_BATCH:
-            self.select_task(TASK_BATCH)
+        if accepted and self._task not in (TASK_BATCH, TASK_FOLLOW_CLIP):
+            self.select_task(TASK_BATCH)  # a driving-clip batch keeps its task, engine and clip
         if accepted and status_message:
             self.status_var.set(status_message)
         return accepted
@@ -2145,6 +2175,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self._last_folder = str(Path(path).parent)
             if not self._leave_batch_mode():
                 return
+            self._leave_batch_task()
             self.source_image_var.set(path)
 
     def _on_browse_pose_video(self) -> None:

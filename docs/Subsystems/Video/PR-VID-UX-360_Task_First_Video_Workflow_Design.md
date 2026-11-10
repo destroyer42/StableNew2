@@ -113,9 +113,10 @@ Disclosure rules:
 - A disclosure opens itself only when it contains a required input that is empty.
 - A collapsed disclosure that hides non-default values shows "modified" in its header (the existing conditioning
   header behaviour, generalised).
-- Motion Library, motion readiness and Prepare Motion Source exist only in `follow_clip`.
-- The batch strip and table show in `batch`, and for as long as a batch is in force; the sequence panel only in
-  `sequence`.
+- Motion Library and Prepare Motion Source exist only in `follow_clip`. Motion readiness (the exact source crop
+  and motion guidance) shows for any engine that declares it, in every task.
+- The batch strip and table show in `batch`, in `follow_clip` (many images can share one driving clip), and for as
+  long as a batch is in force; the sequence panel only in `sequence`.
 
 ## 7. Components
 
@@ -140,6 +141,10 @@ Data flow: workflow records → `workflow_tasks` → task panel sets the existin
 - Make Video handoffs call `apply_make_video_defaults` as today; it additionally leaves `follow_clip` and
   `sequence` for `animate`. Use Latest Output and a single-image choice leave `batch`.
 - Motion Library "Use as Driving Video" and the Review batch handoff switch to `follow_clip` and `batch` respectively.
+- A Storyboard restore (the sequence panel's own, or Job History's "open as Storyboard") selects `sequence`.
+- A Review batch handoff received in `follow_clip` keeps that task, its engine and its clip.
+- The operator's engine choice is remembered per task for the session, so leaving a task and returning brings it
+  back; "Reset to suggested" forgets it.
 - The experimental opt-in is still cleared on any engine change and never restored.
 
 ## 9. Errors and edge cases

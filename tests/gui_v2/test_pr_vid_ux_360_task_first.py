@@ -129,7 +129,7 @@ def test_default_task_hides_everything_it_does_not_need(env):
     tab = env.tab
     for widget in (tab.follow_clip_frame, tab.sequence_panel, tab.batch_panel):
         assert not widget.winfo_manager()
-    assert tab.motion_library_panel.master is tab.follow_clip_frame
+    assert tab.motion_library_panel.master is tab.follow_clip_tools
     for section in (
         tab.advanced_section,
         tab.keyframes_section,
@@ -361,3 +361,84 @@ def test_library_handoff_selects_follow_clip(env, tmp_path):
     assert env.tab.current_task() == "follow_clip"
     assert env.tab.workflow_var.get() == ANIMATE2_ID
     assert env.tab.pose_video_var.get() == str(clip)
+
+
+# ---------------------------------------------------------------- whole-branch review fixes
+
+PROMPT_ENGINE_ID = "wan_animate2_prompt_i2v_v1"
+
+
+def test_many_images_can_share_one_driving_clip(env, tmp_path):
+    # Reachable before the task-first form: a batch whose engine follows a driving clip.
+    from tests.helpers.make_video_313 import make_image
+
+    tab = env.tab
+    assert tab.select_task("follow_clip")
+    assert tab.batch_panel.winfo_manager() == "grid"
+    tab.pose_video_var.set(str(tmp_path / "walk.mp4"))
+    engine = tab.workflow_var.get()
+    first = make_image(tmp_path / "a.png")
+    second = make_image(tmp_path / "b.png", color="maroon")
+    assert tab.set_source_batch([first, second])
+    assert tab.current_task() == "follow_clip"
+    assert tab.workflow_var.get() == engine
+    assert tab.pose_video_var.get() == str(tmp_path / "walk.mp4")
+
+
+def test_source_preview_and_guidance_are_not_tied_to_the_driving_clip_task(env):
+    tab = env.tab
+    assert tab.current_task() == "animate"
+    panel = tab.motion_readiness_panel
+    widget = panel
+    while widget is not None and widget is not tab:
+        assert widget is not tab.follow_clip_frame
+        widget = widget.master
+    assert tab.select_task("follow_clip")
+    assert tab.pose_video_frame.winfo_manager() == "grid"
+    assert tab.follow_clip_tools.winfo_manager() == "grid"
+
+
+def test_a_storyboard_restore_shows_the_storyboard(env):
+    # Job History "open as Storyboard" restores the form through the sequence panel from any task.
+    tab = env.tab
+    assert tab.current_task() == "animate"
+    tab._restore_form_for_storyboard({"workflow_id": TI2V_ID})
+    assert tab.current_task() == "sequence"
+    assert tab.sequence_panel.winfo_manager() == "grid"
+
+
+def test_the_operators_engine_choice_survives_a_task_round_trip(env):
+    tab = env.tab
+    tab.workflow_var.set(PROMPT_ENGINE_ID)  # an operator pick in "Animate an image"
+    assert tab.current_task() == "animate"
+    assert tab.select_task("follow_clip")
+    assert tab.workflow_var.get() != PROMPT_ENGINE_ID
+    assert tab.select_task("animate")
+    assert tab.workflow_var.get() == PROMPT_ENGINE_ID
+    tab.suggested_line.reset_button.invoke()
+    assert tab.workflow_var.get() == TI2V_ID
+    assert tab.select_task("follow_clip") and tab.select_task("animate")
+    assert tab.workflow_var.get() == TI2V_ID
+
+
+def test_browsing_a_single_image_leaves_the_batch_task(env, tmp_path, monkeypatch):
+    from tests.helpers.make_video_313 import make_image
+
+    image = make_image(tmp_path / "one.png")
+    assert env.tab.select_task("batch")
+    monkeypatch.setattr(
+        "src.gui.views.video_workflow_tab_frame_v2.filedialog.askopenfilename",
+        lambda **_kwargs: image,
+    )
+    env.tab._on_browse_source()
+    assert env.tab.current_task() == "animate"
+    assert env.tab.source_image_var.get() == image
+
+
+def test_a_restore_without_a_workflow_keeps_task_and_engine_consistent(env):
+    tab = env.tab
+    assert tab.select_task("follow_clip")
+    engine = tab.workflow_var.get()
+    tab.restore_video_workflow_state({})
+    assert tab.current_task() == "follow_clip"
+    assert tab.workflow_var.get() == engine
