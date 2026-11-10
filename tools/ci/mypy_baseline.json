@@ -48,7 +48,7 @@
     "src/gui/model_list_adapter_v2.py": 2,
     "src/gui/output_settings_panel_v2.py": 3,
     "src/gui/panels_v2/debug_hub_panel_v2.py": 3,
-    "src/gui/panels_v2/job_explanation_panel_v2.py": 4,
+    "src/gui/panels_v2/job_explanation_panel_v2.py": 3,
     "src/gui/panels_v2/layout_manager_v2.py": 3,
     "src/gui/panels_v2/operator_readiness_panel_v2.py": 1,
     "src/gui/panels_v2/queue_panel_v2.py": 2,
@@ -178,5 +178,5 @@
   },
   "metric": "mypy errors per src file, strict, --no-site-packages --platform linux --python-version 3.14",
   "schema_version": 1,
-  "total": 1465
+  "total": 1464
 }

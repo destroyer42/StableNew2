@@ -30,10 +30,15 @@ MANAGED_COMFY_MANIFEST_PATH = (
 #: Port used when the configured base URL does not name one (ComfyUI's own default).
 DEFAULT_MANAGED_COMFY_PORT = 8188
 _VERSION_PATTERN = re.compile(r'__version__\s*=\s*"([^"]+)"')
+PINNED_MEMORY_FLAG = "--disable-pinned-memory"
 
 
 class ManagedComfyContractError(ValueError):
     """The managed runtime contract is missing or does not have the expected shape."""
+
+
+class UnsupportedConfiguredComfyFlag(ValueError):
+    """A legacy launch command explicitly passes an unsupported optional switch."""
 
 
 @dataclass(frozen=True)
@@ -300,13 +305,40 @@ def plan_comfy_launch(
 ) -> tuple[str, ...]:
     """Resolve and verify a new argv without executing the interpreter, ComfyUI or custom nodes."""
 
-    if not required:
-        return tuple(command)
     if not command:
+        if not required:
+            return ()
         raise ValueError(
             "External ComfyUI flags cannot be verified. Configure a StableNew-managed ComfyUI launch command."
         )
 
+    check_configured_pin = PINNED_MEMORY_FLAG in command
+    if not required and not check_configured_pin:
+        return tuple(command)
+    try:
+        executable, parser_path, supported = _inspect_comfy_cli(command, workdir)
+    except ValueError:
+        if required:
+            raise
+        # Custom wrappers were already allowed for workflows without required switches.
+        return tuple(command)
+    unsupported = missing_required_flags(supported, required)
+    if unsupported:
+        raise ValueError(
+            f"ComfyUI at {parser_path} does not support {' '.join(unsupported)}. "
+            "Select a compatible ComfyUI installation."
+        )
+    if check_configured_pin and PINNED_MEMORY_FLAG not in supported:
+        raise UnsupportedConfiguredComfyFlag(
+            f"ComfyUI at {parser_path} does not support {PINNED_MEMORY_FLAG} in the launch command. "
+            "Remove the unsupported flag for this workflow or select a compatible installation."
+        )
+    if not required:
+        return tuple(command)
+    return tuple(with_required_flags((str(Path(executable).absolute()), *command[1:]), required))
+
+
+def _inspect_comfy_cli(command: Sequence[str], workdir: str | None) -> tuple[str, Path, set[str]]:
     # Inspect the parser next to the actual script, not a similarly named install or a wrapper
     # whose argument forwarding cannot be determined without running it.
     interpreter = Path(command[0])
@@ -327,7 +359,7 @@ def plan_comfy_launch(
         or "--" in command[script_index + 1 :]
     ):
         raise ValueError(
-            f"Cannot verify ComfyUI support for {' '.join(required)} from this launch command. "
+            "Cannot verify ComfyUI support for required switches from this launch command. "
             "Configure a direct Python command for ComfyUI main.py with a valid interpreter."
         )
 
@@ -383,13 +415,7 @@ def plan_comfy_launch(
                 for arg in call.args
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
             )
-    unsupported = missing_required_flags(supported, required)
-    if unsupported:
-        raise ValueError(
-            f"ComfyUI at {parser_path} does not support {' '.join(unsupported)}. "
-            "Select a compatible ComfyUI installation."
-        )
-    return tuple(with_required_flags((str(Path(executable).absolute()), *command[1:]), required))
+    return executable, parser_path, supported
 
 
 __all__ = [

@@ -993,7 +993,7 @@ class ComfyWorkflowVideoBackend:
         config = getattr(manager, "config", None) if manager is not None else build_default_comfy_process_config()
         command = getattr(config, "command", ()) or ()
         required = workflow_launch_requirements(command, _required_launch_flags(spec))
-        if not required:
+        if not required and not getattr(config, "autostart_enabled", False):
             return
         running = getattr(manager, "running_command", ()) or ()
         if running:
@@ -1005,7 +1005,7 @@ class ComfyWorkflowVideoBackend:
                     "Wait for the current runtime to be released, then retry."
                 )
             return
-        if isinstance(config, ComfyProcessConfig) and not config.autostart_enabled:
+        if required and isinstance(config, ComfyProcessConfig) and not config.autostart_enabled:
             raise ComfyStartupError("This workflow requires a StableNew-owned ComfyUI, but automatic start is off.")
         try:
             plan_comfy_launch(command, getattr(config, "working_dir", None), required)

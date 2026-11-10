@@ -122,7 +122,12 @@ verifies the declared arguments only. If the configured launcher cannot be inspe
 Python launch for ComfyUI's `main.py`. A running owned process with incompatible flags stays in place until its
 existing lifecycle releases it. When an external ComfyUI occupies the endpoint, workflows that require verified flags
 must wait for that runtime to finish and its operator to close it. **Fix ComfyUI Setup** opens Engine Settings when a
-launch command is missing.
+launch command is missing or an older direct ComfyUI launch rejects the saved `--disable-pinned-memory` switch.
+For a workflow such as Wan2.2 TI2V-5B that has no required launch flags, choose **Remove unsupported flag** in
+Engine Settings, save, then restart StableNew. The repair applies to the saved custom launch command. If an
+environment override supplies the command, update that override before restarting. Workflows such as Wan-Animate-2
+that require the switch still need a compatible installation. Use the Video Workflow readiness strip to check the
+selected workflow's models. Debug Hub's Model Resources tab reports the global ControlNet and auxiliary inventory.
 
 Do **not** commit the result: the paths are machine-specific and the repository default `presets/settings.json`
 is unchanged.

@@ -13,8 +13,29 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
+from src.video.workflow_registry import WorkflowLookupError, build_default_workflow_registry
 
 logger = logging.getLogger(__name__)
+
+
+def _recorded_comfy_requirements(workflow: dict[str, Any]) -> dict[str, Any]:
+    workflow_id = workflow.get("workflow_id")
+    version = workflow.get("workflow_version")
+    if workflow.get("backend_id") != "comfy" or not workflow_id or not version:
+        return {}
+    try:
+        spec = build_default_workflow_registry().get_offerable(workflow_id, version)
+    except WorkflowLookupError:
+        return {}
+    return {
+        "workflow_id": spec.workflow_id,
+        "workflow_version": spec.workflow_version,
+        "model_files": [
+            dep.locator for dep in spec.dependency_specs if dep.dependency_kind == "model_file"
+        ],
+        "scope": "Catalog requirements for the recorded workflow. See Video Workflow readiness "
+        "for the active ComfyUI inventory.",
+    }
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -169,16 +190,43 @@ class JobExplanationPanelV2(tk.Toplevel):
     def _populate_live_payload(self, payload: dict[str, Any]) -> None:
         origin_text = str(payload.get("origin_text") or "Live job diagnostics")
         self._origin_text.config(text=origin_text)
+        metadata = payload.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        result = metadata.get("result")
+        result_metadata = result.get("metadata") if isinstance(result, dict) else None
+        result_metadata = result_metadata if isinstance(result_metadata, dict) else {}
+        workflow = result_metadata.get("video_workflow")
+        workflow = workflow if isinstance(workflow, dict) else {}
+        requirements = _recorded_comfy_requirements(workflow)
         stage_flow = payload.get("stage_flow") or []
+        rows = payload.get("stage_prompts") or []
+        replay = result_metadata.get("replay_descriptor") or {}
+        if (
+            requirements
+            and isinstance(replay, dict)
+            and replay.get("stage_types") == ["video_workflow"]
+        ):
+            stage_flow = ["video_workflow"]
+            rows = [
+                {
+                    "stage": "video_workflow",
+                    "prompt": workflow.get("prompt") or "-",
+                    "negative": workflow.get("negative_prompt") or "-",
+                    "status": metadata.get("status") or "recorded",
+                }
+            ]
         if isinstance(stage_flow, list) and stage_flow:
             self._stage_flow_label.config(text=" -> ".join(str(stage) for stage in stage_flow))
         else:
             self._stage_flow_label.config(text="Stages unknown")
-        self._populate_metadata(
-            payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-        )
+        if requirements:
+            metadata = {
+                "video_workflow_requirements": requirements,
+                "error_message": metadata.get("error_message"),
+                **metadata,
+            }
+        self._populate_metadata(metadata)
         self.stage_tree.delete(*self.stage_tree.get_children())
-        rows = payload.get("stage_prompts") or []
         if isinstance(rows, list) and rows:
             for row in rows:
                 if not isinstance(row, dict):

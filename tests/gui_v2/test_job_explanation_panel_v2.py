@@ -148,3 +148,51 @@ def test_job_explanation_panel_shows_matrix_substitution_for_variant(tmp_path, t
     assert "A knight in a forest" in values[1]
 
     panel.destroy()
+
+
+def test_job_explanation_shows_the_failed_video_workflow_and_its_own_models(tmp_path, tk_root):
+    def explain(_job_id):
+        return {
+            "stage_flow": ["txt2img"],  # Older failure payload with no stage chain.
+            "metadata": {
+                "status": "failed",
+                "error_message": "ComfyUI rejected --disable-pinned-memory",
+                "result": {
+                    "metadata": {
+                        "replay_descriptor": {"stage_types": ["video_workflow"]},
+                        "video_workflow": {
+                            "backend_id": "comfy",
+                            "workflow_id": "wan22_ti2v_5b_i2v_v1",
+                            "workflow_version": "1.3.0",
+                            "prompt": "standing in the breeze",
+                        },
+                    }
+                },
+            },
+        }
+
+    from types import SimpleNamespace
+
+    panel = JobExplanationPanelV2(
+        "failed-video",
+        master=tk_root,
+        base_runs_dir=tmp_path,
+        controller=SimpleNamespace(get_job_explanation_payload=explain),
+    )
+    try:
+        metadata = json.loads(panel._metadata_text.get("1.0", tk.END))
+        requirements = metadata["video_workflow_requirements"]
+        assert requirements["workflow_version"] == "1.3.0"
+        assert requirements["model_files"] == [
+            "wan2.2_ti2v_5B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan2.2_vae.safetensors",
+        ]
+        assert panel._stage_flow_label.cget("text") == "video_workflow"
+        (row,) = panel.stage_tree.get_children()
+        assert panel.stage_tree.item(row, "values")[:2] == (
+            "video_workflow",
+            "standing in the breeze",
+        )
+    finally:
+        panel.destroy()
