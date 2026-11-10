@@ -1,6 +1,7 @@
 # PR-VID-UX-360: Task-first Video Workflow tab (design)
 
-Date: 2026-11-09. Status: **design, awaiting owner review**. Base: `main` at `5348745f`.
+Date: 2026-11-09. Status: **design reviewed by the owner on 2026-11-09** (smoothing on by default; Motion Library
+only in the driving-clip task; restored state pinned). Base: `main` at `5348745f`.
 Scope: the Video Workflow tab only. SVD Img2Vid and Movie Clips are unchanged.
 
 ## 1. Problem
@@ -21,8 +22,9 @@ The operator says what they want to make; the tab picks the engine, fills the se
 needs.
 
 - Default task, image already loaded: **3 actions or fewer** to a queued clip (task is preselected, type a prompt, Queue).
-- Default task fits without scrolling at the smallest window size the existing GUI layout tests exercise (the plan
-  confirms the exact size).
+- At the main window's minimum size, 1280x680 (`window_layout_contract.PREFERRED_MIN_WIDTH/HEIGHT`), the default
+  task shows source, task selector, Queue, prompt and the Suggested settings line without scrolling. Disclosures and
+  Recent outputs may scroll.
 - Every automatic choice is visible, carries a one-line reason and can be overridden.
 - No change to what is submitted for the same operator choices: the form state, NJR, admission and replay are unchanged.
 
@@ -66,7 +68,7 @@ Computed by a pure function from the selected task and the engine's record. Each
 | Engine | per section 4 | governance state and capability projection |
 | Length | the declared default | `frame_count.default` |
 | Motion | `gentle` (current default), only when the engine declares `motion_profile` | `build_default_form_state` |
-| Smooth with RIFE | on when RIFE resolves on this machine, else off with the reason | existing PR-VID-SMOOTH-302 discovery |
+| Smooth with RIFE | **on by default** (owner decision 2026-11-09). Off with the reason when RIFE is not found, because admission refuses a smoothing request it cannot resolve. Off in `sequence`, because `video_sequence_controller` refuses smoothing inside a sequence. | `rife_runtime.find_rife_executable()` |
 | Seed | blank (random, frozen at submit) | existing behaviour |
 | Negative prompt | blank, shown as "engine default applies" when the engine declares one | `default_negative_prompt` |
 | Workflow controls | each control's declared default | `operator_controls` |
@@ -76,8 +78,9 @@ Computed by a pure function from the selected task and the engine's record. Each
 value that the new engine cannot accept (for example a length it does not offer) is replaced by the suggestion and the
 summary line says so. "Reset to suggested" clears all pins. Pins are session state and are not saved.
 
-**Smoothing default.** Today `smooth_var` is a saved preference that defaults to off. With this change a saved explicit
-choice is still honoured; only an operator with no saved choice gets the suggestion.
+**Smoothing default.** Today `smooth_var` defaults to off. With this change it defaults to on wherever the table above
+allows it. A restored saved state is pinned (section 8), so a saved "off" stays off until the operator changes it or
+uses "Reset to suggested".
 
 ## 6. Layout
 
@@ -117,7 +120,7 @@ Disclosure rules:
 | `src/video/workflow_tasks.py` | new, pure | Task definitions; `eligible_workflows(task, records)`; `choose_workflow(task, records, pinned)`; `suggest_settings(task, record, rife_available)`; `infer_task(record, state)`. No Tk, no I/O. |
 | `src/gui/views/video_workflow_task_panel_v2.py` | new | Task selector and the Suggested settings line and editor. Reads and writes the tab's existing Tk variables; owns pin state. |
 | `src/gui/views/video_workflow_tab_frame_v2.py` | changed | Layout only: sections 6 and the per-task show/hide. Existing widget attributes (`workflow_combo`, `queue_workflow_button`, `advanced_section`, the panel attributes) keep their names so handoffs and tests keep working; `advanced_section` becomes the Suggested settings editor. |
-| `src/controller/video_workflow_controller.py` | changed, small | Exposes RIFE availability for the suggestion, reusing the PR-VID-SMOOTH-302 discovery (the plan locates the exact call). No new admission or build path. Controller surface ceilings are not raised. |
+| `src/controller/video_workflow_controller.py` | changed, small | Adds `rife_available()`, a thin wrapper over `rife_runtime.find_rife_executable()` (the same call the NJR builder uses at admission). No new admission or build path. Controller surface ceilings are not raised. |
 
 Data flow: workflow records → `workflow_tasks` → task panel sets the existing Tk variables →
 `get_video_workflow_state()` (unchanged shape) → controller → NJR builder. The task never leaves the GUI.
