@@ -82,6 +82,10 @@ def main() -> int:
             f"footer bottom {view.actions.mapTo(window, view.actions.rect().bottomLeft()).y()} / window {window.height()}"
         )
         window.grab().save(str(args.out / f"create_{tag}_top.png"))
+        window.activateWindow()
+        view.prompt_text.setFocus()
+        app.processEvents()
+        window.grab().save(str(args.out / f"create_{tag}_focus.png"))
         bar.setValue(bar.maximum() // 2)
         app.processEvents()
         window.grab().save(str(args.out / f"create_{tag}_middle.png"))
@@ -142,6 +146,7 @@ def capture_dock(app, out: Path, width: int, height: int, tag: str) -> None:
             app.processEvents()
 
     window = PrototypeWindow()
+    window.output_toggle.setChecked(True)
     window.resize(width, height)
     window.show()
     pump()

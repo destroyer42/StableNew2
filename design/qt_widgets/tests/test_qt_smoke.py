@@ -99,7 +99,7 @@ class QtWidgetSmokeTests(unittest.TestCase):
             ):  # the expanded Output Display needs >= ~1200 px; collapse it for small windows
                 window.output_dock.set_collapsed(True)
                 self.app.processEvents()
-            for scroll in view.findChildren(QScrollArea):
+            for scroll in (pane for pane in view.findChildren(QScrollArea) if pane.isVisible()):
                 self.assertLessEqual(
                     scroll.widget().minimumSizeHint().width(),
                     scroll.viewport().width(),
@@ -109,7 +109,7 @@ class QtWidgetSmokeTests(unittest.TestCase):
             self.assertLessEqual(window.minimumSizeHint().height(), window.height())
 
     def test_settings_grid_reflows_with_width(self):
-        _, wide = self.make(1600, 900)
+        _, wide = self.make(1920, 1080)
         narrow_window, narrow = self.make(960, 600)
         narrow_window.output_dock.set_collapsed(True)
         self.app.processEvents()
@@ -121,7 +121,7 @@ class QtWidgetSmokeTests(unittest.TestCase):
         view.setting_inputs["steps"].setValue(40)
         field = view.setting_fields["steps"]
         self.assertTrue(field.reset_button.isEnabled())
-        self.assertIn("differs", field.recommendation.text())
+        self.assertIn("Manual · rec. 28", field.recommendation.text())
         field.reset_button.click()
         self.assertEqual(view.setting_inputs["steps"].value(), 28)
         self.assertFalse(field.reset_button.isEnabled())

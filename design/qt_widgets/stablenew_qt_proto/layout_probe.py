@@ -52,15 +52,19 @@ def _control(view: CreateView, name: str) -> QWidget:
 
 
 def _scroll_of(view: CreateView, widget: QWidget) -> QScrollArea | None:
-    for scroll in (view.form_scroll, view.review_scroll):
+    for scroll in view.scroll_areas:
         body = scroll.widget()
         if body is not None and scroll.isVisible() and body.isAncestorOf(widget):
             return scroll
     return None
 
 
-def _scroll_state(scroll: QScrollArea | None) -> int:
-    return scroll.verticalScrollBar().value() if scroll is not None else 0
+def _area_name(view: CreateView, scroll: QScrollArea | None) -> str:
+    return {
+        view.form_scroll: "form",
+        view.settings_scroll: "settings",
+        view.review_scroll: "review",
+    }.get(scroll, "fixed")
 
 
 def control_report(view: CreateView, name: str) -> dict[str, Any]:
@@ -69,7 +73,7 @@ def control_report(view: CreateView, name: str) -> dict[str, Any]:
     window = view.window()
     report: dict[str, Any] = {
         "control": name,
-        "area": "fixed" if scroll is None else ("form" if scroll is view.form_scroll else "review"),
+        "area": _area_name(view, scroll),
         "visible_in_tree": widget.isVisibleTo(window),
     }
     if not report["visible_in_tree"]:
@@ -91,7 +95,7 @@ def control_report(view: CreateView, name: str) -> dict[str, Any]:
         rect = widget.rect()
         tl, br = widget.mapTo(viewport, rect.topLeft()), widget.mapTo(viewport, rect.bottomRight())
         report["clipped"] = bool(
-            tl.x() < 0 or br.x() > viewport.width() or tl.y() < 0 or br.y() > viewport.height()
+            tl.x() < 0 or br.x() >= viewport.width() or tl.y() < 0 or br.y() > viewport.height()
         )
         report["reachable"] = not report["clipped"]
     else:
@@ -101,7 +105,7 @@ def control_report(view: CreateView, name: str) -> dict[str, Any]:
         )
         report["screens_from_top"] = 1
         report["clipped"] = bool(
-            tl.x() < 0 or tl.y() < 0 or br.x() > window.width() or br.y() > window.height()
+            tl.x() < 0 or tl.y() < 0 or br.x() >= window.width() or br.y() > window.height()
         )
         report["reachable"] = not report["clipped"]
     return report
@@ -109,33 +113,32 @@ def control_report(view: CreateView, name: str) -> dict[str, Any]:
 
 def task_path_report(view: CreateView) -> dict[str, Any]:
     """Scroll distance and actions needed to touch each task control in order, starting from the top."""
-    for scroll in (view.form_scroll, view.review_scroll):
+    for scroll in view.scroll_areas:
         scroll.verticalScrollBar().setValue(0)
     QApplication.processEvents()
-    distance = {"form": 0, "review": 0}
+    distance = {"form": 0, "settings": 0, "review": 0}
     actions = 0
-    last = {"form": 0, "review": 0}
     for name in TASK_PATH:
         widget = _control(view, name)
         scroll = _scroll_of(view, widget)
         if scroll is None:
             continue
-        key = "form" if scroll is view.form_scroll else "review"
-        reveal(scroll, widget)
+        bar = scroll.verticalScrollBar()
+        before = bar.value()
+        reveal(scroll, widget, margin=0)
         QApplication.processEvents()
-        value = _scroll_state(scroll)
-        if value != last[key]:
+        if bar.value() != before:
             actions += 1
-            distance[key] += abs(value - last[key])
-            last[key] = value
+            distance[_area_name(view, scroll)] += abs(bar.value() - before)
     viewport = max(1, view.form_scroll.viewport().height())
-    for scroll in (view.form_scroll, view.review_scroll):
+    for scroll in view.scroll_areas:
         scroll.verticalScrollBar().setValue(0)
     return {
         "steps": len(TASK_PATH),
         "scroll_actions": actions,
         "interactions": len(TASK_PATH) + actions,
         "form_scroll_px": distance["form"],
+        "settings_scroll_px": distance["settings"],
         "review_scroll_px": distance["review"],
         "form_scroll_viewports": round(distance["form"] / viewport, 2),
     }
@@ -144,8 +147,8 @@ def task_path_report(view: CreateView) -> dict[str, Any]:
 def keyboard_report(window: QWidget, view: CreateView, limit: int = 260) -> dict[str, Any]:
     """Walk the Tab chain from the first control; record coverage and any focus that lands out of view."""
     app = QApplication.instance()
-    view.form_scroll.verticalScrollBar().setValue(0)
-    view.review_scroll.verticalScrollBar().setValue(0)
+    for scroll in view.scroll_areas:
+        scroll.verticalScrollBar().setValue(0)
     pump(app, 2)
     first = view.source_combo
     first.setFocus()
@@ -215,6 +218,57 @@ def prime(window: QWidget) -> None:
     pump(QApplication.instance(), 3)
 
 
+def text_clipping(view: CreateView) -> list[str]:
+    """Check visible text using the active font and Qt's styled content rectangles."""
+    from PySide6.QtCore import QRect, Qt
+    from PySide6.QtWidgets import (
+        QCheckBox,
+        QComboBox,
+        QLabel,
+        QPushButton,
+        QStyle,
+        QStyleOptionButton,
+        QStyleOptionComboBox,
+    )
+
+    clipped = []
+    for widget in view.findChildren(QWidget):
+        if not widget.isVisibleTo(view):
+            continue
+        flags = Qt.TextFlag.TextShowMnemonic
+        if isinstance(widget, QComboBox):
+            option = QStyleOptionComboBox()
+            widget.initStyleOption(option)
+            rect = widget.style().subControlRect(
+                QStyle.ComplexControl.CC_ComboBox,
+                option,
+                QStyle.SubControl.SC_ComboBoxEditField,
+                widget,
+            )
+            text = widget.currentText()
+        elif isinstance(widget, (QCheckBox, QPushButton)):
+            option = QStyleOptionButton()
+            widget.initStyleOption(option)
+            element = (
+                QStyle.SubElement.SE_CheckBoxContents
+                if isinstance(widget, QCheckBox)
+                else QStyle.SubElement.SE_PushButtonContents
+            )
+            rect = widget.style().subElementRect(element, option, widget)
+            text = widget.text()
+        elif isinstance(widget, QLabel):
+            rect = widget.contentsRect()
+            text = widget.text()
+            flags = Qt.TextFlag.TextWordWrap if widget.wordWrap() else Qt.TextFlag(0)
+        else:
+            continue
+        metrics = widget.fontMetrics()
+        bounds = metrics.boundingRect(QRect(0, 0, rect.width(), 4096), flags, text)
+        if text and (bounds.width() > rect.width() + 1 or bounds.height() > rect.height() + 2):
+            clipped.append(text)
+    return clipped
+
+
 def probe(window: QWidget, *, with_keyboard: bool = True, primed: bool = False) -> dict[str, Any]:
     """Full measurement of the current window state (call after ``show`` and event processing)."""
     if primed:
@@ -251,16 +305,28 @@ def probe(window: QWidget, *, with_keyboard: bool = True, primed: bool = False) 
         "min_hint_fits": window.minimumSizeHint().width() <= window.width()
         and window.minimumSizeHint().height() <= window.height(),
         "horizontal_overflow": [
-            scroll_name
-            for scroll_name, scroll in (("form", view.form_scroll), ("review", view.review_scroll))
-            if scroll.isVisible()
-            and scroll.widget().minimumSizeHint().width() > scroll.viewport().width()
+            _area_name(view, scroll)
+            for scroll in view.scroll_areas
+            if scroll.isVisible() and scroll.widget().width() > scroll.viewport().width()
         ],
     }
     # What is visible without any scrolling (persistent information).
-    for scroll in (view.form_scroll, view.review_scroll):
+    for scroll in view.scroll_areas:
         scroll.verticalScrollBar().setValue(0)
     pump(QApplication.instance(), 2)
+    report["pane_geometry"] = {
+        _area_name(view, scroll): {
+            "viewport": [scroll.viewport().width(), scroll.viewport().height()],
+            "content_height": scroll.widget().height(),
+            "vertical_range": scroll.verticalScrollBar().maximum(),
+        }
+        for scroll in view.scroll_areas
+        if scroll.isVisible()
+    }
+    report["clipped_text"] = text_clipping(view)
+    report["visible_required_controls"] = [
+        name for name in names if _in_view_unscrolled(view, _control(view, name))
+    ]
     report["persistent_without_scroll"] = {
         name: _in_view_unscrolled(view, widget)
         for name, widget in (

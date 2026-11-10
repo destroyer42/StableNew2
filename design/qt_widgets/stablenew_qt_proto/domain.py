@@ -64,6 +64,8 @@ class ModelFixture:
     settings: Settings
     allows_negative: bool
     characterized_sizes: tuple[tuple[int, int], ...]
+    samplers: tuple[str, ...] = SAMPLERS
+    schedulers: tuple[str, ...] = SCHEDULERS
 
 
 MODELS: tuple[ModelFixture, ...] = (
@@ -80,6 +82,8 @@ MODELS: tuple[ModelFixture, ...] = (
         settings=Settings("Euler", "Simple", 8, 1.0, 1024, 1024),
         allows_negative=False,
         characterized_sizes=((1024, 1024), (768, 1360)),
+        samplers=("Euler", "Euler a"),
+        schedulers=("Simple", "Normal"),
     ),
 )
 MODEL_BY_KEY = {model.key: model for model in MODELS}
@@ -377,7 +381,12 @@ class CreateSession:
 
     @property
     def can_simulate_admission(self) -> bool:
-        return self.is_preview_current and self.preview is not None and self.preview.ready
+        return (
+            self.demo_receipt is None
+            and self.is_preview_current
+            and self.preview is not None
+            and self.preview.ready
+        )
 
     # ------------------------------------------------------------- undo/redo
     @property
@@ -608,10 +617,14 @@ class CreateSession:
         resolved, unresolved = expand_prompt(d.prompt, d.slots)
         if not resolved.strip():
             errors.append("Prompt is empty. Supply a prompt before previewing.")
-        if s.sampler not in SAMPLERS:
-            errors.append(f"Sampler '{s.sampler}' is not in this fixture's sampler list.")
-        if s.scheduler not in SCHEDULERS:
-            errors.append(f"Scheduler '{s.scheduler}' is not in this fixture's scheduler list.")
+        for name, supported in (("sampler", model.samplers), ("scheduler", model.schedulers)):
+            value = getattr(s, name)
+            if value not in supported:
+                scope = " (locked in this draft)" if name in d.locked_fields else ""
+                errors.append(
+                    f"{SETTING_LABELS[name]} '{value}' is unsupported by this fixture{scope}. "
+                    f"Choose {', '.join(supported)} or reset the setting."
+                )
         for name, (low, high) in SETTING_RANGES.items():
             value = getattr(s, name)
             if not low <= value <= high:
@@ -697,10 +710,11 @@ class CreateSession:
         self.preview = Preview(
             d.fingerprint(), self.revision, "\n".join(lines), errors, warnings, d.stable_data()
         )
-        self.demo_receipt = None
         return self.preview
 
     def simulate_admission(self) -> DemoReceipt:
+        if self.demo_receipt is not None and self.is_preview_current:
+            return self.demo_receipt
         if not self.can_simulate_admission:
             raise RuntimeError("Preview is missing, stale, or contains an invalid DEMO condition")
         assert self.preview is not None
