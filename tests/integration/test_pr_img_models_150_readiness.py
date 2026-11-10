@@ -106,6 +106,12 @@ def sdxl_bundle() -> dict[str, tuple[str, list[int]]]:
     }
 
 
+@pytest.fixture(autouse=True)
+def _isolate_executor_gpu_pressure(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A Forge transport double must not depend on the workstation's live GPU pressure.
+    monkeypatch.setattr("src.pipeline.executor.collect_gpu_snapshot", lambda: None)
+
+
 @pytest.fixture
 def models(tmp_path: Path) -> dict[str, Path]:
     root = tmp_path / "models"
@@ -155,6 +161,8 @@ def _client(transport: FakeWebUITransport) -> ForgeWebUIClient:
     client = ForgeWebUIClient(base_url="http://127.0.0.1:7861", options_write_enabled=True)
     client._session.request = transport  # type: ignore[method-assign]
     client._options_min_interval_seconds = 0.0
+    # Keep the actual retry loop for error responses from the fake transport.
+    client._sleep = lambda _duration: None
     return client
 
 
