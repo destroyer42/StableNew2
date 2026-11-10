@@ -59,6 +59,7 @@ from .domain import (
     format_setting,
     referenced_slots,
 )
+from .edit_domain import CREATE_SOURCE
 from .tokens import SPACE
 
 LAYOUT_SCROLL = "scroll"  # design A: one vertically scrolling column, preview/result last
@@ -86,6 +87,7 @@ class CreateView(QWidget):
     stateSynced = (
         Signal()
     )  # emitted after every view/session synchronization (Output Display listens)
+    editRequested = Signal(str)
 
     def __init__(
         self,
@@ -584,6 +586,13 @@ class CreateView(QWidget):
         self.result_card.add(self.result_text)
         self.result_gallery = ResultGallery()
         self.result_card.add(self.result_gallery)
+        self.edit_result = QPushButton("Edit linked fixture")
+        self.edit_result.setToolTip(
+            "Open the linked Ridge study fixture from the mock Create gallery."
+        )
+        self.edit_result.hide()
+        self.edit_result.clicked.connect(lambda: self.editRequested.emit(CREATE_SOURCE))
+        self.result_card.add(self.edit_result)
         self.review_layout.addWidget(self.result_card)
         self.review_scroll.setWidget(self.review)
         split.addWidget(self.review_scroll)
@@ -764,8 +773,8 @@ class CreateView(QWidget):
 
         bar.rangeChanged.connect(pin)
         bar.actionTriggered.connect(release)  # only user input triggers actions
-        QTimer.singleShot(0, pin)
-        QTimer.singleShot(500, release)
+        QTimer.singleShot(0, self, pin)
+        QTimer.singleShot(500, self, release)
 
     def _reset(self) -> None:
         # Undoable, so no modal confirmation is needed (and nothing can hang a test run).
@@ -949,6 +958,7 @@ class CreateView(QWidget):
             self.result_gallery.set_tiles(
                 self.session.demo_receipt.tiles if self.session.demo_receipt else ()
             )
+            self.edit_result.setVisible(self.session.demo_receipt is not None)
             preview = self.session.preview
             if preview is None:
                 self.preview_text.setPlainText(

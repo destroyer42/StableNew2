@@ -6,8 +6,9 @@ explicitly save. Screenshots referenced below are in `screenshots/qt-ds-01/`.
 
 ## 1. Orientation
 
-The header shows **ISOLATED DEMO · NO GPU · NO BACKEND · NO JOBS**. Left navigation has **Create Image**
-and **Component Library**. The **Output Display** button (or Ctrl+3) collapses the right dock.
+The header shows **ISOLATED DEMO · NO GPU · NO BACKEND · NO JOBS**. Left navigation has **Create Image**,
+**Component Library** and **Edit & Improve**. The **Output Display** button (or Ctrl+3) collapses
+the right dock outside Edit.
 Shortcuts: Ctrl+1 Create, Ctrl+2 Library, Ctrl+3 Output Display, Alt+Z / Alt+Y undo / redo,
 Ctrl+Enter build mock preview, Ctrl+Shift+Enter simulate admission.
 
@@ -83,3 +84,7 @@ links the captures. Use **tools/layout_audit.py** to reproduce the geometry meas
 
 No real model, profile, backend, job, History or Artifacts; no screen-reader behaviour; no real
 125/150% display. See [ASSESSMENT](ASSESSMENT.md).
+## Edit & Improve
+
+See [the Edit walkthroughs](EDIT_WORKFLOW.md#operator-walkthroughs) for Quick Edit, Masked Edit,
+Extend Canvas, Compare and Iterate, and negative/recovery cases. Use **Ctrl+4** to open the workspace.

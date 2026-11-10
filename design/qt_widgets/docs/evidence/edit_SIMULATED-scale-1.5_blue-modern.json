@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "theme": "blue-modern",
+    "qpa": "windows",
+    "scale": 1.5,
+    "python": "3.14.9",
+    "os": "Windows-11-10.0.26100-SP0",
+    "platform_note": "native platform, simulated scaling",
+    "screen": {
+      "name": "ASUS VG32VQ1B",
+      "geometry": [
+        1707,
+        960
+      ],
+      "devicePixelRatio": 1.5,
+      "logicalDpi": 96.0
+    }
+  },
+  "rows": [
+    {
+      "layout": "editor",
+      "window": [
+        1280,
+        680
+      ],
+      "canvas": [
+        774,
+        341
+      ],
+      "inspector_viewport": [
+        266,
+        463
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1280x680"
+    }
+  ]
+}
