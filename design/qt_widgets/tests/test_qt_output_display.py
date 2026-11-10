@@ -61,7 +61,9 @@ class OutputDisplayTests(unittest.TestCase):
         return widget.mapTo(window, widget.rect().topLeft()).x()
 
     @staticmethod
-    def wheel(delta: int, modifiers=Qt.KeyboardModifier.NoModifier) -> QWheelEvent:
+    def wheel(delta: int, modifiers=None) -> QWheelEvent:
+        if modifiers is None:
+            modifiers = Qt.KeyboardModifier.NoModifier
         pos = QPointF(40, 40)
         return QWheelEvent(
             pos,

@@ -64,7 +64,7 @@ class PrototypeWindow(QMainWindow):
         self.output_toggle.setToolTip("Show or collapse the Output Display (Ctrl+3)")
         self.output_toggle.setAccessibleName("Output Display visible")
         header.addWidget(self.output_toggle)
-        capsule = QLabel("ISOLATED DEMO · NO GPU · NO BACKEND · NO WRITES")
+        capsule = QLabel("ISOLATED DEMO · NO GPU · NO BACKEND · NO JOBS")
         capsule.setProperty("role", "capsule")
         header.addWidget(capsule)
         root.addLayout(header)
@@ -89,7 +89,7 @@ class PrototypeWindow(QMainWindow):
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
         self.statusBar().showMessage(
-            "Prototype uses demonstration fixtures only; all settings and receipts are in memory."
+            "Prototype uses demonstration fixtures only. Drafts and receipts stay in memory; only Theme Studio writes theme files, when you ask."
         )
         self.statusBar().setSizeGripEnabled(True)
         shortcut = QAction("Switch to Create", self)

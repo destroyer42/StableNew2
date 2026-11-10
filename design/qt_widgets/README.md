@@ -1,121 +1,90 @@
-# StableNew — Independent Qt Widgets Prototype Assessment (v0.3)
+# StableNew — Qt Widgets design workspace (QT-DS-01, v0.4)
 
-**Status:** Source-maintainable, isolated prototype candidate; **not** an integrated StableNew branch/PR, not production code, not a qualified Qt migration. Prepared against remote `destroyer42/StableNew2` `main` **`fc644705b0d2428d1a258bc820ae7b214ffe4469`** (2026-11-08). Independent of Figma; no license, API call, asset export or runtime service is required.
+A permanent, source-maintained place to prototype and compare **Qt Widgets** components, themes and
+layouts for StableNew. It is a **design aid**: not production code, not an integrated StableNew
+branch, not a qualified Qt migration, and not a toolkit decision.
 
-**v0.3 adds the Output Display** — a dock to the right of the workspace; see "Output Display" below.
+Authority: `AGENTS.md` and `STATUS.md` win over this directory. The UX research that motivates the
+prototype lives in [`docs/research/stablenew-experience/`](../../docs/research/stablenew-experience/README.md)
+and is **not** duplicated here; this workspace only links to it:
 
-**v0.2 changes (owner request + first Windows run):** blue theme and rounded geometry; fixes for every defect found in the first Windows run; richer Create workflow. See `docs/ASSESSMENT.md` for evidence and `docs/screenshots/` for real-platform captures.
+- [UX-850-B J1 Create journey](../../docs/research/stablenew-experience/ux850-b/JOURNEYS.md)
+- [UX-850-C component roles](../../docs/research/stablenew-experience/ux850-c/COMPONENTS.md) and
+  [token roles](../../docs/research/stablenew-experience/ux850-c/TOKENS.md)
+- [UX-850-D state authority](../../docs/research/stablenew-experience/ux850-d/README.md)
+- [UX-850-E Learning feasibility](../../docs/research/stablenew-experience/ux850-e/README.md) and
+  [UX-850-F delivery program](../../docs/research/stablenew-experience/ux850-f/README.md)
+- [Owner decisions](../../docs/research/stablenew-experience/ux-850-r1/OWNER_DECISIONS.md)
 
-## What is provided
+## What is here
 
-- `stablenew_qt_proto/tokens.py` — blue palette, radius/spacing tokens, WCAG contrast helper with asserted pairs, and the Qt stylesheet. Plain widgets are transparent (no dark patches inside cards); every control keeps a constant 2px border so focus never shifts layout.
-- `stablenew_qt_proto/assets/*.svg` — four static glyphs (spin arrows, combo chevron, checkmark) referenced by the stylesheet. No runtime file writes.
-- `stablenew_qt_proto/components.py` — `SectionCard`, `NoticeBanner` (info/warning/blocked/success), `StatusChip`, `IssueList`, `Disclosure`, `ActionStrip`, `ResponsiveGrid`, `SettingField`, `stacked_label`, and a wheel guard so scrolling the form never silently changes a spin box or combo.
-- `stablenew_qt_proto/gallery.py` — executable component catalog including theme swatches and computed contrast ratios.
-- `stablenew_qt_proto/create_view.py` — the mock Create workflow (below).
-- `stablenew_qt_proto/output_display.py` / `output_model.py` — the Output Display dock and its pure (Qt-free) zoom/size-mode/frame model.
-- `stablenew_qt_proto/domain.py` — dependency-free, deterministic, in-memory draft/preview model with explicit **unqualified fixtures**.
-- `stablenew_qt_proto/app.py` — isolated app with Create and Component Library routes; no StableNew imports.
-- `tools/capture.py` — writes layout PNGs and measurements to a directory you name.
-- `tests/` — pure domain/theme/architecture tests plus opt-in Qt tests that show real windows and measure layout.
+| Path | Purpose |
+|---|---|
+| `stablenew_qt_proto/theme.py` | Pure (no Qt) versioned theme contract: strict validation, contrast checks, density, editor, stylesheet builder |
+| `stablenew_qt_proto/themes/*.theme.json` | Two immutable reference presets: `blue-modern` (the migrated v0.3 look) and `concept-a` (reconstructed, **not** Figma-verified) |
+| `stablenew_qt_proto/theme_store.py` | User theme library (atomic Save As, Export, Import, remembered active theme) |
+| `stablenew_qt_proto/theme_studio.py`, `gallery.py` | Component library page + **Theme Studio** (live preview, state matrix, contrast diagnostics) |
+| `stablenew_qt_proto/components.py`, `create_view.py`, `output_display.py` | Reusable components, the mock Create workflow (two layouts), the Output Display dock |
+| `stablenew_qt_proto/domain.py`, `output_model.py` | Pure in-memory mock domain (fixtures, recommendations, locks, preview freshness) |
+| `stablenew_qt_proto/layout_probe.py`, `tools/layout_audit.py`, `tools/capture.py` | Deterministic layout measurement, evidence tables, screenshots |
+| `tests/` | Pure tests plus opt-in native Qt tests |
+| `docs/` | [WALKTHROUGH](docs/WALKTHROUGH.md), [LAYOUT_EVALUATION](docs/LAYOUT_EVALUATION.md), [THEME_CONTRACT](docs/THEME_CONTRACT.md), [ASSESSMENT](docs/ASSESSMENT.md) (demonstrated vs unverified), [TRACEABILITY](docs/TRACEABILITY.md), [IMPORT_RECORD](docs/IMPORT_RECORD.md), `evidence/`, `screenshots/` |
 
-### Create workflow (v0.2)
+`SOURCE_IMPORT_MANIFEST.sha256` records the exact bytes of the imported v0.3.0 prototype (see
+[IMPORT_RECORD](docs/IMPORT_RECORD.md)).
 
-- **PromptPack:** `{slot}` placeholders in the prompt resolve from an editable slot table (names and values); the preview shows template and resolved prompt; unresolved placeholders, unused slots and unusable slot names warn.
-- **Settings:** sampler, scheduler, steps, CFG, width, height, **seed** (-1 = Random) and **batch**. Samplers/schedulers are closed lists; numeric limits are validated from one table shared with the editors.
-- **Recommendations that mean something:** each setting shows its recommendation and `· differs` in words; **↺** returns one value to the recommendation; **Reset unlocked to recommended** returns the rest. Choosing *Learning-informed (fixture)* now actually proposes different values (steps/CFG), applied through the same lock/manual-protection rules as a model switch.
-- **Size presets** come from the selected fixture's characterized sizes.
-- **Locks and manual edits:** a manual edit equal to the recommendation stops counting as an override.
-- **Undo/Redo** of draft state (typing coalesces into one step; reset is undoable, so no modal confirmation). Alt+Z / Alt+Y; Ctrl+Enter builds the preview; Ctrl+Shift+Enter simulates admission.
-- **Change log:** every change with its revision, newest first, never wiped by later edits.
-- **Review panel:** status chip (NOT BUILT / STALE / BLOCKED / CURRENT · READY), per-issue banners, mock result card; the panel scrolls independently.
-- **Responsive:** the settings grid reflows 1–3 columns by width and never clips; the footer actions stay visible.
+## Boundaries (enforced by tests)
 
-### Output Display (v0.3)
+- No import of `src/`, Tk, the compiler, `JobService`, the SQLite queue, `PipelineRunner`, History,
+  network or subprocess APIs. The Create workflow is a simulation: it never dispatches a job and
+  its receipt is a text acknowledgement with placeholder tiles, **not** a mock authority.
+- The workspace theme is **not** a second production theme. It never reads or writes
+  `presets/settings.json`, `src/gui_v2/design_values.py` or any Tk value. Production Qt adoption
+  would still have to reconcile those owners.
+- User themes are written only by explicit Save As / Export / Apply (remembered theme) into
+  `user_themes/` (git-ignored; override with `STABLENEW_QT_PROTO_THEME_DIR`). Shipped presets are read-only.
+- **Never install PySide6 into StableNew's production venv.** The repository test
+  `tests/system/test_qt_design_workspace.py` runs the Qt-free part of this suite in the normal
+  environment and fails if the application and the workspace reference each other.
 
-A dock to the right of the Create workspace. It shows a **placeholder frame** that follows the draft (size/aspect, resolved prompt, model, settings, preview state); it never shows a real image and says "No image generated".
-
-- **Dock / undock:** **Undock** / **Dock** in its title bar (it may dock left or right, not bottom; dragging the title bar is Qt's native dock behaviour and is not covered by the automated tests).
-- **Collapse:** title-bar arrow, the header **Output Display** button, or **Ctrl+3**. Docked it becomes a thin vertical rail and the workspace takes the space; floating it shrinks to its title bar.
-- **Size modes** (segmented control in the panel):
-  - **Free** – drag the edge to resize (minimum 300 px).
-  - **Lock size** – freezes the docked width (or the floating window size) until you pick another mode.
-  - **Fill** – docked, uses all width the workspace does not need and follows the window; floating, fills the screen.
-- **Zoom:** − / + / slider (5%–1600%) / **100%** / **Fit** (re-fits on resize), Ctrl+wheel (at the pointer), drag to pan, double-click toggles Fit/100%; Ctrl+= / Ctrl+− / Ctrl+0 / Ctrl+9 while focus is inside the display.
-- Trade-off: with the display open the minimum window width is 1192 px (944 px collapsed) and the Create form is narrower; collapse it while authoring.
-
-**Not implemented:** real PromptPack grammar or Matrix expansion, production model discovery, real profiles or Learning evidence, actual NJR compilation, backend/model inspection, production submit, job lifecycle, output images, persistent save/autosave, integrated Library, or comprehensive Qt vs Tk qualification.
-
-## Run on Windows with the existing Python 3.14 + PySide6 environment
-
-The environment recorded by GUI-PORT-740 was **moved**: `C:\Users\rob\qual\gui-port740-env` no longer exists, but `C:\Users\rob\qual.__moved_to_D\gui-port740-env` runs (Python 3.14.9, PySide6 6.12.0, Qt 6.12.0 verified 2026-11-08). Reuse it; do not rebuild.
+## Run (Windows, existing Python 3.14 + PySide6 6.12 environment)
 
 ```powershell
-$py = 'C:\Users\rob\qual.__moved_to_D\gui-port740-env\Scripts\python.exe'
-& $py --version
-& $py -I -c 'import PySide6; print(PySide6.__version__)'
+$py = 'C:\Users\rob\qual.__moved_to_D\gui-port740-env\Scripts\python.exe'   # reuse; do not rebuild
+cd design\qt_widgets
+& $py -m stablenew_qt_proto.app                    # remembered theme, split Create layout
+& $py -m stablenew_qt_proto.app --theme concept-a --layout scroll
 ```
 
-From the extracted `StableNew_Qt_Prototype_Assessment` directory:
+## Test
 
 ```powershell
-& $py -m stablenew_qt_proto.app
-```
-
-**Do not install PySide6 into StableNew's production venv.**
-
-## Tests
-
-```powershell
-& $py -m unittest discover -s tests -v                      # pure tests (Qt tests skip)
+& $py -m unittest discover -s tests                # pure tests (Qt tests skip)
 $env:STABLENEW_QT_PROTOTYPE_TEST = '1'
-& $py -m unittest discover -s tests -v                      # + 42 Qt tests (shows windows briefly)
-Remove-Item Env:STABLENEW_QT_PROTOTYPE_TEST
+& $py -m unittest discover -s tests                # + native Qt tests (shows windows briefly)
 ```
 
-Add `$env:QT_QPA_PLATFORM='offscreen'` for headless runs. Offscreen has no fonts, so text renders as boxes and widths are not representative; use the native platform for layout evidence.
+Use the native platform for layout work; `QT_QPA_PLATFORM=offscreen` has no fonts, so widths are not
+representative.
 
-## Layout evidence
+## Evidence tools
 
 ```powershell
-& $py tools/capture.py --out captures --sizes 1280x680 1440x900 960x600
-& $py tools/capture.py --out captures --sizes 1280x680 --scale 1.5
+& $py tools/layout_audit.py --out docs/evidence --sizes 1280x680 960x600 1440x900 --name my_audit
+& $py tools/capture.py --out captures --sizes 1280x680 --layout split --prefix split_ --studio
 ```
 
-Prints form viewport/content size, settings columns and footer position, and saves top/middle/bottom/blocked/library PNGs plus `dock_*` PNGs of the Output Display (expanded, 100% zoom with a built preview, Fill, collapsed rail, floating, floating-collapsed). Windows under 1200 px wide are captured with the display collapsed. `docs/screenshots/` holds the captures from this release.
+`--scale` sets `QT_SCALE_FACTOR` and is **simulated** scaling (reported as such). Real per-monitor
+125/150% scaling was not run (the development display is 100%).
 
-## Guided manual mock journey
+## Operator guide
 
-1. **Create Image:** edit the Pack name, prompt and a slot value. Rename a slot and watch `{subject}` become unresolved.
-2. **Build mock preview** (or Ctrl+Enter). Read the resolved prompt and the status chip.
-3. Change **Steps**: the chip turns **STALE** and **Simulate admission** disables; its field shows `· differs`. Click **↺** to restore it.
-4. Lock **Steps**, switch to the Flux fixture: the value is kept, the negative prompt blocks the preview (never silently dropped), and the change log explains both.
-5. Clear the negative prompt, rebuild, **Simulate admission**: the result card states **No job submitted and no image generated**.
-6. Try **Undo/Redo** (Alt+Z/Alt+Y), **Reset demo draft**, then Undo to restore it.
-7. Open **Component Library** to inspect components, theme swatches and contrast ratios.
+[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md) is a step-by-step tour: component gallery, Theme Studio
+(edit, preview, contrast, save, restore, export, import), the Create journey and the two layouts.
 
-## Architectural limits
+## Limits that matter
 
-The future production path must remain `Intent → Compiler → immutable NJR → JobService → SQLite Queue/Repository → PipelineRunner.run_njr → Artifacts/History`. This prototype has no runtime, compiler, queue, SQLite, artifact, cancellation, process manager or History implementation. `DemoReceipt` is an ephemeral text-only UI result, **not** a mock authority. Undo history and the change log live in memory only. It does not import production `src` modules.
-
-## Design provenance
-
-The optional visual reference is Figma **StableNew — PySide6 UX Prototype, Concept A**, file `7WvTcu0dxFQN7ZBiZZI8us`. The blue theme is an owner request for this prototype and is **not** Concept A's palette; no pixel parity is claimed and the Figma file was not revalidated.
-
-Merged UX-850 sources from remote `main` at the above SHA:
-
-- [UX-850-B J1 Create journey](https://github.com/destroyer42/StableNew2/blob/fc644705b0d2428d1a258bc820ae7b214ffe4469/docs/research/stablenew-experience/ux850-b/JOURNEYS.md)
-- [UX-850-C component roles](https://github.com/destroyer42/StableNew2/blob/fc644705b0d2428d1a258bc820ae7b214ffe4469/docs/research/stablenew-experience/ux850-c/COMPONENTS.md)
-- [UX-850-C token roles](https://github.com/destroyer42/StableNew2/blob/fc644705b0d2428d1a258bc820ae7b214ffe4469/docs/research/stablenew-experience/ux850-c/TOKENS.md)
-- [UX-850-D state authority](https://github.com/destroyer42/StableNew2/blob/fc644705b0d2428d1a258bc820ae7b214ffe4469/docs/research/stablenew-experience/ux850-d/README.md)
-- [UX-850-E Learning feasibility](https://github.com/destroyer42/StableNew2/blob/fc644705b0d2428d1a258bc820ae7b214ffe4469/docs/research/stablenew-experience/ux850-e/README.md)
-- [UX-850-F delivery program](https://github.com/destroyer42/StableNew2/blob/fc644705b0d2428d1a258bc820ae7b214ffe4469/docs/research/stablenew-experience/ux850-f/README.md)
-- [All 73 confirmed owner decisions](https://github.com/destroyer42/StableNew2/blob/fc644705b0d2428d1a258bc820ae7b214ffe4469/docs/research/stablenew-experience/ux-850-r1/OWNER_DECISIONS.md)
-
-## Development boundary
-
-`AGENTS.md`, current `STATUS.md` and the merged UX-850 research have priority over this standalone artifact. The research does not authorize a full Qt migration. GUI-PORT-742's prior result was **NO-GO** on comparative operator-benefit evidence; a prototype can inform a new decision but does not retroactively overturn that verdict.
-
-Do not copy this package into production `src` as a second runtime design system. A future Qt host package must reconcile existing `src/gui_v2/design_values.py` and toolkit-neutral state, existing Qt proof seams, Windows accessibility/DPI, startup/memory and PySide6 packaging/licensing.
-
-No push, PR, merge, production changes, backend calls or physical execution were performed for this artifact.
+Everything the prototype shows is a fixture. It demonstrates *how components and layouts could
+behave*, not that Qt Widgets is better for StableNew operators; GUI-PORT-742's NO-GO on operator
+benefit is untouched. See [ASSESSMENT](docs/ASSESSMENT.md) for what is demonstrated, simulated and
+unverified.

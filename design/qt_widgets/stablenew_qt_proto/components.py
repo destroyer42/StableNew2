@@ -22,9 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .theme import LEVELS
 from .tokens import SPACE
-
-LEVELS = ("info", "warning", "blocked", "success")
 
 
 class FormTextEdit(QPlainTextEdit):
@@ -153,6 +152,8 @@ class NoticeBanner(QFrame):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(SPACE.md, SPACE.sm, SPACE.md, SPACE.sm)
         self.message = QLabel("No current warning")
+        # Messages can contain imported theme names: never interpret them as rich text.
+        self.message.setTextFormat(Qt.TextFormat.PlainText)
         self.message.setWordWrap(True)
         lay.addWidget(self.message)
         self.setAccessibleName("Workflow notices")
@@ -175,7 +176,13 @@ class IssueList(QWidget):
         self.banners: list[NoticeBanner] = []
 
     def set_issues(
-        self, errors: tuple[str, ...], warnings: tuple[str, ...], *, empty: str = "No issues found"
+        self,
+        errors: tuple[str, ...],
+        warnings: tuple[str, ...],
+        *,
+        empty: str = "No issues found",
+        empty_status: str = "OK",
+        empty_level: str = "success",
     ) -> None:
         for banner in self.banners:
             self._layout.removeWidget(banner)
@@ -185,7 +192,7 @@ class IssueList(QWidget):
             ("WARNING", text, "warning") for text in warnings
         ]
         if not entries:
-            entries = [("OK", empty, "success")]
+            entries = [(empty_status, empty, empty_level)]
         for status, text, level in entries:
             banner = NoticeBanner(self)
             banner.set_message(status, text, level)

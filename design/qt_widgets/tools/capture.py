@@ -61,10 +61,15 @@ def main() -> int:
         window.show()
         app.processEvents()
         window.create_view.set_layout_design(args.layout)
+        for _ in range(8):
+            app.processEvents()  # let the layout settle before measuring or grabbing
         if (
             width < 1200
         ):  # an expanded Output Display needs ~1192 px; small windows use the collapsed rail
             window.output_dock.set_collapsed(True)
+            for _ in range(6):
+                app.processEvents()
+            window.resize(width, height)  # the minimum width only drops once the dock is collapsed
             for _ in range(6):
                 app.processEvents()
         view = window.pages.widget(0)
@@ -84,6 +89,15 @@ def main() -> int:
         app.processEvents()
         window.grab().save(str(args.out / f"create_{tag}_bottom.png"))
         bar.setValue(0)
+        view.source_combo.setCurrentIndex(1)  # a fixture PromptPack with slots
+        view.preview_button.click()
+        view.setting_inputs["batch"].setValue(3)
+        view.preview_button.click()
+        view.admit_button.click()  # simulated admission: placeholder result tiles
+        app.processEvents()
+        for _ in range(8):
+            app.processEvents()  # the result view scrolls after layout
+        window.grab().save(str(args.out / f"create_{tag}_result.png"))
         view.session.switch_model("fixture-flux")  # demonstrate a blocked, explained state
         view._sync_view()
         view._build_preview()
@@ -97,6 +111,20 @@ def main() -> int:
             for _ in range(6):
                 app.processEvents()
             window.grab().save(str(args.out / f"studio_{tag}.png"))
+            studio = window.gallery.studio
+            studio.edit("colors", "accent", "#FFC806")
+            for _ in range(6):
+                app.processEvents()
+            window.grab().save(str(args.out / f"studio_{tag}_edited.png"))
+            studio.mode_buttons["preview"].click()
+            for _ in range(6):
+                app.processEvents()
+            window.grab().save(str(args.out / f"studio_{tag}_edited_preview.png"))
+            studio.edit("colors", "text", studio.draft.palette.background)
+            for _ in range(6):
+                app.processEvents()
+            window.grab().save(str(args.out / f"studio_{tag}_contrast_blocked.png"))
+            studio.revert()
         window.close()
         if not args.studio:
             capture_dock(app, args.out, width, height, tag)

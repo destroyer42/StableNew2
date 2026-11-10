@@ -22,7 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SIZES = ("1280x680", "960x600", "1440x900", "1920x1080")
 
 
-def run(sizes: list[str], layouts: list[str], docks: list[str], theme_id: str) -> list[dict]:
+def run(
+    sizes: list[str], layouts: list[str], docks: list[str], states: list[str], theme_id: str
+) -> list[dict]:
+    from PySide6.QtCore import QEvent
     from PySide6.QtWidgets import QApplication
     from stablenew_qt_proto.app import PrototypeWindow, apply_theme
     from stablenew_qt_proto.layout_probe import probe, pump
@@ -35,18 +38,25 @@ def run(sizes: list[str], layouts: list[str], docks: list[str], theme_id: str) -
         width, height = (int(part) for part in size.split("x"))
         for dock in docks:
             for layout in layouts:
-                window = PrototypeWindow()
-                window.resize(width, height)
-                window.show()
-                pump(app)
-                window.create_view.set_layout_design(layout)
-                window.output_dock.set_collapsed(dock == "collapsed")
-                pump(app, 10)
-                row = probe(window)
-                row["requested_size"] = size
-                row["dock_requested"] = dock
-                rows.append(row)
-                window.close()
+                for state in states:
+                    window = PrototypeWindow()
+                    window.resize(width, height)
+                    window.show()
+                    pump(app)
+                    window.create_view.set_layout_design(layout)
+                    window.output_dock.set_collapsed(dock == "collapsed")
+                    pump(app, 10)  # the minimum width only drops once the dock has collapsed
+                    window.resize(width, height)
+                    pump(app, 10)
+                    row = probe(window, primed=state == "primed")
+                    row["requested_size"] = size
+                    row["dock_requested"] = dock
+                    row["size_clamped"] = [window.width(), window.height()] != [width, height]
+                    rows.append(row)
+                    window.close()
+                    window.deleteLater()
+                    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                    pump(app, 2)
     return rows
 
 
@@ -57,20 +67,22 @@ def markdown(rows: list[dict], meta: dict) -> str:
         f"Theme `{meta['theme']}` · Qt platform `{meta['qpa']}` · scale {meta['scale']} "
         f"({'SIMULATED via QT_SCALE_FACTOR' if meta['scale'] != 1.0 else 'native display scale'}) · {meta['python']}",
         "",
-        "| Layout | Window | Output Display | Form viewport | Form screens | Unreachable | Clipped/overflow | Task scroll actions | Form scroll (viewports) | Summary/preview/primary without scrolling | Tab stops · missing · out of view |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Layout | State | Requested → actual | Output Display | Form viewport | Form screens | Unreachable | Clipped/overflow | Task scroll actions | Form scroll (viewports) | Summary/preview/primary without scrolling | Tab stops · missing · out of view · preview before actions |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         persist = r["persistent_without_scroll"]
         kb = r.get("keyboard", {})
         tp = r["task_path"]
         lines.append(
-            f"| {r['layout']} | {r['window'][0]}×{r['window'][1]} | {r['output_display']} | "
+            f"| {r['layout']} | {r['state']} | {r['requested_size']} → {r['window'][0]}×{r['window'][1]}"
+            f"{' (clamped by minimum size)' if r['size_clamped'] else ''} | {r['output_display']} | "
             f"{r['form_viewport'][0]}×{r['form_viewport'][1]} | {r['form_screens']} | "
             f"{', '.join(r['unreachable']) or 'none'} | {', '.join(r['horizontal_overflow']) or 'none'} | "
             f"{tp['scroll_actions']} | {tp['form_scroll_viewports']} | "
             f"{'yes' if all(persist.values()) else 'no: ' + ', '.join(k for k, v in persist.items() if not v)} | "
-            f"{kb.get('tab_stops', '-')} · {len(kb.get('required_missing_from_chain', []))} · {kb.get('focus_out_of_view', '-')} |"
+            f"{kb.get('tab_stops', '-')} · {len(kb.get('required_missing_from_chain', []))} · {kb.get('focus_out_of_view', '-')} · "
+            f"{'yes' if kb.get('preview_before_actions') else 'no'} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -81,6 +93,9 @@ def main() -> int:
     parser.add_argument("--sizes", nargs="+", default=list(DEFAULT_SIZES))
     parser.add_argument("--layouts", nargs="+", default=["scroll", "split"])
     parser.add_argument("--docks", nargs="+", default=["expanded", "collapsed"])
+    parser.add_argument(
+        "--states", nargs="+", default=["fresh", "primed"], choices=["fresh", "primed"]
+    )
     parser.add_argument("--theme", default="blue-modern")
     parser.add_argument("--scale", type=float, default=1.0)
     parser.add_argument(
@@ -93,7 +108,7 @@ def main() -> int:
     if args.scale != 1.0:
         os.environ["QT_SCALE_FACTOR"] = str(args.scale)
     sys.path.insert(0, str(ROOT))
-    rows = run(args.sizes, args.layouts, args.docks, args.theme)
+    rows = run(args.sizes, args.layouts, args.docks, args.states, args.theme)
     from PySide6.QtGui import QGuiApplication
 
     screen = QGuiApplication.primaryScreen()
@@ -118,6 +133,7 @@ def main() -> int:
         json.dumps({"meta": meta, "rows": rows}, indent=2), encoding="utf-8"
     )
     (args.out / f"{args.name}.md").write_text(markdown(rows, meta), encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")  # the table contains arrows and multiplication signs
     print(markdown(rows, meta))
     return 0
 

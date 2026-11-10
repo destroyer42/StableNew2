@@ -67,6 +67,7 @@ class ComponentsPage(QScrollArea):
             "Prototype-only, source-owned components. Changes here do not affect production StableNew or Figma."
         )
         hint.setProperty("role", "muted")
+        hint.setTextFormat(Qt.TextFormat.PlainText)  # the theme name may come from an imported file
         hint.setWordWrap(True)
         root.addWidget(hint)
 

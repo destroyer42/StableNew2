@@ -1,0 +1,2917 @@
+{
+  "meta": {
+    "theme": "concept-a",
+    "qpa": "windows",
+    "scale": 1.0,
+    "python": "3.14.9",
+    "os": "Windows-11-10.0.26100-SP0",
+    "platform_note": "native platform",
+    "screen": {
+      "name": "ASUS VG32VQ1B",
+      "geometry": [
+        2560,
+        1440
+      ],
+      "devicePixelRatio": 1.0,
+      "logicalDpi": 96.0
+    }
+  },
+  "rows": [
+    {
+      "layout": "scroll",
+      "state": "fresh",
+      "window": [
+        1280,
+        680
+      ],
+      "output_display": "expanded",
+      "view": [
+        684,
+        598
+      ],
+      "form_viewport": [
+        656,
+        402
+      ],
+      "form_content_height": 2722,
+      "form_screens": 6.77,
+      "review_viewport": null,
+      "review_screens": null,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 3,
+      "min_size_hint": [
+        1192,
+        372
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": false,
+        "summary": false,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 2,
+        "interactions": 8,
+        "form_scroll_px": 1163,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 2.89
+      },
+      "keyboard": {
+        "tab_stops": 38,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "reset_unlocked_button",
+          "admit_button",
+          "undo_button",
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "1280x680",
+      "dock_requested": "expanded",
+      "size_clamped": false
+    },
+    {
+      "layout": "scroll",
+      "state": "primed",
+      "window": [
+        1280,
+        680
+      ],
+      "output_display": "expanded",
+      "view": [
+        684,
+        598
+      ],
+      "form_viewport": [
+        656,
+        402
+      ],
+      "form_content_height": 2722,
+      "form_screens": 6.77,
+      "review_viewport": null,
+      "review_screens": null,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 3,
+      "min_size_hint": [
+        1192,
+        372
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": false,
+        "summary": false,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 2,
+        "interactions": 8,
+        "form_scroll_px": 1163,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 2.89
+      },
+      "keyboard": {
+        "tab_stops": 42,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "1280x680",
+      "dock_requested": "expanded",
+      "size_clamped": false
+    },
+    {
+      "layout": "split",
+      "state": "fresh",
+      "window": [
+        1280,
+        680
+      ],
+      "output_display": "expanded",
+      "view": [
+        684,
+        598
+      ],
+      "form_viewport": [
+        407,
+        402
+      ],
+      "form_content_height": 2434,
+      "form_screens": 6.05,
+      "review_viewport": [
+        229,
+        402
+      ],
+      "review_screens": 2.0,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 1,
+      "min_size_hint": [
+        1192,
+        372
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": true,
+        "summary": true,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1283,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 3.19
+      },
+      "keyboard": {
+        "tab_stops": 39,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "reset_unlocked_button",
+          "admit_button",
+          "undo_button",
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "1280x680",
+      "dock_requested": "expanded",
+      "size_clamped": false
+    },
+    {
+      "layout": "split",
+      "state": "primed",
+      "window": [
+        1280,
+        680
+      ],
+      "output_display": "expanded",
+      "view": [
+        684,
+        598
+      ],
+      "form_viewport": [
+        407,
+        402
+      ],
+      "form_content_height": 2434,
+      "form_screens": 6.05,
+      "review_viewport": [
+        229,
+        402
+      ],
+      "review_screens": 1.92,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 1,
+      "min_size_hint": [
+        1192,
+        372
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": true,
+        "summary": true,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1283,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 3.19
+      },
+      "keyboard": {
+        "tab_stops": 43,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "1280x680",
+      "dock_requested": "expanded",
+      "size_clamped": false
+    },
+    {
+      "layout": "scroll",
+      "state": "fresh",
+      "window": [
+        1280,
+        680
+      ],
+      "output_display": "collapsed",
+      "view": [
+        1008,
+        598
+      ],
+      "form_viewport": [
+        980,
+        427
+      ],
+      "form_content_height": 2560,
+      "form_screens": 6.0,
+      "review_viewport": null,
+      "review_screens": null,
+      "chrome_px": 253,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 4,
+      "min_size_hint": [
+        944,
+        325
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": false,
+        "summary": false,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 2,
+        "interactions": 8,
+        "form_scroll_px": 1121,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 2.63
+      },
+      "keyboard": {
+        "tab_stops": 30,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "reset_unlocked_button",
+          "admit_button",
+          "undo_button",
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "1280x680",
+      "dock_requested": "collapsed",
+      "size_clamped": false
+    },
+    {
+      "layout": "scroll",
+      "state": "primed",
+      "window": [
+        1280,
+        680
+      ],
+      "output_display": "collapsed",
+      "view": [
+        1008,
+        598
+      ],
+      "form_viewport": [
+        980,
+        427
+      ],
+      "form_content_height": 2560,
+      "form_screens": 6.0,
+      "review_viewport": null,
+      "review_screens": null,
+      "chrome_px": 253,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 4,
+      "min_size_hint": [
+        944,
+        325
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": false,
+        "summary": false,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 2,
+        "interactions": 8,
+        "form_scroll_px": 1121,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 2.63
+      },
+      "keyboard": {
+        "tab_stops": 34,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "1280x680",
+      "dock_requested": "collapsed",
+      "size_clamped": false
+    },
+    {
+      "layout": "split",
+      "state": "fresh",
+      "window": [
+        1280,
+        680
+      ],
+      "output_display": "collapsed",
+      "view": [
+        1008,
+        598
+      ],
+      "form_viewport": [
+        647,
+        427
+      ],
+      "form_content_height": 2075,
+      "form_screens": 4.86,
+      "review_viewport": [
+        313,
+        427
+      ],
+      "review_screens": 1.73,
+      "chrome_px": 253,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 3,
+      "min_size_hint": [
+        944,
+        325
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": true,
+        "summary": true,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 2,
+        "interactions": 8,
+        "form_scroll_px": 1155,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 2.7
+      },
+      "keyboard": {
+        "tab_stops": 31,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "reset_unlocked_button",
+          "admit_button",
+          "undo_button",
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "1280x680",
+      "dock_requested": "collapsed",
+      "size_clamped": false
+    },
+    {
+      "layout": "split",
+      "state": "primed",
+      "window": [
+        1280,
+        680
+      ],
+      "output_display": "collapsed",
+      "view": [
+        1008,
+        598
+      ],
+      "form_viewport": [
+        647,
+        427
+      ],
+      "form_content_height": 2075,
+      "form_screens": 4.86,
+      "review_viewport": [
+        313,
+        427
+      ],
+      "review_screens": 1.69,
+      "chrome_px": 253,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 3,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 3,
+      "min_size_hint": [
+        944,
+        325
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": true,
+        "summary": true,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 2,
+        "interactions": 8,
+        "form_scroll_px": 1155,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 2.7
+      },
+      "keyboard": {
+        "tab_stops": 35,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "1280x680",
+      "dock_requested": "collapsed",
+      "size_clamped": false
+    },
+    {
+      "layout": "scroll",
+      "state": "fresh",
+      "window": [
+        1192,
+        600
+      ],
+      "output_display": "expanded",
+      "view": [
+        672,
+        518
+      ],
+      "form_viewport": [
+        644,
+        322
+      ],
+      "form_content_height": 2739,
+      "form_screens": 8.51,
+      "review_viewport": null,
+      "review_screens": null,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 3,
+      "min_size_hint": [
+        1192,
+        372
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": false,
+        "summary": false,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1260,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 3.91
+      },
+      "keyboard": {
+        "tab_stops": 38,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "reset_unlocked_button",
+          "admit_button",
+          "undo_button",
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "960x600",
+      "dock_requested": "expanded",
+      "size_clamped": true
+    },
+    {
+      "layout": "scroll",
+      "state": "primed",
+      "window": [
+        1192,
+        600
+      ],
+      "output_display": "expanded",
+      "view": [
+        672,
+        518
+      ],
+      "form_viewport": [
+        644,
+        322
+      ],
+      "form_content_height": 2739,
+      "form_screens": 8.51,
+      "review_viewport": null,
+      "review_screens": null,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 3,
+      "min_size_hint": [
+        1192,
+        372
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": false,
+        "summary": false,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1260,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 3.91
+      },
+      "keyboard": {
+        "tab_stops": 42,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "960x600",
+      "dock_requested": "expanded",
+      "size_clamped": true
+    },
+    {
+      "layout": "split",
+      "state": "fresh",
+      "window": [
+        1192,
+        600
+      ],
+      "output_display": "expanded",
+      "view": [
+        672,
+        518
+      ],
+      "form_viewport": [
+        395,
+        322
+      ],
+      "form_content_height": 2468,
+      "form_screens": 7.66,
+      "review_viewport": [
+        229,
+        322
+      ],
+      "review_screens": 2.5,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 7,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 1,
+      "min_size_hint": [
+        1192,
+        372
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": true,
+        "summary": true,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1380,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 4.29
+      },
+      "keyboard": {
+        "tab_stops": 39,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "reset_unlocked_button",
+          "admit_button",
+          "undo_button",
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "960x600",
+      "dock_requested": "expanded",
+      "size_clamped": true
+    },
+    {
+      "layout": "split",
+      "state": "primed",
+      "window": [
+        1192,
+        600
+      ],
+      "output_display": "expanded",
+      "view": [
+        672,
+        518
+      ],
+      "form_viewport": [
+        395,
+        322
+      ],
+      "form_content_height": 2468,
+      "form_screens": 7.66,
+      "review_viewport": [
+        229,
+        322
+      ],
+      "review_screens": 2.39,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 7,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 1,
+      "min_size_hint": [
+        1192,
+        372
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": true,
+        "summary": true,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1380,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 4.29
+      },
+      "keyboard": {
+        "tab_stops": 43,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "960x600",
+      "dock_requested": "expanded",
+      "size_clamped": true
+    },
+    {
+      "layout": "scroll",
+      "state": "fresh",
+      "window": [
+        960,
+        600
+      ],
+      "output_display": "collapsed",
+      "view": [
+        688,
+        518
+      ],
+      "form_viewport": [
+        660,
+        322
+      ],
+      "form_content_height": 2722,
+      "form_screens": 8.45,
+      "review_viewport": null,
+      "review_screens": null,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 3,
+      "min_size_hint": [
+        944,
+        350
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": false,
+        "summary": false,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1243,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 3.86
+      },
+      "keyboard": {
+        "tab_stops": 30,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "reset_unlocked_button",
+          "admit_button",
+          "undo_button",
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "960x600",
+      "dock_requested": "collapsed",
+      "size_clamped": false
+    },
+    {
+      "layout": "scroll",
+      "state": "primed",
+      "window": [
+        960,
+        600
+      ],
+      "output_display": "collapsed",
+      "view": [
+        688,
+        518
+      ],
+      "form_viewport": [
+        660,
+        322
+      ],
+      "form_content_height": 2722,
+      "form_screens": 8.45,
+      "review_viewport": null,
+      "review_screens": null,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 3,
+      "min_size_hint": [
+        944,
+        350
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": false,
+        "summary": false,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1243,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 3.86
+      },
+      "keyboard": {
+        "tab_stops": 34,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "960x600",
+      "dock_requested": "collapsed",
+      "size_clamped": false
+    },
+    {
+      "layout": "split",
+      "state": "fresh",
+      "window": [
+        960,
+        600
+      ],
+      "output_display": "collapsed",
+      "view": [
+        688,
+        518
+      ],
+      "form_viewport": [
+        411,
+        322
+      ],
+      "form_content_height": 2434,
+      "form_screens": 7.56,
+      "review_viewport": [
+        229,
+        322
+      ],
+      "review_screens": 2.5,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 7,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 1,
+      "min_size_hint": [
+        944,
+        350
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": true,
+        "summary": true,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1363,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 4.23
+      },
+      "keyboard": {
+        "tab_stops": 31,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "reset_unlocked_button",
+          "admit_button",
+          "undo_button",
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "960x600",
+      "dock_requested": "collapsed",
+      "size_clamped": false
+    },
+    {
+      "layout": "split",
+      "state": "primed",
+      "window": [
+        960,
+        600
+      ],
+      "output_display": "collapsed",
+      "view": [
+        688,
+        518
+      ],
+      "form_viewport": [
+        411,
+        322
+      ],
+      "form_content_height": 2434,
+      "form_screens": 7.56,
+      "review_viewport": [
+        229,
+        322
+      ],
+      "review_screens": 2.39,
+      "chrome_px": 278,
+      "controls": [
+        {
+          "control": "source_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "prompt_text",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 2,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "model_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "profile_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 4,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "size_combo",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_unlocked_button",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 5,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "preview_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "admit_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "undo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "redo_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "reset_button",
+          "area": "fixed",
+          "visible_in_tree": true,
+          "screens_from_top": 1,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:steps",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:cfg",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:seed",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 6,
+          "clipped": false,
+          "reachable": true
+        },
+        {
+          "control": "setting:batch",
+          "area": "form",
+          "visible_in_tree": true,
+          "screens_from_top": 7,
+          "clipped": false,
+          "reachable": true
+        }
+      ],
+      "unreachable": [],
+      "settings_columns": 1,
+      "min_size_hint": [
+        944,
+        350
+      ],
+      "min_hint_fits": true,
+      "horizontal_overflow": [],
+      "persistent_without_scroll": {
+        "preview_chip": true,
+        "summary": true,
+        "preview_button": true,
+        "admit_button": true
+      },
+      "task_path": {
+        "steps": 6,
+        "scroll_actions": 3,
+        "interactions": 9,
+        "form_scroll_px": 1363,
+        "review_scroll_px": 0,
+        "form_scroll_viewports": 4.23
+      },
+      "keyboard": {
+        "tab_stops": 35,
+        "required_missing_from_chain": [],
+        "required_disabled_in_state": [
+          "redo_button"
+        ],
+        "focus_out_of_view": 0,
+        "preview_before_actions": true
+      },
+      "requested_size": "960x600",
+      "dock_requested": "collapsed",
+      "size_clamped": false
+    }
+  ]
+}

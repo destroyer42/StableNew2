@@ -93,6 +93,7 @@ class ThemePreview(QFrame):
 
     def _build(self, theme: Theme) -> None:
         heading = QLabel(f"{theme.name} · live preview")
+        heading.setTextFormat(Qt.TextFormat.PlainText)  # imported names are untrusted text
         heading.setProperty("role", "heading")
         self._layout.addWidget(heading)
         muted = QLabel(
@@ -258,6 +259,9 @@ class ThemeStudio(QWidget):
             mode_row.addWidget(button)
             button.clicked.connect(lambda _c=False, k=key: self._set_mode(k))
         mode_row.addStretch(1)
+        # The verdict stays visible on both pages when only one column is shown.
+        self.mode_chip = StatusChip("CONTRAST", "info")
+        mode_row.addWidget(self.mode_chip)
         self.mode_buttons["edit"].setChecked(True)
         root.addWidget(self.mode_bar)
         self._mode = "edit"
@@ -621,6 +625,7 @@ class ThemeStudio(QWidget):
             self.contrast_chip.set_status(f"CONTRAST · {len(failing)} FAIL", "blocked")
         else:
             self.contrast_chip.set_status(f"CONTRAST · ALL {len(checks)} PASS", "success")
+        self.mode_chip.set_status(self.contrast_chip.text(), "blocked" if failing else "success")
         blocked = bool(failing) or bool(ed.errors)
         self.preview.rebuild(d)
         dirty = ed.is_dirty

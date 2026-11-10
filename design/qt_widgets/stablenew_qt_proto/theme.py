@@ -50,6 +50,8 @@ STATE_DEFAULTS: dict[str, str] = {
     "selected_item_border": "accent",
     "hover_fill": "selected",
 }
+# Status levels shared by notices and chips; the stylesheet styles every one of them.
+LEVELS = ("info", "warning", "blocked", "success")
 WEIGHTS = ("normal", "bold")
 DENSITIES = ("comfortable", "compact")
 KINDS = ("reference", "user")

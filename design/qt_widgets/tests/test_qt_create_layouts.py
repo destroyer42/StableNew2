@@ -47,7 +47,8 @@ class CreateCase(unittest.TestCase):
         for _ in range(rounds):
             self.app.processEvents()
 
-    def make(self, width=1280, height=680, *, design=LAYOUT_SPLIT, dock=True):
+    def make(self, width=1280, height=680, *, design=None, dock=True):
+        design = design or LAYOUT_SPLIT
         window = PrototypeWindow(library=self.library, theme=reference_themes()["blue-modern"])
         window.resize(width, height)
         window.show()
@@ -337,6 +338,22 @@ class WorkflowThroughTheUiTests(CreateCase):
         view.setting_inputs["batch"].setValue(2)  # editing clears the stale receipt
         self.pump()
         self.assertEqual(view.result_gallery.tiles, [])
+
+    def test_admission_brings_the_result_into_view_in_both_layouts(self):
+        for design in LAYOUT_DESIGNS:
+            _window, view = self.make(1280, 680, design=design)
+            view.setting_inputs["batch"].setValue(3)
+            view.preview_button.click()
+            view.admit_button.click()
+            self.pump()
+            scroll = view.review_scroll if design == LAYOUT_SPLIT else view.form_scroll
+            bar = scroll.verticalScrollBar()
+            self.assertGreater(bar.maximum(), 0, design)
+            self.assertEqual(bar.value(), bar.maximum(), design)
+            last = view.result_gallery.tiles[-1]
+            bottom = last.mapTo(scroll.viewport(), last.rect().bottomRight()).y()
+            self.assertLessEqual(bottom, scroll.viewport().height(), design)
+            self.assertGreaterEqual(bottom, 0, design)
 
     def test_stale_or_invalid_preview_refuses_admission_with_a_reason(self):
         _window, view = self.make()

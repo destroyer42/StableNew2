@@ -339,6 +339,43 @@ class ResponsiveStudioTests(StudioCase):
         )
 
 
+class UntrustedTextTests(StudioCase):
+    def test_imported_theme_names_are_never_rendered_as_rich_text(self):
+        good = json.loads(canonical_json(self.refs["blue-modern"]))
+        good.update(kind="user", id="hostile", name="<img src='file:///C:/x.png'><b>Boo</b>")
+        path = Path(self._tmp.name) / "hostile.json"
+        path.write_text(json.dumps(good), encoding="utf-8")
+        self.assertTrue(self.studio.import_from(path))
+        self.pump()
+        from PySide6.QtCore import Qt as QtNamespace
+
+        self.assertEqual(self.studio.notice.message.textFormat(), QtNamespace.TextFormat.PlainText)
+        self.assertIn("<img", self.studio.notice.message.text())
+        headings = [
+            w
+            for w in self.studio.preview.findChildren(type(self.studio.notice.message))
+            if "live preview" in w.text()
+        ]
+        self.assertTrue(headings)
+        self.assertEqual(headings[0].textFormat(), QtNamespace.TextFormat.PlainText)
+
+
+class CompactVerdictTests(StudioCase):
+    def test_contrast_verdict_stays_visible_on_the_preview_page_of_a_narrow_studio(self):
+        self.studio.resize(640, 700)
+        self.pump()
+        self.studio.mode_buttons["preview"].click()
+        self.studio.edit("colors", "text", self.studio.draft.palette.background)
+        self.pump()
+        self.assertTrue(self.studio.mode_chip.isVisible())
+        self.assertFalse(self.studio.contrast_chip.isVisible())  # it lives on the Edit page
+        self.assertIn("FAIL", self.studio.mode_chip.text())
+        self.assertEqual(self.studio.mode_chip.property("level"), "blocked")
+        self.studio.revert()
+        self.pump()
+        self.assertIn("ALL 20 PASS", self.studio.mode_chip.text())
+
+
 class WindowThemeTests(StudioCase):
     def make_window(self):
         window = PrototypeWindow(library=self.lib, theme=self.refs["blue-modern"])

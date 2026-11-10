@@ -109,7 +109,7 @@ class ComponentStyleConsistency(unittest.TestCase):
                 )
 
     def test_every_notice_and_chip_level_is_styled(self):
-        from stablenew_qt_proto.components import LEVELS
+        from stablenew_qt_proto.theme import LEVELS
 
         for tid, css in self.css.items():
             for level in LEVELS:

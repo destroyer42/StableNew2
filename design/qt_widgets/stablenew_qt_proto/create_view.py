@@ -5,7 +5,7 @@ No production imports. Every action is local to a CreateSession demo draft.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -679,8 +679,36 @@ class CreateView(QWidget):
             self.banner.set_message("SIMULATION REFUSED", str(exc), "blocked")
             return
         self._sync_view()
-        self.banner.set_message("SIMULATED ONLY", receipt.message, "success")
-        reveal(self.review_scroll, self.result_card)
+        self.banner.set_message(
+            "SIMULATED ONLY", receipt.message.removeprefix("DEMO ONLY: "), "success"
+        )
+        self._show_result()
+
+    def _show_result(self) -> None:
+        """Bring the simulated result into view: it is the last block of whichever column holds it.
+
+        The tile grid reflows after its width is known, which grows the content once more, so the
+        view stays pinned to the bottom while the scroll range settles. Any user scroll releases it.
+        """
+        scroll = self.review_scroll if self.review_scroll.isVisible() else self.form_scroll
+        bar = scroll.verticalScrollBar()
+
+        def pin(*_range: int) -> None:
+            try:
+                bar.setValue(bar.maximum())
+            except RuntimeError:  # the window was closed first
+                pass
+
+        def release(*_action: int) -> None:
+            try:
+                bar.rangeChanged.disconnect(pin)
+            except (RuntimeError, TypeError):  # already released, or the window was closed
+                pass
+
+        bar.rangeChanged.connect(pin)
+        bar.actionTriggered.connect(release)  # only user input triggers actions
+        QTimer.singleShot(0, pin)
+        QTimer.singleShot(500, release)
 
     def _reset(self) -> None:
         # Undoable, so no modal confirmation is needed (and nothing can hang a test run).
@@ -843,7 +871,13 @@ class CreateView(QWidget):
                 )
                 self.review_state.setText("Preview state: Not built")
                 self.preview_chip.set_status("NOT BUILT", "info")
-                self.issue_list.set_issues((), (), empty="Build a preview to run the mock checks")
+                self.issue_list.set_issues(
+                    (),
+                    (),
+                    empty="Build a preview to run the mock checks",
+                    empty_status="NOT CHECKED",
+                    empty_level="info",
+                )
             else:
                 self.preview_text.setPlainText(preview.text)
                 current = self.session.is_preview_current
