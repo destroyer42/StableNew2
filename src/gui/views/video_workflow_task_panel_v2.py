@@ -132,6 +132,10 @@ class PinTracker:
         self.pinned: set[str] = set()
         self._applying = 0
 
+    @property
+    def is_applying(self) -> bool:
+        return self._applying > 0
+
     def watch(self, field: str, variable: tk.Variable) -> None:
         variable.trace_add("write", lambda *_args: self.pin(field))
 

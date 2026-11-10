@@ -7,16 +7,43 @@ Real Tk widgets; the production ``VideoWorkflowController`` and NJR builder sit 
 from __future__ import annotations
 
 import tkinter as tk
+from types import SimpleNamespace
 
 import pytest
 
+from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.gui.views.video_workflow_task_panel_v2 import (
     PinTracker,
     SuggestedSettingsLine,
     WorkflowTaskSelector,
 )
+from tests.helpers.make_video_313 import ANIMATE2_ID, TI2V_ID, make_app, make_window
 
 pytestmark = pytest.mark.gui
+
+
+def _make_env(tk_root, tmp_path, *, rife: bool):
+    app, controller, service = make_app(tmp_path)
+    controller.rife_available = lambda: rife
+    tab = VideoWorkflowTabFrameV2(tk_root, app_controller=app, app_state=SimpleNamespace())
+    app.main_window = make_window(tab)
+    return SimpleNamespace(
+        app=app, controller=controller, service=service, tab=tab, root=tk_root, tmp=tmp_path
+    )
+
+
+@pytest.fixture
+def env(tk_root, tmp_path):
+    made = _make_env(tk_root, tmp_path, rife=True)
+    yield made
+    made.tab.destroy()
+
+
+@pytest.fixture
+def env_no_rife(tk_root, tmp_path):
+    made = _make_env(tk_root, tmp_path, rife=False)
+    yield made
+    made.tab.destroy()
 
 
 # ---------------------------------------------------------------- widgets
@@ -86,3 +113,160 @@ def test_pin_tracker_pins_operator_writes_only(tk_root):
     assert pins.pinned == set()
     pins.pin_all(["seed", "smooth"])
     assert pins.pinned == {"seed", "smooth"}
+
+
+# ---------------------------------------------------------------- the tab
+
+
+def test_default_task_is_animate_with_the_recommended_engine(env):
+    assert env.tab.current_task() == "animate"
+    assert env.tab.workflow_var.get() == TI2V_ID
+    assert env.tab.smooth_var.get() is True
+    assert env.tab.task_selector.task_var.get() == "animate"
+
+
+def test_default_task_hides_everything_it_does_not_need(env):
+    tab = env.tab
+    for widget in (tab.follow_clip_frame, tab.sequence_panel, tab.batch_panel):
+        assert not widget.winfo_manager()
+    assert tab.motion_library_panel.master is tab.follow_clip_frame
+    for section in (
+        tab.advanced_section,
+        tab.keyframes_section,
+        tab.compare_section,
+        tab.details_section,
+    ):
+        assert not section.is_expanded()
+
+
+def test_summary_line_names_the_engine_and_what_was_set(env):
+    summary = env.tab.suggested_line.summary_var.get()
+    assert "smoothed" in summary and "random seed" in summary
+    assert env.tab.workflow_label_var.get() in summary
+
+
+def test_change_button_opens_the_settings_editor(env):
+    env.tab.suggested_line.change_button.invoke()
+    assert env.tab.advanced_section.is_expanded()
+    assert str(env.tab.suggested_line.change_button.cget("text")) == "Hide"
+    assert env.tab.workflow_combo.winfo_manager()
+
+
+def test_engine_picker_offers_only_engines_for_the_task(env):
+    labels = list(env.tab.workflow_combo["values"])
+    ids = [env.tab._workflow_label_to_id[label] for label in labels]
+    assert TI2V_ID in ids and ANIMATE2_ID not in ids
+    env.tab.select_task("follow_clip")
+    ids = [env.tab._workflow_label_to_id[label] for label in env.tab.workflow_combo["values"]]
+    assert ANIMATE2_ID in ids and TI2V_ID not in ids
+
+
+def test_follow_clip_selects_a_driving_engine_and_shows_its_inputs(env):
+    assert env.tab.select_task("follow_clip")
+    assert env.tab.workflow_var.get() == ANIMATE2_ID
+    assert env.tab.follow_clip_frame.winfo_manager()
+    assert env.tab.pose_video_frame.winfo_manager()
+    assert env.tab.experimental_opt_in_var.get() is False  # never ticked for the operator
+    assert str(env.tab.queue_workflow_button.cget("state")) == "disabled"
+
+
+def test_task_follows_an_engine_chosen_some_other_way(env):
+    env.tab.workflow_var.set(ANIMATE2_ID)
+    assert env.tab.current_task() == "follow_clip"
+    assert env.tab.follow_clip_frame.winfo_manager()
+
+
+def test_sequence_turns_smoothing_off_and_shows_the_shot_list(env):
+    assert env.tab.select_task("sequence")
+    assert env.tab.smooth_var.get() is False
+    assert env.tab.sequence_panel.winfo_manager()
+    assert env.tab.select_task("animate")
+    assert env.tab.smooth_var.get() is True
+    assert not env.tab.sequence_panel.winfo_manager()
+
+
+def test_operator_edits_survive_a_task_switch(env):
+    env.tab.seed_var.set("42")
+    env.tab.smooth_var.set(False)
+    env.tab.select_task("batch")
+    env.tab.select_task("animate")
+    assert env.tab.seed_var.get() == "42"
+    assert env.tab.smooth_var.get() is False
+
+
+def test_reset_to_suggested_clears_pins(env):
+    env.tab.smooth_var.set(False)
+    env.tab.seed_var.set("7")
+    env.tab.suggested_line.reset_button.invoke()
+    assert env.tab.smooth_var.get() is True
+    assert env.tab.seed_var.get() == ""
+
+
+def test_batch_task_shows_the_source_strip(env):
+    assert env.tab.select_task("batch")
+    assert env.tab.batch_panel.winfo_manager()
+    assert env.tab.select_task("animate")
+    assert not env.tab.batch_panel.winfo_manager()
+
+
+def test_task_switch_refused_while_a_batch_step_runs(env):
+    env.tab.select_task("batch")
+    env.tab._batch_session.sources = [object()]
+    env.tab._batch_session.busy = "preview"
+    assert env.tab.select_task("animate") is False
+    assert env.tab.current_task() == "batch"
+    assert env.tab.task_selector.task_var.get() == "batch"
+    env.tab._batch_session.busy = None
+    env.tab._batch_session.sources = []
+
+
+def test_leaving_follow_clip_drops_driving_state(env, tmp_path):
+    env.tab.select_task("follow_clip")
+    env.tab.pose_video_var.set(str(tmp_path / "m.mp4"))
+    env.tab._library_binding = {"sha256": "x"}
+    env.tab._library_bound_path = str(tmp_path / "m.mp4")
+    env.tab.select_task("animate")
+    assert env.tab.pose_video_var.get() == ""
+    assert env.tab._library_binding is None and env.tab._library_bound_path == ""
+    assert "pose_video_path" not in env.tab.get_video_workflow_state(for_submission=True)
+
+
+def test_smoothing_is_suggested_off_when_rife_is_missing(env_no_rife):
+    assert env_no_rife.tab.smooth_var.get() is False
+    assert "interpolation" not in env_no_rife.tab.get_video_workflow_state(for_submission=True)
+
+
+def test_pinned_smoothing_without_rife_is_warned_not_flipped(env_no_rife):
+    tab = env_no_rife.tab
+    tab.smooth_var.set(True)
+    tab.select_task("batch")
+    tab.select_task("animate")
+    assert tab.smooth_var.get() is True
+    assert "Smoothing cannot run" in tab.suggested_line.notes_var.get()
+
+
+def test_submitted_form_carries_no_task_and_the_same_fields(env):
+    form = env.tab.get_video_workflow_state(for_submission=True)
+    assert "task" not in form
+    assert form["workflow_id"] == TI2V_ID
+    assert form["interpolation"] == {"enabled": True}
+    assert form["experimental_opt_in"] is False
+
+
+def test_keyframes_section_is_hidden_when_the_engine_declares_none(env):
+    visible = env.tab._workflow_map[TI2V_ID]["form_visibility"]
+    declares = any(
+        visible.get(key) for key in ("end_anchor", "mid_anchors", "camera_intent", "depth_conditioning")
+    )
+    assert bool(env.tab.keyframes_section.winfo_manager()) is declares
+
+
+def test_default_task_fits_the_minimum_window(env):
+    env.root.deiconify()
+    env.root.geometry("1280x680")
+    env.tab.pack(fill="both", expand=True)
+    env.root.update()
+    line = env.tab.suggested_line
+    assert line.winfo_ismapped()
+    assert line.winfo_rooty() + line.winfo_height() <= env.root.winfo_rooty() + 680
+    env.root.withdraw()
