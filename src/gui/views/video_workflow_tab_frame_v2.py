@@ -1040,8 +1040,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         keeps_choice = current.get("governance_state") == "approved" and not current.get(
             "experimental"
         )
+        if self._task in (TASK_FOLLOW_CLIP, TASK_SEQUENCE):
+            self.select_task(TASK_ANIMATE)  # one image handed over: the plain image-to-video task
+            current = self._workflow_map.get(self.workflow_var.get().strip(), {})
+            keeps_choice = current.get("governance_state") == "approved" and not current.get(
+                "experimental"
+            )
         if recommended and recommended in self._workflow_map and not keeps_choice:
-            self.workflow_var.set(recommended)
+            with self._pins.applying():
+                self.workflow_var.set(recommended)
         self.submission_notice.clear()
         return self.workflow_var.get().strip()
 
@@ -1066,6 +1073,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             panel.refresh()
         return True
 
+    def _leave_batch_task(self) -> None:
+        """A single image was chosen: the batch task gives way to the plain image-to-video task."""
+
+        if self._task == TASK_BATCH:
+            self.select_task(TASK_ANIMATE)
+
     def set_source_image_path(
         self,
         image_path: str,
@@ -1075,6 +1088,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     ) -> None:
         if not self._leave_batch_mode():
             return
+        self._leave_batch_task()
         self.source_image_var.set(str(image_path))
         self._source_bundle = None
         # Trusted parent ids from the entry point (History job, Review metadata); valid only for this exact path.
@@ -1102,6 +1116,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if best_path:
             if not self._leave_batch_mode():
                 return
+            self._leave_batch_task()
             self._source_bundle = dict(bundle)
             self.source_image_var.set(str(best_path))
             self.status_var.set(
@@ -1176,13 +1191,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state["experimental_opt_in"] = bool(
                 workflow_meta.get("experimental") and self.experimental_opt_in_var.get()
             )
+        else:
+            # PR-VID-UX-360: a GUI intent, saved with the form and never part of a job.
+            state["task"] = self._task
         return state
 
     def restore_video_workflow_state(self, state: dict[str, Any] | None) -> None:
         if not isinstance(state, dict):
             return
         self._refresh_workflow_choices()
-        self.workflow_var.set(str(state.get("workflow_id") or self.workflow_var.get()))
+        self._restore_task_and_engine(state)
         self.source_image_var.set(str(state.get("source_image_path") or ""))
         self.end_anchor_var.set(str(state.get("end_anchor_path") or ""))
         mid_anchors = state.get("mid_anchor_paths") or []
@@ -1218,6 +1236,24 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if self.pose_video_frame.winfo_manager():
             self.pose_video_var.set(str(state.get("pose_video_path") or ""))
         self.workflow_controls_panel.set_values(state.get("operator_controls"))
+        # Restored values are the operator's own: suggestions never replace them (PR-VID-UX-360).
+        self._pins.pin_all(_SETTINGS_FIELDS)
+        self._apply_suggestions()
+        self._refresh_advanced_status()
+
+    def _restore_task_and_engine(self, state: Mapping[str, Any]) -> None:
+        """Select the saved engine and its task; an engine no longer installed falls back to the
+        recommended one.  A snapshot without a task keeps the current task when the engine can serve it."""
+
+        records = list(self._workflow_map.values())
+        record = self._workflow_map.get(str(state.get("workflow_id") or "").strip())
+        if record is None:
+            fallback = choose_workflow(TASK_ANIMATE, records)
+            record = self._workflow_map.get(fallback.workflow_id) if fallback is not None else None
+        if record is None:
+            return
+        task = infer_task(record, state.get("task") or self._task)
+        self.select_task(task, pinned_workflow_id=str(record["workflow_id"]))
 
     def _apply_workflow_capabilities(self, workflow_meta: dict[str, Any]) -> None:
         """Show/enable only the inputs the selected workflow declares, and the experimental
@@ -1885,6 +1921,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         fields = plan.form_fields
         if not fields:
             return
+        if self._task != TASK_FOLLOW_CLIP:
+            self.select_task(TASK_FOLLOW_CLIP, pinned_workflow_id=plan.workflow_id)
         self.pose_video_var.set(fields["pose_video_path"])
         self._library_binding = plan.binding
         self._library_bound_path = plan.path
@@ -2019,6 +2057,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         """Accept an ordered Review selection as batch sources (intent only; nothing is queued)."""
 
         accepted = self.batch_panel.set_review_selection(list(paths), dict(lineage_by_path or {}))
+        if accepted and self._task != TASK_BATCH:
+            self.select_task(TASK_BATCH)
         if accepted and status_message:
             self.status_var.set(status_message)
         return accepted
@@ -2134,6 +2174,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if latest:
             if not self._leave_batch_mode():
                 return
+            self._leave_batch_task()
             self._source_bundle = None
             self.source_image_var.set(str(latest))
             self.status_var.set(f"Loaded latest output: {Path(str(latest)).name}")

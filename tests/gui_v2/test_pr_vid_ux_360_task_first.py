@@ -270,3 +270,88 @@ def test_default_task_fits_the_minimum_window(env):
     assert line.winfo_ismapped()
     assert line.winfo_rooty() + line.winfo_height() <= env.root.winfo_rooty() + 680
     env.root.withdraw()
+
+
+# ---------------------------------------------------------------- saved state and handoffs
+
+
+def test_saved_state_carries_the_task_but_a_submission_does_not(env):
+    env.tab.select_task("sequence")
+    assert env.tab.get_video_workflow_state()["task"] == "sequence"
+    assert "task" not in env.tab.get_video_workflow_state(for_submission=True)
+
+
+def test_state_round_trip_keeps_task_and_pins_everything(env):
+    env.tab.select_task("follow_clip")
+    env.tab.smooth_var.set(False)
+    saved = env.tab.get_video_workflow_state()
+    assert saved["task"] == "follow_clip"
+    env.tab.suggested_line.reset_button.invoke()
+    env.tab.select_task("animate")
+    assert env.tab.smooth_var.get() is True
+    env.tab.restore_video_workflow_state(saved)
+    assert env.tab.current_task() == "follow_clip"
+    assert env.tab.workflow_var.get() == ANIMATE2_ID
+    assert env.tab.smooth_var.get() is False
+    env.tab.select_task("follow_clip")
+    assert env.tab.smooth_var.get() is False  # restored values are the operator's, not suggestions
+
+
+def test_old_state_without_task_infers_it(env):
+    env.tab.restore_video_workflow_state({"workflow_id": ANIMATE2_ID})
+    assert env.tab.current_task() == "follow_clip"
+    env.tab.restore_video_workflow_state({"workflow_id": TI2V_ID})
+    assert env.tab.current_task() == "animate"
+
+
+def test_restore_without_task_keeps_a_task_the_engine_can_serve(env):
+    # The sequence panel restores a form snapshot (no task key) while its own task is selected.
+    env.tab.select_task("sequence")
+    env.tab.restore_video_workflow_state({"workflow_id": TI2V_ID})
+    assert env.tab.current_task() == "sequence"
+
+
+def test_unknown_task_or_workflow_falls_back(env):
+    env.tab.restore_video_workflow_state({"workflow_id": "gone_v9", "task": "nonsense"})
+    assert env.tab.current_task() == "animate"
+    assert env.tab.workflow_var.get() == TI2V_ID
+
+
+def test_make_video_selects_animate(env):
+    env.tab.select_task("follow_clip")
+    assert env.tab.apply_make_video_defaults() == TI2V_ID
+    assert env.tab.current_task() == "animate"
+
+
+def test_batch_handoff_selects_batch_and_a_single_image_returns_to_animate(env, tmp_path):
+    from tests.helpers.make_video_313 import make_image
+
+    first = make_image(tmp_path / "a.png")
+    second = make_image(tmp_path / "b.png", color="maroon")
+    assert env.tab.set_source_batch([first, second])
+    assert env.tab.current_task() == "batch"
+    env.tab.apply_make_video_defaults()
+    assert env.tab.current_task() == "batch"  # the Review handoff calls both; batch must stand
+    env.tab.set_source_image_path(first)
+    assert env.tab.current_task() == "animate"
+    assert env.tab.source_image_var.get() == first
+
+
+def test_library_handoff_selects_follow_clip(env, tmp_path):
+    from src.video.motion_library.handoff import HandoffPlan
+
+    clip = tmp_path / "walk.mp4"
+    clip.write_bytes(b"x")
+    version = env.tab._workflow_map[ANIMATE2_ID]["workflow_version"]
+    plan = HandoffPlan(
+        ok=True,
+        asset_id="asset-1",
+        path=str(clip),
+        sha256="ab" * 32,
+        workflow_id=ANIMATE2_ID,
+        workflow_version=version,
+    )
+    env.tab._apply_library_handoff(plan)
+    assert env.tab.current_task() == "follow_clip"
+    assert env.tab.workflow_var.get() == ANIMATE2_ID
+    assert env.tab.pose_video_var.get() == str(clip)
