@@ -51,3 +51,8 @@ The [2026-11-05 PR #197–256 delivery and qualification audit](2026-11-05_pr197
 is a dated evidence baseline for PR delivery, qualification and engineering efficiency (original cut `617a5aea`,
 later verification at `a2794072`). It is not a Comprehensive assessment, does not supersede `AGENTS.md`, `STATUS.md`,
 live qualification evidence or current source, and authorizes no package or protected action.
+
+The [2026-11-10 ARCH-DESIGN-950 coordination-hotspot assessment](2026-11-10_arch_design_950_coordination_hotspot_decomposition.md)
+is a Focused, static-analysis design record at `fdd900a9` for decomposing `AppController`, the executor and the Learning
+controller. Its packages (ARCH-951 to ARCH-956) are proposals; each needs its own owner authorization and a fresh check
+against current source.
