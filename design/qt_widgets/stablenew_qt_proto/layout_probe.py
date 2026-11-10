@@ -9,19 +9,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from PySide6.QtCore import QRect, Qt
-from PySide6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QLabel,
-    QPushButton,
-    QScrollArea,
-    QStyle,
-    QStyleOptionButton,
-    QStyleOptionComboBox,
-    QWidget,
-)
+from PySide6.QtWidgets import QApplication, QScrollArea, QWidget
 
 from .components import reveal
 from .create_view import CreateView
@@ -232,6 +220,17 @@ def prime(window: QWidget) -> None:
 
 def text_clipping(view: CreateView) -> list[str]:
     """Check visible text using the active font and Qt's styled content rectangles."""
+    from PySide6.QtCore import QRect, Qt
+    from PySide6.QtWidgets import (
+        QCheckBox,
+        QComboBox,
+        QLabel,
+        QPushButton,
+        QStyle,
+        QStyleOptionButton,
+        QStyleOptionComboBox,
+    )
+
     clipped = []
     for widget in view.findChildren(QWidget):
         if not widget.isVisibleTo(view):
@@ -352,4 +351,4 @@ def _in_view_unscrolled(view: CreateView, widget: QWidget) -> bool:
         widget.mapTo(area, widget.rect().topLeft()),
         widget.mapTo(area, widget.rect().bottomRight()),
     )
-    return tl.x() >= 0 and tl.y() >= 0 and br.x() < area.width() and br.y() < area.height()
+    return tl.x() >= 0 and tl.y() >= 0 and br.x() <= area.width() and br.y() <= area.height()
