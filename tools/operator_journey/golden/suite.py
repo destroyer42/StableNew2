@@ -177,11 +177,13 @@ def write_run_evidence(
     mode: str,
     driver: str,
     extra: dict[str, Any] | None = None,
+    verdict: str | None = None,
 ) -> str:
-    """Aggregate per-journey evidence into the documented run folder; returns the overall verdict."""
+    """Write the suite verdict, or aggregate journey verdicts when the caller has no run-level verdict."""
 
-    verdicts = {r.journey_id: r.verdict for r in results}
-    overall = max(verdicts.values(), key=lambda v: _WORST[v], default=PASS)
+    if verdict is None:
+        verdicts = {r.journey_id: r.verdict for r in results}
+        verdict = max(verdicts.values(), key=_WORST.__getitem__, default=HOLD)
     (run_dir / "plan.json").write_text(
         json.dumps(plan, indent=2, sort_keys=True, default=str), "utf-8"
     )
@@ -203,9 +205,9 @@ def write_run_evidence(
         "repository_sha": repo_sha(),
         "display": display,
         "provenance": provenance(display=display, layout=layout),
-        "overall_verdict": overall,
         "journeys": {},
         **(extra or {}),
+        "overall_verdict": verdict,
     }
     artifacts: list[dict[str, Any]] = []
     with (run_dir / "actions.jsonl").open("w", encoding="utf-8") as actions:
@@ -245,9 +247,9 @@ def write_run_evidence(
         redact(json.dumps(evidence, indent=2, sort_keys=True, default=str), 2_000_000), "utf-8"
     )
     (run_dir / "summary.md").write_text(
-        redact(summary_markdown(overall, mode, driver, results, extra), 200_000), "utf-8"
+        redact(summary_markdown(verdict, mode, driver, results, extra), 200_000), "utf-8"
     )
-    return overall
+    return verdict
 
 
 def summary_markdown(
