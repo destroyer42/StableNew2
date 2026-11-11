@@ -15,6 +15,47 @@ _SENSITIVE_TOKEN_RE = re.compile(
 _LORA_NAME_RE = re.compile(r"<\s*lora\s*:([^:>]+):([^>]+)>", re.IGNORECASE)
 
 
+_SUBJECT = r"(?:person|woman|man|girl|boy|adult|child|teen(?:ager)?|friend)"
+_SUBJECTS = r"(?:people|persons|women|men|girls|boys|adults|children|teens|teenagers|friends|faces)"
+_SINGLE = re.compile(rf"\b(?:one|single|solo|1)[ -]+{_SUBJECT}\b|\b1(?:girl|boy|woman|man)\b")
+_MULTIPLE = re.compile(
+    rf"\b(?:[2-9]|[1-9]\d+|two|three|four|five|six|seven|eight|nine|ten|several|multiple|many)"
+    rf"[ -]+{_SUBJECTS}\b|\b(?:[2-9]|[1-9]\d+)(?:girls?|boys?|women|men)\b"
+    rf"|\b(?:group|crowd|pair) of (?:\d+ |two |three |four |five )?{_SUBJECTS}\b"
+    rf"|\b(?:group (?:photo|portrait)(?! of\b)|family (?:photo|portrait)|a couple (?:posing|together|holding|standing|in love))\b"
+    rf"|\b{_SUBJECT}\s+(?:and|&)\s+(?:a |an )?{_SUBJECT}\b"
+)
+_EXCLUDED_SUBJECTS = re.compile(
+    rf"\b(?:no|without|exclude|avoid)\s+(?:(?:any|other|multiple|two|three)\s+)?"
+    rf"(?:{_SUBJECTS}|{_SUBJECT}|faces?)\b"
+)
+_BACKEND_SYNTAX = re.compile(r"<[^<>]*>|\bembedding:[\w./-]+", re.IGNORECASE)
+_SUBJECT_COUNT_VERSION = 1
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectCountEvidence:
+    classification: str
+    reason: str
+    version: int = _SUBJECT_COUNT_VERSION
+
+
+def classify_subject_count(positive: str) -> SubjectCountEvidence:
+    """Classify explicit human subject intent in rendered positive text, independent of optimization."""
+    text = _BACKEND_SYNTAX.sub(" ", positive).casefold()
+    single = bool(_SINGLE.search(text))
+    multiple = bool(_MULTIPLE.search(text))
+    if single and multiple:
+        return SubjectCountEvidence("unknown", "conflicting single- and multiple-subject cues")
+    if _EXCLUDED_SUBJECTS.search(text):
+        return SubjectCountEvidence("unknown", "positive prompt contains a subject exclusion")
+    if multiple:
+        return SubjectCountEvidence("multiple", "explicit human count, pairing, or group wording")
+    if single:
+        return SubjectCountEvidence("single", "explicit single-human-subject wording")
+    return SubjectCountEvidence("unknown", "no explicit human subject count")
+
+
 @dataclass(frozen=True, slots=True)
 class PromptIntentAnalyzerConfig:
     enable_conflict_detection: bool = True

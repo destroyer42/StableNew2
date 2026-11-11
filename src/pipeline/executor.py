@@ -3194,7 +3194,8 @@ class Pipeline:
         # NOTE: ADetailer has its own custom prompts and should NOT get global positive/negative applied
         base_ad_neg = config.get("adetailer_negative_prompt", "")
         adaptive_refinement = dict(config.get("adaptive_refinement") or {})
-        if base_ad_neg:
+        explicit_profile = config.get("face_mode") in ("single", "multiple")
+        if base_ad_neg or (explicit_profile and "adetailer_negative_prompt" in config):
             # Use the specific adetailer negative prompt as-is (no global merging)
             ad_neg_final = base_ad_neg
             logger.info("🎯 Using custom ADetailer negative prompt (no global terms applied)")
@@ -3231,7 +3232,11 @@ class Pipeline:
 
         # Use adetailer-specific prompt if provided, otherwise use txt2img prompt
         adetailer_prompt = config.get("adetailer_prompt", "")
-        final_prompt = adetailer_prompt if adetailer_prompt else prompt
+        final_prompt = (
+            adetailer_prompt
+            if adetailer_prompt or (explicit_profile and "adetailer_prompt" in config)
+            else prompt
+        )
         original_final_prompt = final_prompt
         original_final_negative = ad_neg_final
         patch_application = apply_prompt_patch(
@@ -3239,8 +3244,10 @@ class Pipeline:
             ad_neg_final,
             self._extract_prompt_patch_payload(adaptive_refinement),
         )
-        final_prompt = patch_application.positive.patched
-        ad_neg_final = patch_application.negative.patched
+        if not explicit_profile or patch_application.positive.applied_add or patch_application.positive.applied_remove:
+            final_prompt = patch_application.positive.patched
+        if not explicit_profile or patch_application.negative.applied_add or patch_application.negative.applied_remove:
+            ad_neg_final = patch_application.negative.patched
         prompt_optimizer_result, prompt_optimizer_config, prompt_optimizer_analysis = (
             self._run_prompt_optimizer(
                 positive_prompt=final_prompt,

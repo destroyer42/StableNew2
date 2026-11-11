@@ -43,6 +43,8 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.zone_map_v2 import get_pipeline_stage_order
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.services.ui_state_store import get_ui_state_store
+from src.utils.config import ADETAILER_DEFAULT_KEY
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 
 logger = logging.getLogger(__name__)
@@ -311,12 +313,6 @@ class PipelineTabFrame(ttk.Frame):
             pass
         self._publish_pipeline_stage_flags()
 
-        listener = getattr(self.pipeline_controller, "on_adetailer_config_changed", None)
-        if callable(listener):
-            try:
-                self.stage_cards_panel.add_adetailer_listener(listener)
-            except Exception:
-                pass
         self._sync_state_overrides()
         self._handle_sidebar_change()
 
@@ -349,20 +345,6 @@ class PipelineTabFrame(ttk.Frame):
             self._on_preview_jobs_changed()
             if hasattr(self, "run_controls"):
                 self.run_controls.update_from_app_state(self.app_state)
-        controller = self.app_controller or self.pipeline_controller
-        if controller:
-            try:
-                controller.restore_last_run()
-            except Exception:
-                pass
-            # Saved startup defaults win over the last run; they only fill the working controls (no scan, no launch).
-            restore_startup = getattr(controller, "restore_startup_defaults", None)
-            if callable(restore_startup):
-                try:
-                    restore_startup()
-                except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError, tk.TclError):
-                    logger.warning("startup defaults could not be restored", exc_info=True)
-
         # PR-GUI-D: ScrollableFrame already handles mouse wheel; remove redundant calls
         attach_tooltip(self.sidebar, "Pipeline controls and prompt packs.")
 
@@ -383,6 +365,42 @@ class PipelineTabFrame(ttk.Frame):
         self.bind("<Configure>", self._on_layout_configure, add="+")
         self._bind_process_inspector_shortcut()
 
+    def restore_working_settings(self, controller: Any) -> None:
+        """Restore once, after the controller can reach the constructed stage cards."""
+        if getattr(self, "_working_settings_restored", False):
+            return
+        self._working_settings_restored = True
+        adetailer_card = getattr(self.stage_cards_panel, "adetailer_card", None)
+        manager = getattr(controller, "_config_manager", None)
+        if adetailer_card is not None:
+            listener = getattr(controller, "on_adetailer_config_changed", None)
+            if callable(listener):
+                self.stage_cards_panel.add_adetailer_listener(listener)
+            update_settings = getattr(manager, "update_settings", None)
+            if callable(update_settings):
+                adetailer_card.set_default_saver(
+                    lambda config: update_settings({ADETAILER_DEFAULT_KEY: config})
+                )
+            get_setting = getattr(manager, "get_setting", None)
+            defaults = get_setting(ADETAILER_DEFAULT_KEY) if callable(get_setting) else None
+            if isinstance(defaults, dict):
+                self.stage_cards_panel.load_adetailer_config(defaults)
+        if controller:
+            try:
+                controller.restore_last_run()
+            except Exception:
+                pass
+            # Saved startup defaults win over the last run; they only fill the working controls (no scan, no launch).
+            restore_startup = getattr(controller, "restore_startup_defaults", None)
+            if callable(restore_startup):
+                try:
+                    restore_startup()
+                except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError, tk.TclError):
+                    logger.warning("startup defaults could not be restored", exc_info=True)
+
+        if adetailer_card is not None:
+            adetailer_card.restore_working_draft(get_ui_state_store())
+
     def _on_first_map(self, event: tk.Event | None = None) -> None:
         """Called when the Pipeline tab becomes visible: flush deferred hot surfaces (never resizes the root)."""
         self._hot_surfaces_flushed_on_map = True
@@ -395,6 +413,10 @@ class PipelineTabFrame(ttk.Frame):
     # compact presentation, decided from measured geometry (no fixed pixel breakpoint): fonts, display scaling and the Tk
     # build all change how much width the forms need. Only grid-column minimums, label wraps and a few grid cells change;
     # no widget is moved to another parent, recreated or rebound, so no state, controller or scroll ownership is involved.
+
+    def flush_adetailer_draft(self) -> bool:
+        card = getattr(self.stage_cards_panel, "adetailer_card", None)
+        return card is None or card.flush_working_draft()
 
     def _on_layout_configure(self, event: tk.Event | None = None) -> None:
         if event is not None and event.widget is not self:
@@ -530,6 +552,11 @@ class PipelineTabFrame(ttk.Frame):
                 pass
         stage_overrides = self.stage_cards_panel.to_overrides(prompt_text=prompt_text)
         overrides.update(stage_overrides)
+        flags = getattr(self.app_state, "get_pipeline_stage_flags", None)
+        if callable(flags):
+            pipeline = dict(overrides.get("pipeline") or {})
+            pipeline["adetailer_enabled"] = bool(flags().get("adetailer", False))
+            overrides["pipeline"] = pipeline
         try:
             self.state_manager.pipeline_overrides = overrides
         except Exception:
@@ -549,6 +576,8 @@ class PipelineTabFrame(ttk.Frame):
         except Exception:
             pass
         self._publish_pipeline_stage_flags(only=stage_name)
+        if stage_name == "adetailer":
+            self._sync_state_overrides()
 
     _PIPELINE_STAGES = ("txt2img", "img2img", "adetailer", "upscale")
     _VARIABLE_ERRORS = (tk.TclError, ValueError, TypeError, AttributeError)

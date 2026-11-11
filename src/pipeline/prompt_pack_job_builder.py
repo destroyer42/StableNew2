@@ -27,6 +27,7 @@ from src.image_backends.model_policy import (
     normalize_profile_owned_values,
 )
 from src.pipeline import config_contract_v26
+from src.pipeline.adetailer_profiles import FACE_PROMPT_FIELDS, compile_adetailer
 from src.pipeline.animatediff_retirement import refuse_enabled_animatediff
 from src.pipeline.compile_evidence import CompileEvidence
 from src.pipeline.config_contract_v26 import (
@@ -492,6 +493,12 @@ class PromptPackNormalizedJobBuilder:
             "contract": PROMPT_ADAPTATION_CONTRACT,
             **adaptation_plan.to_diagnostics(),
         }
+        merged_config, adetailer_decision = compile_adetailer(merged_config, prompt_resolution.positive)
+        if adetailer_decision:
+            stage_chain = self._build_stage_chain(
+                merged_config, {stage.stage_type: stage.enabled for stage in stage_chain}
+            )
+            provenance_metadata["adetailer_mode"] = adetailer_decision
         if prepared.matrix_expansion is not None:
             provenance_metadata["matrix_expansion"] = copy.deepcopy(prepared.matrix_expansion)
         config_for_builder = self._build_config_payload(
@@ -1093,6 +1100,13 @@ class PromptPackNormalizedJobBuilder:
                 vae=stage_vae,
                 extra={k: v for k, v in extra.items() if v not in (None, "", [])},
             )
+            if stage == "adetailer" and data.get("face_mode") in ("single", "multiple"):
+                # A compiled profile may explicitly supply empty text. Preserve it at dispatch.
+                prompt_keys = {name for names in FACE_PROMPT_FIELDS for name in names}
+                prompt_keys.update(("adetailer_hands_prompt", "adetailer_hands_negative_prompt"))
+                stage_cfg = replace(
+                    stage_cfg, extra={**stage_cfg.extra, **{key: data[key] for key in prompt_keys if key in data}}
+                )
             chain.append(stage_cfg)
         # Retired AnimateDiff execution: refuse an enabled stage before any NJR exists. The disabled placeholder
         # every pack carries stays in the chain unchanged.

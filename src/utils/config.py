@@ -45,6 +45,23 @@ def _normalize_scheduler_name(scheduler: str | None) -> str | None:
     return value
 
 
+ADETAILER_DEFAULT_KEY = "adetailer_defaults"
+
+
+def _normalize_adetailer_prompts(config: dict[str, Any]) -> dict[str, Any]:
+    section = config.get("adetailer")
+    if not isinstance(section, dict):
+        return config
+    result = dict(section)
+    for canonical, alias in (
+        ("adetailer_prompt", "ad_prompt"),
+        ("adetailer_negative_prompt", "ad_negative_prompt"),
+    ):
+        if canonical in section or alias in section:
+            result[canonical] = result[alias] = section.get(canonical, section.get(alias))
+    return {**config, "adetailer": result}
+
+
 def synchronize_adetailer_enablement(config: dict[str, Any]) -> dict[str, Any]:
     """Persist one consistent ADetailer stage-enablement boolean.
 
@@ -391,20 +408,37 @@ class ConfigManager:
         config = self.get_default_config()
         self._apply_application_defaults(config)
 
-        # Apply pack-specific overrides
-        if pack_overrides:
-            config = self._merge_configs(config, pack_overrides)
+        # A saved ADetailer section is a configuration in its own right. In particular, a pack
+        # authored before face modes existed must never inherit a mode or profile from app defaults.
+        if pack_overrides is None and "adetailer" not in (runtime_params or {}):
+            defaults = self.get_setting(ADETAILER_DEFAULT_KEY)
+            config["adetailer"] = self._merge_configs(
+                config["adetailer"],
+                defaults if isinstance(defaults, dict) else {"face_mode": "single"},
+            )
 
-        # Apply runtime parameters
-        if runtime_params:
-            config = self._merge_configs(config, runtime_params)
+        for layer in (pack_overrides, runtime_params):
+            if not layer:
+                continue
+            config = self._merge_configs(config, _normalize_adetailer_prompts(layer))
+            adetailer = layer.get("adetailer")
+            if isinstance(adetailer, dict):
+                for key in ("face_mode", "face_mode_profiles"):
+                    # The later ADetailer authoring scope supplies its own mode and profile collection.
+                    config["adetailer"].pop(key, None)
+                    if key in adetailer:
+                        config["adetailer"][key] = deepcopy(adetailer[key])
 
         return config
 
     def application_defaults_key(self) -> tuple[Any, ...]:
         """Value that changes whenever a saved application default that feeds ``resolve_config`` changes."""
 
-        return (self._load_settings().get("output_dir"),)
+        stored = self._load_settings()
+        return (
+            stored.get("output_dir"),
+            json.dumps(stored.get(ADETAILER_DEFAULT_KEY), sort_keys=True),
+        )
 
     def _apply_application_defaults(self, config: dict[str, Any]) -> None:
         """Layer the saved application-wide output folder under pack and job values (in place).
@@ -662,17 +696,16 @@ class ConfigManager:
             return self._settings_cache
         self._settings_cache = {}
         self._settings_load_error = None
-        if self._settings_path.exists():
-            try:
-                text = self._settings_path.read_text(encoding="utf-8")
-                data = json.loads(text)
-                if isinstance(data, dict):
-                    self._settings_cache = data
-                else:
-                    self._settings_load_error = "settings.json is not a JSON object"
-            except Exception as exc:  # noqa: BLE001
-                self._settings_load_error = str(exc)
-                logger.warning("Failed to load engine settings: %s", exc)
+        try:
+            data = json.loads(self._settings_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("settings.json is not a JSON object")
+            self._settings_cache = data
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError) as exc:
+            self._settings_load_error = str(exc)
+            logger.warning("Failed to load engine settings: %s", exc)
         return self._settings_cache
 
     @property
@@ -711,13 +744,24 @@ class ConfigManager:
         return self.load_settings().get(key, default)
 
     def update_settings(self, updates: dict[str, Any]) -> bool:
+        # Merge against the current file so a scoped write preserves settings saved by another reader.
+        self._settings_cache = None
         current = dict(self._load_settings())
+        if self._settings_load_error is not None:
+            return False
         current.update({k: v for k, v in updates.items() if v is not None})
         return self.save_settings(current)
 
     def save_settings(self, settings: dict[str, Any] | None = None) -> bool:
         data = settings if settings is not None else dict(self._load_settings())
         try:
+            # Another reader may have cached settings before the file was damaged.
+            try:
+                existing = json.loads(self._settings_path.read_text(encoding="utf-8"))
+                if not isinstance(existing, dict):
+                    raise ValueError("settings.json is not a JSON object")
+            except FileNotFoundError:
+                pass
             atomic_write_json(self._settings_path, data, indent=2, ensure_ascii=False)
             self._settings_cache = dict(data)
             self._settings_load_error = None
@@ -890,7 +934,9 @@ class ConfigManager:
         # synchronizer mistake that default for a higher-precedence explicit
         # value and silently disable a section-only "adetailer.enabled=True"
         # config that previously worked via the stage sequencer's OR fallback.
-        synchronized_input = synchronize_adetailer_enablement(config or {})
+        synchronized_input = synchronize_adetailer_enablement(
+            _normalize_adetailer_prompts(config or {})
+        )
         merged = self._deep_merge_dicts(base, synchronized_input)
         self._ensure_refiner_hires_fields(merged)
         return merged

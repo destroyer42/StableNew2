@@ -150,7 +150,6 @@
     "src/services/config_service.py": 1,
     "src/services/diagnostics_service_v2.py": 2,
     "src/services/operator_readiness_service.py": 2,
-    "src/services/ui_state_store.py": 1,
     "src/services/watchdog_system_v2.py": 12,
     "src/utils/config.py": 3,
     "src/utils/debug_shutdown_inspector.py": 1,

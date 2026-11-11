@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from src.state.workspace_paths import workspace_paths
@@ -27,6 +28,7 @@ class UIStateStore:
     """Manages persistence of UI state across sessions."""
 
     def __init__(self, path: Path | str | None = None) -> None:
+        self._lock = RLock()
         self._path = Path(path) if path else UI_STATE_PATH
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -50,47 +52,51 @@ class UIStateStore:
             True if save succeeded, False otherwise
         """
         try:
-            # Ensure schema version is set
-            state["schema_version"] = SCHEMA_VERSION
-
-            atomic_write_text(self._path, json.dumps(state, indent=2))
+            with self._lock:
+                self._read_state()  # Refuse to replace unreadable or unsupported state.
+                payload = {**state, "schema_version": SCHEMA_VERSION}
+                atomic_write_text(self._path, json.dumps(payload, indent=2))
             logger.debug(f"Saved UI state to {self._path}")
             return True
         except Exception as e:
             logger.warning(f"Failed to save UI state: {e}")
             return False
 
-    def load_state(self) -> dict[str, Any] | None:
-        """Load UI state from disk.
+    def update_state(self, changes: dict[str, Any]) -> bool:
+        """Merge the supplied keys into the latest state and publish atomically."""
+        with self._lock:
+            try:
+                state = self.load_state(strict=True) or {}
+            except (OSError, ValueError):
+                return False
+            return self.save_state({**state, **changes})
 
-        Returns:
-            Dictionary containing UI state, or None if file doesn't exist
-            or schema version is unsupported
-        """
-        if not self._path.exists():
-            logger.debug(f"No UI state file found at {self._path}")
-            return None
-
+    def _read_state(self) -> dict[str, Any] | None:
         try:
-            state = json.loads(self._path.read_text())
-
-            # Validate schema version
-            if state.get("schema_version") != SCHEMA_VERSION:
-                logger.warning(
-                    f"Unsupported UI state schema: {state.get('schema_version')}, expected {SCHEMA_VERSION}"
-                )
-                return None
-            content_visibility = state.get("content_visibility")
-            if not isinstance(content_visibility, dict):
-                state["content_visibility"] = dict(DEFAULT_CONTENT_VISIBILITY_STATE)
-            elif content_visibility.get("mode") not in {"sfw", "nsfw"}:
-                state["content_visibility"] = dict(DEFAULT_CONTENT_VISIBILITY_STATE)
-
-            logger.debug(f"Loaded UI state from {self._path}")
-            return state
-        except Exception as e:
-            logger.warning(f"Failed to load UI state: {e}")
+            state = json.loads(self._path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
             return None
+        if not isinstance(state, dict) or state.get("schema_version") != SCHEMA_VERSION:
+            raise ValueError("UI state must be a JSON object with a supported schema version")
+        return state
+
+    def load_state(self, *, strict: bool = False) -> dict[str, Any] | None:
+        """Load saved state, optionally surfacing read errors to a draft editor."""
+        try:
+            state = self._read_state()
+        except (OSError, ValueError) as exc:
+            logger.warning("Failed to load UI state from %s: %s", self._path, exc)
+            if strict:
+                raise
+            return None
+        if state is not None:
+            content_visibility = state.get("content_visibility")
+            if not isinstance(content_visibility, dict) or content_visibility.get("mode") not in {
+                "sfw",
+                "nsfw",
+            }:
+                state["content_visibility"] = dict(DEFAULT_CONTENT_VISIBILITY_STATE)
+        return state
 
     def clear_state(self) -> bool:
         """Delete the saved UI state file.

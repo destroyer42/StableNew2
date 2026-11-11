@@ -14,7 +14,8 @@ def test_adetailer_card_uses_shared_width_baseline(tk_root) -> None:
     assert card.body_frame.columnconfigure(0)["minsize"] == get_stage_card_min_width()
     assert card._overall_frame.columnconfigure(1)["minsize"] == PRIMARY_CONTROL_MIN_WIDTH
     assert card._face_tab.columnconfigure(1)["minsize"] == PRIMARY_CONTROL_MIN_WIDTH
-    assert card._hand_prompt_frame.columnconfigure(1)["minsize"] == PRIMARY_CONTROL_MIN_WIDTH
+    assert card._hand_prompt_frame.columnconfigure(0)["weight"] == 1
+    assert all(editor.grid_info()["sticky"] == "nesw" for editor in card._hand_prompt_widgets)
 
 
 def test_txt2img_refiner_and_hires_forms_keep_control_widths(tk_root) -> None:

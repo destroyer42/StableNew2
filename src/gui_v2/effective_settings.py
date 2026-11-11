@@ -147,6 +147,35 @@ def _lora_text(job: Any, visible: bool) -> str:
     return ", ".join(f"{tag.name} @ {tag.weight:g}" for tag in tags)
 
 
+def _adetailer_summary(job: Any) -> str:
+    stage = next(
+        (stage for stage in getattr(job, "stages", ()) if stage.stage_type == "adetailer"), None
+    )
+    if stage is None or not stage.enabled:
+        return "off"
+    settings = _mapping(stage.extra)
+    metadata = _mapping(getattr(getattr(job, "provenance", None), "metadata", {}))
+    mode = _mapping(metadata.get("adetailer_mode"))
+    label = {"single": "Single Face", "multiple": "Multiple Faces"}.get(
+        str(mode.get("effective_mode")), "Inherited settings"
+    )
+    if mode.get("requested_mode") == "auto":
+        qualifier = " (uncertain fallback)" if mode.get("uncertain") else ""
+        label = f"Auto → {label}{qualifier}"
+    passes: list[str] = []
+    for role, enabled, limit in (
+        ("face", settings.get("enable_face_pass", True), settings.get("ad_mask_k_largest", 3)),
+        (
+            "hand",
+            settings.get("enable_hands_pass", settings.get("ad_hands_enabled", False)),
+            settings.get("ad_hands_mask_k", 6),
+        ),
+    ):
+        value = ("all eligible" if limit == 0 else f"up to {limit}") if enabled else "off"
+        passes.append(f"{role} {value}")
+    return f"{label} ({', '.join(passes)})"
+
+
 def _job_rows(job: Any, context: EffectiveContext) -> dict[str, str]:
     config = _mapping(getattr(job, "config", {}))
     pipeline = _mapping(config.get("pipeline"))
@@ -173,6 +202,7 @@ def _job_rows(job: Any, context: EffectiveContext) -> dict[str, str]:
         "Model": _text(_first(config, "model", "model_name")),
         "Stages": " + ".join(stages) if stages else "-",
         "Stages off": ", ".join(disabled) if disabled else "none",
+        "ADetailer": _adetailer_summary(job),
         "Size": f"{width} x {height}" if width and height else "-",
         "Sampler": f"{_text(sampler)} / {_text(scheduler)}",
         "Steps": _text(_first(config, "steps")),
@@ -192,6 +222,8 @@ def _merge_rows(per_job: Sequence[dict[str, str]]) -> tuple[EffectiveRow, ...]:
     rows: list[EffectiveRow] = []
     for label in per_job[0]:
         values = list(dict.fromkeys(item.get(label, "-") for item in per_job))
+        if label == "ADetailer" and values == ["off"]:
+            continue
         if len(values) == 1:
             rows.append(EffectiveRow(label, values[0]))
             continue

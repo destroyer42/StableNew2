@@ -125,9 +125,13 @@ class StageCardsPanel(ttk.Frame):
                 continue
             for var in watcher() or []:
                 try:
-                    var.trace_add("write", lambda *_: self._on_change())
+                    var.trace_add("write", lambda *_, owner=card: self._on_card_change(owner))
                 except Exception:
                     pass
+
+    def _on_card_change(self, card: ttk.Frame) -> None:
+        if self._on_change is not None and not getattr(card, "loading_config", False):
+            self._on_change()
 
     def _attach_adetailer_watchers(self) -> None:
         card = getattr(self, "adetailer_card", None)
@@ -242,7 +246,9 @@ class StageCardsPanel(ttk.Frame):
         upscale_card.update_input_dimensions(width, height)
 
     def _notify_adetailer_listeners(self) -> None:
-        if not self._adetailer_listeners:
+        if not self._adetailer_listeners or getattr(
+            getattr(self, "adetailer_card", None), "loading_config", False
+        ):
             return
         config = self.collect_adetailer_config()
         for listener in list(self._adetailer_listeners):

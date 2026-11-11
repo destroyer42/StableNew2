@@ -707,8 +707,8 @@
         "S110": 5
       },
       "src/gui/views/pipeline_tab_frame_v2.py": {
-        "BLE001": 29,
-        "S110": 21,
+        "BLE001": 28,
+        "S110": 20,
         "S112": 1
       },
       "src/gui/views/prompt_tab_frame_v2.py": {
@@ -898,7 +898,7 @@
         "BLE001": 4
       },
       "src/services/ui_state_store.py": {
-        "BLE001": 3
+        "BLE001": 2
       },
       "src/services/watchdog_system_v2.py": {
         "BLE001": 5,

@@ -6,7 +6,7 @@ import os
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, ttk
 from typing import Any
 
 from src.api.webui_process_manager import WebUIProcessManager, build_default_webui_process_config
@@ -983,6 +983,9 @@ class MainWindowV2:
                     base_generation_panel._controller = controller
             except Exception:
                 pass
+        restore = getattr(getattr(self, "pipeline_tab", None), "restore_working_settings", None)
+        if callable(restore):
+            restore(controller)
         # Update run_controls with the controller
         if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "run_controls"):
             try:
@@ -1421,7 +1424,19 @@ class MainWindowV2:
     def on_app_close(self) -> None:
         self._trigger_graceful_exit("window-close")
 
+    def _flush_adetailer_draft(self) -> bool:
+        flush = getattr(getattr(self, "pipeline_tab", None), "flush_adetailer_draft", None)
+        return not callable(flush) or flush()
+
     def _trigger_graceful_exit(self, reason: str) -> None:
+        if reason == "window-close" and not self._flush_adetailer_draft():
+            if not messagebox.askokcancel(
+                "ADetailer draft could not be saved",
+                "The current ADetailer edits could not be written to ui_state.json. "
+                "Close and discard these edits?",
+                parent=self.root,
+            ):
+                return
         self._detach_presentation_actions()
         handler = getattr(self, "_graceful_exit_handler", None)
         if handler:
@@ -1480,6 +1495,8 @@ class MainWindowV2:
 
         # PR-PERSIST-001: Save UI state before cleanup
         try:
+            if not self._flush_adetailer_draft():
+                logger.warning("ADetailer working draft could not be saved during cleanup")
             self._save_ui_state()
         except Exception as e:
             logger.warning(f"Failed to save UI state during cleanup: {e}")
@@ -1748,7 +1765,6 @@ class MainWindowV2:
                 pass
 
             state = {
-                **existing_state,
                 "window": {"geometry": geometry, "state": window_state},
                 "tabs": merge_tabs_state(
                     existing_state.get("tabs"),
@@ -1766,10 +1782,10 @@ class MainWindowV2:
                     learning_state = getter()
                     if isinstance(learning_state, dict):
                         state["learning"] = learning_state
-                    elif "learning" not in state:
+                    elif "learning" not in existing_state:
                         state["learning"] = {}
             except Exception:
-                if "learning" not in state:
+                if "learning" not in existing_state:
                     state["learning"] = {}
             try:
                 photo_tab = getattr(self, "photo_optimize_tab", None)
@@ -1778,10 +1794,10 @@ class MainWindowV2:
                     photo_state = photo_getter()
                     if isinstance(photo_state, dict):
                         state["photo_optimize"] = photo_state
-                    elif "photo_optimize" not in state:
+                    elif "photo_optimize" not in existing_state:
                         state["photo_optimize"] = {}
             except Exception:
-                if "photo_optimize" not in state:
+                if "photo_optimize" not in existing_state:
                     state["photo_optimize"] = {}
             try:
                 clips_tab = getattr(self, "movie_clips_tab", None)
@@ -1790,10 +1806,10 @@ class MainWindowV2:
                     clips_state = clips_getter()
                     if isinstance(clips_state, dict):
                         state["movie_clips"] = clips_state
-                    elif "movie_clips" not in state:
+                    elif "movie_clips" not in existing_state:
                         state["movie_clips"] = {}
             except Exception:
-                if "movie_clips" not in state:
+                if "movie_clips" not in existing_state:
                     state["movie_clips"] = {}
             try:
                 svd_tab = getattr(self, "svd_tab", None)
@@ -1802,10 +1818,10 @@ class MainWindowV2:
                     svd_state = svd_getter()
                     if isinstance(svd_state, dict):
                         state["svd"] = svd_state
-                    elif "svd" not in state:
+                    elif "svd" not in existing_state:
                         state["svd"] = {}
             except Exception:
-                if "svd" not in state:
+                if "svd" not in existing_state:
                     state["svd"] = {}
             try:
                 video_tab = getattr(self, "video_workflow_tab", None)
@@ -1814,13 +1830,14 @@ class MainWindowV2:
                     video_state = video_getter()
                     if isinstance(video_state, dict):
                         state["video_workflow"] = video_state
-                    elif "video_workflow" not in state:
+                    elif "video_workflow" not in existing_state:
                         state["video_workflow"] = {}
             except Exception:
-                if "video_workflow" not in state:
+                if "video_workflow" not in existing_state:
                     state["video_workflow"] = {}
 
-            ui_store.save_state(state)
+            if not ui_store.update_state(state):
+                return
             logger.debug(f"Saved UI state: geometry={geometry}, tab={selected_tab_index}")
         except Exception as e:
             logger.warning(f"Failed to save UI state: {e}")
