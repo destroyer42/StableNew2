@@ -88,6 +88,7 @@ class CreateView(QWidget):
         Signal()
     )  # emitted after every view/session synchronization (Output Display listens)
     editRequested = Signal(str)
+    motionRequested = Signal(str)
 
     def __init__(
         self,
@@ -593,6 +594,13 @@ class CreateView(QWidget):
         self.edit_result.hide()
         self.edit_result.clicked.connect(lambda: self.editRequested.emit(CREATE_SOURCE))
         self.result_card.add(self.edit_result)
+        self.animate_result = QPushButton("Animate in Motion")
+        self.animate_result.setToolTip(
+            "Hand the linked Ridge study fixture to Motion & Video. Nothing is queued."
+        )
+        self.animate_result.hide()
+        self.animate_result.clicked.connect(lambda: self.motionRequested.emit(CREATE_SOURCE))
+        self.result_card.add(self.animate_result)
         self.review_layout.addWidget(self.result_card)
         self.review_scroll.setWidget(self.review)
         split.addWidget(self.review_scroll)
@@ -959,6 +967,7 @@ class CreateView(QWidget):
                 self.session.demo_receipt.tiles if self.session.demo_receipt else ()
             )
             self.edit_result.setVisible(self.session.demo_receipt is not None)
+            self.animate_result.setVisible(self.session.demo_receipt is not None)
             preview = self.session.preview
             if preview is None:
                 self.preview_text.setPlainText(

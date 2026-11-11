@@ -479,3 +479,166 @@ def probe_edit(window) -> dict[str, Any]:
         "missing_tab_stops": missing,
         "preview": view.session.status,
     }
+
+
+# ------------------------------------------------------------------------------- Motion & Video
+MOTION_STATES = ("quick", "story", "movie")
+
+
+def prime_motion(
+    window, size: tuple[int, int], state: str = "story", layout: str = "strip", shots: int = 6
+) -> None:
+    """Prepare a Motion evidence case. Everything is the in-memory mock; nothing is submitted."""
+    from .motion_domain import KIND_MOVIE, KIND_QUICK, KIND_STORY
+
+    app = QApplication.instance()
+    view = window.motion_view
+    window.nav.setCurrentRow(window.pages.indexOf(view))
+    window.show()
+    pump(app)
+    window.resize(*size)
+    window.activateWindow()
+    pump(app)
+    view.receive_source(CREATE_SOURCE, "create")
+    view.set_layout_design(layout)
+    session = view.session
+    if state == "quick":
+        view.set_mode(KIND_QUICK)
+        view.quick_panel.prompt.setPlainText("Slow push toward the ridge")
+        view.review()
+        view.simulate()
+    elif state == "story":
+        view.set_mode(KIND_STORY)
+        session.ensure_storyboard()
+        session.update_story(
+            title="Ridge sequence",
+            default_prompt="Slow cinematic movement",
+            source_key=CREATE_SOURCE,
+            source_digest=session.catalog.get(CREATE_SOURCE).digest,
+        )
+        while len(session.story.draft.shots) < shots:
+            session.add_shot()
+        view.ui.shot = session.story.draft.shots[1].shot_id
+        view.sync()
+        view.review()
+        view.simulate()
+        view.story_panel.inspector.setCurrentWidget(view.story_panel.shot_scroll)
+    else:
+        view.set_mode(KIND_MOVIE)
+        view.add_clips(["hist-run-1-clip-1", "hist-run-1-clip-2", "hist-run-1-clip-3"])
+        view.review()
+        view.simulate()
+    view.sync()
+    pump(app, 10)
+
+
+def _motion_controls(view) -> dict[str, QWidget]:
+    controls: dict[str, QWidget] = {
+        "mode_quick": view.mode_buttons["quick"],
+        "mode_story": view.mode_buttons["story"],
+        "mode_movie": view.mode_buttons["movie"],
+        "review": view.actions.review,
+        "simulate": view.actions.simulate,
+        "inspect": view.actions.inspect,
+    }
+    if view.actions.send.isVisibleTo(view):
+        controls["send"] = view.actions.send
+    if view.ui.mode == "story":
+        panel = view.story_panel
+        controls |= {f"tool_{k}": b for k, b in panel.buttons.items()}
+        controls["viewer"] = panel.viewer
+        controls["inspector"] = panel.inspector
+    return controls
+
+
+def probe_motion(window) -> dict[str, Any]:
+    """Measure persistent Motion controls, inspector overflow, shrunk controls and the Tab chain."""
+    from PySide6.QtWidgets import QAbstractButton, QAbstractSpinBox, QComboBox, QLineEdit
+
+    view = window.motion_view
+    app = QApplication.instance()
+    controls = _motion_controls(view)
+
+    page = view.page_scroll.viewport()
+
+    def visible_through_parents(widget: QWidget) -> bool:
+        """Horizontal containment everywhere; vertical too, except inside the page scroller."""
+        area = widget.parentWidget()
+        while area is not None:
+            tl = widget.mapTo(area, widget.rect().topLeft())
+            br = widget.mapTo(area, widget.rect().bottomRight())
+            if tl.x() < 0 or br.x() > area.width():
+                return False
+            if area not in (page, view.page_scroll) and (tl.y() < 0 or br.y() > area.height()):
+                return False
+            if area is window:
+                break
+            area = area.parentWidget()
+        return True
+
+    clipped = [
+        n for n, w in controls.items() if w.isVisibleTo(window) and not visible_through_parents(w)
+    ]
+    overflow: dict[str, int] = {}
+    for index, scroll in enumerate(view.findChildren(QScrollArea)):
+        if not scroll.isVisibleTo(window) or scroll.widget() is None:
+            continue
+        need = scroll.widget().minimumSizeHint().width()
+        have = scroll.viewport().width()
+        if need > have:
+            overflow[scroll.accessibleName() or f"scroll{index}"] = need - have
+    shrunk = []
+    for kind in (QAbstractButton, QComboBox, QLineEdit, QAbstractSpinBox):
+        for widget in view.findChildren(kind):
+            if not widget.isVisibleTo(window) or not widget.isEnabled():
+                continue
+            hint = widget.minimumSizeHint()
+            if widget.height() < hint.height() or widget.width() < min(hint.width(), 48):
+                name = widget.accessibleName() or widget.metaObject().className()
+                shrunk.append(
+                    f"{name} {widget.width()}x{widget.height()} < {hint.width()}x{hint.height()}"
+                )
+    view.actions.review.setFocus()
+    pump(app, 2)
+    seen: list[QWidget] = []
+    for _ in range(160):
+        focus = app.focusWidget()
+        if focus is None or focus in seen:
+            break
+        seen.append(focus)
+        window.focusNextChild()
+        pump(app, 1)
+    missing = [
+        n
+        for n, w in controls.items()
+        if w.isEnabled()
+        and w.isVisibleTo(window)
+        and w.focusPolicy() != Qt.FocusPolicy.NoFocus
+        and not any(x is w or w.isAncestorOf(x) for x in seen)
+    ]
+    report: dict[str, Any] = {
+        "mode": view.ui.mode,
+        "layout": view.ui.layout if view.ui.mode == "story" else "-",
+        "window": window.size().toTuple(),
+        "motion_view": view.size().toTuple(),
+        "stack": view.stack.size().toTuple(),
+        "clipped": clipped,
+        "page_scroll_px": max(0, view.stack.height() - page.height()),
+        "horizontal_overflow_px": overflow,
+        "shrunk_controls": shrunk,
+        "tab_stops": len(seen),
+        "missing_tab_stops": missing,
+        "status": view.session.status(view.ui.mode).value,
+    }
+    if view.ui.mode == "story":
+        panel = view.story_panel
+        report["viewer"] = panel.viewer.size().toTuple()
+        report["inspector"] = panel.inspector.size().toTuple()
+        report["strip_viewport"] = panel.strip_scroll.viewport().size().toTuple()
+        report["shots"] = len(view.session.story.draft.shots)
+        cards = [c for c in panel.strip.findChildren(QWidget) if c.property("role") == "shot"]
+        report["shot_cards_visible_unscrolled"] = sum(
+            1 for c in cards if _contained(c, panel.strip_scroll.viewport())
+        )
+        report["compact"] = panel.compact
+    return report

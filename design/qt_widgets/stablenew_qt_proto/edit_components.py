@@ -44,14 +44,21 @@ class SourcePicker(QComboBox):
         self.setToolTip("Sources are isolated fixtures. Availability is shown before selection.")
 
 
+FIXTURE_ASSETS = ("ridge", "ridge-revision", "coast", "evening")
+
+
+def motif_image(motif: int, size: tuple[int, int]) -> QImage:
+    """One of the four prototype-owned fixture illustrations at ``size`` (no catalog check)."""
+    image = QImage(str(ASSET_DIR / f"edit-{FIXTURE_ASSETS[motif]}.svg"))
+    if image.isNull():
+        raise EditRefused(f"Fixture pixels could not be read for motif {motif}.")
+    return image.scaled(*size, mode=Qt.TransformationMode.SmoothTransformation)
+
+
 def fixture_image(key: str) -> QImage:
     """Read one of four prototype-owned assets after the catalog visibility check."""
     source = require_available(key)
-    assets = ("ridge", "ridge-revision", "coast", "evening")
-    image = QImage(str(ASSET_DIR / f"edit-{assets[source.motif]}.svg"))
-    if image.isNull():
-        raise EditRefused(f"Fixture pixels could not be read for {key}.")
-    return image.scaled(*source.size, mode=Qt.TransformationMode.SmoothTransformation)
+    return motif_image(source.motif, source.size)
 
 
 def mask_layer(mask: bytes, width: int, height: int, color: QColor, feather: int = 0) -> QImage:

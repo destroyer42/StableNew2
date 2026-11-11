@@ -631,6 +631,12 @@ def build_stylesheet(theme: Theme, asset_dir: Path) -> str:
     QLabel[role='tile'] {{ background: {c.field}; border: {bw}px dashed {c.strong_border}; border-radius: {r.control}px; padding: 8px; }}
     QLabel[role='tile'][selected='true'] {{ border: {bw}px solid {sel_b}; }}
 
+    QFrame[role='shot'] {{ background: {c.field}; border: {bw}px solid {c.border}; border-radius: {r.card}px; }}
+    QFrame[role='shot']:hover {{ border-color: {hover_b}; }}
+    QFrame[role='shot']:focus {{ border-color: {focus_b}; }}
+    QFrame[role='shot'][invalid='true'] {{ border-color: {c.danger}; }}
+    QFrame[role='shot'][selected='true'] {{ background: {c.selected}; border-color: {sel_b}; }}
+
     QLabel[role='muted'] {{ color: {c.muted}; }}
     QLabel[role='muted'][level='warning'] {{ color: {c.accent}; }}
     QLabel[role='heading'] {{ font-size: {t.heading_pt}pt; font-weight: {emph}; }}

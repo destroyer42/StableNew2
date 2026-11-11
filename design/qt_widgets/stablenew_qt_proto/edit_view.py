@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import ExitStack
 from dataclasses import replace
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QAction, QImage
 from PySide6.QtWidgets import (
     QComboBox,
@@ -140,6 +140,8 @@ def _setting_changes(before: EditPreview, after: EditPreview) -> list[str]:
 
 class EditView(QWidget):
     """Canvas-first editor with a hideable inspector and a separate comparison surface."""
+
+    motionRequested = Signal(str)
 
     def __init__(self, layout_design: str = "editor"):
         super().__init__()
@@ -323,6 +325,11 @@ class EditView(QWidget):
         review.addWidget(self.preview_summary)
         self.recorded_parent = QPushButton("Inspect recorded source parent")
         review.addWidget(self.recorded_parent)
+        self.animate = QPushButton("Animate in Motion")
+        self.animate.setToolTip(
+            "Hand this source to Motion & Video as a Quick Clip draft. Nothing is queued."
+        )
+        review.addWidget(self.animate)
         review.addStretch(1)
         self.candidate_scroll, candidates = _scroll()
         self.inspector.addTab(self.candidate_scroll, "Candidates")
@@ -366,6 +373,7 @@ class EditView(QWidget):
         self.admit_button.clicked.connect(self._admit)
         self.compare_button.clicked.connect(self._toggle_compare)
         self.recorded_parent.clicked.connect(self._inspect_parent)
+        self.animate.clicked.connect(self._animate)
         self.candidate_picker.currentIndexChanged.connect(self._candidate_changed)
         self.peer_picker.currentIndexChanged.connect(self._show_candidate)
         self.baseline.clicked.connect(self._set_baseline)
@@ -379,6 +387,13 @@ class EditView(QWidget):
             action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             action.triggered.connect(callback)
             self.addAction(action)
+
+    def _animate(self) -> None:
+        draft = self.session.draft
+        if draft is None:
+            self._warn("Nothing to animate", "Select a source image first.")
+            return
+        self.motionRequested.emit(draft.source_key)
 
     def _warn(self, title: str, message: str) -> None:
         self.banner.set_message(title, message, "warning")

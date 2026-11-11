@@ -41,6 +41,10 @@ def main() -> int:
         choices=("masked", "extend", "compare", "blocked"),
         default=["masked"],
     )
+    parser.add_argument("--motion-layouts", nargs="+", choices=("strip", "timeline"))
+    parser.add_argument(
+        "--motion-states", nargs="+", choices=("quick", "story", "movie"), default=["story"]
+    )
     parser.add_argument("--prefix", default="", help="file-name prefix, e.g. 'split_'")
     parser.add_argument(
         "--studio", action="store_true", help="also capture the Theme Studio and component pages"
@@ -61,6 +65,26 @@ def main() -> int:
     app = QApplication([])
     apply_theme(app, reference_theme(args.theme))
     suffix = f"@{args.scale:g}x" if args.scale != 1.0 else ""
+    if args.motion_layouts:
+        from PySide6.QtCore import QEvent
+        from stablenew_qt_proto.layout_probe import prime_motion
+
+        for size in args.sizes:
+            width, height = map(int, size.split("x"))
+            for state in args.motion_states:
+                for layout in args.motion_layouts if state == "story" else ["strip"]:
+                    window = PrototypeWindow(motion_layout=layout)
+                    prime_motion(window, (width, height), state, layout)
+                    name = f"{state}_{layout}" if state == "story" else state
+                    tag = f"{args.prefix}{args.theme}_{name}_{size}{suffix}"
+                    path = args.out / f"motion_{tag}.png"
+                    if not window.grab().save(str(path)):
+                        raise OSError(f"Could not save {path}")
+                    print(f"{tag}: client {window.width()}x{window.height()}")
+                    window.close()
+                    window.deleteLater()
+                    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        return 0
     if args.edit_layout:
         from PySide6.QtCore import QEvent
         from stablenew_qt_proto.layout_probe import prime_edit
