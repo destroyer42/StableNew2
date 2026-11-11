@@ -64,7 +64,8 @@ class NativeLibraryTests(unittest.TestCase):
         apply_theme(self.app, reference_theme("blue-modern"))
 
     # --------------------------------------------------------------------------- helpers
-    def click_key(self, key, modifiers=Qt.KeyboardModifier.NoModifier):
+    def click_key(self, key, modifiers=None):
+        modifiers = Qt.KeyboardModifier.NoModifier if modifiers is None else modifiers
         results = self.view.results
         self.assertIn(key, self.session.result().items, f"{key} is not on this page")
         rect = results.visualRect(results.page_model.index(results.page_model.row_of(key)))
