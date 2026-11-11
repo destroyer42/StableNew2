@@ -169,11 +169,6 @@ class PipelineController(CorePipelineController):
             learning_enabled=learning_enabled,
         )
 
-    def get_webui_connection_state(self):
-        if hasattr(self, "_webui_connection") and self._webui_connection is not None:
-            return self._webui_connection.get_state()
-        return None
-
     def _extract_metadata(self, attr_name: str) -> dict[str, Any] | None:
         getter = getattr(self, "gui_get_metadata", None)
         if callable(getter):
@@ -633,7 +628,6 @@ class PipelineController(CorePipelineController):
 
         webui_conn = kwargs.pop("webui_connection_controller", None)
         super().__init__(**kwargs)
-        self._learning_runner = None
         self._learning_record_writer = learning_record_writer
         self._learning_record_callback = on_learning_record
         self._last_learning_record: LearningRecord | None = None
@@ -766,13 +760,6 @@ class PipelineController(CorePipelineController):
                 return None
         return None
 
-    def _get_learning_runner(self):
-        if self._learning_runner is None:
-            from src.learning.learning_runner import LearningRunner
-
-            self._learning_runner = LearningRunner()
-        return self._learning_runner
-
     def _get_queue_submission_service(self) -> QueueSubmissionService:
         current = getattr(self, "_queue_submission_service", None)
         job_service = getattr(self, "_job_service", None)
@@ -789,11 +776,6 @@ class PipelineController(CorePipelineController):
         merged = self._config_manager.resolve_config(runtime_params=dict(runtime_overrides or {}))
         _logger.debug("Merged run config: runtime_keys=%s", sorted((runtime_overrides or {}).keys()))
         return merged
-
-    def get_learning_runner_for_tests(self):
-        """Return the learning runner instance for test inspection."""
-
-        return self._get_learning_runner()
 
     def handle_learning_record(self, record: LearningRecord) -> None:
         """Handle learning records forwarded from pipeline runner."""
@@ -828,19 +810,6 @@ class PipelineController(CorePipelineController):
         """Enable or disable passive learning record emission."""
 
         self._learning_enabled = bool(enabled)
-
-    def is_learning_enabled(self) -> bool:
-        """Return whether learning record emission is enabled."""
-
-        return self._learning_enabled
-
-    def set_learning_queue_cap(self, cap: int) -> None:
-        """Set max queue depth allowed for learning automation submissions."""
-        try:
-            value = int(cap)
-        except Exception:
-            value = 1
-        self._learning_queue_cap = max(1, value)
 
     def get_learning_queue_cap(self) -> int:
         return max(1, int(getattr(self, "_learning_queue_cap", 1)))
@@ -915,14 +884,6 @@ class PipelineController(CorePipelineController):
         """Return the most recent StageExecutionPlan built by this controller."""
 
         return self._last_stage_execution_plan
-
-    def get_last_run_config_for_tests(self) -> dict[str, Any] | None:
-        return self._last_run_config
-
-    def get_last_stage_events_for_tests(self) -> list[dict] | None:
-        """Return last emitted stage events."""
-
-        return self._last_stage_events
 
     # Queue-backed execution -------------------------------------------------
     def start_pipeline(
@@ -1206,24 +1167,6 @@ class PipelineController(CorePipelineController):
         else:
             _logger.warning(f"Running job {job.job_id} missing NJR, cannot display in GUI")
 
-    def _get_draft_part_count(self) -> int:
-        if not self._app_state:
-            return 0
-        summary = getattr(self._app_state.job_draft, "summary", None)
-        if summary is None:
-            return 0
-        return getattr(summary, "part_count", 0) or 0
-
-    def _log_add_to_queue_event(self, job_id: str | None) -> None:
-        logger = getattr(self, "_job_lifecycle_logger", None)
-        if not logger:
-            return
-        logger.log_add_to_queue(
-            source="pipeline_tab",
-            job_id=job_id,
-            draft_size=self._get_draft_part_count(),
-        )
-
     # ------------------------------------------------------------------
     # GUI callbacks for preview + job controls
     # ------------------------------------------------------------------
@@ -1414,16 +1357,6 @@ class PipelineController(CorePipelineController):
         if added and not self._app_state_preview_updates_managed_externally:
             self.refresh_preview_from_state()
 
-    def remove_pack_from_draft(self, pack_id: str) -> None:
-        if not self._app_state:
-            return
-        filtered = [entry for entry in self._app_state.job_draft.packs if entry.pack_id != pack_id]
-        if len(filtered) == len(self._app_state.job_draft.packs):
-            return
-        self._app_state.job_draft.packs = filtered
-        if not self._app_state_preview_updates_managed_externally:
-            self.refresh_preview_from_state()
-
     def clear_draft(self) -> None:
         if not self._app_state:
             return
@@ -1495,25 +1428,6 @@ class PipelineController(CorePipelineController):
         )
         self.record_run_result(result)
         return result
-    def _infer_job_stage(self, job: Job) -> str | None:
-        record = getattr(job, "_normalized_record", None)
-        if record and record.stage_chain:
-            first_stage = record.stage_chain[0]
-            stage_name = getattr(first_stage, "stage_type", None) or getattr(
-                first_stage, "stage_name", None
-            )
-            if stage_name:
-                return str(stage_name).lower()
-        snapshot = getattr(job, "snapshot", None) or {}
-        stage = snapshot.get("stage") or snapshot.get("stage_name")
-        if stage:
-            return str(stage).lower()
-        config_snapshot = getattr(job, "config_snapshot", None) or {}
-        stage = config_snapshot.get("stage") or config_snapshot.get("stage_name")
-        if stage:
-            return str(stage).lower()
-        return None
-
     def submit_preview_jobs_to_queue(
         self,
         *,
@@ -1623,9 +1537,6 @@ class PipelineController(CorePipelineController):
         if record is None:
             return []
         return [record]
-
-    def _hydrate_history_record(self, entry: Any):
-        return self._get_history_handoff_service().hydrate_history_record(entry)
 
     def _hydrate_njr_from_snapshot(
         self, snapshot: Mapping[str, Any] | None

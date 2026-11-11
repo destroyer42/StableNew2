@@ -38,7 +38,6 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Any, TypedDict
 
-from src.api.webui_api import WebUIAPI
 from src.api.webui_process_manager import (
     WebUIProcessManager,
     clear_global_webui_process_manager,
@@ -162,9 +161,7 @@ from src.utils.debug_shutdown_inspector import log_shutdown_state
 from src.utils.diagnostics_bundle_v2 import build_crash_bundle
 from src.utils.error_envelope_v2 import (
     UnifiedErrorEnvelope,
-    get_attached_envelope,
     serialize_envelope,
-    wrap_exception,
 )
 from src.utils.file_io import load_image_to_base64, read_prompt_pack
 from src.utils.process_inspector_v2 import (
@@ -319,30 +316,6 @@ class CancelToken:
 
 class AppController:
     _queue_submit_in_progress: bool = False
-
-    def on_add_to_queue_clicked(self) -> None:
-        """Fire-and-forget async boundary for Add to Queue."""
-        if getattr(self, "_queue_submit_in_progress", False):
-            self._append_log("[D21] Queue submit already in progress; ignoring duplicate request.")
-            return
-        self._queue_submit_in_progress = True
-        jobs = getattr(self, "_draft_job_bundle", [])
-        self._draft_job_bundle = []
-
-        # PR-THREAD-001: Use tracked thread for clean shutdown
-        self._spawn_tracked_thread(
-            target=self._submit_jobs_async,
-            args=(jobs,),
-            name="QueueSubmit",
-            purpose="Submit jobs to queue asynchronously"
-        )
-
-    def _submit_jobs_async(self, jobs):
-        try:
-            for job in jobs:
-                self.job_service.submit_queued(job)
-        finally:
-            self._queue_submit_in_progress = False
 
     def _spawn_tracked_thread(
         self,
@@ -513,7 +486,6 @@ class AppController:
                 structured_logger=self._structured_logger,
             )
         self._apply_initial_resource_probe_grace()
-        self._webui_api: WebUIAPI | None = None
         client = getattr(self, "_api_client", None)
         self.resource_service = resource_service or (
             WebUIResourceService(client=client) if client is not None else WebUIResourceService()
@@ -1349,17 +1321,6 @@ class AppController:
         controller.clear_draft()
         self._append_log("[controller] Job draft cleared")
 
-    def on_add_to_job(self, pack_ids: list[str]) -> None:
-        """Explicit event API: add the selected packs to the pipeline draft."""
-        self.on_pipeline_add_packs_to_job(pack_ids)
-
-    def on_update_preview(self) -> None:
-        """Explicit event API: refresh preview records."""
-        controller = self.pipeline_controller
-        if controller is None:
-            return
-        controller.refresh_preview_from_state()
-
     def _get_pipeline_stage_flags_from_state(self) -> dict[str, bool]:
         defaults = {"txt2img": True, "img2img": False, "adetailer": False, "upscale": False}
         getter = getattr(getattr(self, "app_state", None), "get_pipeline_stage_flags", None)
@@ -1470,16 +1431,6 @@ class AppController:
             "enabled": bool(self.state.current_config.randomization_enabled),
             "max_variants": max(1, int(self.state.current_config.max_variants or 1)),
         }
-
-    def _read_pack_prompts(self, pack: PromptPackInfo) -> tuple[str, str]:
-        try:
-            prompts = read_prompt_pack(pack.path)
-        except Exception:
-            prompts = []
-        if not prompts:
-            return "", ""
-        first = prompts[0]
-        return first.get("positive", "").strip(), first.get("negative", "").strip()
 
     def _start_run_v2(self, mode: RunMode, source: RunSource) -> Any:
         run_service = self._get_run_submission_service()
@@ -3090,51 +3041,6 @@ class AppController:
             self._apply_prompt_optimizer_ui_config(prompt_optimizer)
         self._append_log("[controller] Settings updated.")
 
-    def on_open_advanced_editor(self) -> None:
-        self._append_log("[controller] Opening advanced prompt editor.")
-        prompt = self._get_active_prompt_text()
-        window = getattr(self, "main_window", None)
-        if window is None:
-            return
-        try:
-            window.open_advanced_editor(
-                initial_prompt=prompt,
-                on_apply=self.on_advanced_prompt_applied,
-            )
-        except Exception:
-            pass
-
-    def on_advanced_prompt_applied(
-        self, new_prompt: str, negative_prompt: str | None = None
-    ) -> None:
-        prompt_value = new_prompt or ""
-        self._append_log("[controller] Advanced prompt applied.")
-        ws = getattr(self.app_state, "prompt_workspace_state", None)
-        if ws is not None:
-            try:
-                index = ws.get_current_slot_index()
-                ws.set_slot_text(index, prompt_value)
-            except Exception:
-                pass
-
-        window = getattr(self, "main_window", None)
-        if window is not None:
-            try:
-                window.apply_prompt_text(prompt_value, negative_prompt=negative_prompt)
-            except Exception:
-                pass
-
-        if self.app_state is not None:
-            try:
-                self.app_state.set_prompt(prompt_value)
-            except Exception:
-                pass
-            if negative_prompt is not None:
-                try:
-                    self.app_state.set_negative_prompt(negative_prompt)
-                except Exception:
-                    pass
-
     # ------------------------------------------------------------------
     # Internal helpers (state & logging)
     # ------------------------------------------------------------------
@@ -3151,20 +3057,6 @@ class AppController:
             self._update_status("Stopping...")
         elif new_state == LifecycleState.ERROR:
             self._update_status(f"Error: {error or 'Unknown error'}")
-
-    def _set_lifecycle_threadsafe(
-        self, new_state: LifecycleState, error: str | None = None
-    ) -> None:
-        """
-        Schedule lifecycle change on the Tk main thread if threaded.
-        For tests (threaded=False), apply immediately.
-        """
-        if not self.threaded:
-            self._set_lifecycle(new_state, error)
-            return
-
-        if self.main_window is not None:
-            self._ui_dispatch(lambda: self._set_lifecycle(new_state, error))
 
     def _update_status(self, text: str) -> None:
         """Update application status through AppState."""
@@ -3250,18 +3142,6 @@ class AppController:
             except Exception:
                 pass
 
-    def _append_log_threadsafe(self, text: str) -> None:
-        """
-        Schedule a log append on the Tk main thread if threaded.
-        For tests (threaded=False), apply immediately.
-        """
-        if not self.threaded:
-            self._append_log(text)
-            return
-
-        if self.main_window is not None:
-            self._ui_dispatch(lambda: self._append_log(text))
-
     def _clear_active_operation(self, expected_action: str | None = None) -> None:
         if expected_action is None or self.last_ui_action == expected_action:
             self.current_operation_label = None
@@ -3342,9 +3222,6 @@ class AppController:
             ),
         }
 
-    def get_process_auto_scanner(self) -> ProcessAutoScannerService | None:
-        return getattr(self, "process_auto_scanner", None)
-
     def _get_protected_process_pids(self) -> Iterable[int]:
         pids: set[int] = set()
 
@@ -3398,15 +3275,6 @@ class AppController:
                 self._last_diagnostics_bundle_reason = reason
                 self._append_log(f"[DIAG] Saved diagnostics bundle: {path}")
             return path
-
-    def _capture_error_envelope(
-        self, exc: Exception, *, subsystem: str = "controller"
-    ) -> UnifiedErrorEnvelope:
-        envelope = get_attached_envelope(exc)
-        if envelope is None:
-            envelope = wrap_exception(exc, subsystem=subsystem)
-        self._last_error_envelope = envelope
-        return envelope
 
     def _log_structured_error(self, envelope: UnifiedErrorEnvelope, message: str) -> None:
         log_with_ctx(
@@ -4103,32 +3971,6 @@ class AppController:
     # Run / Stop / Preview
     # ------------------------------------------------------------------
 
-    def run_pipeline(self) -> Any:
-        """Deprecated public entrypoint that now resolves to queue-backed run flow."""
-        if self.state.lifecycle == LifecycleState.RUNNING:
-            self._append_log(
-                "[controller] run_pipeline requested, but pipeline is already running."
-            )
-            return None
-
-        self._append_log(
-            "[controller] run_pipeline is deprecated; normalizing to the queue-backed start_run_v2 flow."
-        )
-        return self.start_run_v2()
-
-    def _execute_pipeline_via_runner(self, pipeline_config: Any) -> Any:
-        """DEPRECATED (PR-CORE1-12): Legacy pipeline_config execution removed.
-
-        Execute pipeline using the traditional PipelineRunner approach.
-
-        This method is DISABLED as of PR-CORE1-B2 (NJR-only execution).
-        Use PipelineController.start_pipeline_v2() which builds NJR + enqueues.
-
-        Raises:
-            RuntimeError: Always - pipeline_config execution is disabled.
-        """
-        raise RuntimeError("Legacy runner path is disabled in NJR-only mode")
-
     def _run_pipeline_via_runner_only(self, pipeline_config: Any) -> Any:
         """DEPRECATED (PR-CORE1-12): Legacy fallback execution - NO LONGER USED.
 
@@ -4165,21 +4007,6 @@ class AppController:
             except Exception:  # noqa: BLE001 - fall back to the documented default
                 pass
         return ""
-
-    def _coerce_bool(self, value: Any, default: bool = False) -> bool:
-        if value is None:
-            return default
-        if hasattr(value, "get"):
-            try:
-                return bool(value.get())
-            except Exception:
-                return default
-        return bool(value)
-
-    def _ensure_webui_api(self) -> WebUIAPI:
-        if self._webui_api is None:
-            self._webui_api = WebUIAPI(client=getattr(self, "_api_client", None))  # the configured runtime's client
-        return self._webui_api
 
     def on_run_clicked(self) -> None:
         """
@@ -4299,20 +4126,6 @@ class AppController:
 
         if self.app_state and isinstance(run_snapshot, dict):
             self.app_state.set_run_config(dict(run_snapshot))
-
-    def _set_profile_default(
-        cfg: Any,
-        attr: str,
-        value: Any,
-        baseline: Any,
-    ) -> None:
-        if value is None:
-            return
-        current = getattr(cfg, attr, None)
-        if current:
-            if current != baseline or value == baseline:
-                return
-        setattr(cfg, attr, value)
 
     def _refresh_stage_visibility(self) -> None:
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
@@ -4678,28 +4491,6 @@ class AppController:
     # Packs
     # ------------------------------------------------------------------
 
-    def _apply_base_generation_overrides(self, overrides: dict[str, Any]) -> None:
-        """Apply base-generation overrides to the pipeline sidebar."""
-        try:
-            pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-            if pipeline_tab is None:
-                return
-
-            sidebar_panel = getattr(pipeline_tab, "sidebar", None)
-            if sidebar_panel is None:
-                return
-
-            base_generation_panel = getattr(sidebar_panel, "get_base_generation_panel", lambda: None)()
-            if base_generation_panel is None:
-                return
-
-            if hasattr(base_generation_panel, "apply_from_overrides"):
-                base_generation_panel.apply_from_overrides(overrides)
-                self._append_log(f"[controller] Applied base generation overrides: {overrides}")
-
-        except Exception as e:
-            self._append_log(f"[controller] Error applying base generation overrides: {e}")
-
     def _on_pack_list_select(self, event: Any) -> None:
         if self.main_window is None:
             return
@@ -4903,37 +4694,6 @@ class AppController:
                 setattr(cfg, attr, value)
             self._append_log(f"[controller] Config updated: {field}={value}")
 
-    def _get_gui_overrides_for_pipeline(self) -> dict[str, Any]:
-        """Return GUI state as a dict for the PipelineController's config assembler.
-
-        This method is wired to PipelineController.get_gui_overrides to bridge
-        the GUI state (via get_current_config) to the assembler's input format.
-        """
-        current = self.get_current_config()
-        pack = self._get_selected_pack()
-        prompt = self._get_active_prompt_text() or self._resolve_prompt_from_pack(pack) or ""
-        if not prompt:
-            prompt = (pack.name if pack else current.get("preset_name")) or "StableNew GUI Run"
-
-        # Get negative prompt from AppStateV2 (not CurrentConfig)
-        negative_prompt = getattr(self.app_state, "negative_prompt", "") if self.app_state else ""
-
-        overrides = {
-            "prompt": prompt,
-            "negative_prompt": negative_prompt or "",
-            "model": current.get("model", ""),
-            "model_name": current.get("model", ""),
-            "vae_name": getattr(self.state.current_config, "vae_name", "") or "",
-            "sampler": current.get("sampler", ""),
-            "width": current.get("width", 512),
-            "height": current.get("height", 512),
-            "steps": current.get("steps", 20),
-            "cfg_scale": current.get("cfg_scale", 7.0),
-            "batch_size": 1,
-        }
-        overlay_config_in_place(overrides, self.get_current_global_prompt_policy())
-        return overrides
-
     def get_current_global_prompt_policy(self) -> dict[str, Any]:
         """Project the editable sidebar policy for compilation, never execution."""
 
@@ -4942,16 +4702,6 @@ class AppController:
             getattr(self, "config_manager", None),
             self._append_log,
         )
-
-    def build_pipeline_config_v2(self) -> DeprecatedPipelineConfigSnapshot:
-        """DEPRECATED (PR-CORE1-12): Legacy pipeline_config builder.
-
-        Build the pipeline configuration structure that drives the runner.
-
-        NOTE: Retained only for deprecated helper/test surfaces. Execution no
-        longer routes through this shape.
-        """
-        return self._build_pipeline_config()
 
     def _build_pipeline_config(self) -> DeprecatedPipelineConfigSnapshot:
         """DEPRECATED (PR-CORE1-12): Internal pipeline_config builder.
@@ -5066,21 +4816,12 @@ class AppController:
         self._append_log(f"[controller] Randomizer max variants set to {normalized}")
         self.state.current_config.max_variants = normalized
         self._update_run_config_randomizer(max_variants=normalized)
-
-    def on_matrix_base_prompt_changed(self, text: str) -> None:
-        self._append_log("[controller] Matrix base prompt changed (stub).")
         # TODO: store in matrix config.
-
-    def on_matrix_slots_changed(self) -> None:
-        self._append_log("[controller] Matrix slots changed (stub).")
         # TODO: store in matrix config.
 
     # ------------------------------------------------------------------
     # Preview / Right Zone
     # ------------------------------------------------------------------
-
-    def on_request_preview_refresh(self) -> None:
-        self._append_log("[controller] Preview refresh requested (stub).")
         # TODO: set preview_label image or text based on latest run or preview.
 
     def _empty_resource_map(self) -> dict[str, list[Any]]:
@@ -5105,9 +4846,6 @@ class AppController:
             return
         self._runtime_projection_coordinator.publish_webui_resources(resources)
         self.generation_profiles.on_resources_updated(resources)
-
-    def _apply_webui_resources(self, resources: dict[str, list[Any]] | None) -> None:
-        self._on_webui_resources_updated(resources)
 
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
         """Refresh resources from WebUI API and update GUI dropdowns.
