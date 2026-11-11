@@ -435,13 +435,61 @@ def test_get_recent_svd_history_extracts_variant_details(tmp_path) -> None:
 
     records = controller.get_recent_svd_history()
 
-    assert len(records) == 1
-    assert records[0]["source_image_path"] == str(source_path)
-    assert records[0]["video_path"] == str(video_path)
-    assert records[0]["model_id"] == "stabilityai/stable-video-diffusion-img2vid-xt"
-    assert records[0]["postprocess_applied"] == ["interpolation", "upscale"]
-    assert records[0]["postprocess_output_frame_count"] == 49
-    assert records[0]["postprocess_output_width"] == 2048
+    assert records == [
+        {
+            "job_id": "job-svd-1",
+            "status": JobStatus.COMPLETED.value,
+            "created_at": entry.created_at,
+            "started_at": entry.started_at,
+            "completed_at": entry.completed_at,
+            "source_image_path": str(source_path),
+            "thumbnail_path": str(preview_path),
+            "video_path": str(video_path),
+            "gif_path": None,
+            "output_path": str(video_path),
+            "output_dir": str(tmp_path),
+            "manifest_path": str(manifest_path),
+            "frame_count": 25,
+            "fps": 7,
+            "model_id": "stabilityai/stable-video-diffusion-img2vid-xt",
+            "count": 1,
+            "postprocess": {
+                "applied": ["interpolation", "upscale"],
+                "input_frame_count": 25,
+                "output_frame_count": 49,
+                "output_width": 2048,
+                "output_height": 1152,
+            },
+            "postprocess_applied": ["interpolation", "upscale"],
+            "postprocess_stage_count": 2,
+            "postprocess_input_frame_count": 25,
+            "postprocess_output_frame_count": 49,
+            "postprocess_output_width": 2048,
+            "postprocess_output_height": 1152,
+        }
+    ]
+
+
+def test_get_recent_svd_history_preserves_order_and_limit() -> None:
+    artifact = {"svd_native_artifact": {"output_paths": ["frame.png"]}}
+    old = datetime(2026, 10, 1)
+    new = datetime(2026, 10, 2)
+    controller = AppController.__new__(AppController)
+    controller.app_state = SimpleNamespace(
+        history_items=[
+            SimpleNamespace(job_id="older", created_at=old, result=artifact),
+            SimpleNamespace(job_id="no-video", completed_at=new, result={}),
+            SimpleNamespace(job_id="started", created_at=old, started_at=new, result=artifact),
+            SimpleNamespace(job_id="completed", completed_at=new, result=artifact),
+        ]
+    )
+
+    assert [row["job_id"] for row in controller.get_recent_svd_history()] == [
+        "started",
+        "completed",
+        "older",
+    ]
+    assert [row["job_id"] for row in controller.get_recent_svd_history(limit=0)] == ["started"]
 
 
 def test_get_recent_svd_history_falls_back_to_manifest_when_summary_missing(tmp_path) -> None:

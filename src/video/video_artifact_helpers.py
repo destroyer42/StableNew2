@@ -99,6 +99,70 @@ def bundle_from_execution_result(execution_result: VideoExecutionResult) -> dict
     )
 
 
+def _result_metadata(result: dict[str, Any]) -> dict[str, Any] | None:
+    metadata = result.get("metadata")
+    if isinstance(metadata, dict):
+        return metadata
+    if isinstance(metadata, list):
+        for item in reversed(metadata):
+            if isinstance(item, dict):
+                return item
+    return None
+
+
+def history_video_artifact_summary(
+    result: Any,
+    *,
+    preferred_stage: str | None = None,
+) -> dict[str, Any] | None:
+    """Read the artifact summary used by history handoffs and SVD history.
+
+    Older stored jobs may use backend aggregates or legacy stage-specific keys.
+    A preferred stage selects that stage within each aggregate where present.
+    """
+    preferred = str(preferred_stage or "").strip()
+    metadata = _result_metadata(result) if isinstance(result, dict) else None
+    if metadata is None:
+        metadata = {}
+
+    video_artifacts = metadata.get("video_artifacts")
+    if isinstance(video_artifacts, dict):
+        if preferred and isinstance(video_artifacts.get(preferred), dict):
+            return dict(video_artifacts[preferred])
+        for aggregate in video_artifacts.values():
+            if isinstance(aggregate, dict):
+                return dict(aggregate)
+
+    primary_artifact = metadata.get("video_primary_artifact")
+    if isinstance(primary_artifact, dict):
+        if not preferred or str(primary_artifact.get("stage") or "").strip() == preferred:
+            return dict(primary_artifact)
+
+    video_backend_results = metadata.get("video_backend_results")
+    if isinstance(video_backend_results, dict):
+        if preferred and isinstance(video_backend_results.get(preferred), dict):
+            return dict(video_backend_results[preferred])
+        for aggregate in video_backend_results.values():
+            if isinstance(aggregate, dict):
+                return dict(aggregate)
+
+    legacy_keys: list[str] = []
+    if preferred:
+        legacy_keys.append(f"{preferred}_artifact")
+    legacy_keys.extend(["svd_native_artifact", "animatediff_artifact"])
+    seen: set[str] = set()
+    for key in legacy_keys:
+        if key in seen:
+            continue
+        seen.add(key)
+        aggregate = metadata.get(key)
+        if isinstance(aggregate, dict):
+            return dict(aggregate)
+        if isinstance(result, dict) and isinstance(result.get(key), dict):
+            return dict(result[key])
+    return None
+
+
 def video_bundle_from_result(result: Any) -> dict[str, Any] | None:
     """The canonical video-artifact bundle a persisted job result carries, or ``None``.
 
@@ -112,10 +176,8 @@ def video_bundle_from_result(result: Any) -> dict[str, Any] | None:
     bundle = result.get("video_bundle")
     if isinstance(bundle, dict) and bundle:
         return dict(bundle)
-    metadata = result.get("metadata")
-    if isinstance(metadata, list):
-        metadata = next((item for item in reversed(metadata) if isinstance(item, dict)), None)
-    if not isinstance(metadata, dict):
+    metadata = _result_metadata(result)
+    if metadata is None:
         return None
     for key in ("video_primary_artifact", "video_workflow_artifact"):
         candidate = metadata.get(key)
@@ -173,5 +235,6 @@ __all__ = [
     "extract_primary_video_path",
     "extract_source_image_for_handoff",
     "extract_video_frame_paths",
+    "history_video_artifact_summary",
     "video_bundle_from_result",
 ]

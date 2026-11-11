@@ -174,6 +174,8 @@ from src.utils.process_inspector_v2 import (
 )
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils.thread_registry import get_thread_registry
+from src.video.svd_history import project_recent_svd_history
+from src.video.video_artifact_helpers import history_video_artifact_summary
 
 logger = logging.getLogger(__name__)
 
@@ -6498,18 +6500,9 @@ class AppController:
     def get_recent_svd_history(self, limit: int = 25) -> list[dict[str, Any]]:
         app_state = getattr(self, "app_state", None)
         history_items = list(getattr(app_state, "history_items", []) or [])
-        records: list[dict[str, Any]] = []
-        for entry in history_items:
-            record = self._build_svd_history_record(entry)
-            if record is not None:
-                records.append(record)
-        records.sort(
-            key=lambda item: self._history_sort_key(
-                item.get("completed_at") or item.get("started_at") or item.get("created_at")
-            ),
-            reverse=True,
+        return project_recent_svd_history(
+            history_items, limit=limit, read_manifest=self._load_svd_manifest_payload
         )
-        return records[: max(int(limit), 1)]
 
     def _iter_history_image_candidates(self, entry: Any) -> list[str]:
         candidates: list[str] = []
@@ -6566,12 +6559,7 @@ class AppController:
         bundle = result.get("video_bundle")
         if isinstance(bundle, dict):
             return dict(bundle)
-        metadata = self._extract_history_result_metadata(entry)
-        artifact = self._extract_video_artifact_summary(
-            metadata,
-            result,
-            preferred_stage=None,
-        )
+        artifact = history_video_artifact_summary(result)
         if not isinstance(artifact, dict):
             return None
         return {
@@ -6589,27 +6577,6 @@ class AppController:
             "count": artifact.get("count"),
         }
 
-    def _extract_history_result_metadata(self, entry: Any) -> dict[str, Any]:
-        result = getattr(entry, "result", None)
-        if not isinstance(result, dict):
-            return {}
-        metadata = result.get("metadata")
-        if isinstance(metadata, dict):
-            return metadata
-        if isinstance(metadata, list):
-            for item in reversed(metadata):
-                if isinstance(item, dict):
-                    return item
-        return {}
-
-    @staticmethod
-    def _history_sort_key(value: Any) -> str:
-        if value is None:
-            return ""
-        if isinstance(value, datetime):
-            return value.isoformat()
-        return str(value)
-
     @staticmethod
     def _load_svd_manifest_payload(manifest_paths: Iterable[str]) -> dict[str, Any]:
         for manifest_path in manifest_paths:
@@ -6623,194 +6590,3 @@ class AppController:
             if isinstance(payload, dict):
                 return payload
         return {}
-
-    @staticmethod
-    def _extract_video_artifact_summary(
-        metadata: dict[str, Any],
-        result: dict[str, Any] | None,
-        *,
-        preferred_stage: str | None = None,
-    ) -> dict[str, Any] | None:
-        preferred = str(preferred_stage or "").strip()
-
-        video_artifacts = metadata.get("video_artifacts")
-        if isinstance(video_artifacts, dict):
-            if preferred and isinstance(video_artifacts.get(preferred), dict):
-                return dict(video_artifacts[preferred])
-            for aggregate in video_artifacts.values():
-                if isinstance(aggregate, dict):
-                    return dict(aggregate)
-
-        primary_artifact = metadata.get("video_primary_artifact")
-        if isinstance(primary_artifact, dict):
-            if not preferred or str(primary_artifact.get("stage") or "").strip() == preferred:
-                return dict(primary_artifact)
-
-        video_backend_results = metadata.get("video_backend_results")
-        if isinstance(video_backend_results, dict):
-            if preferred and isinstance(video_backend_results.get(preferred), dict):
-                return dict(video_backend_results[preferred])
-            for aggregate in video_backend_results.values():
-                if isinstance(aggregate, dict):
-                    return dict(aggregate)
-
-        legacy_keys: list[str] = []
-        if preferred:
-            legacy_keys.append(f"{preferred}_artifact")
-        legacy_keys.extend(["svd_native_artifact", "animatediff_artifact"])
-        seen: set[str] = set()
-        for key in legacy_keys:
-            if key in seen:
-                continue
-            seen.add(key)
-            aggregate = metadata.get(key)
-            if isinstance(aggregate, dict):
-                return dict(aggregate)
-            if isinstance(result, dict) and isinstance(result.get(key), dict):
-                return dict(result[key])
-        return None
-
-    def _build_svd_history_record(self, entry: Any) -> dict[str, Any] | None:
-        metadata = self._extract_history_result_metadata(entry)
-        result = getattr(entry, "result", None)
-        artifact = self._extract_video_artifact_summary(
-            metadata,
-            result if isinstance(result, dict) else None,
-            preferred_stage="svd_native",
-        )
-
-        variants = []
-        if isinstance(result, dict):
-            raw_variants = result.get("variants")
-            if isinstance(raw_variants, list):
-                variants = [item for item in raw_variants if isinstance(item, dict)]
-        primary_variant = variants[0] if variants else {}
-        artifacts = []
-        if isinstance(artifact, dict):
-            raw_artifacts = artifact.get("artifacts")
-            if isinstance(raw_artifacts, list):
-                artifacts = [item for item in raw_artifacts if isinstance(item, dict)]
-        if not artifacts:
-            artifacts = [
-                dict(item.get("artifact"))
-                for item in variants
-                if isinstance(item.get("artifact"), dict)
-            ]
-        primary_artifact = artifacts[0] if artifacts else {}
-
-        manifest_candidates: list[str] = []
-        if isinstance(artifact, dict):
-            manifest_candidates.extend(str(item) for item in artifact.get("manifest_paths", []) if item)
-        manifest_value = primary_variant.get("manifest_path") or primary_artifact.get("manifest_path")
-        if manifest_value:
-            manifest_candidates.append(str(manifest_value))
-        manifest_payload = self._load_svd_manifest_payload(manifest_candidates)
-        manifest_artifact = (
-            dict(manifest_payload.get("artifact"))
-            if isinstance(manifest_payload.get("artifact"), dict)
-            else {}
-        )
-
-        if not isinstance(artifact, dict) and not manifest_payload and not primary_artifact:
-            return None
-
-        postprocess = primary_variant.get("postprocess")
-        if not isinstance(postprocess, dict):
-            postprocess = manifest_payload.get("postprocess") if isinstance(manifest_payload.get("postprocess"), dict) else {}
-        applied = [str(item) for item in postprocess.get("applied", []) if item]
-        input_frame_count = postprocess.get("input_frame_count")
-        output_frame_count = postprocess.get("output_frame_count")
-        output_width = postprocess.get("output_width")
-        output_height = postprocess.get("output_height")
-
-        video_paths = [str(item) for item in (artifact or {}).get("video_paths", []) if item]
-        if not video_paths:
-            video_paths = [str(item) for item in manifest_payload.get("video_paths", []) if item]
-        if not video_paths:
-            video_value = primary_variant.get("video_path")
-            if video_value:
-                video_paths = [str(video_value)]
-
-        gif_paths = [str(item) for item in (artifact or {}).get("gif_paths", []) if item]
-        if not gif_paths:
-            gif_paths = [str(item) for item in manifest_payload.get("gif_paths", []) if item]
-        if not gif_paths:
-            gif_value = primary_variant.get("gif_path")
-            if gif_value:
-                gif_paths = [str(gif_value)]
-
-        output_paths = [str(item) for item in (artifact or {}).get("output_paths", []) if item]
-        if not output_paths and isinstance(primary_artifact, dict):
-            output_paths = [str(item) for item in primary_artifact.get("output_paths", []) if item]
-        if not output_paths:
-            output_paths = [str(item) for item in manifest_payload.get("output_paths", []) if item]
-        if not output_paths:
-            output_paths = [str(item) for item in manifest_payload.get("frame_paths", []) if item]
-        if not output_paths and primary_variant.get("path"):
-            output_paths = [str(primary_variant["path"])]
-
-        manifest_paths = [str(item) for item in (artifact or {}).get("manifest_paths", []) if item]
-        if not manifest_paths:
-            manifest_paths = [str(item) for item in manifest_payload.get("manifest_paths", []) if item]
-        if not manifest_paths and manifest_value:
-            manifest_paths = [str(manifest_value)]
-
-        thumbnail_path = (
-            (artifact or {}).get("thumbnail_path")
-            or primary_variant.get("thumbnail_path")
-            or primary_artifact.get("thumbnail_path")
-            or manifest_payload.get("thumbnail_path")
-            or manifest_artifact.get("thumbnail_path")
-        )
-        source_image_path = (
-            primary_variant.get("source_image_path")
-            or primary_artifact.get("input_image_path")
-            or manifest_payload.get("source_image_path")
-            or manifest_artifact.get("input_image_path")
-        )
-        if not source_image_path:
-            snapshot = getattr(entry, "snapshot", None)
-            if isinstance(snapshot, dict):
-                normalized = snapshot.get("normalized_job")
-                if isinstance(normalized, dict):
-                    input_paths = normalized.get("input_image_paths")
-                    if isinstance(input_paths, list) and input_paths:
-                        source_image_path = input_paths[0]
-        primary_output = (
-            (video_paths[0] if video_paths else None)
-            or (gif_paths[0] if gif_paths else None)
-            or (output_paths[0] if output_paths else None)
-        )
-        output_dir = None
-        if primary_output:
-            output_dir = str(Path(primary_output).parent)
-        elif thumbnail_path:
-            output_dir = str(Path(thumbnail_path).parent)
-        elif manifest_paths:
-            output_dir = str(Path(manifest_paths[0]).parent.parent)
-
-        return {
-            "job_id": getattr(entry, "job_id", ""),
-            "status": getattr(getattr(entry, "status", None), "value", str(getattr(entry, "status", ""))),
-            "created_at": getattr(entry, "created_at", None),
-            "started_at": getattr(entry, "started_at", None),
-            "completed_at": getattr(entry, "completed_at", None),
-            "source_image_path": str(source_image_path) if source_image_path else None,
-            "thumbnail_path": str(thumbnail_path) if thumbnail_path else None,
-            "video_path": video_paths[0] if video_paths else None,
-            "gif_path": gif_paths[0] if gif_paths else None,
-            "output_path": primary_output,
-            "output_dir": output_dir,
-            "manifest_path": manifest_paths[0] if manifest_paths else None,
-            "frame_count": primary_variant.get("frame_count") or manifest_payload.get("frame_count"),
-            "fps": primary_variant.get("fps") or manifest_payload.get("fps"),
-            "model_id": primary_variant.get("model_id") or manifest_payload.get("model_id"),
-            "count": (artifact or {}).get("count") or manifest_payload.get("count") or len(output_paths),
-            "postprocess": postprocess or None,
-            "postprocess_applied": applied,
-            "postprocess_stage_count": len(applied),
-            "postprocess_input_frame_count": input_frame_count,
-            "postprocess_output_frame_count": output_frame_count,
-            "postprocess_output_width": output_width,
-            "postprocess_output_height": output_height,
-        }
