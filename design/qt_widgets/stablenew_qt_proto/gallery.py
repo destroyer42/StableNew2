@@ -428,7 +428,11 @@ class ComponentsPage(QScrollArea):
             row.add(AssetTile(card_info(session, key), pixmap))
         card.add(row)
         card.add(SourceIdentityBadge("history:ridge-17"))
-        card.add(SourceIdentityBadge("history:missing", session.catalog.get("history:missing").availability))
+        card.add(
+            SourceIdentityBadge(
+                "history:missing", session.catalog.get("history:missing").availability
+            )
+        )
         card.add(AssetTile(card_info(session, "history:ridge-17"), None, grid=False))
         root.addWidget(card)
 

@@ -6,6 +6,7 @@ may be decoded. A hidden, missing, unsupported or media-less record is never pas
 
 from __future__ import annotations
 
+import copy
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -54,14 +55,14 @@ from .edit_components import CompareViewer, ImageCanvas, ZoomControls, motif_ima
 from .library_domain import (
     ACTION_LABELS,
     HANDOFF_ACTIONS,
-    AssetKind,
     SCOPE_LABELS,
-    SEMANTIC_UNAVAILABLE,
     SCOPE_SHORT,
+    SEMANTIC_UNAVAILABLE,
     SIMILARITY_LABEL,
     ActionEligibility,
     ActionId,
     AssetGroup,
+    AssetKind,
     AssetRecord,
     Availability,
     Catalog,
@@ -75,7 +76,7 @@ from .library_domain import (
     relations,
     scope_count,
 )
-from .library_session import LibrarySession, LearningProposal, PlacementProposal
+from .library_session import LearningProposal, LibrarySession, PlacementProposal
 from .motion_components import ElidedLabel
 from .tokens import COLORS, RADIUS, SPACE
 
@@ -218,10 +219,9 @@ def card_info(session: LibrarySession, key: str) -> CardInfo:
     )
 
 
-def _font(base: QFont, delta: int = 0, bold: bool = False) -> QFont:
-    font = QFont(base)
-    if delta:
-        font.setPointSizeF(max(7.0, font.pointSizeF() + delta))
+def _font(base: QFont, bold: bool = False) -> QFont:
+    """The theme's own font, optionally bold. Size and family always come from the theme, never from here."""
+    font = copy.copy(base)
     font.setBold(bold)
     return font
 
@@ -253,7 +253,9 @@ def paint_card(
     painter.drawRoundedRect(QRectF(preview), 4, 4)
     if pixmap is not None and not pixmap.isNull():
         scaled = pixmap.scaled(
-            preview.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+            preview.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
         )
         painter.drawPixmap(
             preview.x() + (preview.width() - scaled.width()) // 2,
@@ -262,13 +264,17 @@ def paint_card(
         )
     else:
         painter.setPen(QColor(COLORS.muted))
-        painter.setFont(_font(base_font, -1))
+        painter.setFont(_font(base_font))
         text = info.media_note or "Loading…"
         painter.drawText(preview, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, text)
     # Selection order, favorite and collection membership are three different signals.
-    painter.setFont(_font(base_font, -1, True))
+    painter.setFont(_font(base_font, True))
     if selected:
-        badge = QRect(rect.x() + 6, rect.y() + 6, 22, 20) if grid else QRect(rect.x() + 6, rect.y() + 14, 22, 22)
+        badge = (
+            QRect(rect.x() + 6, rect.y() + 6, 22, 20)
+            if grid
+            else QRect(rect.x() + 6, rect.y() + 14, 22, 22)
+        )
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(COLORS.accent))
         painter.drawRoundedRect(QRectF(badge), 6, 6)
@@ -276,12 +282,16 @@ def paint_card(
         painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, str(info.order))
     painter.setPen(QColor(COLORS.accent))
     if grid:
-        marks = ("★ " if info.favorite else "") + (f"▤{info.collections}" if info.collections else "")
+        marks = ("★ " if info.favorite else "") + (
+            f"▤{info.collections}" if info.collections else ""
+        )
         if marks:
             painter.setBrush(QColor(COLORS.background))
             chip = QRect(preview.right() - 46, preview.bottom() - 18, 46, 18)
-            painter.drawText(chip, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, marks.strip())
-    fm_font = _font(base_font, 0, True)
+            painter.drawText(
+                chip, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, marks.strip()
+            )
+    fm_font = _font(base_font, True)
     painter.setFont(fm_font)
     fm = QFontMetrics(fm_font)
     painter.setPen(QColor(COLORS.text))
@@ -290,7 +300,7 @@ def paint_card(
         y = preview.bottom() + 4
         painter.drawText(QRect(text_x, y, width, fm.height()), Qt.AlignmentFlag.AlignLeft,
                          fm.elidedText(info.label, Qt.TextElideMode.ElideRight, width))  # fmt: skip
-        small = _font(base_font, -1)
+        small = _font(base_font)
         sm = QFontMetrics(small)
         painter.setFont(small)
         painter.setPen(QColor(COLORS.muted))
@@ -311,7 +321,7 @@ def paint_card(
         y = rect.y() + 6
         painter.drawText(QRect(text_x, y, max(20, width), fm.height()), Qt.AlignmentFlag.AlignLeft,
                          fm.elidedText(info.label, Qt.TextElideMode.ElideRight, max(20, width)))  # fmt: skip
-        small = _font(base_font, -1)
+        small = _font(base_font)
         sm = QFontMetrics(small)
         painter.setFont(small)
         painter.setPen(QColor(COLORS.muted))
@@ -320,7 +330,9 @@ def paint_card(
                          sm.elidedText(line2, Qt.TextElideMode.ElideRight, max(20, width)))  # fmt: skip
         warn = info.availability != Availability.AVAILABLE
         painter.setPen(QColor(COLORS.danger if warn else COLORS.muted))
-        marks = ("★ " if info.favorite else "") + (f"▤{info.collections} " if info.collections else "")
+        marks = ("★ " if info.favorite else "") + (
+            f"▤{info.collections} " if info.collections else ""
+        )
         right = QRect(rect.right() - right_w - pad, y, right_w, rect.height() - 12)
         painter.drawText(right, Qt.AlignmentFlag.AlignRight | Qt.TextFlag.TextWordWrap,
                          sm.elidedText(info.availability_text, Qt.TextElideMode.ElideRight, right_w))  # fmt: skip
@@ -351,7 +363,15 @@ class AssetTile(QWidget):
 
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt API)
         painter = QPainter(self)
-        paint_card(painter, self.rect(), self.info, self.pixmap, grid=self.grid, focus=False, base_font=self.font())
+        paint_card(
+            painter,
+            self.rect(),
+            self.info,
+            self.pixmap,
+            grid=self.grid,
+            focus=False,
+            base_font=self.font(),
+        )
         painter.end()
 
 
@@ -375,7 +395,9 @@ class AssetPageModel(QAbstractListModel):
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.AccessibleTextRole):
             info = card_info(self.session, key)
             selected = f", selected {info.order}" if info.order else ""
-            return f"{info.label}, {info.type_text}, {info.source}, {info.availability_text}{selected}"
+            return (
+                f"{info.label}, {info.type_text}, {info.source}, {info.availability_text}{selected}"
+            )
         if role == Qt.ItemDataRole.ToolTipRole:
             return f"{key}\n{card_info(self.session, key).availability_text}"
         return None
@@ -511,7 +533,11 @@ class AssetView(QListView):
             self.activated_key.emit(key)
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802 (Qt API)
-        key = self._key_at(event.pos()) if event.reason() == event.Reason.Mouse else self.current_key()
+        key = (
+            self._key_at(event.pos())
+            if event.reason() == event.Reason.Mouse
+            else self.current_key()
+        )
         if key:
             self.contextRequested.emit(key, event.globalPos())
 
@@ -561,7 +587,9 @@ class SourceIdentityBadge(ElidedLabel):
         namespace, _, record = key.partition(":")
         shown = f"{namespace} · {record}" if key else "no source selected"
         self.set_full_text(f"Source {shown}")
-        self.setAccessibleName(f"Source identity: {key or 'none'}, {AVAILABILITY_TEXT[availability]}")
+        self.setAccessibleName(
+            f"Source identity: {key or 'none'}, {AVAILABILITY_TEXT[availability]}"
+        )
         self.setProperty("level", "info" if availability == Availability.AVAILABLE else "warning")
         repolish(self)
 
@@ -587,12 +615,16 @@ class SourceScopePicker(QWidget):
         outer.addWidget(self.list, 1)
         self.combo = QComboBox()
         self.combo.setAccessibleName("Source scope")
-        self.combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
         self.combo.setMinimumContentsLength(14)
         self.combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.combo.hide()
         outer.addWidget(self.combo)
-        self.note = QLabel("Scopes filter source-identified fixtures; they are not separate repositories.")
+        self.note = QLabel(
+            "Scopes filter source-identified fixtures; they are not separate repositories."
+        )
         self.note.setProperty("role", "muted")
         self.note.setWordWrap(True)
         outer.addWidget(self.note)
@@ -621,12 +653,40 @@ class SourceScopePicker(QWidget):
             self.list.addItem(item)
             self.combo.addItem(text.strip())
 
-        for scope in (Scope.ALL, Scope.HISTORY, Scope.EDIT_PHOTO, Scope.VIDEO, Scope.MOTION, Scope.LEARNING, Scope.IMPORTED):
-            add(scope, None, f"{SCOPE_SHORT[scope]} ({scope_count(cat, org, scope)})", SCOPE_LABELS[scope])
-        add(Scope.COLLECTIONS, None, f"Collections ({scope_count(cat, org, Scope.COLLECTIONS)})", "Every asset that is in at least one collection")
+        for scope in (
+            Scope.ALL,
+            Scope.HISTORY,
+            Scope.EDIT_PHOTO,
+            Scope.VIDEO,
+            Scope.MOTION,
+            Scope.LEARNING,
+            Scope.IMPORTED,
+        ):
+            add(
+                scope,
+                None,
+                f"{SCOPE_SHORT[scope]} ({scope_count(cat, org, scope)})",
+                SCOPE_LABELS[scope],
+            )
+        add(
+            Scope.COLLECTIONS,
+            None,
+            f"Collections ({scope_count(cat, org, Scope.COLLECTIONS)})",
+            "Every asset that is in at least one collection",
+        )
         for collection in org.collections:
-            add(Scope.COLLECTIONS, collection.collection_id, f"   ▤ {collection.name} ({len(collection.members)})", f"Collection {collection.name}")
-        add(Scope.FAVORITES, None, f"Favorites ({scope_count(cat, org, Scope.FAVORITES)})", SCOPE_LABELS[Scope.FAVORITES])
+            add(
+                Scope.COLLECTIONS,
+                collection.collection_id,
+                f"   ▤ {collection.name} ({len(collection.members)})",
+                f"Collection {collection.name}",
+            )
+        add(
+            Scope.FAVORITES,
+            None,
+            f"Favorites ({scope_count(cat, org, Scope.FAVORITES)})",
+            SCOPE_LABELS[Scope.FAVORITES],
+        )
         want = (session.query.scope.value, session.query.collection)
         row = self._rows.index(want) if want in self._rows else 0
         self.list.setCurrentRow(row)
@@ -647,7 +707,12 @@ class SourceScopePicker(QWidget):
 
 # ------------------------------------------------------------------------------- filter bar
 ANY = "Any"
-DATE_CHOICES = (("Any time", None), ("Since 2026-10-10", "2026-10-10"), ("Since 2026-10-03", "2026-10-03"), ("Since 2026-10-01", "2026-10-01"))
+DATE_CHOICES = (
+    ("Any time", None),
+    ("Since 2026-10-10", "2026-10-10"),
+    ("Since 2026-10-03", "2026-10-03"),
+    ("Since 2026-10-01", "2026-10-01"),
+)
 AVAIL_CHOICES = (("Any state", None), *((AVAILABILITY_TEXT[a], a) for a in Availability))
 
 
@@ -679,12 +744,21 @@ class AssetFilterBar(QWidget):
         self.search.setPlaceholderText("Search indexed fixture fields…")
         self.search.setClearButtonEnabled(True)
         self.search.setAccessibleName("Search assets")
-        self.mode = _combo("Search mode", "Metadata and bounded prompt-prefix search. Semantic search is not available.")
+        self.mode = _combo(
+            "Search mode",
+            "Metadata and bounded prompt-prefix search. Semantic search is not available.",
+        )
         self.mode.addItem("Metadata", SearchMode.METADATA)
         self.mode.addItem("Prompt prefix", SearchMode.PROMPT_PREFIX)
         self.mode.addItem("Semantic — unavailable", None)
-        self.mode.setItemData(0, "Searches label, ID, model, workflow, kind and tags", Qt.ItemDataRole.ToolTipRole)
-        self.mode.setItemData(1, "Matches the start of the first 48 characters of a fixture prompt", Qt.ItemDataRole.ToolTipRole)
+        self.mode.setItemData(
+            0, "Searches label, ID, model, workflow, kind and tags", Qt.ItemDataRole.ToolTipRole
+        )
+        self.mode.setItemData(
+            1,
+            "Matches the start of the first 48 characters of a fixture prompt",
+            Qt.ItemDataRole.ToolTipRole,
+        )
         self.mode.setItemData(2, SEMANTIC_UNAVAILABLE, Qt.ItemDataRole.ToolTipRole)
         self.mode.model().item(2).setEnabled(False)
         self.sort = _combo("Sort order")
@@ -704,7 +778,16 @@ class AssetFilterBar(QWidget):
         self.collection = _combo("Collection")
         self.favorites = QCheckBox("Favorites only")
         self.favorites.setAccessibleName("Favorites only")
-        for widget in (self.kind, self.category, self.model, self.recency, self.availability, self.tag, self.collection, self.favorites):
+        for widget in (
+            self.kind,
+            self.category,
+            self.model,
+            self.recency,
+            self.availability,
+            self.tag,
+            self.collection,
+            self.favorites,
+        ):
             self.filters.add(widget)
         outer.addWidget(self.filters)
         self.semantics = QLabel("")
@@ -718,7 +801,17 @@ class AssetFilterBar(QWidget):
         self._timer.setInterval(120)  # a keystroke never re-queries the catalog immediately
         self._timer.timeout.connect(self.changed.emit)
         self.search.textChanged.connect(lambda _t: self._timer.start())
-        for combo in (self.mode, self.sort, self.kind, self.category, self.model, self.recency, self.availability, self.tag, self.collection):
+        for combo in (
+            self.mode,
+            self.sort,
+            self.kind,
+            self.category,
+            self.model,
+            self.recency,
+            self.availability,
+            self.tag,
+            self.collection,
+        ):
             combo.activated.connect(lambda _i: self._emit())
         self.favorites.toggled.connect(lambda _c: self._emit())
 
@@ -726,6 +819,9 @@ class AssetFilterBar(QWidget):
         if not self._loading:
             self._timer.stop()
             self.changed.emit()
+
+    def pending(self) -> bool:
+        return self._timer.isActive()
 
     def flush(self) -> None:
         """Apply a pending debounced search now (used by tests and when leaving the field)."""
@@ -738,17 +834,31 @@ class AssetFilterBar(QWidget):
         self._loading = True
         keep = self.query_changes()
         for combo, entries in (
-            (self.kind, ((ANY, None), *((k, k) for k in sorted({r.kind for r in catalog}, key=str)))),
-            (self.category, ((ANY, None), *((c, c) for c in sorted({r.category for r in catalog})))),
-            (self.model, ((ANY, None), *((m, m) for m in sorted({r.model for r in catalog if r.model})))),
+            (
+                self.kind,
+                ((ANY, None), *((k, k) for k in sorted({r.kind for r in catalog}, key=str))),
+            ),
+            (
+                self.category,
+                ((ANY, None), *((c, c) for c in sorted({r.category for r in catalog}))),
+            ),
+            (
+                self.model,
+                ((ANY, None), *((m, m) for m in sorted({r.model for r in catalog if r.model}))),
+            ),
             (self.recency, DATE_CHOICES),
             (self.availability, AVAIL_CHOICES),
             (self.tag, ((ANY, None), *((t, t) for t in session.org.all_tags()))),
-            (self.collection, ((ANY, None), *((c.name, c.collection_id) for c in session.org.collections))),
+            (
+                self.collection,
+                ((ANY, None), *((c.name, c.collection_id) for c in session.org.collections)),
+            ),
         ):
             combo.clear()
             for text, data in entries:
-                combo.addItem(f"{getattr(data, 'value', text)}" if combo is self.kind and data else text, data)
+                combo.addItem(
+                    f"{getattr(data, 'value', text)}" if combo is self.kind and data else text, data
+                )
         self.kind.setItemText(0, "Any type")
         self.category.setItemText(0, "Any source")
         self.model.setItemText(0, "Any model")
@@ -780,7 +890,9 @@ class AssetFilterBar(QWidget):
             "kinds": frozenset(AssetKind(k) for k in kinds),
             "categories": one(self.category) if self.category.count() else frozenset(),
             "models": one(self.model) if self.model.count() else frozenset(),
-            "availability": frozenset(Availability(a) for a in one(self.availability)) if self.availability.count() else frozenset(),
+            "availability": frozenset(Availability(a) for a in one(self.availability))
+            if self.availability.count()
+            else frozenset(),
             "tags": one(self.tag) if self.tag.count() else frozenset(),
             "collection": self.collection.currentData() if self.collection.count() else None,
             "date_from": self.recency.currentData() if self.recency.count() else None,
@@ -920,14 +1032,18 @@ class AssetDetailsPanel(QWidget):
         self.badge.set_identity("")
         self.title.setText("No selection")
         self.preview.setPixmap(QPixmap())
-        self.preview.setText("Select an asset to see its source identity, lineage and compatible actions.")
+        self.preview.setText(
+            "Select an asset to see its source identity, lineage and compatible actions."
+        )
         self.status.set_status("Nothing selected", "info")
         self.inspect.setEnabled(False)
         for layout in (self.facts_layout, self.related_layout):
             self._clear(layout)
         self.groups.set_groups((), "")
 
-    def show_asset(self, session: LibrarySession, key: str, media: MediaProvider, extra: str = "") -> None:
+    def show_asset(
+        self, session: LibrarySession, key: str, media: MediaProvider, extra: str = ""
+    ) -> None:
         record = session.catalog.get(key)
         availability = session.availability_of(record)
         self._key = key
@@ -936,13 +1052,22 @@ class AssetDetailsPanel(QWidget):
         pixmap = media.thumbnail(key)
         if pixmap is not None:
             self.preview.setText("")
-            self.preview.setPixmap(pixmap.scaledToWidth(min(240, max(120, self.width() - 40)), Qt.TransformationMode.SmoothTransformation))
+            self.preview.setPixmap(
+                pixmap.scaledToWidth(
+                    min(240, max(120, self.width() - 40)),
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
         else:
             _source, reason = session.media_source(key)
             self.preview.setPixmap(QPixmap())
             self.preview.setText(reason or "Loading preview…")
-        text = AVAILABILITY_TEXT[availability] + (" · Archived (simulated Photo policy)" if key in session.org.archived else "")
-        self.status.set_status(text, "success" if availability == Availability.AVAILABLE else "warning")
+        text = AVAILABILITY_TEXT[availability] + (
+            " · Archived (simulated Photo policy)" if key in session.org.archived else ""
+        )
+        self.status.set_status(
+            text, "success" if availability == Availability.AVAILABLE else "warning"
+        )
         self.inspect.setEnabled(True)
         self._clear(self.facts_layout)
         if extra:
@@ -954,12 +1079,18 @@ class AssetDetailsPanel(QWidget):
         tags = ", ".join(org.tags_of(key)) or "none"
         self.facts_layout.addWidget(_fact_label(f"Collections: {collections}"))
         self.facts_layout.addWidget(_fact_label(f"Tags: {tags}"))
-        self.facts_layout.addWidget(_fact_label(f"Favorite: {'yes' if key in org.favorites else 'no'}"))
+        self.facts_layout.addWidget(
+            _fact_label(f"Favorite: {'yes' if key in org.favorites else 'no'}")
+        )
         for line in availability_lines(session, key):
             self.facts_layout.addWidget(_fact_label(line, "muted"))
         self.groups.set_groups(groups_of(session.catalog, key), key)
         self._clear(self.related_layout)
-        rels = [r for r in relations(session.catalog, key) if not r.caveat.startswith(("Same content", SIMILARITY_LABEL))]
+        rels = [
+            r
+            for r in relations(session.catalog, key)
+            if not r.caveat.startswith(("Same content", SIMILARITY_LABEL))
+        ]
         if rels:
             head = _fact_label("Related items", "section")
             self.related_layout.addWidget(head)
@@ -984,7 +1115,9 @@ def availability_lines(session: LibrarySession, key: str) -> list[str]:
                    f"{record.availability.value}.")  # fmt: skip
     observations = session.catalog.observations_of(key)
     if observations:
-        out.append(f"Referenced by {len(observations)} research observation(s): {', '.join(observations)}.")
+        out.append(
+            f"Referenced by {len(observations)} research observation(s): {', '.join(observations)}."
+        )
     return out
 
 
@@ -1047,7 +1180,9 @@ class AssetActionMenu(QWidget):
             button.setToolTip(note or ACTION_LABELS[item.action])
 
 
-def build_action_menu(items: tuple[ActionEligibility, ...], parent: QWidget, trigger: Callable[[str], None]) -> QMenu:
+def build_action_menu(
+    items: tuple[ActionEligibility, ...], parent: QWidget, trigger: Callable[[str], None]
+) -> QMenu:
     menu = QMenu(parent)
     menu.setToolTipsVisible(True)
     menu.setAccessibleName("Asset actions")
@@ -1093,7 +1228,9 @@ class MultiSelectionStrip(ActionStrip):
     def set_selection(self, session: LibrarySession) -> None:
         keys = session.selection
         if not keys:
-            self.status.setText("No selection · click an asset; Ctrl+click adds, Shift+click selects a range")
+            self.status.setText(
+                "No selection · click an asset; Ctrl+click adds, Shift+click selects a range"
+            )
             self.status.setToolTip("")
         else:
             report = session.selection_report()
@@ -1102,7 +1239,9 @@ class MultiSelectionStrip(ActionStrip):
             more = f" +{len(keys) - self.CHIPS} more" if len(keys) > self.CHIPS else ""
             away = f" · {off} not on this page" if off else ""
             self.status.setText(f"{len(keys)} selected{away}: {shown}{more}")
-            self.status.setToolTip("\n".join(f"{i}. {k} — {report[k].value}" for i, k in enumerate(keys, 1)))
+            self.status.setToolTip(
+                "\n".join(f"{i}. {k} — {report[k].value}" for i, k in enumerate(keys, 1))
+            )
         self.clear.setEnabled(bool(keys))
         self.actions.setEnabled(bool(keys))
         self.organize.setEnabled(bool(keys))
@@ -1154,7 +1293,9 @@ class CollectionPanel(QWidget):
         for button in (self.new, self.rename, self.add, self.remove):
             grid.add(button)
         col.addWidget(grid)
-        note = _fact_label("Removing a reference never deletes, moves or changes the source artifact.", "muted")
+        note = _fact_label(
+            "Removing a reference never deletes, moves or changes the source artifact.", "muted"
+        )
         col.addWidget(note)
 
 
@@ -1178,7 +1319,12 @@ class OrganizePanel(QWidget):
         row.addWidget(self.favorite)
         row.addWidget(self.unfavorite)
         col.addLayout(row)
-        col.addWidget(_fact_label("A favorite is not a rating, a selection, a parent link or Learning evidence.", "muted"))
+        col.addWidget(
+            _fact_label(
+                "A favorite is not a rating, a selection, a parent link or Learning evidence.",
+                "muted",
+            )
+        )
         col.addWidget(_fact_label("History", "section"))
         row2 = QHBoxLayout()
         self.undo = QPushButton("Undo")
@@ -1244,7 +1390,9 @@ class CompatibilityReview(QDialog):
         head.setProperty("role", "section")
         head.setWordWrap(True)
         outer.addWidget(head)
-        counts = QLabel(f"{len(proposal.items)} selected · {len(eligibility.eligible)} can be placed · {len(eligibility.blocked)} blocked")
+        counts = QLabel(
+            f"{len(proposal.items)} selected · {len(eligibility.eligible)} can be placed · {len(eligibility.blocked)} blocked"
+        )
         counts.setProperty("role", "muted")
         outer.addWidget(counts)
         scroll = QScrollArea()
@@ -1264,7 +1412,11 @@ class CompatibilityReview(QDialog):
             col.addWidget(banner)
         if proposal.needs_replace:
             banner = NoticeBanner()
-            banner.set_message("Unsaved work", f"{proposal.replace_detail} Replace or Cancel; Cancel changes nothing.", "warning")
+            banner.set_message(
+                "Unsaved work",
+                f"{proposal.replace_detail} Replace or Cancel; Cancel changes nothing.",
+                "warning",
+            )
             banner.setAccessibleName("Replacement warning")
             col.addWidget(banner)
         col.addWidget(_fact_label("Can be placed (selected order)", "section"))
@@ -1347,7 +1499,11 @@ class CompatibilityReview(QDialog):
             self.eligible.blockSignals(True)
             for i in range(self.eligible.count()):
                 item = self.eligible.item(i)
-                if item is not changed and item.checkState() == Qt.CheckState.Checked and len(self._checked()) > cap:
+                if (
+                    item is not changed
+                    and item.checkState() == Qt.CheckState.Checked
+                    and len(self._checked()) > cap
+                ):
                     item.setCheckState(Qt.CheckState.Unchecked)
             self.eligible.blockSignals(False)
         self.buttons["narrow"].setEnabled(bool(self._checked()))
@@ -1362,7 +1518,13 @@ class CompatibilityReview(QDialog):
 
 
 def proposal_text(proposal: LearningProposal) -> str:
-    lines = [f"{proposal.proposal_id} · {proposal.status}", "", f"Intended research context: {proposal.context}", "", "Sources (selected order)"]
+    lines = [
+        f"{proposal.proposal_id} · {proposal.status}",
+        "",
+        f"Intended research context: {proposal.context}",
+        "",
+        "Sources (selected order)",
+    ]
     for n, s in enumerate(proposal.sources, 1):
         lines += [
             f"{n}. {s.key}  [{s.kind}]  namespace {s.namespace}",
@@ -1386,7 +1548,11 @@ class LearningProposalDialog(QDialog):
         self.resize(620, 520)
         col = QVBoxLayout(self)
         banner = NoticeBanner()
-        banner.set_message("Not a study", "A non-executable, inspectable placement summary. Nothing was submitted.", "warning")
+        banner.set_message(
+            "Not a study",
+            "A non-executable, inspectable placement summary. Nothing was submitted.",
+            "warning",
+        )
         col.addWidget(banner)
         self.text = QPlainTextEdit(proposal_text(proposal))
         self.text.setReadOnly(True)
@@ -1404,7 +1570,9 @@ class InspectDialog(QDialog):
 
     compareRequested = Signal(str)
 
-    def __init__(self, session: LibrarySession, media: MediaProvider, key: str, parent: QWidget | None = None):
+    def __init__(
+        self, session: LibrarySession, media: MediaProvider, key: str, parent: QWidget | None = None
+    ):
         super().__init__(parent)
         self.key = key
         record = session.catalog.get(key)
@@ -1451,7 +1619,9 @@ class InspectDialog(QDialog):
 class CompareDialog(QDialog):
     """Direct-parent comparison of two permitted stills. Arbitrary or video pairs are never offered."""
 
-    def __init__(self, session: LibrarySession, media: MediaProvider, key: str, parent: QWidget | None = None):
+    def __init__(
+        self, session: LibrarySession, media: MediaProvider, key: str, parent: QWidget | None = None
+    ):
         super().__init__(parent)
         self.setWindowTitle("Compare with parent")
         self.setAccessibleName("Parent comparison")
@@ -1465,7 +1635,12 @@ class CompareDialog(QDialog):
             raise ValueError("A comparison image is not permitted.")
         self.viewer.set_pair(left, right, f"Parent {parent_record.key}", f"Derived {child.key}")
         col.addWidget(self.viewer, 1)
-        col.addWidget(_fact_label("Direct parent only, established by the recorded lineage. This is not an arbitrary comparison.", "muted"))
+        col.addWidget(
+            _fact_label(
+                "Direct parent only, established by the recorded lineage. This is not an arbitrary comparison.",
+                "muted",
+            )
+        )
         self.close_button = QPushButton("Close")
         self.close_button.clicked.connect(self.close)
         col.addWidget(self.close_button, 0, Qt.AlignmentFlag.AlignRight)

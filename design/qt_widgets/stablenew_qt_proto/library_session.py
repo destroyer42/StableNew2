@@ -21,8 +21,8 @@ from .library_domain import (
     ACTION_ORDER,
     HANDOFF_ACTIONS,
     MAX_COLLECTION_NAME,
-    MEDIA_KINDS,
     MAX_TAG,
+    MEDIA_KINDS,
     UNDO_LIMIT,
     ActionEligibility,
     ActionId,
@@ -37,8 +37,8 @@ from .library_domain import (
     Scope,
     SelectionStatus,
     ViewState,
-    evaluate_action,
     availability_reason,
+    evaluate_action,
     exact_groups,
     fixture_catalog,
     initial_org,
@@ -240,7 +240,10 @@ class LibrarySession:
     def result(self) -> QueryResult:
         token = (self.query, self.org, tuple(sorted(self.overrides.items())))
         if self._cache is None or self._cache[0] != token:
-            self._cache = (token, run_query(self.catalog, self.org, self.query, self.availability_of))
+            self._cache = (
+                token,
+                run_query(self.catalog, self.org, self.query, self.availability_of),
+            )
         return self._cache[1]
 
     def set_query(self, **changes) -> QueryResult:
@@ -310,6 +313,8 @@ class LibrarySession:
             raise LibraryRefused(f"Not in the current selection: {', '.join(unknown)}.")
         keep = set(keys)
         self.selection = tuple(k for k in self.selection if k in keep)
+        if self.focus not in self.selection:
+            self.focus = self.selection[-1] if self.selection else None
         self._touch()
         return self.selection
 
@@ -371,7 +376,9 @@ class LibrarySession:
             collections=(*self.org.collections, collection),
             next_collection=self.org.next_collection + 1,
         )
-        self._apply(org, f"Created collection '{name}' with {len(collection.members)} reference(s).")
+        self._apply(
+            org, f"Created collection '{name}' with {len(collection.members)} reference(s)."
+        )
         return collection
 
     def rename_collection(self, collection_id: str, name: str) -> Collection:
@@ -387,7 +394,9 @@ class LibrarySession:
         new = replace(old, name=name)
         org = replace(
             self.org,
-            collections=tuple(new if c.collection_id == collection_id else c for c in self.org.collections),
+            collections=tuple(
+                new if c.collection_id == collection_id else c for c in self.org.collections
+            ),
         )
         self._apply(org, f"Renamed '{old.name}' to '{name}'. No asset was modified.")
         return new
@@ -402,12 +411,15 @@ class LibrarySession:
         new = replace(collection, members=(*collection.members, *fresh))
         org = replace(
             self.org,
-            collections=tuple(new if c.collection_id == collection_id else c for c in self.org.collections),
+            collections=tuple(
+                new if c.collection_id == collection_id else c for c in self.org.collections
+            ),
         )
         skipped = len(set(keys)) - len(fresh)
         extra = f" {skipped} already a member." if skipped else ""
         return self._apply(
-            org, f"Added {len(fresh)} reference(s) to '{collection.name}'.{extra} Source artifacts are unchanged."
+            org,
+            f"Added {len(fresh)} reference(s) to '{collection.name}'.{extra} Source artifacts are unchanged.",
         )
 
     def remove_from_collection(self, collection_id: str, keys: tuple[str, ...]) -> str:
@@ -419,7 +431,9 @@ class LibrarySession:
         new = replace(collection, members=tuple(k for k in collection.members if k not in drop))
         org = replace(
             self.org,
-            collections=tuple(new if c.collection_id == collection_id else c for c in self.org.collections),
+            collections=tuple(
+                new if c.collection_id == collection_id else c for c in self.org.collections
+            ),
         )
         return self._apply(
             org,
@@ -493,12 +507,18 @@ class LibrarySession:
         motion = self.destinations.motion
         if motion is not None and motion.assembly.draft is not None:
             in_assembly = frozenset(i.clip_id for i in motion.assembly.draft.items)
-        return RuleContext(self.catalog, self.org, self.availability_of, self.query.collection, in_assembly)
+        return RuleContext(
+            self.catalog, self.org, self.availability_of, self.query.collection, in_assembly
+        )
 
     def evaluate(self, action: ActionId, keys: tuple[str, ...] | None = None) -> ActionEligibility:
-        return evaluate_action(action, self.selection if keys is None else tuple(keys), self._context())
+        return evaluate_action(
+            action, self.selection if keys is None else tuple(keys), self._context()
+        )
 
-    def available_actions(self, keys: tuple[str, ...] | None = None) -> tuple[ActionEligibility, ...]:
+    def available_actions(
+        self, keys: tuple[str, ...] | None = None
+    ) -> tuple[ActionEligibility, ...]:
         return tuple(self.evaluate(a, keys) for a in ACTION_ORDER)
 
     # ------------------------------------------------------------------------------ placement
@@ -543,7 +563,10 @@ class LibrarySession:
         return (
             ("Source identity", record.key),
             ("Source namespace", record.namespace),
-            ("Known lineage", f"parent {record.parent.key}" if record.parent else "no parent recorded"),
+            (
+                "Known lineage",
+                f"parent {record.parent.key}" if record.parent else "no parent recorded",
+            ),
             ("Media availability", self.availability_of(record).value),
         )
 
@@ -560,18 +583,28 @@ class LibrarySession:
             copied=self._identity(record),
             preserved=("Recorded mock candidates and baselines",)
             + (("The open draft for this source (kept exactly as it is)",) if same else ()),
-            reset=() if same else ("New editable draft: mode, prompt, regions, mask and geometry start at defaults",),
+            reset=()
+            if same
+            else (
+                "New editable draft: mode, prompt, regions, mask and geometry start at defaults",
+            ),
             discarded=tuple(
                 x
                 for x in (
-                    "Current Preview and its approval" if edit.preview is not None and not same else "",
+                    "Current Preview and its approval"
+                    if edit.preview is not None and not same
+                    else "",
                     "Unsaved edit-draft changes" if needs else "",
                 )
                 if x
             ),
-            notes=("Edit derives its own lineage display from its fixture; it inherits no approval.",),
+            notes=(
+                "Edit derives its own lineage display from its fixture; it inherits no approval.",
+            ),
             needs_replace=needs,
-            replace_detail=f"Open Edit draft on {edit.draft.source_key} has unsaved changes." if needs else "",
+            replace_detail=f"Open Edit draft on {edit.draft.source_key} has unsaved changes."
+            if needs
+            else "",
             destination_revision=edit.revision,
         )
 
@@ -591,7 +624,11 @@ class LibrarySession:
         if record.kind.value == "Motion reference":
             if draft is None or not draft.source_key:
                 blocked = tuple(
-                    replace(v, ok=False, reason="Choose a Quick Clip source image first; a motion reference only adds to a draft.")
+                    replace(
+                        v,
+                        ok=False,
+                        reason="Choose a Quick Clip source image first; a motion reference only adds to a draft.",
+                    )
                     for v in eligibility.verdicts
                 )
                 return replace(base, eligibility=replace(eligibility, verdicts=blocked))
@@ -616,11 +653,15 @@ class LibrarySession:
             preserved=("Selected workflow" + (f" ({workflow.label})" if draft else ""),)
             if draft
             else (),
-            reset=() if same else ("Prompt, seed intent, frames and reference start from a fresh draft",),
+            reset=()
+            if same
+            else ("Prompt, seed intent, frames and reference start from a fresh draft",),
             discarded=tuple(
                 x
                 for x in (
-                    "Preview approval" if motion.previews.get("quick") is not None and not same else "",
+                    "Preview approval"
+                    if motion.previews.get("quick") is not None and not same
+                    else "",
                     "Experimental consent" if not same else "",
                     "Unsaved Motion draft changes" if needs and quick.dirty else "",
                 )
@@ -628,7 +669,9 @@ class LibrarySession:
             ),
             notes=common,
             needs_replace=needs,
-            replace_detail=f"The Motion Quick Clip draft on {draft.source_key} will be replaced." if needs else "",
+            replace_detail=f"The Motion Quick Clip draft on {draft.source_key} will be replaced."
+            if needs
+            else "",
             destination_revision=quick.revision,
         )
 
@@ -648,7 +691,9 @@ class LibrarySession:
             copied=(*self._identity(record), ("Intended source type", "storyboard source image")),
             preserved=("Existing shots, prompts and anchors",) if draft else (),
             reset=(),
-            discarded=("Storyboard Preview approval and experimental consent (the draft revision changes)",),
+            discarded=(
+                "Storyboard Preview approval and experimental consent (the draft revision changes)",
+            ),
             notes=(change,),
             destination_revision=motion.story.revision,
         )
@@ -670,18 +715,23 @@ class LibrarySession:
         eligibility = replace(eligibility, verdicts=tuple(verdicts))
         existing = len(motion.assembly.draft.items) if motion.assembly.draft else 0
         copied = tuple(
-            (f"Clip {n}", f"{k} (selected order {n})") for n, k in enumerate(eligibility.eligible, 1)
+            (f"Clip {n}", f"{k} (selected order {n})")
+            for n, k in enumerate(eligibility.eligible, 1)
         )
         return replace(
             base,
             eligibility=eligibility,
             copied=copied,
-            preserved=(f"The {existing} item(s) already in the assembly, their order, trims, profile and audio",),
+            preserved=(
+                f"The {existing} item(s) already in the assembly, their order, trims, profile and audio",
+            ),
             reset=(),
             discarded=("Assembly Preview approval (the assembly changes)",)
             if motion.assembly_preview is not None
             else (),
-            notes=("Clips are appended in the selected order, never sorted by name. Nothing is assembled.",),
+            notes=(
+                "Clips are appended in the selected order, never sorted by name. Nothing is assembled.",
+            ),
             destination_revision=motion.assembly.revision,
         )
 
@@ -692,7 +742,10 @@ class LibrarySession:
         record = self._rec(base.eligibility.eligible[0])
         pack = PACK_BY_KEY.get(record.recipe_pack or "")
         if pack is None:
-            blocked = tuple(replace(v, ok=False, reason="Create has no fixture for this recipe route.") for v in base.eligibility.verdicts)
+            blocked = tuple(
+                replace(v, ok=False, reason="Create has no fixture for this recipe route.")
+                for v in base.eligibility.verdicts
+            )
             return replace(base, eligibility=replace(base.eligibility, verdicts=blocked))
         same = create.draft.source_key == pack.key and not create.pack_modified
         dirty = create.draft.fingerprint() != CreateDraft().fingerprint()
@@ -719,27 +772,60 @@ class LibrarySession:
             preserved=("Every source record, its hash, job lineage and observation IDs, unmerged",),
             reset=(),
             discarded=(),
-            notes=("Creates an inspectable, non-executable proposal only. No study, experiment or rating is created.",),
+            notes=(
+                "Creates an inspectable, non-executable proposal only. No study, experiment or rating is created.",
+            ),
             destination_revision=len(self.learning_proposals),
         )
 
-    def commit(self, proposal: PlacementProposal, choice: Replacement | None = None) -> PlacementResult:
+    def commit(
+        self, proposal: PlacementProposal, choice: Replacement | None = None
+    ) -> PlacementResult:
         """Place the reviewed selection. Refused, stale and cancelled placements mutate nothing."""
         action, label = proposal.action, proposal.destination
         fresh = self.propose(action) if tuple(proposal.items) == self.selection else None
         if fresh is None:
-            return self._finish(PlacementResult(Outcome.STALE, "The selection changed since this review. Review again.", action, label))
+            return self._finish(
+                PlacementResult(
+                    Outcome.STALE,
+                    "The selection changed since this review. Review again.",
+                    action,
+                    label,
+                )
+            )
         if not fresh.can_place:
-            return self._finish(PlacementResult(Outcome.REFUSED, f"Not placed: {fresh.eligibility.reason}", action, label))
+            return self._finish(
+                PlacementResult(
+                    Outcome.REFUSED, f"Not placed: {fresh.eligibility.reason}", action, label
+                )
+            )
         if fresh.destination_revision != proposal.destination_revision:
-            return self._finish(PlacementResult(Outcome.STALE, f"{label} changed since this review. Nothing was placed; review again.", action, label))
+            return self._finish(
+                PlacementResult(
+                    Outcome.STALE,
+                    f"{label} changed since this review. Nothing was placed; review again.",
+                    action,
+                    label,
+                )
+            )
         if fresh.needs_replace and choice != Replacement.REPLACE:
-            return self._finish(PlacementResult(Outcome.CANCELLED, f"Cancelled: {label} and the Library context are unchanged.", action, label))
+            return self._finish(
+                PlacementResult(
+                    Outcome.CANCELLED,
+                    f"Cancelled: {label} and the Library context are unchanged.",
+                    action,
+                    label,
+                )
+            )
         try:
             placed = self._apply_placement(fresh)
         except (EditRefused, MotionRefused, LibraryRefused, ValueError) as exc:
-            return self._finish(PlacementResult(Outcome.REFUSED, f"Not placed: {exc}", action, label))
-        result = PlacementResult(Outcome.PLACED, self._receipt(fresh, placed), action, label, placed)
+            return self._finish(
+                PlacementResult(Outcome.REFUSED, f"Not placed: {exc}", action, label)
+            )
+        result = PlacementResult(
+            Outcome.PLACED, self._receipt(fresh, placed), action, label, placed
+        )
         self.pending_return = BrowseContext(
             self.query,
             self.selection,
@@ -759,7 +845,9 @@ class LibrarySession:
         records = [self._rec(k) for k in keys]
         if p.action == ActionId.EDIT:
             edit = self.destinations.edit
-            if not edit.select(records[0].native_key, Replacement.REPLACE if p.needs_replace else None):
+            if not edit.select(
+                records[0].native_key, Replacement.REPLACE if p.needs_replace else None
+            ):
                 raise LibraryRefused("Edit still holds unsaved work; nothing was replaced.")
         elif p.action == ActionId.ANIMATE:
             motion = self.destinations.motion
@@ -775,7 +863,9 @@ class LibrarySession:
             if motion.story.draft is None:
                 motion.new_storyboard(native)
             else:
-                motion.update_story(source_key=native, source_digest=motion.catalog.get(native).digest)
+                motion.update_story(
+                    source_key=native, source_digest=motion.catalog.get(native).digest
+                )
         elif p.action == ActionId.MOVIE:
             self.destinations.motion.add_clips([r.native_key for r in records])
         elif p.action == ActionId.REGENERATE:
@@ -794,20 +884,30 @@ class LibrarySession:
 
     # --------------------------------------------------------------------------- Learning proposal
     def build_learning_proposal(self, keys: tuple[str, ...]) -> LearningProposal:
-        sources, limits = [], [
-            "Fixture identities only; none is a production History, job or Learning record.",
-            "A Library placement does not create a study, an experiment, a rating or a Learning record.",
-            "Observational evidence: prompt, seed and baseline were not controlled by this proposal.",
-        ]
+        sources, limits = (
+            [],
+            [
+                "Fixture identities only; none is a production History, job or Learning record.",
+                "A Library placement does not create a study, an experiment, a rating or a Learning record.",
+                "Observational evidence: prompt, seed and baseline were not controlled by this proposal.",
+            ],
+        )
         groups = exact_groups(self.catalog)
         for key in keys:
             r = self._rec(key)
             target = self._rec(r.references.key) if r.references else r
             sources.append(
                 ProposalSource(
-                    r.key, r.label, r.kind.value, r.namespace, r.observation_id or "unknown",
-                    r.job_id or "unknown", target.content_hash or "unknown", r.model or "unknown",
-                    str(r.rating) if r.rating is not None else "none recorded", r.experiment or "none recorded",
+                    r.key,
+                    r.label,
+                    r.kind.value,
+                    r.namespace,
+                    r.observation_id or "unknown",
+                    r.job_id or "unknown",
+                    target.content_hash or "unknown",
+                    r.model or "unknown",
+                    str(r.rating) if r.rating is not None else "none recorded",
+                    r.experiment or "none recorded",
                 )  # fmt: skip
             )
             if r.rating is not None:
@@ -852,8 +952,12 @@ class LibrarySession:
         for key, before in context.availability:
             now = self.effective(key)
             if now != before:
-                notes.append(f"{key} changed from {before.value} to {now.value} while you were away; it stays selected.")
+                notes.append(
+                    f"{key} changed from {before.value} to {now.value} while you were away; it stays selected."
+                )
         self.pending_return = None
-        self._say("Returned to the Library with the same scope, filters, sort, page and selection." + (" " + " ".join(notes) if notes else ""))
+        self._say(
+            "Returned to the Library with the same scope, filters, sort, page and selection."
+            + (" " + " ".join(notes) if notes else "")
+        )
         return tuple(notes)
-

@@ -5,11 +5,9 @@ from __future__ import annotations
 import os
 import unittest
 
-from stablenew_qt_proto.edit_domain import Replacement
 from stablenew_qt_proto.library_domain import (
     SIMILARITY_LABEL,
     ActionId,
-    AssetKind,
     Scope,
     ViewState,
     fixture_catalog,
@@ -17,14 +15,13 @@ from stablenew_qt_proto.library_domain import (
 from stablenew_qt_proto.library_session import Outcome
 
 try:
-    from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
+    from PySide6.QtCore import QEvent, Qt, QTimer
     from PySide6.QtGui import QImage
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QLabel
     from shiboken6 import isValid
     from stablenew_qt_proto.app import PrototypeWindow, apply_theme
     from stablenew_qt_proto.layout_probe import pump
-    from stablenew_qt_proto.library_components import KEY_ROLE
     from stablenew_qt_proto.library_view import LAYOUTS, TAB_ORGANIZE
     from stablenew_qt_proto.tokens import reference_theme
 except ImportError:
@@ -290,7 +287,9 @@ class NativeLibraryTests(unittest.TestCase):
         picker.list.itemClicked.emit(picker.list.item(row))
         pump(self.app)
         self.assertEqual(self.session.query.collection, "col-1")
-        self.assertEqual(set(self.session.result().items), set(self.session.org.collection("col-1").members))
+        self.assertEqual(
+            set(self.session.result().items), set(self.session.org.collection("col-1").members)
+        )
 
     # ----------------------------------------------------------------- actions, menus
     def test_context_menu_for_unselected_item_selects_it_and_lists_every_action(self):
@@ -301,7 +300,11 @@ class NativeLibraryTests(unittest.TestCase):
         menu.close()
 
     def test_disabled_actions_show_a_reason_in_words(self):
-        self.click_key("history:twin-a") if "history:twin-a" in self.session.result().items else self.session.select_only("history:twin-a")
+        self.click_key(
+            "history:twin-a"
+        ) if "history:twin-a" in self.session.result().items else self.session.select_only(
+            "history:twin-a"
+        )
         self.view.sync_selection()
         buttons = self.view.actions.buttons
         gated = buttons[ActionId.DELETE]
@@ -375,12 +378,18 @@ class NativeLibraryTests(unittest.TestCase):
         self.assertIs(self.window.pages.currentWidget(), self.window.edit_view)
 
     def test_library_to_motion_quick_clip_handoff(self):
-        self.click_key("create:ridge-study") if "create:ridge-study" in self.session.result().items else self.session.select_only("create:ridge-study")
+        self.click_key(
+            "create:ridge-study"
+        ) if "create:ridge-study" in self.session.result().items else self.session.select_only(
+            "create:ridge-study"
+        )
         self.view.sync_selection()
         self.dialog_choice("place")
         self.view.trigger(ActionId.ANIMATE.value)
         pump(self.app)
-        self.assertEqual(self.session.destinations.motion.quick.draft.source_key, "create:ridge-study")
+        self.assertEqual(
+            self.session.destinations.motion.quick.draft.source_key, "create:ridge-study"
+        )
         self.assertIs(self.window.pages.currentWidget(), self.window.motion_view)
 
     def test_learning_proposal_is_not_executable_and_stays_in_the_library(self):
@@ -476,7 +485,9 @@ class NativeLibraryTests(unittest.TestCase):
                 self.view.set_layout_design(design)
                 self.window.resize(width, height)
                 pump(self.app, 10)
-                self.assertTrue(self.view.results.isVisible() or self.view.state.isVisible(), (width, design))
+                self.assertTrue(
+                    self.view.results.isVisible() or self.view.state.isVisible(), (width, design)
+                )
                 self.assertTrue(self.view.strip.isVisible(), (width, design))
                 if self.view._narrow:
                     self.press(self.view.view_switch["inspect"])
@@ -503,7 +514,8 @@ class NativeLibraryTests(unittest.TestCase):
 
     def test_focusable_controls_have_accessible_names(self):
         unnamed = [
-            w for w in self.view.findChildren(type(self.view.strip.clear))
+            w
+            for w in self.view.findChildren(type(self.view.strip.clear))
             if w.isVisible() and not (w.accessibleName() or w.text())
         ]
         self.assertEqual(unnamed, [])
@@ -571,7 +583,10 @@ class NativeComponentLibraryTests(unittest.TestCase):
         gallery = window.gallery
         gallery.stack.setCurrentWidget(gallery.components_page)
         pump(self.app)
-        text = " ".join(label.text() for label in gallery.components_page.widget().findChildren(type(window.return_button)))
+        text = " ".join(
+            label.text()
+            for label in gallery.components_page.widget().findChildren(type(window.return_button))
+        )
         self.assertTrue(gallery.components_page.widget().height() > 0)
         for theme in ("concept-a", "blue-modern"):
             window.apply_theme(reference_theme(theme))

@@ -69,7 +69,7 @@ class IdentityTests(unittest.TestCase):
             fixture_catalog().get("history:does-not-exist")
 
     def test_unknown_fields_are_shown_as_unknown(self):
-        rows = dict((r.name, r.value) for r in describe(fixture_catalog().get("create:ridge-study")))
+        rows = {r.name: r.value for r in describe(fixture_catalog().get("create:ridge-study"))}
         self.assertEqual(rows["Parent"], UNKNOWN)
         self.assertEqual(rows["Job / record lineage"], UNKNOWN)
         self.assertEqual(rows["Duration"], UNKNOWN)
@@ -77,7 +77,18 @@ class IdentityTests(unittest.TestCase):
     def test_catalog_covers_required_fixture_categories(self):
         c = fixture_catalog()
         kinds = {r.kind.value for r in c}
-        self.assertTrue({"Still image", "Edited candidate", "Video clip", "Storyboard sequence", "Motion reference", "Learning observation", "Unsupported type"} <= kinds)
+        self.assertTrue(
+            {
+                "Still image",
+                "Edited candidate",
+                "Video clip",
+                "Storyboard sequence",
+                "Motion reference",
+                "Learning observation",
+                "Unsupported type",
+            }
+            <= kinds
+        )
         availabilities = {r.availability for r in c}
         self.assertEqual(availabilities, set(Availability))
         self.assertTrue(any(r.kind.value == "Edited candidate" and r.parent for r in c))
@@ -102,8 +113,19 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(r.matched, ("history:coast-04",))  # every word must match
 
     def test_filters_are_and_across_and_or_within(self):
-        base = LibraryQuery(scope=Scope.ALL, kinds=frozenset({"Still image"}), models=frozenset({"fixture-flux"}))
-        base = replace(base, kinds=frozenset(k for k in __import__("stablenew_qt_proto.library_domain", fromlist=["AssetKind"]).AssetKind if k.value == "Still image"))
+        base = LibraryQuery(
+            scope=Scope.ALL, kinds=frozenset({"Still image"}), models=frozenset({"fixture-flux"})
+        )
+        base = replace(
+            base,
+            kinds=frozenset(
+                k
+                for k in __import__(
+                    "stablenew_qt_proto.library_domain", fromlist=["AssetKind"]
+                ).AssetKind
+                if k.value == "Still image"
+            ),
+        )
         r = run_query(self.s.catalog, self.s.org, base)
         self.assertTrue(all(self.s.catalog.get(k).model == "fixture-flux" for k in r.matched))
 
@@ -116,14 +138,18 @@ class QueryTests(unittest.TestCase):
 
     def test_date_filter_reports_unknown_dates(self):
         r = self.s.set_query(date_from="2026-10-10", scope=Scope.ALL)
-        self.assertTrue(all((self.s.catalog.get(k).created or "") >= "2026-10-10" for k in r.matched))
+        self.assertTrue(
+            all((self.s.catalog.get(k).created or "") >= "2026-10-10" for k in r.matched)
+        )
 
     def test_model_filter_notice_for_unknown_model(self):
         r = self.s.set_query(scope=Scope.IMPORTED, models=frozenset({"fixture-sdxl"}))
         self.assertTrue(any("no model metadata" in n for n in r.notices))
 
     def test_prompt_prefix_is_bounded_and_distinct_from_metadata(self):
-        r = self.s.set_query(scope=Scope.HISTORY, text="Harbor at first", mode=SearchMode.PROMPT_PREFIX)
+        r = self.s.set_query(
+            scope=Scope.HISTORY, text="Harbor at first", mode=SearchMode.PROMPT_PREFIX
+        )
         self.assertEqual(set(r.matched), {"history:twin-a", "history:twin-b"})
         r = self.s.set_query(text="first light", mode=SearchMode.PROMPT_PREFIX)
         self.assertEqual(r.matched, ())  # a prefix search is not a substring search
@@ -133,9 +159,16 @@ class QueryTests(unittest.TestCase):
     def test_sort_orders_are_deterministic_with_unknown_dates_last(self):
         recent = self.s.set_query(scope=Scope.IMPORTED, sort=Sort.RECENT).matched
         oldest = self.s.set_query(scope=Scope.IMPORTED, sort=Sort.OLDEST).matched
-        self.assertEqual(recent, tuple(sorted(recent, key=lambda k: (self.s.catalog.get(k).created or ""), reverse=True)))
+        self.assertEqual(
+            recent,
+            tuple(
+                sorted(recent, key=lambda k: (self.s.catalog.get(k).created or ""), reverse=True)
+            ),
+        )
         self.assertEqual(set(recent), set(oldest))
-        self.assertEqual(self.s.set_query(sort=Sort.LABEL).matched, self.s.set_query(sort=Sort.LABEL).matched)
+        self.assertEqual(
+            self.s.set_query(sort=Sort.LABEL).matched, self.s.set_query(sort=Sort.LABEL).matched
+        )
 
     def test_pagination_and_continuation(self):
         r = self.s.set_query(page_size=10)
@@ -186,6 +219,14 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(set(self.s.selection_report().values()), {SelectionStatus.FILTERED_OUT})
         self.assertEqual(self.s.selection, (first, "history:ridge-17"))  # not silently replaced
 
+    def test_narrow_moves_focus_off_a_dropped_item(self):
+        items = self.s.result().items
+        self.s.select_only(items[0])
+        self.s.toggle(items[1])
+        self.assertEqual(self.s.focus, items[1])
+        self.s.narrow([items[0]])
+        self.assertEqual(self.s.focus, items[0])
+
     def test_range_toggle_clear_and_narrow(self):
         items = self.s.result().items
         self.s.select_only(items[0])
@@ -209,7 +250,10 @@ class OrganizationTests(unittest.TestCase):
         c = self.s.create_collection("Harbor", ("history:twin-a", "history:twin-b"))
         self.assertEqual(c.members, ("history:twin-a", "history:twin-b"))
         self.s.add_to_collection("col-1", ("history:twin-a",))
-        self.assertEqual({x.name for x in self.s.org.collections_of("history:twin-a")}, {"Harbor", "Ridge project"})
+        self.assertEqual(
+            {x.name for x in self.s.org.collections_of("history:twin-a")},
+            {"Harbor", "Ridge project"},
+        )
         self.assertIn("history:twin-a", self.s.catalog)
 
     def test_removal_is_non_destructive_and_rename_leaves_assets_alone(self):
@@ -221,7 +265,9 @@ class OrganizationTests(unittest.TestCase):
         self.assertIs(self.s.catalog.get("history:ridge-17"), record)
         self.assertEqual(self.s.org.tags_of("history:ridge-17"), before_tags)
         self.s.rename_collection("col-1", "Ridge work")
-        self.assertIs(self.s.catalog.get("history:ridge-16"), self.s.catalog.get("history:ridge-16"))
+        self.assertIs(
+            self.s.catalog.get("history:ridge-16"), self.s.catalog.get("history:ridge-16")
+        )
         with self.assertRaises(LibraryRefused):
             self.s.rename_collection("col-1", "client review")  # case-insensitive duplicate
         with self.assertRaises(LibraryRefused):
@@ -288,7 +334,10 @@ class GroupTests(unittest.TestCase):
         before = len(c)
         exact_groups(c)
         self.assertEqual(len(c), before)
-        self.assertEqual(len({c.get(k).ref for g in exact_groups(c) for k in g.members}), sum(len(g.members) for g in exact_groups(c)))
+        self.assertEqual(
+            len({c.get(k).ref for g in exact_groups(c) for k in g.members}),
+            sum(len(g.members) for g in exact_groups(c)),
+        )
 
 
 class EligibilityTests(unittest.TestCase):
@@ -336,7 +385,11 @@ class EligibilityTests(unittest.TestCase):
     def test_video_clip_parity_with_motion_session(self):
         motion = MotionSession()
         for record in self.s.catalog:
-            if record.key.startswith("video:hist-") and record.native_key and record.native_key in motion.clips:
+            if (
+                record.key.startswith("video:hist-")
+                and record.native_key
+                and record.native_key in motion.clips
+            ):
                 ok, _ = MotionSession.clip_eligibility(motion.clip(record.native_key))
                 self.assertEqual(self.ok(ActionId.MOVIE, record.key).placeable, ok, record.key)
 
@@ -345,25 +398,36 @@ class EligibilityTests(unittest.TestCase):
 
         for source in SOURCES:
             record = self.s.catalog.get(source.key)
-            self.assertEqual(record.parent.key if record.parent else None, source.parent, source.key)
+            self.assertEqual(
+                record.parent.key if record.parent else None, source.parent, source.key
+            )
             self.assertEqual(record.availability, source.availability, source.key)
 
     def test_multi_selection_preflight_lists_eligible_and_blocked(self):
-        e = self.ok(ActionId.MOVIE, "video:hist-run-1-clip-1", "history:ridge-17", "video:hist-clip-lost")
+        e = self.ok(
+            ActionId.MOVIE, "video:hist-run-1-clip-1", "history:ridge-17", "video:hist-clip-lost"
+        )
         self.assertEqual(e.eligible, ("video:hist-run-1-clip-1",))
         self.assertEqual({v.key for v in e.blocked}, {"history:ridge-17", "video:hist-clip-lost"})
         self.assertTrue(e.needs_narrowing and not e.placeable)
         single = self.ok(ActionId.EDIT, "history:ridge-17", "photo:evening")
         self.assertIn("one asset", single.set_reason)
         self.assertTrue(single.needs_narrowing)
-        self.assertIn("different placements", self.ok(ActionId.ANIMATE, "motion:orbit-slow", "create:ridge-study").set_reason)
+        self.assertIn(
+            "different placements",
+            self.ok(ActionId.ANIMATE, "motion:orbit-slow", "create:ridge-study").set_reason,
+        )
         self.assertFalse(self.ok(ActionId.EDIT).placeable)  # empty selection
 
 
 class HandoffTests(unittest.TestCase):
     def setUp(self):
         self.s = session()
-        self.edit, self.motion, self.create = (self.s.destinations.edit, self.s.destinations.motion, self.s.destinations.create)
+        self.edit, self.motion, self.create = (
+            self.s.destinations.edit,
+            self.s.destinations.motion,
+            self.s.destinations.create,
+        )
 
     def test_edit_handoff_fields_and_return_state(self):
         self.s.set_scope(Scope.HISTORY)
@@ -378,8 +442,10 @@ class HandoffTests(unittest.TestCase):
         self.assertIsNone(self.edit.preview)
         self.s.set_scope(Scope.LEARNING)  # the operator wandered off
         self.s.restore_context()
-        self.assertEqual((self.s.query.scope, self.s.query.text, self.s.query.page_size, self.s.selection),
-                         (Scope.HISTORY, "ridge", 7, ("history:ridge-17",)))
+        self.assertEqual(
+            (self.s.query.scope, self.s.query.text, self.s.query.page_size, self.s.selection),
+            (Scope.HISTORY, "ridge", 7, ("history:ridge-17",)),
+        )
 
     def test_preview_approval_is_discarded_on_new_source(self):
         self.edit.select("history:ridge-16")
@@ -397,11 +463,28 @@ class HandoffTests(unittest.TestCase):
         self.s.set_query(text="ridge")
         self.s.select_only("history:ridge-17")
         p = self.s.propose(ActionId.EDIT)
-        snap = (self.edit.draft, self.edit.revision, self.s.query, self.s.selection, self.s.org, self.s.pending_return)
+        snap = (
+            self.edit.draft,
+            self.edit.revision,
+            self.s.query,
+            self.s.selection,
+            self.s.org,
+            self.s.pending_return,
+        )
         for choice in (None, Replacement.CANCEL, Replacement.KEEP):
             r = self.s.commit(p, choice)
             self.assertEqual(r.outcome, Outcome.CANCELLED)
-        self.assertEqual(snap, (self.edit.draft, self.edit.revision, self.s.query, self.s.selection, self.s.org, self.s.pending_return))
+        self.assertEqual(
+            snap,
+            (
+                self.edit.draft,
+                self.edit.revision,
+                self.s.query,
+                self.s.selection,
+                self.s.org,
+                self.s.pending_return,
+            ),
+        )
         self.assertEqual(self.s.commit(p, Replacement.REPLACE).outcome, Outcome.PLACED)
         self.assertEqual(self.edit.draft.source_key, "history:ridge-17")
 
@@ -459,8 +542,10 @@ class HandoffTests(unittest.TestCase):
         order = ("video:hist-run-1-clip-3", "video:hist-run-1-clip-1", "video:hist-run-1-clip-2")
         self.s.selection = order
         self.assertTrue(self.s.commit(self.s.propose(ActionId.MOVIE)).ok)
-        self.assertEqual([i.clip_id for i in self.motion.assembly.draft.items],
-                         ["hist-run-1-clip-3", "hist-run-1-clip-1", "hist-run-1-clip-2"])
+        self.assertEqual(
+            [i.clip_id for i in self.motion.assembly.draft.items],
+            ["hist-run-1-clip-3", "hist-run-1-clip-1", "hist-run-1-clip-2"],
+        )
         self.assertIsNone(self.motion.assembly_preview)
         self.assertFalse(self.motion.movies)
         before = self.motion.assembly.revision
@@ -504,7 +589,9 @@ class HandoffTests(unittest.TestCase):
         self.assertFalse(proposal.executable or proposal.is_study)
         self.assertEqual(proposal.sources[0].observation_id, "mock-obs-0102")
         self.assertTrue(any("not independent samples" in x for x in proposal.limitations))
-        self.assertEqual(revisions, (self.edit.revision, self.motion.quick.revision, self.create.revision))
+        self.assertEqual(
+            revisions, (self.edit.revision, self.motion.quick.revision, self.create.revision)
+        )
         self.assertFalse(hasattr(proposal, "submit") or hasattr(proposal, "run"))
 
     def test_identical_hash_records_stay_separate_sources_in_a_proposal(self):
@@ -563,23 +650,56 @@ class WalkthroughTests(unittest.TestCase):
         results = run_all()
         self.assertEqual([r.key for r in results], [f"LIB-0{i}" for i in range(1, 9)])
         self.assertTrue(all(r.terminal and r.steps for r in results))
-        self.assertEqual({r.outcome for r in results} - {"success", "refusal", "recoverable"}, set())
+        self.assertEqual(
+            {r.outcome for r in results} - {"success", "refusal", "recoverable"}, set()
+        )
 
 
 class IsolationTests(unittest.TestCase):
     def test_library_modules_import_only_prototype_and_stdlib(self):
-        forbidden = {"src", "controller", "pipeline", "queue", "history", "tkinter", "sqlite3", "subprocess", "socket", "requests", "ctypes", "shutil", "os", "pathlib", "glob", "webbrowser"}
+        forbidden = {
+            "src",
+            "controller",
+            "pipeline",
+            "queue",
+            "history",
+            "tkinter",
+            "sqlite3",
+            "subprocess",
+            "socket",
+            "requests",
+            "ctypes",
+            "shutil",
+            "os",
+            "pathlib",
+            "glob",
+            "webbrowser",
+        }
         for name in ("library_domain.py", "library_session.py", "library_walkthroughs.py"):
             tree = ast.parse((ROOT / name).read_text(encoding="utf-8"))
             for node in ast.walk(tree):
-                names = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module or ""] if isinstance(node, ast.ImportFrom) and node.level == 0 else []
+                names = (
+                    [a.name for a in node.names]
+                    if isinstance(node, ast.Import)
+                    else [node.module or ""]
+                    if isinstance(node, ast.ImportFrom) and node.level == 0
+                    else []
+                )
                 for n in names:
                     self.assertNotIn(n.split(".")[0], forbidden, f"{name}: {n}")
 
     def test_no_file_operations_in_library_domain(self):
         for name in ("library_domain.py", "library_session.py"):
             code = (ROOT / name).read_text(encoding="utf-8")
-            for token in ("open(", "unlink", "rmtree", "rename(", "os.remove", "write_text", "write_bytes"):
+            for token in (
+                "open(",
+                "unlink",
+                "rmtree",
+                "rename(",
+                "os.remove",
+                "write_text",
+                "write_bytes",
+            ):
                 self.assertNotIn(token, code, f"{name}: {token}")
 
 

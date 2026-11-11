@@ -232,7 +232,9 @@ class Catalog:
         try:
             return self._records[key]
         except KeyError:
-            raise LibraryRefused(f"Unknown source identity: {key}. Nothing was substituted.") from None
+            raise LibraryRefused(
+                f"Unknown source identity: {key}. Nothing was substituted."
+            ) from None
 
     def keys(self) -> tuple[str, ...]:
         return tuple(self._records)
@@ -270,50 +272,180 @@ def _curated() -> list[AssetRecord]:
     ridge16, ridge17 = AssetRef("history", "ridge-16"), AssetRef("history", "ridge-17")
     twin_hash = _hash("harbor-twin-bytes")
     records: list[AssetRecord] = [
-        _still("history", "ridge-16", "Ridge revision 16", 0, model="fixture-sdxl", workflow="txt2img",
-               created="2026-10-02", job_id="fixture-job-16", native_key="history:ridge-16",
-               prompt="Ridge at dusk, long shadows, painterly", recipe_pack="pack-landscapes"),
-        _still("history", "ridge-17", "Ridge revision 17", 1, model="fixture-sdxl", workflow="img2img",
-               created="2026-10-03", job_id="fixture-job-17", native_key="history:ridge-17",
-               parent=ridge16, prompt="Ridge at dusk, long shadows, warmer sky",
-               recipe_pack="pack-landscapes"),
-        _still("create", "ridge-study", "Ridge study (Create result)", 0, model="fixture-sdxl",
-               workflow="txt2img", created="2026-10-05", native_key="create:ridge-study",
-               prompt="Ridge study, overcast morning"),
-        _still("history", "coast-04", "Coast study 4", 2, size=(800, 400), model="fixture-flux",
-               workflow="txt2img", created="2026-10-08", job_id="fixture-job-44",
-               prompt="Wide coast, low tide, soft haze", recipe_pack="pack-landscapes"),
-        _still("history", "twin-a", "Harbor study (copy A)", 3, content_hash=twin_hash,
-               model="fixture-sdxl", workflow="txt2img", created="2026-10-09", job_id="fixture-job-61",
-               prompt="Harbor at first light, gulls"),
-        _still("history", "twin-b", "Harbor study (copy B)", 3, content_hash=twin_hash,
-               model="fixture-sdxl", workflow="txt2img", created="2026-10-10", job_id="fixture-job-62",
-               prompt="Harbor at first light, gulls"),
-        _still("history", "near-a", "Harbor study (similar A)", 3, model="fixture-sdxl",
-               workflow="txt2img", created="2026-10-10", job_id="fixture-job-63",
-               prompt="Harbor at dawn, boats"),
-        _still("history", "near-b", "Harbor study (similar B)", 2, model="fixture-flux",
-               workflow="txt2img", created="2026-10-11", job_id="fixture-job-64",
-               prompt="Harbor at dawn, mist"),
-        _still("history", "missing", "Missing still", 0, availability=Availability.MISSING,
-               model="fixture-sdxl", created="2026-09-28", job_id="fixture-job-9",
-               native_key="history:missing", prompt="Ridge, file since removed"),
-        _still("history", "hidden", "Restricted still", 1, availability=Availability.HIDDEN,
-               model="fixture-sdxl", created="2026-09-29", job_id="fixture-job-10",
-               native_key="history:hidden", prompt="Restricted fixture content"),
-        _still("photo", "evening", "Evening candidate", 3, size=(600, 400), category=CATEGORY_EDIT,
-               created="2026-10-11", native_key="photo:evening", model="fixture-sdxl",
-               workflow="photo-optimize"),
-        _still("edit", "fixture-candidate-1", "Edited candidate (ridge, warmer sky)", 1,
-               kind=AssetKind.EDITED, category=CATEGORY_EDIT, parent=ridge17, model="fixture-sdxl",
-               workflow="masked-edit", created="2026-10-12", job_id="fixture-job-edit-1"),
-        _still("import", "coast", "Imported coast study", 2, category=CATEGORY_IMPORTED,
-               created="2026-10-06", native_key="import:coast"),
-        _still("anchor", "ridge-dusk", "Ridge at dusk (authored anchor)", 3,
-               category=CATEGORY_IMPORTED, created="2026-10-07", native_key="anchor:ridge-dusk"),
-        _rec("import", "clip", "Imported clip (unsupported type)", AssetKind.UNSUPPORTED,
-             CATEGORY_IMPORTED, availability=Availability.UNSUPPORTED, created="2026-10-06",
-             native_key="import:clip"),
+        _still(
+            "history",
+            "ridge-16",
+            "Ridge revision 16",
+            0,
+            model="fixture-sdxl",
+            workflow="txt2img",
+            created="2026-10-02",
+            job_id="fixture-job-16",
+            native_key="history:ridge-16",
+            prompt="Ridge at dusk, long shadows, painterly",
+            recipe_pack="pack-landscapes",
+        ),
+        _still(
+            "history",
+            "ridge-17",
+            "Ridge revision 17",
+            1,
+            model="fixture-sdxl",
+            workflow="img2img",
+            created="2026-10-03",
+            job_id="fixture-job-17",
+            native_key="history:ridge-17",
+            parent=ridge16,
+            prompt="Ridge at dusk, long shadows, warmer sky",
+            recipe_pack="pack-landscapes",
+        ),
+        _still(
+            "create",
+            "ridge-study",
+            "Ridge study (Create result)",
+            0,
+            model="fixture-sdxl",
+            workflow="txt2img",
+            created="2026-10-05",
+            native_key="create:ridge-study",
+            prompt="Ridge study, overcast morning",
+        ),
+        _still(
+            "history",
+            "coast-04",
+            "Coast study 4",
+            2,
+            size=(800, 400),
+            model="fixture-flux",
+            workflow="txt2img",
+            created="2026-10-08",
+            job_id="fixture-job-44",
+            prompt="Wide coast, low tide, soft haze",
+            recipe_pack="pack-landscapes",
+        ),
+        _still(
+            "history",
+            "twin-a",
+            "Harbor study (copy A)",
+            3,
+            content_hash=twin_hash,
+            model="fixture-sdxl",
+            workflow="txt2img",
+            created="2026-10-09",
+            job_id="fixture-job-61",
+            prompt="Harbor at first light, gulls",
+        ),
+        _still(
+            "history",
+            "twin-b",
+            "Harbor study (copy B)",
+            3,
+            content_hash=twin_hash,
+            model="fixture-sdxl",
+            workflow="txt2img",
+            created="2026-10-10",
+            job_id="fixture-job-62",
+            prompt="Harbor at first light, gulls",
+        ),
+        _still(
+            "history",
+            "near-a",
+            "Harbor study (similar A)",
+            3,
+            model="fixture-sdxl",
+            workflow="txt2img",
+            created="2026-10-10",
+            job_id="fixture-job-63",
+            prompt="Harbor at dawn, boats",
+        ),
+        _still(
+            "history",
+            "near-b",
+            "Harbor study (similar B)",
+            2,
+            model="fixture-flux",
+            workflow="txt2img",
+            created="2026-10-11",
+            job_id="fixture-job-64",
+            prompt="Harbor at dawn, mist",
+        ),
+        _still(
+            "history",
+            "missing",
+            "Missing still",
+            0,
+            availability=Availability.MISSING,
+            model="fixture-sdxl",
+            created="2026-09-28",
+            job_id="fixture-job-9",
+            native_key="history:missing",
+            prompt="Ridge, file since removed",
+        ),
+        _still(
+            "history",
+            "hidden",
+            "Restricted still",
+            1,
+            availability=Availability.HIDDEN,
+            model="fixture-sdxl",
+            created="2026-09-29",
+            job_id="fixture-job-10",
+            native_key="history:hidden",
+            prompt="Restricted fixture content",
+        ),
+        _still(
+            "photo",
+            "evening",
+            "Evening candidate",
+            3,
+            size=(600, 400),
+            category=CATEGORY_EDIT,
+            created="2026-10-11",
+            native_key="photo:evening",
+            model="fixture-sdxl",
+            workflow="photo-optimize",
+        ),
+        _still(
+            "edit",
+            "fixture-candidate-1",
+            "Edited candidate (ridge, warmer sky)",
+            1,
+            kind=AssetKind.EDITED,
+            category=CATEGORY_EDIT,
+            parent=ridge17,
+            model="fixture-sdxl",
+            workflow="masked-edit",
+            created="2026-10-12",
+            job_id="fixture-job-edit-1",
+        ),
+        _still(
+            "import",
+            "coast",
+            "Imported coast study",
+            2,
+            category=CATEGORY_IMPORTED,
+            created="2026-10-06",
+            native_key="import:coast",
+        ),
+        _still(
+            "anchor",
+            "ridge-dusk",
+            "Ridge at dusk (authored anchor)",
+            3,
+            category=CATEGORY_IMPORTED,
+            created="2026-10-07",
+            native_key="anchor:ridge-dusk",
+        ),
+        _rec(
+            "import",
+            "clip",
+            "Imported clip (unsupported type)",
+            AssetKind.UNSUPPORTED,
+            CATEGORY_IMPORTED,
+            availability=Availability.UNSUPPORTED,
+            created="2026-10-06",
+            native_key="import:clip",
+        ),
     ]
     assert refs["import:clip"].availability == Availability.UNSUPPORTED  # keep fixtures aligned
     # Video fixtures mirror the Motion mock history so eligibility parity can be tested.
@@ -328,25 +460,54 @@ def _curated() -> list[AssetRecord]:
         clip = motion.clip(clip_id)
         available = clip.output_available
         records.append(
-            _rec("video", clip_id, f"Clip · {clip.label}", AssetKind.VIDEO, CATEGORY_VIDEO,
-                 availability=Availability.AVAILABLE if available else Availability.MISSING,
-                 duration=round(clip.seconds, 2), model=clip.workflow[0], workflow=clip.workflow[0],
-                 created="2026-10-14", parent=AssetRef.parse(clip.source_key), job_id=clip.run_id,
-                 motif=0, native_key=clip.clip_id, retired=clip.clip_id == "hist-clip-retired",
-                 content_hash=_hash(f"video:{clip.clip_id}"))
+            _rec(
+                "video",
+                clip_id,
+                f"Clip · {clip.label}",
+                AssetKind.VIDEO,
+                CATEGORY_VIDEO,
+                availability=Availability.AVAILABLE if available else Availability.MISSING,
+                duration=round(clip.seconds, 2),
+                model=clip.workflow[0],
+                workflow=clip.workflow[0],
+                created="2026-10-14",
+                parent=AssetRef.parse(clip.source_key),
+                job_id=clip.run_id,
+                motif=0,
+                native_key=clip.clip_id,
+                retired=clip.clip_id == "hist-clip-retired",
+                content_hash=_hash(f"video:{clip.clip_id}"),
+            )
         )
     run = motion.run("hist-run-1")
     records.append(
-        _rec("video", "hist-board-1", "Storyboard run · Fixture Ridge walk", AssetKind.SEQUENCE,
-             CATEGORY_VIDEO, duration=round(sum(c.seconds for c in run.clips), 2),
-             model="svd_native", created="2026-10-14", job_id=run.run_id, motif=0)
+        _rec(
+            "video",
+            "hist-board-1",
+            "Storyboard run · Fixture Ridge walk",
+            AssetKind.SEQUENCE,
+            CATEGORY_VIDEO,
+            duration=round(sum(c.seconds for c in run.clips), 2),
+            model="svd_native",
+            created="2026-10-14",
+            job_id=run.run_id,
+            motif=0,
+        )
     )
     for key, title, availability in REFERENCES:
         namespace, _, record_id = key.partition(":")
         records.append(
-            _rec(namespace, record_id, title, AssetKind.MOTION_REF, CATEGORY_MOTION,
-                 availability=availability, created="2026-10-01", native_key=key,
-                 content_hash=_hash(key))
+            _rec(
+                namespace,
+                record_id,
+                title,
+                AssetKind.MOTION_REF,
+                CATEGORY_MOTION,
+                availability=availability,
+                created="2026-10-01",
+                native_key=key,
+                content_hash=_hash(key),
+            )
         )
     for obs_id, ref, experiment, rating, created in (
         ("0101", ridge17, "fixture-exp-A", 4, "2026-10-15"),
@@ -356,10 +517,20 @@ def _curated() -> list[AssetRecord]:
     ):
         target = next(r for r in records if r.ref == ref)
         records.append(
-            _rec("learning", f"obs-{obs_id}", f"Observation · {target.label} ({experiment})",
-                 AssetKind.OBSERVATION, CATEGORY_LEARNING, model=target.model, created=created,
-                 observation_id=f"mock-obs-{obs_id}", references=ref, rating=rating,
-                 experiment=experiment, job_id=target.job_id)
+            _rec(
+                "learning",
+                f"obs-{obs_id}",
+                f"Observation · {target.label} ({experiment})",
+                AssetKind.OBSERVATION,
+                CATEGORY_LEARNING,
+                model=target.model,
+                created=created,
+                observation_id=f"mock-obs-{obs_id}",
+                references=ref,
+                rating=rating,
+                experiment=experiment,
+                job_id=target.job_id,
+            )
         )
     return records
 
@@ -373,10 +544,18 @@ def bulk_records(count: int) -> list[AssetRecord]:
         )  # fmt: skip
         day = 1 + (i % 27)
         records.append(
-            _still("history", f"gen-{i:05d}", f"Generated study {i:05d}", i % 4,
-                   availability=availability, model="fixture-flux" if i % 3 == 0 else "fixture-sdxl",
-                   workflow="txt2img", created=f"2026-09-{day:02d}", job_id=f"fixture-job-b{i}",
-                   prompt=f"Generated study {i}, {('mist', 'dusk', 'noon', 'night')[i % 4]}")
+            _still(
+                "history",
+                f"gen-{i:05d}",
+                f"Generated study {i:05d}",
+                i % 4,
+                availability=availability,
+                model="fixture-flux" if i % 3 == 0 else "fixture-sdxl",
+                workflow="txt2img",
+                created=f"2026-09-{day:02d}",
+                job_id=f"fixture-job-b{i}",
+                prompt=f"Generated study {i}, {('mist', 'dusk', 'noon', 'night')[i % 4]}",
+            )
         )
     return records
 
@@ -484,7 +663,8 @@ def initial_org() -> OrgState:
     return OrgState(
         collections=(
             Collection(
-                "col-1", "Ridge project",
+                "col-1",
+                "Ridge project",
                 ("history:ridge-16", "history:ridge-17", "create:ridge-study"),
             ),
             Collection("col-2", "Client review", ("history:ridge-17", "history:coast-04")),
@@ -614,7 +794,9 @@ def run_query(
         unknown = sum(1 for r in rows if r.model is None)
         rows = [r for r in rows if r.model in query.models]
         if unknown:
-            notices.append(f"{unknown} record(s) have no model metadata and are excluded by the model filter.")
+            notices.append(
+                f"{unknown} record(s) have no model metadata and are excluded by the model filter."
+            )
     if query.date_from or query.date_to:
         unknown = sum(1 for r in rows if r.created is None)
         rows = [
@@ -625,18 +807,28 @@ def run_query(
             and (not query.date_to or r.created <= query.date_to)
         ]
         if unknown:
-            notices.append(f"{unknown} record(s) have an unknown date and are excluded by the date filter.")
+            notices.append(
+                f"{unknown} record(s) have an unknown date and are excluded by the date filter."
+            )
     text = " ".join(query.text.split())
     if text:
         if query.mode == SearchMode.PROMPT_PREFIX:
             needle = text.casefold()
             if len(needle) > PROMPT_INDEX_LEN:
                 needle = needle[:PROMPT_INDEX_LEN]
-                notices.append(f"Only the first {PROMPT_INDEX_LEN} characters of a prompt are indexed; the query was cut to match.")
+                notices.append(
+                    f"Only the first {PROMPT_INDEX_LEN} characters of a prompt are indexed; the query was cut to match."
+                )
             unindexed = sum(1 for r in rows if not r.prompt)
-            rows = [r for r in rows if r.prompt and r.prompt[:PROMPT_INDEX_LEN].casefold().startswith(needle)]
+            rows = [
+                r
+                for r in rows
+                if r.prompt and r.prompt[:PROMPT_INDEX_LEN].casefold().startswith(needle)
+            ]
             if unindexed:
-                notices.append(f"{unindexed} record(s) have no indexed prompt prefix and cannot match a prompt search.")
+                notices.append(
+                    f"{unindexed} record(s) have no indexed prompt prefix and cannot match a prompt search."
+                )
         else:
             words = text.casefold().split(" ")
             rows = [r for r in rows if all(w in _metadata_haystack(r, org) for w in words)]
@@ -856,7 +1048,9 @@ def _edit_rule(record: AssetRecord, ctx: RuleContext) -> str:
     if problem := _unavailable(record, ctx):
         return problem
     if record.native_key not in EDIT_KEYS:
-        return f"Edit has no fixture for {record.key}. The Library will not substitute another image."
+        return (
+            f"Edit has no fixture for {record.key}. The Library will not substitute another image."
+        )
     return ""
 
 
@@ -868,7 +1062,9 @@ def _animate_rule(record: AssetRecord, ctx: RuleContext) -> str:
             return "Motion has no fixture for this motion reference."
         return ""
     if record.kind == AssetKind.VIDEO or record.kind == AssetKind.SEQUENCE:
-        return "Motion animates still images or takes a motion reference; use Movie Clips for clips."
+        return (
+            "Motion animates still images or takes a motion reference; use Movie Clips for clips."
+        )
     if record.kind not in IMAGE_KINDS:
         return f"Motion cannot use a {record.kind.value.lower()} as a source."
     if problem := _unavailable(record, ctx):
@@ -904,7 +1100,9 @@ def _movie_rule(record: AssetRecord, ctx: RuleContext) -> str:
 
 def _compare_rule(record: AssetRecord, ctx: RuleContext) -> str:
     if record.kind in (AssetKind.VIDEO, AssetKind.SEQUENCE):
-        return "Video comparison is not supported. Only direct-parent still-image comparison is shown."
+        return (
+            "Video comparison is not supported. Only direct-parent still-image comparison is shown."
+        )
     if record.kind not in IMAGE_KINDS:
         return f"Comparison needs two still images; this is a {record.kind.value.lower()}."
     if record.parent is None:
@@ -923,7 +1121,9 @@ def _compare_rule(record: AssetRecord, ctx: RuleContext) -> str:
 
 def _regenerate_rule(record: AssetRecord, ctx: RuleContext) -> str:
     if record.kind not in IMAGE_KINDS:
-        return f"Regeneration starts from a still image recipe; this is a {record.kind.value.lower()}."
+        return (
+            f"Regeneration starts from a still image recipe; this is a {record.kind.value.lower()}."
+        )
     if problem := _unavailable(record, ctx):
         return problem
     if not record.recipe_pack:
@@ -944,7 +1144,9 @@ def _learning_rule(record: AssetRecord, ctx: RuleContext) -> str:
     if problem := _unavailable(record, ctx):
         return problem
     if not record.job_id:
-        return "No job or record lineage is recorded, so it cannot be proposed as a Learning source."
+        return (
+            "No job or record lineage is recorded, so it cannot be proposed as a Learning source."
+        )
     return ""
 
 
@@ -1003,8 +1205,14 @@ def evaluate_action(action: ActionId, keys: tuple[str, ...], ctx: RuleContext) -
             f"{ACTION_LABELS[action]} takes {noun} at a time; "
             f"{len(keys)} are selected. Narrow the selection."
         )
-    if keys and action == ActionId.ANIMATE and len({r.kind == AssetKind.MOTION_REF for r in records}) > 1:
-        set_reason = "A motion reference and a source image are different placements. Narrow the selection."
+    if (
+        keys
+        and action == ActionId.ANIMATE
+        and len({r.kind == AssetKind.MOTION_REF for r in records}) > 1
+    ):
+        set_reason = (
+            "A motion reference and a source image are different placements. Narrow the selection."
+        )
     return ActionEligibility(action, destination, tuple(verdicts), set_reason)
 
 
@@ -1023,7 +1231,9 @@ def relations(catalog: Catalog, key: str) -> tuple[Relation, ...]:
         out.append(Relation("Parent", record.parent.key, "Recorded lineage."))
     out += [Relation("Child", k, "Recorded lineage.") for k in catalog.children_of(key)]
     if record.references is not None:
-        out.append(Relation("Observed asset", record.references.key, "This record is an observation."))
+        out.append(
+            Relation("Observed asset", record.references.key, "This record is an observation.")
+        )
     out += [
         Relation("Observation", k, "A separate research record about this asset.")
         for k in catalog.observations_of(key)
@@ -1031,9 +1241,7 @@ def relations(catalog: Catalog, key: str) -> tuple[Relation, ...]:
     for group in groups_of(catalog, key):
         for member in group.members:
             if member != key:
-                caveat = (
-                    "Same content hash, distinct record." if group.exact else SIMILARITY_LABEL
-                )
+                caveat = "Same content hash, distinct record." if group.exact else SIMILARITY_LABEL
                 out.append(Relation("Same content" if group.exact else "Similar", member, caveat))
     return tuple(out)
 

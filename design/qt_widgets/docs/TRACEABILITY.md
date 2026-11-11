@@ -49,3 +49,18 @@ may inform visual review only and was not read in this task.
 | ≥ 2 layouts at five sizes; primary chosen; no horizontal overflow | `MOTION_LAYOUTS.md`, `evidence/motion_*`, `screenshots/qt-ds-04/` |
 | No production imports, jobs, NJRs, persistence, FFmpeg, network | `test_architecture`, `test_independence` (Motion flow under blocked runtimes) |
 | UX-DEC-020…034 | table in `MOTION_WORKFLOW.md` (each marked demonstrated or not) |
+
+## QT-DS-05 scope → evidence
+
+| Scope item | Where |
+|---|---|
+| Find → inspect → organize/select → act → place → return, as one connected flow | `library_domain.py`, `library_session.py`, `library_view.py`, `LIBRARY_WORKFLOW.md` |
+| Four regions: source scopes, search/filters, grid + list over one selection, details/actions | `library_components.py`, `library_view.py` |
+| Pure domain separating record ID, namespace, hash, lineage, collections, labels, observation ID | `LIBRARY_WORKFLOW.md` (identity model), `test_library_domain` |
+| ≥ 8 executable walkthroughs ending in success, refusal or recoverable | `library_walkthroughs.py`, `test_library_domain`, `test_independence` |
+| Reuse of QT-DS-01…04 shell, components and tooling; Library components in the Component Library | `gallery.py`, `test_qt_library` (Component Library test) |
+| ≥ 2 layouts at five sizes, measured; default chosen from evidence; report kept | `LIBRARY_LAYOUTS.md`, `evidence/library_*`, `screenshots/qt-ds-05/` |
+| Handoffs never inherit approval, consent or Preview; cancel/refusal/stale mutate nothing | `LibrarySession.propose/commit`, `test_library_domain`, `test_qt_library` |
+| No production import, store, scan, job, NJR or filesystem write; no private images in Git | `test_architecture`, `test_independence`, repo guard test |
+| UX-DEC-035…041 | table in `LIBRARY_ACCEPTANCE.md` (each marked demonstrated or not) |
+

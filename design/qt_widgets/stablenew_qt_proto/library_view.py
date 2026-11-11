@@ -65,7 +65,7 @@ TAB_DETAILS, TAB_ACTIONS, TAB_ORGANIZE = 0, 1, 2
 class LibraryUi:
     """Presentation-only state that survives a theme rebuild. Not Library data."""
 
-    layout: str = "gallery"
+    layout: str = "adaptive"
     mode: str = "grid"
     tab: int = TAB_DETAILS
     page: str = "browse"  # narrow layouts: browse | inspect
@@ -93,7 +93,7 @@ class LibraryView(QWidget):
     def __init__(
         self,
         session: LibrarySession | None = None,
-        layout_design: str = "gallery",
+        layout_design: str = "adaptive",
         ui: LibraryUi | None = None,
     ):
         super().__init__()
@@ -126,7 +126,9 @@ class LibraryView(QWidget):
             head.addWidget(button)
         self.mock_chip = QLabel("FIXTURES ONLY · NO SCAN")
         self.mock_chip.setProperty("role", "capsule")
-        self.mock_chip.setToolTip("Fixture records only. Nothing is scanned, imported, moved, renamed or deleted.")
+        self.mock_chip.setToolTip(
+            "Fixture records only. Nothing is scanned, imported, moved, renamed or deleted."
+        )
         head.addWidget(self.mock_chip)
         root.addLayout(head)
         self.banner = NoticeBanner()
@@ -156,7 +158,15 @@ class LibraryView(QWidget):
         self.body_layout = QVBoxLayout(self.body)
         self.body_layout.setContentsMargins(0, 0, 0, 0)
         root.addWidget(self.body, 1)
-        self._managed = (self.scope_picker, self.filter_bar, self.notices, self.header, self.stack, self.strip, self.tabs)
+        self._managed = (
+            self.scope_picker,
+            self.filter_bar,
+            self.notices,
+            self.header,
+            self.stack,
+            self.strip,
+            self.tabs,
+        )
 
         self._wire()
         self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
@@ -195,12 +205,19 @@ class LibraryView(QWidget):
             fit_segment(button)
             button.clicked.connect(lambda _c=False, k=key: self.set_mode(k))
             self.mode_buttons[key] = button
-        self.details_toggle = _button("Details ▸", "Show or hide the details drawer", checkable=True)
+        self.details_toggle = _button(
+            "Details ▸", "Show or hide the details drawer", checkable=True
+        )
         self.states_button = _button("Fixture states", "Simulate fixture states")
         self.states_menu = QMenu(self.states_button)
         for text, callback in (
             ("Simulate loading", lambda: self.set_view_state(ViewState.LOADING)),
-            ("Simulate read error", lambda: self.set_view_state(ViewState.ERROR, "Simulated read failure in the fixture reader.")),
+            (
+                "Simulate read error",
+                lambda: self.set_view_state(
+                    ViewState.ERROR, "Simulated read failure in the fixture reader."
+                ),
+            ),
             ("Back to ready", lambda: self.set_view_state(ViewState.READY)),
             ("Make 'Ridge revision 16' go missing", lambda: self._simulate("vanish")),
             ("Restore 'Ridge revision 16'", lambda: self._simulate("restore")),
@@ -209,7 +226,14 @@ class LibraryView(QWidget):
         self.states_button.setMenu(self.states_menu)
         self.filters_toggle = _button("Filters ▾", "Show or hide filters", checkable=True)
         row.addStretch(1)
-        for widget in (self.filters_toggle, self.clear_filters, self.prev, self.next, *self.mode_buttons.values(), self.details_toggle):
+        for widget in (
+            self.filters_toggle,
+            self.clear_filters,
+            self.prev,
+            self.next,
+            *self.mode_buttons.values(),
+            self.details_toggle,
+        ):
             row.addWidget(widget)
         return header
 
@@ -411,7 +435,10 @@ class LibraryView(QWidget):
 
     # ------------------------------------------------------------------------------ feedback
     def note(self, message: str, level: str = "success", status: str = "") -> None:
-        word = status or {"success": "Done", "warning": "Note", "blocked": "Blocked", "info": "Info"}[level]
+        word = (
+            status
+            or {"success": "Done", "warning": "Note", "blocked": "Blocked", "info": "Info"}[level]
+        )
         self.banner.set_message(word, message, level)
         self.banner.show()
         self.feedback.emit(message)
@@ -436,12 +463,23 @@ class LibraryView(QWidget):
             self.filter_bar.populate(session.catalog, session)
         else:
             self.scope_picker.refresh(session) if self.scope_picker.list.currentRow() < 0 else None
-        self.filter_bar.show_query(session.query) if full else None
+        if (
+            full and not self.filter_bar.pending()
+        ):  # never overwrite keystrokes still in the debounce
+            self.filter_bar.show_query(session.query)
         if session.view_state == ViewState.LOADING:
-            self.state.show_state("Loading…", "Reading fixture records. Results appear when the read finishes.", "Finish loading")
+            self.state.show_state(
+                "Loading…",
+                "Reading fixture records. Results appear when the read finishes.",
+                "Finish loading",
+            )
             self.stack.setCurrentWidget(self.state)
         elif session.view_state == ViewState.ERROR:
-            self.state.show_state("Read error", f"{session.view_error} Your selection, filters and collections are intact.", "Retry")
+            self.state.show_state(
+                "Read error",
+                f"{session.view_error} Your selection, filters and collections are intact.",
+                "Retry",
+            )
             self.stack.setCurrentWidget(self.state)
         elif result.empty == EmptyState.EMPTY_SOURCE:
             self.state.show_state(*self._empty_text())
@@ -460,14 +498,21 @@ class LibraryView(QWidget):
                 bar = self.results.verticalScrollBar()
                 keep = bar.value()
                 self.results.page_model.set_keys(result.items)
-                bar.setValue(keep if self._shown_keys is not None and set(self._shown_keys) == set(result.items) else 0)
+                bar.setValue(
+                    keep
+                    if self._shown_keys is not None and set(self._shown_keys) == set(result.items)
+                    else 0
+                )
                 self._shown_keys = result.items
             else:
                 self.results.page_model.refresh()
             self.stack.setCurrentWidget(self.results)
         if self.stack.currentWidget() is self.state:
             self._shown_keys = None
-        self.summary.set_full_text(result.summary() + (f" · {session.query.mode.value} search" if session.query.text else ""))
+        self.summary.set_full_text(
+            result.summary()
+            + (f" · {session.query.mode.value} search" if session.query.text else "")
+        )
         self.prev.setEnabled(result.page > 0)
         self.next.setEnabled(result.page + 1 < result.page_count)
         self.clear_filters.setEnabled(session.query.filters_active)
@@ -493,7 +538,12 @@ class LibraryView(QWidget):
             key = session.focus if session.focus in keys else keys[-1]
             extra = ""
             if len(keys) > 1:
-                extra = f"{len(keys)} assets are selected, in this order: " + ", ".join(keys[:6]) + (" …" if len(keys) > 6 else "") + f". Showing details for {key}."
+                extra = (
+                    f"{len(keys)} assets are selected, in this order: "
+                    + ", ".join(keys[:6])
+                    + (" …" if len(keys) > 6 else "")
+                    + f". Showing details for {key}."
+                )
             self.details.show_asset(session, key, self.media, extra)
         self.actions.set_eligibility(session.available_actions(), len(keys))
         self._sync_organize()
@@ -505,7 +555,9 @@ class LibraryView(QWidget):
         combo.blockSignals(True)
         combo.clear()
         for collection in session.org.collections:
-            combo.addItem(f"{collection.name} ({len(collection.members)})", collection.collection_id)
+            combo.addItem(
+                f"{collection.name} ({len(collection.members)})", collection.collection_id
+            )
         combo.setCurrentIndex(max(0, combo.findData(want)))
         combo.blockSignals(False)
         has_sel, has_target = bool(session.selection), combo.count() > 0
@@ -518,9 +570,15 @@ class LibraryView(QWidget):
         panel.unfavorite.setEnabled(has_sel)
         panel.undo.setEnabled(session.can_undo)
         panel.redo.setEnabled(session.can_redo)
-        focus = session.focus if session.focus in session.selection else (session.selection[-1] if session.selection else None)
+        focus = (
+            session.focus
+            if session.focus in session.selection
+            else (session.selection[-1] if session.selection else None)
+        )
         tags = ", ".join(session.org.tags_of(focus)) if focus else ""
-        panel.tags.current.setText(f"Tags on {focus}: {tags or 'none'}" if focus else "Tags: select an asset")
+        panel.tags.current.setText(
+            f"Tags on {focus}: {tags or 'none'}" if focus else "Tags: select an asset"
+        )
 
     def _scope_text(self) -> str:
         query = self.session.query
@@ -531,12 +589,28 @@ class LibraryView(QWidget):
     def _empty_text(self) -> tuple[str, str, str]:
         query = self.session.query
         if query.collection is not None:
-            return ("This collection is empty", "It holds no references yet. Select assets in another source and use Add selected in Organize.", "Show all collections")
+            return (
+                "This collection is empty",
+                "It holds no references yet. Select assets in another source and use Add selected in Organize.",
+                "Show all collections",
+            )
         if query.scope == Scope.FAVORITES:
-            return ("No favorites yet", "Select an asset and use Favorite in Organize. A favorite is only a mark; it is not a rating.", "Show all supported assets")
+            return (
+                "No favorites yet",
+                "Select an asset and use Favorite in Organize. A favorite is only a mark; it is not a rating.",
+                "Show all supported assets",
+            )
         if query.scope == Scope.COLLECTIONS:
-            return ("No collections hold anything yet", "Create a collection in Organize and add selected assets to it.", "Show all supported assets")
-        return ("This source is empty", f"{self._scope_text()} has no fixture records. Choose another source.", "Show all supported assets")
+            return (
+                "No collections hold anything yet",
+                "Create a collection in Organize and add selected assets to it.",
+                "Show all supported assets",
+            )
+        return (
+            "This source is empty",
+            f"{self._scope_text()} has no fixture records. Choose another source.",
+            "Show all supported assets",
+        )
 
     def _state_action(self) -> None:
         session = self.session
@@ -557,7 +631,12 @@ class LibraryView(QWidget):
 
     def _simulate(self, what: str) -> None:
         key = "history:ridge-16"
-        self.note(self.session.simulate_vanish(key) if what == "vanish" else self.session.simulate_restore(key), "warning")
+        self.note(
+            self.session.simulate_vanish(key)
+            if what == "vanish"
+            else self.session.simulate_restore(key),
+            "warning",
+        )
         self.media.forget(key)
         self.refresh()
 
@@ -586,7 +665,9 @@ class LibraryView(QWidget):
         self.session.clear_filters()
         self.filter_bar.show_query(self.session.query)
         self.refresh(full=True)
-        self.note("Filters cleared. The source scope, sort order and selection are unchanged.", "info")
+        self.note(
+            "Filters cleared. The source scope, sort order and selection are unchanged.", "info"
+        )
 
     def _page(self, delta: int) -> None:
         self.session.go_page(self.session.query.page + delta)
@@ -595,7 +676,10 @@ class LibraryView(QWidget):
 
     def _on_select(self, key: str, modifiers) -> None:
         session = self.session
-        if modifiers & Qt.KeyboardModifier.ShiftModifier and session.focus in self.session.result().items:
+        if (
+            modifiers & Qt.KeyboardModifier.ShiftModifier
+            and session.focus in self.session.result().items
+        ):
             session.select_range(session.focus, key)
         elif modifiers & Qt.KeyboardModifier.ControlModifier:
             session.toggle(key)
@@ -647,9 +731,15 @@ class LibraryView(QWidget):
         session = self.session
         if action == ActionId.INSPECT:
             if session.selection:
-                self.inspect(session.focus if session.focus in session.selection else session.selection[-1])
+                self.inspect(
+                    session.focus if session.focus in session.selection else session.selection[-1]
+                )
         elif action == ActionId.COMPARE:
-            self.compare(session.selection[0] if session.selection else "")
+            self.compare(
+                session.focus
+                if session.focus in session.selection
+                else (session.selection[0] if session.selection else "")
+            )
         elif action in HANDOFF_ACTIONS:
             self.begin_placement(action)
         elif action in (ActionId.ADD_COLLECTION, ActionId.REMOVE_COLLECTION):
@@ -691,7 +781,11 @@ class LibraryView(QWidget):
         session = self.session
         proposal = session.propose(action)
         if not proposal.eligibility.eligible:
-            self.note(proposal.eligibility.reason or "Select at least one asset.", "blocked", "Cannot place")
+            self.note(
+                proposal.eligibility.reason or "Select at least one asset.",
+                "blocked",
+                "Cannot place",
+            )
             return None
         while True:
             dialog = CompatibilityReview(proposal, self)
@@ -705,7 +799,11 @@ class LibraryView(QWidget):
                 continue
             break
         if dialog.choice == ReviewChoice.CANCEL:
-            self.note("Placement cancelled. The Library and the destination are unchanged.", "info", "Cancelled")
+            self.note(
+                "Placement cancelled. The Library and the destination are unchanged.",
+                "info",
+                "Cancelled",
+            )
             return None
         choice = Replacement.REPLACE if dialog.choice == ReviewChoice.REPLACE else None
         return self.place(proposal, choice)
@@ -722,7 +820,9 @@ class LibraryView(QWidget):
                         ("scroll", self.results.verticalScrollBar().value()), ("layout", self.ui.layout)),
                 )  # fmt: skip
             if proposal.action == ActionId.LEARNING:
-                self.learning_dialog = LearningProposalDialog(self.session.learning_proposals[-1], self)
+                self.learning_dialog = LearningProposalDialog(
+                    self.session.learning_proposals[-1], self
+                )
                 self.learning_dialog.show()
             self.placed.emit(result)
         self.refresh()
@@ -742,7 +842,7 @@ class LibraryView(QWidget):
         self.show_page("browse")
         if "scroll" in ui:
             self.results.verticalScrollBar().setValue(ui["scroll"])
-        self.note(self.session.last_feedback, "warning" if notes else "success", "Returned")
+        self.note(self.session.last_feedback, "warning" if notes else "success", "Context restored")
         return notes
 
     # ---------------------------------------------------------------------------- organizing
@@ -756,10 +856,16 @@ class LibraryView(QWidget):
         name = self.organize.collections.name.text()
         if self._guard(lambda: self.session.create_collection(name)):
             self.organize.collections.name.clear()
-            self.organize.collections.target.setCurrentIndex(self.organize.collections.target.count())
+            self.organize.collections.target.setCurrentIndex(
+                self.organize.collections.target.count()
+            )
         self.refresh(full=True)
-        newest = self.session.org.collections[-1].collection_id if self.session.org.collections else None
-        self.organize.collections.target.setCurrentIndex(max(0, self.organize.collections.target.findData(newest)))
+        newest = (
+            self.session.org.collections[-1].collection_id if self.session.org.collections else None
+        )
+        self.organize.collections.target.setCurrentIndex(
+            max(0, self.organize.collections.target.findData(newest))
+        )
 
     def _rename_collection(self) -> None:
         target, name = self._target(), self.organize.collections.name.text()
@@ -807,4 +913,3 @@ class LibraryView(QWidget):
         if self._menu is not None:
             self._menu.close()
         self.media.deleteLater()
-

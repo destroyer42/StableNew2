@@ -50,7 +50,7 @@ class PrototypeWindow(QMainWindow):
         *,
         edit_layout: str = "editor",
         motion_layout: str = "strip",
-        library_layout: str = "gallery",
+        library_layout: str = "adaptive",
     ):
         super().__init__()
         self.library = library or ThemeLibrary()
@@ -80,7 +80,9 @@ class PrototypeWindow(QMainWindow):
         header.addWidget(self.output_toggle)
         self.return_button = QPushButton("← Return to Library")
         self.return_button.setAccessibleName("Return to Library")
-        self.return_button.setToolTip("Go back to the Library with the same scope, filters, sort, page and selection")
+        self.return_button.setToolTip(
+            "Go back to the Library with the same scope, filters, sort, page and selection"
+        )
         self.return_button.hide()
         header.addWidget(self.return_button)
         capsule = QLabel("ISOLATED DEMO · NO GPU · NO BACKEND · NO JOBS")
@@ -93,7 +95,13 @@ class PrototypeWindow(QMainWindow):
         self.nav = QListWidget()
         self.nav.setProperty("role", "nav")
         self.nav.addItems(
-            ["Create Image", "Component Library", "Edit & Improve", "Motion & Video", "Asset Library"]
+            [
+                "Create Image",
+                "Component Library",
+                "Edit & Improve",
+                "Motion & Video",
+                "Asset Library",
+            ]
         )
         self.nav.setMaximumWidth(240)
         self.nav.setMinimumWidth(184)
@@ -206,7 +214,9 @@ class PrototypeWindow(QMainWindow):
             self.edit_view.adopt_session_source()
             target = self.edit_view
         elif action in (ActionId.ANIMATE, ActionId.STORYBOARD, ActionId.MOVIE):
-            mode = {ActionId.ANIMATE: KIND_QUICK, ActionId.STORYBOARD: KIND_STORY}.get(action, KIND_MOVIE)
+            mode = {ActionId.ANIMATE: KIND_QUICK, ActionId.STORYBOARD: KIND_STORY}.get(
+                action, KIND_MOVIE
+            )
             self.motion_view.adopt_session_state(mode)
             target = self.motion_view
         elif action == ActionId.REGENERATE:
@@ -334,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--library-layout",
         choices=("gallery", "adaptive"),
-        default="gallery",
+        default="adaptive",
         help="Asset Library layout for design comparison (A gallery-first, B adaptive browser)",
     )
     args, qt_args = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
@@ -344,7 +354,9 @@ def main(argv: list[str] | None = None) -> int:
     theme = library.get(args.theme) if args.theme else library.load_active()
     apply_theme(app, theme)
     window = PrototypeWindow(
-        library, theme, edit_layout=args.edit_layout,
+        library,
+        theme,
+        edit_layout=args.edit_layout,
         motion_layout=args.motion_layout,
         library_layout=args.library_layout,
     )

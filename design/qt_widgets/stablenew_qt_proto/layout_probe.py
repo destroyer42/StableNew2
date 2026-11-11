@@ -642,3 +642,254 @@ def probe_motion(window) -> dict[str, Any]:
         )
         report["compact"] = panel.compact
     return report
+
+
+# ----------------------------------------------------------------------------------- Asset Library
+LIBRARY_STATES = ("browse", "selected", "filters", "organize")
+
+
+def prime_library(
+    window,
+    size: tuple[int, int],
+    layout: str = "gallery",
+    state: str = "browse",
+    mode: str = "grid",
+    catalog: str = "small",
+) -> None:
+    """Prepare an Asset Library evidence case. Fixtures only; nothing is scanned, moved or written."""
+    from .library_domain import fixture_catalog
+
+    app = QApplication.instance()
+    view = window.library_view
+    window.nav.setCurrentRow(window.pages.indexOf(view))
+    window.show()
+    pump(app)
+    window.resize(*size)
+    window.activateWindow()
+    pump(app)
+    if catalog == "large":
+        view.session.catalog = fixture_catalog(bulk=1500)
+        view.refresh(full=True)
+    view.set_layout_design(layout)
+    view.set_mode(mode)
+    pump(app, 8)
+    if state in ("selected", "organize"):
+        items = view.session.result().items
+        for key in items[:3]:
+            view.session.toggle(key)
+        view.sync_selection()
+        if state == "organize":
+            from .library_view import TAB_ORGANIZE
+
+            view.show_inspector(TAB_ORGANIZE)
+    elif state == "filters":
+        view.filters_toggle.setChecked(True)
+        view.filter_bar.search.setText("ridge")
+        view.filter_bar.flush()
+        items = view.session.result().items
+        if items:
+            view.session.toggle(items[0])
+        view.sync_selection()
+    pump(app, 10)
+
+
+def _library_controls(view) -> dict[str, QWidget]:
+    bar = view.filter_bar
+    controls: dict[str, QWidget] = {
+        "layout_gallery": view.layout_buttons["gallery"],
+        "layout_adaptive": view.layout_buttons["adaptive"],
+        "search": bar.search,
+        "search_mode": bar.mode,
+        "sort": bar.sort,
+        "grid": view.mode_buttons["grid"],
+        "list": view.mode_buttons["list"],
+        "prev": view.prev,
+        "next": view.next,
+        "clear_filters": view.clear_filters,
+        "selection_clear": view.strip.clear,
+        "selection_actions": view.strip.actions,
+        "selection_organize": view.strip.organize,
+        "results": view.results,
+    }
+    if view._narrow:
+        controls["switch_browse"] = view.view_switch["browse"]
+        controls["switch_inspect"] = view.view_switch["inspect"]
+    for name in ("kind", "category", "model", "recency", "availability", "tag", "collection"):
+        controls[f"filter_{name}"] = getattr(bar, name)
+    controls["filter_favorites"] = bar.favorites
+    return controls
+
+
+def _clipped_by_ancestors(widget: QWidget, window: QWidget) -> bool:
+    """True when any part of the widget lies outside an ancestor that clips it (scrollers excepted)."""
+    area = widget.parentWidget()
+    while area is not None:
+        tl = widget.mapTo(area, widget.rect().topLeft())
+        br = widget.mapTo(area, widget.rect().bottomRight())
+        scroller = isinstance(area.parentWidget(), QScrollArea)
+        if tl.x() < 0 or br.x() >= area.width() + 1:
+            return True
+        if not scroller and (tl.y() < 0 or br.y() >= area.height() + 1):
+            return True
+        if area is window:
+            break
+        area = area.parentWidget()
+    return False
+
+
+def _text_clipped(widget: QWidget) -> str | None:
+    """Persistent text that does not fit its own control (the clipped 'Any collectio' class of defect)."""
+    from PySide6.QtWidgets import QAbstractButton, QComboBox
+
+    if isinstance(widget, QComboBox):
+        text, room = widget.currentText(), widget.width() - 34
+    elif isinstance(widget, QAbstractButton) and widget.text():
+        text, room = widget.text().replace("&", ""), widget.width() - 14
+    else:
+        return None
+    if not text:
+        return None
+    need = widget.fontMetrics().horizontalAdvance(text)
+    return f"{text!r} needs {need}px, has {room}px" if need > room else None
+
+
+def probe_library(window) -> dict[str, Any]:
+    """Measure the Library at the current size: tiles, regions, clipping, reachability, focus, timing."""
+    import time
+
+    from PySide6.QtWidgets import QAbstractButton, QAbstractSpinBox, QComboBox, QLineEdit
+
+    view = window.library_view
+    app = QApplication.instance()
+    session = view.session
+    results = view.results
+    controls = _library_controls(view)
+
+    clipped = [
+        n for n, w in controls.items() if w.isVisibleTo(window) and _clipped_by_ancestors(w, window)
+    ]
+    text_clipped = []
+    for kind in (QAbstractButton, QComboBox):
+        for widget in view.findChildren(kind):
+            if widget.isVisibleTo(window):
+                note = _text_clipped(widget)
+                if note:
+                    text_clipped.append(
+                        f"{widget.accessibleName() or widget.metaObject().className()}: {note}"
+                    )
+    shrunk = []
+    for kind in (QAbstractButton, QComboBox, QLineEdit, QAbstractSpinBox):
+        for widget in view.findChildren(kind):
+            if (
+                not widget.isVisibleTo(window)
+                or not widget.isEnabled()
+                or widget.metaObject().className() == "QLineEditIconButton"
+            ):
+                continue
+            hint = widget.minimumSizeHint()
+            if widget.height() < hint.height() or widget.width() < min(hint.width(), 48):
+                name = widget.accessibleName() or widget.metaObject().className()
+                shrunk.append(
+                    f"{name} {widget.width()}x{widget.height()} < {hint.width()}x{hint.height()}"
+                )
+
+    viewport = results.viewport()
+    tiles = results.visible_tile_count() if results.isVisibleTo(window) else 0
+    tops = set()
+    if results.isVisibleTo(window):
+        for r in range(results.page_model.rowCount()):
+            rect = results.visualRect(results.page_model.index(r))
+            if rect.intersects(viewport.rect()):
+                tops.add(rect.top())
+    bar = results.verticalScrollBar()
+    filter_height = (
+        view.filter_bar.filters.height() if view.filter_bar.filters.isVisibleTo(window) else 0
+    )
+    chrome_height = view.filter_bar.height() if view.filter_bar.isVisibleTo(window) else 0
+    inspector = view.tabs.width() if view.tabs.isVisibleTo(window) else 0
+
+    for _ in range(
+        5
+    ):  # a native window may not be active yet; the walk needs a real starting focus
+        window.activateWindow()
+        results.setFocus()
+        pump(app, 3)
+        if app.focusWidget() is not None:
+            break
+    seen: list[QWidget] = []
+    for _ in range(160):
+        focus = app.focusWidget()
+        if focus is None or focus in seen:
+            break
+        seen.append(focus)
+        window.focusNextChild()
+        pump(app, 1)
+    missing = [
+        n
+        for n, w in controls.items()
+        if w.isEnabled()
+        and w.isVisibleTo(window)
+        and w.focusPolicy() != Qt.FocusPolicy.NoFocus
+        and not any(x is w or w.isAncestorOf(x) for x in seen)
+    ]
+
+    selection = bool(session.selection)
+    actions_reachable = (not selection) or (
+        view.strip.actions.isVisibleTo(window)
+        and view.strip.actions.isEnabled()
+        and (
+            view.tabs.isVisibleTo(window)
+            or view.view_switch["inspect"].isVisibleTo(window)
+            or view.strip.details.isVisibleTo(window)
+        )
+    )
+
+    def timed(call, repeat: int = 5) -> float:
+        samples = []
+        for _ in range(repeat):
+            start = time.perf_counter()
+            call()
+            pump(app, 2)
+            samples.append((time.perf_counter() - start) * 1000)
+        return round(sorted(samples)[len(samples) // 2], 1)
+
+    refresh_ms = timed(lambda: view.refresh(full=True))
+    page_ms = None
+    if session.result().page_count > 1:
+
+        def flip():
+            view._page(1)
+            view._page(-1)
+
+        page_ms = timed(flip)
+
+    return {
+        "layout": view.ui.layout,
+        "mode": view.ui.mode,
+        "window": window.size().toTuple(),
+        "library_view": view.size().toTuple(),
+        "narrow_inspector_page": bool(view._narrow),
+        "catalog": len(session.catalog),
+        "results": session.result().total,
+        "page_size": session.query.page_size,
+        "tiles_visible": tiles,
+        "tile_rows_visible": len(tops),
+        "media_area": viewport.size().toTuple(),
+        "scrollbar_range_px": bar.maximum(),
+        "filters_height": filter_height,
+        "filter_bar_height": chrome_height,
+        "inspector_width": inspector,
+        "scope_width": view.scope_picker.width() if view.scope_picker.isVisibleTo(window) else 0,
+        "clipped": clipped,
+        "text_clipped": text_clipped,
+        "shrunk_controls": shrunk,
+        "tab_stops": len(seen),
+        "missing_tab_stops": missing,
+        "actions_reachable": actions_reachable,
+        "selection": len(session.selection),
+        "widgets": len(view.findChildren(QWidget)),
+        "decoded": view.media.decode_count,
+        "blocked_requests": view.media.blocked_count,
+        "refresh_ms": refresh_ms,
+        "page_flip_ms": page_ms,
+    }
