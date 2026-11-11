@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-711 of 866 modules have a docstring.
+713 of 868 modules have a docstring.
 
 ## src/
 
@@ -445,6 +445,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `video_workflow_runtime_strip_v2.py`: Tk rendering of the Video Workflow "Runtime readiness" strip (PR-VID-UX-311)
 - `video_workflow_sequence_panel_v2.py`: Tk rendering of the Video Workflow "Multi-shot sequence" section (PR-VID-SEQ-331A)
 - `video_workflow_tab_frame_v2.py`: (no docstring)
+- `video_workflow_task_panel_v2.py`: Task selector and Suggested-settings line for the Video Workflow tab (PR-VID-UX-360)
 
 ## src/gui/widgets/
 
@@ -982,6 +983,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `workflow_readiness.py`: Bounded, workflow-specific resource-readiness check (PR-VID-130)
 - `workflow_registry.py`: (no docstring)
 - `workflow_source_preparation.py`: Deterministic source preparation declared by a workflow catalog entry
+- `workflow_tasks.py`: Operator tasks for the Video Workflow tab (PR-VID-UX-360)
 
 ## src/video/motion/
 

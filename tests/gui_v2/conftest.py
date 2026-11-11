@@ -57,6 +57,19 @@ def _isolate_prompt_pack_dir(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) 
 
 
 @pytest.fixture(autouse=True)
+def _gui_tests_do_not_depend_on_a_local_rife_install(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Video Workflow form suggests smoothing when RIFE is found (PR-VID-UX-360).
+
+    Whether the host has RIFE (``STABLENEW_RIFE_EXE``, ``PATH``, ``tools/rife``) must not change what a
+    GUI test sees, so the form's availability check reports "not found" unless a test sets it.
+    """
+
+    monkeypatch.setattr(
+        "src.controller.video_preflight_controller.find_rife_executable", lambda: None
+    )
+
+
+@pytest.fixture(autouse=True)
 def _gui_tests_never_open_a_native_yes_no_dialog(monkeypatch: pytest.MonkeyPatch) -> None:
     """A real ``askyesno`` blocks the test run forever; fail fast and name the test that needs an injected answer.
 

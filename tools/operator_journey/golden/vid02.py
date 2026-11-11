@@ -300,6 +300,10 @@ def run_vid02(
         d, w = run.driver, run.window
         tab = w.video_workflow_tab
         d.select_tab(w.center_notebook, "Video Workflow - Adv")
+        # The Motion Library and the driving clip belong to the "Follow a driving clip" task.
+        if tab.current_task() != "follow_clip":
+            d.invoke(tab.task_selector.buttons["follow_clip"], label="Make: Follow a driving clip")
+            d.pump(0.5)
         panel = tab.motion_library_panel
 
         # 1. Choose the library folder (a test-owned directory), then Lane A: Batch Convert Motion.
@@ -483,6 +487,10 @@ def run_vid02(
         d, w = run.driver, run.window
         tab = w.video_workflow_tab
         d.select_tab(w.center_notebook, "Video Workflow - Adv")
+        # The Motion Library and the driving clip belong to the "Follow a driving clip" task.
+        if tab.current_task() != "follow_clip":
+            d.invoke(tab.task_selector.buttons["follow_clip"], label="Make: Follow a driving clip")
+            d.pump(0.5)
         panel = tab.motion_library_panel
         d.wait_until(
             lambda: bool(lane_b_id) and panel.tree.exists(lane_b_id),
@@ -513,10 +521,15 @@ def run_vid02(
             timeout=10,
             description="the source image is shown",
         )
+        if not tab.advanced_section.is_expanded():
+            # The engine and its settings are filled in for the task; an operator who wants a specific one opens
+            # the Settings editor with "Change".
+            d.invoke(tab.suggested_line.change_button, label="Settings: Change")
+            d.pump(0.5)
         fun = next((v for v in tab.workflow_combo.cget("values") if "Fun Control" in str(v)), None)
         if fun is None:
-            raise JourneyHold("the workflow picker offers no driving-video workflow")
-        d.select_combobox(tab.workflow_combo, str(fun), label="Workflow")
+            raise JourneyHold("the engine picker offers no driving-video workflow")
+        d.select_combobox(tab.workflow_combo, str(fun), label="Engine")
         d.pump(0.6)
         if converted:
             first = converted[0]

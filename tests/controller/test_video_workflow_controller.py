@@ -155,3 +155,21 @@ def test_wan_seed_rejects_invalid_or_out_of_range_values(tmp_path: Path) -> None
         valid, reason = controller.validate_form_data(_wan_form(seed=seed))
         assert valid is False
         assert "Seed" in str(reason)
+
+
+def test_rife_available_reports_discovery_and_never_raises(tmp_path: Path, monkeypatch) -> None:
+    # PR-VID-UX-360: the form suggests smoothing only when the same discovery admission uses finds RIFE.
+    import src.controller.video_preflight_controller as module
+
+    controller, _ = _controller(tmp_path)
+
+    monkeypatch.setattr(module, "find_rife_executable", lambda: Path("rife.exe"))
+    assert controller.rife_available() is True
+    monkeypatch.setattr(module, "find_rife_executable", lambda: None)
+    assert controller.rife_available() is False
+
+    def _boom():
+        raise OSError("tools folder unreadable")
+
+    monkeypatch.setattr(module, "find_rife_executable", _boom)
+    assert controller.rife_available() is False

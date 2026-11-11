@@ -567,7 +567,9 @@ def test_video_workflow_status_and_source_identity_stay_visible_in_the_fixed_hea
             assert label.winfo_ismapped() and not _is_under(label, scroll.inner)
         assert "boom" in tab.status_var.get()
         assert "source.png" in tab.source_summary_var.get()
-        # Effective settings are condensed behind a disclosure but remain one click away and intact.
+        # Effective settings are condensed behind a disclosure (inside Details since PR-VID-UX-360) and intact.
+        tab.details_section.set_expanded(True)
+        _settle(laptop_root, 60)
         section = tab.effective_settings_section
         assert not tab.effective_settings_label.winfo_ismapped()
         section.toggle_button.invoke()
@@ -583,7 +585,7 @@ def test_advanced_conditioning_collapses_without_losing_values_and_flags_active_
     tab.pack(fill="both", expand=True)
     try:
         _settle(laptop_root, 200)
-        tab.advanced_section.set_expanded(True)  # Advanced Conditioning lives inside the Advanced options
+        tab.keyframes_section.set_expanded(True)  # Advanced Conditioning lives under Keyframes and conditioning
         _settle(laptop_root, 60)
         section = tab.conditioning_section
         assert section.is_expanded() is False and not tab.conditioning_frame.winfo_ismapped()

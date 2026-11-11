@@ -292,6 +292,7 @@ def test_header_strip_stays_compact_and_details_live_in_the_scrolled_body(tk_roo
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=app, app_state=SimpleNamespace())
     tab.pack(fill="both", expand=True)
     tk_root.geometry("1280x800")
+    assert tab.select_task("batch")  # PR-VID-UX-360: the strip belongs to the "Many images" task
     tk_root.update_idletasks()
     panel = tab.batch_panel
     header = tab._header_frame

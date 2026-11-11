@@ -101,18 +101,23 @@ def _open_workflow_tab(run: GoldenRun, source_image: Path, form_prompt: str = ""
         timeout=10,
         description="the chosen source image is shown",
     )
+    # The Storyboard belongs to the "Multi-shot sequence" task: choosing it shows the panel in the open.
+    if tab.current_task() != "sequence":
+        d.invoke(tab.task_selector.buttons["sequence"], label="Make: Multi-shot sequence")
+        d.pump(0.5)
+    if not tab.advanced_section.is_expanded():
+        # The engine and its settings are filled in for the task; an operator who wants a specific one opens
+        # the Settings editor with "Change".
+        d.invoke(tab.suggested_line.change_button, label="Settings: Change")
+        d.pump(0.5)
     labels = [str(v) for v in tab.workflow_combo.cget("values")]
     wanted = next((v for v in labels if "TI2V-5B" in v), None)
     if wanted is None:
         raise JourneyHold(f"the picker does not offer {WORKFLOW_ID} {WORKFLOW_VERSION}: {labels}")
-    d.select_combobox(tab.workflow_combo, wanted, label="Workflow")
+    d.select_combobox(tab.workflow_combo, wanted, label="Engine")
     d.pump(0.6)
     if form_prompt:
         d.type_in_text(tab.prompt_text, form_prompt, label="Motion prompt (form)")
-    if not tab.advanced_section.is_expanded():
-        # The Storyboard lives under "Advanced options", which starts collapsed: an operator opens it first.
-        d.invoke(tab.advanced_section.toggle_button, label="Advanced options")
-        d.pump(0.5)
     if not tab.sequence_panel.is_expanded():
         d.invoke(tab.sequence_panel.toggle_button, label="Multi-shot sequence")
         d.pump(0.5)
@@ -447,12 +452,21 @@ def run_vid03(
             f"the revised job recorded the first run's artifacts: {shared[:3]}",
         )
 
-        # Unsupported sequencing refuses accurately (Fun Control is experimental and not a sequence workflow).
+        # Unsupported sequencing is not on offer: the sequence task lists only engines that can run one
+        # (Fun Control is experimental and not a sequence workflow).  Should one ever be listed, choosing
+        # it must still refuse with a reason.
         labels = [str(v) for v in tab.workflow_combo.cget("values")]
         fun = next((v for v in labels if "Fun Control" in v), None)
+        ev.observe("sequence_engines_offered", labels)
+        run.check(
+            "refuse",
+            "sequence_task_offers_only_sequence_engines",
+            fun is None and tab.current_task() == "sequence",
+            f"task={tab.current_task()!r} engines={labels}",
+        )
         if fun is not None:
             submitted = len(run.submissions.calls)
-            d.select_combobox(tab.workflow_combo, fun, label="Workflow")
+            d.select_combobox(tab.workflow_combo, fun, label="Engine")
             d.pump(0.6)
             d.invoke(
                 d.find_button(panel, "Preview Sequence Summary"), label="Preview Sequence Summary"
