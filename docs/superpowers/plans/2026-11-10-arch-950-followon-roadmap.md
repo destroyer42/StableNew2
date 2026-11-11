@@ -45,7 +45,7 @@
 
 ### Task 1: ARCH-951 Remove unreferenced legacy paths
 
-**Status:** tier A implemented on branch `arch/arch-951-unreferenced-legacy-removal`. Remaining: tier B decision (OD-1), ratchets, gate, PR.
+**Status:** tier A implemented and rebased on `origin/main` `2ebf96fe` (branch `arch/arch-951-unreferenced-legacy-removal`); ratchets lowered; pull request open for hosted CI. Local full gate: not clean (4 journey failures reproduced on pristine `origin/main`; 2 timing tests passed on rerun). Tier B is ARCH-951B (below).
 
 **Files:**
 - Modify: `src/pipeline/executor.py`, `src/pipeline/pipeline_runner.py`, `src/controller/app_controller.py`, `src/controller/pipeline_controller.py`, `src/gui/controllers/learning_controller.py`, `docs/Subsystems/Image/IMAGE_PIPELINE.md`
@@ -53,12 +53,17 @@
 - Tier B only: delete `src/pipeline/payload_builder.py`, `tests/api/test_sdxl_payloads.py`; regenerate `docs/CODE_MAP.md`
 
 **Interfaces:**
-- Produces: smaller files and lower ceilings; no new symbols. Methods that became test-only are reported, not deleted: `PipelineController._normalize_run_mode`, `start_pipeline_v2`, `_get_pipeline_state`.
+- Produces: smaller files and lower ceilings; no new symbols.
+- Candidates for subsequent removal, NOT assumed dead: `PipelineController.start_pipeline_v2`, `_normalize_run_mode`, `_get_pipeline_state`. They became test-only because their only production caller (`AppController.run_pipeline`, whose docstring named `start_pipeline_v2`) was deleted. Checked for indirect reachability: no string literal, f-string or composed name, `getattr` site, callback registration or non-Python file reaches any of them (the `getattr` sites in `presentation_actions.py`, `job_history_panel_v2.py`, `queue_panel_v2.py` and `history_sequence_contract.py` use controller-level literal names or `f"{action}_sequence"`; `main_window_v2.py:1268` resolves `start_pipeline` or `start`). `_normalize_run_mode` and `_get_pipeline_state` are called only from inside `start_pipeline_v2`. Three test files drive `start_pipeline_v2` (`test_core_run_path_v2.py`, `test_pipeline_controller_jobbuilder_integration_v2.py`, `test_pipeline_controller_run_modes_v2.py`), so removal means migrating those tests: a tier C decision (OD-3). The evidence is static, and one runtime doc (`PR-RUNTIME-WEBUI-WATCHDOG-120...md` line 41) still mentions the method.
 
 - [x] **Step 1: Tier A deletion** of 58 methods plus `_build_stage_payload`, orphaned imports, four write-only attributes (`_last_img2img_result`, `_last_upscale_result`, `_webui_api`, `_learning_runner`), and the stale `executor.py` comment. Reachability re-run reports only `_get_batch_runs` unreferenced.
-- [ ] **Step 2: Run focused tests**: `python -m pytest tests/pipeline tests/image_backends tests/controller tests/learning tests/learning_v2 tests/api -q`. Expected: all pass, same collection count.
-- [ ] **Step 3: Tier B is BLOCKED**: OD-1 was answered "include", but `tests/integration/test_prompt_optimizer_payload_integration.py` (3 tests on prompt-optimizer and stage-policy behavior) also imports `build_sdxl_payload`, which the work package did not list. Deleting it is a second test edit and a stop condition. Needs an owner decision: delete all three tests, or first confirm the executor path covers the same optimizer and AUTO-policy assertions. Do not proceed until decided; then delete the module and both test files, run `python tools/generate_code_map.py`, then `python -m pytest tests/tools/test_code_map.py -q`.
-- [ ] **Step 4: Lower ceilings**: `python tools/ci/<each ratchet tool> --update` for controller surface, mypy, ruff, architecture. Expected: `app_controller.py` and `pipeline_controller.py` ceilings decrease, nothing increases.
+- [x] **Step 2: Run focused tests**: `python -m pytest tests/pipeline tests/image_backends tests/controller tests/learning tests/learning_v2 tests/api -q`. Expected: all pass, same collection count.
+- [ ] **Step 3: Tier B is DEFERRED to a separate package (ARCH-951B) under a revised acceptance contract.** OD-1 was answered "include", but `tests/integration/test_prompt_optimizer_payload_integration.py` (3 tests) also imports `build_sdxl_payload`; the work package listed only `tests/api/test_sdxl_payloads.py`. A test is not deleted merely because its implementation dependency is obsolete. Revised contract for ARCH-951B:
+  1. Per-test mapping table: each of the 21 tests (18 in `tests/api/test_sdxl_payloads.py`, 3 in the integration file) is mapped to a test that asserts the same behavior through the executor path or a shared component, or is explicitly waived by the owner as builder-only behavior.
+  2. Established now, for the 3 integration tests (all covered; nothing lost by deleting them once the builder goes): optimizer enabled -> `tests/pipeline/test_executor_prompt_optimizer.py::test_txt2img_stage_uses_prompt_optimizer_and_records_manifest` (identical prompt and negative strings through `run_txt2img_stage`); optimizer disabled -> `tests/image_backends/test_webui_family_prompt_intent.py::test_explicitly_disabled_optimizer_preserves_order_duplicates_and_unicode` (stronger: all backends and stages, byte-identical); AUTO policy values -> `test_executor_prompt_optimizer.py::test_txt2img_stage_auto_fills_missing_or_auto_policy_keys` and `tests/unit/test_stage_policy_engine.py::test_stage_policy_engine_applies_missing_txt2img_values` (DPM++ 2M, Karras, 28, 6.5). Both builder and executor delegate to `PromptOptimizerOrchestrator` and `StagePolicyEngine`, so the shared logic stays covered.
+  3. NOT yet established: the 18 `tests/api/test_sdxl_payloads.py` tests (refiner/hires/upscaler field encoding, `last_image_meta` chaining, alias normalization, empty config, extra-key preservation, string and enum stage types, `StageExecution` input). They assert the builder's own wire encoding, and the executor builds its payloads differently. The mapping table must show where each behavior is asserted on the live path, or record an owner waiver. Any behavior with neither gets a new executor-path test before deletion.
+  4. Deletion happens only after 1-3 are complete: delete the module and both test files together, run `python tools/generate_code_map.py`, then `python -m pytest tests/tools/test_code_map.py -q`; collection count drops by exactly 21.
+- [x] **Step 4: Lower ceilings**: `python tools/ci/<each ratchet tool> --update` for controller surface, mypy, ruff, architecture. Expected: `app_controller.py` and `pipeline_controller.py` ceilings decrease, nothing increases.
 - [ ] **Step 5: Gate**: `python tools/ci/run_pr_gate.py --full`. Expected: pass.
 - [ ] **Step 6: Commit and open PR**: `refactor(arch): ARCH-951 remove unreferenced legacy execution and submission paths`.
 
@@ -85,6 +90,8 @@
 ---
 
 ### Task 3: ARCH-952 History media projection out of `AppController`
+
+**Re-scope first:** ARCH-930 (PR #283, merged) already extracted the SVD history summary into `src/video/svd_history.py` and removed `_extract_history_result_metadata`, `_history_sort_key`, `_extract_video_artifact_summary` and `_build_svd_history_record` from `AppController`. Re-run the cluster inventory on current `origin/main`; keep only what is still in the controller and reuse that module. The file list and interfaces below predate that change.
 
 **Files:**
 - Create: `src/video/history_media_projection.py`
