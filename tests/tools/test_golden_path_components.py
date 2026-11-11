@@ -134,6 +134,12 @@ def test_overall_verdict_is_the_worst_journey(tmp_path: Path) -> None:
     )
 
 
+def test_empty_suite_evidence_is_held(tmp_path: Path) -> None:
+    verdict = write_run_evidence(tmp_path, plan={}, results=[], mode="simulated", driver="tk")
+    assert verdict == HOLD
+    assert json.loads((tmp_path / "evidence.json").read_text())["overall_verdict"] == HOLD
+
+
 # --- fake backends (loopback only) ------------------------------------------------------------------------------------
 
 

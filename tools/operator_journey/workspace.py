@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
+import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -288,6 +291,30 @@ class OperatorWorkspace:
                     os.environ[key] = value
 
 
+def _snapshot_repository(source: Path, target: Path) -> None:
+    """Retain committed SQLite state in a standalone file safe to inspect after sealing."""
+
+    deadline = time.monotonic() + 5
+
+    def check_progress(status: int, _remaining: int, _total: int) -> None:
+        if status != sqlite3.SQLITE_DONE and time.monotonic() >= deadline:
+            raise TimeoutError("timed out retaining the journey's SQLite repository")
+
+    # Stage next to the target so a failed backup leaves no partial database in the evidence.
+    with TemporaryDirectory(prefix=".sqlite-snapshot-", dir=target.parent) as scratch:
+        snapshot = Path(scratch) / target.name
+        source_uri = f"{source.absolute().as_uri()}?mode=ro"
+        with closing(sqlite3.connect(source_uri, uri=True)) as reader:
+            with closing(sqlite3.connect(snapshot)) as writer:
+                reader.backup(writer, pages=256, progress=check_progress, sleep=0.05)
+                # SQLite readers can create WAL/SHM sidecars even when opened with mode=ro.
+                if writer.execute("PRAGMA journal_mode=DELETE").fetchone() != ("delete",):
+                    raise sqlite3.OperationalError(
+                        "could not make the retained repository standalone"
+                    )
+        snapshot.replace(target)
+
+
 def archive_workspace(
     workspace: OperatorWorkspace, evidence: Any, run_dir: Path, *, discard: bool
 ) -> None:
@@ -305,12 +332,11 @@ def archive_workspace(
                     source,
                     target / f"v{index}_{'image' if key == 'artifact' else 'manifest'}{suffix}",
                 )
-    for source, name in (
-        (workspace.records_path, "learning_records.jsonl"),
-        (workspace.state_dir / "jobs.sqlite3", "jobs.sqlite3"),
-    ):
-        if source.is_file():
-            shutil.copy2(source, target / name)
+    if workspace.records_path.is_file():
+        shutil.copy2(workspace.records_path, target / "learning_records.jsonl")
+    repository = workspace.state_dir / "jobs.sqlite3"
+    if repository.is_file():
+        _snapshot_repository(repository, target / repository.name)
     if discard:
         shutil.rmtree(workspace.root, ignore_errors=True)
 

@@ -7,10 +7,13 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import urllib.request
+from contextlib import closing
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -26,6 +29,7 @@ from tools.operator_journey.evidence import FAIL, HOLD, NO_GO, JourneyEvidence
 from tools.operator_journey.golden import baseline, compare, friction, provenance, registry
 from tools.operator_journey.golden.physical import confirmation_phrase, default_confirm
 from tools.operator_journey.golden.suite import redact, write_run_evidence
+from tools.operator_journey.workspace import archive_workspace
 
 HOME = str(Path.home())
 
@@ -365,6 +369,68 @@ def test_screenshot_metadata_is_stripped_and_the_pixel_caveat_is_recorded(
     row = next(r for r in manifest["files"] if r["path"] == "screenshots/IMG-01_1_prompt.png")
     assert row["transform"] == "png_metadata_stripped_pixels_unredacted"
     assert row["source_sha256"] != row["sha256"] and "NOT redacted" in manifest["redaction"]
+
+
+@pytest.mark.parametrize("pending_wal", [False, True], ids=["closed", "pending-wal"])
+def test_retained_repository_can_be_read_without_changing_the_seal(
+    tmp_path: Path, acceptance_root: Path, pending_wal: bool
+) -> None:
+    run = run_folder(tmp_path, "r", [journey("IMG-01")])
+    state_dir = tmp_path / "workspace #1"
+    state_dir.mkdir()
+    workspace = SimpleNamespace(
+        state_dir=state_dir, records_path=state_dir / "learning_records.jsonl"
+    )
+    source = state_dir / "jobs.sqlite3"
+    evidence = SimpleNamespace(variants=[])
+
+    with closing(sqlite3.connect(source)) as writer:
+        assert writer.execute("PRAGMA journal_mode=WAL").fetchone() == ("wal",)
+        writer.execute("CREATE TABLE jobs (job_id TEXT)")
+        writer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        writer.execute("INSERT INTO jobs VALUES ('observed')")
+        writer.commit()
+        if pending_wal:
+            assert source.with_suffix(".sqlite3-wal").stat().st_size > 0
+            archive_workspace(workspace, evidence, run / "journeys" / "IMG-01", discard=False)
+    if not pending_wal:
+        archive_workspace(workspace, evidence, run / "journeys" / "IMG-01", discard=False)
+
+    sealed = baseline.archive_run(run, acceptance_root)
+    database = sealed / "journeys" / "IMG-01" / "artifacts" / "jobs.sqlite3"
+    before = {p.relative_to(sealed) for p in sealed.rglob("*")}
+    assert baseline.verify_archive(sealed)["status"] == "OK"
+    with closing(sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True)) as reader:
+        assert reader.execute("SELECT job_id FROM jobs").fetchall() == [("observed",)]
+    report = baseline.verify_archive(sealed)
+    assert report["status"] == "OK", report["problems"]
+    assert {p.relative_to(sealed) for p in sealed.rglob("*")} == before
+
+
+def test_failed_repository_snapshot_preserves_the_workspace_and_prior_artifact(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    database = workspace_root / "jobs.sqlite3"
+    database.write_bytes(b"invalid SQLite data")
+    workspace = SimpleNamespace(
+        root=workspace_root,
+        state_dir=workspace_root,
+        records_path=workspace_root / "learning_records.jsonl",
+    )
+    run = tmp_path / "run"
+    artifacts = run / "artifacts"
+    artifacts.mkdir(parents=True)
+    prior_snapshot = artifacts / database.name
+    prior_snapshot.write_bytes(b"existing snapshot")
+
+    with pytest.raises(sqlite3.DatabaseError):
+        archive_workspace(workspace, SimpleNamespace(variants=[]), run, discard=True)
+
+    assert database.read_bytes() == b"invalid SQLite data"
+    assert prior_snapshot.read_bytes() == b"existing snapshot"
+    assert list(artifacts.iterdir()) == [prior_snapshot]
 
 
 def test_home_paths_are_redacted_in_every_spelling() -> None:
