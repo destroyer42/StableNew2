@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable, Mapping
-from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -32,16 +31,13 @@ from src.pipeline.config_contract_v26 import (
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.njr_core_v26 import thaw_json
-from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.result_contract_v26 import (
     build_diagnostics_descriptor,
     build_replay_descriptor,
 )
 from src.pipeline.run_stage_handlers import StageRunContext, resolve_stage_handler
 from src.pipeline.stage_sequencer import (
-    StageExecution,
     StageExecutionPlan,
-    StageMetadata,
     StageSequencer,
     StageTypeEnum,
 )
@@ -1748,245 +1744,6 @@ class PipelineRunner:
     # a secondary run_njr conversion path that converts NJR -> legacy config.
 
     pass
-
-    def _call_stage(
-        self,
-        stage: StageExecution,
-        payload: dict[str, Any],
-        run_dir: Path,
-        cancel_token: CancelToken | None,
-        input_image_path: Path | None,
-        prompt_index: int = 1,
-        job_date: str = "",
-        job_id: str | None = None,
-    ) -> dict[str, Any] | None:
-        """Execute a stage using the executor helpers and the built payload.
-
-        Image naming convention: {stage_type}_{prompt_index:02d}_{date}.png
-        Example: txt2img_01_2024-12-04.png
-        """
-
-        stage_type = StageTypeEnum(stage.stage_type)
-        log_with_ctx(
-            get_logger(__name__),
-            logging.INFO,
-            "PIPELINE_STAGE_API_CALL | Calling generate_images",
-            ctx=LogContext(job_id=job_id or "unknown", subsystem="pipeline_runner"),
-            extra_fields={
-                "stage_type": stage_type.value,
-                "sampler": payload.get("sampler_name"),
-                "steps": payload.get("steps"),
-                "job_id": job_id,
-            },
-        )
-
-        if job_date:
-            image_name = f"{stage_type.value}_{prompt_index:02d}_{job_date}"
-        else:
-            image_name = f"{stage_type.value}_{prompt_index:02d}"
-
-        if stage_type == StageTypeEnum.TXT2IMG:
-            return self._pipeline.run_txt2img_stage(
-                payload.get("prompt", ""),
-                payload.get("negative_prompt", ""),
-                payload,
-                run_dir,
-                image_name=image_name,
-                cancel_token=cancel_token,
-            )
-        if stage_type == StageTypeEnum.IMG2IMG:
-            if not input_image_path:
-                raise ValueError("img2img requires input image from previous stage")
-            return self._pipeline.run_img2img_stage(
-                input_image_path,
-                payload.get("prompt", ""),
-                payload,
-                run_dir,
-                image_name,
-                cancel_token=cancel_token,
-            )
-        if stage_type == StageTypeEnum.UPSCALE:
-            if not input_image_path:
-                raise ValueError("upscale requires input image from previous stage")
-            return self._pipeline.run_upscale_stage(
-                input_image_path,
-                payload,
-                run_dir,
-                image_name=image_name,
-                cancel_token=cancel_token,
-            )
-        if stage_type == StageTypeEnum.ADETAILER:
-            if not input_image_path:
-                raise ValueError("adetailer requires input image from previous stage")
-            return self._pipeline.run_adetailer_stage(
-                input_image_path,
-                payload,
-                run_dir,
-                image_name=image_name,
-                prompt=payload.get("prompt"),
-                negative_prompt=payload.get("negative_prompt"),
-                cancel_token=cancel_token,
-            )
-        raise ValueError(f"Unsupported stage {stage_type.value}")
-
-    def _apply_stage_metadata(self, executor_config: dict[str, Any], stage: StageExecution) -> None:
-        """Merge stage metadata into the executor config before execution."""
-        if stage.stage_type != StageTypeEnum.TXT2IMG.value:
-            return
-        metadata = stage.config.metadata
-        if not isinstance(metadata, StageMetadata):
-            return
-        txt_cfg = executor_config.setdefault("txt2img", {})
-        txt_cfg["refiner_enabled"] = metadata.refiner_enabled
-        if metadata.refiner_enabled:
-            if metadata.refiner_model_name:
-                txt_cfg["refiner_model_name"] = metadata.refiner_model_name
-            if metadata.refiner_switch_at is not None:
-                try:
-                    txt_cfg["refiner_switch_at"] = float(metadata.refiner_switch_at)
-                except Exception:
-                    pass
-        txt_cfg["enable_hr"] = metadata.hires_enabled
-        if metadata.hires_enabled:
-            if metadata.hires_upscale_factor is not None:
-                try:
-                    txt_cfg["hr_scale"] = float(metadata.hires_upscale_factor)
-                except Exception:
-                    pass
-            if metadata.hires_denoise is not None:
-                try:
-                    txt_cfg["denoising_strength"] = float(metadata.hires_denoise)
-                except Exception:
-                    pass
-            if metadata.hires_steps is not None:
-                try:
-                    txt_cfg["hr_second_pass_steps"] = max(0, int(metadata.hires_steps))
-                except Exception:
-                    pass
-
-    def _build_executor_config(self, config: Any) -> dict[str, Any]:
-        """Prepare the executor configuration dict from a legacy controller config."""
-
-        base = deepcopy(self._config_manager.get_default_config())
-
-        txt2img = base.setdefault("txt2img", {})
-        txt2img["model"] = config.model
-        txt2img["sampler_name"] = config.sampler
-        txt2img["width"] = config.width
-        txt2img["height"] = config.height
-        txt2img["steps"] = config.steps
-        txt2img["cfg_scale"] = config.cfg_scale
-        txt2img.setdefault("enabled", True)
-        txt2img["refiner_enabled"] = config.refiner_enabled
-        txt2img["refiner_model_name"] = config.refiner_model_name or ""
-        txt2img["refiner_switch_at"] = config.refiner_switch_at
-
-        img2img = base.setdefault("img2img", {})
-        img2img["model"] = config.model
-        img2img["sampler_name"] = config.sampler
-        img2img["steps"] = max(img2img.get("steps", 15), 1)
-        img2img_val = base.get("pipeline", {}).get("img2img_enabled")
-        img2img.setdefault("enabled", bool(img2img_val) if img2img_val is not None else False)
-
-        metadata = base.setdefault("metadata", {})
-        if config.pack_name:
-            metadata["pack_name"] = config.pack_name
-        if config.preset_name:
-            metadata["preset_name"] = config.preset_name
-        pipeline_flags = base.setdefault("pipeline", {})
-        metadata_flag = (config.metadata or {}).get("adetailer_enabled")
-        if isinstance(metadata_flag, bool):
-            pipeline_flags["adetailer_enabled"] = metadata_flag
-        pipeline_flags.setdefault("adetailer_enabled", False)
-        up_enabled = pipeline_flags.get("upscale_enabled", False)
-        upscale = base.setdefault("upscale", {})
-        upscale.setdefault("enabled", up_enabled)
-
-        ad_cfg = base.setdefault("adetailer", {})
-        metadata_adetailer = (config.metadata or {}).get("adetailer")
-        if isinstance(metadata_adetailer, dict):
-            ad_cfg.update(metadata_adetailer)
-        ad_cfg["enabled"] = pipeline_flags["adetailer_enabled"]
-        ad_cfg["adetailer_enabled"] = pipeline_flags["adetailer_enabled"]
-        base["hires_fix"] = dict(config.hires_fix or {})
-
-        return base
-
-    def _build_stage_payload(
-        self,
-        stage: StageExecution,
-        config: Any,
-        executor_config: dict[str, Any],
-        prompt: str,
-        negative_prompt: str,
-        input_image_path: Path | None,
-    ) -> dict[str, Any]:
-        """Construct a per-stage payload from the plan metadata.
-
-        Uses the canonical build_sdxl_payload() builder and then applies
-        runner-specific augmentations (prompt, model, input images).
-        """
-        # Build last_image_meta for chaining if we have an input image
-        last_image_meta: dict[str, Any] | None = None
-        if input_image_path:
-            encoded = self._pipeline._load_image_base64(input_image_path)
-            if encoded:
-                last_image_meta = {
-                    "images": [encoded],
-                    "path": str(input_image_path),
-                }
-
-        # Use canonical payload builder for refiner/hires/upscaler consistency
-        payload = build_sdxl_payload(stage, last_image_meta)  # type: ignore[arg-type]
-
-        # Apply runner-specific overrides
-        payload["prompt"] = prompt
-        payload["negative_prompt"] = negative_prompt
-        payload["model"] = config.model
-        payload["sd_model"] = config.model
-        payload["sampler_name"] = config.sampler
-        payload.setdefault("scheduler", executor_config.get("txt2img", {}).get("scheduler"))
-        payload["steps"] = config.steps
-        payload["cfg_scale"] = config.cfg_scale
-        payload["width"] = config.width
-        payload["height"] = config.height
-
-        # PR-LEARN-012: Override seed parameters from config
-        payload["seed"] = config.seed
-        payload["subseed"] = getattr(config, "subseed", -1)
-        payload["subseed_strength"] = getattr(config, "subseed_strength", 0.0)
-        payload["clip_skip"] = getattr(config, "clip_skip", 2)
-
-        if config.pack_name:
-            payload["pack_name"] = config.pack_name
-        if config.preset_name:
-            payload["preset_name"] = config.preset_name
-
-        payload["stage_type"] = stage.stage_type
-
-        # Preserve stage flags from metadata for backward compatibility
-        metadata = stage.config.metadata
-        if isinstance(metadata, dict):
-            metadata = StageMetadata(
-                refiner_enabled=bool(metadata.get("refiner_enabled", False)),
-                refiner_model_name=metadata.get("refiner_model_name"),
-                refiner_switch_at=metadata.get("refiner_switch_at"),
-                hires_enabled=bool(metadata.get("hires_enabled", False)),
-                hires_upscale_factor=metadata.get("hires_upscale_factor"),
-                hires_upscaler_name=metadata.get("hires_upscaler_name"),
-                hires_denoise=metadata.get("hires_denoise"),
-                hires_steps=metadata.get("hires_steps"),
-                stage_flags=metadata.get("stage_flags", {}),
-            )
-        if isinstance(metadata, StageMetadata):
-            for flag, value in metadata.stage_flags.items():
-                payload.setdefault(flag, value)
-
-        # Set input image path for logging/tracking
-        if input_image_path:
-            payload["input_image_path"] = str(input_image_path)
-
-        return payload
 
     def _emit_learning_record(
         self, config: Any, run_result: PipelineRunResult

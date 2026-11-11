@@ -830,18 +830,6 @@ class LearningController:
             visibility_mode=visibility_mode,
         )
 
-    def export_grid_contact_sheet(
-        self, destination: str | Path, *, visibility_mode: Any = "nsfw", overwrite: bool = False
-    ) -> Any:
-        from src.learning.grid_contact_sheet import export_contact_sheet
-
-        return export_contact_sheet(
-            self.get_grid_results_model(visibility_mode),
-            destination,
-            overwrite=overwrite,
-            protected_paths=[ref for variant in self.learning_state.plan for ref in variant.image_refs],
-        )
-
     def _refresh_grid_view(self) -> None:
         if self._grid_view is not None:
             self._grid_view.refresh()
@@ -1781,100 +1769,6 @@ class LearningController:
             }
 
         return baseline
-
-    def _build_stage_flags_for_experiment(self, experiment: LearningExperiment) -> dict[str, bool]:
-        """Build stage flags based on experiment stage."""
-        stage = experiment.stage.lower()
-
-        return {
-            "txt2img": stage == "txt2img" or stage == "txt2img_enabled",
-            "img2img": stage == "img2img" or stage == "img2img_enabled",
-            "adetailer": stage == "adetailer" or stage == "adetailer_enabled",
-            "upscale": stage == "upscale" or stage == "upscale_enabled",
-            "refiner": False,
-            "hires": False,
-        }
-
-    def _build_variant_overrides(
-        self, variant: LearningVariant, experiment: LearningExperiment
-    ) -> dict[str, Any]:
-        """Build pipeline overrides for a learning variant.
-
-        Returns a dict with the parameter name and value.
-        The _apply_overrides_to_config method will place it in the correct config section.
-        """
-        overrides = {}
-
-        # Apply the variable under test
-        variable = experiment.variable_under_test
-        value = variant.param_value
-
-        if variable == "CFG Scale":
-            overrides["cfg_scale"] = float(value)
-        elif variable == "Steps":
-            overrides["steps"] = int(value)
-        elif variable == "Sampler":
-            overrides["sampler_name"] = str(value)
-        elif variable == "Scheduler":
-            overrides["scheduler"] = str(value)
-        elif variable.startswith("LoRA Strength"):
-            # For LoRA strength, we'd need to handle this differently
-            # For now, just store the value
-            overrides["lora_strength"] = float(value)
-        elif variable == "Denoise Strength":
-            overrides["denoising_strength"] = float(value)
-        elif variable == "Upscale Factor":
-            overrides["upscaling_resize"] = float(value)
-
-        # Add learning context metadata
-        overrides["learning_experiment_id"] = experiment.name
-        overrides["learning_variant_value"] = value
-        overrides["learning_variable"] = variable
-
-        return overrides
-
-    def _apply_overrides_to_config(
-        self,
-        baseline_config: dict[str, Any],
-        overrides: dict[str, Any],
-        experiment: LearningExperiment,
-    ) -> dict[str, Any]:
-        """Apply variant overrides to the correct nested config sections.
-
-        BUGFIX: Overrides must be applied to txt2img/upscale/etc sections,
-        not at the top level, for the builder to use them correctly.
-        """
-        import copy
-
-        config = copy.deepcopy(baseline_config)
-
-        # Determine which stage section to apply overrides to
-        stage = experiment.stage.lower()
-        if stage == "txt2img" or stage == "txt2img_enabled":
-            stage_key = "txt2img"
-        elif stage == "img2img" or stage == "img2img_enabled":
-            stage_key = "img2img"
-        elif stage == "upscale" or stage == "upscale_enabled":
-            stage_key = "upscale"
-        elif stage == "adetailer" or stage == "adetailer_enabled":
-            stage_key = "adetailer"
-        else:
-            stage_key = "txt2img"  # Default
-
-        # Ensure stage section exists
-        if stage_key not in config:
-            config[stage_key] = {}
-
-        # Apply parameter overrides to the stage section
-        for key, value in overrides.items():
-            # Skip learning metadata - those go at top level
-            if key.startswith("learning_"):
-                config[key] = value
-            else:
-                # Apply to stage section
-                config[stage_key][key] = value
-
-        return config
 
     def _apply_variant_override_with_metadata(
         self, config: dict[str, Any], value: Any, experiment: LearningExperiment
@@ -3180,10 +3074,6 @@ class LearningController:
         """Reopen a closed/ignored discovered group back to waiting_review."""
         store = self._get_discovered_store()
         store.reopen_group(group_id)
-
-    def prune_missing_discovered_outputs(self) -> dict[str, int]:
-        """Prune only scanner-owned unavailable discovered artifacts."""
-        return self._get_discovered_store().prune_missing_scanner_items()
 
     def preview_missing_discovered_cleanup(self) -> dict[str, int]:
         return self._get_discovered_store().preview_missing_cleanup()
