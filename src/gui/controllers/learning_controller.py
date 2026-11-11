@@ -2602,47 +2602,16 @@ class LearningController:
         run_id: str | None = None,
         image_path: str | None = None,
     ) -> bool:
-        """Undo a review feedback write by deleting the latest matching record."""
+        """Undo a review feedback write by deleting the latest matching record.
+
+        The record store has one writer: the removal runs inside ``LearningRecordWriter`` under its lock.
+        """
         if not self._learning_record_writer:
             return False
-        path = self._learning_record_writer.records_path
-        if not path.exists():
-            return False
-
-        target_run = str(run_id or "").strip()
-        target_image = str(image_path or "").strip()
-        try:
-            lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-        except Exception:
-            return False
-        if not lines:
-            return False
-
-        remove_index = -1
-        for idx in range(len(lines) - 1, -1, -1):
-            try:
-                payload = json.loads(lines[idx])
-            except Exception:
-                continue
-            metadata = payload.get("metadata", {})
-            if metadata.get("source") != "review_tab":
-                continue
-            if target_run and str(payload.get("run_id") or "") != target_run:
-                continue
-            if target_image and str(metadata.get("image_path") or "") != target_image:
-                continue
-            remove_index = idx
-            break
-        if remove_index < 0:
-            return False
-
-        lines.pop(remove_index)
-        try:
-            final_text = "\n".join(lines)
-            if final_text:
-                final_text += "\n"
-            path.write_text(final_text, encoding="utf-8")
-        except Exception:
+        removed = self._learning_record_writer.remove_latest_review_feedback(
+            run_id=run_id, image_path=image_path
+        )
+        if not removed:
             return False
         self.refresh_recommendations()
         return True
