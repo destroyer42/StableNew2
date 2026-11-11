@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-710 of 865 modules have a docstring.
+711 of 866 modules have a docstring.
 
 ## src/
 
@@ -934,6 +934,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `svd_capabilities.py`: Capability discovery for native SVD postprocess helpers
 - `svd_config.py`: Typed configuration models for native SVD image-to-video
 - `svd_errors.py`: Typed error surface for native SVD runtime
+- `svd_history.py`: Read-only history summaries for the native SVD tab
 - `svd_models.py`: Typed models and registry for native SVD
 - `svd_native_backend.py`: (no docstring)
 - `svd_portable_provenance.py`: Portable, immutable provenance for native-SVD MP4 artifacts
