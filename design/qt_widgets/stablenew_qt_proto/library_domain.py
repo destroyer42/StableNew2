@@ -65,6 +65,8 @@ class AssetKind(StrEnum):
 
 
 IMAGE_KINDS = frozenset({AssetKind.STILL, AssetKind.EDITED})
+# Kinds that may show a packaged fixture picture (a video poster frame is still a still picture).
+MEDIA_KINDS = frozenset({AssetKind.STILL, AssetKind.EDITED, AssetKind.VIDEO, AssetKind.SEQUENCE})
 
 CATEGORY_HISTORY = "History"
 CATEGORY_EDIT = "Edit & Photo"
@@ -105,6 +107,17 @@ SCOPE_LABELS = {
     Scope.COLLECTIONS: "Collections",
     Scope.FAVORITES: "Favorites",
 }
+SCOPE_SHORT = {
+    Scope.ALL: "All assets",
+    Scope.HISTORY: "Generated images",
+    Scope.EDIT_PHOTO: "Edit & Photo",
+    Scope.VIDEO: "Video & Storyboards",
+    Scope.MOTION: "Motion references",
+    Scope.LEARNING: "Learning observations",
+    Scope.IMPORTED: "Imported fixtures",
+    Scope.COLLECTIONS: "Collections",
+    Scope.FAVORITES: "Favorites",
+}
 SCOPE_CATEGORY = {
     Scope.HISTORY: CATEGORY_HISTORY,
     Scope.EDIT_PHOTO: CATEGORY_EDIT,
@@ -121,10 +134,10 @@ class SearchMode(StrEnum):
 
 
 class Sort(StrEnum):
-    RECENT = "Most recent first"
+    RECENT = "Newest first"
     OLDEST = "Oldest first"
     LABEL = "Label A–Z"
-    SOURCE = "Source, then label"
+    SOURCE = "Source, label"
 
 
 class EmptyState(StrEnum):

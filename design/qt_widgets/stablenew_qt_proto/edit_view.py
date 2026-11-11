@@ -425,6 +425,16 @@ class EditView(QWidget):
         self.sync()
         return True
 
+    def adopt_session_source(self) -> None:
+        """Show the draft a Library placement already selected in ``session`` (consent was given there)."""
+        draft = self.session.draft
+        if draft is None:
+            return
+        self.canvas.set_image(fixture_image(draft.source_key))
+        self.banner.hide()
+        self._show_editor()
+        self.sync()
+
     def _confirm_replacement(self, key: str) -> Replacement:
         box = QMessageBox(self)
         box.setWindowTitle("Replace edit draft?")

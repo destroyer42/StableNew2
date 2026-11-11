@@ -21,6 +21,7 @@ from .library_domain import (
     ACTION_ORDER,
     HANDOFF_ACTIONS,
     MAX_COLLECTION_NAME,
+    MEDIA_KINDS,
     MAX_TAG,
     UNDO_LIMIT,
     ActionEligibility,
@@ -37,6 +38,7 @@ from .library_domain import (
     SelectionStatus,
     ViewState,
     evaluate_action,
+    availability_reason,
     exact_groups,
     fixture_catalog,
     initial_org,
@@ -201,6 +203,22 @@ class LibrarySession:
 
     def effective(self, key: str) -> Availability:
         return self.availability_of(self.catalog.get(key))
+
+    def media_source(self, key: str) -> tuple[AssetRecord | None, str]:
+        """The record whose packaged fixture image may be decoded for ``key``, or why none may.
+
+        This is the single gate for every pixel route: thumbnail, preview, inspector, comparison, drag
+        and clipboard. A hidden, missing, unsupported or media-less record never yields a decodable
+        source, and an observation borrows the media of the asset it references only if that is allowed.
+        """
+        record = self.catalog.get(key)
+        target = self.catalog.get(record.references.key) if record.references else record
+        availability = self.availability_of(target)
+        if availability != Availability.AVAILABLE:
+            return None, availability_reason(availability)
+        if target.motif is None or target.kind not in MEDIA_KINDS:
+            return None, "This record has no image of its own (metadata only)."
+        return target, ""
 
     def simulate_vanish(self, key: str) -> str:
         """Fixture-only: the source file disappears outside the Library. Identity stays."""

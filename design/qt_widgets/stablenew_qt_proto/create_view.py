@@ -186,6 +186,11 @@ class CreateView(QWidget):
     def layout_design(self) -> str:
         return self._design
 
+    def adopt_session_state(self) -> None:
+        """Show a draft that another prototype surface (the Library) already placed in ``session``."""
+        self._sync_view()
+        self.stateSynced.emit()
+
     def set_layout_design(self, design: str) -> None:
         """Switch between the scrolling-form and split-workspace designs without losing state."""
         if design not in LAYOUT_DESIGNS:
