@@ -309,7 +309,9 @@ def _snapshot_repository(source: Path, target: Path) -> None:
                 reader.backup(writer, pages=256, progress=check_progress, sleep=0.05)
                 # SQLite readers can create WAL/SHM sidecars even when opened with mode=ro.
                 if writer.execute("PRAGMA journal_mode=DELETE").fetchone() != ("delete",):
-                    raise sqlite3.OperationalError("could not make the retained repository standalone")
+                    raise sqlite3.OperationalError(
+                        "could not make the retained repository standalone"
+                    )
         snapshot.replace(target)
 
 
