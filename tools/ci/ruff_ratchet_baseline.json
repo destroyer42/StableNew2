@@ -388,9 +388,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1281,
+      "BLE001": 1278,
       "S110": 503,
-      "S112": 37
+      "S112": 36
     },
     "counts": {
       "src/api/client.py": {
@@ -513,9 +513,9 @@
         "S110": 11
       },
       "src/gui/controllers/learning_controller.py": {
-        "BLE001": 35,
+        "BLE001": 32,
         "S110": 8,
-        "S112": 4
+        "S112": 3
       },
       "src/gui/controllers/video_workspace_handoff.py": {
         "BLE001": 1,

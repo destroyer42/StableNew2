@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.utils.atomic_io import atomic_write_text
+
 _EVIDENCE_LOCKS: dict[str, threading.RLock] = {}
 _EVIDENCE_LOCKS_GUARD = threading.Lock()
 
@@ -221,6 +223,30 @@ class LearningRecord:
         )
 
 
+def _latest_review_feedback_index(lines: list[str], run_id: str, image_path: str) -> int:
+    """Index of the latest review-tab record matching the optional run and image filters, or ``-1``.
+
+    Unparseable lines never match; the caller keeps them.
+    """
+
+    for index in range(len(lines) - 1, -1, -1):
+        try:
+            payload = json.loads(lines[index])
+        except ValueError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        metadata = payload.get("metadata")
+        if not isinstance(metadata, dict) or metadata.get("source") != "review_tab":
+            continue
+        if run_id and str(payload.get("run_id") or "") != run_id:
+            continue
+        if image_path and str(metadata.get("image_path") or "") != image_path:
+            continue
+        return index
+    return -1
+
+
 class LearningRecordWriter:
     """Writes learning records atomically to append-only JSONL."""
 
@@ -268,6 +294,37 @@ class LearningRecordWriter:
         """Backward compatible alias for append_record."""
 
         self.append_record(record)
+
+    def remove_latest_review_feedback(self, *, run_id: str | None = None, image_path: str | None = None) -> bool:
+        """Remove the latest review-tab record matching the optional ``run_id`` and ``image_path`` filters.
+
+        This is the only operation that rewrites the store. It holds the store's evidence lock across the
+        read-select-replace sequence, so a concurrent ``append_record`` can neither interleave nor be lost, and it
+        replaces the file atomically, so readers see the old or the new content and a failed write leaves the
+        original untouched. Returns ``False`` when there is no match, the file is missing or empty, or the file
+        could not be read or replaced.
+        """
+
+        target_run = str(run_id or "").strip()
+        target_image = str(image_path or "").strip()
+        try:
+            with evidence_file_lock(self.records_path):
+                if not self.records_path.exists():
+                    return False
+                lines = [line for line in self.records_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+                index = _latest_review_feedback_index(lines, target_run, target_image)
+                if index < 0:
+                    return False
+                del lines[index]
+                text = "\n".join(lines)
+                if text:
+                    text += "\n"
+                atomic_write_text(self.records_path, text)
+                return True
+        except (OSError, ValueError):
+            # OSError: the file could not be read or atomically replaced; ValueError: undecodable bytes.
+            logger.warning("Failed to remove review feedback from %s", self.records_path, exc_info=True)
+            return False
 
     def get_ratings_for_experiment(self, experiment_id: str) -> dict[str, int]:
         """Get all ratings for an experiment as {image_path: rating} dict."""
