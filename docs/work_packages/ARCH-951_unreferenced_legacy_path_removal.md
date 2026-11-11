@@ -1,9 +1,11 @@
 # ARCH-951 — Remove unreferenced legacy execution and submission paths
 
-Status: **PROPOSED, not authorized.** Produced by the design package ARCH-DESIGN-950
+Status: **Tier A IMPLEMENTED (pull request open, merge pending); tier B DEFERRED to ARCH-951B under a revised
+acceptance contract (below).** Produced by the design package ARCH-DESIGN-950
 ([assessment](../assessments/2026-11-10_arch_design_950_coordination_hotspot_decomposition.md),
-[symbol inventory](../assessments/evidence/arch_design_950/STRUCTURAL_INVENTORY.md)). Implementation needs the owner's
-explicit authorization and decision OD-1 (whether tier B is included). Date: 2026-11-10.
+[symbol inventory](../assessments/evidence/arch_design_950/STRUCTURAL_INVENTORY.md)). Tier A authorized by the owner on
+2026-11-10; the owner answered OD-1 "include tier B", which the evidence below shows cannot be done as specified.
+Date: 2026-11-10.
 
 This file is the copy-paste prompt for a fresh implementation session. It follows
 `docs/CODEX_WORK_PACKAGE_TEMPLATE.md`. Do not repeat the architecture discovery; do verify the start state.
@@ -138,15 +140,83 @@ Focused regression tests to run while editing (existing; none are modified):
 - `AGENTS.md`: none.
 - `docs/Subsystems/Image/IMAGE_PIPELINE.md`: replace the dead-code bullets at lines 375-376.
 
+## Tier B revised acceptance contract (ARCH-951B)
+
+The owner's OD-1 answer assumed `tests/api/test_sdxl_payloads.py` was the only test importer of `build_sdxl_payload`.
+It is not: `tests/integration/test_prompt_optimizer_payload_integration.py` (3 tests) also imports it, and this package's
+stop conditions forbid a second test edit. A test is not deleted merely because its implementation dependency is
+obsolete; behavioral coverage must be shown first.
+
+1. Per-test mapping table. Each of the 21 tests (18 in `tests/api/test_sdxl_payloads.py`, 3 in the integration file) maps
+   to a test asserting the same behavior through the executor path or a shared component, or is explicitly waived by the
+   owner as builder-only behavior.
+2. Established now, for the 3 integration tests: covered through the executor path, so nothing is lost by deleting them
+   once the builder goes.
+   - Optimizer enabled: `tests/pipeline/test_executor_prompt_optimizer.py::test_txt2img_stage_uses_prompt_optimizer_and_records_manifest`
+     asserts the same prompt and negative strings through `run_txt2img_stage`.
+   - Optimizer disabled: `tests/image_backends/test_webui_family_prompt_intent.py::test_explicitly_disabled_optimizer_preserves_order_duplicates_and_unicode`
+     (stronger: every backend and stage, byte-identical).
+   - AUTO policy values (DPM++ 2M, Karras, 28, 6.5): `test_executor_prompt_optimizer.py::test_txt2img_stage_auto_fills_missing_or_auto_policy_keys`
+     and `tests/unit/test_stage_policy_engine.py::test_stage_policy_engine_applies_missing_txt2img_values`.
+   - The builder and the executor both delegate to `PromptOptimizerOrchestrator` and `StagePolicyEngine`.
+3. NOT established: the 18 `tests/api/test_sdxl_payloads.py` tests (refiner, hires and upscaler field encoding,
+   `last_image_meta` chaining, alias normalization, empty config, extra-key preservation, string and enum stage types,
+   `StageExecution` input). They assert the builder's own wire encoding. The mapping table must show where each behavior
+   is asserted on the live path or record an owner waiver; a behavior with neither gets a new executor-path test first.
+4. Only then delete `src/pipeline/payload_builder.py` and both test files together, regenerate `docs/CODE_MAP.md`, and
+   expect the collection count to drop by exactly 21.
+
 ## Completion report
 
-- Parent/final SHA:
-- Files changed:
-- Validation and CI:
-- Main unchanged:
-- Working tree clean:
-- Ready for next phase: Yes / No
-- Lines removed per file, and the new ceilings:
-- Symbols kept despite being listed, with the reference found:
+- Parent/final SHA: parent `origin/main` `2ebf96fe` (PR #283, ARCH-930, merged); the branch was first built on
+  `8677ff11` and rebased once. Final SHA: the pull request head, which contains this report.
+- Files changed: `executor.py`, `pipeline_runner.py`, `app_controller.py`, `pipeline_controller.py`,
+  `learning_controller.py` (deletions only, plus orphaned imports and one comment line);
+  `docs/Subsystems/Image/IMAGE_PIPELINE.md`; `tools/ci/controller_surface_baseline.json`, `mypy_baseline.json`,
+  `ruff_ratchet_baseline.json` (all decreases); this work package; the follow-on plan
+  `docs/superpowers/plans/2026-11-10-arch-950-followon-roadmap.md`. `architecture_baseline.json` unchanged.
+- Validation and CI (read the distinctions; the local full gate is NOT clean):
+  - Focused set (`tests/pipeline`, `image_backends`, `controller`, `learning`, `learning_v2`, `api`): 5,619 passed at the
+    pre-rebase SHA `48ba453c`. Re-run on the rebased head: see the pull request.
+  - `python tools/ci/run_pr_gate.py --full` at `48ba453c` (pre-rebase, so not exact-SHA evidence for the final head):
+    lint, collection (16,226) and smoke (397 passed) passed; the sharded census reported 16,197 passed, 6 failed,
+    23 skipped, so the gate exited 1.
+  - Four of the six failures are `tests/tools/test_golden_path_journeys.py` journeys (`video` simulated and physical,
+    `storyboard`, `motion-assets`), all failing with "isolation: read operator-owned file ...config/managed_comfy_runtime.json".
+    **All four were reproduced on pristine `origin/main` `2ebf96fe`** with the same message, so they are not caused by
+    this package.
+  - The other two (`tests/tools/test_gui_seam_743.py::test_exception_isolation_and_pending_id_release`,
+    `tests/utils/test_process_containment_failsafe.py::test_output_of_a_pump_abandoned_by_stop_never_leaks_into_the_restarted_process`)
+    passed when re-run alone on this branch and on pristine `origin/main`. That is consistent with timing flakiness
+    under the two-worker census, but it is an inference: they were not reproduced as failing anywhere else.
+  - Hosted `required`, `full-suite`, `windows`: pending at the time of writing; they are the exact-SHA evidence.
+- Main unchanged: yes (nothing was pushed to `main`).
+- Working tree clean: yes at commit time.
+- Ready for next phase: Yes for ARCH-954, which is independent of this package; this package awaits hosted CI and
+  review; tier B (ARCH-951B) is not ready.
+- Lines removed per file, and the new ceilings: `executor.py` -925/+2 (6,590 to 5,667), `pipeline_runner.py` -243
+  (2,210 to 1,967), `app_controller.py` -262 (ceiling 6,592 to 6,330, measured after ARCH-930),
+  `learning_controller.py` -110 (4,123 to 4,013), `pipeline_controller.py` -89 (ceiling 1,697 to 1,608).
+  1,629 source lines deleted in total.
+- Symbols kept despite being listed, with the reference found: none of the 58 tier A methods plus
+  `_build_stage_payload` was kept. `_build_stage_payload` was first refused by the deletion script because the stale
+  `executor.py` comment named it; it was deleted after that comment was corrected. `_get_batch_runs` is excluded by
+  scope (`STATUS.md` open owner decision 4). Tier B module `payload_builder.py` is kept: a third importer exists.
+- Candidates for subsequent removal, not assumed dead: `PipelineController.start_pipeline_v2`, `_normalize_run_mode`,
+  `_get_pipeline_state`. They became test-only because their only production caller (the deleted
+  `AppController.run_pipeline`, whose docstring named `start_pipeline_v2`) is gone; `_normalize_run_mode` and
+  `_get_pipeline_state` are called only from `start_pipeline_v2`. Checked for indirect reachability: no string literal,
+  f-string or composed name, `getattr` site, callback registration or non-Python file reaches them (the dynamic
+  `getattr` sites in `presentation_actions.py`, `job_history_panel_v2.py`, `queue_panel_v2.py` and
+  `history_sequence_contract.py` use literal controller names or `f"{action}_sequence"`; `main_window_v2.py:1268`
+  resolves `start_pipeline` or `start`). Three test files drive `start_pipeline_v2`
+  (`test_core_run_path_v2.py`, `test_pipeline_controller_jobbuilder_integration_v2.py`,
+  `test_pipeline_controller_run_modes_v2.py`), so removal needs a tier C decision (OD-3); one runtime doc
+  (`PR-RUNTIME-WEBUI-WATCHDOG-120...md` line 41) still mentions the method. The evidence is static.
 - Model / usage (host, actual model, effort, repair passes, result, exact start/end window and the line from
   `tools/usage_report.py --since <task-start> --until <end-after-closeout> --session <claude:ID|codex:ID> --line`):
+  Claude Code (desktop app), `claude-sonnet-5-5`, effort not recorded by the host; one batched repair cycle (the
+  rebase onto ARCH-930); result PASS for the scoped deletion, local full gate FAIL as described above. Window starts
+  2026-11-10T20:23:30-05:00 (first message of the session; a start time was not recorded before discovery) and is
+  shared with the follow-on plan and the start of ARCH-954. Session `claude:69062684-e681-4f4e-8cf9-e13d3f669d8b`.
+  Claude Code claude-sonnet-5-5: 109 responses, fresh input 226, cache read 19.1M, cache write 363.9k, output 90.9k, reasoning 0 (in output) (tokens from host session logs; cost not reported)
