@@ -54,6 +54,13 @@ class AssetReadinessTab(ttk.Frame):
             bar, text="Refresh (hash files)", command=lambda: self._request(True)
         )
         self._refresh_button.pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Label(
+            self,
+            text="Global inventory of ControlNet and auxiliary models. "
+            "See Video Workflow readiness for the selected ComfyUI workflow's model requirements.",
+            wraplength=880,
+            anchor="w",
+        ).pack(fill=tk.X)
         ttk.Label(self, textvariable=self._status, wraplength=880, anchor="w").pack(fill=tk.X)
         self._text = tk.Text(self, wrap=tk.WORD, state=tk.DISABLED)
         self._text.pack(fill=tk.BOTH, expand=True, pady=(4, 0))

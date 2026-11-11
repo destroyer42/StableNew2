@@ -399,7 +399,7 @@ def _tab(
         clip.write_bytes(clip_bytes)
     tab.workflow_var.set(workflow)
     tab._refresh_workspace_summary()
-    tab.experimental_opt_in_var.set(True)
+    tab._on_workflow_selected(None)
     tab.set_source_image_path(str(source))
     tab.pose_video_var.set(str(clip))
     tab._select_frame_count(41)

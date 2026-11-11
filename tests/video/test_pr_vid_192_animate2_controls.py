@@ -75,7 +75,7 @@ def _form(workflow_id: str, **overrides: Any) -> dict[str, Any]:
 
 
 def _run_jobs(tmp_path: Path, forms: list[dict[str, Any]]):
-    manager = _ManagedFake()
+    manager = _ManagedFake(tmp_path)
     client = _AnimateComfy(tmp_path)
     repository, queue, service, _ = _build_stack(tmp_path, [_backend(client, manager)])
     app = SimpleNamespace(job_service=service, output_dir=str(tmp_path / "output"))

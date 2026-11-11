@@ -8,10 +8,15 @@ Validates that:
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 from unittest.mock import Mock
+
+import pytest
 
 from src.controller.app_controller import AppController
 from src.controller.core_pipeline_controller import CorePipelineController
+from src.services import watchdog_system_v2
+from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
 from src.services.watchdog_system_v2 import SystemWatchdogV2
 
 
@@ -68,57 +73,34 @@ def test_app_controller_has_running_jobs_reads_job_service_queue():
     assert AppController.has_running_jobs(controller) is True
 
 
-def test_watchdog_doesnt_trigger_during_normal_generation():
-    """Verify watchdog doesn't trigger during a 60-second image generation."""
-    import tempfile
+def test_watchdog_doesnt_trigger_during_normal_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A responsive UI keeps a running one-minute generation out of stall diagnostics."""
+    start = 50.0
+    clock = SimpleNamespace(now=start)
+    monkeypatch.setattr(watchdog_system_v2, "time", SimpleNamespace(monotonic=lambda: clock.now))
+    app = SimpleNamespace(
+        last_ui_heartbeat_ts=start,
+        last_runner_activity_ts=start,
+        has_running_jobs=lambda: True,
+        _is_shutting_down=False,
+    )
+    diagnostics = Mock(spec=DiagnosticsServiceV2)
+    watchdog = SystemWatchdogV2(app, diagnostics)
 
-    from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
+    for tick in range(1, 121):
+        clock.now = start + tick * 0.5
+        watchdog._check()
+        app.last_ui_heartbeat_ts = clock.now
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create mock app controller that simulates active generation
-        class ActiveGenerationApp:
-            def __init__(self):
-                self.last_ui_heartbeat_ts = time.monotonic()
-                self.last_runner_activity_ts = time.monotonic()
-                self._is_shutting_down = False
-
-            def has_running_jobs(self):
-                return False  # No running jobs for this test
-
-        app = ActiveGenerationApp()
-        diag = DiagnosticsServiceV2(tmpdir)
-        watchdog = SystemWatchdogV2(app, diag, check_interval_s=0.5)
-
-        # Start watchdog
-        watchdog.start()
-
-        # Simulate 5 seconds of responsive GUI main-loop heartbeat ticks.
-        for _i in range(10):  # 10 iterations * 0.5s = 5 seconds
-            time.sleep(0.5)
-            app.last_ui_heartbeat_ts = time.monotonic()
-
-        # Stop watchdog
-        watchdog.stop()
-
-        # Check that no diagnostic files were created
-        import os
-
-        diagnostics = [f for f in os.listdir(tmpdir) if f.endswith(".zip")]
-
-        assert len(diagnostics) == 0, (
-            f"Watchdog should not trigger during active generation, but found {len(diagnostics)} diagnostic(s)"
-        )
-
-        print(
-            "[OK] Watchdog correctly did not trigger during simulated generation with UI heartbeats"
-        )
+    diagnostics.build_async.assert_not_called()
 
 
 def test_watchdog_still_triggers_on_true_stall():
     """Verify watchdog still triggers if UI truly stalls for 90+ seconds."""
     import tempfile
 
-    from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
     from src.utils.diagnostics_bundle_v2 import _IN_FLIGHT, _LAST_BUNDLE_TS
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -171,6 +153,7 @@ def test_watchdog_still_triggers_on_true_stall():
 if __name__ == "__main__":
     test_ui_stall_threshold_is_realistic()
     test_progress_reporting_updates_runner_activity_not_ui_heartbeat()
-    test_watchdog_doesnt_trigger_during_normal_generation()
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        test_watchdog_doesnt_trigger_during_normal_generation(monkeypatch)
     test_watchdog_still_triggers_on_true_stall()
     print("\n[OK] All heartbeat stall fix tests passed!")

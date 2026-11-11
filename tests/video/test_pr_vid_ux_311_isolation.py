@@ -1,9 +1,7 @@
-"""PR-VID-UX-311: runtime readiness reads only the app's own settings, never the repository's managed-runtime file.
+"""Configured runtime readiness and isolation of the global operator-readiness row.
 
-An isolated operator journey runs the app in a child process, so a pytest fixture cannot stand in for the probes there;
-the app itself must take its Comfy launch command from the ConfigManager it was built with. These tests fail on any read
-of ``config/managed_comfy_runtime.json`` or any load of its contract from the preflight, the controller path that feeds
-the Video Workflow strip, and the global operator-readiness row (with and without a Comfy command configured).
+Workflow preflight reads its selected CLI and the repository contract. The global status
+row only projects settings and should not read the managed runtime manifest.
 """
 
 from __future__ import annotations
@@ -22,13 +20,11 @@ from src.services.operator_readiness_service import (
     configured_comfy_command,
 )
 from src.video.workflow_preflight import (
-    GATE_BLOCKED,
     GATE_OK,
     default_preflight_probes,
-    evaluate_workflow_preflight,
 )
-from src.video.workflow_registry import build_default_workflow_registry
 from tests.services.test_operator_readiness_service import _service
+from tests.video.test_comfy_process_manager import fake_comfy_command
 
 PROTECTED = "managed_comfy_runtime"
 ANIMATE = ("wan_animate2_drive_i2v_v1", "1.2.0")  # declares required launch flags
@@ -107,46 +103,20 @@ class _Controller(VideoPreflightControllerMixin):
         self._preflight_probes = None
 
 
-@pytest.mark.parametrize(
-    ("command", "flags_state"),
-    [([], GATE_BLOCKED), (["python", "main.py"], GATE_BLOCKED)],
-)
-def test_the_controller_preflight_reads_the_apps_settings_not_the_managed_manifest(
-    protected_reads, offline, command, flags_state
+def test_workflow_preflight_checks_the_selected_install_without_launching(
+    tmp_path, offline
 ) -> None:
-    result = _Controller(_Settings(command)).workflow_preflight(*ANIMATE)
-
-    assert protected_reads == []
+    command = fake_comfy_command(tmp_path, "--disable-pinned-memory")
+    result = _Controller(_Settings(list(command))).workflow_preflight(*ANIMATE)
     gates = {gate.id: gate for gate in result.gates}
-    # The flags gate is answered from the configured command alone (no contract needed): a command
-    # without the required flags, or none at all, is a proven shortfall; it is not "unknown".
-    assert gates["launch_flags"].state == flags_state
+    assert gates["launch_flags"].state == GATE_OK
+    assert "CLI support checked offline" in gates["launch_flags"].detail
 
 
-def test_a_command_with_the_required_flags_passes_without_the_manifest(
-    protected_reads, offline
-) -> None:
-    spec = build_default_workflow_registry().get_offerable(*ANIMATE)
-    from src.video.workflow_readiness import required_launch_flags
-
-    command = ["python", "main.py", *required_launch_flags(spec)]
-
-    result = _Controller(_Settings(command)).workflow_preflight(*ANIMATE)
-
-    assert protected_reads == []
-    assert {gate.id: gate for gate in result.gates}["launch_flags"].state == GATE_OK
-
-
-def test_the_default_probes_take_the_command_from_the_given_settings(
-    protected_reads, offline
-) -> None:
+def test_default_probes_take_the_command_from_the_given_settings(protected_reads, offline) -> None:
     probes = default_preflight_probes(config_manager=_Settings(["python", "main.py"]))
-
     assert protected_reads == []
     assert probes.command == ("python", "main.py")
-    assert probes.managed_contract is None
-    evaluate_workflow_preflight(build_default_workflow_registry().get_offerable(*ANIMATE), probes)
-    assert protected_reads == []
 
 
 @pytest.mark.parametrize(

@@ -166,8 +166,17 @@ def test_follow_clip_selects_a_driving_engine_and_shows_its_inputs(env):
     assert env.tab.workflow_var.get() == ANIMATE2_ID
     assert env.tab.follow_clip_frame.winfo_manager()
     assert env.tab.pose_video_frame.winfo_manager()
-    assert env.tab.experimental_opt_in_var.get() is False  # never ticked for the operator
+    # Choosing the task is not consent: only the picker's own selection event authorises an experimental engine.
+    assert env.tab._experimental_selection_confirmed() is False
     assert str(env.tab.queue_workflow_button.cget("state")) == "disabled"
+    assert env.tab.advanced_section.is_expanded()  # the picker, where consent is given, is in view
+    env.tab.workflow_combo.event_generate("<<ComboboxSelected>>")
+    assert env.tab._experimental_selection_confirmed() is True
+    env.tab.select_task("animate")
+    env.tab.select_task("follow_clip")
+    assert (
+        env.tab._experimental_selection_confirmed() is False
+    )  # a new selection never inherits consent
 
 
 def test_task_follows_an_engine_chosen_some_other_way(env):

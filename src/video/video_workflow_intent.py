@@ -64,7 +64,7 @@ def parse_seed_input(value: Any) -> int | None:
 
 
 def experimental_opt_in_granted(spec: Any, form_data: Mapping[str, Any]) -> bool:
-    """True only for an experimental spec whose job form explicitly ticked the opt-in."""
+    """True only for an experimental spec with explicit authorization in its job intent."""
 
     return bool(getattr(spec, "is_experimental", False)) and (
         form_data.get(EXPERIMENTAL_OPT_IN_FIELD) is True
@@ -105,8 +105,7 @@ def capability_errors(
     name = spec.display_name
     if spec.is_experimental and not experimental_opt_in_granted(spec, form_data):
         errors.append(
-            f"'{name}' is an experimental workflow. Tick 'Enable experimental workflow for this "
-            "job' to run it; the choice is recorded per job."
+            f"'{name}' is an experimental workflow. Choose it explicitly in the workflow picker to queue it."
         )
     required = set(spec.required_input_names)
     if "end_anchor" in required and not _text(form_data.get("end_anchor_path")):

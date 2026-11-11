@@ -42,6 +42,7 @@ from src.video.workflow_preflight import (
     evaluate_workflow_preflight,
 )
 from src.video.workflow_registry import build_default_workflow_registry
+from tests.video.test_comfy_process_manager import fake_comfy_command
 
 TI2V = ("wan22_ti2v_5b_i2v_v1", "1.2.0")
 ANIMATE = ("wan_animate2_drive_i2v_v1", "1.2.0")
@@ -215,55 +216,35 @@ def test_no_launch_configuration_is_a_repairable_blocker() -> None:
     assert result.setup_repair_reason.startswith("Launch flags:")
 
 
-def test_a_command_missing_the_flag_is_repairable_and_a_present_flag_is_not_a_blocker() -> None:
-    spec = _spec(ANIMATE)
-
-    missing = evaluate_workflow_preflight(spec, _probes(_facts(saved_command=BARE)))
-    assert _gate(missing, "launch_flags").state == GATE_BLOCKED
-    assert _gate(missing, "launch_flags").action == ACTION_FIX_COMFY_SETUP
-    assert PIN in missing.block_reason and "Add required flags" in missing.block_reason
-
-    ok = evaluate_workflow_preflight(spec, _probes(_facts(saved_command=GOOD)))
-    assert _gate(ok, "launch_flags").state == GATE_OK and ok.queueable
-    assert (
-        "will start" in _gate(ok, "runtime").detail
-    )  # ready for managed startup, not "already running"
-    assert not ok.setup_repair_available
+def test_a_configured_install_with_missing_flags_is_queueable_offline(tmp_path) -> None:
+    command = fake_comfy_command(tmp_path, PIN, AUTO)
+    result = evaluate_workflow_preflight(_spec(ANIMATE), _probes(_facts(saved_command=command)))
+    assert _gate(result, "launch_flags").state == GATE_OK and result.queueable
+    assert "will apply" in _gate(result, "launch_flags").detail
+    assert "Runtime health is unverified" in _gate(result, "runtime").detail
+    assert not result.setup_repair_available
 
 
-def test_a_saved_fix_is_not_proof_that_the_running_launcher_has_the_flag() -> None:
-    spec = _spec(ANIMATE)
-    facts = _facts(saved_command=GOOD, active_command=BARE)
-
-    result = evaluate_workflow_preflight(spec, _probes(facts))
-
+def test_a_saved_change_does_not_prove_the_owned_process_has_the_flag() -> None:
+    facts = _facts(saved_command=GOOD, active_command=BARE, owns_runtime=True)
+    result = evaluate_workflow_preflight(_spec(ANIMATE), _probes(facts))
     gate = _gate(result, "launch_flags")
     assert gate.state == GATE_BLOCKED and not result.queueable
-    assert "not applied" in gate.detail or "not applied it" in gate.detail
-    assert "Restart StableNew" in gate.fix
-    assert gate.action == "" and not result.setup_repair_available  # the repair is already saved
+    assert "running StableNew-owned ComfyUI lacks" in gate.detail
+    assert "released" in gate.fix
+    assert not result.setup_repair_available
     assert result.notices and "must restart" in result.notices[0]
 
 
-def test_an_environment_override_missing_the_flag_is_not_hidden_by_a_good_saved_command() -> None:
-    spec = _spec(ANIMATE)
-    facts = _facts(saved_command=GOOD, environment_command=BARE)
-
-    result = evaluate_workflow_preflight(spec, _probes(facts))
-
+@pytest.mark.parametrize("supported", [False, True])
+def test_cli_compatibility_is_checked_on_the_environment_override(tmp_path, supported) -> None:
+    switches = (PIN,) if supported else ()
+    command = fake_comfy_command(tmp_path, *switches)
+    facts = _facts(saved_command=GOOD, environment_command=command)
+    result = evaluate_workflow_preflight(_spec(ANIMATE), _probes(facts))
     gate = _gate(result, "launch_flags")
-    assert gate.state == GATE_BLOCKED and "STABLENEW_COMFY_COMMAND" in gate.detail
-    assert "outside StableNew" in gate.fix and gate.action == ""  # Engine Settings cannot change it
-    assert any("overrides Engine Settings" in note for note in result.notices)
-
-
-def test_an_environment_command_with_the_flag_passes_and_says_where_it_came_from() -> None:
-    spec = _spec(ANIMATE)
-    facts = _facts(saved_command=BARE, environment_command=GOOD)
-
-    result = evaluate_workflow_preflight(spec, _probes(facts))
-
-    assert _gate(result, "launch_flags").state == GATE_OK
+    assert gate.state == (GATE_OK if supported else GATE_BLOCKED)
+    assert "will apply" in gate.detail if supported else f"does not support {PIN}" in gate.detail
     assert any("STABLENEW_COMFY_COMMAND" in note for note in result.notices)
 
 
@@ -274,8 +255,7 @@ def test_an_unowned_serving_comfy_is_never_qualified_by_the_saved_command() -> N
         spec, _probes(_facts(saved_command=GOOD), state="healthy", object_info={})
     )
     gate = _gate(external, "launch_flags")
-    assert gate.state == GATE_BLOCKED and "did not launch" in gate.detail
-    assert "will not adopt, stop or restart" in gate.detail
+    assert gate.state == GATE_BLOCKED and "external ComfyUI" in gate.detail
     assert (
         gate.action == "" and not external.queueable
     )  # an operator-side stop, not an Engine Settings fix
@@ -283,14 +263,19 @@ def test_an_unowned_serving_comfy_is_never_qualified_by_the_saved_command() -> N
     owned = evaluate_workflow_preflight(
         spec,
         _probes(
-            _facts(saved_command=GOOD, active_command=GOOD, owns_runtime=True),
+            _facts(
+                saved_command=GOOD,
+                active_command=BARE,
+                owns_runtime=True,
+                verified_launch_flags=(PIN, AUTO),
+            ),
             state="healthy",
             object_info={},
         ),
     )
     assert (
         _gate(owned, "launch_flags").state == GATE_OK
-        and "StableNew launched" in _gate(owned, "launch_flags").detail
+        and "owned ComfyUI launch used" in _gate(owned, "launch_flags").detail
     )
 
     unknown = evaluate_workflow_preflight(
@@ -332,10 +317,13 @@ def test_an_occupied_endpoint_reports_the_port_and_offers_no_setup_repair() -> N
     ("kwargs", "gate_id"),
     [({"ram_gb": 4.0}, "ram"), ({"vram": (12282.0, 500.0)}, "vram"), ({"vram": None}, "vram")],
 )
-def test_resource_advisories_never_offer_the_setup_repair(kwargs: dict, gate_id: str) -> None:
+def test_resource_advisories_never_offer_the_setup_repair(
+    tmp_path, kwargs: dict, gate_id: str
+) -> None:
     spec = _spec(ANIMATE)
 
-    result = evaluate_workflow_preflight(spec, _probes(_facts(saved_command=GOOD), **kwargs))
+    command = fake_comfy_command(tmp_path, PIN)
+    result = evaluate_workflow_preflight(spec, _probes(_facts(saved_command=command), **kwargs))
 
     assert _gate(result, gate_id).state == "advisory" and result.queueable
     assert not result.setup_repair_available
@@ -351,7 +339,12 @@ def test_missing_nodes_or_model_files_never_offer_the_setup_repair() -> None:
     result = evaluate_workflow_preflight(
         spec,
         _probes(
-            _facts(saved_command=GOOD, active_command=GOOD, owns_runtime=True),
+            _facts(
+                saved_command=GOOD,
+                active_command=BARE,
+                owns_runtime=True,
+                verified_launch_flags=(PIN, AUTO),
+            ),
             state="healthy",
             object_info={"SomeOtherNode": {"input": {"required": {}}}},
         ),
@@ -375,13 +368,14 @@ def test_the_projection_survives_to_dict_for_diagnostics() -> None:
 # --------------------------------------------------------------------------- agreement with the backend
 
 
-@pytest.mark.parametrize("command", [BARE, GOOD, ("python", "main.py", PIN), ()])
-def test_preflight_and_backend_admission_agree_about_the_active_launchers_flags(command) -> None:
+@pytest.mark.parametrize("switches", [None, (), (PIN,)])
+def test_preflight_and_backend_agree_about_cli_support(tmp_path, switches) -> None:
     """The strip blocks exactly when ``_verify_required_launch_flags`` would refuse, for the same launcher."""
 
     spec = _spec(ANIMATE)
+    command = fake_comfy_command(tmp_path, *switches) if switches is not None else ()
     manager = SimpleNamespace(
-        _config=SimpleNamespace(base_url="http://x", command=list(command)),
+        config=SimpleNamespace(base_url="http://x", command=list(command)),
         owns_process=False,
         is_running=lambda: False,
     )

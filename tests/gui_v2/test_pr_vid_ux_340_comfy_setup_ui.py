@@ -130,16 +130,14 @@ def test_a_resource_advisory_shows_its_reason_and_no_fix_setup(
 
 
 @pytest.mark.gui
-def test_a_saved_but_unapplied_change_is_a_restart_notice_not_a_fix_or_an_enabled_queue(
+def test_a_live_incompatible_owned_process_blocks_queue_with_a_release_hint(
     tk_root, tmp_path, monkeypatch
 ) -> None:
     probes = _LaunchProbes()
-    probes.launch = ComfyLaunchFacts(saved_command=GOOD, active_command=BARE)
+    probes.launch = ComfyLaunchFacts(saved_command=GOOD, active_command=BARE, owns_runtime=True)
     tab, runner = _tab(tk_root, tmp_path, monkeypatch, probes)
     _select(tab, ANIMATE_ID)
-    tab.experimental_opt_in_var.set(
-        True
-    )  # the per-job opt-in is satisfied; only the runtime blocks
+    tab._on_workflow_selected(None)  # satisfy consent so only runtime compatibility blocks
     tab._refresh_queue_gate()
     runner.drain()
     strip = tab.runtime_readiness_strip
@@ -150,7 +148,7 @@ def test_a_saved_but_unapplied_change_is_a_restart_notice_not_a_fix_or_an_enable
         ["disabled"]
     )  # the active launcher still lacks the flag
     flags = next(row for row in strip.last_view.rows if row.label == "Launch flags")
-    assert "not applied" in flags.detail and "Restart StableNew" in flags.fix
+    assert "running StableNew-owned ComfyUI lacks" in flags.detail and "released" in flags.fix
 
 
 @pytest.mark.gui
@@ -168,7 +166,6 @@ def test_an_environment_override_is_named_and_no_fix_action_is_offered(
 
     assert "STABLENEW_COMFY_COMMAND" in strip.notices_var.get()
     assert not _shown(strip.fix_setup_button)
-    assert any("STABLENEW_COMFY_COMMAND" in row.detail for row in strip.last_view.rows)
 
 
 @pytest.mark.gui
@@ -197,16 +194,16 @@ def test_an_experimental_wan_workflow_still_needs_its_own_opt_in_which_defaults_
     _select(tab, ANIMATE_ID)
     runner.drain()
 
-    assert tab.experimental_opt_in_var.get() is False
+    assert tab._experimental_selection_confirmed() is False
     assert tab.queue_workflow_button.instate(["disabled"])
-    assert "experimental opt-in" in tab.queue_block_reason_var.get()
+    assert "Choose this experimental workflow" in tab.queue_block_reason_var.get()
     _select(
         tab,
         next(
             v["workflow_id"] for v in tab._workflow_map.values() if v["workflow_id"] != ANIMATE_ID
         ),
     )
-    assert tab.experimental_opt_in_var.get() is False  # never carried to another workflow
+    assert tab._experimental_selection_confirmed() is False  # never carried to another workflow
 
 
 # --------------------------------------------------------------------------- Engine Settings dialog
@@ -296,6 +293,29 @@ def test_add_required_flags_is_exactly_once_and_changes_nothing_else(
         assert dialog.comfy_command() == [*DESKTOP, PIN]
         assert dialog.comfy_command().count(PIN) == 1
         assert _nothing_launches == []
+    finally:
+        dialog.master.destroy()
+
+
+def test_legacy_comfy_repair_removes_only_the_unsupported_flag(tmp_path, tk_root) -> None:
+    from tests.video.test_comfy_process_manager import fake_comfy_command
+
+    clean = [*fake_comfy_command(tmp_path, "--disable-auto-launch"), "--disable-auto-launch"]
+    dialog = _dialog(tk_root, _manager(tmp_path, comfy_command=[*clean, PIN]))
+    try:
+        assert dialog.add_comfy_flags_button.cget("text") == "Remove unsupported flag"
+        assert not dialog.comfy_settings_changed()
+
+        dialog.add_comfy_flags_button.invoke()
+
+        assert dialog.collect_values()["comfy_command"] == clean
+        assert dialog.add_comfy_flags_button.instate(["disabled"])
+        dialog.add_required_comfy_flags()
+        assert dialog.comfy_command() == clean
+        assert (
+            "Choose a compatible install for workflows that require it."
+            in dialog.comfy_status_text()
+        )
     finally:
         dialog.master.destroy()
 

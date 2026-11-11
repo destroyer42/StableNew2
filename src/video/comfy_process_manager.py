@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +11,11 @@ from src.utils.config import ConfigManager
 from src.utils.managed_process import ManagedProcess
 from src.video.comfy_healthcheck import probe_comfy_endpoint, wait_for_comfy_ready
 from src.video.comfy_runtime_setup import ComfyLaunchFacts
+from src.video.managed_comfy_runtime import (
+    missing_required_flags,
+    plan_comfy_launch,
+    workflow_launch_requirements,
+)
 
 # Anchored to the repository, not the working directory, and size-rotated by ``ManagedProcess``.
 _MANAGED_COMFY_LOG_PATH = (
@@ -66,6 +71,8 @@ class ComfyProcessManager:
         _LAST_LAUNCH_CONFIG = config
         self._process_factory = process_factory
         self._managed: ManagedProcess | None = None
+        self._running_command: tuple[str, ...] = ()
+        self._verified_launch_flags: tuple[str, ...] = ()
         self._last_tails: tuple[list[str], list[str]] = ([], [])
         self._stopped = False
         _GLOBAL_COMFY_PROCESS_MANAGER = self
@@ -102,10 +109,28 @@ class ComfyProcessManager:
     def is_running(self) -> bool:
         return self._managed is not None and self._managed.is_running()
 
-    def start(self) -> subprocess.Popen:
+    @property
+    def running_command(self) -> tuple[str, ...]:
+        return self._running_command if self.is_running() else ()
+
+    @property
+    def verified_launch_flags(self) -> tuple[str, ...]:
+        return self._verified_launch_flags if self.is_running() else ()
+
+    def _check_running_flags(self, required: Sequence[str]) -> None:
+        missing = missing_required_flags(self.verified_launch_flags, required)
+        if missing:
+            raise ComfyStartupError(
+                f"The running StableNew-owned ComfyUI lacks verified launch flags {' '.join(missing)}. "
+                "Wait for the current runtime to be released, then retry."
+            )
+
+    def start(self, *, required_flags: Sequence[str] = ()) -> subprocess.Popen:
+        required = workflow_launch_requirements(self.config.command, required_flags)
         if self._managed is not None and self.is_running():
             process = self._managed.process
             if process is not None:
+                self._check_running_flags(required)
                 return process
         if self._config.base_url:
             endpoint_state = probe_comfy_endpoint(self._config.base_url, timeout=0.5)
@@ -118,8 +143,12 @@ class ComfyProcessManager:
                 raise ComfyStartupError(
                     f"Cannot launch managed ComfyUI: {detail}; refusing to adopt, stop, or replace it"
                 )
+        try:
+            command = plan_comfy_launch(self.config.command, self.config.working_dir, required)
+        except ValueError as exc:
+            raise ComfyStartupError(str(exc)) from exc
         managed = self._process_factory(
-            self._config.command,
+            list(command),
             cwd=self._config.working_dir,
             env=self._config.build_env(),
             label="comfy",
@@ -132,6 +161,8 @@ class ComfyProcessManager:
             raise ComfyStartupError(str(exc)) from exc
 
         self._managed = managed
+        self._running_command = command
+        self._verified_launch_flags = required
         self._stopped = False
         # stop() unregisters this manager; a relaunch must re-register it, or the owned process
         # it just started would be invisible to runtime transitions (PR-RUNTIME-100) that look
@@ -146,6 +177,8 @@ class ComfyProcessManager:
             return
         self._stopped = True
         managed, self._managed = self._managed, None
+        self._running_command = ()
+        self._verified_launch_flags = ()
         if managed is not None:
             managed.stop(grace_seconds=grace_seconds)
             self._last_tails = (managed.stdout_tail(), managed.stderr_tail())
@@ -165,16 +198,20 @@ class ComfyProcessManager:
                 raise ComfyStartupError(self._startup_failure_detail(base_url, exc)) from exc
             raise
 
-    def ensure_running(self) -> bool:
+    def ensure_running(self, *, required_flags: Sequence[str] = ()) -> bool:
+        required = workflow_launch_requirements(self.config.command, required_flags)
         if self.is_running():
+            self._check_running_flags(required)
+            if required:
+                return self.check_health() and self.is_running()
             try:
                 if self.check_health():
                     return True
             except Exception:
                 pass
             self.stop()
-        self.start()
-        return self.check_health()
+        self.start(required_flags=required_flags)
+        return self.check_health() and (not required or self.is_running())
 
     def restart(
         self,
@@ -266,7 +303,14 @@ def read_comfy_launch_facts(config_manager: ConfigManager | None = None) -> Comf
         environment_command=facts.environment_command,
         active_command=command,
         owns_runtime=owns,
+        verified_launch_flags=active.verified_launch_flags if active is not None and owns else (),
     )
+
+
+def get_registered_comfy_launch_config() -> ComfyProcessConfig | None:
+    """The registered launcher's base config, including after its owned child is released."""
+
+    return _LAST_LAUNCH_CONFIG
 
 
 def build_default_comfy_process_config(
@@ -278,18 +322,33 @@ def build_default_comfy_process_config(
     command = list(_saved_and_environment_launch(settings).effective_command)
     if not command:
         return None
-    working_dir = str(settings.get("comfy_workdir") or "").strip() or None
+    working_dir = (
+        str(os.getenv("STABLENEW_COMFY_WORKDIR") or settings.get("comfy_workdir") or "").strip()
+        or None
+    )
     if working_dir:
         working_dir = str(Path(working_dir))
     autostart_enabled = raw_settings.get("comfy_autostart_enabled")
     if autostart_enabled is None:
         autostart_enabled = bool(command)
+    autostart_env = os.getenv("STABLENEW_COMFY_AUTOSTART")
+    if autostart_env is not None:
+        autostart_enabled = autostart_env.lower() in {"1", "true", "yes"}
+    timeout = float(settings.get("comfy_health_total_timeout_seconds") or 30.0)
+    try:
+        timeout = float(os.getenv("STABLENEW_COMFY_TIMEOUT", str(timeout)))
+    except ValueError:
+        pass
     return ComfyProcessConfig(
         command=command,
         working_dir=working_dir,
         autostart_enabled=bool(autostart_enabled),
-        base_url=str(settings.get("comfy_base_url") or "http://127.0.0.1:8188"),
-        startup_timeout_seconds=float(settings.get("comfy_health_total_timeout_seconds") or 30.0),
+        base_url=str(
+            settings.get("comfy_base_url")
+            or os.getenv("STABLENEW_COMFY_BASE_URL")
+            or "http://127.0.0.1:8188"
+        ),
+        startup_timeout_seconds=timeout,
         log_path=_MANAGED_COMFY_LOG_PATH,
     )
 

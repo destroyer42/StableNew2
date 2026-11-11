@@ -73,6 +73,102 @@ def _manager(config: ComfyProcessConfig) -> ComfyProcessManager:
     return ComfyProcessManager(config, process_factory=_FakeManaged)
 
 
+def fake_comfy_command(root: Path, *switches: str) -> tuple[str, ...]:
+    """Minimal on-disk parser declarations. The test process factory never executes them."""
+
+    parser = root / "comfy" / "cli_args.py"
+    parser.parent.mkdir(parents=True, exist_ok=True)
+    parser.write_text(
+        "".join(f"parser.add_argument({flag!r}, action='store_true')\n" for flag in switches),
+        encoding="utf-8",
+    )
+    main = root / "main.py"
+    main.write_text("from comfy.cli_args import args\n", encoding="utf-8")
+    return (sys.executable, str(main))
+
+
+def test_new_launch_adds_workflow_and_managed_contract_flags(tmp_path) -> None:
+    from src.video.managed_comfy_runtime import (
+        build_managed_launch_command,
+        load_managed_comfy_contract,
+    )
+
+    contract = load_managed_comfy_contract()
+    install = tmp_path / contract.install_dir_name
+    workflow_flag = "--workflow-flag"
+    command = build_managed_launch_command(
+        contract, install_dir=install, runtime_dir=tmp_path / "runtime", port=8188
+    )
+    interpreter = Path(command[0])
+    interpreter.parent.mkdir(parents=True)
+    interpreter.touch(mode=0o755)
+    fake_comfy_command(install / "source", *contract.required_flags, workflow_flag)
+    base = command[:-1]  # preserve the first existing flag and add only what is missing
+    manager = _manager(ComfyProcessConfig(command=base))
+
+    manager.start(required_flags=(workflow_flag, contract.required_flags[0]))
+
+    (child,) = _FakeManaged.instances
+    assert child.command == [*command, workflow_flag]
+    assert manager.running_command == tuple(child.command)
+    assert manager.verified_launch_flags == (*contract.required_flags, workflow_flag)
+    assert manager.config.command == base
+    manager.stop()
+    assert manager.running_command == manager.verified_launch_flags == ()
+
+
+@pytest.mark.parametrize("already_present", [False, True])
+def test_incompatible_comfy_fails_before_start(tmp_path, already_present) -> None:
+    flag = "--disable-pinned-memory"
+    command = list(fake_comfy_command(tmp_path))
+    if already_present:
+        command.append(flag)
+    manager = _manager(ComfyProcessConfig(command=command))
+
+    with pytest.raises(
+        ComfyStartupError, match="cli_args.py does not support --disable-pinned-memory"
+    ):
+        manager.start(required_flags=(flag,))
+
+    assert _FakeManaged.instances == []
+
+
+@pytest.mark.parametrize("flag_in_argv", [False, True])
+def test_running_comfy_without_verified_flags_is_left_alone(tmp_path, flag_in_argv) -> None:
+    flag = "--disable-pinned-memory"
+    command = list(fake_comfy_command(tmp_path, flag))
+    if flag_in_argv:
+        command.append(flag)
+    manager = _manager(ComfyProcessConfig(command=command))
+    process = manager.start()
+
+    with pytest.raises(ComfyStartupError, match="running StableNew-owned ComfyUI lacks"):
+        manager.ensure_running(required_flags=(flag,))
+
+    (child,) = _FakeManaged.instances
+    assert child.process is process and not child.stopped
+    assert (flag in manager.running_command) is flag_in_argv
+    assert manager.verified_launch_flags == ()
+
+
+def test_legacy_configured_flag_blocks_start_even_without_a_workflow_requirement(tmp_path) -> None:
+    command = [
+        *fake_comfy_command(tmp_path, "--disable-auto-launch"),
+        "--disable-auto-launch",
+        "--disable-pinned-memory",
+    ]
+    manager = _manager(ComfyProcessConfig(command=command))
+
+    with pytest.raises(ComfyStartupError, match="does not support --disable-pinned-memory"):
+        manager.start()
+
+    assert _FakeManaged.instances == []
+    assert manager.config.command == command
+    manager.config.command = command[:-1]
+    manager.start()
+    assert _FakeManaged.instances[0].command == command[:-1]
+
+
 def test_comfy_process_manager_start_invokes_the_managed_process_with_config() -> None:
     cfg = ComfyProcessConfig(
         command=["python", "main.py"],
@@ -232,7 +328,8 @@ def test_a_failed_launch_is_reported_as_a_startup_error_and_leaves_no_owner() ->
     assert manager.owns_process is False
 
 
-def test_build_default_comfy_process_config_reads_settings(tmp_path: Path) -> None:
+def test_build_default_comfy_process_config_reads_settings(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("STABLENEW_COMFY_AUTOSTART", raising=False)
     manager = ConfigManager(presets_dir=tmp_path / "presets")
     manager.save_settings(
         {
@@ -255,7 +352,9 @@ def test_build_default_comfy_process_config_reads_settings(tmp_path: Path) -> No
 
 def test_build_default_comfy_process_config_autostarts_when_command_configured(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.delenv("STABLENEW_COMFY_AUTOSTART", raising=False)
     manager = ConfigManager(presets_dir=tmp_path / "presets")
     manager.save_settings(
         {

@@ -57,6 +57,8 @@ class ComfyLaunchFacts:
     active_command: tuple[str, ...] | None = None
     #: True only while a process ``ComfyProcessManager`` launched is running.
     owns_runtime: bool = False
+    #: Switches checked against the selected CLI and passed to the owned child.
+    verified_launch_flags: tuple[str, ...] = ()
 
     @property
     def resolved(self) -> ResolvedLaunchCommand:
@@ -90,11 +92,6 @@ class ComfyLaunchFacts:
         """The command a launch from this process would actually run: the registered launcher's, else the effective one."""
 
         return self.active_command if self.active_command is not None else self.effective_command
-
-
-def command_missing_flags(command: Sequence[str], required: Sequence[str]) -> tuple[str, ...]:
-    present = set(command)
-    return tuple(flag for flag in required if flag not in present)
 
 
 def environment_override_notice(facts: ComfyLaunchFacts) -> str:
@@ -142,7 +139,6 @@ __all__ = [
     "SOURCE_SETTINGS",
     "ComfyLaunchFacts",
     "ResolvedLaunchCommand",
-    "command_missing_flags",
     "environment_override_notice",
     "resolve_launch_command",
     "restart_pending_notice",

@@ -11,7 +11,7 @@ Find the simplest coherent operator experience for creating, editing, animating,
 ## What this research is not
 
 - **Not user testing.** No operator was observed. Every usability statement is either a code/doc/archive observation or an explicitly labelled hypothesis. The only operator-reported material is the owner's brief (section 5 of PR-GUI-UX-850) and the 2026-10-22 audit's `[O]` items.
-- **Not a toolkit decision.** `QT_VS_TK_COAS.md` frames the options. This research installed nothing; a PySide6 6.12.0 environment from earlier work already exists on the host (EV-39). No PySide6 or Tk prototype was built.
+- **Not a toolkit decision.** `QT_VS_TK_COAS.md` frames the options. This research installed nothing; a PySide6 6.12.0 environment from earlier work already exists on the host (EV-39). No PySide6 or Tk prototype was built by this research. A separate, non-authoritative Qt Widgets design workspace (QT-DS-01) now lives in [`design/qt_widgets/`](../../../design/qt_widgets/README.md); it consumes this research and does not replace it.
 - **Not a workflow-discovery record yet.** The nine workflow files are still `DISCOVERY OPEN`: the owner answered the cross-cutting decision questions on 2026-11-05 (DECISION_REGISTER DR-A8..A21) but not the per-workflow discovery contracts. Anything not traceable to the owner's own words or a repository decision is marked `PENDING` or `PROPOSED`. The only usability participant is the owner (DR-A14).
 
 ## Evidence hierarchy

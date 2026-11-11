@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "totals": {
-    "daemon_threads": 14,
+    "daemon_threads": 13,
     "raw_threads": 9,
     "utils_upward_imports": 18,
     "controller_gui_imports": 6,
@@ -33,7 +33,7 @@
       "raw_threads": 1
     },
     "src/main.py": {
-      "daemon_threads": 3
+      "daemon_threads": 2
     },
     "src/queue/single_node_runner.py": {
       "raw_threads": 1

@@ -32,7 +32,8 @@ needs.
 
 - No change to `VideoWorkflowNjrBuilder`, the compiler, admission, the queue, governance or the catalog specs.
 - No new tuning numbers. Suggestions use only values the catalog already declares and rules already shipped.
-- No automatic opt-in and no silent routing. An experimental engine still needs this job's own opt-in.
+- No automatic consent and no silent routing. An experimental engine still needs the operator to choose it in the
+  Engine picker for this job (the picker's selection event is the consent; choosing a task is not).
 - No merging of SVD or Movie Clips into this tab. "Use native SVD instead" moves into the engine chooser.
 - No AI-assisted workflow choice (`AI_ASSIST` section 10 stays as is).
 
@@ -52,8 +53,8 @@ Engine choice within a task, in order:
 1. The operator's pinned engine, if it is eligible for the task.
 2. The first eligible engine that is `approved` and not experimental (catalog order, the rule
    `workflow_picker.recommended_workflow_id` already uses).
-3. Otherwise the first eligible engine without an `admission_block_reason`. It is experimental, so the opt-in is shown
-   and Queue stays disabled until it is ticked.
+3. Otherwise the first eligible engine without an `admission_block_reason`. It is experimental, so the Settings editor
+   opens with the picker and Queue stays disabled until the operator chooses it there.
 4. Otherwise the first eligible engine, with its block reason shown. If none is eligible the task is listed disabled
    with "No installed workflow supports this."
 
@@ -88,7 +89,7 @@ Fixed header (never scrolls):
 
 1. Source image: path, Browse, Use Latest Output.
 2. Task selector: four radio-style buttons in one row.
-3. Queue button, Preview Frozen Plan, the experimental opt-in (only when needed), the block reason with its fix
+3. Queue button, Preview Frozen Plan, the block reason with its fix
    action, status, the submission notice, the batch strip (`batch` only) and the source summary (what the job
    will read stays in view, the PR-GUI-110 contract).
 
@@ -145,7 +146,7 @@ Data flow: workflow records → `workflow_tasks` → task panel sets the existin
 - A Review batch handoff received in `follow_clip` keeps that task, its engine and its clip.
 - The operator's engine choice is remembered per task for the session, so leaving a task and returning brings it
   back; "Reset to suggested" forgets it.
-- The experimental opt-in is still cleared on any engine change and never restored.
+- Experimental consent (the picker selection) is reset on any engine change, including a task's own, and never restored.
 
 ## 9. Errors and edge cases
 
@@ -160,8 +161,8 @@ Data flow: workflow records → `workflow_tasks` → task panel sets the existin
   experimental-only and all-blocked; suggestions and reasons; pin replacement when a value is illegal; `infer_task`.
   Uses plain record dicts; asserts no workflow or model name is referenced by the module.
 - `tests/gui_v2/test_pr_vid_ux_360_task_first.py`: per-task visibility; default-task action count; pinning survives a
-  task switch; "Reset to suggested"; state round-trip with and without `task`; handoffs select the right task; opt-in
-  never auto-ticked; submitted state for unchanged choices equals today's.
+  task switch; "Reset to suggested"; state round-trip with and without `task`; handoffs select the right task; experimental
+  consent only from the picker, never from a task choice; submitted state for unchanged choices equals today's.
 - Existing video GUI tests updated only where they assert the old layout. Controller and architecture ratchets unchanged.
 - Not covered by tests: interactive Tk acceptance on the desktop, which needs an operator run.
 

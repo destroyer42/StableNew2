@@ -717,8 +717,8 @@ def test_a_declined_source_preview_never_blocks_queueing_the_same_source(
     # Wan-Animate-2 is still experimental, so Queue waits for the job's opt-in (PR-VID-GOV-316)
     # and for nothing else: the declined preview disables nothing.
     assert str(tab.queue_workflow_button.cget("state")) == "disabled"
-    assert "experimental opt-in" in tab.queue_block_reason_var.get()
-    tab.experimental_opt_in_var.set(True)
+    assert "Choose this experimental workflow" in tab.queue_block_reason_var.get()
+    tab._on_workflow_selected(None)
     assert str(tab.queue_workflow_button.cget("state")) == "normal"
 
     tab.pose_video_var.set(str(clip))

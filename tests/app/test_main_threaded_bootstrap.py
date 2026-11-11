@@ -46,6 +46,7 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     fake_root = _FakeRoot()
     fake_window = _FakeWindow()
     captured: dict[str, object] = {}
+    emergency_callbacks = []
 
     monkeypatch.setattr(main_module, "tk", SimpleNamespace(Tk=lambda: fake_root))
     monkeypatch.setattr(main_module, "messagebox", None)
@@ -53,8 +54,8 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
     monkeypatch.setattr(main_module, "SingleInstanceLock", _FakeSingleInstanceLock)
     monkeypatch.setattr(main_module, "_register_emergency_cleanup", lambda _window: None)
     monkeypatch.setattr(main_module, "_async_bootstrap_webui", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(main_module, "_async_bootstrap_comfy", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(main_module, "graceful_exit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main_module.atexit, "register", emergency_callbacks.append)
 
     def _fake_build_v2_app(**kwargs):
         captured.update(kwargs)
@@ -67,3 +68,4 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
 
     assert captured["threaded"] is True
     assert captured["root"] is fake_root
+    assert emergency_callbacks == [main_module._emergency_comfy_cleanup]

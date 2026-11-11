@@ -177,14 +177,18 @@ def test_idle_polling_does_not_build_the_dispatch_summary_while_nothing_is_held(
         calls["n"] += 1
         return real()
 
+    wait_for_change = Mock(return_value=False)
+    monkeypatch.setattr(queue, "wait_for_change", wait_for_change)
     monkeypatch.setattr(queue, "dispatch_summary", counting)
     for _ in range(5):
         runner._idle_wait()
+    assert wait_for_change.call_count == 5
     assert calls["n"] == 0  # the O(queue) summary is only built while a hold or quarantine can explain the idle
     queue.submit(image("a"))
     queue.quarantine_gpu_dispatch(INCIDENT)
     runner._idle_wait()
     assert calls["n"] == 1
+    assert wait_for_change.call_count == 5  # held-only work takes the separate wait path
 
 
 def test_webui_hold_and_gpu_quarantine_are_independent(repository):

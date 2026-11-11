@@ -226,10 +226,10 @@ def test_make_video_keeps_an_approved_choice_and_never_carries_an_opt_in(env) ->
     assert env.tab.workflow_var.get() == TI2V_ID  # the recommended approved workflow
 
     env.tab.workflow_var.set(ANIMATE2_ID)
-    env.tab.experimental_opt_in_var.set(True)
+    env.tab._on_workflow_selected(None)
     route_image_to_video_workflow(main_window=env.window, image_path=path)
     assert env.tab.workflow_var.get() == TI2V_ID
-    assert env.tab.experimental_opt_in_var.get() is False
+    assert env.tab._experimental_selection_confirmed() is False
     assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is False
 
 
@@ -240,19 +240,19 @@ def test_an_experimental_workflow_stays_selectable_and_needs_its_own_opt_in(env)
     labels = list(env.tab.workflow_combo["values"])
     assert any("(Experimental" in label or "(experimental)" in label for label in labels)
     experimental_label = next(label for label in labels if "Driving Video" in label)
-    env.tab.workflow_label_var.set(experimental_label)  # chosen through the friendly picker
+    env.tab.workflow_label_var.set(experimental_label)  # programmatic label write
     assert env.tab.workflow_var.get() == ANIMATE2_ID
 
-    assert "experimental opt-in" in env.tab._queue_block_reason()
+    assert "Choose this experimental workflow" in env.tab._queue_block_reason()
     assert str(env.tab.queue_workflow_button.cget("state")) == "disabled"
     assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is False
 
-    env.tab.experimental_opt_in_var.set(True)
+    env.tab._on_workflow_selected(None)
     assert env.tab._queue_block_reason() == ""
     assert env.tab.get_video_workflow_state(for_submission=True)["experimental_opt_in"] is True
 
     env.tab.workflow_var.set(TI2V_ID)  # leaving the experimental workflow drops the authorisation
-    assert env.tab.experimental_opt_in_var.get() is False
+    assert env.tab._experimental_selection_confirmed() is False
 
 
 # ------------------------------------------------------------------ friendly names, persisted state
@@ -389,6 +389,25 @@ def test_queue_submits_one_frozen_njr_through_the_job_service_boundary(env) -> N
     notice = env.tab.submission_notice
     assert notice.kind == "queued" and "job-1-0" in notice.message_var.get()
     assert notice.view_button.winfo_ismapped() or notice.view_button.winfo_manager() == "grid"
+
+
+def test_explicit_experimental_selection_and_queue_freeze_consent(env) -> None:
+    _ready_tab(env)
+    tab = env.tab
+    workflow_id = "wan_animate2_prompt_i2v_v1"
+    tab.workflow_var.set(workflow_id)
+    tab.queue_workflow_button.invoke()
+    assert env.service.calls == []
+
+    tab._on_workflow_selected(None)
+    tab.queue_workflow_button.invoke()
+
+    [(records, _policy)] = env.service.calls
+    [record] = records
+    block = record.config["video_workflow"]
+    assert block["workflow_id"] == workflow_id
+    assert block["video_execution"]["experimental_opt_in"] is True
+    assert "experimental_opt_in" not in tab.get_video_workflow_state()
 
 
 def test_view_in_queue_selects_the_pipeline_tab_and_dismisses_the_notice(env) -> None:

@@ -84,7 +84,7 @@ def test_wan_admission_is_capability_driven_and_records_the_per_job_opt_in(tmp_p
     controller, submitted = _capture_controller(tmp_path)
 
     ok, reason = controller.validate_form_data(_wan_form(experimental_opt_in=False))
-    assert not ok and "experimental" in reason and "Enable experimental workflow" in reason
+    assert not ok and "experimental" in reason and "Choose it explicitly" in reason
     assert controller.build_default_form_state()["experimental_opt_in"] is False
     for override, fragment in (
         ({"end_anchor_path": str(end)}, "end anchor"),

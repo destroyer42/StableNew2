@@ -1,0 +1,301 @@
+{
+  "meta": {
+    "theme": "concept-a",
+    "qpa": "windows",
+    "scale": 1.0,
+    "python": "3.14.9",
+    "os": "Windows-11-10.0.26100-SP0",
+    "platform_note": "native platform",
+    "screen": {
+      "name": "\\\\.\\DISPLAY6",
+      "geometry": [
+        2560,
+        1440
+      ],
+      "devicePixelRatio": 1.0,
+      "logicalDpi": 96.0
+    }
+  },
+  "rows": [
+    {
+      "layout": "editor",
+      "window": [
+        960,
+        600
+      ],
+      "canvas": [
+        482,
+        285
+      ],
+      "inspector_viewport": [
+        238,
+        405
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 48
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "960x600"
+    },
+    {
+      "layout": "inspector",
+      "window": [
+        960,
+        600
+      ],
+      "canvas": [
+        278,
+        287
+      ],
+      "inspector_viewport": [
+        238,
+        407
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 46
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "960x600"
+    },
+    {
+      "layout": "editor",
+      "window": [
+        1280,
+        680
+      ],
+      "canvas": [
+        770,
+        365
+      ],
+      "inspector_viewport": [
+        282,
+        485
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1280x680"
+    },
+    {
+      "layout": "inspector",
+      "window": [
+        1280,
+        680
+      ],
+      "canvas": [
+        566,
+        367
+      ],
+      "inspector_viewport": [
+        282,
+        487
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1280x680"
+    },
+    {
+      "layout": "editor",
+      "window": [
+        1366,
+        768
+      ],
+      "canvas": [
+        856,
+        453
+      ],
+      "inspector_viewport": [
+        282,
+        573
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1366x768"
+    },
+    {
+      "layout": "inspector",
+      "window": [
+        1366,
+        768
+      ],
+      "canvas": [
+        652,
+        455
+      ],
+      "inspector_viewport": [
+        282,
+        575
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1366x768"
+    },
+    {
+      "layout": "editor",
+      "window": [
+        1440,
+        900
+      ],
+      "canvas": [
+        925,
+        585
+      ],
+      "inspector_viewport": [
+        282,
+        705
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1440x900"
+    },
+    {
+      "layout": "inspector",
+      "window": [
+        1440,
+        900
+      ],
+      "canvas": [
+        721,
+        587
+      ],
+      "inspector_viewport": [
+        282,
+        707
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1440x900"
+    },
+    {
+      "layout": "editor",
+      "window": [
+        1920,
+        1080
+      ],
+      "canvas": [
+        1354,
+        765
+      ],
+      "inspector_viewport": [
+        282,
+        885
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1920x1080"
+    },
+    {
+      "layout": "inspector",
+      "window": [
+        1920,
+        1080
+      ],
+      "canvas": [
+        1150,
+        767
+      ],
+      "inspector_viewport": [
+        282,
+        887
+      ],
+      "settings_scroll_px": {
+        "profile": 0,
+        "region": 0,
+        "prompt": 0,
+        "negative": 0,
+        "advanced": 0
+      },
+      "horizontal_overflow_px": 0,
+      "clipped": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "preview": "Current / ready",
+      "requested_size": "1920x1080"
+    }
+  ]
+}
