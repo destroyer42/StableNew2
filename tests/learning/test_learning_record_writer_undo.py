@@ -113,6 +113,25 @@ def test_malformed_and_blank_lines_do_not_crash_and_unselected_malformed_lines_a
     assert [json.loads(line)["run_id"] for line in lines if line.startswith('{"')] == ["r1"]
 
 
+def test_pathologically_nested_line_is_unparseable_and_kept_not_an_error(tmp_path: Path) -> None:
+    """``json.loads`` raises ``RecursionError`` (not ``ValueError``) on absurd nesting; it must be skipped, not raised."""
+
+    writer = LearningRecordWriter(tmp_path)
+    writer.append_record(_record("r1"))
+    deep_line = "[" * 100_000 + "]" * 100_000
+    with open(writer.records_path, "a", encoding="utf-8") as handle:
+        handle.write(deep_line + "\n")
+
+    # the valid review record before the unparseable line is still found and removed; the deep line is kept
+    assert writer.remove_latest_review_feedback() is True
+    assert writer.records_path.read_text(encoding="utf-8").splitlines() == [deep_line]
+
+    # with only the unparseable line left there is no match: False, file unchanged
+    before = writer.records_path.read_bytes()
+    assert writer.remove_latest_review_feedback() is False
+    assert writer.records_path.read_bytes() == before
+
+
 def test_removing_the_last_record_leaves_an_empty_file(tmp_path: Path) -> None:
     writer = LearningRecordWriter(tmp_path)
     writer.append_record(_record("only"))

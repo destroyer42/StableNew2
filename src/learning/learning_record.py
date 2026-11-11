@@ -232,7 +232,8 @@ def _latest_review_feedback_index(lines: list[str], run_id: str, image_path: str
     for index in range(len(lines) - 1, -1, -1):
         try:
             payload = json.loads(lines[index])
-        except ValueError:
+        except (ValueError, RecursionError):
+            # RecursionError: ``json.loads`` raises it, not ``ValueError``, on absurdly nested input.
             continue
         if not isinstance(payload, dict):
             continue
