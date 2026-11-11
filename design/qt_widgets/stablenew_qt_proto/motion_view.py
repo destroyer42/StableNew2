@@ -805,7 +805,10 @@ class StoryPanel(QWidget):
         except MotionRefused as exc:
             plan = None
             self.clip_info.setText(str(exc))
-        self.viewer.set_plan(plan)
+        if (
+            plan is None or plan != self.viewer.plan
+        ):  # a sync must not rewind a playing illustration
+            self.viewer.set_plan(plan)
         with QSignalBlocker(self.compare_combo):
             self.compare_combo.clear()
             self.compare_combo.addItem("Nothing selected", None)

@@ -7,10 +7,10 @@ PySide6 6.12.0, native `windows` Qt platform, screen DPR 1.0.
 
 | Suite | Result |
 |---|---|
-| Whole `design/qt_widgets/tests`, pure (Qt tests skip) | 421 collected · 276 run · 145 skipped · **OK** |
-| Whole suite with `STABLENEW_QT_PROTOTYPE_TEST=1` (native) | 421 run · **OK** |
-| `tests/test_motion_domain.py` (pure Motion domain + walkthroughs + playback math) | 90 tests |
-| `tests/test_qt_motion.py` (native Motion interaction + geometry) | 36 tests |
+| Whole `design/qt_widgets/tests`, pure (Qt tests skip) | 426 collected · 281 run · 145 skipped · **OK** |
+| Whole suite with `STABLENEW_QT_PROTOTYPE_TEST=1` (native) | 426 run · **OK** |
+| `tests/test_motion_domain.py` (pure Motion domain + walkthroughs + playback math) | 94 tests |
+| `tests/test_qt_motion.py` (native Motion interaction + geometry) | 37 tests |
 | `tests/test_independence.py` | Motion flow added: all seven walkthroughs + the assembly-failure drill run with production modules, numpy, PIL, sqlite3, sockets and subprocess blocked, and assert that no `PySide6` module was loaded |
 | Repo guard `tests/system/test_qt_design_workspace.py` (StableNew `.venv`) | 4 passed |
 | `ruff check` / `ruff format --check` on `design/qt_widgets` | clean |
@@ -24,6 +24,28 @@ summary-vs-admission and staleness, result identity and variant independence, ha
 reopen as a new draft), Movie Clips ordering/trim/transition/audio/profile rules, assembly results with
 their own identity, and isolation. Two real defects were found by these tests and fixed: consent could be
 revived by returning to equal values, and a Storyboard media fingerprint omitted anchors on shot 1.
+
+## CI and review
+
+- `python tools/ci/run_pr_gate.py` was run once on the committed work and printed **PR gate OK** (completeness,
+  controller ratchets, Ruff, mypy smoke/ratchet, ruff/architecture ratchets, Tk boundary, isolated collection of
+  16232 tests, required smoke 397 passed).
+- One aggregate read-only review (architecture, Qt lifetime, hidden-media, token use) found **five** defects and
+  no lifetime, signal-loop, hidden-media or hard-coded-colour problems. All five were fixed in one bounded repair
+  pass with a regression test each:
+  1. Consent and admission were not bound to the media fingerprint (a replaced motion-reference file could keep
+     consent and reuse an old run): both now include the reviewed fingerprint.
+  2. Undo after Save produced a bogus stale-save conflict: Save now re-bases the undo/redo history.
+  3. The seed range disagreed with the UI spinners and variant offsets could overflow: `SEED_MAX` is 2³¹−1 and
+     explicit seed + variants is validated.
+  4. A sync rewound a playing draft illustration: the viewer is only reset when the plan really changes.
+  5. Camera keywords matched substrings ("bright" → pan-right): matching is now whole-word.
+- Not fixed, not reachable from the UI: `accept_source_media` for Movie Clips would raise, and a workflow combo
+  falls back to index 0 for a workflow outside the offered list. A motion reference has no explicit *Accept
+  Current Media* path (a changed reference makes the summary stale and voids consent, but there is no recorded
+  reference digest to accept); that is a documented gap for a later package.
+- The gate was not re-run after the repair pass (one run was the instruction); Ruff, the pure and native suites and
+  the repo guard were re-run and pass.
 
 ## Walkthroughs (executable, `motion_walkthroughs.run_all()`)
 

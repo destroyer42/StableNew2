@@ -14,6 +14,7 @@ from stablenew_qt_proto.motion_domain import (
     KIND_STORY,
     MAX_SHOTS,
     MIN_SHOTS,
+    SEED_MAX,
     WORKFLOWS,
     Governance,
     MotionRefused,
@@ -927,6 +928,54 @@ class WalkthroughTests(unittest.TestCase):
         self.assertEqual(outcomes["MOTION-07"], "recoverable")
         self.assertTrue(all(o in ("success", "refusal", "recoverable") for o in outcomes.values()))
         self.assertTrue(all(r.steps and r.terminal for r in results))
+
+
+class ReviewRepairTests(unittest.TestCase):
+    def test_changed_motion_reference_voids_consent_and_never_reuses_the_old_run(self):
+        m = MotionSession()
+        m.select_source(CREATE_SOURCE)
+        m.update_quick(
+            workflow=ANIMATE, prompt="Follow the walk", reference_key="motion:orbit-slow"
+        )
+        m.grant_consent(KIND_QUICK)
+        m.review(KIND_QUICK)
+        first = m.simulate_quick()
+        m.catalog.replace_media("motion:orbit-slow")
+        self.assertEqual(m.status(KIND_QUICK), Status.STALE)
+        m.review(KIND_QUICK)
+        self.assertFalse(m.consent_valid(KIND_QUICK))
+        self.assertEqual(m.status(KIND_QUICK), Status.BLOCKED)
+        m.grant_consent(KIND_QUICK)
+        m.review(KIND_QUICK)
+        self.assertEqual(m.status(KIND_QUICK), Status.READY)  # not Simulated: the bytes changed
+        second = m.simulate_quick()
+        self.assertNotEqual(first.run_id, second.run_id)
+
+    def test_undo_after_save_is_not_a_stale_save(self):
+        m = board(3)
+        m.save_storyboard()
+        m.update_shot(m.story.draft.shots[0].shot_id, label="Edited after save")
+        m.story.undo()
+        self.assertFalse(m.story.dirty)
+        m.update_shot(m.story.draft.shots[1].shot_id, label="Another edit")
+        m.story.undo()
+        saved = m.save_storyboard()
+        self.assertEqual(saved.base_revision, 2)
+
+    def test_explicit_seed_range_and_variant_offsets_are_validated(self):
+        self.assertEqual(SeedIntent("explicit", SEED_MAX).problem(), "")
+        self.assertNotEqual(SeedIntent("explicit", SEED_MAX + 1).problem(), "")
+        m = quick_ready(seed=SeedIntent("explicit", SEED_MAX), variants=3)
+        self.assertTrue(any("would pass" in e for e in m.review(KIND_QUICK).errors))
+        self.assertEqual(m.status(KIND_QUICK), Status.BLOCKED)
+        m.update_quick(variants=1)
+        self.assertEqual(m.review(KIND_QUICK).errors, ())
+
+    def test_camera_keywords_match_whole_words_only(self):
+        self.assertEqual(motion_for("pan to the right", None), "pan-right")
+        self.assertEqual(motion_for("zoom out slowly", None), "zoom-out")
+        for text in ("bright dawn", "leftover light", "a group of cups"):
+            self.assertEqual(motion_for(text, 0), motion_for("", 0), text)
 
 
 class PlaybackPlanTests(unittest.TestCase):

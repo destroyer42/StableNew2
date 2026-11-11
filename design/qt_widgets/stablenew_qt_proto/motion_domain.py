@@ -13,7 +13,8 @@ stale-save conflicts, explicit acceptance of changed media, and Movie Clips asse
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable, Sequence
+import re
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
@@ -24,7 +25,7 @@ MOCK_NOTICE = "Simulated · no video generated · no job queued"
 MIN_SHOTS, MAX_SHOTS = 2, 12
 MAX_VARIANTS = 3
 UNDO_LIMIT = 50
-SEED_MAX = 2**32 - 1
+SEED_MAX = 2**31 - 1
 KIND_QUICK, KIND_STORY, KIND_MOVIE = "quick", "story", "movie"
 KINDS = (KIND_QUICK, KIND_STORY, KIND_MOVIE)
 
@@ -505,6 +506,15 @@ def evaluate_quick(draft: MotionDraft, catalog: MediaCatalog, revision: int) -> 
             f"{draft.frames} frames is not legal for {wf.label} ({wf.policy.describe()})."
         )
     errors += _seed_problem(draft.seed)
+    if (
+        draft.seed.kind == "explicit"
+        and not draft.seed.problem()
+        and draft.seed.value + draft.variants - 1 > SEED_MAX
+    ):
+        errors.append(
+            f"Explicit seed {draft.seed.value} with {draft.variants} variants would pass {SEED_MAX}. "
+            "Choose a lower seed or fewer variants."
+        )
     if draft.seed.kind == "inherit":
         warnings.append("Seed intent 'inherit' resolves to a random draw at admission.")
     if draft.reference_key:
@@ -786,7 +796,7 @@ def motion_for(prompt: str, seed: int | None) -> str:
         ("left", "pan-left"), ("right", "pan-right"), ("zoom out", "zoom-out"), ("zoom", "zoom-in"),
         ("tilt", "tilt-up"), ("up", "tilt-up"),
     ):  # fmt: skip
-        if word in text:
+        if re.search(rf"\b{re.escape(word)}\b", text):
             return motion
     options = ("pan-right", "zoom-in", "pan-left", "tilt-up", "zoom-out")
     return options[(seed or 0) % len(options)]
@@ -894,9 +904,14 @@ class Authoring[T]:
         self.revision += 1
         return True
 
-    def rebase(self, draft: T) -> None:
-        """Adopt a saved form of the same content without a material change (no revision bump)."""
+    def rebase(self, draft: T, adapt: Callable[[T], T] | None = None) -> None:
+        """Adopt a saved form of the same content without a material change (no revision bump).
+
+        ``adapt`` carries save metadata (the new base revision) onto the undo/redo history."""
         self.draft = self._initial = draft
+        if adapt is not None:
+            self._undo = [adapt(d) for d in self._undo]
+            self._redo = [adapt(d) for d in self._redo]
 
     def undo(self) -> None:
         if self.draft is not None and self._undo:
@@ -966,7 +981,7 @@ class MotionSession:
         self.previews: dict[str, MotionPreview | None] = dict.fromkeys(KINDS)
         self.assembly_preview: MotionPreview | None = None
         self._consent: dict[str, tuple[int, str]] = {}
-        self._admitted: dict[str, tuple[int, str]] = {}
+        self._admitted: dict[str, tuple[int, str, tuple]] = {}
         self.runs: list[MockRun] = []
         self.clips: dict[str, MockClip] = {}
         self.movies: list[MockMovieResult] = []
@@ -1067,9 +1082,20 @@ class MotionSession:
             and self._consent[kind] == (auth.revision, self._consent_fingerprint(kind, auth.draft))
         )
 
-    @staticmethod
-    def _consent_fingerprint(kind: str, draft: object) -> str:
-        return hashlib.sha256(f"{kind}|{draft!r}".encode()).hexdigest()
+    def _consent_fingerprint(self, kind: str, draft: object) -> str:
+        media = self.media_fingerprint(kind)
+        return hashlib.sha256(f"{kind}|{draft!r}|{media!r}".encode()).hexdigest()
+
+    def _admitted_now(self, kind: str) -> tuple | None:
+        """The admission record, only while the draft revision and media bytes are unchanged."""
+        admitted = self._admitted.get(kind)
+        if (
+            admitted
+            and admitted[0] == self._auth(kind).revision
+            and admitted[2] == self.media_fingerprint(kind)
+        ):
+            return admitted
+        return None
 
     def grant_consent(self, kind: str) -> None:
         """Consent is bound to this exact draft revision: any later change (even back to equal values) voids it."""
@@ -1159,8 +1185,7 @@ class MotionSession:
             return Status.STALE
         if preview.errors or (self.consent_required(kind) and not self.consent_valid(kind)):
             return Status.BLOCKED
-        admitted = self._admitted.get(kind)
-        if admitted and admitted[0] == auth.revision:
+        if self._admitted_now(kind):
             return Status.SIMULATED
         return Status.READY
 
@@ -1194,8 +1219,8 @@ class MotionSession:
     def simulate_quick(self) -> MockRun:
         self._require_ready(KIND_QUICK)
         draft = self.quick.draft
-        admitted = self._admitted.get(KIND_QUICK)
-        if admitted and admitted[0] == self.quick.revision:
+        admitted = self._admitted_now(KIND_QUICK)
+        if admitted:
             return next(r for r in self.runs if r.run_id == admitted[1])
         wf = workflow_for(draft.workflow)
         run_id, plan = self.mint("mock-run"), plan_fingerprint(draft)
@@ -1235,14 +1260,18 @@ class MotionSession:
             done,
         )
         self.runs.append(run)
-        self._admitted[KIND_QUICK] = (self.quick.revision, run_id)
+        self._admitted[KIND_QUICK] = (
+            self.quick.revision,
+            run_id,
+            self.media_fingerprint(KIND_QUICK),
+        )
         return run
 
     def simulate_storyboard(self) -> MockRun:
         self._require_ready(KIND_STORY)
         draft = self.story.draft
-        admitted = self._admitted.get(KIND_STORY)
-        if admitted and admitted[0] == self.story.revision:
+        admitted = self._admitted_now(KIND_STORY)
+        if admitted:
             return next(r for r in self.runs if r.run_id == admitted[1])
         wf = workflow_for(draft.workflow)
         run_id, plan = self.mint("mock-run"), plan_fingerprint(draft)
@@ -1264,7 +1293,11 @@ class MotionSession:
             run_id, "sequence", draft.title, draft, plan, resolved, tuple(clips), state, prefix
         )
         self.runs.append(run)
-        self._admitted[KIND_STORY] = (self.story.revision, run_id)
+        self._admitted[KIND_STORY] = (
+            self.story.revision,
+            run_id,
+            self.media_fingerprint(KIND_STORY),
+        )
         return run
 
     def _segment(
@@ -1414,7 +1447,7 @@ class MotionSession:
     def save_storyboard(self) -> StoryboardDraft:
         """In-memory mock save. Consent is never saved with a draft and the save clears it."""
         saved = self.store.save(self.ensure_storyboard())
-        self.story.rebase(saved)
+        self.story.rebase(saved, lambda d: replace(d, base_revision=saved.base_revision))
         self._consent.pop(KIND_STORY, None)
         return saved
 
@@ -1656,8 +1689,8 @@ class MotionSession:
 
     def simulate_assembly(self) -> MockMovieResult:
         self._require_ready(KIND_MOVIE)
-        admitted = self._admitted.get(KIND_MOVIE)
-        if admitted and admitted[0] == self.assembly.revision:
+        admitted = self._admitted_now(KIND_MOVIE)
+        if admitted:
             return next(m for m in self.movies if m.movie_id == admitted[1])
         draft, preview = self.assembly.draft, self.previews[KIND_MOVIE]
         profile = PROFILES[draft.profile]
@@ -1669,7 +1702,7 @@ class MotionSession:
             "Fixture drill: simulated assembly failure. The clip list is retained." if failed else "",
         )  # fmt: skip
         self.movies.append(result)
-        self._admitted[KIND_MOVIE] = (self.assembly.revision, result.movie_id)
+        self._admitted[KIND_MOVIE] = (self.assembly.revision, result.movie_id, ())
         return result
 
     def latest_run(self, kind: str) -> MockRun | None:

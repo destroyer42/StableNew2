@@ -509,6 +509,19 @@ class NativeMotionTests(unittest.TestCase):
         pump(self.app)
         self.assertFalse(viewer.playing)
 
+    def test_a_sync_does_not_rewind_the_draft_illustration(self):
+        panel = self.story(3)
+        viewer = panel.viewer
+        self.assertIsNotNone(viewer.plan)
+        viewer.slider.setValue(4)
+        self.press(viewer.play_button)
+        self.assertTrue(viewer.playing)
+        self.view.sync()
+        pump(self.app)
+        self.assertTrue(viewer.playing)
+        self.assertGreaterEqual(viewer.index, 4)
+        self.press(viewer.play_button)
+
     def test_theme_switch_keeps_session_and_view_state(self):
         panel = self.story(4)
         self.view.select_shot(self.shot_ids()[2])
