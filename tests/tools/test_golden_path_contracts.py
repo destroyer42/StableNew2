@@ -16,7 +16,7 @@ import pytest
 
 from tools.operator_journey import cli
 from tools.operator_journey.evidence import HOLD, NO_GO, PASS, JourneyEvidence
-from tools.operator_journey.golden import definitions
+from tools.operator_journey.golden import baseline, definitions, physical
 from tools.operator_journey.golden.host import HostProbes
 from tools.operator_journey.golden.modes import ModeRefusal, validate_combination
 from tools.operator_journey.golden.physical import (
@@ -413,7 +413,7 @@ def test_competing_generation_gpu_pressure_and_missing_telemetry_are_no_go(
 def run_gate(tmp_path, plan, probes, ctx, *, confirm=None, executor=None, journeys=("image",)):
     path = tmp_path / "plan.json"
     path.write_text(json.dumps(plan, default=str), "utf-8")
-    chosen = definitions.select("image") if journeys == ("image",) else definitions.select("all")
+    chosen = [definitions.JOURNEYS[key] for key in journeys]
     return run_physical(
         path,
         journeys=chosen,
@@ -442,9 +442,39 @@ def test_missing_authorization_is_a_hold_and_runs_nothing(
         confirm=lambda _p: confirmation_phrase(plan),
     )
     assert verdict == HOLD and "not authorized" in (run_dir / "summary.md").read_text()
+    evidence = json.loads((run_dir / "evidence.json").read_text())
+    assert evidence["outcomes"]["physical_execution"] == "NOT RUN"
+    assert evidence["overall_verdict"] == evidence["outcomes"]["verdict"] == HOLD
+
+
+def test_readiness_no_go_is_recorded_in_the_sealed_physical_evidence(
+    tmp_path, model_file, source_file, monkeypatch
+) -> None:
+    plan, probes = frozen(tmp_path, model_file, source_file)
+    monkeypatch.setattr(
+        physical,
+        "evaluate_readiness",
+        lambda *_: {
+            "verdict": NO_GO,
+            "gates": [{"id": "available_ram", "state": NO_GO, "detail": "below minimum"}],
+        },
+    )
+    verdict, run_dir = run_gate(
+        tmp_path, authorize(plan), probes, ctx_for(probes), executor=boom, confirm=boom
+    )
+    assert verdict == NO_GO
+    sealed = baseline.archive_run(run_dir, tmp_path / "acceptance")
+    verification = baseline.verify_archive(sealed)
+    evidence = json.loads((sealed / "evidence.json").read_text())
+    assert verification["status"] == "OK"
+    assert evidence["journeys"] == {}
+    assert evidence["outcomes"]["physical_execution"] == "NOT RUN"
+    assert f"Physical golden paths: {NO_GO}" in (sealed / "summary.md").read_text()
     assert (
-        json.loads((run_dir / "evidence.json").read_text())["outcomes"]["physical_execution"]
-        == "NOT RUN"
+        verification["manifest"]["overall_verdict"]
+        == evidence["overall_verdict"]
+        == evidence["outcomes"]["verdict"]
+        == NO_GO
     )
 
 
@@ -522,6 +552,7 @@ def test_authorized_matching_confirmed_plan_runs_once_with_three_outcomes(
     )
     evidence = json.loads((run_dir / "evidence.json").read_text())
     assert calls == ["IMG-01"] and verdict == PASS
+    assert evidence["overall_verdict"] == evidence["outcomes"]["verdict"] == PASS
     assert evidence["outcomes"]["functional"] == PASS and evidence["outcomes"]["safety"] == PASS
     assert evidence["outcomes"]["visual_quality"] == "PENDING_OPERATOR_REVIEW"
     assert (run_dir / "resource_telemetry.jsonl").read_text().strip()
@@ -676,10 +707,11 @@ def test_a_retry_or_requeue_is_treated_as_ambiguous_dispatch_and_never_repeated(
 
 
 def test_device_loss_stops_the_run_with_no_go_and_no_second_attempt(
-    tmp_path, model_file, source_file
+    tmp_path, model_file, source_file, monkeypatch
 ) -> None:
     plan, probes = frozen(tmp_path, model_file, source_file, journeys=("image", "video"))
     approved = authorize(plan, journeys=("image", "video"))
+    monkeypatch.setattr(physical, "evaluate_readiness", lambda *_: {"verdict": PASS})
     calls: list[str] = []
 
     def executor(journey, target, monitor, run_dir):
@@ -691,23 +723,20 @@ def test_device_loss_stops_the_run_with_no_go_and_no_second_attempt(
         )
         return ev
 
-    ctx = ctx_for(probes, endpoint=None) if False else ctx_for(probes)
     verdict, run_dir = run_gate(
         tmp_path,
         approved,
         probes,
-        ctx,
+        ctx_for(probes),
         executor=executor,
         confirm=lambda _p: confirmation_phrase(plan),
-        journeys=("all",),
+        journeys=("image", "video"),
     )
-    assert verdict in {NO_GO, HOLD}
-    if verdict == NO_GO:
-        assert calls == ["IMG-01"]  # the second journey never started
-        assert (
-            "never retried"
-            in json.loads((run_dir / "evidence.json").read_text())["outcomes"]["reason"]
-        )
+    assert verdict == NO_GO, (run_dir / "summary.md").read_text()
+    assert calls == ["IMG-01"]  # the second journey never started
+    evidence = json.loads((run_dir / "evidence.json").read_text())
+    assert "never retried" in evidence["outcomes"]["reason"]
+    assert evidence["overall_verdict"] == evidence["outcomes"]["verdict"] == NO_GO
 
 
 def test_monitor_trips_on_vram_ram_commit_timeout_and_blind_telemetry(tmp_path) -> None:

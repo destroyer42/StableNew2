@@ -202,6 +202,16 @@ Verdicts per journey are `PASS`, `FAIL`, `HOLD` (a prerequisite is missing) and 
 
 **Friction and reachability.** A journey that passes only because the driver compensated for a product defect is recorded as such: a forced maximize, a dragged pane, a mouse release that had to follow a moving control, a retried click, a retried field entry, or a wait for a hidden control is a friction event linked to a structured finding. Reachability is `DIRECT`, `WITH_WORKAROUNDS`, `BLOCKED` or (semantic driver) `NOT_ASSESSED`; it is never inferred from a semantic run. `--layout maximized|normal|minimum` (windows driver) selects the window layout; `maximized` is the historic default and is itself recorded as a workaround. The findings are `tools/operator_journey/golden/findings.v1.json` (severity, environment, reproduction, evidence with SHA-256, repair status) and the workflow coverage matrix is `coverage_matrix.v1.json` (full desktop journey / partial journey / integration only / untested); `--check-registries` validates both, including that every referenced journey and test file exists.
 
+**Reading verdicts and SQLite evidence.** New physical archives carry the physical run verdict in both
+`evidence.json` (`overall_verdict` and `outcomes.verdict`) and `MANIFEST.json` (`overall_verdict`). It also
+drives the summary and exit code, including a HOLD or NO-GO before any journey runs. In older physical records
+with conflicting verdicts, read the run verdict from `outcomes.verdict` and retain the original seal.
+
+Newly captured journey repositories are standalone SQLite backups of committed state. Verify older WAL-mode
+evidence before relying on it. To inspect its database, copy the manifest-listed database and any manifest-listed
+SQLite sidecars to a scratch directory and query the copy. SQLite can create WAL/SHM files even when opening a
+WAL-mode database read-only. Verification reports any unlisted sidecars as unexpected files.
+
 ### 11b. Advanced golden-path journeys (PR-TEST-JOURNEYS-832)
 
 `--journey advanced` (or one of `prompt-model`, `image-edit`, `motion-assets`, `storyboard`, `learning-profile`, `recovery`) runs six more journeys through the same framework, drivers, evidence, sealed archives and comparator as section 11a. They are **simulated-lane only** (`physical=False`): `--mode physical` and `--mode readiness` refuse them with `ModeRefusal` before any plan, gate or runtime exists, and each runner aborts if handed a physical target. Backends are loopback fakes at the API boundary only. Visual quality is never claimed.

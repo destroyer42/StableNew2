@@ -297,6 +297,7 @@ def run_physical(
             mode=PHYSICAL,
             driver="windows",
             extra={"outcomes": outcome},
+            verdict=verdict,
         )
         (run_dir / "summary.md").write_text(
             redact(
