@@ -1219,6 +1219,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             return
         self._refresh_workflow_choices()
         self._restore_task_and_engine(state)
+        # A restore never carries consent, even for the engine already selected (no variable write happens then).
+        self._explicit_workflow_selection = None
+        self._invalidate_experiment_preview()
+        self._refresh_queue_gate()
         self.source_image_var.set(str(state.get("source_image_path") or ""))
         self.end_anchor_var.set(str(state.get("end_anchor_path") or ""))
         mid_anchors = state.get("mid_anchor_paths") or []
