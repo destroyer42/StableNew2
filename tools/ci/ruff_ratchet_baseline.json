@@ -387,8 +387,8 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1281,
-      "S110": 503,
+      "BLE001": 1256,
+      "S110": 488,
       "S112": 37
     },
     "counts": {
@@ -424,8 +424,8 @@
         "BLE001": 18
       },
       "src/controller/app_controller.py": {
-        "BLE001": 132,
-        "S110": 49,
+        "BLE001": 124,
+        "S110": 44,
         "S112": 4
       },
       "src/controller/app_controller_services/application_runtime_coordinator.py": {
@@ -468,7 +468,7 @@
         "S110": 3
       },
       "src/controller/pipeline_controller.py": {
-        "BLE001": 42,
+        "BLE001": 41,
         "S110": 21
       },
       "src/controller/pipeline_controller_services/history_handoff_service.py": {
@@ -837,8 +837,8 @@
         "BLE001": 1
       },
       "src/pipeline/executor.py": {
-        "BLE001": 64,
-        "S110": 17
+        "BLE001": 52,
+        "S110": 11
       },
       "src/pipeline/job_models_v2.py": {
         "BLE001": 1,
@@ -854,8 +854,8 @@
         "BLE001": 2
       },
       "src/pipeline/pipeline_runner.py": {
-        "BLE001": 20,
-        "S110": 7
+        "BLE001": 16,
+        "S110": 3
       },
       "src/pipeline/prompt_pack_job_builder.py": {
         "BLE001": 5

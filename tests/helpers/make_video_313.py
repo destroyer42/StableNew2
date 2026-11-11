@@ -81,8 +81,6 @@ _BORROWED = (
     "_get_history_image_path",
     "_get_history_video_bundle",
     "_iter_history_image_candidates",
-    "_extract_history_result_metadata",
-    "_extract_video_artifact_summary",
 )
 
 
