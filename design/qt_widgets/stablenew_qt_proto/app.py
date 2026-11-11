@@ -27,6 +27,7 @@ from .components import fit_segment
 from .create_view import CreateView
 from .edit_view import EditView
 from .gallery import ComponentGallery
+from .motion_view import MotionView
 from .output_display import OutputDock
 from .output_model import SIZE_FILL, fill_width, frame_from_session
 from .theme import Theme
@@ -44,6 +45,7 @@ class PrototypeWindow(QMainWindow):
         theme: Theme | None = None,
         *,
         edit_layout: str = "editor",
+        motion_layout: str = "strip",
     ):
         super().__init__()
         self.library = library or ThemeLibrary()
@@ -80,7 +82,7 @@ class PrototypeWindow(QMainWindow):
         root.addWidget(splitter, 1)
         self.nav = QListWidget()
         self.nav.setProperty("role", "nav")
-        self.nav.addItems(["Create Image", "Component Library", "Edit & Improve"])
+        self.nav.addItems(["Create Image", "Component Library", "Edit & Improve", "Motion & Video"])
         self.nav.setMaximumWidth(240)
         self.nav.setMinimumWidth(184)
         self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -93,6 +95,8 @@ class PrototypeWindow(QMainWindow):
         self.pages.addWidget(self.gallery)
         self.edit_view = EditView(edit_layout)
         self.pages.addWidget(self.edit_view)
+        self.motion_view = MotionView(layout_design=motion_layout)
+        self.pages.addWidget(self.motion_view)
         splitter.addWidget(self.pages)
         splitter.setSizes([185, 1200])
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
@@ -109,8 +113,14 @@ class PrototypeWindow(QMainWindow):
         edit.setShortcut("Ctrl+4")
         edit.triggered.connect(lambda: self.nav.setCurrentRow(2))
         self.addAction(edit)
+        motion = QAction("Switch to Motion & Video", self)
+        motion.setShortcut("Ctrl+5")
+        motion.triggered.connect(lambda: self.nav.setCurrentRow(3))
+        self.addAction(motion)
         self._build_output_display()
         self.create_view.editRequested.connect(self._open_edit)
+        self.create_view.motionRequested.connect(self._open_motion)
+        self.edit_view.motionRequested.connect(self._open_motion)
         self.nav.currentRowChanged.connect(self._workspace_changed)
 
     # ------------------------------------------------------------------- theme
@@ -129,11 +139,29 @@ class PrototypeWindow(QMainWindow):
         self.create_view = new
         new.stateSynced.connect(self._refresh_output)
         new.editRequested.connect(self._open_edit)
+        new.motionRequested.connect(self._open_motion)
+        self._rebuild_motion()
         self.pages.setCurrentIndex(self.nav.currentRow())
         self.gallery.rebuild_components()
         self.output_dock.restyle()
         self.edit_view.restyle()
         self._refresh_output()
+
+    def _rebuild_motion(self) -> None:
+        """Rebuild Motion from the same session and UI state so a theme switch loses nothing."""
+        old = self.motion_view
+        old.shutdown()
+        new = MotionView(session=old.session, ui=old.ui)
+        index = self.pages.indexOf(old)
+        self.pages.insertWidget(index, new)
+        self.pages.removeWidget(old)
+        old.deleteLater()
+        self.motion_view = new
+
+    def _open_motion(self, key: str) -> None:
+        origin = "edit" if self.sender() is self.edit_view else "create"
+        if self.motion_view.receive_source(key, origin):
+            self.nav.setCurrentRow(self.pages.indexOf(self.motion_view))
 
     def _open_edit(self, key: str) -> None:
         if self.edit_view.select_source(key):
@@ -141,7 +169,7 @@ class PrototypeWindow(QMainWindow):
 
     def _workspace_changed(self, index: int) -> None:
         # The dock projects Create only. Edit has its own viewer and needs the space.
-        show_output = self.pages.widget(index) != self.edit_view
+        show_output = self.pages.widget(index) not in (self.edit_view, self.motion_view)
         self.output_dock.setVisible(show_output)
         self.output_toggle.setVisible(show_output)
         self._output_shortcut.setEnabled(show_output)
@@ -229,13 +257,21 @@ def main(argv: list[str] | None = None) -> int:
         default="editor",
         help="Edit workspace layout for design comparison",
     )
+    parser.add_argument(
+        "--motion-layout",
+        choices=("strip", "timeline"),
+        default="strip",
+        help="Motion Storyboard layout for design comparison (A strip, B timeline)",
+    )
     args, qt_args = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
     app = QApplication([sys.argv[0], *qt_args])
     app.setApplicationName("StableNew Qt Design Assessment (isolated)")
     library = ThemeLibrary()
     theme = library.get(args.theme) if args.theme else library.load_active()
     apply_theme(app, theme)
-    window = PrototypeWindow(library, theme, edit_layout=args.edit_layout)
+    window = PrototypeWindow(
+        library, theme, edit_layout=args.edit_layout, motion_layout=args.motion_layout
+    )
     window.create_view.set_layout_design(args.layout)
     window.show()
     return app.exec()

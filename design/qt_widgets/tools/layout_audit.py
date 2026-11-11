@@ -115,6 +115,61 @@ def run_edit(sizes: list[str], layouts: list[str], theme_id: str) -> list[dict]:
     return rows
 
 
+def run_motion(
+    sizes: list[str], layouts: list[str], states: list[str], theme_id: str
+) -> list[dict]:
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QApplication
+    from stablenew_qt_proto.app import PrototypeWindow, apply_theme
+    from stablenew_qt_proto.layout_probe import prime_motion, probe_motion, pump
+    from stablenew_qt_proto.tokens import reference_theme
+
+    app = QApplication.instance() or QApplication([])
+    apply_theme(app, reference_theme(theme_id))
+    rows = []
+    for size in sizes:
+        width, height = map(int, size.split("x"))
+        for state in states:
+            for layout in layouts if state == "story" else ["strip"]:
+                window = PrototypeWindow()
+                prime_motion(window, (width, height), state, layout)
+                row = probe_motion(window)
+                row["requested_size"] = size
+                row["theme"] = theme_id
+                row["size_clamped"] = [window.width(), window.height()] != [width, height]
+                rows.append(row)
+                window.close()
+                window.deleteLater()
+                QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                pump(app, 2)
+    return rows
+
+
+def motion_markdown(rows: list[dict], meta: dict) -> str:
+    lines = [
+        f"# Motion layout audit ({meta['platform_note']})",
+        "",
+        f"Theme `{meta['theme']}` · Qt platform `{meta['qpa']}` · requested scale {meta['scale']} · "
+        f"screen DPR {meta['screen']['devicePixelRatio']} · Python {meta['python']}",
+        "",
+        "| Mode | Layout | Requested → actual | Viewer | Inspector | Cards unscrolled | Clipped | Page scroll | Overflow | Shrunk | Tab stops · missing |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for r in rows:
+        width, height = r["window"]
+        cards = f"{r['shot_cards_visible_unscrolled']}/{r['shots']}" if "shots" in r else "-"
+        viewer = "x".join(map(str, r["viewer"])) if "viewer" in r else "-"
+        inspector = "x".join(map(str, r["inspector"])) if "inspector" in r else "-"
+        over = ", ".join(f"{k} {v}px" for k, v in r["horizontal_overflow_px"].items()) or "none"
+        lines.append(
+            f"| {r['mode']} | {r['layout']} | {r['requested_size']} → {width}×{height}"
+            f"{' (clamped)' if r['size_clamped'] else ''} | {viewer} | {inspector} | {cards} | "
+            f"{', '.join(r['clipped']) or 'none'} | {r['page_scroll_px']} px | {over} | {len(r['shrunk_controls'])} | "
+            f"{r['tab_stops']} · {', '.join(r['missing_tab_stops']) or 'none'} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def edit_markdown(rows: list[dict], meta: dict) -> str:
     lines = [
         f"# Edit layout audit ({meta['platform_note']})",
@@ -143,6 +198,10 @@ def main() -> int:
     parser.add_argument("--sizes", nargs="+", default=list(DEFAULT_SIZES))
     parser.add_argument("--layouts", nargs="+", default=["scroll", "split"])
     parser.add_argument("--edit-layouts", nargs="+", choices=["editor", "inspector"])
+    parser.add_argument("--motion-layouts", nargs="+", choices=["strip", "timeline"])
+    parser.add_argument(
+        "--motion-states", nargs="+", default=["story"], choices=["quick", "story", "movie"]
+    )
     parser.add_argument("--docks", nargs="+", default=["expanded", "collapsed"])
     parser.add_argument(
         "--states", nargs="+", default=["fresh", "primed"], choices=["fresh", "primed"]
@@ -159,7 +218,9 @@ def main() -> int:
     if args.scale != 1.0:
         os.environ["QT_SCALE_FACTOR"] = str(args.scale)
     sys.path.insert(0, str(ROOT))
-    if args.edit_layouts:
+    if args.motion_layouts:
+        rows = run_motion(args.sizes, args.motion_layouts, args.motion_states, args.theme)
+    elif args.edit_layouts:
         rows = run_edit(args.sizes, args.edit_layouts, args.theme)
     else:
         rows = run(args.sizes, args.layouts, args.docks, args.states, args.theme)
@@ -184,7 +245,10 @@ def main() -> int:
     }
     if args.scale != 1.0:
         meta["platform_note"] += ", simulated scaling"
-    report = edit_markdown(rows, meta) if args.edit_layouts else markdown(rows, meta)
+    if args.motion_layouts:
+        report = motion_markdown(rows, meta)
+    else:
+        report = edit_markdown(rows, meta) if args.edit_layouts else markdown(rows, meta)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / f"{args.name}.json").write_text(
         json.dumps({"meta": meta, "rows": rows}, indent=2), encoding="utf-8"

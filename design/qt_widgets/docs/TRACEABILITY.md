@@ -38,3 +38,14 @@ Research sources are linked from [`docs/research/stablenew-experience/`](../../.
 
 Component design authority is checked-in source, **not** a Figma plugin session or chat memory. Figma Concept A
 may inform visual review only and was not read in this task.
+
+## QT-DS-04 scope → evidence
+
+| Scope item | Where |
+|---|---|
+| Quick Clip, Storyboard, Movie Clips as connected simulated tasks | `motion_domain.py`, `motion_view.py`, `MOTION_WORKFLOW.md` |
+| ≥ 7 executable walkthroughs ending in success, refusal or recoverable | `motion_walkthroughs.py`, `WalkthroughTests`, `test_independence` |
+| Shared components + Component Library entries; both themes; theme switch keeps drafts | `motion_components.py`, `gallery.py`, `test_qt_motion` (theme tests) |
+| ≥ 2 layouts at five sizes; primary chosen; no horizontal overflow | `MOTION_LAYOUTS.md`, `evidence/motion_*`, `screenshots/qt-ds-04/` |
+| No production imports, jobs, NJRs, persistence, FFmpeg, network | `test_architecture`, `test_independence` (Motion flow under blocked runtimes) |
+| UX-DEC-020…034 | table in `MOTION_WORKFLOW.md` (each marked demonstrated or not) |

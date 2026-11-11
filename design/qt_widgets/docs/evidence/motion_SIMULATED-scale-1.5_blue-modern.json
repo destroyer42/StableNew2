@@ -1,0 +1,185 @@
+{
+  "meta": {
+    "theme": "blue-modern",
+    "qpa": "windows",
+    "scale": 1.5,
+    "python": "3.14.9",
+    "os": "Windows-11-10.0.26100-SP0",
+    "platform_note": "native platform, simulated scaling",
+    "screen": {
+      "name": "ASUS VG32VQ1B",
+      "geometry": [
+        1707,
+        960
+      ],
+      "devicePixelRatio": 1.5,
+      "logicalDpi": 96.0
+    }
+  },
+  "rows": [
+    {
+      "mode": "story",
+      "layout": "strip",
+      "window": [
+        1280,
+        680
+      ],
+      "motion_view": [
+        1072,
+        632
+      ],
+      "stack": [
+        1064,
+        472
+      ],
+      "clipped": [],
+      "page_scroll_px": 0,
+      "horizontal_overflow_px": {},
+      "shrunk_controls": [],
+      "tab_stops": 33,
+      "missing_tab_stops": [],
+      "status": "Simulated result available",
+      "viewer": [
+        501,
+        224
+      ],
+      "inspector": [
+        555,
+        224
+      ],
+      "strip_viewport": [
+        1064,
+        144
+      ],
+      "shots": 6,
+      "shot_cards_visible_unscrolled": 6,
+      "compact": false,
+      "requested_size": "1280x680",
+      "theme": "blue-modern",
+      "size_clamped": false
+    },
+    {
+      "mode": "story",
+      "layout": "timeline",
+      "window": [
+        1280,
+        680
+      ],
+      "motion_view": [
+        1072,
+        632
+      ],
+      "stack": [
+        1064,
+        472
+      ],
+      "clipped": [],
+      "page_scroll_px": 0,
+      "horizontal_overflow_px": {},
+      "shrunk_controls": [],
+      "tab_stops": 33,
+      "missing_tab_stops": [],
+      "status": "Simulated result available",
+      "viewer": [
+        501,
+        242
+      ],
+      "inspector": [
+        555,
+        242
+      ],
+      "strip_viewport": [
+        1064,
+        90
+      ],
+      "shots": 6,
+      "shot_cards_visible_unscrolled": 6,
+      "compact": false,
+      "requested_size": "1280x680",
+      "theme": "blue-modern",
+      "size_clamped": false
+    },
+    {
+      "mode": "story",
+      "layout": "strip",
+      "window": [
+        1366,
+        768
+      ],
+      "motion_view": [
+        1158,
+        720
+      ],
+      "stack": [
+        1150,
+        560
+      ],
+      "clipped": [],
+      "page_scroll_px": 0,
+      "horizontal_overflow_px": {},
+      "shrunk_controls": [],
+      "tab_stops": 33,
+      "missing_tab_stops": [],
+      "status": "Simulated result available",
+      "viewer": [
+        542,
+        312
+      ],
+      "inspector": [
+        600,
+        312
+      ],
+      "strip_viewport": [
+        1150,
+        144
+      ],
+      "shots": 6,
+      "shot_cards_visible_unscrolled": 6,
+      "compact": false,
+      "requested_size": "1366x768",
+      "theme": "blue-modern",
+      "size_clamped": false
+    },
+    {
+      "mode": "story",
+      "layout": "timeline",
+      "window": [
+        1366,
+        768
+      ],
+      "motion_view": [
+        1158,
+        720
+      ],
+      "stack": [
+        1150,
+        560
+      ],
+      "clipped": [],
+      "page_scroll_px": 0,
+      "horizontal_overflow_px": {},
+      "shrunk_controls": [],
+      "tab_stops": 33,
+      "missing_tab_stops": [],
+      "status": "Simulated result available",
+      "viewer": [
+        542,
+        330
+      ],
+      "inspector": [
+        600,
+        330
+      ],
+      "strip_viewport": [
+        1150,
+        90
+      ],
+      "shots": 6,
+      "shot_cards_visible_unscrolled": 6,
+      "compact": false,
+      "requested_size": "1366x768",
+      "theme": "blue-modern",
+      "size_clamped": false
+    }
+  ]
+}

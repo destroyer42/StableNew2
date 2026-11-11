@@ -88,3 +88,24 @@ No real model, profile, backend, job, History or Artifacts; no screen-reader beh
 
 See [the Edit walkthroughs](EDIT_WORKFLOW.md#operator-walkthroughs) for Quick Edit, Masked Edit,
 Extend Canvas, Compare and Iterate, and negative/recovery cases. Use **Ctrl+4** to open the workspace.
+
+## Motion & Video
+
+Open **Motion & Video** (Ctrl+5), or choose **Animate in Motion** on a simulated Create result or in Edit.
+Everything is simulated: the viewer animates a camera move over a still fixture and is labelled
+*Simulated Clip — No Video Generated*. The scripted versions run without Qt:
+`python -c "from stablenew_qt_proto.motion_walkthroughs import run_all; [print(r.key, r.outcome, r.terminal) for r in run_all()]"`.
+
+| Key | Task | Ends in |
+|---|---|---|
+| MOTION-01 | Quick Clip: source, intent, review, simulate two variants, inspect, rate | success |
+| MOTION-02 | Create/Edit handoff; a different source asks *Cancel* (default) or *Replace draft* | success |
+| MOTION-03 | Storyboard: three shots, reorder, duplicate, explicit frames/seed, review, simulate | success |
+| MOTION-04 | Experimental consent is per submission; consent never inherited; SVD refuses a prompt | refusal |
+| MOTION-05 | Edit a shot after a result: stale summary, a new independent candidate | success |
+| MOTION-06 | Movie Clips: explicit order, trims, audio fixture, profile, crossfade refusal, assembly | success |
+| MOTION-07 | Missing media, changed anchor, empty prompt, stale save → Save As, declined replacement | recoverable |
+
+Shortcuts in Motion: Ctrl+Enter Review Readiness, Alt+Z / Alt+Y undo / redo, Alt+Left / Alt+Right move the
+selected shot. Shot cards respond to arrow keys, Home/End and Enter/Space. Details:
+[Motion workflow](MOTION_WORKFLOW.md) and [layout comparison](MOTION_LAYOUTS.md).

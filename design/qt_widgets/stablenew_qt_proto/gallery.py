@@ -40,6 +40,27 @@ from .components import (
 from .domain import ResultTile
 from .edit_components import CompareViewer, ImageCanvas, SourcePicker, ZoomControls, fixture_image
 from .edit_domain import CREATE_SOURCE, EditRefused, suggest_mask
+from .motion_components import (
+    AssemblyRow,
+    ClipAssemblyList,
+    ElidedLabel,
+    MotionActionStrip,
+    MotionSourceSelector,
+    QualityRatingPanel,
+    SequenceReadinessPanel,
+    ShotCardData,
+    ShotStrip,
+    ShotTimeline,
+    SimulatedClipViewer,
+    TimelineRow,
+    WorkflowCapabilityBadge,
+)
+from .motion_domain import (
+    KIND_STORY,
+    WORKFLOWS,
+    MotionSession,
+    plan_for_clip,
+)
 from .theme import Theme, contrast_checks
 from .theme_store import ThemeLibrary
 from .theme_studio import ThemeStudio
@@ -282,8 +303,97 @@ class ComponentsPage(QScrollArea):
         )
         card.add(compare)
         root.addWidget(card)
+        self._motion_components(root)
         root.addStretch(1)
         self.setWidget(body)
+
+    def _motion_components(self, root: QVBoxLayout) -> None:
+        """Motion & Video components over fixtures only: nothing here renders or encodes video."""
+        session = MotionSession()
+        catalog = session.catalog
+        clip = session.clips["hist-run-1-clip-1"]
+
+        card = SectionCard(
+            "Motion · source and workflow",
+            "MotionSourceSelector (available / hidden / missing / unsupported fixtures) and "
+            "WorkflowCapabilityBadge (approved, experimental, retired, hold).",
+        )
+        card.add(MotionSourceSelector(catalog))
+        for wf in WORKFLOWS:
+            badge = WorkflowCapabilityBadge()
+            badge.set_workflow(wf)
+            card.add(badge)
+        elided = ElidedLabel(
+            "ElidedLabel: a very long single-line value keeps its full text in the tooltip and "
+            "never widens the layout it sits in."
+        )
+        card.add(elided)
+        root.addWidget(card)
+
+        card = SectionCard(
+            "Motion · Storyboard strip and timeline",
+            "ShotStrip wraps cards instead of scrolling; ShotTimeline is an order/duration illustration.",
+        )
+        strip = ShotStrip(catalog)
+        cards = [
+            ShotCardData(f"shot-{n}", n, f"Shot {n}", "33 f", basis, issues, "create:ridge-study")
+            for n, basis, issues in (
+                (1, "source", 0),
+                (2, "carried", 0),
+                (3, "provided", 1),
+                (4, "carried", -1),
+            )
+        ]
+        strip.set_shots(cards, "shot-2")
+        card.add(strip)
+        timeline = ShotTimeline()
+        timeline.set_rows(
+            [TimelineRow(c.shot_id, c.position, c.label, 33, c.basis, c.issues > 0) for c in cards],
+            "shot-2",
+        )
+        card.add(timeline)
+        root.addWidget(card)
+
+        card = SectionCard(
+            "Motion · readiness and viewer",
+            "SequenceReadinessPanel states the summary is not an NJR; SimulatedClipViewer plays "
+            "fixture illustrations only.",
+        )
+        readiness = SequenceReadinessPanel()
+        readiness.set_state(session.status(KIND_STORY), None, session.issues(KIND_STORY), 0)
+        card.add(readiness)
+        viewer = SimulatedClipViewer(catalog)
+        viewer.setMinimumHeight(240)
+        viewer.set_plan(plan_for_clip(clip))
+        card.add(viewer)
+        root.addWidget(card)
+
+        card = SectionCard(
+            "Motion · assembly, rating and actions",
+            "ClipAssemblyList keeps authored order; QualityRatingPanel separates action outcome from "
+            "operator impression; MotionActionStrip extends the shared ActionStrip.",
+        )
+        assembly = ClipAssemblyList()
+        assembly.set_items(
+            [
+                AssemblyRow("item-1", "hist-run-1-clip-1 · Open on ridge · 33 f", 33, 0, 0, ""),
+                AssemblyRow(
+                    "item-2",
+                    "hist-clip-lost · source media missing",
+                    25,
+                    0,
+                    0,
+                    "Source media is missing",
+                ),
+            ],
+            "item-1",
+        )
+        card.add(assembly)
+        rating = QualityRatingPanel()
+        rating.set_clip(clip, None)
+        card.add(rating)
+        card.add(MotionActionStrip())
+        root.addWidget(card)
 
 
 class ComponentGallery(QWidget):

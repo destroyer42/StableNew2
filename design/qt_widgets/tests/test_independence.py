@@ -63,6 +63,15 @@ GUARDED_FLOW = textwrap.dedent(
         library.set_active(saved)
         assert ThemeLibrary(Path(tmp) / "themes").load_active() == saved
 
+    from stablenew_qt_proto.motion_walkthroughs import failed_assembly_demo, run_all
+
+    results = run_all()
+    assert len(results) == 7, results
+    assert all(r.terminal for r in results), results
+    assert failed_assembly_demo().terminal
+    qt_loaded = sorted(m for m in sys.modules if m.startswith("PySide6"))
+    assert not qt_loaded, "pure Motion domain must not import Qt: " + ", ".join(qt_loaded)
+
     leaked = sorted(m for m in sys.modules if m.split(".")[0] in BLOCKED)
     assert not leaked, leaked
     print("INDEPENDENT-OK")
