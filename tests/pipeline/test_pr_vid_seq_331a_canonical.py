@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.controller.app_controller import AppController
 from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
 from src.queue.job_model import JobStatus
+from src.video.history_media_projection import history_video_bundle
 from src.video.sequence_history import sequence_history_info
 from src.video.sequence_ledger import LEDGER_FILE_NAME
 from src.video.sequence_resume import SequenceResumeError
@@ -34,9 +34,7 @@ def test_send_to_movie_clips_from_recent_outputs_loads_the_assembled_movie_once(
     # Recent outputs hands Movie Clips the bundle the result recorded...
     recorded = video_bundle_from_result(job.result)
     # ...and Job History builds its own from the same result; the two must agree.
-    history = AppController._get_history_video_bundle(
-        object.__new__(AppController), SimpleNamespace(result=job.result)
-    )
+    history = history_video_bundle(SimpleNamespace(result=job.result))
 
     assert recorded is not None and history is not None
     movie = Path(recorded["primary_path"])

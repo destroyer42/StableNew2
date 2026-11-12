@@ -48,12 +48,15 @@ def test_image_navigation_preserves_lineage_status_and_return(tmp_path):
 
 
 @pytest.mark.parametrize("destination", ["video", "movie"])
-def test_history_bundle_and_image_fallback_preserve_results(destination):
+def test_history_bundle_and_image_fallback_preserve_results(destination, tmp_path):
     controller, actions = make_controller()
-    controller._get_history_entry_by_job_id = Mock(return_value=object())
+    source = tmp_path / "source.png"
+    source.touch()
     bundle = {"primary_path": "clip.mp4", "frame_paths": ["b.png", "a.png"]}
-    controller._get_history_video_bundle = Mock(return_value=bundle)
-    controller._get_history_image_path = Mock(return_value="source.png")
+    entry = SimpleNamespace(
+        job_id="job-1", result={"video_bundle": bundle, "output_paths": [str(source)]}
+    )
+    controller.app_state = SimpleNamespace(history_items=[entry])
     if destination == "video":
         actions.bundle_to_video_workflow.return_value = "b.png"
         assert controller.send_history_job_image_to_video_workflow("job-1") == "b.png"
@@ -62,10 +65,10 @@ def test_history_bundle_and_image_fallback_preserve_results(destination):
             status_message="Loaded video output into Video Workflow tab.",
         )
         actions.bundle_to_video_workflow.return_value = None
-        controller.send_image_to_video_workflow = Mock(return_value="source.png")
-        assert controller.send_history_job_image_to_video_workflow("job-1") == "source.png"
+        controller.send_image_to_video_workflow = Mock(return_value=str(source))
+        assert controller.send_history_job_image_to_video_workflow("job-1") == str(source)
         controller.send_image_to_video_workflow.assert_called_once_with(
-            "source.png",
+            str(source),
             {"source_job_id": "job-1"},
         )
     else:
@@ -74,10 +77,10 @@ def test_history_bundle_and_image_fallback_preserve_results(destination):
             bundle=bundle,
             status_message="Loaded history output into Movie Clips.",
         )
-        controller._get_history_video_bundle.return_value = None
-        assert controller.send_history_job_to_movie_clips("job-1") == "source.png"
+        del entry.result["video_bundle"]
+        assert controller.send_history_job_to_movie_clips("job-1") == str(source)
         actions.image_to_movie_clips.assert_called_once_with(
-            image_path="source.png",
+            image_path=str(source),
             status_message="Loaded source.png into Movie Clips.",
         )
 
