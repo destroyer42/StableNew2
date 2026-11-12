@@ -703,7 +703,7 @@ class ConfigManager:
             self._settings_cache = data
         except FileNotFoundError:
             pass
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RecursionError) as exc:
             self._settings_load_error = str(exc)
             logger.warning("Failed to load engine settings: %s", exc)
         return self._settings_cache

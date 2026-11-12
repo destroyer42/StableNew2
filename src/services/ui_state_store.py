@@ -76,6 +76,8 @@ class UIStateStore:
             state = json.loads(self._path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return None
+        except RecursionError as exc:
+            raise ValueError("UI state JSON exceeds the supported nesting depth") from exc
         if not isinstance(state, dict) or state.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("UI state must be a JSON object with a supported schema version")
         return state
@@ -91,10 +93,10 @@ class UIStateStore:
             return None
         if state is not None:
             content_visibility = state.get("content_visibility")
-            if not isinstance(content_visibility, dict) or content_visibility.get("mode") not in {
+            if not isinstance(content_visibility, dict) or content_visibility.get("mode") not in (
                 "sfw",
                 "nsfw",
-            }:
+            ):
                 state["content_visibility"] = dict(DEFAULT_CONTENT_VISIBILITY_STATE)
         return state
 

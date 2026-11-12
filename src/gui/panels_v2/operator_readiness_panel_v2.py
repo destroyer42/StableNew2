@@ -45,8 +45,9 @@ def persist_intro_dismissal(store: UIStateStore | None = None) -> bool:
     readiness_state = state.get(OPERATOR_READINESS_STATE_KEY)
     if not isinstance(readiness_state, dict):
         readiness_state = {}
-    state[OPERATOR_READINESS_STATE_KEY] = {**readiness_state, INTRO_DISMISSED_KEY: True}
-    return selected_store.save_state(state)
+    return selected_store.update_state(
+        {OPERATOR_READINESS_STATE_KEY: {**readiness_state, INTRO_DISMISSED_KEY: True}}
+    )
 
 
 class OperatorReadinessPanelV2(ttk.Frame):

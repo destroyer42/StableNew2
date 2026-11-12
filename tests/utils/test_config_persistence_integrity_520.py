@@ -322,3 +322,22 @@ def test_new_native_pack_is_versioned_discoverable_and_loadable(manager: ConfigM
     # And its settings can then be saved through the same boundary.
     assert manager.save_pack_config("fresh", {"txt2img": {"steps": 12}}) is True
     assert path in discover_native_prompt_packs(manager.packs_dir)
+
+
+def test_settings_decoder_recursion_failure_is_reported_and_preserved(
+    manager: ConfigManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = manager.presets_dir / "settings.json"
+    payload = '{"nested":[[null]]}'
+    path.write_text(payload, encoding="utf-8")
+    loads = json.loads
+
+    def fail_on_nested_document(value, *args, **kwargs):
+        if value == payload:
+            raise RecursionError("JSON decoder nesting limit")
+        return loads(value, *args, **kwargs)
+
+    monkeypatch.setattr("src.utils.config.json.loads", fail_on_nested_document)
+    assert manager.settings_load_error
+    assert not manager.update_settings({"adetailer_defaults": {"face_mode": "single"}})
+    assert path.read_text(encoding="utf-8") == payload

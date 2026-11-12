@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tkinter as tk
 
 import pytest
@@ -261,3 +262,35 @@ def test_prompt_editors_are_reachable_in_scaled_scroll_view(tk_root):
         assert card.hands_negative_var.get().startswith("pasted text\n")
     finally:
         tk_root.tk.call("tk", "scaling", original_scale)
+
+
+@pytest.mark.parametrize("mode", [[], {}])
+def test_malformed_content_visibility_does_not_prevent_draft_restore(tmp_path, mode):
+    store = UIStateStore(tmp_path / "ui_state.json")
+    draft = {"adetailer_prompt": "saved draft"}
+    assert store.save_state(
+        {"content_visibility": {"mode": mode}, "adetailer_working_draft": draft}
+    )
+    restored = store.load_state(strict=True)
+    assert restored["adetailer_working_draft"] == draft
+    assert restored["content_visibility"] == {"mode": "nsfw"}
+
+
+def test_decoder_recursion_failure_preserves_unreadable_ui_state(tmp_path, monkeypatch):
+    path = tmp_path / "ui_state.json"
+    payload = '{"schema_version":"2.6","nested":[[null]]}'
+    path.write_text(payload, encoding="utf-8")
+    store = UIStateStore(path)
+    loads = json.loads
+
+    def fail_on_nested_document(value, *args, **kwargs):
+        if value == payload:
+            raise RecursionError("JSON decoder nesting limit")
+        return loads(value, *args, **kwargs)
+
+    monkeypatch.setattr("src.services.ui_state_store.json.loads", fail_on_nested_document)
+    assert store.load_state() is None
+    with pytest.raises(ValueError, match="nesting"):
+        store.load_state(strict=True)
+    assert not store.update_state({"adetailer_working_draft": {"adetailer_prompt": "new"}})
+    assert path.read_text(encoding="utf-8") == payload

@@ -73,6 +73,30 @@ def test_intro_dismissal_merges_scoped_state_without_erasing_other_ui_state(tmp_
     assert saved["content_visibility"] == {"mode": "sfw"}
 
 
+def test_intro_dismissal_preserves_an_adetailer_autosave_during_its_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = UIStateStore(tmp_path / "ui_state.json")
+    draft_key = "adetailer_working_draft"
+    assert store.save_state({draft_key: {"adetailer_prompt": "old"}})
+    load_state = store.load_state
+    latest = {"adetailer_prompt": "new draft"}
+
+    def interleave_autosave(*, strict: bool = False):
+        state = load_state(strict=strict)
+        if not strict:
+            # Commit the background write after the intro has captured its own snapshot.
+            assert store.update_state({draft_key: latest})
+        return state
+
+    monkeypatch.setattr(store, "load_state", interleave_autosave)
+    assert persist_intro_dismissal(store)
+    saved = load_state(strict=True)
+    assert saved is not None
+    assert saved[draft_key] == latest
+    assert saved["operator_readiness"]["intro_dismissed"] is True
+
+
 def test_main_window_readiness_service_reuses_live_authorities() -> None:
     repository = object()
     webui = _FakeWebUI()
