@@ -25,6 +25,7 @@ from typing import Any
 from src.image_backends.forge_zimage_profile import validate_zimage_njr
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import apply_model_compile_policy
+from src.pipeline.adetailer_profiles import compile_adetailer
 from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.exact_profile_effective_config import prepare_effective_config
 from src.pipeline.job_models_v2 import (
@@ -159,6 +160,19 @@ class JobBuilderV2:
                         sampler_name=str(config.get("sampler") or "") or None,
                         model=str(config.get("model") or "") or None,
                     )
+                    stages: tuple[StageConfig, ...] = (stage,)
+                    metadata: dict[str, Any] = {}
+                    if effective_evidence:
+                        metadata["effective_configuration"] = effective_evidence
+                    # PromptPack compilation owns its supplied stage list and has already selected its profile.
+                    pipeline = config.get("pipeline") or {}
+                    if "stages" not in config and pipeline.get("adetailer_enabled") is True:
+                        config, decision = compile_adetailer(config, prompt_info.final_prompt)
+                        if decision:
+                            stages += (
+                                StageConfig("adetailer", enabled=True, extra=config["adetailer"]),
+                            )
+                            metadata["adetailer_mode"] = decision
                     job = NormalizedJobRecord(
                         schema_version=CURRENT_NJR_SCHEMA_VERSION,
                         job_id=self._id_fn(),
@@ -173,7 +187,7 @@ class JobBuilderV2:
                                 model_name=self._model_name(config),
                             ),
                         ),
-                        stages=(stage,),
+                        stages=stages,
                         output_plan=OutputPlan(base_output_dir=output.base_output_dir),
                         provenance=NJRProvenance(
                             seed=seed,
@@ -187,11 +201,7 @@ class JobBuilderV2:
                             randomizer_summary=randomizer_summary or {},
                             txt2img_prompt_info=prompt_info,
                             pack_usage=tuple(self._build_pack_usage(config)),
-                            metadata=(
-                                {"effective_configuration": effective_evidence}
-                                if effective_evidence
-                                else {}
-                            ),
+                            metadata=metadata,
                         ),
                     )
                     validate_zimage_njr(job)

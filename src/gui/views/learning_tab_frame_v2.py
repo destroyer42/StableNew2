@@ -1196,11 +1196,9 @@ class LearningTabFrame(ttk.Frame):
             )
             self._active_experiment_id = handle.experiment_id
         ui_store = get_ui_state_store()
-        state = ui_store.load_state() or {}
         learning_state = self.get_learning_session_state()
-        state["learning"] = learning_state if isinstance(learning_state, dict) else {}
         self._safe_refresh_guide()
-        if not ui_store.save_state(state):
+        if not ui_store.update_state({"learning": learning_state if isinstance(learning_state, dict) else {}}):
             raise RuntimeError("Learning resume UI state could not be saved")
 
     def _restore_from_store_payload(

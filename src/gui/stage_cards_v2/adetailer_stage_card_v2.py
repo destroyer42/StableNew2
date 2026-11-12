@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import tkinter as tk
-from collections.abc import Iterable
-from tkinter import ttk
+from collections.abc import Callable, Iterable
+from concurrent.futures import Future, ThreadPoolExecutor
+from functools import partial
+from tkinter import messagebox, ttk
 from typing import Any
 
 from src.gui.help_text.stage_setting_help_v2 import ADETAILER_STAGE_HELP
@@ -13,10 +15,10 @@ from src.gui.theme_v2 import (
     BODY_LABEL_STYLE,
     DARK_CHECKBUTTON_STYLE,
     DARK_COMBOBOX_STYLE,
-    DARK_ENTRY_STYLE,
     DARK_SPINBOX_STYLE,
     SURFACE_FRAME_STYLE,
 )
+from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.pipeline_layout_contract import (
     get_single_pair_form_column_specs,
     get_stage_card_min_width,
@@ -32,6 +34,24 @@ from src.pipeline.adetailer_contract import (
     schema_issues,
     split_detectors,
 )
+from src.pipeline.adetailer_profiles import (
+    FACE_MASK_LIMITS,
+    FACE_MODES,
+    PROFILES_KEY,
+    apply_profile,
+    profile_values,
+    suggested_profile,
+)
+from src.services.ui_state_store import UIStateStore
+
+_MODE_LABELS = {
+    "single": "Single Face",
+    "multiple": "Multiple Faces",
+    "auto": "Auto (Prompt-Aware)",
+    "legacy": "Inherited settings",
+}
+_DRAFT_KEY = "adetailer_working_draft"
+_DRAFT_DELAY_MS = 450
 
 
 class ADetailerStageCardV2(BaseStageCardV2):
@@ -66,6 +86,22 @@ class ADetailerStageCardV2(BaseStageCardV2):
                 list(forge_fallbacks[1]),
             )
         self.stage_model_override_var = tk.StringVar(value="")
+        self._mode = "single"
+        self._editing_profile = "single"
+        self._profiles: dict[str, dict[str, Any]] = {}
+        self._mode_var = tk.StringVar(master, _MODE_LABELS[self._mode])
+        self._profile_var = tk.StringVar(master, _MODE_LABELS[self._editing_profile])
+        self._config_revision = tk.IntVar(master)
+        self.loading_config = False
+        self._resource_refreshing = False
+        self._draft_store: UIStateStore | None = None
+        self._draft_after: str | None = None
+        self._draft_worker: ThreadPoolExecutor | None = None
+        self._draft_write: tuple[Future[bool], dict[str, Any]] | None = None
+        self._draft_pending: dict[str, Any] | None = None
+        self._draft_saved: dict[str, Any] | None = None
+        self._draft_read_error = ""
+        self._expanded_prompts = tk.BooleanVar(master, False)
 
         # Fresh-configuration defaults. Loading a saved dict never applies them to a flag the dict omits.
         self.enable_face_pass_var = tk.BooleanVar(value=FRESH_PASS_DEFAULTS["enable_face_pass"])
@@ -151,8 +187,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._hand_sampler_combo: ttk.Combobox | None = None
         self._face_widgets: list[tk.Widget] = []
         self._hand_widgets: list[tk.Widget] = []
-        self._face_prompt_widgets: list[tk.Widget] = []
-        self._hand_prompt_widgets: list[tk.Widget] = []
+        self._face_prompt_widgets: list[tk.Text] = []
+        self._hand_prompt_widgets: list[tk.Text] = []
 
         self.detector_var = self.model_var
 
@@ -164,12 +200,23 @@ class ADetailerStageCardV2(BaseStageCardV2):
             **kwargs,
         )
 
+        self.bind("<Destroy>", self._dispose_draft_worker, add="+")
+        fresh = self._raw_config()
+        fresh.update(
+            face_mode="single",
+            **{PROFILES_KEY: {mode: suggested_profile(mode) for mode in FACE_MASK_LIMITS}},
+        )
+        self.load_from_dict(fresh)
+        for variable in self.watchable_vars():
+            if variable is not self._config_revision:
+                variable.trace_add("write", self._on_working_edit)
+
     def _build_body(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
 
         helper = ttk.Label(
             parent,
-            text="Use face and hand pass tabs for pass-local settings. Stage model override is optional and inherits Base Generation by default.",
+            text="Edits are restored as your working draft. Use Apply to PromptPack to save pack settings. Queued jobs keep their compiled settings.",
             style=BODY_LABEL_STYLE,
             wraplength=460,
             justify="left",
@@ -235,11 +282,51 @@ class ADetailerStageCardV2(BaseStageCardV2):
         summary = ttk.Label(
             overall, text="", style=BODY_LABEL_STYLE, wraplength=460, justify="left"
         )
-        summary.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        summary.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(4, 0))
         self._effective_summary_label = summary
 
+        mode_label = ttk.Label(overall, text="Face Handling", style=BODY_LABEL_STYLE)
+        mode_label.grid(row=3, column=0, sticky="w", pady=2)
+        self._mode_combo = self._build_combo(overall, self._mode_var, ())
+        self._mode_combo.grid(row=3, column=1, columnspan=3, sticky="ew", pady=2)
+        self._mode_combo.bind("<<ComboboxSelected>>", self._select_mode)
+        self._attach_setting_help(
+            "face_mode",
+            "Single Face retains one eligible region without identifying the intended subject. "
+            "Multiple Faces keeps eligible regions separate and may still introduce identity drift. "
+            "Auto selects a profile for each compiled prompt and falls back to Single Face when uncertain.",
+            mode_label,
+            self._mode_combo,
+        )
+        self._profile_label = ttk.Label(overall, text="Edit Profile", style=BODY_LABEL_STYLE)
+        self._profile_label.grid(row=4, column=0, sticky="w", pady=2)
+        self._profile_combo = self._build_combo(
+            overall, self._profile_var, (_MODE_LABELS[mode] for mode in FACE_MASK_LIMITS)
+        )
+        self._profile_combo.grid(row=4, column=1, columnspan=3, sticky="ew", pady=2)
+        self._profile_combo.bind("<<ComboboxSelected>>", self._select_profile)
+
+        actions = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
+        actions.grid(row=2, column=0, sticky="ew", pady=4)
+        self._reset_profile_button = ttk.Button(
+            actions, text="Reset to suggested", command=self._reset_profile
+        )
+        self._reset_profile_button.grid(row=0, column=0, sticky="w", padx=(0, 6))
+        self._save_default_button = ttk.Button(
+            actions, text="Save ADetailer as App Default", state="disabled"
+        )
+        self._save_default_button.grid(row=1, column=0, sticky="w", pady=2)
+        self._draft_status = ttk.Label(
+            actions, style=BODY_LABEL_STYLE, wraplength=325, justify="left"
+        )
+        self._draft_status.grid(row=2, column=0, sticky="w")
+        self._default_status = ttk.Label(
+            actions, style=BODY_LABEL_STYLE, wraplength=325, justify="left"
+        )
+        self._default_status.grid(row=3, column=0, sticky="w")
+
         notebook = ttk.Notebook(parent)
-        notebook.grid(row=2, column=0, sticky="nsew")
+        notebook.grid(row=3, column=0, sticky="nsew")
         self._notebook = notebook
 
         face_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
@@ -342,6 +429,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
                 increment,
                 help_key=help_key,
             )
+            if variable is self.face_mask_k_largest_var:
+                self._face_mask_spin = widget
             self._face_widgets.append(widget)
             row += 1
 
@@ -363,6 +452,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self.MASK_MERGE_OPTIONS,
             help_key="mask_merge",
         )
+        self._face_merge_combo = merge_combo
         self._face_widgets.append(merge_combo)
         row += 1
 
@@ -494,61 +584,120 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._hand_widgets.extend([hand_masked, inpaint_wh])
 
     def _build_prompt_tab(self, parent: ttk.Frame) -> None:
-        face_frame = ttk.LabelFrame(parent, text="Face Pass Prompts", style="Dark.TLabelframe")
-        face_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        configure_grid_columns(face_frame, get_single_pair_form_column_specs())
-        self._face_prompt_frame = face_frame
+        expand = ttk.Checkbutton(
+            parent,
+            text="Expand prompt editors",
+            variable=self._expanded_prompts,
+            command=self._resize_prompt_editors,
+            style=DARK_CHECKBUTTON_STYLE,
+        )
+        expand.grid(row=0, column=0, columnspan=2, sticky="w", pady=2)
+        for row, title, variables, widgets in (
+            (
+                1,
+                "Face Pass Prompts",
+                (self.face_prompt_var, self.face_negative_var),
+                self._face_prompt_widgets,
+            ),
+            (
+                2,
+                "Hand Pass Prompts",
+                (self.hands_prompt_var, self.hands_negative_var),
+                self._hand_prompt_widgets,
+            ),
+        ):
+            frame = ttk.LabelFrame(parent, text=title, style="Dark.TLabelframe")
+            frame.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+            frame.columnconfigure(0, weight=1)
+            for index, (label, help_key, variable) in enumerate(
+                zip(
+                    ("Positive prompt", "Negative prompt"),
+                    ("prompt", "negative"),
+                    variables,
+                    strict=True,
+                )
+            ):
+                editor_label = ttk.Label(frame, text=label, style=BODY_LABEL_STYLE)
+                editor_label.grid(row=2 * index, column=0, sticky="w", pady=(4, 0))
+                editor = self._build_prompt_editor(frame, 2 * index + 1, variable)
+                editor_label.bind("<Button-1>", partial(self._focus_prompt_editor, editor))
+                self._attach_setting_help(
+                    help_key, ADETAILER_STAGE_HELP[help_key], editor_label, editor
+                )
+                widgets.append(editor)
+            if row == 1:
+                self._face_prompt_frame = frame
+            else:
+                self._hand_prompt_frame = frame
 
-        face_prompt_label = ttk.Label(face_frame, text="Prompt", style=BODY_LABEL_STYLE)
-        face_prompt_label.grid(row=0, column=0, sticky="w", pady=2)
-        face_prompt = ttk.Entry(
-            face_frame, textvariable=self.face_prompt_var, style=DARK_ENTRY_STYLE
-        )
-        face_prompt.grid(row=0, column=1, sticky="ew", pady=2, padx=(8, 0))
-        self._attach_setting_help(
-            "prompt", ADETAILER_STAGE_HELP["prompt"], face_prompt_label, face_prompt
-        )
-        face_negative_label = ttk.Label(face_frame, text="Negative", style=BODY_LABEL_STYLE)
-        face_negative_label.grid(row=1, column=0, sticky="w", pady=2)
-        face_negative = ttk.Entry(
-            face_frame, textvariable=self.face_negative_var, style=DARK_ENTRY_STYLE
-        )
-        face_negative.grid(row=1, column=1, sticky="ew", pady=2, padx=(8, 0))
-        self._attach_setting_help(
-            "negative",
-            ADETAILER_STAGE_HELP["negative"],
-            face_negative_label,
-            face_negative,
-        )
-        self._face_prompt_widgets.extend([face_prompt, face_negative])
+    @staticmethod
+    def _focus_prompt_editor(editor: tk.Text, _event: tk.Event) -> None:
+        editor.focus_set()
 
-        hand_frame = ttk.LabelFrame(parent, text="Hand Pass Prompts", style="Dark.TLabelframe")
-        hand_frame.grid(row=1, column=0, sticky="ew")
-        configure_grid_columns(hand_frame, get_single_pair_form_column_specs())
-        self._hand_prompt_frame = hand_frame
+    def _build_prompt_editor(
+        self, frame: ttk.LabelFrame, row: int, variable: tk.StringVar
+    ) -> tk.Text:
+        colors = TOKENS.colors
+        editor = tk.Text(
+            frame,
+            width=1,
+            height=4,
+            wrap="word",
+            undo=True,
+            takefocus=True,
+            bg=colors.surface_secondary,
+            fg=colors.text_primary,
+            insertbackground=colors.accent_primary,
+            selectbackground=colors.accent_primary,
+            selectforeground=colors.surface_primary,
+            highlightbackground=colors.surface_secondary,
+            highlightcolor=colors.accent_primary,
+            highlightthickness=1,
+            borderwidth=0,
+            padx=4,
+            pady=3,
+        )
+        editor.grid(row=row, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=editor.yview)
+        scrollbar.grid(row=row, column=1, sticky="ns")
+        editor.configure(yscrollcommand=scrollbar.set)
 
-        hand_prompt_label = ttk.Label(hand_frame, text="Prompt", style=BODY_LABEL_STYLE)
-        hand_prompt_label.grid(row=0, column=0, sticky="w", pady=2)
-        hand_prompt = ttk.Entry(
-            hand_frame, textvariable=self.hands_prompt_var, style=DARK_ENTRY_STYLE
-        )
-        hand_prompt.grid(row=0, column=1, sticky="ew", pady=2, padx=(8, 0))
-        self._attach_setting_help(
-            "prompt", ADETAILER_STAGE_HELP["prompt"], hand_prompt_label, hand_prompt
-        )
-        hand_negative_label = ttk.Label(hand_frame, text="Negative", style=BODY_LABEL_STYLE)
-        hand_negative_label.grid(row=1, column=0, sticky="w", pady=2)
-        hand_negative = ttk.Entry(
-            hand_frame, textvariable=self.hands_negative_var, style=DARK_ENTRY_STYLE
-        )
-        hand_negative.grid(row=1, column=1, sticky="ew", pady=2, padx=(8, 0))
-        self._attach_setting_help(
-            "negative",
-            ADETAILER_STAGE_HELP["negative"],
-            hand_negative_label,
-            hand_negative,
-        )
-        self._hand_prompt_widgets.extend([hand_prompt, hand_negative])
+        def load_text(*_args: Any) -> None:
+            value = variable.get()
+            if value == editor.get("1.0", "end-1c"):
+                return
+            state = editor.cget("state")
+            editor.configure(state="normal")
+            editor.replace("1.0", "end-1c", value)
+            editor.edit_reset()
+            editor.edit_modified(False)
+            editor.configure(state=state)
+
+        def edited(_event: tk.Event) -> None:
+            if editor.edit_modified():
+                editor.edit_modified(False)
+                value = editor.get("1.0", "end-1c")
+                if variable.get() != value:
+                    variable.set(value)
+
+        def traverse(forward: bool) -> str:
+            target = editor.tk_focusNext() if forward else editor.tk_focusPrev()
+            if target is not None:
+                target.focus_set()
+            return "break"
+
+        trace_id = variable.trace_add("write", load_text)
+        editor.bind("<Destroy>", lambda _event: variable.trace_remove("write", trace_id))
+        editor.bind("<<Modified>>", edited)
+        editor.bind("<Tab>", lambda _event: traverse(True))
+        editor.bind("<Shift-Tab>", lambda _event: traverse(False))
+        load_text()
+        return editor
+
+    def _resize_prompt_editors(self) -> None:
+        height = 10 if self._expanded_prompts.get() else 4
+        for editor in (*self._face_prompt_widgets, *self._hand_prompt_widgets):
+            editor.configure(height=height)
 
     def _add_combo_row(
         self,
@@ -612,6 +761,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._set_widgets_enabled(self._face_prompt_widgets, bool(self.enable_face_pass_var.get()))
         self._set_widgets_enabled(self._hand_widgets, bool(self.enable_hands_pass_var.get()))
         self._set_widgets_enabled(self._hand_prompt_widgets, bool(self.enable_hands_pass_var.get()))
+        if self.enable_face_pass_var.get() and self._mode in FACE_MODES:
+            self._face_mask_spin.configure(state="disabled")
+            self._face_merge_combo.configure(state="disabled")
         self._refresh_effective_summary()
 
     def _pass_argument_view(self, hands: bool) -> dict[str, Any]:
@@ -631,6 +783,20 @@ class ADetailerStageCardV2(BaseStageCardV2):
     def effective_summary(self) -> str:
         """Which passes will run and with which detector, as projected from the card's own variables."""
         lines: list[str] = []
+        if self._mode == "auto":
+            lines.append(
+                f"Auto resolves each prompt at compile time. Editing {_MODE_LABELS[self._editing_profile]}."
+            )
+        try:
+            face_k = self.face_mask_k_largest_var.get()
+            hand_k = self.hands_mask_k_largest_var.get()
+            face_limit = str(face_k) if face_k else "all eligible"
+            hand_limit = str(hand_k) if hand_k else "all eligible"
+            lines.append(
+                f"Retained masks for displayed settings: face {face_limit}, hand {hand_limit}."
+            )
+        except tk.TclError:
+            pass
         if not (self.enable_face_pass_var.get() or self.enable_hands_pass_var.get()):
             lines.append(
                 "No correction will run: both passes are off, so ADetailer sends no request."
@@ -722,7 +888,208 @@ class ADetailerStageCardV2(BaseStageCardV2):
     def load_from_dict(self, cfg: dict[str, Any] | None) -> None:
         if not cfg:
             return
+        mode = cfg.get("face_mode")
+        self._mode = mode if mode in FACE_MODES else "legacy"
+        self._editing_profile = mode if mode in FACE_MASK_LIMITS else "single"
+        profiles = cfg.get(PROFILES_KEY)
+        self._profiles = (
+            {
+                name: profile_values(values)
+                for name, values in profiles.items()
+                if name in FACE_MASK_LIMITS and isinstance(values, dict)
+            }
+            if isinstance(profiles, dict)
+            else {}
+        )
+        if self._mode in FACE_MODES:
+            for name in FACE_MASK_LIMITS:
+                initial = profile_values(cfg) if name == self._editing_profile else {}
+                self._profiles[name] = {
+                    **suggested_profile(name),
+                    **initial,
+                    **self._profiles.get(name, {}),
+                }
+            cfg = apply_profile(cfg, self._editing_profile, self._profiles[self._editing_profile])
+        self._load_controls(cfg)
 
+    def _sync_mode_controls(self) -> None:
+        modes = (*FACE_MODES, "legacy") if self._mode == "legacy" else FACE_MODES
+        self._mode_combo.configure(values=tuple(_MODE_LABELS[mode] for mode in modes))
+        self._mode_var.set(_MODE_LABELS[self._mode])
+        self._profile_var.set(_MODE_LABELS[self._editing_profile])
+        for widget in (self._profile_label, self._profile_combo):
+            if self._mode == "auto":
+                widget.grid()
+            else:
+                widget.grid_remove()
+        self._reset_profile_button.configure(
+            state="disabled" if self._mode == "legacy" else "normal"
+        )
+        self._sync_pass_states()
+
+    def _select_mode(self, _event: tk.Event) -> None:
+        target = next(mode for mode, label in _MODE_LABELS.items() if label == self._mode_var.get())
+        if target != self._mode:
+            self._switch_profile(target, target if target in FACE_MASK_LIMITS else "single")
+
+    def _select_profile(self, _event: tk.Event) -> None:
+        target = next(
+            mode for mode in FACE_MASK_LIMITS if _MODE_LABELS[mode] == self._profile_var.get()
+        )
+        if target != self._editing_profile:
+            self._switch_profile("auto", target)
+
+    def _switch_profile(self, mode: str, profile: str, *, reset: bool = False) -> None:
+        try:
+            config = self._raw_config()
+        except tk.TclError:
+            self._sync_mode_controls()
+            self._draft_status.configure(
+                text="Finish editing the current numeric settings before switching profiles."
+            )
+            return
+        current = self._editing_profile if self._mode != "legacy" else profile
+        self._profiles[current] = profile_values(config)
+        for name in FACE_MASK_LIMITS:
+            if name not in self._profiles:
+                self._profiles[name] = suggested_profile(name)
+        if reset:
+            self._profiles[profile] = suggested_profile(profile)
+        self._mode, self._editing_profile = mode, profile
+        self._load_controls(apply_profile(config, profile, self._profiles[profile]))
+        self._on_working_edit()
+
+    def _reset_profile(self) -> None:
+        if messagebox.askokcancel(
+            "Reset ADetailer profile",
+            f"Replace the prompts and refinement settings for {_MODE_LABELS[self._editing_profile]} "
+            "with the suggested values?",
+            parent=self,
+        ):
+            self._switch_profile(self._mode, self._editing_profile, reset=True)
+
+    def set_default_saver(self, save: Callable[[dict[str, Any]], bool]) -> None:
+        def save_default() -> None:
+            try:
+                saved = save(self.to_config_dict())
+            except (OSError, ValueError, tk.TclError):
+                saved = False
+            self._default_status.configure(
+                text=(
+                    "Application default saved for new configurations."
+                    if saved
+                    else "Could not save the application default. Check settings.json and file permissions."
+                )
+            )
+
+        self._save_default_button.configure(command=save_default, state="normal")
+
+    def restore_working_draft(self, store: UIStateStore) -> None:
+        self._draft_store = store
+        original = self.to_config_dict()
+        try:
+            state = store.load_state(strict=True) or {}
+            if _DRAFT_KEY in state:
+                draft = state[_DRAFT_KEY]
+                if not isinstance(draft, dict) or not draft:
+                    raise ValueError("invalid ADetailer working draft")
+                self.load_from_dict(draft)
+                self._draft_status.configure(text="Working draft restored.")
+            self._draft_saved = self.to_config_dict()
+        except (OSError, ValueError, TypeError, tk.TclError):
+            self.load_from_dict(original)
+            self._draft_read_error = (
+                "Could not read the saved ADetailer draft. Check ui_state.json before replacing it."
+            )
+            self._draft_status.configure(text=self._draft_read_error)
+
+    def _on_working_edit(self, *_args: Any) -> None:
+        self._refresh_effective_summary()
+        if self.loading_config or self._resource_refreshing or self._draft_store is None:
+            return
+        try:
+            snapshot = self.to_config_dict()
+        except (ValueError, tk.TclError):
+            return  # Keep the most recent valid settings while a numeric control is being edited.
+        if snapshot == self._draft_saved and self._draft_pending is None:
+            return
+        self._draft_pending = snapshot
+        self._draft_status.configure(text=self._draft_read_error or "Working draft modified.")
+        if self._draft_after is None and self._draft_write is None and not self._draft_read_error:
+            self._draft_after = self.after(_DRAFT_DELAY_MS, self._start_draft_write)
+
+    def _start_draft_write(self) -> None:
+        self._draft_after = None
+        store, snapshot = self._draft_store, self._draft_pending
+        if store is None or snapshot is None:
+            return
+        if self._draft_worker is None:
+            self._draft_worker = ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="adetailer-draft"
+            )
+        future = self._draft_worker.submit(store.update_state, {_DRAFT_KEY: snapshot})
+        self._draft_write = (future, snapshot)
+        self._draft_after = self.after(50, self._poll_draft_write)
+
+    def _poll_draft_write(self) -> None:
+        self._draft_after = None
+        if self._draft_write is None:
+            return
+        future, snapshot = self._draft_write
+        if not future.done():
+            self._draft_after = self.after(50, self._poll_draft_write)
+            return
+        self._finish_draft_write(future.result(), snapshot)
+        if self._draft_pending is not None and self._draft_pending != snapshot:
+            self._draft_after = self.after(_DRAFT_DELAY_MS, self._start_draft_write)
+
+    def _finish_draft_write(self, saved: bool, snapshot: dict[str, Any]) -> None:
+        self._draft_write = None
+        if saved:
+            self._draft_saved = snapshot
+            if self._draft_pending == snapshot:
+                self._draft_pending = None
+        self._draft_status.configure(
+            text=(
+                ("Working draft modified." if self._draft_pending else "Working draft saved.")
+                if saved
+                else "Could not save the working draft. Check ui_state.json and file permissions."
+            )
+        )
+
+    def _dispose_draft_worker(self, _event: tk.Event) -> None:
+        if self._draft_after is not None:
+            self.after_cancel(self._draft_after)
+            self._draft_after = None
+        if self._draft_worker is not None:
+            self._draft_worker.shutdown(wait=False)
+
+    def flush_working_draft(self) -> bool:
+        if self._draft_after is not None:
+            self.after_cancel(self._draft_after)
+            self._draft_after = None
+        if self._draft_write is not None:
+            future, in_flight = self._draft_write
+            self._finish_draft_write(future.result(), in_flight)
+        store, snapshot = self._draft_store, self._draft_pending
+        if snapshot is None or store is None:
+            return True
+        if self._draft_read_error:
+            return False
+        saved = store.update_state({_DRAFT_KEY: snapshot})
+        self._finish_draft_write(saved, snapshot)
+        return saved
+
+    def _load_controls(self, cfg: dict[str, Any]) -> None:
+        self.loading_config = True
+        try:
+            self._load_fields(cfg)
+            self._sync_mode_controls()
+        finally:
+            self.loading_config = False
+        self._config_revision.set(self._config_revision.get() + 1)
+
+    def _load_fields(self, cfg: dict[str, Any]) -> None:
         self._legacy_notes = []
         self.stage_model_override_var.set(
             self._normalize_stage_model_override(
@@ -755,9 +1122,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.face_denoise_var.set(
             float(cfg.get("adetailer_denoise", cfg.get("ad_denoising_strength", 0.32)))
         )
-        self.face_prompt_var.set(str(cfg.get("adetailer_prompt") or cfg.get("ad_prompt") or ""))
+        self.face_prompt_var.set(str(cfg.get("adetailer_prompt", cfg.get("ad_prompt", "")) or ""))
         self.face_negative_var.set(
-            str(cfg.get("adetailer_negative_prompt") or cfg.get("ad_negative_prompt") or "")
+            str(cfg.get("adetailer_negative_prompt", cfg.get("ad_negative_prompt", "")) or "")
         )
         self.face_inpaint_masked_var.set(bool(cfg.get("ad_inpaint_only_masked", True)))
         self.face_padding_var.set(
@@ -805,10 +1172,20 @@ class ADetailerStageCardV2(BaseStageCardV2):
         )
         self.hands_denoise_var.set(float(cfg.get("adetailer_hands_denoise", 0.25)))
         self.hands_prompt_var.set(
-            str(cfg.get("adetailer_hands_prompt", self.hands_prompt_var.get()))
+            str(
+                cfg.get(
+                    "adetailer_hands_prompt",
+                    "well-formed fingers, natural knuckles, correct hand anatomy, sharp details",
+                )
+            )
         )
         self.hands_negative_var.set(
-            str(cfg.get("adetailer_hands_negative_prompt", self.hands_negative_var.get()))
+            str(
+                cfg.get(
+                    "adetailer_hands_negative_prompt",
+                    "extra fingers, fused fingers, broken fingers, deformed hands, missing fingers",
+                )
+            )
         )
         self.hands_inpaint_masked_var.set(bool(cfg.get("ad_hands_inpaint_only_masked", True)))
         self.hands_padding_var.set(int(cfg.get("ad_hands_padding", cfg.get("hands_padding", 16))))
@@ -824,9 +1201,18 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.hands_dilate_erode_var.set(int(cfg.get("ad_hands_dilate_erode", 6)))
         self.hands_mask_blur_var.set(int(cfg.get("ad_hands_mask_blur", 4)))
         self.hands_merge_var.set(str(cfg.get("ad_hands_mask_merge_invert", "None")))
-        self._sync_pass_states()
 
     def to_config_dict(self) -> dict[str, Any]:
+        config = self._raw_config()
+        if self._mode in FACE_MODES:
+            profiles = {**self._profiles, self._editing_profile: profile_values(config)}
+            # Auto displays either profile for editing, but the flat authoring aliases mirror Single Face.
+            flat_mode = "single" if self._mode == "auto" else self._mode
+            config = apply_profile(config, flat_mode, profiles[flat_mode])
+            config.update(face_mode=self._mode, **{PROFILES_KEY: profiles})
+        return config
+
+    def _raw_config(self) -> dict[str, Any]:
         config = {
             "adetailer_checkpoint_model": self._normalize_stage_model_override(
                 self.stage_model_override_var.get()
@@ -901,6 +1287,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
     def watchable_vars(self) -> Iterable[tk.Variable]:
         return [
+            self._config_revision,
             self.stage_model_override_var,
             self.enable_face_pass_var,
             self.model_var,
@@ -949,6 +1336,13 @@ class ADetailerStageCardV2(BaseStageCardV2):
         ]
 
     def apply_webui_resources(self, resources: dict[str, Any] | None) -> None:
+        self._resource_refreshing = True
+        try:
+            self._update_webui_resources(resources)
+        finally:
+            self._resource_refreshing = False
+
+    def _update_webui_resources(self, resources: dict[str, Any] | None) -> None:
         if resources is None:
             resources = {}
         detector_models = [

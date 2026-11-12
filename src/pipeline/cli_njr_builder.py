@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import apply_model_compile_policy
+from src.pipeline.adetailer_profiles import compile_adetailer
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     extract_adaptive_refinement_intent,
@@ -82,7 +83,9 @@ def build_cli_njr(
     batch_size: int,
     run_name: str | None = None,
 ) -> NormalizedJobRecord:
-    full_config = apply_model_compile_policy(deepcopy(config))
+    full_config, adetailer_decision = compile_adetailer(
+        apply_model_compile_policy(deepcopy(config)), prompt
+    )
     txt2img = dict(full_config.get("txt2img", {}) or {})
     pipeline = dict(full_config.get("pipeline", {}) or {})
 
@@ -136,6 +139,7 @@ def build_cli_njr(
         provenance=NJRProvenance(
             seed=int(txt2img.get("seed", -1) or -1),
             metadata={
+                **({"adetailer_mode": adetailer_decision} if adetailer_decision else {}),
                 "execution_source": "cli",
                 **({"run_name": run_name} if run_name else {}),
             },

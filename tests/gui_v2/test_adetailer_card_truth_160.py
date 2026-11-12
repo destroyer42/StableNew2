@@ -74,7 +74,11 @@ def test_misleading_controls_are_gone_and_top_k_is_labelled_accurately(tk_root, 
     assert card.MASK_FILTER_OPTIONS == ["Area", "Confidence"]
     exported = card.to_config_dict()
     assert not (set(exported) & UNSUPPORTED_CONFIG_KEYS)
-    assert exported["ad_mask_k_largest"] == 3 and exported["ad_hands_mask_k"] == 6
+    assert exported["face_mode"] == "single"
+    assert exported["ad_mask_k_largest"] == 1 and exported["ad_hands_mask_k"] == 6
+    card.load_from_dict({"ad_mask_k_largest": 3})
+    assert "face_mode" not in card.to_config_dict()
+    assert card.to_config_dict()["ad_mask_k_largest"] == 3
 
 
 @pytest.mark.gui

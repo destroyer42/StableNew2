@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -44,6 +45,7 @@ def _isolated(monkeypatch):
     from src.api import healthcheck
     from src.video import comfy_healthcheck
 
+    monkeypatch.setattr("src.pipeline.executor.collect_gpu_snapshot", lambda: None)
     monkeypatch.setattr(healthcheck, "probe_webui_endpoint", lambda *a, **k: "free")
     monkeypatch.setattr(comfy_healthcheck, "probe_comfy_endpoint", lambda *a, **k: "free")
     monkeypatch.setattr(
@@ -337,3 +339,40 @@ def test_a_frozen_job_whose_requested_pass_the_schema_rejects_is_refused_not_sil
     ):
         runner.run_njr(_roundtrip(record), cancel_token=None)
     assert generate.call_count == 0
+
+
+@pytest.mark.parametrize(("prompt", "limit"), [("a group photo", 0), ("one woman", 1)])
+def test_compiled_auto_profile_reaches_backend_as_supported_args(tmp_path, prompt, limit):
+    from src.pipeline.adetailer_profiles import compile_adetailer
+
+    positive = "  visage naturel\n<lora:portrait:0.5>  \n"
+    authored = {
+        **FROZEN_SETTINGS,
+        "face_mode": "auto",
+        "enable_hands_pass": True,
+        "face_mode_profiles": {
+            mode: {
+                "adetailer_prompt": positive,
+                "adetailer_negative_prompt": "",
+                "adetailer_hands_prompt": "  embedding:mãos\n",
+                "adetailer_hands_negative_prompt": "",
+                "ad_hands_mask_k": 12,
+            }
+            for mode in ("single", "multiple")
+        },
+    }
+    config, _decision = compile_adetailer({"adetailer": authored}, prompt)
+    record, _source = _record(tmp_path, config["adetailer"])
+    record = replace(
+        record, workload=replace(record.workload, config={"prompt_optimizer": {"enabled": False}})
+    )
+    result, args = _dispatch(tmp_path, _roundtrip(record))
+    assert result.success
+    face, hands = args[2:]
+    assert face["ad_mask_k"] == limit and face["ad_mask_merge_invert"] == "None"
+    assert face["ad_prompt"] == positive and face["ad_negative_prompt"] == ""
+    assert hands["ad_mask_k"] == 12
+    assert hands["ad_prompt"] == "  embedding:mãos\n" and hands["ad_negative_prompt"] == ""
+    assert all(
+        set(unit) <= SUPPORTED_ARG_KEYS and not schema_issues(unit) for unit in (face, hands)
+    )
