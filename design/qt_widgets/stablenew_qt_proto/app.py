@@ -27,6 +27,10 @@ from .components import fit_segment
 from .create_view import CreateView
 from .edit_view import EditView
 from .gallery import ComponentGallery
+from .library_domain import ActionId
+from .library_session import Destinations, LibrarySession
+from .library_view import LibraryView
+from .motion_domain import KIND_MOVIE, KIND_QUICK, KIND_STORY
 from .motion_view import MotionView
 from .output_display import OutputDock
 from .output_model import SIZE_FILL, fill_width, frame_from_session
@@ -46,6 +50,7 @@ class PrototypeWindow(QMainWindow):
         *,
         edit_layout: str = "editor",
         motion_layout: str = "strip",
+        library_layout: str = "adaptive",
     ):
         super().__init__()
         self.library = library or ThemeLibrary()
@@ -73,6 +78,13 @@ class PrototypeWindow(QMainWindow):
         self.output_toggle.setToolTip("Show or collapse the Output Display (Ctrl+3)")
         self.output_toggle.setAccessibleName("Output Display visible")
         header.addWidget(self.output_toggle)
+        self.return_button = QPushButton("← Return to Library")
+        self.return_button.setAccessibleName("Return to Library")
+        self.return_button.setToolTip(
+            "Go back to the Library with the same scope, filters, sort, page and selection"
+        )
+        self.return_button.hide()
+        header.addWidget(self.return_button)
         capsule = QLabel("ISOLATED DEMO · NO GPU · NO BACKEND · NO JOBS")
         capsule.setProperty("role", "capsule")
         header.addWidget(capsule)
@@ -82,7 +94,15 @@ class PrototypeWindow(QMainWindow):
         root.addWidget(splitter, 1)
         self.nav = QListWidget()
         self.nav.setProperty("role", "nav")
-        self.nav.addItems(["Create Image", "Component Library", "Edit & Improve", "Motion & Video"])
+        self.nav.addItems(
+            [
+                "Create Image",
+                "Component Library",
+                "Edit & Improve",
+                "Motion & Video",
+                "Asset Library",
+            ]
+        )
         self.nav.setMaximumWidth(240)
         self.nav.setMinimumWidth(184)
         self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -97,6 +117,16 @@ class PrototypeWindow(QMainWindow):
         self.pages.addWidget(self.edit_view)
         self.motion_view = MotionView(layout_design=motion_layout)
         self.pages.addWidget(self.motion_view)
+        # The Library places drafts into these destination-owned mock sessions; it owns none of them.
+        self.library_view = LibraryView(
+            LibrarySession(
+                destinations=Destinations(
+                    self.edit_view.session, self.motion_view.session, self.create_view.session
+                )
+            ),
+            layout_design=library_layout,
+        )
+        self.pages.addWidget(self.library_view)
         splitter.addWidget(self.pages)
         splitter.setSizes([185, 1200])
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
@@ -117,11 +147,17 @@ class PrototypeWindow(QMainWindow):
         motion.setShortcut("Ctrl+5")
         motion.triggered.connect(lambda: self.nav.setCurrentRow(3))
         self.addAction(motion)
+        library = QAction("Switch to Asset Library", self)
+        library.setShortcut("Ctrl+6")
+        library.triggered.connect(lambda: self.nav.setCurrentRow(4))
+        self.addAction(library)
         self._build_output_display()
         self.create_view.editRequested.connect(self._open_edit)
         self.create_view.motionRequested.connect(self._open_motion)
         self.edit_view.motionRequested.connect(self._open_motion)
         self.nav.currentRowChanged.connect(self._workspace_changed)
+        self.library_view.placed.connect(self._library_placed)
+        self.return_button.clicked.connect(self.return_to_library)
 
     # ------------------------------------------------------------------- theme
     def apply_theme(self, theme: Theme) -> None:
@@ -141,6 +177,7 @@ class PrototypeWindow(QMainWindow):
         new.editRequested.connect(self._open_edit)
         new.motionRequested.connect(self._open_motion)
         self._rebuild_motion()
+        self._rebuild_library()
         self.pages.setCurrentIndex(self.nav.currentRow())
         self.gallery.rebuild_components()
         self.output_dock.restyle()
@@ -158,6 +195,42 @@ class PrototypeWindow(QMainWindow):
         old.deleteLater()
         self.motion_view = new
 
+    def _rebuild_library(self) -> None:
+        """Rebuild the Library from the same session and UI state so a theme switch loses nothing."""
+        old = self.library_view
+        old.shutdown()
+        new = LibraryView(session=old.session, ui=old.ui)
+        index = self.pages.indexOf(old)
+        self.pages.insertWidget(index, new)
+        self.pages.removeWidget(old)
+        old.deleteLater()
+        self.library_view = new
+        new.placed.connect(self._library_placed)
+
+    def _library_placed(self, result) -> None:
+        """A reviewed placement already wrote a draft into a destination session: show it there."""
+        action = result.action
+        if action == ActionId.EDIT:
+            self.edit_view.adopt_session_source()
+            target = self.edit_view
+        elif action in (ActionId.ANIMATE, ActionId.STORYBOARD, ActionId.MOVIE):
+            mode = {ActionId.ANIMATE: KIND_QUICK, ActionId.STORYBOARD: KIND_STORY}.get(
+                action, KIND_MOVIE
+            )
+            self.motion_view.adopt_session_state(mode)
+            target = self.motion_view
+        elif action == ActionId.REGENERATE:
+            self.create_view.adopt_session_state()
+            target = self.create_view
+        else:  # Learning: an inspectable proposal that stays in the Library
+            return
+        self.nav.setCurrentRow(self.pages.indexOf(target))
+        self.return_button.show()
+
+    def return_to_library(self) -> None:
+        self.nav.setCurrentRow(self.pages.indexOf(self.library_view))
+        self.library_view.return_to_library()
+
     def _open_motion(self, key: str) -> None:
         origin = "edit" if self.sender() is self.edit_view else "create"
         if self.motion_view.receive_source(key, origin):
@@ -169,7 +242,12 @@ class PrototypeWindow(QMainWindow):
 
     def _workspace_changed(self, index: int) -> None:
         # The dock projects Create only. Edit has its own viewer and needs the space.
-        show_output = self.pages.widget(index) not in (self.edit_view, self.motion_view)
+        page = self.pages.widget(index)
+        show_output = page not in (self.edit_view, self.motion_view, self.library_view)
+        if page is self.library_view or self.library_view.session.pending_return is None:
+            self.return_button.hide()
+        elif page is not self.library_view:
+            self.return_button.show()
         self.output_dock.setVisible(show_output)
         self.output_toggle.setVisible(show_output)
         self._output_shortcut.setEnabled(show_output)
@@ -263,6 +341,12 @@ def main(argv: list[str] | None = None) -> int:
         default="strip",
         help="Motion Storyboard layout for design comparison (A strip, B timeline)",
     )
+    parser.add_argument(
+        "--library-layout",
+        choices=("gallery", "adaptive"),
+        default="adaptive",
+        help="Asset Library layout for design comparison (A gallery-first, B adaptive browser)",
+    )
     args, qt_args = parser.parse_known_args(sys.argv[1:] if argv is None else argv)
     app = QApplication([sys.argv[0], *qt_args])
     app.setApplicationName("StableNew Qt Design Assessment (isolated)")
@@ -270,7 +354,11 @@ def main(argv: list[str] | None = None) -> int:
     theme = library.get(args.theme) if args.theme else library.load_active()
     apply_theme(app, theme)
     window = PrototypeWindow(
-        library, theme, edit_layout=args.edit_layout, motion_layout=args.motion_layout
+        library,
+        theme,
+        edit_layout=args.edit_layout,
+        motion_layout=args.motion_layout,
+        library_layout=args.library_layout,
     )
     window.create_view.set_layout_design(args.layout)
     window.show()

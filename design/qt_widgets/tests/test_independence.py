@@ -69,8 +69,13 @@ GUARDED_FLOW = textwrap.dedent(
     assert len(results) == 7, results
     assert all(r.terminal for r in results), results
     assert failed_assembly_demo().terminal
+    from stablenew_qt_proto.library_walkthroughs import run_all as run_library
+
+    library_results = run_library()
+    assert [r.key for r in library_results] == [f"LIB-0{i}" for i in range(1, 9)], library_results
+    assert all(r.terminal for r in library_results), library_results
     qt_loaded = sorted(m for m in sys.modules if m.startswith("PySide6"))
-    assert not qt_loaded, "pure Motion domain must not import Qt: " + ", ".join(qt_loaded)
+    assert not qt_loaded, "pure Motion and Library domains must not import Qt: " + ", ".join(qt_loaded)
 
     leaked = sorted(m for m in sys.modules if m.split(".")[0] in BLOCKED)
     assert not leaked, leaked

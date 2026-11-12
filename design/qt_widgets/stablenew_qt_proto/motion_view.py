@@ -1554,6 +1554,12 @@ class MotionView(QWidget):
         self.set_mode(KIND_QUICK)
         return selected
 
+    def adopt_session_state(self, mode: str) -> None:
+        """Show drafts a Library placement already wrote to ``session`` (consent was given there)."""
+        self.banner.hide()
+        self.set_mode(mode)
+        self.sync()
+
     def _confirm_replacement(self, key: str) -> Replacement:
         box = QMessageBox(self)
         box.setWindowTitle("Replace Motion draft?")

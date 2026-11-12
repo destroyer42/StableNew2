@@ -63,8 +63,8 @@ class QtWidgetSmokeTests(unittest.TestCase):
 
     def test_window_and_gallery_construct(self):
         window, _ = self.make()
-        self.assertEqual(window.pages.count(), 4)
-        self.assertEqual(window.nav.count(), 4)
+        self.assertEqual(window.pages.count(), 5)
+        self.assertEqual(window.nav.count(), 5)
         window.nav.setCurrentRow(1)
         self.app.processEvents()
         self.assertTrue(window.pages.currentWidget().isVisible())

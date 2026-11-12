@@ -31,9 +31,11 @@ and is **not** duplicated here; this workspace only links to it:
 | `stablenew_qt_proto/edit_components.py`, `edit_view.py` | Source picker, image canvas, shared zoom controls, comparison viewer and Edit workspace |
 | `stablenew_qt_proto/motion_domain.py`, `motion_walkthroughs.py` | Pure (no Qt) Motion mock domain: workflow fixtures, Quick Clip / Storyboard / Movie Clips evaluation, in-memory session, playback math, MOTION-01..07 scripts |
 | `stablenew_qt_proto/motion_components.py`, `motion_view.py` | Reusable Motion widgets and the Motion & Video workspace (Storyboard layouts A and B) |
+| `stablenew_qt_proto/library_domain.py`, `library_session.py`, `library_walkthroughs.py` | Pure (no Qt) Asset Library mock domain: fixture catalog and identities, scopes, search/filter/pagination, collections/tags/favorites with undo, grouping, per-action eligibility, whole-selection placement proposals, return context, LIB-01..08 scripts |
+| `stablenew_qt_proto/library_components.py`, `library_view.py` | Reusable Library widgets and the Asset Library workspace (layouts A gallery-first and B adaptive browser) |
 | `stablenew_qt_proto/layout_probe.py`, `tools/layout_audit.py`, `tools/capture.py` | Deterministic layout measurement, evidence tables, screenshots |
 | `tests/` | Pure tests plus opt-in native Qt tests |
-| `docs/` | [MOTION_WORKFLOW](docs/MOTION_WORKFLOW.md), [MOTION_LAYOUTS](docs/MOTION_LAYOUTS.md), [MOTION_ACCEPTANCE](docs/MOTION_ACCEPTANCE.md), [WALKTHROUGH](docs/WALKTHROUGH.md), [LAYOUT_EVALUATION](docs/LAYOUT_EVALUATION.md), [THEME_CONTRACT](docs/THEME_CONTRACT.md), [ASSESSMENT](docs/ASSESSMENT.md) (demonstrated vs unverified), [TRACEABILITY](docs/TRACEABILITY.md), [IMPORT_RECORD](docs/IMPORT_RECORD.md), `evidence/`, `screenshots/` |
+| `docs/` | [LIBRARY_WORKFLOW](docs/LIBRARY_WORKFLOW.md), [LIBRARY_LAYOUTS](docs/LIBRARY_LAYOUTS.md), [LIBRARY_ACCEPTANCE](docs/LIBRARY_ACCEPTANCE.md), [MOTION_WORKFLOW](docs/MOTION_WORKFLOW.md), [MOTION_LAYOUTS](docs/MOTION_LAYOUTS.md), [MOTION_ACCEPTANCE](docs/MOTION_ACCEPTANCE.md), [WALKTHROUGH](docs/WALKTHROUGH.md), [LAYOUT_EVALUATION](docs/LAYOUT_EVALUATION.md), [THEME_CONTRACT](docs/THEME_CONTRACT.md), [ASSESSMENT](docs/ASSESSMENT.md) (demonstrated vs unverified), [TRACEABILITY](docs/TRACEABILITY.md), [IMPORT_RECORD](docs/IMPORT_RECORD.md), `evidence/`, `screenshots/` |
 
 `SOURCE_IMPORT_MANIFEST.sha256` records the exact bytes of the imported v0.3.0 prototype (see
 [IMPORT_RECORD](docs/IMPORT_RECORD.md)).
@@ -61,6 +63,7 @@ cd design\qt_widgets
 & $py -m stablenew_qt_proto.app --theme concept-a --layout scroll
 & $py -m stablenew_qt_proto.app --theme blue-modern --edit-layout inspector
 & $py -m stablenew_qt_proto.app --motion-layout timeline     # Motion Storyboard layout B
+& $py -m stablenew_qt_proto.app --library-layout adaptive    # Asset Library layout B (A is the comparison)
 ```
 
 The [responsive Create design](docs/RESPONSIVE_CREATE.md) records the default split workspace, the
@@ -87,6 +90,8 @@ representative.
 & $py tools/capture.py --out captures --sizes 1280x680 --edit-layout editor --edit-states masked extend compare blocked
 & $py tools/layout_audit.py --out docs/evidence --motion-layouts strip timeline --motion-states quick story movie --sizes 960x600 1280x680 1366x768 1440x900 1920x1080 --name motion_native_blue-modern
 & $py tools/capture.py --out captures --motion-layouts strip timeline --motion-states story --sizes 1366x768
+& $py tools/layout_audit.py --out docs/evidence --library-layouts gallery adaptive --library-states browse selected filters organize --library-modes grid list --library-catalogs small large --sizes 960x600 1280x680 1366x768 1440x900 1920x1080 --name library_native_blue-modern
+& $py tools/capture.py --out captures --library-layouts gallery adaptive --library-states browse selected --sizes 1280x680
 ```
 
 `--scale` sets `QT_SCALE_FACTOR` and is **simulated** scaling (reported as such). Real per-monitor
@@ -104,6 +109,11 @@ Use **Ctrl+4** to open Edit or **Edit linked fixture** in a simulated Create res
 [Motion & Video](docs/MOTION_WORKFLOW.md) covers Quick Clip, Storyboard and Movie Clips (all
 simulated, no video is generated or encoded), the seven MOTION walkthroughs, the layout comparison
 and UX-DEC-020…034 traceability. Use **Ctrl+5**, or **Animate in Motion** in Create and Edit.
+
+[Asset Library](docs/LIBRARY_WORKFLOW.md) covers find, inspect, organize, compatible actions, reviewed
+handoffs to Edit, Motion, Movie Clips and Create, and the return to the same library context over
+fixtures only (nothing is scanned, imported, moved or deleted), the eight LIB walkthroughs, the layout
+comparison and UX-DEC-035…041 traceability. Use **Ctrl+6**.
 
 ## Limits that matter
 

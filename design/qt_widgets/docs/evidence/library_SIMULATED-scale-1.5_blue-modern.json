@@ -1,0 +1,373 @@
+{
+  "meta": {
+    "theme": "blue-modern",
+    "qpa": "windows",
+    "scale": 1.5,
+    "python": "3.14.9",
+    "os": "Windows-11-10.0.26100-SP0",
+    "platform_note": "native platform, simulated scaling",
+    "screen": {
+      "name": "ASUS VG32VQ1B",
+      "geometry": [
+        1707,
+        960
+      ],
+      "devicePixelRatio": 1.5,
+      "logicalDpi": 96.0
+    }
+  },
+  "rows": [
+    {
+      "layout": "gallery",
+      "mode": "grid",
+      "window": [
+        1280,
+        680
+      ],
+      "library_view": [
+        1072,
+        632
+      ],
+      "narrow_inspector_page": false,
+      "catalog": 148,
+      "results": 148,
+      "page_size": 24,
+      "tiles_visible": 4,
+      "tile_rows_visible": 2,
+      "media_area": [
+        501,
+        214
+      ],
+      "scrollbar_range_px": 1634,
+      "filters_height": 150,
+      "filter_bar_height": 200,
+      "inspector_width": 320,
+      "scope_width": 215,
+      "clipped": [],
+      "text_clipped": [],
+      "shrunk_controls": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "actions_reachable": true,
+      "selection": 0,
+      "widgets": 281,
+      "decoded": 11,
+      "blocked_requests": 2,
+      "refresh_ms": 8.6,
+      "page_flip_ms": 4.3,
+      "requested_size": "1280x680",
+      "theme": "blue-modern",
+      "state": "browse",
+      "catalog_size": "small",
+      "size_clamped": false
+    },
+    {
+      "layout": "gallery",
+      "mode": "grid",
+      "window": [
+        1280,
+        680
+      ],
+      "library_view": [
+        1072,
+        632
+      ],
+      "narrow_inspector_page": false,
+      "catalog": 148,
+      "results": 148,
+      "page_size": 24,
+      "tiles_visible": 4,
+      "tile_rows_visible": 2,
+      "media_area": [
+        501,
+        214
+      ],
+      "scrollbar_range_px": 1634,
+      "filters_height": 150,
+      "filter_bar_height": 200,
+      "inspector_width": 320,
+      "scope_width": 215,
+      "clipped": [],
+      "text_clipped": [],
+      "shrunk_controls": [],
+      "tab_stops": 27,
+      "missing_tab_stops": [],
+      "actions_reachable": true,
+      "selection": 3,
+      "widgets": 301,
+      "decoded": 11,
+      "blocked_requests": 2,
+      "refresh_ms": 52.8,
+      "page_flip_ms": 51.7,
+      "requested_size": "1280x680",
+      "theme": "blue-modern",
+      "state": "selected",
+      "catalog_size": "small",
+      "size_clamped": false
+    },
+    {
+      "layout": "adaptive",
+      "mode": "grid",
+      "window": [
+        1280,
+        680
+      ],
+      "library_view": [
+        1072,
+        632
+      ],
+      "narrow_inspector_page": false,
+      "catalog": 148,
+      "results": 148,
+      "page_size": 24,
+      "tiles_visible": 9,
+      "tile_rows_visible": 3,
+      "media_area": [
+        724,
+        348
+      ],
+      "scrollbar_range_px": 884,
+      "filters_height": 0,
+      "filter_bar_height": 42,
+      "inspector_width": 320,
+      "scope_width": 736,
+      "clipped": [],
+      "text_clipped": [],
+      "shrunk_controls": [],
+      "tab_stops": 17,
+      "missing_tab_stops": [],
+      "actions_reachable": true,
+      "selection": 0,
+      "widgets": 280,
+      "decoded": 18,
+      "blocked_requests": 22,
+      "refresh_ms": 6.2,
+      "page_flip_ms": 5.9,
+      "requested_size": "1280x680",
+      "theme": "blue-modern",
+      "state": "browse",
+      "catalog_size": "small",
+      "size_clamped": false
+    },
+    {
+      "layout": "adaptive",
+      "mode": "grid",
+      "window": [
+        1280,
+        680
+      ],
+      "library_view": [
+        1072,
+        632
+      ],
+      "narrow_inspector_page": false,
+      "catalog": 148,
+      "results": 148,
+      "page_size": 24,
+      "tiles_visible": 9,
+      "tile_rows_visible": 3,
+      "media_area": [
+        724,
+        348
+      ],
+      "scrollbar_range_px": 884,
+      "filters_height": 0,
+      "filter_bar_height": 42,
+      "inspector_width": 320,
+      "scope_width": 736,
+      "clipped": [],
+      "text_clipped": [],
+      "shrunk_controls": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "actions_reachable": true,
+      "selection": 3,
+      "widgets": 300,
+      "decoded": 18,
+      "blocked_requests": 23,
+      "refresh_ms": 28.3,
+      "page_flip_ms": 44.4,
+      "requested_size": "1280x680",
+      "theme": "blue-modern",
+      "state": "selected",
+      "catalog_size": "small",
+      "size_clamped": false
+    },
+    {
+      "layout": "gallery",
+      "mode": "grid",
+      "window": [
+        1709,
+        947
+      ],
+      "library_view": [
+        1460,
+        899
+      ],
+      "narrow_inspector_page": false,
+      "catalog": 148,
+      "results": 148,
+      "page_size": 24,
+      "tiles_visible": 24,
+      "tile_rows_visible": 4,
+      "media_area": [
+        889,
+        561
+      ],
+      "scrollbar_range_px": 55,
+      "filters_height": 96,
+      "filter_bar_height": 146,
+      "inspector_width": 320,
+      "scope_width": 215,
+      "clipped": [],
+      "text_clipped": [],
+      "shrunk_controls": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "actions_reachable": true,
+      "selection": 0,
+      "widgets": 281,
+      "decoded": 21,
+      "blocked_requests": 60,
+      "refresh_ms": 21.7,
+      "page_flip_ms": 12.6,
+      "requested_size": "1920x1080",
+      "theme": "blue-modern",
+      "state": "browse",
+      "catalog_size": "small",
+      "size_clamped": true
+    },
+    {
+      "layout": "gallery",
+      "mode": "grid",
+      "window": [
+        1709,
+        947
+      ],
+      "library_view": [
+        1460,
+        899
+      ],
+      "narrow_inspector_page": false,
+      "catalog": 148,
+      "results": 148,
+      "page_size": 24,
+      "tiles_visible": 24,
+      "tile_rows_visible": 4,
+      "media_area": [
+        889,
+        561
+      ],
+      "scrollbar_range_px": 55,
+      "filters_height": 96,
+      "filter_bar_height": 146,
+      "inspector_width": 320,
+      "scope_width": 215,
+      "clipped": [],
+      "text_clipped": [],
+      "shrunk_controls": [],
+      "tab_stops": 27,
+      "missing_tab_stops": [],
+      "actions_reachable": true,
+      "selection": 3,
+      "widgets": 301,
+      "decoded": 21,
+      "blocked_requests": 63,
+      "refresh_ms": 54.9,
+      "page_flip_ms": 40.0,
+      "requested_size": "1920x1080",
+      "theme": "blue-modern",
+      "state": "selected",
+      "catalog_size": "small",
+      "size_clamped": true
+    },
+    {
+      "layout": "adaptive",
+      "mode": "grid",
+      "window": [
+        1709,
+        947
+      ],
+      "library_view": [
+        1460,
+        899
+      ],
+      "narrow_inspector_page": false,
+      "catalog": 148,
+      "results": 148,
+      "page_size": 24,
+      "tiles_visible": 24,
+      "tile_rows_visible": 4,
+      "media_area": [
+        1112,
+        615
+      ],
+      "scrollbar_range_px": 1,
+      "filters_height": 0,
+      "filter_bar_height": 42,
+      "inspector_width": 320,
+      "scope_width": 1124,
+      "clipped": [],
+      "text_clipped": [],
+      "shrunk_controls": [],
+      "tab_stops": 17,
+      "missing_tab_stops": [],
+      "actions_reachable": true,
+      "selection": 0,
+      "widgets": 280,
+      "decoded": 21,
+      "blocked_requests": 65,
+      "refresh_ms": 21.1,
+      "page_flip_ms": 20.9,
+      "requested_size": "1920x1080",
+      "theme": "blue-modern",
+      "state": "browse",
+      "catalog_size": "small",
+      "size_clamped": true
+    },
+    {
+      "layout": "adaptive",
+      "mode": "grid",
+      "window": [
+        1709,
+        947
+      ],
+      "library_view": [
+        1460,
+        899
+      ],
+      "narrow_inspector_page": false,
+      "catalog": 148,
+      "results": 148,
+      "page_size": 24,
+      "tiles_visible": 24,
+      "tile_rows_visible": 4,
+      "media_area": [
+        1112,
+        615
+      ],
+      "scrollbar_range_px": 1,
+      "filters_height": 0,
+      "filter_bar_height": 42,
+      "inspector_width": 320,
+      "scope_width": 1124,
+      "clipped": [],
+      "text_clipped": [],
+      "shrunk_controls": [],
+      "tab_stops": 22,
+      "missing_tab_stops": [],
+      "actions_reachable": true,
+      "selection": 3,
+      "widgets": 300,
+      "decoded": 21,
+      "blocked_requests": 68,
+      "refresh_ms": 48.9,
+      "page_flip_ms": 39.2,
+      "requested_size": "1920x1080",
+      "theme": "blue-modern",
+      "state": "selected",
+      "catalog_size": "small",
+      "size_clamped": true
+    }
+  ]
+}

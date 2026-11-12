@@ -40,6 +40,21 @@ from .components import (
 from .domain import ResultTile
 from .edit_components import CompareViewer, ImageCanvas, SourcePicker, ZoomControls, fixture_image
 from .edit_domain import CREATE_SOURCE, EditRefused, suggest_mask
+from .library_components import (
+    AssetActionMenu,
+    AssetFilterBar,
+    AssetTile,
+    MediaProvider,
+    MultiSelectionStrip,
+    SimilarityGroupPanel,
+    SourceIdentityBadge,
+    SourceScopePicker,
+    StatePanel,
+    TagEditor,
+    card_info,
+)
+from .library_domain import ILLUSTRATIVE_GROUPS, ActionId, fixture_catalog
+from .library_session import LibrarySession
 from .motion_components import (
     AssemblyRow,
     ClipAssemblyList,
@@ -304,6 +319,7 @@ class ComponentsPage(QScrollArea):
         card.add(compare)
         root.addWidget(card)
         self._motion_components(root)
+        self._library_components(root)
         root.addStretch(1)
         self.setWidget(body)
 
@@ -394,6 +410,70 @@ class ComponentsPage(QScrollArea):
         card.add(rating)
         card.add(MotionActionStrip())
         root.addWidget(card)
+
+    def _library_components(self, root: QVBoxLayout) -> None:
+        """Asset Library components over fixtures only. Nothing here scans, indexes or decodes a user file."""
+        session = LibrarySession(fixture_catalog(0))
+        session.toggle("history:ridge-17")
+        session.toggle("history:coast-04")
+        media = MediaProvider(session)
+        card = SectionCard(
+            "Library · tiles and identity",
+            "AssetTile shows the same card the browser paints: order badge (selection), star (favorite) and "
+            "collection count are different signals. SourceIdentityBadge keeps namespace and record ID visible.",
+        )
+        row = ResponsiveGrid(min_column_width=170)
+        for key in ("history:ridge-17", "history:coast-04", "history:missing", "history:hidden"):
+            pixmap = media.thumbnail(key)
+            row.add(AssetTile(card_info(session, key), pixmap))
+        card.add(row)
+        card.add(SourceIdentityBadge("history:ridge-17"))
+        card.add(
+            SourceIdentityBadge(
+                "history:missing", session.catalog.get("history:missing").availability
+            )
+        )
+        card.add(AssetTile(card_info(session, "history:ridge-17"), None, grid=False))
+        root.addWidget(card)
+
+        card = SectionCard(
+            "Library · scopes, filters and states",
+            "SourceScopePicker (presentation scopes, not repositories), AssetFilterBar (metadata and prompt-prefix "
+            "search; semantic search is shown as unavailable) and StatePanel (empty source, no matches, loading, error).",
+        )
+        picker = SourceScopePicker()
+        picker.refresh(session)
+        picker.list.setMinimumHeight(190)
+        card.add(picker)
+        bar = AssetFilterBar()
+        bar.populate(session.catalog, session)
+        card.add(bar)
+        panel = StatePanel()
+        panel.show_state(
+            "No filter matches",
+            "Nothing in this source matches these filters. The search did not widen to other sources.",
+            "Clear filters",
+        )
+        card.add(panel)
+        root.addWidget(card)
+
+        card = SectionCard(
+            "Library · actions, selection and groups",
+            "AssetActionMenu lists every action with its eligibility reason. MultiSelectionStrip extends the shared "
+            "ActionStrip. SimilarityGroupPanel always carries the label ‘Illustrative Similarity — No AI Analysis’.",
+        )
+        menu = AssetActionMenu()
+        menu.set_eligibility(session.available_actions(), len(session.selection))
+        card.add(menu)
+        strip = MultiSelectionStrip()
+        strip.set_selection(session)
+        card.add(strip)
+        groups = SimilarityGroupPanel()
+        groups.set_groups(ILLUSTRATIVE_GROUPS[:1], "history:twin-a")
+        card.add(groups)
+        card.add(TagEditor())
+        root.addWidget(card)
+        self._library_refs = (session, media, ActionId)  # keep the demo session alive with the page
 
 
 class ComponentGallery(QWidget):

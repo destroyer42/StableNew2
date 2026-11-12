@@ -97,3 +97,22 @@ Concept A against Figma if its fidelity matters; (3) run real 125/150% scaling a
 architecture decision (owner of design values, startup, packaging).
 
 No publication, protected action or physical runtime authorization was inferred.
+
+## QT-DS-05 addendum — Asset Library (fixtures only)
+
+A unified **Asset Library** destination (Ctrl+6) was added over an in-memory fixture catalog: scopes, search and
+filters with stated AND/OR semantics, bounded pagination, grid and list over one ordered selection, collections /
+tags / favorites with undo, exact-hash and clearly-labelled illustrative grouping, per-action eligibility with
+whole-selection preflight, reviewed handoffs to Edit, Motion (Quick Clip, Storyboard, Movie Clips) and Create,
+a non-executable Learning proposal, and a return to the same library context. Two layouts were measured natively at
+five sizes in both themes; **B · Adaptive browser** is the default.
+
+- **Demonstrated:** the eight LIB walkthroughs (Qt-free, under blocked production runtimes), the native interaction
+  tests, 320 native layout cases with 0 clipped controls, 0 clipped text, 0 Tab gaps and 0 unreachable actions, and
+  hidden / missing / unsupported media never reaching the decoder.
+- **Simulated:** every record, hash, observation, collection and group; the Photo-style archive; loading and read errors.
+- **Unverified:** operator benefit; real 125/150 % and mixed-DPI scaling; screen readers; persistence; real catalogs and
+  thumbnails; drag-and-drop, folder scanning, import and semantic search (not built).
+
+Nothing was scanned, imported, moved, renamed, deleted or written. See [LIBRARY_WORKFLOW](LIBRARY_WORKFLOW.md),
+[LIBRARY_LAYOUTS](LIBRARY_LAYOUTS.md) and [LIBRARY_ACCEPTANCE](LIBRARY_ACCEPTANCE.md).

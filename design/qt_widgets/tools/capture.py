@@ -45,6 +45,17 @@ def main() -> int:
     parser.add_argument(
         "--motion-states", nargs="+", choices=("quick", "story", "movie"), default=["story"]
     )
+    parser.add_argument("--library-layouts", nargs="+", choices=("gallery", "adaptive"))
+    parser.add_argument(
+        "--library-states",
+        nargs="+",
+        choices=("browse", "selected", "filters", "organize"),
+        default=["browse"],
+    )
+    parser.add_argument("--library-modes", nargs="+", choices=("grid", "list"), default=["grid"])
+    parser.add_argument(
+        "--library-catalogs", nargs="+", choices=("small", "large"), default=["small"]
+    )
     parser.add_argument("--prefix", default="", help="file-name prefix, e.g. 'split_'")
     parser.add_argument(
         "--studio", action="store_true", help="also capture the Theme Studio and component pages"
@@ -65,6 +76,27 @@ def main() -> int:
     app = QApplication([])
     apply_theme(app, reference_theme(args.theme))
     suffix = f"@{args.scale:g}x" if args.scale != 1.0 else ""
+    if args.library_layouts:
+        from PySide6.QtCore import QEvent
+        from stablenew_qt_proto.layout_probe import prime_library
+
+        for size in args.sizes:
+            width, height = map(int, size.split("x"))
+            for layout in args.library_layouts:
+                for state in args.library_states:
+                    for mode in args.library_modes:
+                        for catalog in args.library_catalogs:
+                            window = PrototypeWindow(library_layout=layout)
+                            prime_library(window, (width, height), layout, state, mode, catalog)
+                            tag = f"{args.prefix}{args.theme}_{layout}_{state}_{mode}_{catalog}_{size}{suffix}"
+                            path = args.out / f"library_{tag}.png"
+                            if not window.grab().save(str(path)):
+                                raise OSError(f"Could not save {path}")
+                            print(f"{tag}: client {window.width()}x{window.height()}")
+                            window.close()
+                            window.deleteLater()
+                            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        return 0
     if args.motion_layouts:
         from PySide6.QtCore import QEvent
         from stablenew_qt_proto.layout_probe import prime_motion

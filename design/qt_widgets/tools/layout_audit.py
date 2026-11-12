@@ -145,6 +145,73 @@ def run_motion(
     return rows
 
 
+def run_library(
+    sizes: list[str],
+    layouts: list[str],
+    states: list[str],
+    modes: list[str],
+    catalogs: list[str],
+    theme_id: str,
+) -> list[dict]:
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QApplication
+    from stablenew_qt_proto.app import PrototypeWindow, apply_theme
+    from stablenew_qt_proto.layout_probe import prime_library, probe_library, pump
+    from stablenew_qt_proto.tokens import reference_theme
+
+    app = QApplication.instance() or QApplication([])
+    apply_theme(app, reference_theme(theme_id))
+    rows = []
+    for size in sizes:
+        width, height = map(int, size.split("x"))
+        for layout in layouts:
+            for state in states:
+                for mode in modes:
+                    for catalog in catalogs:
+                        window = PrototypeWindow(library_layout=layout)
+                        prime_library(window, (width, height), layout, state, mode, catalog)
+                        row = probe_library(window)
+                        row.update(
+                            requested_size=size,
+                            theme=theme_id,
+                            state=state,
+                            catalog_size=catalog,
+                            size_clamped=[window.width(), window.height()] != [width, height],
+                        )
+                        rows.append(row)
+                        window.close()
+                        window.deleteLater()
+                        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                        pump(app, 2)
+    return rows
+
+
+def library_markdown(rows: list[dict], meta: dict) -> str:
+    lines = [
+        f"# Asset Library layout audit ({meta['platform_note']})",
+        "",
+        f"Theme `{meta['theme']}` · Qt platform `{meta['qpa']}` · requested scale {meta['scale']} · "
+        f"screen DPR {meta['screen']['devicePixelRatio']} · Python {meta['python']}",
+        "",
+        "| Layout | State | View | Catalog | Requested → actual | Tiles (rows) | Media area | Filters h | Inspector w | "
+        "Clipped | Text clipped | Actions reachable | Tab stops · missing | Refresh ms | Page flip ms |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for r in rows:
+        width, height = r["window"]
+        inspector = r["inspector_width"] or ("page" if r["narrow_inspector_page"] else "hidden")
+        flip = r["page_flip_ms"] if r["page_flip_ms"] is not None else "-"
+        lines.append(
+            f"| {r['layout']} | {r['state']} | {r['mode']} | {r['catalog_size']} ({r['catalog']}) | "
+            f"{r['requested_size']} → {width}×{height}{' (clamped)' if r['size_clamped'] else ''} | "
+            f"{r['tiles_visible']} ({r['tile_rows_visible']}) | {r['media_area'][0]}×{r['media_area'][1]} | "
+            f"{r['filters_height']} | {inspector} | {', '.join(r['clipped']) or 'none'} | "
+            f"{len(r['text_clipped'])} | {'yes' if r['actions_reachable'] else 'NO'} | "
+            f"{r['tab_stops']} · {', '.join(r['missing_tab_stops']) or 'none'} | {r['refresh_ms']} | {flip} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def motion_markdown(rows: list[dict], meta: dict) -> str:
     lines = [
         f"# Motion layout audit ({meta['platform_note']})",
@@ -202,6 +269,17 @@ def main() -> int:
     parser.add_argument(
         "--motion-states", nargs="+", default=["story"], choices=["quick", "story", "movie"]
     )
+    parser.add_argument("--library-layouts", nargs="+", choices=["gallery", "adaptive"])
+    parser.add_argument(
+        "--library-states",
+        nargs="+",
+        default=["browse"],
+        choices=["browse", "selected", "filters", "organize"],
+    )
+    parser.add_argument("--library-modes", nargs="+", default=["grid"], choices=["grid", "list"])
+    parser.add_argument(
+        "--library-catalogs", nargs="+", default=["small"], choices=["small", "large"]
+    )
     parser.add_argument("--docks", nargs="+", default=["expanded", "collapsed"])
     parser.add_argument(
         "--states", nargs="+", default=["fresh", "primed"], choices=["fresh", "primed"]
@@ -218,7 +296,16 @@ def main() -> int:
     if args.scale != 1.0:
         os.environ["QT_SCALE_FACTOR"] = str(args.scale)
     sys.path.insert(0, str(ROOT))
-    if args.motion_layouts:
+    if args.library_layouts:
+        rows = run_library(
+            args.sizes,
+            args.library_layouts,
+            args.library_states,
+            args.library_modes,
+            args.library_catalogs,
+            args.theme,
+        )
+    elif args.motion_layouts:
         rows = run_motion(args.sizes, args.motion_layouts, args.motion_states, args.theme)
     elif args.edit_layouts:
         rows = run_edit(args.sizes, args.edit_layouts, args.theme)
@@ -245,7 +332,9 @@ def main() -> int:
     }
     if args.scale != 1.0:
         meta["platform_note"] += ", simulated scaling"
-    if args.motion_layouts:
+    if args.library_layouts:
+        report = library_markdown(rows, meta)
+    elif args.motion_layouts:
         report = motion_markdown(rows, meta)
     else:
         report = edit_markdown(rows, meta) if args.edit_layouts else markdown(rows, meta)
