@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-719 of 874 modules have a docstring.
+720 of 875 modules have a docstring.
 
 ## src/
 
@@ -704,6 +704,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `learning_sample_evidence.py`: Forward artifact-to-observed-seed association at the existing image-save boundary
 - `matrix_expansion_plan.py`: Pure PromptPack Matrix expansion plan
 - `model_synchronizer.py`: Deterministic A1111 checkpoint synchronization for pipeline execution
+- `njr_compiler.py`: The single assembly boundary for ``NormalizedJobRecord`` (P4-2)
 - `njr_core_v26.py`: Immutable eight-part Normalized Job Record contract for StableNew v2.6
 - `openpose_compile.py`: PromptPack OpenPose conditioning compilation (PR-IMG-CNET-210)
 - `outpaint_canvas.py`: Toolkit-neutral outpainting canvas preparation and original-pixel preservation
