@@ -1,6 +1,6 @@
 # P4-2 — Unified NJR compiler migration
 
-Status: **PROPOSED. Nothing here is authorized.** Produced by the design package recorded in
+Status: **AUTHORIZED 2026-11-13 (owner decisions, delegated to the coordinating session): P4-2A to P4-2F, run strictly in order A, B, C, D, E, F, each in a fresh session; P4-2E starts only after the coordinating session has reviewed the A-D results (OD-11). OD-8: the held Character Training compiler is included in P4-2B as a constructor swap only. OD-2 (new `SourceKind`), OD-3 (refusal-timing changes) and OD-4 (canonical configuration shape) are not adopted.** Produced by the design package recorded in
 [the 2026-11-12 Focused assessment](../assessments/2026-11-12_p4_2_unified_njr_compiler_design.md), at `origin/main`
 `67e0e559d1998321d567e78f9b4e16cf4e6d9807`. Date: 2026-11-12.
 

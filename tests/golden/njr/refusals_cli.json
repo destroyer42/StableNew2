@@ -1,0 +1,38 @@
+{
+ "empty_txt2img_prompt": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "txt2img workload requires a positive prompt",
+   "outcome": "refused",
+   "type": "ValueError"
+  }
+ },
+ "exact_profile_unsupported": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "Z-Image-Turbo FP8 (limited support) cannot run this work: use a natural-language positive prompt without weighted syntax or adapter/embedding tokens",
+   "outcome": "refused",
+   "type": "ZImageProfileError"
+  }
+ },
+ "missing_input_image": {
+  "outcome": "not_applicable",
+  "reason": "the CLI builder takes no input image"
+ },
+ "queue_admission": {
+  "outcome": "not_applicable",
+  "reason": "the CLI runs runner.run_njr directly and never crosses JobService.submit_njrs (X14)"
+ },
+ "retired_stage_requested_by_config": {
+  "admission": {
+   "outcome": "accepted"
+  },
+  "compile": {
+   "outcome": "accepted"
+  }
+ }
+}

@@ -1,0 +1,4409 @@
+[
+ {
+  "job_id": "learning_00000000000000000000000000000001_00000000000000000000000000000001:0_00000000",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "00000000000000000000000000000001",
+    "experiment_name": "baseline study",
+    "variable_under_test": "CFG Scale",
+    "variant_index": 0,
+    "variant_value": 4.0
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "clip_skip": 2,
+    "frozen_experiment": {
+     "executed_config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 4.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 4.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "schema_version": 1,
+     "snapshot": {
+      "baseline_authoring": {
+       "copied_at": "2026-01-02T03:04:05",
+       "copied_from": "pipeline",
+       "draft_signature": "da22c0945d68d3c40eba421fb7f6adb11ed283ab66f369315b4a613f149c17ea",
+       "edited": [],
+       "origin": "pipeline_copy",
+       "version": 1
+      },
+      "baseline_config": {
+       "adetailer": {
+        "ad_cfg_scale": 6.5,
+        "ad_confidence": 0.35,
+        "ad_denoising_strength": 0.3,
+        "ad_sampler": "DPM++ 2M",
+        "ad_steps": 25,
+        "adetailer_cfg": 6.5,
+        "adetailer_checkpoint_model": "ordinary.safetensors",
+        "adetailer_confidence": 0.35,
+        "adetailer_denoise": 0.3,
+        "adetailer_model": "face_yolov8n.pt",
+        "adetailer_sampler": "DPM++ 2M",
+        "adetailer_scheduler": "Karras",
+        "adetailer_steps": 25,
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "model_name": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "scale": 2.0,
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+",
+        "upscaler_1": "R-ESRGAN 4x+",
+        "upscaler_name": "R-ESRGAN 4x+",
+        "upscaling_resize": 2.0
+       }
+      },
+      "display_name": "baseline study",
+      "effective_settings": [
+       {
+        "label": "Model",
+        "name": "model",
+        "ownership": "baseline",
+        "value": "ordinary.safetensors"
+       },
+       {
+        "label": "VAE",
+        "name": "vae",
+        "ownership": "baseline",
+        "value": null
+       },
+       {
+        "label": "Sampler",
+        "name": "sampler_name",
+        "ownership": "baseline",
+        "value": "DPM++ 2M"
+       },
+       {
+        "label": "Scheduler",
+        "name": "scheduler",
+        "ownership": "baseline",
+        "value": "Karras"
+       },
+       {
+        "label": "Steps",
+        "name": "steps",
+        "ownership": "baseline",
+        "value": 30
+       },
+       {
+        "label": "CFG Scale",
+        "name": "cfg_scale",
+        "ownership": "variable",
+        "value": 7.0
+       },
+       {
+        "label": "Width",
+        "name": "width",
+        "ownership": "baseline",
+        "value": 768
+       },
+       {
+        "label": "Height",
+        "name": "height",
+        "ownership": "baseline",
+        "value": 1024
+       },
+       {
+        "label": "Seed (-1 = pick once at Preview)",
+        "name": "seed",
+        "ownership": "baseline",
+        "value": 42
+       },
+       {
+        "label": "Subseed",
+        "name": "subseed",
+        "ownership": "baseline",
+        "value": 700
+       },
+       {
+        "label": "Subseed strength",
+        "name": "subseed_strength",
+        "ownership": "baseline",
+        "value": 0.5
+       },
+       {
+        "label": "CLIP skip",
+        "name": "clip_skip",
+        "ownership": "baseline",
+        "value": null
+       }
+      ],
+      "experiment_id": "00000000000000000000000000000001",
+      "experiment_timestamp": "20260102-030405",
+      "images_per_value": 2,
+      "input_image": {},
+      "input_image_path": "",
+      "model_identity": {
+       "display_name": "ordinary.safetensors",
+       "exact_profile": null,
+       "family": "unknown",
+       "key": "model:unknown:ordinary",
+       "kind": "model",
+       "model_key": "ordinary",
+       "sha256": null
+      },
+      "model_policy_context": {
+       "contract": {
+        "allowed_backends": [
+         "forge_webui",
+         "a1111_webui"
+        ],
+        "controls": {
+         "cfg_scale": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "denoise_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "geometry": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "lora_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "model": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "sampler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "scheduler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "steps": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "upscale_factor": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "vae": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         }
+        },
+        "features": {
+         "adetailer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "controlnet": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "unsupported"
+         },
+         "embeddings": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "hires": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "lora": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "negative_prompt": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "prompt_optimizer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "refiner": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "upscale": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         }
+        },
+        "modes": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ],
+        "prompt_dialect": "sdxl_weighted_tags",
+        "required_backend": null,
+        "stages": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ]
+       },
+       "evidence": "registry_evidence",
+       "family": "sdxl",
+       "policy_id": "sdxl",
+       "profile_ref": null,
+       "selected_model": "ordinary.safetensors",
+       "stage": "txt2img"
+      },
+      "negative_prompt_text": "",
+      "prompt_source": {
+       "comparison_mode": false,
+       "compatibility_probe": null,
+       "embedding_experiment": null,
+       "end_value": 8,
+       "evidence_proposal": null,
+       "executor_base_contract": "learning_executor_base/1",
+       "fixed_strength": 1.0,
+       "frozen_seed_policy": null,
+       "grid": null,
+       "lora_composition": null,
+       "lora_mode": "strength",
+       "lora_name": null,
+       "prompt_model_matrix": null,
+       "prompt_semantics": "executor_base_before_globals_and_optimizer",
+       "prompt_slot": null,
+       "prompt_source": "custom",
+       "selected_items": [],
+       "selected_loras": [],
+       "selected_models": [],
+       "selected_prompt_index": 0,
+       "selected_prompt_label": "",
+       "selected_prompt_loras": [],
+       "selected_prompt_negative_text": "",
+       "selected_prompt_pack_name": "",
+       "selected_prompt_pack_path": "",
+       "start_value": 4,
+       "step_value": 2,
+       "strength_end": 1.5,
+       "strength_start": 0.5,
+       "strength_step": 0.1,
+       "study_type": "controlled_variable"
+      },
+      "prompt_text": "a lighthouse at dusk",
+      "schema_version": 2,
+      "seed_policy": {
+       "policy": "requested_seed_with_backend_observed_vector",
+       "requested_base_seed": 42,
+       "requested_sample_count": 2,
+       "requested_subseed": 700,
+       "subseed_strength": 0.5
+      },
+      "stage": "txt2img",
+      "stage_chain": [
+       "txt2img"
+      ],
+      "variable_under_test": "CFG Scale",
+      "variant_effective_settings": [
+       {
+        "settings": {
+         "cfg_scale": 4.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 4.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 6.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 6.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 8.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 8.0
+       }
+      ],
+      "variant_values": [
+       4.0,
+       6.0,
+       8.0
+      ]
+     },
+     "snapshot_sha256": "6aebf44d2e77e4ea2ddb94acb92ee9b155b4982bf0152a5f472e650d344b01d5",
+     "variant_id": "00000000000000000000000000000001:0"
+    },
+    "learning": {
+     "config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 4.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 4.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "experiment_name": "baseline study",
+     "experiment_timestamp": "20260102-030405",
+     "images_per_value": 2,
+     "prompt_source": {
+      "comparison_mode": false,
+      "compatibility_probe": null,
+      "embedding_experiment": null,
+      "end_value": 8,
+      "evidence_proposal": null,
+      "executor_base_contract": "learning_executor_base/1",
+      "fixed_strength": 1.0,
+      "frozen_seed_policy": null,
+      "grid": null,
+      "lora_composition": null,
+      "lora_mode": "strength",
+      "lora_name": null,
+      "prompt_model_matrix": null,
+      "prompt_semantics": "executor_base_before_globals_and_optimizer",
+      "prompt_slot": null,
+      "prompt_source": "custom",
+      "selected_items": [],
+      "selected_loras": [],
+      "selected_models": [],
+      "selected_prompt_index": 0,
+      "selected_prompt_label": "",
+      "selected_prompt_loras": [],
+      "selected_prompt_negative_text": "",
+      "selected_prompt_pack_name": "",
+      "selected_prompt_pack_path": "",
+      "start_value": 4,
+      "step_value": 2,
+      "strength_end": 1.5,
+      "strength_start": 0.5,
+      "strength_step": 0.1,
+      "study_type": "controlled_variable"
+     },
+     "schema": "stablenew.learning.v2.6",
+     "seed_policy": {
+      "policy": "requested_seed_with_backend_observed_vector",
+      "requested_base_seed": 42,
+      "requested_sample_count": 2,
+      "requested_subseed": 700,
+      "subseed_strength": 0.5
+     },
+     "stage": "txt2img",
+     "variable_under_test": "CFG Scale",
+     "variant_id": "00000000000000000000000000000001:0",
+     "variant_value": 4.0
+    },
+    "learning_enabled": true,
+    "learning_experiment": "00000000000000000000000000000001",
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_stage": "txt2img",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 4.0,
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "submission_source": "learning",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 0,
+   "variant_total": 3
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "baseline study",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 4.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "ordinary.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer": {
+     "ad_cfg_scale": 6.5,
+     "ad_confidence": 0.35,
+     "ad_denoising_strength": 0.3,
+     "ad_sampler": "DPM++ 2M",
+     "ad_steps": 25,
+     "adetailer_cfg": 6.5,
+     "adetailer_checkpoint_model": "ordinary.safetensors",
+     "adetailer_confidence": 0.35,
+     "adetailer_denoise": 0.3,
+     "adetailer_model": "face_yolov8n.pt",
+     "adetailer_sampler": "DPM++ 2M",
+     "adetailer_scheduler": "Karras",
+     "adetailer_steps": 25,
+     "cfg_scale": 6.5,
+     "denoising_strength": 0.3,
+     "model": "ordinary.safetensors",
+     "model_name": "ordinary.safetensors",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "steps": 25
+    },
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "img2img": {
+     "cfg_scale": 6.5,
+     "denoising_strength": 0.4,
+     "height": 1024,
+     "model": "ordinary.safetensors",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "steps": 25,
+     "width": 768
+    },
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 4.0,
+    "negative_prompt": "",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "a lighthouse at dusk",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 4.0,
+     "height": 1024,
+     "model": "ordinary.safetensors",
+     "negative_prompt": "",
+     "prompt": "a lighthouse at dusk",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    },
+    "upscale": {
+     "scale": 2.0,
+     "upscale_factor": 2.0,
+     "upscaler": "R-ESRGAN 4x+",
+     "upscaler_1": "R-ESRGAN 4x+",
+     "upscaler_name": "R-ESRGAN 4x+",
+     "upscaling_resize": 2.0
+    }
+   },
+   "images_per_prompt": 2,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "frozen_experiment": {
+     "executed_config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 4.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 4.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "schema_version": 1,
+     "snapshot": {
+      "baseline_authoring": {
+       "copied_at": "2026-01-02T03:04:05",
+       "copied_from": "pipeline",
+       "draft_signature": "da22c0945d68d3c40eba421fb7f6adb11ed283ab66f369315b4a613f149c17ea",
+       "edited": [],
+       "origin": "pipeline_copy",
+       "version": 1
+      },
+      "baseline_config": {
+       "adetailer": {
+        "ad_cfg_scale": 6.5,
+        "ad_confidence": 0.35,
+        "ad_denoising_strength": 0.3,
+        "ad_sampler": "DPM++ 2M",
+        "ad_steps": 25,
+        "adetailer_cfg": 6.5,
+        "adetailer_checkpoint_model": "ordinary.safetensors",
+        "adetailer_confidence": 0.35,
+        "adetailer_denoise": 0.3,
+        "adetailer_model": "face_yolov8n.pt",
+        "adetailer_sampler": "DPM++ 2M",
+        "adetailer_scheduler": "Karras",
+        "adetailer_steps": 25,
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "model_name": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "scale": 2.0,
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+",
+        "upscaler_1": "R-ESRGAN 4x+",
+        "upscaler_name": "R-ESRGAN 4x+",
+        "upscaling_resize": 2.0
+       }
+      },
+      "display_name": "baseline study",
+      "effective_settings": [
+       {
+        "label": "Model",
+        "name": "model",
+        "ownership": "baseline",
+        "value": "ordinary.safetensors"
+       },
+       {
+        "label": "VAE",
+        "name": "vae",
+        "ownership": "baseline",
+        "value": null
+       },
+       {
+        "label": "Sampler",
+        "name": "sampler_name",
+        "ownership": "baseline",
+        "value": "DPM++ 2M"
+       },
+       {
+        "label": "Scheduler",
+        "name": "scheduler",
+        "ownership": "baseline",
+        "value": "Karras"
+       },
+       {
+        "label": "Steps",
+        "name": "steps",
+        "ownership": "baseline",
+        "value": 30
+       },
+       {
+        "label": "CFG Scale",
+        "name": "cfg_scale",
+        "ownership": "variable",
+        "value": 7.0
+       },
+       {
+        "label": "Width",
+        "name": "width",
+        "ownership": "baseline",
+        "value": 768
+       },
+       {
+        "label": "Height",
+        "name": "height",
+        "ownership": "baseline",
+        "value": 1024
+       },
+       {
+        "label": "Seed (-1 = pick once at Preview)",
+        "name": "seed",
+        "ownership": "baseline",
+        "value": 42
+       },
+       {
+        "label": "Subseed",
+        "name": "subseed",
+        "ownership": "baseline",
+        "value": 700
+       },
+       {
+        "label": "Subseed strength",
+        "name": "subseed_strength",
+        "ownership": "baseline",
+        "value": 0.5
+       },
+       {
+        "label": "CLIP skip",
+        "name": "clip_skip",
+        "ownership": "baseline",
+        "value": null
+       }
+      ],
+      "experiment_id": "00000000000000000000000000000001",
+      "experiment_timestamp": "20260102-030405",
+      "images_per_value": 2,
+      "input_image": {},
+      "input_image_path": "",
+      "model_identity": {
+       "display_name": "ordinary.safetensors",
+       "exact_profile": null,
+       "family": "unknown",
+       "key": "model:unknown:ordinary",
+       "kind": "model",
+       "model_key": "ordinary",
+       "sha256": null
+      },
+      "model_policy_context": {
+       "contract": {
+        "allowed_backends": [
+         "forge_webui",
+         "a1111_webui"
+        ],
+        "controls": {
+         "cfg_scale": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "denoise_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "geometry": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "lora_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "model": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "sampler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "scheduler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "steps": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "upscale_factor": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "vae": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         }
+        },
+        "features": {
+         "adetailer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "controlnet": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "unsupported"
+         },
+         "embeddings": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "hires": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "lora": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "negative_prompt": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "prompt_optimizer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "refiner": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "upscale": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         }
+        },
+        "modes": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ],
+        "prompt_dialect": "sdxl_weighted_tags",
+        "required_backend": null,
+        "stages": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ]
+       },
+       "evidence": "registry_evidence",
+       "family": "sdxl",
+       "policy_id": "sdxl",
+       "profile_ref": null,
+       "selected_model": "ordinary.safetensors",
+       "stage": "txt2img"
+      },
+      "negative_prompt_text": "",
+      "prompt_source": {
+       "comparison_mode": false,
+       "compatibility_probe": null,
+       "embedding_experiment": null,
+       "end_value": 8,
+       "evidence_proposal": null,
+       "executor_base_contract": "learning_executor_base/1",
+       "fixed_strength": 1.0,
+       "frozen_seed_policy": null,
+       "grid": null,
+       "lora_composition": null,
+       "lora_mode": "strength",
+       "lora_name": null,
+       "prompt_model_matrix": null,
+       "prompt_semantics": "executor_base_before_globals_and_optimizer",
+       "prompt_slot": null,
+       "prompt_source": "custom",
+       "selected_items": [],
+       "selected_loras": [],
+       "selected_models": [],
+       "selected_prompt_index": 0,
+       "selected_prompt_label": "",
+       "selected_prompt_loras": [],
+       "selected_prompt_negative_text": "",
+       "selected_prompt_pack_name": "",
+       "selected_prompt_pack_path": "",
+       "start_value": 4,
+       "step_value": 2,
+       "strength_end": 1.5,
+       "strength_start": 0.5,
+       "strength_step": 0.1,
+       "study_type": "controlled_variable"
+      },
+      "prompt_text": "a lighthouse at dusk",
+      "schema_version": 2,
+      "seed_policy": {
+       "policy": "requested_seed_with_backend_observed_vector",
+       "requested_base_seed": 42,
+       "requested_sample_count": 2,
+       "requested_subseed": 700,
+       "subseed_strength": 0.5
+      },
+      "stage": "txt2img",
+      "stage_chain": [
+       "txt2img"
+      ],
+      "variable_under_test": "CFG Scale",
+      "variant_effective_settings": [
+       {
+        "settings": {
+         "cfg_scale": 4.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 4.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 6.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 6.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 8.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 8.0
+       }
+      ],
+      "variant_values": [
+       4.0,
+       6.0,
+       8.0
+      ]
+     },
+     "snapshot_sha256": "6aebf44d2e77e4ea2ddb94acb92ee9b155b4982bf0152a5f472e650d344b01d5",
+     "variant_id": "00000000000000000000000000000001:0"
+    },
+    "learning": {
+     "config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 4.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 4.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "experiment_name": "baseline study",
+     "experiment_timestamp": "20260102-030405",
+     "images_per_value": 2,
+     "prompt_source": {
+      "comparison_mode": false,
+      "compatibility_probe": null,
+      "embedding_experiment": null,
+      "end_value": 8,
+      "evidence_proposal": null,
+      "executor_base_contract": "learning_executor_base/1",
+      "fixed_strength": 1.0,
+      "frozen_seed_policy": null,
+      "grid": null,
+      "lora_composition": null,
+      "lora_mode": "strength",
+      "lora_name": null,
+      "prompt_model_matrix": null,
+      "prompt_semantics": "executor_base_before_globals_and_optimizer",
+      "prompt_slot": null,
+      "prompt_source": "custom",
+      "selected_items": [],
+      "selected_loras": [],
+      "selected_models": [],
+      "selected_prompt_index": 0,
+      "selected_prompt_label": "",
+      "selected_prompt_loras": [],
+      "selected_prompt_negative_text": "",
+      "selected_prompt_pack_name": "",
+      "selected_prompt_pack_path": "",
+      "start_value": 4,
+      "step_value": 2,
+      "strength_end": 1.5,
+      "strength_start": 0.5,
+      "strength_step": 0.1,
+      "study_type": "controlled_variable"
+     },
+     "schema": "stablenew.learning.v2.6",
+     "seed_policy": {
+      "policy": "requested_seed_with_backend_observed_vector",
+      "requested_base_seed": 42,
+      "requested_sample_count": 2,
+      "requested_subseed": 700,
+      "subseed_strength": 0.5
+     },
+     "stage": "txt2img",
+     "variable_under_test": "CFG Scale",
+     "variant_id": "00000000000000000000000000000001:0",
+     "variant_value": 4.0
+    },
+    "learning_enabled": true,
+    "learning_experiment": "00000000000000000000000000000001",
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_stage": "txt2img",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 4.0,
+    "submission_source": "learning"
+   },
+   "negative_prompt": "",
+   "positive_prompt": "a lighthouse at dusk",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ {
+  "job_id": "learning_00000000000000000000000000000001_00000000000000000000000000000001:1_00000000",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "00000000000000000000000000000001",
+    "experiment_name": "baseline study",
+    "variable_under_test": "CFG Scale",
+    "variant_index": 1,
+    "variant_value": 6.0
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "clip_skip": 2,
+    "frozen_experiment": {
+     "executed_config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 6.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 6.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "schema_version": 1,
+     "snapshot": {
+      "baseline_authoring": {
+       "copied_at": "2026-01-02T03:04:05",
+       "copied_from": "pipeline",
+       "draft_signature": "da22c0945d68d3c40eba421fb7f6adb11ed283ab66f369315b4a613f149c17ea",
+       "edited": [],
+       "origin": "pipeline_copy",
+       "version": 1
+      },
+      "baseline_config": {
+       "adetailer": {
+        "ad_cfg_scale": 6.5,
+        "ad_confidence": 0.35,
+        "ad_denoising_strength": 0.3,
+        "ad_sampler": "DPM++ 2M",
+        "ad_steps": 25,
+        "adetailer_cfg": 6.5,
+        "adetailer_checkpoint_model": "ordinary.safetensors",
+        "adetailer_confidence": 0.35,
+        "adetailer_denoise": 0.3,
+        "adetailer_model": "face_yolov8n.pt",
+        "adetailer_sampler": "DPM++ 2M",
+        "adetailer_scheduler": "Karras",
+        "adetailer_steps": 25,
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "model_name": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "scale": 2.0,
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+",
+        "upscaler_1": "R-ESRGAN 4x+",
+        "upscaler_name": "R-ESRGAN 4x+",
+        "upscaling_resize": 2.0
+       }
+      },
+      "display_name": "baseline study",
+      "effective_settings": [
+       {
+        "label": "Model",
+        "name": "model",
+        "ownership": "baseline",
+        "value": "ordinary.safetensors"
+       },
+       {
+        "label": "VAE",
+        "name": "vae",
+        "ownership": "baseline",
+        "value": null
+       },
+       {
+        "label": "Sampler",
+        "name": "sampler_name",
+        "ownership": "baseline",
+        "value": "DPM++ 2M"
+       },
+       {
+        "label": "Scheduler",
+        "name": "scheduler",
+        "ownership": "baseline",
+        "value": "Karras"
+       },
+       {
+        "label": "Steps",
+        "name": "steps",
+        "ownership": "baseline",
+        "value": 30
+       },
+       {
+        "label": "CFG Scale",
+        "name": "cfg_scale",
+        "ownership": "variable",
+        "value": 7.0
+       },
+       {
+        "label": "Width",
+        "name": "width",
+        "ownership": "baseline",
+        "value": 768
+       },
+       {
+        "label": "Height",
+        "name": "height",
+        "ownership": "baseline",
+        "value": 1024
+       },
+       {
+        "label": "Seed (-1 = pick once at Preview)",
+        "name": "seed",
+        "ownership": "baseline",
+        "value": 42
+       },
+       {
+        "label": "Subseed",
+        "name": "subseed",
+        "ownership": "baseline",
+        "value": 700
+       },
+       {
+        "label": "Subseed strength",
+        "name": "subseed_strength",
+        "ownership": "baseline",
+        "value": 0.5
+       },
+       {
+        "label": "CLIP skip",
+        "name": "clip_skip",
+        "ownership": "baseline",
+        "value": null
+       }
+      ],
+      "experiment_id": "00000000000000000000000000000001",
+      "experiment_timestamp": "20260102-030405",
+      "images_per_value": 2,
+      "input_image": {},
+      "input_image_path": "",
+      "model_identity": {
+       "display_name": "ordinary.safetensors",
+       "exact_profile": null,
+       "family": "unknown",
+       "key": "model:unknown:ordinary",
+       "kind": "model",
+       "model_key": "ordinary",
+       "sha256": null
+      },
+      "model_policy_context": {
+       "contract": {
+        "allowed_backends": [
+         "forge_webui",
+         "a1111_webui"
+        ],
+        "controls": {
+         "cfg_scale": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "denoise_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "geometry": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "lora_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "model": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "sampler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "scheduler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "steps": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "upscale_factor": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "vae": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         }
+        },
+        "features": {
+         "adetailer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "controlnet": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "unsupported"
+         },
+         "embeddings": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "hires": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "lora": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "negative_prompt": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "prompt_optimizer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "refiner": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "upscale": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         }
+        },
+        "modes": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ],
+        "prompt_dialect": "sdxl_weighted_tags",
+        "required_backend": null,
+        "stages": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ]
+       },
+       "evidence": "registry_evidence",
+       "family": "sdxl",
+       "policy_id": "sdxl",
+       "profile_ref": null,
+       "selected_model": "ordinary.safetensors",
+       "stage": "txt2img"
+      },
+      "negative_prompt_text": "",
+      "prompt_source": {
+       "comparison_mode": false,
+       "compatibility_probe": null,
+       "embedding_experiment": null,
+       "end_value": 8,
+       "evidence_proposal": null,
+       "executor_base_contract": "learning_executor_base/1",
+       "fixed_strength": 1.0,
+       "frozen_seed_policy": null,
+       "grid": null,
+       "lora_composition": null,
+       "lora_mode": "strength",
+       "lora_name": null,
+       "prompt_model_matrix": null,
+       "prompt_semantics": "executor_base_before_globals_and_optimizer",
+       "prompt_slot": null,
+       "prompt_source": "custom",
+       "selected_items": [],
+       "selected_loras": [],
+       "selected_models": [],
+       "selected_prompt_index": 0,
+       "selected_prompt_label": "",
+       "selected_prompt_loras": [],
+       "selected_prompt_negative_text": "",
+       "selected_prompt_pack_name": "",
+       "selected_prompt_pack_path": "",
+       "start_value": 4,
+       "step_value": 2,
+       "strength_end": 1.5,
+       "strength_start": 0.5,
+       "strength_step": 0.1,
+       "study_type": "controlled_variable"
+      },
+      "prompt_text": "a lighthouse at dusk",
+      "schema_version": 2,
+      "seed_policy": {
+       "policy": "requested_seed_with_backend_observed_vector",
+       "requested_base_seed": 42,
+       "requested_sample_count": 2,
+       "requested_subseed": 700,
+       "subseed_strength": 0.5
+      },
+      "stage": "txt2img",
+      "stage_chain": [
+       "txt2img"
+      ],
+      "variable_under_test": "CFG Scale",
+      "variant_effective_settings": [
+       {
+        "settings": {
+         "cfg_scale": 4.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 4.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 6.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 6.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 8.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 8.0
+       }
+      ],
+      "variant_values": [
+       4.0,
+       6.0,
+       8.0
+      ]
+     },
+     "snapshot_sha256": "6aebf44d2e77e4ea2ddb94acb92ee9b155b4982bf0152a5f472e650d344b01d5",
+     "variant_id": "00000000000000000000000000000001:1"
+    },
+    "learning": {
+     "config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 6.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 6.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "experiment_name": "baseline study",
+     "experiment_timestamp": "20260102-030405",
+     "images_per_value": 2,
+     "prompt_source": {
+      "comparison_mode": false,
+      "compatibility_probe": null,
+      "embedding_experiment": null,
+      "end_value": 8,
+      "evidence_proposal": null,
+      "executor_base_contract": "learning_executor_base/1",
+      "fixed_strength": 1.0,
+      "frozen_seed_policy": null,
+      "grid": null,
+      "lora_composition": null,
+      "lora_mode": "strength",
+      "lora_name": null,
+      "prompt_model_matrix": null,
+      "prompt_semantics": "executor_base_before_globals_and_optimizer",
+      "prompt_slot": null,
+      "prompt_source": "custom",
+      "selected_items": [],
+      "selected_loras": [],
+      "selected_models": [],
+      "selected_prompt_index": 0,
+      "selected_prompt_label": "",
+      "selected_prompt_loras": [],
+      "selected_prompt_negative_text": "",
+      "selected_prompt_pack_name": "",
+      "selected_prompt_pack_path": "",
+      "start_value": 4,
+      "step_value": 2,
+      "strength_end": 1.5,
+      "strength_start": 0.5,
+      "strength_step": 0.1,
+      "study_type": "controlled_variable"
+     },
+     "schema": "stablenew.learning.v2.6",
+     "seed_policy": {
+      "policy": "requested_seed_with_backend_observed_vector",
+      "requested_base_seed": 42,
+      "requested_sample_count": 2,
+      "requested_subseed": 700,
+      "subseed_strength": 0.5
+     },
+     "stage": "txt2img",
+     "variable_under_test": "CFG Scale",
+     "variant_id": "00000000000000000000000000000001:1",
+     "variant_value": 6.0
+    },
+    "learning_enabled": true,
+    "learning_experiment": "00000000000000000000000000000001",
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_stage": "txt2img",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 6.0,
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "submission_source": "learning",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 1,
+   "variant_total": 3
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "baseline study",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 6.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "ordinary.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer": {
+     "ad_cfg_scale": 6.5,
+     "ad_confidence": 0.35,
+     "ad_denoising_strength": 0.3,
+     "ad_sampler": "DPM++ 2M",
+     "ad_steps": 25,
+     "adetailer_cfg": 6.5,
+     "adetailer_checkpoint_model": "ordinary.safetensors",
+     "adetailer_confidence": 0.35,
+     "adetailer_denoise": 0.3,
+     "adetailer_model": "face_yolov8n.pt",
+     "adetailer_sampler": "DPM++ 2M",
+     "adetailer_scheduler": "Karras",
+     "adetailer_steps": 25,
+     "cfg_scale": 6.5,
+     "denoising_strength": 0.3,
+     "model": "ordinary.safetensors",
+     "model_name": "ordinary.safetensors",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "steps": 25
+    },
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "img2img": {
+     "cfg_scale": 6.5,
+     "denoising_strength": 0.4,
+     "height": 1024,
+     "model": "ordinary.safetensors",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "steps": 25,
+     "width": 768
+    },
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 6.0,
+    "negative_prompt": "",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "a lighthouse at dusk",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 6.0,
+     "height": 1024,
+     "model": "ordinary.safetensors",
+     "negative_prompt": "",
+     "prompt": "a lighthouse at dusk",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    },
+    "upscale": {
+     "scale": 2.0,
+     "upscale_factor": 2.0,
+     "upscaler": "R-ESRGAN 4x+",
+     "upscaler_1": "R-ESRGAN 4x+",
+     "upscaler_name": "R-ESRGAN 4x+",
+     "upscaling_resize": 2.0
+    }
+   },
+   "images_per_prompt": 2,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "frozen_experiment": {
+     "executed_config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 6.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 6.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "schema_version": 1,
+     "snapshot": {
+      "baseline_authoring": {
+       "copied_at": "2026-01-02T03:04:05",
+       "copied_from": "pipeline",
+       "draft_signature": "da22c0945d68d3c40eba421fb7f6adb11ed283ab66f369315b4a613f149c17ea",
+       "edited": [],
+       "origin": "pipeline_copy",
+       "version": 1
+      },
+      "baseline_config": {
+       "adetailer": {
+        "ad_cfg_scale": 6.5,
+        "ad_confidence": 0.35,
+        "ad_denoising_strength": 0.3,
+        "ad_sampler": "DPM++ 2M",
+        "ad_steps": 25,
+        "adetailer_cfg": 6.5,
+        "adetailer_checkpoint_model": "ordinary.safetensors",
+        "adetailer_confidence": 0.35,
+        "adetailer_denoise": 0.3,
+        "adetailer_model": "face_yolov8n.pt",
+        "adetailer_sampler": "DPM++ 2M",
+        "adetailer_scheduler": "Karras",
+        "adetailer_steps": 25,
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "model_name": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "scale": 2.0,
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+",
+        "upscaler_1": "R-ESRGAN 4x+",
+        "upscaler_name": "R-ESRGAN 4x+",
+        "upscaling_resize": 2.0
+       }
+      },
+      "display_name": "baseline study",
+      "effective_settings": [
+       {
+        "label": "Model",
+        "name": "model",
+        "ownership": "baseline",
+        "value": "ordinary.safetensors"
+       },
+       {
+        "label": "VAE",
+        "name": "vae",
+        "ownership": "baseline",
+        "value": null
+       },
+       {
+        "label": "Sampler",
+        "name": "sampler_name",
+        "ownership": "baseline",
+        "value": "DPM++ 2M"
+       },
+       {
+        "label": "Scheduler",
+        "name": "scheduler",
+        "ownership": "baseline",
+        "value": "Karras"
+       },
+       {
+        "label": "Steps",
+        "name": "steps",
+        "ownership": "baseline",
+        "value": 30
+       },
+       {
+        "label": "CFG Scale",
+        "name": "cfg_scale",
+        "ownership": "variable",
+        "value": 7.0
+       },
+       {
+        "label": "Width",
+        "name": "width",
+        "ownership": "baseline",
+        "value": 768
+       },
+       {
+        "label": "Height",
+        "name": "height",
+        "ownership": "baseline",
+        "value": 1024
+       },
+       {
+        "label": "Seed (-1 = pick once at Preview)",
+        "name": "seed",
+        "ownership": "baseline",
+        "value": 42
+       },
+       {
+        "label": "Subseed",
+        "name": "subseed",
+        "ownership": "baseline",
+        "value": 700
+       },
+       {
+        "label": "Subseed strength",
+        "name": "subseed_strength",
+        "ownership": "baseline",
+        "value": 0.5
+       },
+       {
+        "label": "CLIP skip",
+        "name": "clip_skip",
+        "ownership": "baseline",
+        "value": null
+       }
+      ],
+      "experiment_id": "00000000000000000000000000000001",
+      "experiment_timestamp": "20260102-030405",
+      "images_per_value": 2,
+      "input_image": {},
+      "input_image_path": "",
+      "model_identity": {
+       "display_name": "ordinary.safetensors",
+       "exact_profile": null,
+       "family": "unknown",
+       "key": "model:unknown:ordinary",
+       "kind": "model",
+       "model_key": "ordinary",
+       "sha256": null
+      },
+      "model_policy_context": {
+       "contract": {
+        "allowed_backends": [
+         "forge_webui",
+         "a1111_webui"
+        ],
+        "controls": {
+         "cfg_scale": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "denoise_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "geometry": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "lora_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "model": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "sampler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "scheduler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "steps": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "upscale_factor": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "vae": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         }
+        },
+        "features": {
+         "adetailer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "controlnet": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "unsupported"
+         },
+         "embeddings": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "hires": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "lora": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "negative_prompt": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "prompt_optimizer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "refiner": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "upscale": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         }
+        },
+        "modes": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ],
+        "prompt_dialect": "sdxl_weighted_tags",
+        "required_backend": null,
+        "stages": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ]
+       },
+       "evidence": "registry_evidence",
+       "family": "sdxl",
+       "policy_id": "sdxl",
+       "profile_ref": null,
+       "selected_model": "ordinary.safetensors",
+       "stage": "txt2img"
+      },
+      "negative_prompt_text": "",
+      "prompt_source": {
+       "comparison_mode": false,
+       "compatibility_probe": null,
+       "embedding_experiment": null,
+       "end_value": 8,
+       "evidence_proposal": null,
+       "executor_base_contract": "learning_executor_base/1",
+       "fixed_strength": 1.0,
+       "frozen_seed_policy": null,
+       "grid": null,
+       "lora_composition": null,
+       "lora_mode": "strength",
+       "lora_name": null,
+       "prompt_model_matrix": null,
+       "prompt_semantics": "executor_base_before_globals_and_optimizer",
+       "prompt_slot": null,
+       "prompt_source": "custom",
+       "selected_items": [],
+       "selected_loras": [],
+       "selected_models": [],
+       "selected_prompt_index": 0,
+       "selected_prompt_label": "",
+       "selected_prompt_loras": [],
+       "selected_prompt_negative_text": "",
+       "selected_prompt_pack_name": "",
+       "selected_prompt_pack_path": "",
+       "start_value": 4,
+       "step_value": 2,
+       "strength_end": 1.5,
+       "strength_start": 0.5,
+       "strength_step": 0.1,
+       "study_type": "controlled_variable"
+      },
+      "prompt_text": "a lighthouse at dusk",
+      "schema_version": 2,
+      "seed_policy": {
+       "policy": "requested_seed_with_backend_observed_vector",
+       "requested_base_seed": 42,
+       "requested_sample_count": 2,
+       "requested_subseed": 700,
+       "subseed_strength": 0.5
+      },
+      "stage": "txt2img",
+      "stage_chain": [
+       "txt2img"
+      ],
+      "variable_under_test": "CFG Scale",
+      "variant_effective_settings": [
+       {
+        "settings": {
+         "cfg_scale": 4.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 4.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 6.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 6.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 8.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 8.0
+       }
+      ],
+      "variant_values": [
+       4.0,
+       6.0,
+       8.0
+      ]
+     },
+     "snapshot_sha256": "6aebf44d2e77e4ea2ddb94acb92ee9b155b4982bf0152a5f472e650d344b01d5",
+     "variant_id": "00000000000000000000000000000001:1"
+    },
+    "learning": {
+     "config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 6.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 6.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "experiment_name": "baseline study",
+     "experiment_timestamp": "20260102-030405",
+     "images_per_value": 2,
+     "prompt_source": {
+      "comparison_mode": false,
+      "compatibility_probe": null,
+      "embedding_experiment": null,
+      "end_value": 8,
+      "evidence_proposal": null,
+      "executor_base_contract": "learning_executor_base/1",
+      "fixed_strength": 1.0,
+      "frozen_seed_policy": null,
+      "grid": null,
+      "lora_composition": null,
+      "lora_mode": "strength",
+      "lora_name": null,
+      "prompt_model_matrix": null,
+      "prompt_semantics": "executor_base_before_globals_and_optimizer",
+      "prompt_slot": null,
+      "prompt_source": "custom",
+      "selected_items": [],
+      "selected_loras": [],
+      "selected_models": [],
+      "selected_prompt_index": 0,
+      "selected_prompt_label": "",
+      "selected_prompt_loras": [],
+      "selected_prompt_negative_text": "",
+      "selected_prompt_pack_name": "",
+      "selected_prompt_pack_path": "",
+      "start_value": 4,
+      "step_value": 2,
+      "strength_end": 1.5,
+      "strength_start": 0.5,
+      "strength_step": 0.1,
+      "study_type": "controlled_variable"
+     },
+     "schema": "stablenew.learning.v2.6",
+     "seed_policy": {
+      "policy": "requested_seed_with_backend_observed_vector",
+      "requested_base_seed": 42,
+      "requested_sample_count": 2,
+      "requested_subseed": 700,
+      "subseed_strength": 0.5
+     },
+     "stage": "txt2img",
+     "variable_under_test": "CFG Scale",
+     "variant_id": "00000000000000000000000000000001:1",
+     "variant_value": 6.0
+    },
+    "learning_enabled": true,
+    "learning_experiment": "00000000000000000000000000000001",
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_stage": "txt2img",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 6.0,
+    "submission_source": "learning"
+   },
+   "negative_prompt": "",
+   "positive_prompt": "a lighthouse at dusk",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ {
+  "job_id": "learning_00000000000000000000000000000001_00000000000000000000000000000001:2_00000000",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "00000000000000000000000000000001",
+    "experiment_name": "baseline study",
+    "variable_under_test": "CFG Scale",
+    "variant_index": 2,
+    "variant_value": 8.0
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "clip_skip": 2,
+    "frozen_experiment": {
+     "executed_config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 8.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 8.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "schema_version": 1,
+     "snapshot": {
+      "baseline_authoring": {
+       "copied_at": "2026-01-02T03:04:05",
+       "copied_from": "pipeline",
+       "draft_signature": "da22c0945d68d3c40eba421fb7f6adb11ed283ab66f369315b4a613f149c17ea",
+       "edited": [],
+       "origin": "pipeline_copy",
+       "version": 1
+      },
+      "baseline_config": {
+       "adetailer": {
+        "ad_cfg_scale": 6.5,
+        "ad_confidence": 0.35,
+        "ad_denoising_strength": 0.3,
+        "ad_sampler": "DPM++ 2M",
+        "ad_steps": 25,
+        "adetailer_cfg": 6.5,
+        "adetailer_checkpoint_model": "ordinary.safetensors",
+        "adetailer_confidence": 0.35,
+        "adetailer_denoise": 0.3,
+        "adetailer_model": "face_yolov8n.pt",
+        "adetailer_sampler": "DPM++ 2M",
+        "adetailer_scheduler": "Karras",
+        "adetailer_steps": 25,
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "model_name": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "scale": 2.0,
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+",
+        "upscaler_1": "R-ESRGAN 4x+",
+        "upscaler_name": "R-ESRGAN 4x+",
+        "upscaling_resize": 2.0
+       }
+      },
+      "display_name": "baseline study",
+      "effective_settings": [
+       {
+        "label": "Model",
+        "name": "model",
+        "ownership": "baseline",
+        "value": "ordinary.safetensors"
+       },
+       {
+        "label": "VAE",
+        "name": "vae",
+        "ownership": "baseline",
+        "value": null
+       },
+       {
+        "label": "Sampler",
+        "name": "sampler_name",
+        "ownership": "baseline",
+        "value": "DPM++ 2M"
+       },
+       {
+        "label": "Scheduler",
+        "name": "scheduler",
+        "ownership": "baseline",
+        "value": "Karras"
+       },
+       {
+        "label": "Steps",
+        "name": "steps",
+        "ownership": "baseline",
+        "value": 30
+       },
+       {
+        "label": "CFG Scale",
+        "name": "cfg_scale",
+        "ownership": "variable",
+        "value": 7.0
+       },
+       {
+        "label": "Width",
+        "name": "width",
+        "ownership": "baseline",
+        "value": 768
+       },
+       {
+        "label": "Height",
+        "name": "height",
+        "ownership": "baseline",
+        "value": 1024
+       },
+       {
+        "label": "Seed (-1 = pick once at Preview)",
+        "name": "seed",
+        "ownership": "baseline",
+        "value": 42
+       },
+       {
+        "label": "Subseed",
+        "name": "subseed",
+        "ownership": "baseline",
+        "value": 700
+       },
+       {
+        "label": "Subseed strength",
+        "name": "subseed_strength",
+        "ownership": "baseline",
+        "value": 0.5
+       },
+       {
+        "label": "CLIP skip",
+        "name": "clip_skip",
+        "ownership": "baseline",
+        "value": null
+       }
+      ],
+      "experiment_id": "00000000000000000000000000000001",
+      "experiment_timestamp": "20260102-030405",
+      "images_per_value": 2,
+      "input_image": {},
+      "input_image_path": "",
+      "model_identity": {
+       "display_name": "ordinary.safetensors",
+       "exact_profile": null,
+       "family": "unknown",
+       "key": "model:unknown:ordinary",
+       "kind": "model",
+       "model_key": "ordinary",
+       "sha256": null
+      },
+      "model_policy_context": {
+       "contract": {
+        "allowed_backends": [
+         "forge_webui",
+         "a1111_webui"
+        ],
+        "controls": {
+         "cfg_scale": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "denoise_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "geometry": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "lora_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "model": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "sampler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "scheduler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "steps": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "upscale_factor": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "vae": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         }
+        },
+        "features": {
+         "adetailer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "controlnet": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "unsupported"
+         },
+         "embeddings": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "hires": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "lora": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "negative_prompt": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "prompt_optimizer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "refiner": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "upscale": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         }
+        },
+        "modes": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ],
+        "prompt_dialect": "sdxl_weighted_tags",
+        "required_backend": null,
+        "stages": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ]
+       },
+       "evidence": "registry_evidence",
+       "family": "sdxl",
+       "policy_id": "sdxl",
+       "profile_ref": null,
+       "selected_model": "ordinary.safetensors",
+       "stage": "txt2img"
+      },
+      "negative_prompt_text": "",
+      "prompt_source": {
+       "comparison_mode": false,
+       "compatibility_probe": null,
+       "embedding_experiment": null,
+       "end_value": 8,
+       "evidence_proposal": null,
+       "executor_base_contract": "learning_executor_base/1",
+       "fixed_strength": 1.0,
+       "frozen_seed_policy": null,
+       "grid": null,
+       "lora_composition": null,
+       "lora_mode": "strength",
+       "lora_name": null,
+       "prompt_model_matrix": null,
+       "prompt_semantics": "executor_base_before_globals_and_optimizer",
+       "prompt_slot": null,
+       "prompt_source": "custom",
+       "selected_items": [],
+       "selected_loras": [],
+       "selected_models": [],
+       "selected_prompt_index": 0,
+       "selected_prompt_label": "",
+       "selected_prompt_loras": [],
+       "selected_prompt_negative_text": "",
+       "selected_prompt_pack_name": "",
+       "selected_prompt_pack_path": "",
+       "start_value": 4,
+       "step_value": 2,
+       "strength_end": 1.5,
+       "strength_start": 0.5,
+       "strength_step": 0.1,
+       "study_type": "controlled_variable"
+      },
+      "prompt_text": "a lighthouse at dusk",
+      "schema_version": 2,
+      "seed_policy": {
+       "policy": "requested_seed_with_backend_observed_vector",
+       "requested_base_seed": 42,
+       "requested_sample_count": 2,
+       "requested_subseed": 700,
+       "subseed_strength": 0.5
+      },
+      "stage": "txt2img",
+      "stage_chain": [
+       "txt2img"
+      ],
+      "variable_under_test": "CFG Scale",
+      "variant_effective_settings": [
+       {
+        "settings": {
+         "cfg_scale": 4.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 4.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 6.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 6.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 8.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 8.0
+       }
+      ],
+      "variant_values": [
+       4.0,
+       6.0,
+       8.0
+      ]
+     },
+     "snapshot_sha256": "6aebf44d2e77e4ea2ddb94acb92ee9b155b4982bf0152a5f472e650d344b01d5",
+     "variant_id": "00000000000000000000000000000001:2"
+    },
+    "learning": {
+     "config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 8.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 8.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "experiment_name": "baseline study",
+     "experiment_timestamp": "20260102-030405",
+     "images_per_value": 2,
+     "prompt_source": {
+      "comparison_mode": false,
+      "compatibility_probe": null,
+      "embedding_experiment": null,
+      "end_value": 8,
+      "evidence_proposal": null,
+      "executor_base_contract": "learning_executor_base/1",
+      "fixed_strength": 1.0,
+      "frozen_seed_policy": null,
+      "grid": null,
+      "lora_composition": null,
+      "lora_mode": "strength",
+      "lora_name": null,
+      "prompt_model_matrix": null,
+      "prompt_semantics": "executor_base_before_globals_and_optimizer",
+      "prompt_slot": null,
+      "prompt_source": "custom",
+      "selected_items": [],
+      "selected_loras": [],
+      "selected_models": [],
+      "selected_prompt_index": 0,
+      "selected_prompt_label": "",
+      "selected_prompt_loras": [],
+      "selected_prompt_negative_text": "",
+      "selected_prompt_pack_name": "",
+      "selected_prompt_pack_path": "",
+      "start_value": 4,
+      "step_value": 2,
+      "strength_end": 1.5,
+      "strength_start": 0.5,
+      "strength_step": 0.1,
+      "study_type": "controlled_variable"
+     },
+     "schema": "stablenew.learning.v2.6",
+     "seed_policy": {
+      "policy": "requested_seed_with_backend_observed_vector",
+      "requested_base_seed": 42,
+      "requested_sample_count": 2,
+      "requested_subseed": 700,
+      "subseed_strength": 0.5
+     },
+     "stage": "txt2img",
+     "variable_under_test": "CFG Scale",
+     "variant_id": "00000000000000000000000000000001:2",
+     "variant_value": 8.0
+    },
+    "learning_enabled": true,
+    "learning_experiment": "00000000000000000000000000000001",
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_stage": "txt2img",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 8.0,
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "submission_source": "learning",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 2,
+   "variant_total": 3
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "baseline study",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 8.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "ordinary.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer": {
+     "ad_cfg_scale": 6.5,
+     "ad_confidence": 0.35,
+     "ad_denoising_strength": 0.3,
+     "ad_sampler": "DPM++ 2M",
+     "ad_steps": 25,
+     "adetailer_cfg": 6.5,
+     "adetailer_checkpoint_model": "ordinary.safetensors",
+     "adetailer_confidence": 0.35,
+     "adetailer_denoise": 0.3,
+     "adetailer_model": "face_yolov8n.pt",
+     "adetailer_sampler": "DPM++ 2M",
+     "adetailer_scheduler": "Karras",
+     "adetailer_steps": 25,
+     "cfg_scale": 6.5,
+     "denoising_strength": 0.3,
+     "model": "ordinary.safetensors",
+     "model_name": "ordinary.safetensors",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "steps": 25
+    },
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "img2img": {
+     "cfg_scale": 6.5,
+     "denoising_strength": 0.4,
+     "height": 1024,
+     "model": "ordinary.safetensors",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "steps": 25,
+     "width": 768
+    },
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 8.0,
+    "negative_prompt": "",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "a lighthouse at dusk",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 8.0,
+     "height": 1024,
+     "model": "ordinary.safetensors",
+     "negative_prompt": "",
+     "prompt": "a lighthouse at dusk",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    },
+    "upscale": {
+     "scale": 2.0,
+     "upscale_factor": 2.0,
+     "upscaler": "R-ESRGAN 4x+",
+     "upscaler_1": "R-ESRGAN 4x+",
+     "upscaler_name": "R-ESRGAN 4x+",
+     "upscaling_resize": 2.0
+    }
+   },
+   "images_per_prompt": 2,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "frozen_experiment": {
+     "executed_config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 8.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 8.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "schema_version": 1,
+     "snapshot": {
+      "baseline_authoring": {
+       "copied_at": "2026-01-02T03:04:05",
+       "copied_from": "pipeline",
+       "draft_signature": "da22c0945d68d3c40eba421fb7f6adb11ed283ab66f369315b4a613f149c17ea",
+       "edited": [],
+       "origin": "pipeline_copy",
+       "version": 1
+      },
+      "baseline_config": {
+       "adetailer": {
+        "ad_cfg_scale": 6.5,
+        "ad_confidence": 0.35,
+        "ad_denoising_strength": 0.3,
+        "ad_sampler": "DPM++ 2M",
+        "ad_steps": 25,
+        "adetailer_cfg": 6.5,
+        "adetailer_checkpoint_model": "ordinary.safetensors",
+        "adetailer_confidence": 0.35,
+        "adetailer_denoise": 0.3,
+        "adetailer_model": "face_yolov8n.pt",
+        "adetailer_sampler": "DPM++ 2M",
+        "adetailer_scheduler": "Karras",
+        "adetailer_steps": 25,
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.3,
+        "model": "ordinary.safetensors",
+        "model_name": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25
+       },
+       "backend_options": {
+        "image": {
+         "backend_id": "forge_webui"
+        }
+       },
+       "global_negative_prompt": "global negative",
+       "global_positive_prompt": "",
+       "global_prompt_policy_source": "frozen_njr",
+       "img2img": {
+        "cfg_scale": 6.5,
+        "denoising_strength": 0.4,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "steps": 25,
+        "width": 768
+       },
+       "pipeline": {
+        "adetailer_enabled": false,
+        "apply_global_negative_adetailer": true,
+        "apply_global_negative_img2img": true,
+        "apply_global_negative_txt2img": true,
+        "apply_global_negative_upscale": true,
+        "apply_global_positive_txt2img": false,
+        "img2img_enabled": false,
+        "txt2img_enabled": true,
+        "upscale_enabled": false
+       },
+       "prompt_optimizer": {
+        "enabled": false
+       },
+       "txt2img": {
+        "cfg_scale": 7.0,
+        "height": 1024,
+        "model": "ordinary.safetensors",
+        "sampler_name": "DPM++ 2M",
+        "scheduler": "Karras",
+        "seed": 42,
+        "steps": 30,
+        "subseed": 700,
+        "subseed_strength": 0.5,
+        "vae": "",
+        "width": 768
+       },
+       "upscale": {
+        "scale": 2.0,
+        "upscale_factor": 2.0,
+        "upscaler": "R-ESRGAN 4x+",
+        "upscaler_1": "R-ESRGAN 4x+",
+        "upscaler_name": "R-ESRGAN 4x+",
+        "upscaling_resize": 2.0
+       }
+      },
+      "display_name": "baseline study",
+      "effective_settings": [
+       {
+        "label": "Model",
+        "name": "model",
+        "ownership": "baseline",
+        "value": "ordinary.safetensors"
+       },
+       {
+        "label": "VAE",
+        "name": "vae",
+        "ownership": "baseline",
+        "value": null
+       },
+       {
+        "label": "Sampler",
+        "name": "sampler_name",
+        "ownership": "baseline",
+        "value": "DPM++ 2M"
+       },
+       {
+        "label": "Scheduler",
+        "name": "scheduler",
+        "ownership": "baseline",
+        "value": "Karras"
+       },
+       {
+        "label": "Steps",
+        "name": "steps",
+        "ownership": "baseline",
+        "value": 30
+       },
+       {
+        "label": "CFG Scale",
+        "name": "cfg_scale",
+        "ownership": "variable",
+        "value": 7.0
+       },
+       {
+        "label": "Width",
+        "name": "width",
+        "ownership": "baseline",
+        "value": 768
+       },
+       {
+        "label": "Height",
+        "name": "height",
+        "ownership": "baseline",
+        "value": 1024
+       },
+       {
+        "label": "Seed (-1 = pick once at Preview)",
+        "name": "seed",
+        "ownership": "baseline",
+        "value": 42
+       },
+       {
+        "label": "Subseed",
+        "name": "subseed",
+        "ownership": "baseline",
+        "value": 700
+       },
+       {
+        "label": "Subseed strength",
+        "name": "subseed_strength",
+        "ownership": "baseline",
+        "value": 0.5
+       },
+       {
+        "label": "CLIP skip",
+        "name": "clip_skip",
+        "ownership": "baseline",
+        "value": null
+       }
+      ],
+      "experiment_id": "00000000000000000000000000000001",
+      "experiment_timestamp": "20260102-030405",
+      "images_per_value": 2,
+      "input_image": {},
+      "input_image_path": "",
+      "model_identity": {
+       "display_name": "ordinary.safetensors",
+       "exact_profile": null,
+       "family": "unknown",
+       "key": "model:unknown:ordinary",
+       "kind": "model",
+       "model_key": "ordinary",
+       "sha256": null
+      },
+      "model_policy_context": {
+       "contract": {
+        "allowed_backends": [
+         "forge_webui",
+         "a1111_webui"
+        ],
+        "controls": {
+         "cfg_scale": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "denoise_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "geometry": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "lora_strength": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "model": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "sampler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "scheduler": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "steps": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "upscale_factor": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         },
+         "vae": {
+          "allowed": [],
+          "mode": "configurable",
+          "value": null
+         }
+        },
+        "features": {
+         "adetailer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "controlnet": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "unsupported"
+         },
+         "embeddings": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "hires": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "lora": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "negative_prompt": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "prompt_optimizer": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "refiner": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         },
+         "upscale": {
+          "compatibility_policy": "",
+          "limit": null,
+          "stages": [],
+          "support": "supported"
+         }
+        },
+        "modes": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ],
+        "prompt_dialect": "sdxl_weighted_tags",
+        "required_backend": null,
+        "stages": [
+         "txt2img",
+         "img2img",
+         "adetailer",
+         "upscale"
+        ]
+       },
+       "evidence": "registry_evidence",
+       "family": "sdxl",
+       "policy_id": "sdxl",
+       "profile_ref": null,
+       "selected_model": "ordinary.safetensors",
+       "stage": "txt2img"
+      },
+      "negative_prompt_text": "",
+      "prompt_source": {
+       "comparison_mode": false,
+       "compatibility_probe": null,
+       "embedding_experiment": null,
+       "end_value": 8,
+       "evidence_proposal": null,
+       "executor_base_contract": "learning_executor_base/1",
+       "fixed_strength": 1.0,
+       "frozen_seed_policy": null,
+       "grid": null,
+       "lora_composition": null,
+       "lora_mode": "strength",
+       "lora_name": null,
+       "prompt_model_matrix": null,
+       "prompt_semantics": "executor_base_before_globals_and_optimizer",
+       "prompt_slot": null,
+       "prompt_source": "custom",
+       "selected_items": [],
+       "selected_loras": [],
+       "selected_models": [],
+       "selected_prompt_index": 0,
+       "selected_prompt_label": "",
+       "selected_prompt_loras": [],
+       "selected_prompt_negative_text": "",
+       "selected_prompt_pack_name": "",
+       "selected_prompt_pack_path": "",
+       "start_value": 4,
+       "step_value": 2,
+       "strength_end": 1.5,
+       "strength_start": 0.5,
+       "strength_step": 0.1,
+       "study_type": "controlled_variable"
+      },
+      "prompt_text": "a lighthouse at dusk",
+      "schema_version": 2,
+      "seed_policy": {
+       "policy": "requested_seed_with_backend_observed_vector",
+       "requested_base_seed": 42,
+       "requested_sample_count": 2,
+       "requested_subseed": 700,
+       "subseed_strength": 0.5
+      },
+      "stage": "txt2img",
+      "stage_chain": [
+       "txt2img"
+      ],
+      "variable_under_test": "CFG Scale",
+      "variant_effective_settings": [
+       {
+        "settings": {
+         "cfg_scale": 4.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 4.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 6.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 6.0
+       },
+       {
+        "settings": {
+         "cfg_scale": 8.0,
+         "height": 1024,
+         "model": "ordinary.safetensors",
+         "sampler_name": "DPM++ 2M",
+         "scheduler": "Karras",
+         "seed": 42,
+         "stage": "txt2img",
+         "steps": 30,
+         "subseed": 700,
+         "subseed_strength": 0.5,
+         "width": 768
+        },
+        "value": 8.0
+       }
+      ],
+      "variant_values": [
+       4.0,
+       6.0,
+       8.0
+      ]
+     },
+     "snapshot_sha256": "6aebf44d2e77e4ea2ddb94acb92ee9b155b4982bf0152a5f472e650d344b01d5",
+     "variant_id": "00000000000000000000000000000001:2"
+    },
+    "learning": {
+     "config": {
+      "adetailer": {
+       "ad_cfg_scale": 6.5,
+       "ad_confidence": 0.35,
+       "ad_denoising_strength": 0.3,
+       "ad_sampler": "DPM++ 2M",
+       "ad_steps": 25,
+       "adetailer_cfg": 6.5,
+       "adetailer_checkpoint_model": "ordinary.safetensors",
+       "adetailer_confidence": 0.35,
+       "adetailer_denoise": 0.3,
+       "adetailer_model": "face_yolov8n.pt",
+       "adetailer_sampler": "DPM++ 2M",
+       "adetailer_scheduler": "Karras",
+       "adetailer_steps": 25,
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.3,
+       "model": "ordinary.safetensors",
+       "model_name": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25
+      },
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "img2img": {
+       "cfg_scale": 6.5,
+       "denoising_strength": 0.4,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "steps": 25,
+       "width": 768
+      },
+      "learning_experiment_id": "00000000000000000000000000000001",
+      "learning_variable": "CFG Scale",
+      "learning_variant_value": 8.0,
+      "negative_prompt": "",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "a lighthouse at dusk",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 8.0,
+       "height": 1024,
+       "model": "ordinary.safetensors",
+       "negative_prompt": "",
+       "prompt": "a lighthouse at dusk",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      },
+      "upscale": {
+       "scale": 2.0,
+       "upscale_factor": 2.0,
+       "upscaler": "R-ESRGAN 4x+",
+       "upscaler_1": "R-ESRGAN 4x+",
+       "upscaler_name": "R-ESRGAN 4x+",
+       "upscaling_resize": 2.0
+      }
+     },
+     "experiment_id": "00000000000000000000000000000001",
+     "experiment_name": "baseline study",
+     "experiment_timestamp": "20260102-030405",
+     "images_per_value": 2,
+     "prompt_source": {
+      "comparison_mode": false,
+      "compatibility_probe": null,
+      "embedding_experiment": null,
+      "end_value": 8,
+      "evidence_proposal": null,
+      "executor_base_contract": "learning_executor_base/1",
+      "fixed_strength": 1.0,
+      "frozen_seed_policy": null,
+      "grid": null,
+      "lora_composition": null,
+      "lora_mode": "strength",
+      "lora_name": null,
+      "prompt_model_matrix": null,
+      "prompt_semantics": "executor_base_before_globals_and_optimizer",
+      "prompt_slot": null,
+      "prompt_source": "custom",
+      "selected_items": [],
+      "selected_loras": [],
+      "selected_models": [],
+      "selected_prompt_index": 0,
+      "selected_prompt_label": "",
+      "selected_prompt_loras": [],
+      "selected_prompt_negative_text": "",
+      "selected_prompt_pack_name": "",
+      "selected_prompt_pack_path": "",
+      "start_value": 4,
+      "step_value": 2,
+      "strength_end": 1.5,
+      "strength_start": 0.5,
+      "strength_step": 0.1,
+      "study_type": "controlled_variable"
+     },
+     "schema": "stablenew.learning.v2.6",
+     "seed_policy": {
+      "policy": "requested_seed_with_backend_observed_vector",
+      "requested_base_seed": 42,
+      "requested_sample_count": 2,
+      "requested_subseed": 700,
+      "subseed_strength": 0.5
+     },
+     "stage": "txt2img",
+     "variable_under_test": "CFG Scale",
+     "variant_id": "00000000000000000000000000000001:2",
+     "variant_value": 8.0
+    },
+    "learning_enabled": true,
+    "learning_experiment": "00000000000000000000000000000001",
+    "learning_experiment_id": "00000000000000000000000000000001",
+    "learning_stage": "txt2img",
+    "learning_variable": "CFG Scale",
+    "learning_variant_value": 8.0,
+    "submission_source": "learning"
+   },
+   "negative_prompt": "",
+   "positive_prompt": "a lighthouse at dusk",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ }
+]

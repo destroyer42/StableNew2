@@ -1,0 +1,305 @@
+[
+ {
+  "job_id": "job-1",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": null,
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": true,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": false,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "exact_profile",
+     "family": "z_image",
+     "mode": "compile",
+     "operations": [
+      {
+       "code": "positive_embedding_dropped_unsupported",
+       "details": {
+        "count": 1
+       },
+       "effect": "dropped",
+       "scope": "embeddings"
+      },
+      {
+       "code": "lora_dropped_unsupported",
+       "details": {
+        "index": 0,
+        "kind": "pack"
+       },
+       "effect": "dropped",
+       "scope": "lora"
+      },
+      {
+       "code": "pack_lora_trigger_not_tracked",
+       "details": {},
+       "effect": "not_applied",
+       "scope": "lora"
+      }
+     ],
+     "policy_id": "z_image_turbo_fp8_scaled",
+     "profile_ref": {
+      "id": "z_image_turbo_fp8_scaled",
+      "version": 1
+     },
+     "prompt_dialect": "natural_language",
+     "reason": "",
+     "ruleset_version": "159.1"
+    }
+   },
+   "negative_embeddings": [],
+   "pack_usage": [
+    {
+     "pack_name": "ZImage",
+     "pack_path": "<tmp>/packs/zimage.json",
+     "prompt_index": 0,
+     "used_for_stage": "txt2img"
+    }
+   ],
+   "positive_embeddings": [],
+   "randomizer_summary": {
+    "base_seed": null,
+    "enabled": false,
+    "max_variants": 1,
+    "seed_mode": "none"
+   },
+   "seed": 42,
+   "txt2img_prompt_info": {
+    "final_negative_prompt": "",
+    "final_prompt": "A ceramic teapot on a wooden table.",
+    "global_negative_applied": false,
+    "global_negative_terms": "",
+    "original_negative_prompt": "",
+    "original_prompt": "A ceramic teapot on a wooden table."
+   },
+   "variant_index": 0,
+   "variant_total": 1
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "ZImage",
+   "id": "zimage.json",
+   "kind": "prompt_pack",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": 0
+  },
+  "stages": [
+   {
+    "cfg_scale": 1.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {
+     "clip_skip": 1
+    },
+    "model": "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors",
+    "sampler_name": "Euler",
+    "scheduler": "Beta",
+    "stage_type": "txt2img",
+    "steps": 9,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "img2img",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "adetailer",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "upscale",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "animatediff",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "video_workflow",
+    "steps": null,
+    "vae": null
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui",
+     "model_profile": {
+      "id": "z_image_turbo_fp8_scaled",
+      "version": 1
+     }
+    }
+   },
+   "config": {
+    "adetailer": null,
+    "aesthetic": null,
+    "animatediff": null,
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui",
+      "model_profile": {
+       "id": "z_image_turbo_fp8_scaled",
+       "version": 1
+      }
+     }
+    },
+    "cfg_scale": 1.0,
+    "clip_skip": 1,
+    "distilled_cfg_scale": 9.0,
+    "do_not_save_grid": null,
+    "do_not_save_samples": null,
+    "enable_hr": null,
+    "global_negative_prompt": "",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "height": 1024,
+    "hires_fix": null,
+    "hires_use_base_model": null,
+    "hr_checkpoint_name": null,
+    "matrix_slot_values": {},
+    "metadata": {},
+    "model": "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors",
+    "negative_prompt": "",
+    "pack_name": "ZImage",
+    "pack_path": "<tmp>/packs/zimage.json",
+    "pipeline": {
+     "apply_global_negative_txt2img": false,
+     "apply_global_positive_txt2img": false,
+     "images_per_prompt": 1,
+     "loop_count": 1
+    },
+    "prompt": "A ceramic teapot on a wooden table.",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "prompt_pack_id": "zimage.json",
+    "prompt_pack_row_index": 0,
+    "randomization": {
+     "enabled": false
+    },
+    "refiner": null,
+    "restore_faces": null,
+    "sampler": "Euler",
+    "sampler_name": "Euler",
+    "scheduler": "Beta",
+    "seed": 42,
+    "seed_resize_from_h": null,
+    "seed_resize_from_w": null,
+    "stages": [
+     "txt2img"
+    ],
+    "steps": 9,
+    "style_lora": null,
+    "subseed": null,
+    "subseed_strength": null,
+    "tiling": null,
+    "txt2img": {
+     "cfg_scale": 1.0,
+     "clip_skip": 1,
+     "distilled_cfg_scale": 9.0,
+     "height": 1024,
+     "model": "zImageTurboQuantized_fp8ScaledE4m3fnKJ.safetensors",
+     "negative_prompt": "",
+     "prompt_optimizer": {
+      "enabled": false
+     },
+     "sampler": "Euler",
+     "sampler_name": "Euler",
+     "scheduler": "Beta",
+     "steps": 9,
+     "width": 1024
+    },
+    "upscale": null,
+    "use_refiner": false,
+    "vae": "",
+    "video_workflow": null,
+    "width": 1024
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {
+    "prompt_pack_id": "zimage.json",
+    "prompt_source": "pack",
+    "run_mode": "queue",
+    "source": "add_to_queue"
+   },
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {},
+   "negative_prompt": "",
+   "positive_prompt": "A ceramic teapot on a wooden table.",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ }
+]

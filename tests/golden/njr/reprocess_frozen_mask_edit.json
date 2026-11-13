@@ -1,0 +1,305 @@
+{
+ "job_id": "reprocess-1",
+ "output_plan": {
+  "base_output_dir": "output",
+  "filename_template": "{seed}",
+  "route": null
+ },
+ "provenance": {
+  "aesthetic_embedding": null,
+  "aesthetic_enabled": false,
+  "aesthetic_text": null,
+  "aesthetic_weight": null,
+  "batch_index": 0,
+  "batch_total": 1,
+  "config_variant_index": 0,
+  "config_variant_label": "base",
+  "config_variant_overrides": {},
+  "img2img_prompt_info": null,
+  "learning_context": null,
+  "lora_tags": [],
+  "matrix_mode": null,
+  "matrix_name": null,
+  "matrix_prompt_mode": null,
+  "matrix_slot_values": {},
+  "metadata": {
+   "image_edit_inputs": {
+    "mask": {
+     "format": "PNG",
+     "height": 64,
+     "path": "<tmp>/state/image_edit_inputs/e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39.png",
+     "sha256": "e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39",
+     "size": 116,
+     "width": 64
+    },
+    "original_path": "<tmp>/original.png",
+    "schema": "stablenew.image_edit.inputs.v1",
+    "source": {
+     "format": "PNG",
+     "height": 64,
+     "path": "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png",
+     "sha256": "20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+     "size": 182,
+     "width": 64
+    }
+   },
+   "original_image_count": 1,
+   "parent_artifact_id": "sha256:20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+   "parent_job_id": "parent-job",
+   "reprocess": {
+    "input_count": 1,
+    "input_image_paths": [
+     "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png"
+    ],
+    "requested_stages": [
+     "img2img"
+    ],
+    "schema": "stablenew.reprocess.v2.6",
+    "source": "image_edit",
+    "source_items": [
+     {
+      "image_edit": {
+       "inpaint_full_res": true,
+       "inpaint_full_res_padding": 24,
+       "inpainting_fill": 1,
+       "inpainting_mask_invert": false,
+       "mask_blur": 8,
+       "mask_image_path": "<tmp>/state/image_edit_inputs/e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39.png",
+       "metadata": {},
+       "operation": "masked_inpaint",
+       "schema": "stablenew.image_edit.v2.6"
+      },
+      "input_image_path": "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png",
+      "metadata": {
+       "source_artifact_id": "sha256:20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+       "source_path": "<tmp>/original.png"
+      },
+      "model": "sdxl",
+      "negative_prompt": "",
+      "prompt": "replace the blue region with flowers",
+      "vae": null
+     }
+    ]
+   },
+   "reprocess_mode": true,
+   "reprocess_stages": [
+    "img2img"
+   ],
+   "submission_source": "image_edit"
+  },
+  "negative_embeddings": [],
+  "pack_usage": [],
+  "positive_embeddings": [],
+  "randomizer_summary": {},
+  "seed": null,
+  "txt2img_prompt_info": null,
+  "variant_index": 0,
+  "variant_total": 1
+ },
+ "schema_version": "2.6",
+ "source": {
+  "display_name": "ReviewMaskedEdit",
+  "id": null,
+  "kind": "image_edit",
+  "metadata": {},
+  "parent_artifact_id": "sha256:20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+  "parent_job_id": "parent-job",
+  "revision": null,
+  "row_index": null
+ },
+ "stages": [
+  {
+   "cfg_scale": 6.5,
+   "denoising_strength": 0.55,
+   "enabled": true,
+   "extra": {
+    "cfg_scale": 6.5,
+    "denoising_strength": 0.55,
+    "height": 64,
+    "image_edit_inputs": {
+     "mask": {
+      "format": "PNG",
+      "height": 64,
+      "path": "<tmp>/state/image_edit_inputs/e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39.png",
+      "sha256": "e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39",
+      "size": 116,
+      "width": 64
+     },
+     "original_path": "<tmp>/original.png",
+     "schema": "stablenew.image_edit.inputs.v1",
+     "source": {
+      "format": "PNG",
+      "height": 64,
+      "path": "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png",
+      "sha256": "20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+      "size": 182,
+      "width": 64
+     }
+    },
+    "inpaint_full_res": true,
+    "inpaint_full_res_padding": 24,
+    "inpainting_fill": 1,
+    "inpainting_mask_invert": false,
+    "mask_blur": 8,
+    "mask_image_path": "<tmp>/state/image_edit_inputs/e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39.png",
+    "model": "sdxl",
+    "sampler_name": "Euler",
+    "scheduler": "Karras",
+    "seed": 42,
+    "steps": 23,
+    "width": 64
+   },
+   "model": "sdxl",
+   "sampler_name": "Euler",
+   "scheduler": "Karras",
+   "stage_type": "img2img",
+   "steps": 23,
+   "vae": null
+  }
+ ],
+ "workload": {
+  "backend_options": {
+   "image": {
+    "backend_id": "forge_webui"
+   }
+  },
+  "config": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "global_negative_prompt": "",
+   "global_positive_prompt": "",
+   "height": 64,
+   "img2img": {
+    "cfg_scale": 6.5,
+    "denoising_strength": 0.55,
+    "height": 64,
+    "image_edit_inputs": {
+     "mask": {
+      "format": "PNG",
+      "height": 64,
+      "path": "<tmp>/state/image_edit_inputs/e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39.png",
+      "sha256": "e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39",
+      "size": 116,
+      "width": 64
+     },
+     "original_path": "<tmp>/original.png",
+     "schema": "stablenew.image_edit.inputs.v1",
+     "source": {
+      "format": "PNG",
+      "height": 64,
+      "path": "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png",
+      "sha256": "20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+      "size": 182,
+      "width": 64
+     }
+    },
+    "inpaint_full_res": true,
+    "inpaint_full_res_padding": 24,
+    "inpainting_fill": 1,
+    "inpainting_mask_invert": false,
+    "mask_blur": 8,
+    "mask_image_path": "<tmp>/state/image_edit_inputs/e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39.png",
+    "model": "sdxl",
+    "sampler_name": "Euler",
+    "scheduler": "Karras",
+    "seed": 42,
+    "steps": 23,
+    "width": 64
+   },
+   "img2img_denoising_strength": 0.55,
+   "model": "sdxl",
+   "pipeline": {
+    "apply_global_negative_img2img": false
+   },
+   "prompt_optimizer": {
+    "enabled": false
+   },
+   "seed": 42,
+   "txt2img": {
+    "model": "sdxl",
+    "seed": 42
+   },
+   "width": 64
+  },
+  "images_per_prompt": 1,
+  "input_image_paths": [
+   "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png"
+  ],
+  "intent_config": {},
+  "loop_count": 1,
+  "loop_type": "pipeline",
+  "metadata": {
+   "image_edit_inputs": {
+    "mask": {
+     "format": "PNG",
+     "height": 64,
+     "path": "<tmp>/state/image_edit_inputs/e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39.png",
+     "sha256": "e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39",
+     "size": 116,
+     "width": 64
+    },
+    "original_path": "<tmp>/original.png",
+    "schema": "stablenew.image_edit.inputs.v1",
+    "source": {
+     "format": "PNG",
+     "height": 64,
+     "path": "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png",
+     "sha256": "20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+     "size": 182,
+     "width": 64
+    }
+   },
+   "original_image_count": 1,
+   "parent_artifact_id": "sha256:20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+   "parent_job_id": "parent-job",
+   "reprocess": {
+    "input_count": 1,
+    "input_image_paths": [
+     "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png"
+    ],
+    "requested_stages": [
+     "img2img"
+    ],
+    "schema": "stablenew.reprocess.v2.6",
+    "source": "image_edit",
+    "source_items": [
+     {
+      "image_edit": {
+       "inpaint_full_res": true,
+       "inpaint_full_res_padding": 24,
+       "inpainting_fill": 1,
+       "inpainting_mask_invert": false,
+       "mask_blur": 8,
+       "mask_image_path": "<tmp>/state/image_edit_inputs/e6a66ff888054a6dc37a30f5cde7fbc865cb255cabef8f5aa144701c7df4bb39.png",
+       "metadata": {},
+       "operation": "masked_inpaint",
+       "schema": "stablenew.image_edit.v2.6"
+      },
+      "input_image_path": "<tmp>/state/image_edit_inputs/20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8.png",
+      "metadata": {
+       "source_artifact_id": "sha256:20544ae38b15c4223afd0cda3850ba67f201e32d00f9ef41ebc74d277a0251f8",
+       "source_path": "<tmp>/original.png"
+      },
+      "model": "sdxl",
+      "negative_prompt": "",
+      "prompt": "replace the blue region with flowers",
+      "vae": null
+     }
+    ]
+   },
+   "reprocess_mode": true,
+   "reprocess_stages": [
+    "img2img"
+   ],
+   "submission_source": "image_edit"
+  },
+  "negative_prompt": "",
+  "positive_prompt": "replace the blue region with flowers",
+  "start_stage": "img2img",
+  "variant_mode": "standard"
+ },
+ "workload_kind": "image"
+}

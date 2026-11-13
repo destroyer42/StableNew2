@@ -1,0 +1,30 @@
+{
+ "empty_txt2img_prompt": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "The frozen experiment has no prompt. Choose a prompt and rebuild Preview.",
+   "outcome": "refused",
+   "type": "ValueError"
+  }
+ },
+ "exact_profile_unsupported": {
+  "outcome": "not_applicable",
+  "reason": "Learning's exact-profile refusal happens at freeze time for frozen-arm studies; no ordinary-study request reaches it"
+ },
+ "missing_input_image": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "The Learning baseline is incomplete: Source image not found: <tmp>/absent.png",
+   "outcome": "refused",
+   "type": "ValueError"
+  }
+ },
+ "retired_stage": {
+  "outcome": "not_applicable",
+  "reason": "a Learning experiment stage is txt2img, img2img, adetailer or upscale"
+ }
+}

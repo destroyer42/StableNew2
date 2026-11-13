@@ -1,0 +1,4694 @@
+[
+ {
+  "job_id": "matrix-0",
+  "output_plan": {
+   "base_output_dir": "out",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "mx",
+    "experiment_name": "matrix",
+    "variable_under_test": "Prompt x Model",
+    "variant_index": 0,
+    "variant_value": {
+     "cell_id": "e29e13f49f0d4510fc2b",
+     "col": 0,
+     "model_label": "Model 1",
+     "prompt_label": "A",
+     "row": 0
+    }
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "e29e13f49f0d4510fc2b",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 0,
+      "prompt_label": "A",
+      "row": 0
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, calm and confident, natural lighting.",
+     "arm_sha256": "4b94ca408b901ff47c8dac1891a69e4829857e27c6643d62b598f4f72c87faab",
+     "candidate_index": 0,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "ordinary.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, calm and confident, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "ordinary.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, calm and confident, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, calm and confident, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, calm and confident, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "e29e13f49f0d4510fc2b",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 0,
+      "prompt_label": "A",
+      "row": 0
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "ordinary.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "ordinary.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "94baf9bb88e1bcc4b5a2dfb9e6650bfe53fc4242471aa6be36fd73ee5cf15fdc",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "94baf9bb88e1bcc4b5a2dfb9e6650bfe53fc4242471aa6be36fd73ee5cf15fdc",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 0,
+   "variant_total": 6
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "matrix",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "ordinary.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "learning_experiment_id": "mx",
+    "learning_variable": "Prompt x Model",
+    "learning_variant_value": {
+     "cell_id": "e29e13f49f0d4510fc2b",
+     "col": 0,
+     "model_label": "Model 1",
+     "prompt_label": "A",
+     "row": 0
+    },
+    "model": "ordinary.safetensors",
+    "negative_prompt": "bad hands",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "A knight, calm and confident, natural lighting.",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 7.0,
+     "height": 1024,
+     "lora_strengths": [],
+     "model": "ordinary.safetensors",
+     "negative_prompt": "bad hands",
+     "prompt": "A knight, calm and confident, natural lighting.",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    }
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "e29e13f49f0d4510fc2b",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 0,
+      "prompt_label": "A",
+      "row": 0
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, calm and confident, natural lighting.",
+     "arm_sha256": "4b94ca408b901ff47c8dac1891a69e4829857e27c6643d62b598f4f72c87faab",
+     "candidate_index": 0,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "ordinary.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, calm and confident, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "ordinary.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, calm and confident, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, calm and confident, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, calm and confident, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "e29e13f49f0d4510fc2b",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 0,
+      "prompt_label": "A",
+      "row": 0
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "ordinary.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "ordinary.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "94baf9bb88e1bcc4b5a2dfb9e6650bfe53fc4242471aa6be36fd73ee5cf15fdc",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "94baf9bb88e1bcc4b5a2dfb9e6650bfe53fc4242471aa6be36fd73ee5cf15fdc",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_prompt": "bad hands",
+   "positive_prompt": "A knight, calm and confident, natural lighting.",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ {
+  "job_id": "matrix-1",
+  "output_plan": {
+   "base_output_dir": "out",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "mx",
+    "experiment_name": "matrix",
+    "variable_under_test": "Prompt x Model",
+    "variant_index": 1,
+    "variant_value": {
+     "cell_id": "7bd0bea47f386a5b5b89",
+     "col": 1,
+     "model_label": "Model 2",
+     "prompt_label": "A",
+     "row": 0
+    }
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "7bd0bea47f386a5b5b89",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 0,
+      "prompt_label": "A",
+      "row": 0
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, calm and confident, natural lighting.",
+     "arm_sha256": "7d7bcf8af9261edba0b69b99134225105d4570cde8bbaf4e406989e7935e44a8",
+     "candidate_index": 1,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "peer.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, calm and confident, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "peer.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, calm and confident, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, calm and confident, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, calm and confident, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "7bd0bea47f386a5b5b89",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 0,
+      "prompt_label": "A",
+      "row": 0
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "peer.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "peer.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "94baf9bb88e1bcc4b5a2dfb9e6650bfe53fc4242471aa6be36fd73ee5cf15fdc",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "94baf9bb88e1bcc4b5a2dfb9e6650bfe53fc4242471aa6be36fd73ee5cf15fdc",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 1,
+   "variant_total": 6
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "matrix",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "peer.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "learning_experiment_id": "mx",
+    "learning_variable": "Prompt x Model",
+    "learning_variant_value": {
+     "cell_id": "7bd0bea47f386a5b5b89",
+     "col": 1,
+     "model_label": "Model 2",
+     "prompt_label": "A",
+     "row": 0
+    },
+    "model": "peer.safetensors",
+    "negative_prompt": "bad hands",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "A knight, calm and confident, natural lighting.",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 7.0,
+     "height": 1024,
+     "lora_strengths": [],
+     "model": "peer.safetensors",
+     "negative_prompt": "bad hands",
+     "prompt": "A knight, calm and confident, natural lighting.",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    }
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "7bd0bea47f386a5b5b89",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 0,
+      "prompt_label": "A",
+      "row": 0
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, calm and confident, natural lighting.",
+     "arm_sha256": "7d7bcf8af9261edba0b69b99134225105d4570cde8bbaf4e406989e7935e44a8",
+     "candidate_index": 1,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "peer.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, calm and confident, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "peer.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, calm and confident, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, calm and confident, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, calm and confident, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "7bd0bea47f386a5b5b89",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 0,
+      "prompt_label": "A",
+      "row": 0
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "peer.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "peer.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "94baf9bb88e1bcc4b5a2dfb9e6650bfe53fc4242471aa6be36fd73ee5cf15fdc",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "94baf9bb88e1bcc4b5a2dfb9e6650bfe53fc4242471aa6be36fd73ee5cf15fdc",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_prompt": "bad hands",
+   "positive_prompt": "A knight, calm and confident, natural lighting.",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ {
+  "job_id": "matrix-2",
+  "output_plan": {
+   "base_output_dir": "out",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "mx",
+    "experiment_name": "matrix",
+    "variable_under_test": "Prompt x Model",
+    "variant_index": 2,
+    "variant_value": {
+     "cell_id": "ee7558bbeb84b43abb6c",
+     "col": 0,
+     "model_label": "Model 1",
+     "prompt_label": "B",
+     "row": 1
+    }
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "ee7558bbeb84b43abb6c",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 1,
+      "prompt_label": "B",
+      "row": 1
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+     "arm_sha256": "f2fb9469ac9d88d9613effa1afaba73ba2337d65a51619370df9111b65013e98",
+     "candidate_index": 2,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "ordinary.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, angry and battle-ready, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "ordinary.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, angry and battle-ready, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, angry and battle-ready, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "ee7558bbeb84b43abb6c",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 1,
+      "prompt_label": "B",
+      "row": 1
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "ordinary.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "ordinary.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "e7988ecf9d84a56296b9599b52bb7ff79cc8d64d950d2b5d89805d684362ff85",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "e7988ecf9d84a56296b9599b52bb7ff79cc8d64d950d2b5d89805d684362ff85",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 2,
+   "variant_total": 6
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "matrix",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "ordinary.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "learning_experiment_id": "mx",
+    "learning_variable": "Prompt x Model",
+    "learning_variant_value": {
+     "cell_id": "ee7558bbeb84b43abb6c",
+     "col": 0,
+     "model_label": "Model 1",
+     "prompt_label": "B",
+     "row": 1
+    },
+    "model": "ordinary.safetensors",
+    "negative_prompt": "bad hands",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "A knight, angry and battle-ready, natural lighting.",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 7.0,
+     "height": 1024,
+     "lora_strengths": [],
+     "model": "ordinary.safetensors",
+     "negative_prompt": "bad hands",
+     "prompt": "A knight, angry and battle-ready, natural lighting.",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    }
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "ee7558bbeb84b43abb6c",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 1,
+      "prompt_label": "B",
+      "row": 1
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+     "arm_sha256": "f2fb9469ac9d88d9613effa1afaba73ba2337d65a51619370df9111b65013e98",
+     "candidate_index": 2,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "ordinary.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, angry and battle-ready, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "ordinary.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, angry and battle-ready, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, angry and battle-ready, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "ee7558bbeb84b43abb6c",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 1,
+      "prompt_label": "B",
+      "row": 1
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "ordinary.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "ordinary.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "e7988ecf9d84a56296b9599b52bb7ff79cc8d64d950d2b5d89805d684362ff85",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "e7988ecf9d84a56296b9599b52bb7ff79cc8d64d950d2b5d89805d684362ff85",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_prompt": "bad hands",
+   "positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ {
+  "job_id": "matrix-3",
+  "output_plan": {
+   "base_output_dir": "out",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "mx",
+    "experiment_name": "matrix",
+    "variable_under_test": "Prompt x Model",
+    "variant_index": 3,
+    "variant_value": {
+     "cell_id": "58d0021b521425281fc0",
+     "col": 1,
+     "model_label": "Model 2",
+     "prompt_label": "B",
+     "row": 1
+    }
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "58d0021b521425281fc0",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 1,
+      "prompt_label": "B",
+      "row": 1
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+     "arm_sha256": "6c23e20cf66a0b90f0ccc212b620a3c4a08bfa54a5a0dee9c8e7e31e30188bc4",
+     "candidate_index": 3,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "peer.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, angry and battle-ready, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "peer.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, angry and battle-ready, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, angry and battle-ready, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "58d0021b521425281fc0",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 1,
+      "prompt_label": "B",
+      "row": 1
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "peer.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "peer.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "e7988ecf9d84a56296b9599b52bb7ff79cc8d64d950d2b5d89805d684362ff85",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "e7988ecf9d84a56296b9599b52bb7ff79cc8d64d950d2b5d89805d684362ff85",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 3,
+   "variant_total": 6
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "matrix",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "peer.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "learning_experiment_id": "mx",
+    "learning_variable": "Prompt x Model",
+    "learning_variant_value": {
+     "cell_id": "58d0021b521425281fc0",
+     "col": 1,
+     "model_label": "Model 2",
+     "prompt_label": "B",
+     "row": 1
+    },
+    "model": "peer.safetensors",
+    "negative_prompt": "bad hands",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "A knight, angry and battle-ready, natural lighting.",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 7.0,
+     "height": 1024,
+     "lora_strengths": [],
+     "model": "peer.safetensors",
+     "negative_prompt": "bad hands",
+     "prompt": "A knight, angry and battle-ready, natural lighting.",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    }
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "58d0021b521425281fc0",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 1,
+      "prompt_label": "B",
+      "row": 1
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+     "arm_sha256": "6c23e20cf66a0b90f0ccc212b620a3c4a08bfa54a5a0dee9c8e7e31e30188bc4",
+     "candidate_index": 3,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "peer.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, angry and battle-ready, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "peer.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, angry and battle-ready, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, angry and battle-ready, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "58d0021b521425281fc0",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 1,
+      "prompt_label": "B",
+      "row": 1
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "peer.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "peer.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "e7988ecf9d84a56296b9599b52bb7ff79cc8d64d950d2b5d89805d684362ff85",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "e7988ecf9d84a56296b9599b52bb7ff79cc8d64d950d2b5d89805d684362ff85",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_prompt": "bad hands",
+   "positive_prompt": "A knight, angry and battle-ready, natural lighting.",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ {
+  "job_id": "matrix-4",
+  "output_plan": {
+   "base_output_dir": "out",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "mx",
+    "experiment_name": "matrix",
+    "variable_under_test": "Prompt x Model",
+    "variant_index": 4,
+    "variant_value": {
+     "cell_id": "5f3b11998a1b5cc8aef5",
+     "col": 0,
+     "model_label": "Model 1",
+     "prompt_label": "C",
+     "row": 2
+    }
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "5f3b11998a1b5cc8aef5",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 2,
+      "prompt_label": "C",
+      "row": 2
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, exhausted but determined, natural lighting.",
+     "arm_sha256": "63777fe3c38a2ea6174ccce2268c7fa10b4da26b3d05faf967a8cbd60e2daa51",
+     "candidate_index": 4,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "ordinary.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, exhausted but determined, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "ordinary.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, exhausted but determined, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, exhausted but determined, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, exhausted but determined, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "5f3b11998a1b5cc8aef5",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 2,
+      "prompt_label": "C",
+      "row": 2
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "ordinary.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "ordinary.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "33f1be37814751737d5f4cdf1af4b833e2de49028a9d23423e4b096fbd58ded6",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "33f1be37814751737d5f4cdf1af4b833e2de49028a9d23423e4b096fbd58ded6",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 4,
+   "variant_total": 6
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "matrix",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "ordinary.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "learning_experiment_id": "mx",
+    "learning_variable": "Prompt x Model",
+    "learning_variant_value": {
+     "cell_id": "5f3b11998a1b5cc8aef5",
+     "col": 0,
+     "model_label": "Model 1",
+     "prompt_label": "C",
+     "row": 2
+    },
+    "model": "ordinary.safetensors",
+    "negative_prompt": "bad hands",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "A knight, exhausted but determined, natural lighting.",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 7.0,
+     "height": 1024,
+     "lora_strengths": [],
+     "model": "ordinary.safetensors",
+     "negative_prompt": "bad hands",
+     "prompt": "A knight, exhausted but determined, natural lighting.",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    }
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "5f3b11998a1b5cc8aef5",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 2,
+      "prompt_label": "C",
+      "row": 2
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, exhausted but determined, natural lighting.",
+     "arm_sha256": "63777fe3c38a2ea6174ccce2268c7fa10b4da26b3d05faf967a8cbd60e2daa51",
+     "candidate_index": 4,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "ordinary.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, exhausted but determined, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "ordinary.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, exhausted but determined, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, exhausted but determined, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, exhausted but determined, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "5f3b11998a1b5cc8aef5",
+      "col": 0,
+      "model_index": 0,
+      "model_label": "Model 1",
+      "prompt_index": 2,
+      "prompt_label": "C",
+      "row": 2
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "ordinary.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "ordinary.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "33f1be37814751737d5f4cdf1af4b833e2de49028a9d23423e4b096fbd58ded6",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "33f1be37814751737d5f4cdf1af4b833e2de49028a9d23423e4b096fbd58ded6",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_prompt": "bad hands",
+   "positive_prompt": "A knight, exhausted but determined, natural lighting.",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ {
+  "job_id": "matrix-5",
+  "output_plan": {
+   "base_output_dir": "out",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": {
+    "experiment_id": "mx",
+    "experiment_name": "matrix",
+    "variable_under_test": "Prompt x Model",
+    "variant_index": 5,
+    "variant_value": {
+     "cell_id": "cc5f5e61dd19ca9a3288",
+     "col": 1,
+     "model_label": "Model 2",
+     "prompt_label": "C",
+     "row": 2
+    }
+   },
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "cc5f5e61dd19ca9a3288",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 2,
+      "prompt_label": "C",
+      "row": 2
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, exhausted but determined, natural lighting.",
+     "arm_sha256": "4a81b081020a648395cb7091c27ef2a99944346e777429bdd8b5424bb38d8da5",
+     "candidate_index": 5,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "peer.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, exhausted but determined, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "peer.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, exhausted but determined, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, exhausted but determined, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, exhausted but determined, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "cc5f5e61dd19ca9a3288",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 2,
+      "prompt_label": "C",
+      "row": 2
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "peer.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "peer.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "33f1be37814751737d5f4cdf1af4b833e2de49028a9d23423e4b096fbd58ded6",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "33f1be37814751737d5f4cdf1af4b833e2de49028a9d23423e4b096fbd58ded6",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 42,
+   "txt2img_prompt_info": null,
+   "variant_index": 5,
+   "variant_total": 6
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "matrix",
+   "id": null,
+   "kind": "learning",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "peer.safetensors",
+    "sampler_name": "DPM++ 2M",
+    "scheduler": "Karras",
+    "stage_type": "txt2img",
+    "steps": 30,
+    "vae": ""
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "backend_options": {
+     "image": {
+      "backend_id": "forge_webui"
+     }
+    },
+    "global_negative_prompt": "global negative",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "frozen_njr",
+    "learning_experiment_id": "mx",
+    "learning_variable": "Prompt x Model",
+    "learning_variant_value": {
+     "cell_id": "cc5f5e61dd19ca9a3288",
+     "col": 1,
+     "model_label": "Model 2",
+     "prompt_label": "C",
+     "row": 2
+    },
+    "model": "peer.safetensors",
+    "negative_prompt": "bad hands",
+    "pipeline": {
+     "adetailer_enabled": false,
+     "apply_global_negative_adetailer": true,
+     "apply_global_negative_img2img": true,
+     "apply_global_negative_txt2img": true,
+     "apply_global_negative_upscale": true,
+     "apply_global_positive_txt2img": false,
+     "img2img_enabled": false,
+     "txt2img_enabled": true,
+     "upscale_enabled": false
+    },
+    "prompt": "A knight, exhausted but determined, natural lighting.",
+    "prompt_optimizer": {
+     "enabled": false
+    },
+    "txt2img": {
+     "cfg_scale": 7.0,
+     "height": 1024,
+     "lora_strengths": [],
+     "model": "peer.safetensors",
+     "negative_prompt": "bad hands",
+     "prompt": "A knight, exhausted but determined, natural lighting.",
+     "sampler_name": "DPM++ 2M",
+     "scheduler": "Karras",
+     "seed": 42,
+     "steps": 30,
+     "subseed": 700,
+     "subseed_strength": 0.5,
+     "vae": "",
+     "width": 768
+    }
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "causal_one_variable": false,
+    "clip_skip": 0,
+    "comparison_claim": "prompt_by_target_envelope_preference",
+    "prompt_adaptation": {
+     "adaptable": true,
+     "changed": false,
+     "complete": true,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "registry_evidence",
+     "family": "sdxl",
+     "mode": "compile",
+     "operations": [],
+     "policy_id": "sdxl",
+     "profile_ref": null,
+     "prompt_dialect": "sdxl_weighted_tags",
+     "reason": "",
+     "ruleset_version": "159.1"
+    },
+    "prompt_model_matrix": {
+     "cell": {
+      "cell_id": "cc5f5e61dd19ca9a3288",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 2,
+      "prompt_label": "C",
+      "row": 2
+     },
+     "contract": "learning_prompt_model_matrix/1",
+     "digest": "08cea884d5be72dd025fd0981ddae97a408412e4097c856a668c7f52c1465021"
+    },
+    "prompt_model_matrix_arm": {
+     "adapted_negative_prompt": "global negative, bad hands",
+     "adapted_positive_prompt": "A knight, exhausted but determined, natural lighting.",
+     "arm_sha256": "4a81b081020a648395cb7091c27ef2a99944346e777429bdd8b5424bb38d8da5",
+     "candidate_index": 5,
+     "causal_one_variable": false,
+     "checkpoint_evidence": {},
+     "comparison_claim": "prompt_by_target_envelope_preference",
+     "contract": "learning_prompt_model_matrix/1",
+     "effective_backend_options": {
+      "image": {
+       "backend_id": "forge_webui"
+      }
+     },
+     "effective_config": {
+      "backend_options": {
+       "image": {
+        "backend_id": "forge_webui"
+       }
+      },
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "model": "peer.safetensors",
+      "negative_prompt": "bad hands",
+      "pipeline": {
+       "adetailer_enabled": false,
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false,
+       "img2img_enabled": false,
+       "txt2img_enabled": true,
+       "upscale_enabled": false
+      },
+      "prompt": "A knight, exhausted but determined, natural lighting.",
+      "prompt_optimizer": {
+       "enabled": false
+      },
+      "txt2img": {
+       "cfg_scale": 7.0,
+       "height": 1024,
+       "lora_strengths": [],
+       "model": "peer.safetensors",
+       "negative_prompt": "bad hands",
+       "prompt": "A knight, exhausted but determined, natural lighting.",
+       "sampler_name": "DPM++ 2M",
+       "scheduler": "Karras",
+       "seed": 42,
+       "steps": 30,
+       "subseed": 700,
+       "subseed_strength": 0.5,
+       "vae": "",
+       "width": 768
+      }
+     },
+     "effective_global_positive_prompt": "",
+     "effective_intent": {
+      "apply_global_negative": true,
+      "contract": "pack_prompt_intent/1",
+      "global_negative": "global negative",
+      "loras": [],
+      "negative_channel": true,
+      "negative_embeddings": [],
+      "negative_phrases": [],
+      "pack_negative": "bad hands",
+      "positive_embeddings": [],
+      "quality": "",
+      "safety_negative": "",
+      "subject": "A knight, exhausted but determined, natural lighting.",
+      "triggers": []
+     },
+     "effective_lora_tags": [],
+     "effective_negative_embeddings": [],
+     "effective_positive_embeddings": [],
+     "executor_base_negative_prompt": "bad hands",
+     "executor_base_positive_prompt": "A knight, exhausted but determined, natural lighting.",
+     "executor_global_prompt_policy": {
+      "global_negative_prompt": "global negative",
+      "global_positive_prompt": "",
+      "global_prompt_policy_source": "frozen_njr",
+      "pipeline": {
+       "apply_global_negative_adetailer": true,
+       "apply_global_negative_img2img": true,
+       "apply_global_negative_txt2img": true,
+       "apply_global_negative_upscale": true,
+       "apply_global_positive_txt2img": false
+      }
+     },
+     "global_positive": {
+      "contract": "learning_model_comparison_global_positive/1",
+      "mode": "not_requested",
+      "requested": false
+     },
+     "matrix_cell": {
+      "cell_id": "cc5f5e61dd19ca9a3288",
+      "col": 1,
+      "model_index": 1,
+      "model_label": "Model 2",
+      "prompt_index": 2,
+      "prompt_label": "C",
+      "row": 2
+     },
+     "model_policy_context": {
+      "contract": {
+       "allowed_backends": [
+        "forge_webui",
+        "a1111_webui"
+       ],
+       "controls": {
+        "cfg_scale": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "denoise_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "geometry": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "lora_strength": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "model": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "sampler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "scheduler": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "steps": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "upscale_factor": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        },
+        "vae": {
+         "allowed": [],
+         "mode": "configurable",
+         "value": null
+        }
+       },
+       "features": {
+        "adetailer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "controlnet": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "unsupported"
+        },
+        "embeddings": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "hires": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "lora": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "negative_prompt": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "prompt_optimizer": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "refiner": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        },
+        "upscale": {
+         "compatibility_policy": "",
+         "limit": null,
+         "stages": [],
+         "support": "supported"
+        }
+       },
+       "modes": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ],
+       "prompt_dialect": "sdxl_weighted_tags",
+       "required_backend": null,
+       "stages": [
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale"
+       ]
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "selected_model": "peer.safetensors",
+      "stage": "txt2img"
+     },
+     "prompt_adaptation": {
+      "adaptable": true,
+      "changed": false,
+      "complete": true,
+      "contract": "prompt_adaptation/1",
+      "counts": {
+       "loras": 0,
+       "negative_embeddings": 0,
+       "negative_present": true,
+       "positive_embeddings": 0,
+       "style_lora": 0
+      },
+      "evidence": "registry_evidence",
+      "family": "sdxl",
+      "mode": "compile",
+      "operations": [],
+      "policy_id": "sdxl",
+      "profile_ref": null,
+      "prompt_dialect": "sdxl_weighted_tags",
+      "reason": "",
+      "ruleset_version": "159.1"
+     },
+     "prompt_semantics": "executor_base_before_globals_and_optimizer",
+     "selected_model": "peer.safetensors",
+     "shared_geometry": {
+      "height": 1024,
+      "width": 768
+     },
+     "source_intent_sha256": "33f1be37814751737d5f4cdf1af4b833e2de49028a9d23423e4b096fbd58ded6",
+     "study_type": "prompt_model_matrix"
+    },
+    "seed_resize_from_h": 0,
+    "seed_resize_from_w": 0,
+    "shared_geometry": {
+     "height": 1024,
+     "width": 768
+    },
+    "source_intent_sha256": "33f1be37814751737d5f4cdf1af4b833e2de49028a9d23423e4b096fbd58ded6",
+    "study_type": "prompt_model_matrix",
+    "subseed": 700,
+    "subseed_strength": 0.5
+   },
+   "negative_prompt": "bad hands",
+   "positive_prompt": "A knight, exhausted but determined, natural lighting.",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ }
+]

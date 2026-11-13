@@ -1,0 +1,417 @@
+{
+ "job_id": "reprocess-1",
+ "output_plan": {
+  "base_output_dir": "<tmp>/output",
+  "filename_template": "{seed}",
+  "route": null
+ },
+ "provenance": {
+  "aesthetic_embedding": null,
+  "aesthetic_enabled": false,
+  "aesthetic_text": null,
+  "aesthetic_weight": null,
+  "batch_index": 0,
+  "batch_total": 1,
+  "config_variant_index": 0,
+  "config_variant_label": "base",
+  "config_variant_overrides": {},
+  "img2img_prompt_info": null,
+  "learning_context": null,
+  "lora_tags": [],
+  "matrix_mode": null,
+  "matrix_name": null,
+  "matrix_prompt_mode": null,
+  "matrix_slot_values": {},
+  "metadata": {
+   "original_image_count": 1,
+   "reprocess": {
+    "input_count": 1,
+    "input_image_paths": [
+     "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png"
+    ],
+    "requested_stages": [
+     "video_workflow"
+    ],
+    "schema": "stablenew.reprocess.v2.6",
+    "source": "video_workflow"
+   },
+   "reprocess_mode": true,
+   "reprocess_stages": [
+    "video_workflow"
+   ],
+   "submission_source": "video_workflow",
+   "video_workflow": {
+    "approximate_seconds": 0.7,
+    "backend_id": "comfy",
+    "display_name": "Wan2.2 TI2V-5B Prompt-Directed I2V",
+    "experimental_opt_in": false,
+    "fps": 24,
+    "frame_count": 17,
+    "governance_state": "approved",
+    "output_route": "Reprocess",
+    "seed": 100,
+    "sequence": {
+     "segments": 3,
+     "sequence_id": "golden-sequence"
+    },
+    "source_preparation": {
+     "orientation": "portrait",
+     "orientation_rule": "landscape when source width is greater than height; otherwise portrait",
+     "original_source_path": "<tmp>/in/portrait.png",
+     "policy": "cover_resize_center_crop",
+     "prepared_dimensions": {
+      "height": 832,
+      "width": 480
+     },
+     "prepared_image_path": "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png",
+     "source_dimensions": {
+      "height": 832,
+      "width": 480
+     },
+     "target_dimensions": {
+      "height": 832,
+      "width": 480
+     }
+    },
+    "workflow_id": "wan22_ti2v_5b_i2v_v1",
+    "workflow_version": "1.3.0"
+   }
+  },
+  "negative_embeddings": [],
+  "pack_usage": [],
+  "positive_embeddings": [],
+  "randomizer_summary": {},
+  "seed": null,
+  "txt2img_prompt_info": null,
+  "variant_index": 0,
+  "variant_total": 1
+ },
+ "schema_version": "2.6",
+ "source": {
+  "display_name": "Video Workflow",
+  "id": null,
+  "kind": "video_workflow",
+  "metadata": {},
+  "parent_artifact_id": null,
+  "parent_job_id": null,
+  "revision": null,
+  "row_index": null
+ },
+ "stages": [
+  {
+   "cfg_scale": 1.0,
+   "denoising_strength": 0.0,
+   "enabled": true,
+   "extra": {
+    "backend_id": "comfy",
+    "enabled": true,
+    "fps": 24,
+    "frame_count": 17,
+    "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+    "prompt": "the person waves",
+    "seed": 100,
+    "sequence_metadata": {
+     "assembly": {
+      "clip_name": "walk",
+      "codec": "libx264",
+      "enabled": true,
+      "quality": "draft"
+     },
+     "backend": "comfy",
+     "color_match": {
+      "algorithm": "per_channel_histogram_lut.v1",
+      "enabled": false,
+      "reference": "segment0_first_frame"
+     },
+     "continuity": null,
+     "experimental_opt_in": false,
+     "fps": 24,
+     "model_id": null,
+     "plan_digest": "<env_digest>",
+     "plan_origin": null,
+     "policy_version": "stablenew.video_sequence_policy.v1",
+     "schema": "stablenew.video_sequence_plan.v1",
+     "segments": [
+      {
+       "anchor_path": null,
+       "anchor_policy": "source",
+       "anchor_sha256": null,
+       "frame_count": 17,
+       "index": 0,
+       "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+       "overlap_frames": 0,
+       "prompt": "the person waves",
+       "seed": 100,
+       "workflow_id": "wan22_ti2v_5b_i2v_v1",
+       "workflow_version": "1.3.0"
+      },
+      {
+       "anchor_path": null,
+       "anchor_policy": "carry_last_frame",
+       "anchor_sha256": null,
+       "frame_count": 17,
+       "index": 1,
+       "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+       "overlap_frames": 1,
+       "prompt": "the person waves",
+       "seed": 101,
+       "workflow_id": "wan22_ti2v_5b_i2v_v1",
+       "workflow_version": "1.3.0"
+      },
+      {
+       "anchor_path": null,
+       "anchor_policy": "carry_last_frame",
+       "anchor_sha256": null,
+       "frame_count": 17,
+       "index": 2,
+       "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+       "overlap_frames": 1,
+       "prompt": "the person waves",
+       "seed": 102,
+       "workflow_id": "wan22_ti2v_5b_i2v_v1",
+       "workflow_version": "1.3.0"
+      }
+     ],
+     "sequence_id": "golden-sequence",
+     "source": {
+      "path": "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png",
+      "sha256": "9bda9198329e7626b41d7777d25e1838275bfcd11c35987fa7bcf7bee6becd63"
+     },
+     "stage": "video_workflow",
+     "target_height": 832,
+     "target_width": 480
+    },
+    "source_preparation": {
+     "orientation": "portrait",
+     "orientation_rule": "landscape when source width is greater than height; otherwise portrait",
+     "original_source_path": "<tmp>/in/portrait.png",
+     "policy": "cover_resize_center_crop",
+     "prepared_dimensions": {
+      "height": 832,
+      "width": 480
+     },
+     "prepared_image_path": "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png",
+     "source_dimensions": {
+      "height": 832,
+      "width": 480
+     },
+     "target_dimensions": {
+      "height": 832,
+      "width": 480
+     }
+    },
+    "video_execution": {
+     "backend_id": "comfy",
+     "controls": [
+      "negative_prompt",
+      "prompt_text",
+      "source_image"
+     ],
+     "experimental_opt_in": false,
+     "task": "image_to_video",
+     "workflow_id": "wan22_ti2v_5b_i2v_v1",
+     "workflow_version": "1.3.0"
+    },
+    "workflow_id": "wan22_ti2v_5b_i2v_v1",
+    "workflow_version": "1.3.0"
+   },
+   "model": null,
+   "sampler_name": "workflow",
+   "scheduler": null,
+   "stage_type": "video_workflow",
+   "steps": 1,
+   "vae": null
+  }
+ ],
+ "workload": {
+  "backend_options": {},
+  "config": {
+   "pipeline": {
+    "output_route": "Reprocess",
+    "video_workflow_enabled": true
+   },
+   "video_workflow": {
+    "backend_id": "comfy",
+    "enabled": true,
+    "fps": 24,
+    "frame_count": 17,
+    "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+    "prompt": "the person waves",
+    "seed": 100,
+    "sequence_metadata": {
+     "assembly": {
+      "clip_name": "walk",
+      "codec": "libx264",
+      "enabled": true,
+      "quality": "draft"
+     },
+     "backend": "comfy",
+     "color_match": {
+      "algorithm": "per_channel_histogram_lut.v1",
+      "enabled": false,
+      "reference": "segment0_first_frame"
+     },
+     "continuity": null,
+     "experimental_opt_in": false,
+     "fps": 24,
+     "model_id": null,
+     "plan_digest": "<env_digest>",
+     "plan_origin": null,
+     "policy_version": "stablenew.video_sequence_policy.v1",
+     "schema": "stablenew.video_sequence_plan.v1",
+     "segments": [
+      {
+       "anchor_path": null,
+       "anchor_policy": "source",
+       "anchor_sha256": null,
+       "frame_count": 17,
+       "index": 0,
+       "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+       "overlap_frames": 0,
+       "prompt": "the person waves",
+       "seed": 100,
+       "workflow_id": "wan22_ti2v_5b_i2v_v1",
+       "workflow_version": "1.3.0"
+      },
+      {
+       "anchor_path": null,
+       "anchor_policy": "carry_last_frame",
+       "anchor_sha256": null,
+       "frame_count": 17,
+       "index": 1,
+       "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+       "overlap_frames": 1,
+       "prompt": "the person waves",
+       "seed": 101,
+       "workflow_id": "wan22_ti2v_5b_i2v_v1",
+       "workflow_version": "1.3.0"
+      },
+      {
+       "anchor_path": null,
+       "anchor_policy": "carry_last_frame",
+       "anchor_sha256": null,
+       "frame_count": 17,
+       "index": 2,
+       "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+       "overlap_frames": 1,
+       "prompt": "the person waves",
+       "seed": 102,
+       "workflow_id": "wan22_ti2v_5b_i2v_v1",
+       "workflow_version": "1.3.0"
+      }
+     ],
+     "sequence_id": "golden-sequence",
+     "source": {
+      "path": "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png",
+      "sha256": "9bda9198329e7626b41d7777d25e1838275bfcd11c35987fa7bcf7bee6becd63"
+     },
+     "stage": "video_workflow",
+     "target_height": 832,
+     "target_width": 480
+    },
+    "source_preparation": {
+     "orientation": "portrait",
+     "orientation_rule": "landscape when source width is greater than height; otherwise portrait",
+     "original_source_path": "<tmp>/in/portrait.png",
+     "policy": "cover_resize_center_crop",
+     "prepared_dimensions": {
+      "height": 832,
+      "width": 480
+     },
+     "prepared_image_path": "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png",
+     "source_dimensions": {
+      "height": 832,
+      "width": 480
+     },
+     "target_dimensions": {
+      "height": 832,
+      "width": 480
+     }
+    },
+    "video_execution": {
+     "backend_id": "comfy",
+     "controls": [
+      "negative_prompt",
+      "prompt_text",
+      "source_image"
+     ],
+     "experimental_opt_in": false,
+     "task": "image_to_video",
+     "workflow_id": "wan22_ti2v_5b_i2v_v1",
+     "workflow_version": "1.3.0"
+    },
+    "workflow_id": "wan22_ti2v_5b_i2v_v1",
+    "workflow_version": "1.3.0"
+   }
+  },
+  "continuity_link": null,
+  "images_per_prompt": 1,
+  "input_image_paths": [
+   "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png"
+  ],
+  "intent_config": {},
+  "loop_count": 1,
+  "loop_type": "pipeline",
+  "metadata": {
+   "original_image_count": 1,
+   "reprocess": {
+    "input_count": 1,
+    "input_image_paths": [
+     "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png"
+    ],
+    "requested_stages": [
+     "video_workflow"
+    ],
+    "schema": "stablenew.reprocess.v2.6",
+    "source": "video_workflow"
+   },
+   "reprocess_mode": true,
+   "reprocess_stages": [
+    "video_workflow"
+   ],
+   "submission_source": "video_workflow",
+   "video_workflow": {
+    "approximate_seconds": 0.7,
+    "backend_id": "comfy",
+    "display_name": "Wan2.2 TI2V-5B Prompt-Directed I2V",
+    "experimental_opt_in": false,
+    "fps": 24,
+    "frame_count": 17,
+    "governance_state": "approved",
+    "output_route": "Reprocess",
+    "seed": 100,
+    "sequence": {
+     "segments": 3,
+     "sequence_id": "golden-sequence"
+    },
+    "source_preparation": {
+     "orientation": "portrait",
+     "orientation_rule": "landscape when source width is greater than height; otherwise portrait",
+     "original_source_path": "<tmp>/in/portrait.png",
+     "policy": "cover_resize_center_crop",
+     "prepared_dimensions": {
+      "height": 832,
+      "width": 480
+     },
+     "prepared_image_path": "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png",
+     "source_dimensions": {
+      "height": 832,
+      "width": 480
+     },
+     "target_dimensions": {
+      "height": 832,
+      "width": 480
+     }
+    },
+    "workflow_id": "wan22_ti2v_5b_i2v_v1",
+    "workflow_version": "1.3.0"
+   }
+  },
+  "negative_prompt": "static, still image, blurry, low quality, worst quality, extra limbs, extra fingers, deformed hands, distorted body, cropped, watermark, subtitles",
+  "positive_prompt": "the person waves",
+  "sequence_intent": null,
+  "start_stage": "video_workflow",
+  "variant_mode": "standard"
+ },
+ "workload_kind": "video"
+}

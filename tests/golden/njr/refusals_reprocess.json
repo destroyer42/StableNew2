@@ -1,0 +1,45 @@
+{
+ "empty_prompt_img2img": {
+  "admission": {
+   "outcome": "accepted"
+  },
+  "compile": {
+   "outcome": "accepted"
+  }
+ },
+ "exact_profile_unsupported_img2img_at_builder": {
+  "admission": {
+   "outcome": "accepted"
+  },
+  "compile": {
+   "outcome": "accepted"
+  }
+ },
+ "exact_profile_unsupported_img2img_at_reprocess_wrapper": {
+  "wrapper": {
+   "message": "Z-Image-Turbo FP8 (limited support) cannot run this request: stage(s) img2img are outside its qualified envelope (supported: txt2img); no stage is omitted or rewritten for you. Nothing was queued and no setting was changed.",
+   "outcome": "refused",
+   "type": "OperationNotSupportedError"
+  }
+ },
+ "missing_input_image": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "Input image not found: <tmp>/absent.png",
+   "outcome": "refused",
+   "type": "ValueError"
+  }
+ },
+ "retired_stage": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "AnimateDiff execution is retired and can no longer run. Disable the AnimateDiff stage (animatediff_enabled=false), or use native SVD or the Comfy Video Workflow instead. No request was sent and no stage was substituted.",
+   "outcome": "refused",
+   "type": "AnimateDiffRetiredError"
+  }
+ }
+}

@@ -1,0 +1,179 @@
+[
+ {
+  "job_id": "reprocess-1",
+  "output_plan": {
+   "base_output_dir": "<tmp>/output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": null,
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "original_image_count": 2,
+    "reprocess": {
+     "input_count": 2,
+     "input_image_paths": [
+      "<tmp>/in/first.png",
+      "<tmp>/in/second.png"
+     ],
+     "requested_stages": [
+      "img2img"
+     ],
+     "schema": "stablenew.reprocess.v2.6",
+     "source": "reprocess",
+     "source_items": [
+      {
+       "image_edit": null,
+       "input_image_path": "<tmp>/in/first.png",
+       "metadata": {},
+       "model": "sdxl.safetensors",
+       "negative_prompt": "blurry",
+       "prompt": "a clean portrait",
+       "vae": null
+      },
+      {
+       "image_edit": null,
+       "input_image_path": "<tmp>/in/second.png",
+       "metadata": {},
+       "model": "sdxl.safetensors",
+       "negative_prompt": "blurry",
+       "prompt": "a clean portrait",
+       "vae": null
+      }
+     ]
+    },
+    "reprocess_mode": true,
+    "reprocess_stages": [
+     "img2img"
+    ],
+    "submission_source": "reprocess"
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": null,
+   "txt2img_prompt_info": null,
+   "variant_index": 0,
+   "variant_total": 1
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "Review Golden",
+   "id": null,
+   "kind": "reprocess",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 6.0,
+    "denoising_strength": 0.4,
+    "enabled": true,
+    "extra": {
+     "cfg_scale": 6.0,
+     "denoising_strength": 0.4,
+     "model": "sdxl.safetensors",
+     "steps": 18
+    },
+    "model": "sdxl.safetensors",
+    "sampler_name": "Euler a",
+    "scheduler": null,
+    "stage_type": "img2img",
+    "steps": 18,
+    "vae": null
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "img2img": {
+     "cfg_scale": 6.0,
+     "denoising_strength": 0.4,
+     "model": "sdxl.safetensors",
+     "steps": 18
+    },
+    "model": "sdxl.safetensors",
+    "seed": 77,
+    "txt2img": {
+     "model": "sdxl.safetensors"
+    }
+   },
+   "images_per_prompt": 2,
+   "input_image_paths": [
+    "<tmp>/in/first.png",
+    "<tmp>/in/second.png"
+   ],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {
+    "original_image_count": 2,
+    "reprocess": {
+     "input_count": 2,
+     "input_image_paths": [
+      "<tmp>/in/first.png",
+      "<tmp>/in/second.png"
+     ],
+     "requested_stages": [
+      "img2img"
+     ],
+     "schema": "stablenew.reprocess.v2.6",
+     "source": "reprocess",
+     "source_items": [
+      {
+       "image_edit": null,
+       "input_image_path": "<tmp>/in/first.png",
+       "metadata": {},
+       "model": "sdxl.safetensors",
+       "negative_prompt": "blurry",
+       "prompt": "a clean portrait",
+       "vae": null
+      },
+      {
+       "image_edit": null,
+       "input_image_path": "<tmp>/in/second.png",
+       "metadata": {},
+       "model": "sdxl.safetensors",
+       "negative_prompt": "blurry",
+       "prompt": "a clean portrait",
+       "vae": null
+      }
+     ]
+    },
+    "reprocess_mode": true,
+    "reprocess_stages": [
+     "img2img"
+    ],
+    "submission_source": "reprocess"
+   },
+   "negative_prompt": "blurry",
+   "positive_prompt": "a clean portrait",
+   "start_stage": "img2img",
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ }
+]
