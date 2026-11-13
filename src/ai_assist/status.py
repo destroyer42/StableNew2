@@ -97,7 +97,9 @@ def read_status(
             STATE_NOT_INSTALLED,
             "Offline AI Assist is not set up: no runtime build is pinned in config/managed_ai_runtime.json.",
             blockers=problems,
-            actions=("Pin a runtime build by reviewed change (tools/ai_assist_admin.py describe-runtime).",),
+            actions=(
+                "Pin a runtime build by reviewed change (tools/ai_assist_admin.py describe-runtime).",
+            ),
             last_outcome=last,
             egress=egress,
             missing=MISSING_PINNED_BUILD,
@@ -105,7 +107,6 @@ def read_status(
     verification = verify_installation(base, runtime, registry, allow_candidate=True)
     if verification.ok and verification.entry is not None and verification.build is not None:
         entry, build = verification.entry, verification.build
-        identity = {"model_name": entry.display_name, "build_id": build.build_id, "model_sha256": entry.sha256}
         if trust_tier(entry, build) == TRUST_QUALIFIED:
             return AiAssistStatus(
                 STATE_READY,
@@ -114,19 +115,25 @@ def read_status(
                 last_outcome=last,
                 egress=egress,
                 trust=TRUST_QUALIFIED,
-                **identity,
+                model_name=entry.display_name,
+                build_id=build.build_id,
+                model_sha256=entry.sha256,
             )
         if preview_enabled_for(base, entry, build):
             return AiAssistStatus(
                 STATE_PREVIEW,
                 f"{PREVIEW_LABEL} (enabled by the operator): {entry.display_name} is installed and verified but not qualified.",
                 blockers=problems,
-                actions=() if egress == "attested" else ("Record the outbound firewall attestation.",),
+                actions=()
+                if egress == "attested"
+                else ("Record the outbound firewall attestation.",),
                 last_outcome=last,
                 egress=egress,
                 trust=TRUST_PREVIEW,
                 missing="" if egress == "attested" else MISSING_ATTESTATION,
-                **identity,
+                model_name=entry.display_name,
+                build_id=build.build_id,
+                model_sha256=entry.sha256,
             )
         return AiAssistStatus(
             STATE_PREVIEW_AVAILABLE,
@@ -136,7 +143,9 @@ def read_status(
             last_outcome=last,
             egress=egress,
             missing=MISSING_ENABLEMENT,
-            **identity,
+            model_name=entry.display_name,
+            build_id=build.build_id,
+            model_sha256=entry.sha256,
         )
     if verification.code is OutcomeCode.NOT_INSTALLED:
         return AiAssistStatus(

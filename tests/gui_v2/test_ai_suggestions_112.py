@@ -496,7 +496,9 @@ def test_preview_dialog_enables_and_revokes_only_through_the_owner(journey):
     j.flow.owner = owner
     dialog = j.flow.open_preview()
     assert dialog is not None and not calls
-    assert dialog.enable_button.instate(["!disabled"]) and dialog.revoke_button.instate(["disabled"])
+    assert dialog.enable_button.instate(["!disabled"]) and dialog.revoke_button.instate(
+        ["disabled"]
+    )
     dialog.enable_button.invoke()
     assert calls == ["enable"] and dialog.revoke_button.instate(["!disabled"])
     dialog.revoke_button.invoke()

@@ -59,7 +59,10 @@ def enable(inst: Install) -> None:
 def test_status_distinguishes_qualified_available_enabled_and_not_installed(
     installation: Install, candidate: Install, tmp_path
 ) -> None:
-    assert read_status(installation.root, installation.manifest, installation.registry).state == STATE_READY
+    assert (
+        read_status(installation.root, installation.manifest, installation.registry).state
+        == STATE_READY
+    )
     status = read_status(candidate.root, candidate.manifest, candidate.registry)
     assert status.state == STATE_PREVIEW_AVAILABLE and status.missing == "enablement"
     assert preview_state(status).can_enable
@@ -69,7 +72,10 @@ def test_status_distinguishes_qualified_available_enabled_and_not_installed(
     assert status.missing == "attestation" and PREVIEW_LABEL in status.summary
     empty = read_status(tmp_path / "x", RuntimeManifest(()), ModelRegistry(()))
     assert empty.missing == "pinned_build"
-    assert read_status(tmp_path / "x", candidate.manifest, candidate.registry).missing == "imported_model"
+    assert (
+        read_status(tmp_path / "x", candidate.manifest, candidate.registry).missing
+        == "imported_model"
+    )
 
 
 def test_enable_use_label_and_revoke(candidate: Install) -> None:
@@ -138,7 +144,9 @@ def test_preview_policy_off_never_admits_a_candidate_even_with_a_record(candidat
     enable(candidate)
     record_attestation(candidate.root, "rule")
     policy = ServicePolicy(strict_offline=True, watch_interval_seconds=0.05)
-    assert make_service(candidate, policy=policy).run(request_for()).code is OutcomeCode.NOT_INSTALLED
+    assert (
+        make_service(candidate, policy=policy).run(request_for()).code is OutcomeCode.NOT_INSTALLED
+    )
 
 
 def test_qualified_path_is_unchanged_and_labelled_qualified(installation: Install) -> None:
@@ -169,7 +177,9 @@ def test_integration_names_each_missing_prerequisite_then_runs_labelled(
     candidate: Install, tmp_path
 ) -> None:
     def owner(root, manifest, registry):
-        return AiAssistIntegration(lambda: None, lambda cb: None, root=root, runtime_manifest=manifest, registry=registry)
+        return AiAssistIntegration(
+            lambda: None, lambda cb: None, root=root, runtime_manifest=manifest, registry=registry
+        )
 
     no_build = owner(tmp_path / "a", RuntimeManifest(()), candidate.registry)
     code, text = no_build.availability()
@@ -204,14 +214,18 @@ def test_integration_service_uses_preview_policy_with_strict_offline(tmp_path) -
 def test_readiness_record_shows_the_preview_state_and_label(candidate: Install) -> None:
     enable(candidate)
     service = OperatorReadinessService(
-        ai_assist_status_provider=lambda: read_status(candidate.root, candidate.manifest, candidate.registry),
+        ai_assist_status_provider=lambda: read_status(
+            candidate.root, candidate.manifest, candidate.registry
+        ),
         python_version_provider=lambda: (3, 14, 0),
         free_threaded_provider=lambda: False,
         jit_enabled_provider=lambda: False,
         comfy_command_provider=lambda: (),
     )
     record = service.collect().record_for("ai_assist")
-    assert record is not None and PREVIEW_LABEL in record.summary and "not attested" in record.summary
+    assert (
+        record is not None and PREVIEW_LABEL in record.summary and "not attested" in record.summary
+    )
 
 
 def test_preview_status_text_names_the_exact_prerequisite() -> None:

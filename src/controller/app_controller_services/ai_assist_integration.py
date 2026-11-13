@@ -197,7 +197,10 @@ class AiAssistIntegration:
                     OutcomeCode.NOT_INSTALLED,
                     "AI Assist needs an imported runtime and model: nothing is imported and activated.",
                 )
-            return OutcomeCode.NOT_INSTALLED, "AI Assist needs an installed runtime and model (qualified, or an enabled Preview model)."
+            return (
+                OutcomeCode.NOT_INSTALLED,
+                "AI Assist needs an installed runtime and model (qualified, or an enabled Preview model).",
+            )
         if status.egress != "attested":
             return (
                 OutcomeCode.EGRESS_NOT_ATTESTED,

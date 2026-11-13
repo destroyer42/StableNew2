@@ -415,7 +415,10 @@ class AiAssistService:
                     request_id=request.request_id,
                     reason=result.reason,
                     elapsed_ms=result.elapsed_ms,
-                    details={**observer.evidence.as_details(), "trust_tier": verification.trust_tier},
+                    details={
+                        **observer.evidence.as_details(),
+                        "trust_tier": verification.trust_tier,
+                    },
                 )
             else:
                 output_chars = len(result.stdout)
@@ -426,7 +429,10 @@ class AiAssistService:
                     reason=validated.reason,
                     suggestion=validated.suggestion,
                     elapsed_ms=result.elapsed_ms,
-                    details={**observer.evidence.as_details(), "trust_tier": verification.trust_tier},
+                    details={
+                        **observer.evidence.as_details(),
+                        "trust_tier": verification.trust_tier,
+                    },
                 )
         except Exception:  # noqa: BLE001 - the request must always end in a typed outcome
             logger.exception("AI assist request failed unexpectedly")
