@@ -197,7 +197,7 @@ class AiAssistIntegration:
                     OutcomeCode.NOT_INSTALLED,
                     "AI Assist needs an imported runtime and model: nothing is imported and activated.",
                 )
-            return OutcomeCode.NOT_INSTALLED, "AI Assist needs an installed runtime and model."
+            return OutcomeCode.NOT_INSTALLED, "AI Assist needs an installed runtime and model (qualified, or an enabled Preview model)."
         if status.egress != "attested":
             return (
                 OutcomeCode.EGRESS_NOT_ATTESTED,
@@ -211,31 +211,6 @@ class AiAssistIntegration:
         """Bind the window's queued invoker; it never falls back to running Tk work on a worker."""
         with self._lock:
             self._dispatch = dispatch
-
-    def availability(self) -> tuple[OutcomeCode | None, str]:
-        if self.closed:
-            return OutcomeCode.UNAVAILABLE, "Application shutdown has begun."
-        if self.service is None:
-            return OutcomeCode.UNAVAILABLE, "AI Assist service is unavailable."
-        if self.busy:
-            return OutcomeCode.BUSY, "Another AI request is running."
-        status = self.status()
-        if status.state == STATE_INTEGRITY_FAILED:
-            return (
-                OutcomeCode.INTEGRITY_FAILED,
-                "AI integrity check failed. Open Operator Readiness.",
-            )
-        if status.state != STATE_READY:
-            return (
-                OutcomeCode.NOT_INSTALLED,
-                "AI Assist needs an installed, qualified runtime and model.",
-            )
-        if status.egress != "attested":
-            return (
-                OutcomeCode.EGRESS_NOT_ATTESTED,
-                "Operator-managed outbound restriction must be attested.",
-            )
-        return None, "AI suggestions are advisory. Review before accepting."
 
     def submit(
         self, request: AssistRequest, on_done: Callable[[AssistOutcome], None]
