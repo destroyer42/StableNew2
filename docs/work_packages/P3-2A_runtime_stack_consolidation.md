@@ -1,6 +1,6 @@
 # P3-2A — One construction site and a verified record for the runtime stack
 
-Status: **AUTHORIZED for local implementation by the owner on 2026-11-12 (stage A only).** Not started.
+Status: **IMPLEMENTED (stage A only), 2026-11-12/13.** Completion report below; hosted CI is the integration verdict.
 Produced by the P3-2 decision report
 ([assessment](../assessments/2026-11-12_p3_2_runtime_composition_root_decision.md), measured at
 `67e0e559d1998321d567e78f9b4e16cf4e6d9807`). This file is the copy-paste prompt for a fresh implementation session and
@@ -202,3 +202,32 @@ without separate authorization.** Stop at completion of P3-2A; do not begin P3-2
 
 Per `AGENTS.md` section 8: exact SHA and diff, behavior and identity evidence, outstanding risks, documentation impact,
 and the measured `Model / usage` line from `tools/usage_report.py`.
+
+## Completion report (2026-11-13)
+
+- **Outcome:** `src/app/runtime_stack.py` is the one production construction site for `JobRepository`, `JobQueue`,
+  `SingleNodeJobRunner` and `JobService`; `RuntimeStack` is a frozen identity record with `verify()` and no production
+  flag; `AppController._build_job_service` and `_single_node_runner_factory` are removed and the branch raises
+  `RuntimeCompositionError`. Branch `feat/p3-2a-runtime-stack`, implementation commit `d336c9e0` on `67e0e559` (+ the
+  docs commit `fd1cbbce`). Started 2026-11-12 18:09 -05:00, session `fe01c306-d83c-4b9b-8510-46c5dac48408`.
+- **Layering (correction 2):** `src/app/runtime_stack.py` is dependency-safe: importing `src.app` loads neither
+  `pipeline_controller` nor `job_execution_controller`; `JobService` is imported inside `assemble_runtime_stack`.
+- **Reachability:** full-census trace at the unmodified source (16,359 test records, uncommitted plugin) recorded zero
+  calls to either deleted method.
+- **Evidence:** G1-G11 and N1-N7 (`tests/app/test_runtime_stack_*_p3_2.py`, 21 tests) pass; on unmodified source only
+  N1, N2, N4 (and N5 once, a global-manager isolation gap since fixed) failed, as intended. Gate steps before the census
+  passed (controller ratchet 6161/1607, mypy ratchet 1425, ruff and architecture ratchets, collection, smoke 397).
+  G8: no AppState projection mismatch exists after `build_v2_app` (pinned, nothing repaired).
+- **Census:** `run_pr_gate.py --full` exit 1 with 41 failures on this host versus 40 on the unmodified baseline; 33 are
+  common (a live external ComfyUI/Forge endpoint blocks runtime-transition tests), 8 differ and all 8 pass alone.
+  `tests/tools`: 6 failed, 2,969 passed; four golden-journey failures match the baseline, `image-edit` passes alone, and
+  `test_img_forge_100_acceptance_driver` fails identically on unmodified `67e0e559` on this host.
+- **Stage-A choices:** `_job_repository_path`/`_job_history_path` are unchanged (G10 pins them); a service built by the
+  factory is verified, an injected stand-in is recorded unverified because existing tests inject stubs.
+- **Risks / not demonstrated:** no physical launch, no restart against a running Forge; the operator's repository file
+  changed size and mtime during the window because their live app writes it (no test opened that path, but identity by
+  size/mtime cannot be proven here); `AppController` keeps its own pytest path rule (temporary debt, OD-4).
+- **Docs:** QUEUE_AND_RUNTIME 6/11/15, STATUS decision 11, GUI ownership map, ARCHITECTURE 11, CODEX_MAP, CODE_MAP.
+- **Model / usage:** Claude Code desktop, claude-sonnet-5-5, effort not recorded by the host, 0 repair passes, result
+  PASS locally with hosted CI pending; 120 responses, cache read 24.6M, output 73.4k (`tools/usage_report.py`, window
+  from task start).
