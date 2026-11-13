@@ -52,10 +52,6 @@ PERMITTED_NON_PRODUCTION: dict[tuple[str, str], str] = {
         "JobRepository",
         "src/migrations/sqlite_job_importer.py",
     ): "offline importer, not the application stack",
-    (
-        "WebUIProcessManager",
-        "src/gui/main_window_v2.py",
-    ): "dormant launcher run_app (OD-7, separate package)",
 }
 
 _TRACKED_NAMES = frozenset(PRODUCTION_SITES)

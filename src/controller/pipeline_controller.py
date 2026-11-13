@@ -47,7 +47,6 @@ from src.controller.webui_connection_controller import (
     WebUIConnectionController,
     WebUIConnectionState,
 )
-from src.history.history_record import HistoryRecord
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.pipeline.history_variation_compiler import compile_history_variation
 from src.pipeline.job_builder_v2 import JobBuilderV2
@@ -1548,13 +1547,6 @@ class PipelineController(CorePipelineController):
         if count:
             _logger.info("Replayed job %s with %d queued job(s)", job_id, count)
         return count
-
-    def on_replay_history_job_v2(self, record: HistoryRecord) -> Any:
-        """Replay entrypoint that assumes NJR-only history records."""
-        try:
-            return self._job_controller.replay(record)
-        except Exception:
-            return None
 
     def get_job_history_service(self) -> JobHistoryService | None:
         """Return a JobHistoryService bound to this controller's queue/history."""

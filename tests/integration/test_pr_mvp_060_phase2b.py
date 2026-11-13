@@ -7,7 +7,10 @@ import pytest
 
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.job_history_service import JobHistoryService
-from src.queue.job_model import JobStatus
+from src.controller.pipeline_controller_services.history_handoff_service import (
+    HistoryHandoffService,
+)
+from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
 from src.utils.error_envelope_v2 import get_attached_envelope, wrap_exception
@@ -93,8 +96,23 @@ def test_retry_is_new_lineage_and_preserves_authorized_workload(tmp_path: Path) 
     with pytest.raises(RuntimeError):
         controller.get_runner().run_once(original)
 
-    retry_id = history.retry_job(original.job_id)
-    assert retry_id is not None
+    # The live replay admission (AppController.on_replay_history_job_v2 -> PipelineController.replay_job_from_history):
+    # hydrate the stored NJR, compile a replay intent, and submit the new lineage through the queue.
+    admitted: list[str] = []
+
+    def submit_replay(records, **_kwargs) -> int:
+        for record in records:
+            job = Job(job_id=record.job_id, snapshot={"normalized_job": record.to_dict()})
+            job._normalized_record = record
+            queue.submit(job)
+            admitted.append(record.job_id)
+        return len(records)
+
+    count = HistoryHandoffService().replay_job_from_history(
+        job_id=original.job_id, history_service=history, submit_normalized_jobs=submit_replay
+    )
+    assert count == 1
+    (retry_id,) = admitted
     retry_job = queue.get_job(retry_id)
     assert retry_job is not None
     controller.get_runner().run_once(retry_job)

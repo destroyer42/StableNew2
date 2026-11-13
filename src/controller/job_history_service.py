@@ -118,30 +118,6 @@ class JobHistoryService:
                 return False
         return False
 
-    def retry_job(self, job_id: str) -> str | None:
-        """Retry a completed/failed job by re-submitting its payload."""
-
-        vm = self.get_job(job_id)
-        if vm is None or vm.status not in {
-            JobStatus.COMPLETED,
-            JobStatus.FAILED,
-            JobStatus.CANCELLED,
-        }:
-            return None
-
-        original = self._queue.get_job(job_id)
-        if original is None:
-            return None
-
-        replay = getattr(self._job_controller, "replay", None)
-        record = getattr(original, "_normalized_record", None)
-        if callable(replay) and record is not None:
-            try:
-                return replay(record)
-            except Exception:
-                return None
-        return None
-
     def _from_job(self, job: Job, *, is_active: bool = False) -> JobView:
         return self._build_view_from_job(job, is_active=is_active)
 
@@ -641,7 +617,3 @@ class NullHistoryService(JobHistoryService):
     def cancel_job(self, job_id: str) -> bool:
         """Return False - cancellation not supported."""
         return False
-
-    def retry_job(self, job_id: str) -> str | None:
-        """Return None - retry not supported."""
-        return None

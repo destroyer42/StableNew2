@@ -122,7 +122,6 @@ from src.controller.svd_submission_service import (
 )
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
-    WebUIConnectionState,
 )
 from src.gui.app_state_projection_sink import AppStateProjectionSink
 from src.gui.app_state_v2 import AppStateV2
@@ -2527,57 +2526,6 @@ class AppController:
         persist = getattr(job_exec, "persist_queue_state", None)
         if callable(persist):
             persist()
-
-    def _execute_job(self, job: Job) -> dict[str, Any]:
-        """Execute a job via NJR only (PR-CORE1-D11 pack-only path)."""
-        self._append_log(f"[queue] Executing job {job.job_id}")
-
-        webui_ctrl = getattr(self, "webui_connection_controller", None)
-        if (
-            webui_ctrl is not None
-            and webui_ctrl.get_state() == WebUIConnectionState.READY
-            and not webui_ctrl.is_webui_ready_strict()
-        ):
-            reason = webui_ctrl.last_readiness_error or "unknown"
-            message = f"WebUI not ready: {reason}"
-            self._append_log(f"[queue] {message}")
-            # The queue alone owns lifecycle (PR-QUEUE-WEBUI-171): the typed ready-gate result below is assessed there.
-            result_payload: dict[str, Any] = {"error": message}
-            canonical_result = normalize_run_result(result_payload, default_run_id=job.job_id)
-            metadata = canonical_result.get("metadata") or {}
-            metadata.setdefault("execution_path", "ready_gate")
-            metadata["ready_gate_reason"] = reason
-            canonical_result["metadata"] = metadata
-            return canonical_result
-
-        execution_path = "missing"
-        result_payload: Any | None = None
-        normalized_record = getattr(job, "_normalized_record", None)
-        if normalized_record is not None and self.pipeline_controller is not None:
-            execution_path = "njr"
-            self._append_log(
-                f"[queue] Job {job.job_id} has normalized_record, executing via NJR-only path"
-            )
-            try:
-                result_payload = self.pipeline_controller._run_job(job)
-            except Exception as exc:  # noqa: BLE001
-                self._append_log(f"[queue] NJR execution for job {job.job_id} failed: {exc!r}")
-                result_payload = {"success": False, "error": str(exc)}
-        else:
-            execution_path = "missing_njr"
-            self._append_log(
-                f"[queue] Job {job.job_id} is missing normalized_record; cannot execute."
-            )
-            result_payload = {
-                "error": "Job is missing normalized_record; legacy/pipeline_config execution is disabled.",
-            }
-
-        canonical_result = normalize_run_result(result_payload, default_run_id=job.job_id)
-        metadata = dict(canonical_result.get("metadata") or {})
-        metadata["execution_path"] = execution_path
-        metadata.setdefault("job_id", job.job_id)
-        canonical_result["metadata"] = metadata
-        return canonical_result
 
     def _safe_int(self, value: Any, default: int) -> int:
         try:
