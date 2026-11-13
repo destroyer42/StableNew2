@@ -116,7 +116,8 @@ creating another dispatcher, navigation authority or execution path.
 Owner decision 11 is accepted for the Tk production host only: one application composition path, one dispatcher owner per
 Tk root and one coordinated lifecycle, with the existing kernel, queue, repository, `JobService`, `PipelineRunner` and
 process managers authoritative. It does not authorize Qt or a second GUI host, and it is not the full P3-2 runtime-stack
-migration (`AppController` still builds some of its own services).
+migration (the queue stack is built at one site, `src/app/runtime_stack.py`, called from the controllers; lifting it into
+`build_v2_app` remains open).
 
 - **Composition path:** `src/main.py` launches (single-instance lock, `Tk()`, `mainloop`) and calls `build_v2_app`
   (`src/app_factory.py`), the only place the Tk root's dispatcher, `AppStateV2`, controller, window and watchdog are joined.

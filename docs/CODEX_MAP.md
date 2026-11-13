@@ -11,7 +11,7 @@ The earlier per-PR version of this file is in Git (`git show 7e311d1d:docs/CODEX
 
 | Task | Start here, in order |
 |---|---|
-| GUI to queue submission | `src/controller/app_controller.py` -> `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
+| GUI to queue submission | `src/controller/app_controller.py` -> `src/controller/job_service.py` (built in `src/app/runtime_stack.py`) -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
 | Job record (NJR) and compilers | `src/pipeline/njr_core_v26.py`, `src/pipeline/config_contract_v26.py`, `src/pipeline/job_builder_v2.py` |
 | Running a job | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
 | PromptPacks | `docs/Subsystems/PromptPacks/PROMPTPACKS_AND_PROMPTING.md`; `src/pipeline/prompt_pack_parser.py` -> `src/pipeline/prompt_pack_job_builder.py`; `src/promptpacks/` |

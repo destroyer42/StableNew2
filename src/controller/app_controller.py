@@ -51,6 +51,7 @@ from src.api.webui_resource_service import (
 from src.api.webui_resources import WebUIResource
 from src.api.webui_runtime_identity import resolve_effective_webui_base_url
 from src.app.optional_dependency_probes import OptionalDependencySnapshot
+from src.app.runtime_stack import RuntimeCompositionError
 from src.config.app_config import (
     get_jsonl_log_config,
     is_debug_shutdown_inspector_enabled,
@@ -99,7 +100,6 @@ from src.controller.global_prompt_policy_service import (
     overlay_config_in_place,
     read_current_policy,
 )
-from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
@@ -146,9 +146,6 @@ from src.pipeline.reprocess_builder import (
 )
 from src.pipeline.training_njr_compiler import TrainingIntent, compile_training_intent
 from src.queue.job_model import Job, JobStatus
-from src.queue.job_queue import JobQueue
-from src.queue.job_repository import JobRepository
-from src.queue.single_node_runner import SingleNodeJobRunner
 from src.review.workflow_adapter import ReviewWorkflowAdapter
 from src.services.duration_stats_service import DurationStatsService
 from src.state.workspace_paths import workspace_paths
@@ -573,7 +570,7 @@ class AppController:
         if pipeline_job_service is not None:
             self.job_service = pipeline_job_service
         elif self.job_service is None:
-            self.job_service = self._build_job_service()
+            raise RuntimeCompositionError("PipelineController supplied no JobService and none was injected")
         outage = getattr(self.job_service, "webui_outage", None)
         if job_service is None and outage is not None:  # not injected: restored WebUI jobs await a readiness proof
             outage.enable_startup_gate()
@@ -2429,34 +2426,6 @@ class AppController:
     # ------------------------------------------------------------------
     # Queue & JobService helpers (PR-039B)
     # ------------------------------------------------------------------
-
-    def _single_node_runner_factory(
-        self,
-        job_queue: JobQueue,
-        run_callable: Callable[[Job], dict] | None,
-    ) -> SingleNodeJobRunner:
-        """Factory that produces the SingleNodeJobRunner used by JobService."""
-
-        return SingleNodeJobRunner(
-            job_queue,
-            run_callable=run_callable or self._execute_job,
-            poll_interval=0.05,
-        )
-
-    def _build_job_service(self) -> JobService:
-        repository = JobRepository(self._job_repository_path)
-        job_queue = JobQueue(repository=repository)
-        history_service = JobHistoryService(job_queue, repository)
-        service = JobService(
-            job_queue,
-            runner_factory=self._single_node_runner_factory,
-            history_store=repository,
-            history_service=history_service,
-            run_callable=self._execute_job,
-            job_lifecycle_logger=self._job_lifecycle_logger,
-            require_normalized_records=True,
-        )
-        return service
 
     def _setup_queue_callbacks(self) -> None:
         if not self.job_service:
