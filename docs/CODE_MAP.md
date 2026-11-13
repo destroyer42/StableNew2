@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-716 of 871 modules have a docstring.
+717 of 872 modules have a docstring.
 
 ## src/
 
@@ -53,6 +53,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: (no docstring)
 - `optional_dependency_probes.py`: (no docstring)
+- `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
 
 ## src/assets/
 

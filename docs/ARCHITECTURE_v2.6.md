@@ -555,6 +555,16 @@ contract. Rendering, dialogs and event handling remain in `src/gui/`.
 The MVP remains a single-process desktop application. Threaded work must marshal
 UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 
+The queue stack is constructed in one place: `src/app/runtime_stack.py` builds the
+`JobRepository`, `JobQueue`, `SingleNodeJobRunner` and `JobService`, called from
+`JobExecutionController` and `PipelineController` in their existing order. The frozen
+`RuntimeStack` record it returns names and verifies these identities and holds no
+lifecycle, process, cancellation or pause/auto-run state. `AppController` has no second
+wiring and fails closed when no service exists. The test-mode repository rule
+(`PYTEST_CURRENT_TEST` selects `:memory:`) lives in `resolve_job_repository_location()`
+and is temporary compatibility debt, not the target design; lifting construction into
+the application bootstrap is a separate decision.
+
 Capability-aware backend/model selection may later change what image settings a
 GUI presents, but GUI surfaces may only express intent/configuration and render
 projections; they may never build A1111, Diffusers, ComfyUI, or model-family
