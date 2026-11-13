@@ -826,7 +826,9 @@ def test_an_unqualified_lfm3_candidate_keeps_offline_ai_assist_disabled(tmp_path
     )
     unqualified = read_status(root, RuntimeManifest((build,)), _qualified(DOC["candidates"], False))
     assert unqualified.state == STATE_NOT_INSTALLED
-    assert unqualified.missing == "imported_model"  # nothing is active, so Preview is not even offered
+    assert (
+        unqualified.missing == "imported_model"
+    )  # nothing is active, so Preview is not even offered
     assert read_status(root).state == STATE_NOT_INSTALLED  # the shipped configuration
 
 
