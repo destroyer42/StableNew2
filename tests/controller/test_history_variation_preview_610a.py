@@ -20,6 +20,7 @@ from src.controller.pipeline_controller_services.preview_admission import (
     accepted_preview_records,
 )
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
+from src.image_backends import operation_compatibility
 from src.image_backends.operation_compatibility import OperationNotSupportedError
 from src.pipeline import history_variation_compiler as hvc
 from src.pipeline.history_variation_compiler import HistoryVariationDraft
@@ -190,7 +191,8 @@ def test_refusal_at_compile_admits_zero_jobs_and_reports_the_reason(harness, mon
     blocked = type(
         "A", (), {"ready": False, "explain": lambda self: "model changed", "problems": ()}
     )()
-    monkeypatch.setattr(hvc, "assess_njr", lambda job: blocked)
+    # The recheck runs through the compiler core's operation check (P4-2B), which reads this seam.
+    monkeypatch.setattr(operation_compatibility, "assess_njr", lambda job, metadata=None: blocked)
     request, records, accepted = harness.build_preview()
     assert records == [] and accepted
     assert "model changed" in harness.controller.get_preview_build_timing_snapshot()["error"]

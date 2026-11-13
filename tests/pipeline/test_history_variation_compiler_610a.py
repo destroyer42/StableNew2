@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.image_backends import operation_compatibility
 from src.image_backends.model_policy import Support
 from src.image_backends.operation_compatibility import OperationNotSupportedError
 from src.pipeline import history_variation_compiler as hvc
@@ -259,7 +260,8 @@ def test_negative_prompt_edit_refused_when_target_profile_forbids_it(monkeypatch
 
 def test_current_operation_policy_is_rechecked(monkeypatch):
     blocked = SimpleNamespace(ready=False, explain=lambda: "no", problems=())
-    monkeypatch.setattr(hvc, "assess_njr", lambda job: blocked)
+    # The recheck runs through the compiler core's operation check (P4-2B), which reads this seam.
+    monkeypatch.setattr(operation_compatibility, "assess_njr", lambda job, metadata=None: blocked)
     with pytest.raises(OperationNotSupportedError):
         compile_history_variation(_draft())
 

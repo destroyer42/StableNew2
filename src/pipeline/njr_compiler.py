@@ -58,9 +58,7 @@ class CompileCheck(Enum):
 
     PROFILE_NJR = "profile_njr"  # validate_profile_njr: the pure exact-profile NJR admission check
     OPERATION = "operation"  # require_njr_operation: operation compatibility of the exact profile
-    RETIRED = (
-        "retired"  # require_no_retired_execution: retired execution (AnimateDiff, secondary motion)
-    )
+    RETIRED = "retired"  # require_no_retired_execution: any retired execution feature
 
 
 _CHECKS: Mapping[CompileCheck, Callable[[NormalizedJobRecord], None]] = {
