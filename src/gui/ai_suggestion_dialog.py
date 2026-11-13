@@ -10,6 +10,7 @@ from tkinter import ttk
 from src.ai_assist.contracts import SuggestionKind
 from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
+from src.gui_v2.ai_plan_advice import PLAN_ADVICE_NOTICE, PlanReview, review_text
 from src.gui_v2.ai_suggestion_view import KIND_LABELS, SuggestionReview
 
 
@@ -24,6 +25,8 @@ class AiSuggestionDialog(tk.Toplevel):
         on_close: Callable[[], None],
         explanations: dict[SuggestionKind, str],
         trust_label: str = "",
+        on_advise: Callable[[str], None] | None = None,
+        advise_problem: str = "",
     ) -> None:
         super().__init__(master)
         self.title("AI suggestion review")
@@ -39,11 +42,32 @@ class AiSuggestionDialog(tk.Toplevel):
             button.pack(side="left", padx=4)
             self._requests.append((button, kind))
         self._explanations = explanations
+        self._on_advise = on_advise
+        self._advise_problem = advise_problem
         self._trust_label = trust_label
         self.trust_var = tk.StringVar(value=trust_label)
         ttk.Label(self, textvariable=self.trust_var, wraplength=760, justify="left").pack(
             fill="x", padx=8
         )
+        self.goal_var = tk.StringVar(value="")
+        self.advise_button: ttk.Button | None = None
+        self.goal_entry: ttk.Entry | None = None
+        self._copy_buttons: list[ttk.Button] = []
+        if on_advise is not None:
+            plan = ttk.LabelFrame(self, text="Advisory plan (advice, not a plan)")
+            plan.pack(fill="x", padx=8, pady=(0, 4))
+            ttk.Label(plan, text=PLAN_ADVICE_NOTICE, wraplength=740, justify="left").pack(
+                fill="x", padx=4, pady=2
+            )
+            row = ttk.Frame(plan)
+            row.pack(fill="x", padx=4, pady=2)
+            ttk.Label(row, text="Goal:").pack(side="left")
+            self.goal_entry = ttk.Entry(row, textvariable=self.goal_var, width=70)
+            self.goal_entry.pack(side="left", fill="x", expand=True, padx=4)
+            self.advise_button = ttk.Button(row, text="Advise plan", command=self._advise)
+            self.advise_button.pack(side="left", padx=4)
+            self.copy_frame = ttk.Frame(plan)
+            self.copy_frame.pack(fill="x", padx=4, pady=2)
         self.status_var = tk.StringVar(
             value="Choose the assistance to request. Acceptance changes only the editing buffer."
         )
@@ -71,7 +95,61 @@ class AiSuggestionDialog(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self.close)
         self._set_requests(False)
         unavailable = [f"{KIND_LABELS[k]}: {v}" for k, v in explanations.items() if v]
+        if advise_problem:
+            unavailable.append(f"Advise plan: {advise_problem}")
         self._text("\n".join(unavailable))
+
+    def _advise(self) -> None:
+        if self._on_advise is not None:
+            self._on_advise(self.goal_var.get())
+
+    def _set_advise(self, running: bool) -> None:
+        if self.advise_button is not None:
+            self.advise_button.state(
+                ["disabled"] if running or self._advise_problem else ["!disabled"]
+            )
+
+    def set_advise_problem(self, problem: str) -> None:
+        self._advise_problem = problem
+        self._set_advise(False)
+
+    def _clear_copy_buttons(self) -> None:
+        for button in self._copy_buttons:
+            button.destroy()
+        self._copy_buttons.clear()
+
+    def show_plan(self, review: PlanReview) -> None:
+        """Read-only display of a judged advisory plan. The only actions are per-step clipboard copies."""
+
+        self._clear_copy_buttons()
+        self.status(review.status)
+        self._set_requests(False)
+        self._set_advise(False)
+        self.cancel_button.state(["disabled"])
+        self.accept_button.state(["disabled"])
+        self._text(review_text(review))
+        if self.advise_button is not None:
+            for row in review.rows:
+                button = ttk.Button(
+                    self.copy_frame,
+                    text=f"Copy step {row.index}",
+                    command=partial(self._copy, row.copy_text),
+                )
+                button.pack(side="left", padx=2)
+                self._copy_buttons.append(button)
+
+    def _copy(self, text: str) -> None:
+        self.clipboard_clear()
+        self.clipboard_append(text)
+
+    def running_plan(self) -> None:
+        self._clear_copy_buttons()
+        self.status("Advise plan: request running…")
+        self._text("")
+        self._set_requests(True)
+        self._set_advise(True)
+        self.accept_button.state(["disabled"])
+        self.cancel_button.state(["!disabled"])
 
     def set_trust_label(self, label: str) -> None:
         """Every surface of a suggestion from an unqualified Preview model carries this label."""
@@ -96,12 +174,15 @@ class AiSuggestionDialog(tk.Toplevel):
         self.status(f"{KIND_LABELS[kind]}: request running…")
         self._text("")
         self._set_requests(True)
+        self._set_advise(True)
         self.accept_button.state(["disabled"])
         self.cancel_button.state(["!disabled"])
 
     def show_review(self, model: SuggestionReview) -> None:
+        self._clear_copy_buttons()
         self.status(f"{model.kind}: {model.status}")
         self._set_requests(False)
+        self._set_advise(False)
         self.cancel_button.state(["disabled"])
         self.accept_button.state(["!disabled"] if model.can_accept else ["disabled"])
         lines: list[str] = []
@@ -136,6 +217,8 @@ class AiSuggestionDialog(tk.Toplevel):
         self._text("\n".join(lines))
 
     def clear_sensitive(self) -> None:
+        self._clear_copy_buttons()
+        self.goal_var.set("")
         self._text("")
         self.accept_button.state(["disabled"])
         self.status_var.set(

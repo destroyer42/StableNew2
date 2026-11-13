@@ -19,6 +19,14 @@ MAX_TEXT_CHARS = 8000
 MAX_LIST_ITEMS = 256
 MAX_NAME_CHARS = 200
 MAX_REFUSAL_REASON_CHARS = 400
+#: Planning bounds (P3). Exceeding any of them is a rejection, never a truncation.
+MAX_GOAL_CHARS = 1000
+MAX_PLAN_STEPS = 6
+MAX_STEP_COUNT = 8
+MAX_PLAN_TOTAL_COUNT = 24
+MAX_RATIONALE_CHARS = 240
+#: The one stage that takes a workflow; every other allowed stage takes a model target.
+VIDEO_STAGE = "video"
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
@@ -26,6 +34,8 @@ class SuggestionKind(str, Enum):
     PROMPT_REWRITE = "prompt_rewrite"
     TARGET_FIT_ADVICE = "target_fit_advice"
     WORKFLOW_CHOICE = "workflow_choice"
+    #: Advisory, read-only step list (owner decision D17). Never an executable plan; see ``PlanStep``.
+    PLAN_PROPOSAL = "plan_proposal"
 
 
 class OutcomeCode(str, Enum):
@@ -98,6 +108,9 @@ class AssistRequest:
     #: Closed lists the model may choose from. The model can never name something that is not in them.
     allowed_targets: tuple[str, ...] = ()
     allowed_workflows: tuple[str, ...] = ()
+    #: ``PLAN_PROPOSAL`` only: the operator's goal in their own words (data for the model) and the closed stage list.
+    goal_text: str = ""
+    allowed_stages: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request_id, str) or not _REQUEST_ID.match(self.request_id):
@@ -115,12 +128,22 @@ class AssistRequest:
         for label, names in (
             ("allowed_targets", self.allowed_targets),
             ("allowed_workflows", self.allowed_workflows),
+            ("allowed_stages", self.allowed_stages),
         ):
             if not isinstance(names, tuple) or len(names) > MAX_LIST_ITEMS:
                 raise ValueError(f"{label} must be a tuple of at most {MAX_LIST_ITEMS} names")
             for name in names:
                 if not isinstance(name, str) or not name or len(name) > MAX_NAME_CHARS:
                     raise ValueError(f"{label} holds an invalid name")
+        if not isinstance(self.goal_text, str) or len(self.goal_text) > MAX_GOAL_CHARS:
+            raise ValueError(f"goal_text must be text of at most {MAX_GOAL_CHARS} characters")
+        if self.kind is SuggestionKind.PLAN_PROPOSAL:
+            if not self.goal_text.strip():
+                raise ValueError("a plan request needs a goal")
+            if not self.allowed_stages or not (self.allowed_targets or self.allowed_workflows):
+                raise ValueError("a plan request needs closed lists of stages and models or workflows")
+        elif self.goal_text or self.allowed_stages:
+            raise ValueError("goal_text and allowed_stages belong to plan requests only")
         if self.kind is SuggestionKind.PROMPT_REWRITE and not self.positive_text.strip():
             raise ValueError("a rewrite request needs a positive prompt")
         if self.kind is SuggestionKind.TARGET_FIT_ADVICE and not self.allowed_targets:
@@ -129,7 +152,7 @@ class AssistRequest:
             raise ValueError("workflow advice needs a closed list of workflows")
 
     def input_chars(self) -> int:
-        return len(self.positive_text) + len(self.negative_text)
+        return len(self.positive_text) + len(self.negative_text) + len(self.goal_text)
 
     def digest(self) -> str:
         """Short content digest for correlation. The text itself is never persisted or logged."""
@@ -142,9 +165,26 @@ class AssistRequest:
                 self.target_policy_id,
                 "|".join(self.allowed_targets),
                 "|".join(self.allowed_workflows),
+                self.goal_text,
+                "|".join(self.allowed_stages),
             )
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
+@dataclass(frozen=True, slots=True)
+class PlanStep:
+    """One advisory step. Identifiers come from the request's closed lists; ``rationale`` is display text only.
+
+    There is deliberately no field here that could carry a path, a payload, a seed, a prompt or any value an executor
+    could consume: a step names *which* stage/model/workflow would fit, nothing more.
+    """
+
+    stage: str
+    target: str | None
+    workflow: str | None
+    count: int
+    rationale: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +199,8 @@ class AssistSuggestion:
     target: str | None = None
     workflow: str | None = None
     changes: tuple[str, ...] = ()
+    #: ``PLAN_PROPOSAL`` only. Advice, not a plan: no field converts these to Intent, a job or a queue entry.
+    steps: tuple[PlanStep, ...] = ()
 
     def to_diagnostics(self) -> dict[str, Any]:
         """Content-free view (kind, counts, codes) safe for logs and the event record."""
@@ -171,6 +213,7 @@ class AssistSuggestion:
             "negative_chars": None if self.negative_text is None else len(self.negative_text),
             "has_target": self.target is not None,
             "has_workflow": self.workflow is not None,
+            "step_count": len(self.steps),
         }
 
 
@@ -197,15 +240,22 @@ class AssistOutcome:
 __all__ = [
     "CHANGE_CODES",
     "CONTENT_CLASSES",
+    "MAX_GOAL_CHARS",
     "MAX_LIST_ITEMS",
     "MAX_NAME_CHARS",
+    "MAX_PLAN_STEPS",
+    "MAX_PLAN_TOTAL_COUNT",
+    "MAX_RATIONALE_CHARS",
     "MAX_REFUSAL_REASON_CHARS",
+    "MAX_STEP_COUNT",
     "MAX_TEXT_CHARS",
     "SUGGESTION_SCHEMA_ID",
+    "VIDEO_STAGE",
     "AiCancelToken",
     "AssistOutcome",
     "AssistRequest",
     "AssistSuggestion",
     "OutcomeCode",
+    "PlanStep",
     "SuggestionKind",
 ]

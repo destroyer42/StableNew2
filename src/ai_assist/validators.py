@@ -18,12 +18,18 @@ from typing import Any
 
 from src.ai_assist.contracts import (
     CHANGE_CODES,
+    MAX_PLAN_STEPS,
+    MAX_PLAN_TOTAL_COUNT,
+    MAX_RATIONALE_CHARS,
     MAX_REFUSAL_REASON_CHARS,
+    MAX_STEP_COUNT,
     MAX_TEXT_CHARS,
     SUGGESTION_SCHEMA_ID,
+    VIDEO_STAGE,
     AssistRequest,
     AssistSuggestion,
     OutcomeCode,
+    PlanStep,
     SuggestionKind,
 )
 from src.prompting.prompt_compatibility import NON_PROSE_PATTERN
@@ -39,8 +45,10 @@ _ALLOWED_KEYS = frozenset(
         "workflow",
         "changes",
         "refusal_reason",
+        "steps",
     }
 )
+_STEP_KEYS = frozenset({"stage", "target", "workflow", "count", "rationale"})
 #: A rewrite may not grow without bound relative to what the operator wrote.
 _MAX_GROWTH_FACTOR = 4
 _GROWTH_ALLOWANCE = 400
@@ -101,6 +109,44 @@ def _text_field(value: Any, label: str, *, limit: int) -> tuple[str | None, str]
     return value, ""
 
 
+def _validate_steps(value: Any, request: AssistRequest) -> tuple[tuple[PlanStep, ...], str]:
+    """Closed-list, bounded validation of a plan's steps. Returns ``(steps, "")`` or ``((), reason)``; never repairs."""
+
+    if not isinstance(value, list) or not value:
+        return (), "steps_missing"
+    if len(value) > MAX_PLAN_STEPS:
+        return (), "plan_too_many_steps"
+    steps: list[PlanStep] = []
+    total = 0
+    for item in value:
+        if not isinstance(item, dict) or set(item) != _STEP_KEYS:
+            return (), "step_fields_invalid"
+        stage, target, workflow = item["stage"], item["target"], item["workflow"]
+        count, rationale = item["count"], item["rationale"]
+        if not isinstance(stage, str) or stage not in request.allowed_stages:
+            return (), "stage_not_in_closed_list"
+        if stage == VIDEO_STAGE:
+            if target is not None:
+                return (), "step_target_with_video_stage"
+            if not isinstance(workflow, str) or workflow not in request.allowed_workflows:
+                return (), "workflow_not_in_closed_list"
+        else:
+            if workflow is not None:
+                return (), "step_workflow_with_image_stage"
+            if not isinstance(target, str) or target not in request.allowed_targets:
+                return (), "target_not_in_closed_list"
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= MAX_STEP_COUNT:
+            return (), "step_count_out_of_bounds"
+        total += count
+        text, problem = _text_field(rationale, "rationale", limit=MAX_RATIONALE_CHARS)
+        if problem or text is None or not text.strip():
+            return (), problem or "rationale_missing"
+        steps.append(PlanStep(stage, target, workflow, count, text))
+    if total > MAX_PLAN_TOTAL_COUNT:
+        return (), "plan_total_over_bound"
+    return tuple(steps), ""
+
+
 def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResult:
     """Classify the model's complete stdout for ``request``."""
 
@@ -152,8 +198,17 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
         return _malformed(problem)
     target = document.get("target")
     workflow = document.get("workflow")
+    steps: tuple[PlanStep, ...] = ()
 
-    if request.kind is SuggestionKind.PROMPT_REWRITE:
+    if "steps" in document and request.kind is not SuggestionKind.PLAN_PROPOSAL:
+        return _malformed("unexpected_steps_field")
+    if request.kind is SuggestionKind.PLAN_PROPOSAL:
+        if positive is not None or negative is not None or target is not None or workflow is not None:
+            return _malformed("unexpected_text_field")
+        steps, problem = _validate_steps(document.get("steps"), request)
+        if problem:
+            return _malformed(problem)
+    elif request.kind is SuggestionKind.PROMPT_REWRITE:
         if target is not None or workflow is not None:
             return _malformed("unexpected_choice_field")
         if positive is None or not positive.strip():
@@ -188,6 +243,7 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
         target=target if request.kind is SuggestionKind.TARGET_FIT_ADVICE else None,
         workflow=workflow if request.kind is SuggestionKind.WORKFLOW_CHOICE else None,
         changes=tuple(changes),
+        steps=steps,
     )
     return ValidationResult(OutcomeCode.SUGGESTION, "", suggestion)
 

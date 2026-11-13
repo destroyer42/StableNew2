@@ -52,7 +52,12 @@ FAKE_CHILD = textwrap.dedent(
     if selfpid:
         with open(selfpid, "w") as handle:
             handle.write(str(os.getpid()))
-    positive = prompt.split("POSITIVE_PROMPT:", 1)[1].split("NEGATIVE_PROMPT:", 1)[0].strip("\\n")
+    positive = (
+        prompt.split("POSITIVE_PROMPT:", 1)[1].split("NEGATIVE_PROMPT:", 1)[0].strip("\\n")
+        if "POSITIVE_PROMPT:" in prompt else ""
+    )
+    plan_step = {"stage": "txt2img", "target": "model-a", "workflow": None, "count": 2, "rationale": "fits the goal"}
+    video_step = {"stage": "video", "target": None, "workflow": "wf-a", "count": 1, "rationale": "animate it"}
     schema = "ai_assist.suggestion/1"
     if mode == "sleep":
         time.sleep(120)
@@ -84,6 +89,13 @@ FAKE_CHILD = textwrap.dedent(
         print(json.dumps({"schema": schema, "status": "ok", "kind": "prompt_rewrite", "positive": positive,
                           "negative": "", "changes": []}))
         print("llama_print_timings: eval time = 1234.5 ms / 87 runs ( 14.19 ms per token, 70.46 tokens per second)")
+    elif mode == "plan_ok":
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "plan_proposal", "steps": [plan_step, video_step]}))
+    elif mode == "plan_out_of_list":
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "plan_proposal",
+                          "steps": [dict(plan_step, target="not-installed")]}))
+    elif mode == "plan_too_many":
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "plan_proposal", "steps": [plan_step] * 7}))
     elif mode == "exit3":
         sys.exit(3)
     elif mode == "wrong_enum":

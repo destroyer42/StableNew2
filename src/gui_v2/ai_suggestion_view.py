@@ -74,6 +74,17 @@ def checked_suggestion(outcome: AssistOutcome, request: AssistRequest) -> Assist
         "workflow": s.workflow,
         "changes": list(s.changes),
     }
+    if request.kind is SuggestionKind.PLAN_PROPOSAL:
+        document["steps"] = [
+            {
+                "stage": step.stage,
+                "target": step.target,
+                "workflow": step.workflow,
+                "count": step.count,
+                "rationale": step.rationale,
+            }
+            for step in s.steps
+        ]
     return validate_output(json.dumps(document), request).suggestion
 
 
