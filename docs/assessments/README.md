@@ -56,3 +56,8 @@ The [2026-11-10 ARCH-DESIGN-950 coordination-hotspot assessment](2026-11-10_arch
 is a Focused, static-analysis design record at `fdd900a9` for decomposing `AppController`, the executor and the Learning
 controller. Its packages (ARCH-951 to ARCH-956) are proposals; each needs its own owner authorization and a fresh check
 against current source.
+
+The [2026-11-12 P4-2 unified NJR compiler design](2026-11-12_p4_2_unified_njr_compiler_design.md) is a Focused,
+static-analysis design record at `67e0e559` for one NJR assembly core. Its packages (P4-2A to P4-2F, in
+[the work-package plan](../work_packages/P4-2_unified_njr_compiler_migration.md)) are proposals; each needs its own
+owner authorization and a fresh check against current source.
