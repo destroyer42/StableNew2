@@ -135,7 +135,11 @@ def _validate_steps(value: Any, request: AssistRequest) -> tuple[tuple[PlanStep,
                 return (), "step_workflow_with_image_stage"
             if not isinstance(target, str) or target not in request.allowed_targets:
                 return (), "target_not_in_closed_list"
-        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= MAX_STEP_COUNT:
+        if (
+            isinstance(count, bool)
+            or not isinstance(count, int)
+            or not 1 <= count <= MAX_STEP_COUNT
+        ):
             return (), "step_count_out_of_bounds"
         total += count
         text, problem = _text_field(rationale, "rationale", limit=MAX_RATIONALE_CHARS)
@@ -203,7 +207,12 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
     if "steps" in document and request.kind is not SuggestionKind.PLAN_PROPOSAL:
         return _malformed("unexpected_steps_field")
     if request.kind is SuggestionKind.PLAN_PROPOSAL:
-        if positive is not None or negative is not None or target is not None or workflow is not None:
+        if (
+            positive is not None
+            or negative is not None
+            or target is not None
+            or workflow is not None
+        ):
             return _malformed("unexpected_text_field")
         steps, problem = _validate_steps(document.get("steps"), request)
         if problem:

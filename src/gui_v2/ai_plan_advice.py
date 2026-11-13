@@ -136,7 +136,9 @@ def _judge_model_step(step: PlanStep, facts: PlanFacts) -> StepVerdict:
 def _judge_workflow_step(step: PlanStep, facts: PlanFacts) -> StepVerdict:
     fact = facts.workflows.get(step.workflow or "")
     if fact is None:
-        return StepVerdict(step, VERDICT_UNAVAILABLE, "The workflow is not offered by the catalogue.")
+        return StepVerdict(
+            step, VERDICT_UNAVAILABLE, "The workflow is not offered by the catalogue."
+        )
     if fact.governance_state == _GOVERNANCE_EXPERIMENTAL:
         return StepVerdict(
             step,
@@ -152,11 +154,17 @@ def _judge_workflow_step(step: PlanStep, facts: PlanFacts) -> StepVerdict:
     try:
         blocked, unknown = facts.preflight(step.workflow or "", fact.version)
     except Exception:  # noqa: BLE001 - never "valid by default" when readiness could not be read
-        return StepVerdict(step, VERDICT_NEEDS_INPUT, "Readiness could not be checked. Open the Video Workflow tab.")
+        return StepVerdict(
+            step,
+            VERDICT_NEEDS_INPUT,
+            "Readiness could not be checked. Open the Video Workflow tab.",
+        )
     if blocked:
         return StepVerdict(step, VERDICT_UNAVAILABLE, f"Prerequisite missing: {blocked[0]}")
     if unknown:
-        return StepVerdict(step, VERDICT_NEEDS_INPUT, f"Readiness could not be confirmed: {unknown[0]}")
+        return StepVerdict(
+            step, VERDICT_NEEDS_INPUT, f"Readiness could not be confirmed: {unknown[0]}"
+        )
     return StepVerdict(step, VERDICT_VALID)
 
 
@@ -270,7 +278,9 @@ _OUTCOME_COPY = {
 def outcome_plan_text(outcome: AssistOutcome, fallback: Mapping[OutcomeCode, str]) -> str:
     """Fixed, content-free copy for a non-suggestion outcome (never model text, details or exception messages)."""
 
-    return _OUTCOME_COPY.get(outcome.code) or fallback.get(outcome.code, "The AI request did not complete.")
+    return _OUTCOME_COPY.get(outcome.code) or fallback.get(
+        outcome.code, "The AI request did not complete."
+    )
 
 
 def review_text(review: PlanReview) -> str:
@@ -286,7 +296,9 @@ def review_text(review: PlanReview) -> str:
     lines.append("")
     for row in review.rows:
         unit = "clip" if row.stage == VIDEO_STAGE else "image"
-        lines.append(f"{row.index}. [{_VERDICT_TEXT[row.verdict]}] {row.stage}: {row.choice} x {row.count} {unit}(s)")
+        lines.append(
+            f"{row.index}. [{_VERDICT_TEXT[row.verdict]}] {row.stage}: {row.choice} x {row.count} {unit}(s)"
+        )
         lines.append(f"   Why (model's words): {row.rationale}")
         if row.reason:
             lines.append(f"   Check: {row.reason}")

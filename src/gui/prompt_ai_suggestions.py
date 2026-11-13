@@ -366,7 +366,9 @@ class PromptAiSuggestions:
             dialog.set_trust_label(trust)
         if self._review_cancelled:
             dialog.show_plan(
-                unavailable_plan_review("Request cancelled. Nothing was planned.", trust_label=trust)
+                unavailable_plan_review(
+                    "Request cancelled. Nothing was planned.", trust_label=trust
+                )
             )
             self.refresh()
             return

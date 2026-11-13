@@ -532,8 +532,20 @@ def _plan_outcome(request, *, details=None):
         "status": "ok",
         "kind": "plan_proposal",
         "steps": [
-            {"stage": "txt2img", "target": SDXL, "workflow": None, "count": 2, "rationale": "base look"},
-            {"stage": "video", "target": None, "workflow": "wf-a", "count": 1, "rationale": "animate"},
+            {
+                "stage": "txt2img",
+                "target": SDXL,
+                "workflow": None,
+                "count": 2,
+                "rationale": "base look",
+            },
+            {
+                "stage": "video",
+                "target": None,
+                "workflow": "wf-a",
+                "count": 1,
+                "rationale": "animate",
+            },
         ],
     }
     validated = validate_output(json.dumps(doc), request)
@@ -568,14 +580,16 @@ def test_plan_journey_shows_judged_advice_and_touches_nothing(journey):
     assert request.goal_text == "a poster then a short animation"
     assert "request running" in dialog.status_var.get()
     j.service.callbacks[-1](_plan_outcome(request))
-    assert j.scheduled, "completion must be queued to the GUI thread, never run inline on the worker"
+    assert j.scheduled, (
+        "completion must be queued to the GUI thread, never run inline on the worker"
+    )
     j.scheduled.pop(0)()
     text = _dialog_text(dialog)
     assert "Advice, not a plan" in text and "[valid]" in text and "Wan A" in text
     assert [b.cget("text") for b in dialog._copy_buttons] == ["Copy step 1", "Copy step 2"]
     dialog._copy_buttons[1].invoke()
     assert "advice only" in dialog.clipboard_get()
-    assert str(dialog.accept_button.cget("state")) == "disabled"
+    assert dialog.accept_button.instate(["disabled"])
     assert j.frame.workspace_state.current_pack == before and not j.frame.workspace_state.dirty
     assert len(j.service.requests) == 1
 
@@ -585,7 +599,10 @@ def test_plan_refusals_leave_the_manual_path_and_show_the_outcome(journey):
     _bind_plan(j)
     dialog = j.flow.open()
     dialog.goal_var.set("anything")
-    j.owner.availability = lambda: (OutcomeCode.GENERATION_ACTIVE, OUTCOME_TEXT[OutcomeCode.GENERATION_ACTIVE])
+    j.owner.availability = lambda: (
+        OutcomeCode.GENERATION_ACTIVE,
+        OUTCOME_TEXT[OutcomeCode.GENERATION_ACTIVE],
+    )
     dialog.advise_button.invoke()
     assert not j.service.requests
     assert OUTCOME_TEXT[OutcomeCode.GENERATION_ACTIVE] in dialog.status_var.get()
@@ -596,7 +613,9 @@ def test_plan_refusals_leave_the_manual_path_and_show_the_outcome(journey):
     dialog.goal_var.set("go")
     dialog.advise_button.invoke()
     request = j.service.requests[-1]
-    j.service.callbacks[-1](AssistOutcome(OutcomeCode.REFUSED_BY_MODEL, request.request_id, reason="secret"))
+    j.service.callbacks[-1](
+        AssistOutcome(OutcomeCode.REFUSED_BY_MODEL, request.request_id, reason="secret")
+    )
     j.scheduled.pop(0)()
     assert "refused" in dialog.status_var.get() and "secret" not in _dialog_text(dialog)
     assert dialog._copy_buttons == []
@@ -621,11 +640,9 @@ def test_plan_without_sources_is_disabled_with_a_reason(journey):
     from src.gui.prompt_ai_plan_sources import PlanSnapshot
     from src.gui_v2.ai_plan_advice import PlanFacts
 
-    j.flow.bind(
-        j.owner, targets=lambda: (), plan=lambda: PlanSnapshot((), (), (), PlanFacts())
-    )
+    j.flow.bind(j.owner, targets=lambda: (), plan=lambda: PlanSnapshot((), (), (), PlanFacts()))
     dialog = j.flow.open()
-    assert str(dialog.advise_button.cget("state")) == "disabled"
+    assert dialog.advise_button.instate(["disabled"])
     assert "No policy-valid models or approved workflows" in _dialog_text(dialog)
 
 

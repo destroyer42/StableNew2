@@ -16,13 +16,13 @@ from types import SimpleNamespace
 import pytest
 
 from src.ai_assist.contracts import (
+    SUGGESTION_SCHEMA_ID,
     AssistOutcome,
     AssistRequest,
     AssistSuggestion,
     OutcomeCode,
     PlanStep,
     SuggestionKind,
-    SUGGESTION_SCHEMA_ID,
 )
 from src.ai_assist.preview import PREVIEW_LABEL
 from src.ai_assist.service import Submission
@@ -118,7 +118,9 @@ def test_needs_operator_input() -> None:
     assert experimental.verdict == VERDICT_NEEDS_INPUT and "opt-in" in experimental.reason
     unknown = judge_step(video(), facts(preflight=_preflight(unknown=("ComfyUI is not serving.",))))
     assert unknown.verdict == VERDICT_NEEDS_INPUT and "ComfyUI" in unknown.reason
-    default = judge_step(video(), facts())  # no preflight injected: readiness is unknown, never valid
+    default = judge_step(
+        video(), facts()
+    )  # no preflight injected: readiness is unknown, never valid
     assert default.verdict == VERDICT_NEEDS_INPUT
 
 
@@ -154,7 +156,9 @@ def test_invalid_steps_are_shown_not_repaired_or_dropped() -> None:
 
 
 def test_only_a_plan_is_judged() -> None:
-    other = AssistSuggestion(SUGGESTION_SCHEMA_ID, SuggestionKind.WORKFLOW_CHOICE, "r1", workflow="w")
+    other = AssistSuggestion(
+        SUGGESTION_SCHEMA_ID, SuggestionKind.WORKFLOW_CHOICE, "r1", workflow="w"
+    )
     with pytest.raises(ValueError):
         judge_plan(other, facts())
 
@@ -184,7 +188,9 @@ def test_the_only_action_is_copy_text_and_it_is_plain_text() -> None:
         assert isinstance(row.copy_text, str) and "advice only" in row.copy_text
 
 
-_FORBIDDEN = re.compile(r"intent|queue|compile|njr|submit|apply|accept|create|confirm|fill|payload|job", re.I)
+_FORBIDDEN = re.compile(
+    r"intent|queue|compile|njr|submit|apply|accept|create|confirm|fill|payload|job", re.I
+)
 
 
 def test_the_view_model_exposes_no_intent_creating_action_or_field() -> None:
@@ -198,23 +204,31 @@ def test_the_view_model_exposes_no_intent_creating_action_or_field() -> None:
 
 
 def test_plan_modules_import_nothing_that_could_execute_or_queue() -> None:
-    forbidden = ("src.pipeline", "src.queue", "src.controller", "src.video", "src.history", "src.learning")
+    forbidden = (
+        "src.pipeline",
+        "src.queue",
+        "src.controller",
+        "src.video",
+        "src.history",
+        "src.learning",
+    )
     for relative in ("src/gui_v2/ai_plan_advice.py", "src/ai_assist/validators.py"):
         tree = ast.parse(Path(relative).read_text(encoding="utf-8"))
-        modules = [
-            n.module or ""
-            for n in ast.walk(tree)
-            if isinstance(n, ast.ImportFrom)
-        ] + [a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names]
+        modules = [n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)] + [
+            a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names
+        ]
         assert not [m for m in modules if m.startswith(forbidden)], (relative, modules)
 
 
 def test_non_suggestion_outcomes_show_fixed_copy_only() -> None:
-    refused = AssistOutcome(OutcomeCode.REFUSED_BY_MODEL, "r1", reason="model said something private")
+    refused = AssistOutcome(
+        OutcomeCode.REFUSED_BY_MODEL, "r1", reason="model said something private"
+    )
     text = outcome_plan_text(refused, OUTCOME_TEXT)
     assert "private" not in text and "refused" in text
-    assert outcome_plan_text(AssistOutcome(OutcomeCode.GENERATION_ACTIVE, "r1"), OUTCOME_TEXT) == (
-        OUTCOME_TEXT[OutcomeCode.GENERATION_ACTIVE]
+    assert (
+        outcome_plan_text(AssistOutcome(OutcomeCode.GENERATION_ACTIVE, "r1"), OUTCOME_TEXT)
+        == (OUTCOME_TEXT[OutcomeCode.GENERATION_ACTIVE])
     )
     assert "bounds" in outcome_plan_text(AssistOutcome(OutcomeCode.MALFORMED, "r1"), OUTCOME_TEXT)
 
@@ -228,7 +242,9 @@ def test_build_plan_request_takes_ids_from_the_lists_and_the_goal_as_data() -> N
         stages=("txt2img", "video"),
     )
     assert request.kind is SuggestionKind.PLAN_PROPOSAL
-    assert request.allowed_targets == ("model-a", "model-b") and request.goal_text == "make a poster"
+    assert (
+        request.allowed_targets == ("model-a", "model-b") and request.goal_text == "make a poster"
+    )
     assert request.positive_text == "" and request.negative_text == ""
     with pytest.raises(ValueError):
         build_plan_request("r1", "", targets=TARGETS, workflows=WORKFLOWS, stages=("txt2img",))
@@ -245,7 +261,12 @@ class FakeService:
 
     def submit(self, request, done):
         if not self.accept:
-            return Submission(False, AssistOutcome(OutcomeCode.GENERATION_ACTIVE, request.request_id, "generation_running"))
+            return Submission(
+                False,
+                AssistOutcome(
+                    OutcomeCode.GENERATION_ACTIVE, request.request_id, "generation_running"
+                ),
+            )
         self.done = done
         return Submission(True)
 
@@ -269,7 +290,9 @@ def owner(tmp_path):
 
 
 def _request() -> AssistRequest:
-    return build_plan_request("r1", "poster", targets=TARGETS, workflows=WORKFLOWS, stages=("txt2img",))
+    return build_plan_request(
+        "r1", "poster", targets=TARGETS, workflows=WORKFLOWS, stages=("txt2img",)
+    )
 
 
 def _ok_outcome() -> AssistOutcome:
@@ -363,8 +386,18 @@ def sources(monkeypatch):
         _normalize_model_name=lambda name: name,
     )
     records = [
-        {"workflow_id": "wf-a", "workflow_version": "1.3.0", "display_name": "Wan A", "governance_state": "approved"},
-        {"workflow_id": "wf-a", "workflow_version": "1.2.0", "display_name": "dup", "governance_state": "approved"},
+        {
+            "workflow_id": "wf-a",
+            "workflow_version": "1.3.0",
+            "display_name": "Wan A",
+            "governance_state": "approved",
+        },
+        {
+            "workflow_id": "wf-a",
+            "workflow_version": "1.2.0",
+            "display_name": "dup",
+            "governance_state": "approved",
+        },
         {"workflow_id": "", "display_name": "nameless"},
     ]
     return panel, records
@@ -399,5 +432,7 @@ def test_snapshot_without_sources_gives_empty_closed_lists_never_invented_ones()
 
 
 def test_controller_preflight_adapter_never_reports_ok_gates_as_problems() -> None:
-    controller = FakeVideoController([], (SimpleNamespace(label="A", state="advisory", detail="ram"),))
+    controller = FakeVideoController(
+        [], (SimpleNamespace(label="A", state="advisory", detail="ram"),)
+    )
     assert controller_preflight(controller)("w", "1") == ((), ())

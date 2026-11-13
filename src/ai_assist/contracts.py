@@ -141,7 +141,9 @@ class AssistRequest:
             if not self.goal_text.strip():
                 raise ValueError("a plan request needs a goal")
             if not self.allowed_stages or not (self.allowed_targets or self.allowed_workflows):
-                raise ValueError("a plan request needs closed lists of stages and models or workflows")
+                raise ValueError(
+                    "a plan request needs closed lists of stages and models or workflows"
+                )
         elif self.goal_text or self.allowed_stages:
             raise ValueError("goal_text and allowed_stages belong to plan requests only")
         if self.kind is SuggestionKind.PROMPT_REWRITE and not self.positive_text.strip():

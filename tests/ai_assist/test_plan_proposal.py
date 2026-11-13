@@ -97,12 +97,22 @@ def test_valid_plan_becomes_a_typed_advisory_suggestion() -> None:
         PlanStep("txt2img", "model-a", None, 2, "fits the goal"),
         PlanStep("video", None, "wf-a", 1, "animate it"),
     )
-    assert suggestion.positive_text is None and suggestion.target is None and suggestion.workflow is None
+    assert (
+        suggestion.positive_text is None
+        and suggestion.target is None
+        and suggestion.workflow is None
+    )
     assert suggestion.to_diagnostics()["step_count"] == 2
 
 
 def test_a_step_can_carry_no_executable_value() -> None:
-    assert {f.name for f in fields(PlanStep)} == {"stage", "target", "workflow", "count", "rationale"}
+    assert {f.name for f in fields(PlanStep)} == {
+        "stage",
+        "target",
+        "workflow",
+        "count",
+        "rationale",
+    }
     assert set(AssistSuggestion.__slots__) >= {"steps"}
 
 
@@ -146,7 +156,12 @@ def test_missing_or_empty_steps_are_malformed(steps) -> None:
 
 
 def test_other_fields_cannot_ride_along_with_a_plan() -> None:
-    for extra in ({"positive": "x"}, {"target": "model-a"}, {"workflow": "wf-a"}, {"negative": "x"}):
+    for extra in (
+        {"positive": "x"},
+        {"target": "model-a"},
+        {"workflow": "wf-a"},
+        {"negative": "x"},
+    ):
         result = validate_output(document([step()], **extra), REQUEST)
         assert result.code is OutcomeCode.MALFORMED and result.reason == "unexpected_text_field"
 
@@ -202,7 +217,10 @@ def test_request_bounds_fail_at_construction() -> None:
         AssistRequest("r1", SuggestionKind.PROMPT_REWRITE, positive_text="a", goal_text="g")
     with pytest.raises(ValueError):
         AssistRequest(
-            "r1", SuggestionKind.WORKFLOW_CHOICE, allowed_workflows=("w",), allowed_stages=("video",)
+            "r1",
+            SuggestionKind.WORKFLOW_CHOICE,
+            allowed_workflows=("w",),
+            allowed_stages=("video",),
         )
 
 
@@ -351,7 +369,9 @@ def test_a_candidate_never_runs_without_the_preview_policy(candidate: Install) -
     record_attestation(candidate.root, "rule")
     enable_preview(candidate.root, candidate.manifest, candidate.registry)
     policy = ServicePolicy(strict_offline=True, watch_interval_seconds=0.05)
-    assert make_service(candidate, policy=policy).run(plan_request()).code is OutcomeCode.NOT_INSTALLED
+    assert (
+        make_service(candidate, policy=policy).run(plan_request()).code is OutcomeCode.NOT_INSTALLED
+    )
 
 
 # -- privacy (P7, R8): no goal, plan or rationale content on disk or in logs ----------------------------------------------
@@ -373,10 +393,13 @@ def test_event_log_and_disk_carry_no_goal_or_plan_content(
     records = [json.loads(line) for line in raw.splitlines()]
     assert [r["kind"] for r in records] == ["plan_proposal", "plan_proposal"]
     assert all(set(r) <= ALLOWED_FIELDS for r in records)
-    assert {"goal", "goal_text", "steps", "plan", "rationale", "rationales"}.isdisjoint(ALLOWED_FIELDS)
-    assert records[0]["input_chars"] == len(plan_request("plan_ok", extra=f"{canary} zebra").goal_text)
+    assert {"goal", "goal_text", "steps", "plan", "rationale", "rationales"}.isdisjoint(
+        ALLOWED_FIELDS
+    )
+    assert records[0]["input_chars"] == len(
+        plan_request("plan_ok", extra=f"{canary} zebra").goal_text
+    )
     assert canary not in caplog.text
     for path in installation.root.rglob("*"):
         if path.is_file():
             assert canary.encode() not in path.read_bytes(), path
-

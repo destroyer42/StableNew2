@@ -51,9 +51,7 @@ def controller_preflight(video_controller: Any) -> Preflight:
     return run
 
 
-def build_plan_snapshot(
-    base_panel: Any, app_controller: Any, visibility_mode: str
-) -> PlanSnapshot:
+def build_plan_snapshot(base_panel: Any, app_controller: Any, visibility_mode: str) -> PlanSnapshot:
     """Read the closed lists and their facts now (GUI thread). Missing sources give empty lists, never invented ones."""
 
     targets = tuple(prompt_ai_targets(base_panel, visibility_mode))
@@ -61,13 +59,13 @@ def build_plan_snapshot(
     target_facts: dict[str, TargetFact] = {}
     for key, label in targets:
         projection = project_model_selection(key, backend)
-        target_facts[key] = TargetFact(
-            label, tuple(projection.policy.stages), projection.blocking
-        )
+        target_facts[key] = TargetFact(label, tuple(projection.policy.stages), projection.blocking)
     workflows: list[tuple[str, str]] = []
     workflow_facts: dict[str, WorkflowFact] = {}
     video_controller = None
-    getter: Callable[[], Any] | None = getattr(app_controller, "get_video_workflow_controller", None)
+    getter: Callable[[], Any] | None = getattr(
+        app_controller, "get_video_workflow_controller", None
+    )
     if callable(getter):
         video_controller = getter()
         for record in list(video_controller.list_workflow_specs())[:_MAX_WORKFLOWS]:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import Any
 
 from src.ai_assist.contracts import (
     AssistOutcome,
@@ -64,7 +65,7 @@ def checked_suggestion(outcome: AssistOutcome, request: AssistRequest) -> Assist
     s = outcome.suggestion
     if outcome.request_id != request.request_id or s is None or s.request_id != request.request_id:
         return None
-    document = {
+    document: dict[str, Any] = {
         "schema": s.schema,
         "status": "ok",
         "kind": s.kind.value,
