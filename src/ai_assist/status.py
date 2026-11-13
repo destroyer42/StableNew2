@@ -98,7 +98,7 @@ def read_status(
             "Offline AI Assist is not set up: no runtime build is pinned in config/managed_ai_runtime.json.",
             blockers=problems,
             actions=(
-                "Pin a runtime build by reviewed change (tools/ai_assist_admin.py describe-runtime).",
+                "Pin a runtime build by reviewed change (python -m tools.ai_assist_admin describe-runtime).",
             ),
             last_outcome=last,
             egress=egress,
