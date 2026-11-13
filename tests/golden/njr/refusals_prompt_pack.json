@@ -1,0 +1,44 @@
+{
+ "empty_txt2img_prompt": {
+  "admission": {
+   "outcome": "accepted"
+  },
+  "compile": {
+   "outcome": "accepted"
+  }
+ },
+ "exact_profile_unsupported": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "Z-Image-Turbo FP8 (limited support) cannot run this work: use a natural-language positive prompt without weighted syntax or adapter/embedding tokens",
+   "outcome": "refused",
+   "type": "ZImageProfileError"
+  }
+ },
+ "missing_input_image": {
+  "outcome": "not_applicable",
+  "reason": "a PromptPack job has no input image"
+ },
+ "retired_stage_on_a_built_record": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "image workload has incompatible stages: ['animatediff']",
+   "outcome": "refused",
+   "type": "ValueError"
+  }
+ },
+ "retired_stage_requested_by_flag": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "AnimateDiff execution is retired and can no longer run. Disable the AnimateDiff stage (animatediff_enabled=false), or use native SVD or the Comfy Video Workflow instead. No request was sent and no stage was substituted.",
+   "outcome": "refused",
+   "type": "AnimateDiffRetiredError"
+  }
+ }
+}

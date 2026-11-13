@@ -1,0 +1,50 @@
+{
+ "empty_prompt_variation": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "The positive prompt cannot be empty.",
+   "outcome": "refused",
+   "type": "ValueError"
+  }
+ },
+ "exact_profile_unsupported_replay": {
+  "admission": {
+   "outcome": "accepted"
+  },
+  "compile": {
+   "outcome": "accepted"
+  }
+ },
+ "missing_input_image_variation_of_an_input_job": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "This job used a source image; Regenerate would not reproduce that input.",
+   "outcome": "refused",
+   "type": "HistoryVariationRefused"
+  }
+ },
+ "retired_stage_replay": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "AnimateDiff execution is retired and can no longer run. Disable the AnimateDiff stage (animatediff_enabled=false), or use native SVD or the Comfy Video Workflow instead. No request was sent and no stage was substituted.",
+   "outcome": "refused",
+   "type": "AnimateDiffRetiredError"
+  }
+ },
+ "variation_of_an_enabled_animatediff_record": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "Only still-image jobs can be varied (this is a video job).",
+   "outcome": "refused",
+   "type": "HistoryVariationRefused"
+  }
+ }
+}

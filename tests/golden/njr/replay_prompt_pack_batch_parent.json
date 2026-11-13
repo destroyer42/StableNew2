@@ -1,0 +1,803 @@
+{
+ "parent": {
+  "job_id": "job-1",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": null,
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "batch": {
+     "batch_id": "batch-old",
+     "batch_kind": "selected_retry",
+     "schema": "stablenew.batch.v1",
+     "source_count": 3,
+     "source_index": 1
+    },
+    "batch_id": "batch-old",
+    "prompt_adaptation": {
+     "adaptable": false,
+     "changed": false,
+     "complete": false,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "no_evidence",
+     "family": "unknown",
+     "mode": "compile",
+     "operations": [
+      {
+       "code": "target_unverified_no_adaptation",
+       "details": {},
+       "effect": "refused",
+       "scope": "target"
+      }
+     ],
+     "policy_id": "unverified_generic",
+     "profile_ref": null,
+     "prompt_dialect": "unspecified",
+     "reason": "target_unverified_no_adaptation",
+     "ruleset_version": "159.1"
+    }
+   },
+   "negative_embeddings": [],
+   "pack_usage": [
+    {
+     "pack_name": "Golden Pack",
+     "pack_path": "<tmp>/packs/parent-pack.json",
+     "prompt_index": 0,
+     "used_for_stage": "txt2img"
+    }
+   ],
+   "positive_embeddings": [],
+   "randomizer_summary": {
+    "base_seed": null,
+    "enabled": false,
+    "max_variants": 1,
+    "seed_mode": "none"
+   },
+   "seed": null,
+   "txt2img_prompt_info": {
+    "final_negative_prompt": "global-negative",
+    "final_prompt": "A knight at dawn",
+    "global_negative_applied": false,
+    "global_negative_terms": "",
+    "original_negative_prompt": "global-negative",
+    "original_prompt": "A knight at dawn"
+   },
+   "variant_index": 0,
+   "variant_total": 1
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "Golden Pack",
+   "id": "parent-pack.json",
+   "kind": "prompt_pack",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": 0
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.5,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "model.safetensors",
+    "sampler_name": "Euler",
+    "scheduler": "DDIM",
+    "stage_type": "txt2img",
+    "steps": 24,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "img2img",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "adetailer",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "upscale",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "animatediff",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "video_workflow",
+    "steps": null,
+    "vae": null
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer": null,
+    "aesthetic": {
+     "enabled": false
+    },
+    "animatediff": null,
+    "cfg_scale": 7.5,
+    "clip_skip": null,
+    "do_not_save_grid": null,
+    "do_not_save_samples": null,
+    "enable_hr": null,
+    "global_negative_prompt": "",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "legacy_runtime_fallback",
+    "height": 512,
+    "hires_fix": null,
+    "hires_use_base_model": null,
+    "hr_checkpoint_name": null,
+    "matrix_slot_values": {},
+    "metadata": {},
+    "model": "model.safetensors",
+    "negative_prompt": "global-negative",
+    "pack_name": "Golden Pack",
+    "pack_path": "<tmp>/packs/parent-pack.json",
+    "pipeline": {
+     "apply_global_negative_txt2img": true,
+     "images_per_prompt": 1,
+     "loop_count": 1,
+     "loop_type": "pipeline",
+     "variant_mode": "standard"
+    },
+    "prompt": "A knight at dawn",
+    "prompt_optimizer": {},
+    "prompt_pack_id": "parent-pack.json",
+    "prompt_pack_row_index": 0,
+    "randomization": {
+     "enabled": false
+    },
+    "refiner": null,
+    "restore_faces": null,
+    "sampler": "Euler",
+    "scheduler": "DDIM",
+    "seed": null,
+    "seed_resize_from_h": null,
+    "seed_resize_from_w": null,
+    "stages": [
+     "txt2img"
+    ],
+    "steps": 24,
+    "style_lora": null,
+    "subseed": null,
+    "subseed_strength": null,
+    "tiling": null,
+    "upscale": null,
+    "use_refiner": false,
+    "vae": null,
+    "video_workflow": null,
+    "width": 512
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {
+    "prompt_pack_id": "parent-pack.json",
+    "prompt_source": "pack",
+    "run_mode": "queue",
+    "source": "add_to_queue"
+   },
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {},
+   "negative_prompt": "global-negative",
+   "positive_prompt": "A knight at dawn",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ "plain": {
+  "job_id": "replay-plain",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": null,
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "parent_job_id": "job-1",
+    "prompt_adaptation": {
+     "adaptable": false,
+     "changed": false,
+     "complete": false,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "no_evidence",
+     "family": "unknown",
+     "mode": "compile",
+     "operations": [
+      {
+       "code": "target_unverified_no_adaptation",
+       "details": {},
+       "effect": "refused",
+       "scope": "target"
+      }
+     ],
+     "policy_id": "unverified_generic",
+     "profile_ref": null,
+     "prompt_dialect": "unspecified",
+     "reason": "target_unverified_no_adaptation",
+     "ruleset_version": "159.1"
+    },
+    "replay": true,
+    "replay_origin": {
+     "batch": {
+      "batch_id": "batch-old",
+      "batch_kind": "selected_retry",
+      "schema": "stablenew.batch.v1",
+      "source_count": 3,
+      "source_index": 1
+     },
+     "batch_id": "batch-old",
+     "parent_job_id": "job-1",
+     "schema": "stablenew.replay-origin.v1"
+    }
+   },
+   "negative_embeddings": [],
+   "pack_usage": [
+    {
+     "pack_name": "Golden Pack",
+     "pack_path": "<tmp>/packs/parent-pack.json",
+     "prompt_index": 0,
+     "used_for_stage": "txt2img"
+    }
+   ],
+   "positive_embeddings": [],
+   "randomizer_summary": {
+    "base_seed": null,
+    "enabled": false,
+    "max_variants": 1,
+    "seed_mode": "none"
+   },
+   "seed": null,
+   "txt2img_prompt_info": {
+    "final_negative_prompt": "global-negative",
+    "final_prompt": "A knight at dawn",
+    "global_negative_applied": false,
+    "global_negative_terms": "",
+    "original_negative_prompt": "global-negative",
+    "original_prompt": "A knight at dawn"
+   },
+   "variant_index": 0,
+   "variant_total": 1
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "Golden Pack",
+   "id": null,
+   "kind": "history_replay",
+   "metadata": {
+    "original_source_kind": "prompt_pack"
+   },
+   "parent_artifact_id": null,
+   "parent_job_id": "job-1",
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.5,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "model.safetensors",
+    "sampler_name": "Euler",
+    "scheduler": "DDIM",
+    "stage_type": "txt2img",
+    "steps": 24,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "img2img",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "adetailer",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "upscale",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "animatediff",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "video_workflow",
+    "steps": null,
+    "vae": null
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer": null,
+    "aesthetic": {
+     "enabled": false
+    },
+    "animatediff": null,
+    "cfg_scale": 7.5,
+    "clip_skip": null,
+    "do_not_save_grid": null,
+    "do_not_save_samples": null,
+    "enable_hr": null,
+    "global_negative_prompt": "",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "legacy_runtime_fallback",
+    "height": 512,
+    "hires_fix": null,
+    "hires_use_base_model": null,
+    "hr_checkpoint_name": null,
+    "matrix_slot_values": {},
+    "metadata": {},
+    "model": "model.safetensors",
+    "negative_prompt": "global-negative",
+    "pack_name": "Golden Pack",
+    "pack_path": "<tmp>/packs/parent-pack.json",
+    "pipeline": {
+     "apply_global_negative_txt2img": true,
+     "images_per_prompt": 1,
+     "loop_count": 1,
+     "loop_type": "pipeline",
+     "variant_mode": "standard"
+    },
+    "prompt": "A knight at dawn",
+    "prompt_optimizer": {},
+    "prompt_pack_id": "parent-pack.json",
+    "prompt_pack_row_index": 0,
+    "randomization": {
+     "enabled": false
+    },
+    "refiner": null,
+    "restore_faces": null,
+    "sampler": "Euler",
+    "scheduler": "DDIM",
+    "seed": null,
+    "seed_resize_from_h": null,
+    "seed_resize_from_w": null,
+    "stages": [
+     "txt2img"
+    ],
+    "steps": 24,
+    "style_lora": null,
+    "subseed": null,
+    "subseed_strength": null,
+    "tiling": null,
+    "upscale": null,
+    "use_refiner": false,
+    "vae": null,
+    "video_workflow": null,
+    "width": 512
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {
+    "prompt_pack_id": "parent-pack.json",
+    "prompt_source": "pack",
+    "run_mode": "queue",
+    "source": "add_to_queue"
+   },
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {},
+   "negative_prompt": "global-negative",
+   "positive_prompt": "A knight at dawn",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ },
+ "selected_retry": {
+  "job_id": "replay-retry",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": null,
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "batch": {
+     "batch_id": "batch-new",
+     "batch_kind": "selected_retry",
+     "schema": "stablenew.batch.v1",
+     "source_count": 2,
+     "source_index": 0
+    },
+    "parent_artifact_id": "artifact-1",
+    "parent_job_id": "job-1",
+    "prompt_adaptation": {
+     "adaptable": false,
+     "changed": false,
+     "complete": false,
+     "contract": "prompt_adaptation/1",
+     "counts": {
+      "loras": 0,
+      "negative_embeddings": 0,
+      "negative_present": true,
+      "positive_embeddings": 0,
+      "style_lora": 0
+     },
+     "evidence": "no_evidence",
+     "family": "unknown",
+     "mode": "compile",
+     "operations": [
+      {
+       "code": "target_unverified_no_adaptation",
+       "details": {},
+       "effect": "refused",
+       "scope": "target"
+      }
+     ],
+     "policy_id": "unverified_generic",
+     "profile_ref": null,
+     "prompt_dialect": "unspecified",
+     "reason": "target_unverified_no_adaptation",
+     "ruleset_version": "159.1"
+    },
+    "replay": true,
+    "replay_origin": {
+     "batch": {
+      "batch_id": "batch-old",
+      "batch_kind": "selected_retry",
+      "schema": "stablenew.batch.v1",
+      "source_count": 3,
+      "source_index": 1
+     },
+     "batch_id": "batch-old",
+     "parent_job_id": "job-1",
+     "schema": "stablenew.replay-origin.v1"
+    }
+   },
+   "negative_embeddings": [],
+   "pack_usage": [
+    {
+     "pack_name": "Golden Pack",
+     "pack_path": "<tmp>/packs/parent-pack.json",
+     "prompt_index": 0,
+     "used_for_stage": "txt2img"
+    }
+   ],
+   "positive_embeddings": [],
+   "randomizer_summary": {
+    "base_seed": null,
+    "enabled": false,
+    "max_variants": 1,
+    "seed_mode": "none"
+   },
+   "seed": null,
+   "txt2img_prompt_info": {
+    "final_negative_prompt": "global-negative",
+    "final_prompt": "A knight at dawn",
+    "global_negative_applied": false,
+    "global_negative_terms": "",
+    "original_negative_prompt": "global-negative",
+    "original_prompt": "A knight at dawn"
+   },
+   "variant_index": 0,
+   "variant_total": 1
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": "Golden Pack",
+   "id": null,
+   "kind": "history_replay",
+   "metadata": {
+    "original_source_kind": "prompt_pack"
+   },
+   "parent_artifact_id": "artifact-1",
+   "parent_job_id": "job-1",
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.5,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "model.safetensors",
+    "sampler_name": "Euler",
+    "scheduler": "DDIM",
+    "stage_type": "txt2img",
+    "steps": 24,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "img2img",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "adetailer",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "upscale",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "animatediff",
+    "steps": null,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": false,
+    "extra": {},
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "video_workflow",
+    "steps": null,
+    "vae": null
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer": null,
+    "aesthetic": {
+     "enabled": false
+    },
+    "animatediff": null,
+    "cfg_scale": 7.5,
+    "clip_skip": null,
+    "do_not_save_grid": null,
+    "do_not_save_samples": null,
+    "enable_hr": null,
+    "global_negative_prompt": "",
+    "global_positive_prompt": "",
+    "global_prompt_policy_source": "legacy_runtime_fallback",
+    "height": 512,
+    "hires_fix": null,
+    "hires_use_base_model": null,
+    "hr_checkpoint_name": null,
+    "matrix_slot_values": {},
+    "metadata": {},
+    "model": "model.safetensors",
+    "negative_prompt": "global-negative",
+    "pack_name": "Golden Pack",
+    "pack_path": "<tmp>/packs/parent-pack.json",
+    "pipeline": {
+     "apply_global_negative_txt2img": true,
+     "images_per_prompt": 1,
+     "loop_count": 1,
+     "loop_type": "pipeline",
+     "variant_mode": "standard"
+    },
+    "prompt": "A knight at dawn",
+    "prompt_optimizer": {},
+    "prompt_pack_id": "parent-pack.json",
+    "prompt_pack_row_index": 0,
+    "randomization": {
+     "enabled": false
+    },
+    "refiner": null,
+    "restore_faces": null,
+    "sampler": "Euler",
+    "scheduler": "DDIM",
+    "seed": null,
+    "seed_resize_from_h": null,
+    "seed_resize_from_w": null,
+    "stages": [
+     "txt2img"
+    ],
+    "steps": 24,
+    "style_lora": null,
+    "subseed": null,
+    "subseed_strength": null,
+    "tiling": null,
+    "upscale": null,
+    "use_refiner": false,
+    "vae": null,
+    "video_workflow": null,
+    "width": 512
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {
+    "prompt_pack_id": "parent-pack.json",
+    "prompt_source": "pack",
+    "run_mode": "queue",
+    "source": "add_to_queue"
+   },
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {},
+   "negative_prompt": "global-negative",
+   "positive_prompt": "A knight at dawn",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ }
+}

@@ -1,0 +1,40 @@
+{
+ "exact_profile_unsupported": {
+  "outcome": "not_applicable",
+  "reason": "video routes carry no image model profile"
+ },
+ "movie_clips_missing_input_clip": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "Item 1 does not exist or was moved: <tmp>/absent-1.png",
+   "outcome": "refused",
+   "type": "MovieAssemblyAdmissionError"
+  }
+ },
+ "retired_stage": {
+  "outcome": "not_applicable",
+  "reason": "video routes carry no AnimateDiff stage"
+ },
+ "workflow_empty_prompt": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "'Wan2.2 TI2V-5B Prompt-Directed I2V' needs a prompt describing the motion.",
+   "outcome": "refused",
+   "type": "ValueError"
+  }
+ },
+ "workflow_missing_input_image": {
+  "admission": {
+   "outcome": "not_reached"
+  },
+  "compile": {
+   "message": "Video workflow source image does not exist: <tmp>/absent.png",
+   "outcome": "refused",
+   "type": "ValueError"
+  }
+ }
+}

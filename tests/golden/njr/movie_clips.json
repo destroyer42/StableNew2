@@ -1,0 +1,209 @@
+{
+ "job_id": "movie-1",
+ "output_plan": {
+  "base_output_dir": "<tmp>/output",
+  "filename_template": "{seed}",
+  "route": null
+ },
+ "provenance": {
+  "aesthetic_embedding": null,
+  "aesthetic_enabled": false,
+  "aesthetic_text": null,
+  "aesthetic_weight": null,
+  "batch_index": 0,
+  "batch_total": 1,
+  "config_variant_index": 0,
+  "config_variant_label": "base",
+  "config_variant_overrides": {},
+  "img2img_prompt_info": null,
+  "learning_context": null,
+  "lora_tags": [],
+  "matrix_mode": null,
+  "matrix_name": null,
+  "matrix_prompt_mode": null,
+  "matrix_slot_values": {},
+  "metadata": {
+   "movie_assembly": {
+    "clip_count": 2,
+    "duration_seconds": 0.875,
+    "has_audio": false,
+    "mode": "slideshow",
+    "schema": "stablenew.movie_assembly.v1",
+    "total_frames": 7
+   },
+   "original_image_count": 2,
+   "reprocess": {
+    "input_count": 2,
+    "input_image_paths": [
+     "<tmp>/src/b.png",
+     "<tmp>/src/a.png"
+    ],
+    "requested_stages": [
+     "movie_assembly"
+    ],
+    "schema": "stablenew.reprocess.v2.6",
+    "source": "video"
+   },
+   "reprocess_mode": true,
+   "reprocess_stages": [
+    "movie_assembly"
+   ],
+   "submission_source": "video"
+  },
+  "negative_embeddings": [],
+  "pack_usage": [],
+  "positive_embeddings": [],
+  "randomizer_summary": {},
+  "seed": null,
+  "txt2img_prompt_info": null,
+  "variant_index": 0,
+  "variant_total": 1
+ },
+ "schema_version": "2.6",
+ "source": {
+  "display_name": "Movie Clips",
+  "id": null,
+  "kind": "video_workflow",
+  "metadata": {},
+  "parent_artifact_id": null,
+  "parent_job_id": null,
+  "revision": null,
+  "row_index": null
+ },
+ "stages": [
+  {
+   "cfg_scale": 1.0,
+   "denoising_strength": 0.0,
+   "enabled": true,
+   "extra": {
+    "audio": null,
+    "clip_name": "movie",
+    "clips": [
+     {
+      "duration_seconds": 0.5,
+      "height": 30,
+      "kind": "image",
+      "path": "<tmp>/src/b.png",
+      "sha256": "d815bee64925c53b00ef03ee274dfcb500a53fc7db4bda3b3668a6388f5787a6",
+      "source_fps": null,
+      "width": 40
+     },
+     {
+      "duration_seconds": 0.5,
+      "height": 30,
+      "kind": "image",
+      "path": "<tmp>/src/a.png",
+      "sha256": "761507ff854dee71c61d2c26e63897cfca5ef6cc7f3e2c15b188f832dfb9802b",
+      "source_fps": null,
+      "width": 40
+     }
+    ],
+    "encode": {
+     "codec": "libx264",
+     "crf": 16,
+     "pix_fmt": "yuv420p",
+     "preset": "slow"
+    },
+    "fps": 8,
+    "height": 30,
+    "mode": "slideshow",
+    "schema": "stablenew.movie_assembly.v1",
+    "transition_seconds": 0.125,
+    "width": 40
+   },
+   "model": null,
+   "sampler_name": "ffmpeg",
+   "scheduler": null,
+   "stage_type": "movie_assembly",
+   "steps": 1,
+   "vae": null
+  }
+ ],
+ "workload": {
+  "backend_options": {},
+  "config": {
+   "movie_assembly": {
+    "audio": null,
+    "clip_name": "movie",
+    "clips": [
+     {
+      "duration_seconds": 0.5,
+      "height": 30,
+      "kind": "image",
+      "path": "<tmp>/src/b.png",
+      "sha256": "d815bee64925c53b00ef03ee274dfcb500a53fc7db4bda3b3668a6388f5787a6",
+      "source_fps": null,
+      "width": 40
+     },
+     {
+      "duration_seconds": 0.5,
+      "height": 30,
+      "kind": "image",
+      "path": "<tmp>/src/a.png",
+      "sha256": "761507ff854dee71c61d2c26e63897cfca5ef6cc7f3e2c15b188f832dfb9802b",
+      "source_fps": null,
+      "width": 40
+     }
+    ],
+    "encode": {
+     "codec": "libx264",
+     "crf": 16,
+     "pix_fmt": "yuv420p",
+     "preset": "slow"
+    },
+    "fps": 8,
+    "height": 30,
+    "mode": "slideshow",
+    "schema": "stablenew.movie_assembly.v1",
+    "transition_seconds": 0.125,
+    "width": 40
+   },
+   "pipeline": {
+    "output_route": "movie_clips"
+   }
+  },
+  "continuity_link": null,
+  "images_per_prompt": 2,
+  "input_image_paths": [
+   "<tmp>/src/b.png",
+   "<tmp>/src/a.png"
+  ],
+  "intent_config": {},
+  "loop_count": 1,
+  "loop_type": "pipeline",
+  "metadata": {
+   "movie_assembly": {
+    "clip_count": 2,
+    "duration_seconds": 0.875,
+    "has_audio": false,
+    "mode": "slideshow",
+    "schema": "stablenew.movie_assembly.v1",
+    "total_frames": 7
+   },
+   "original_image_count": 2,
+   "reprocess": {
+    "input_count": 2,
+    "input_image_paths": [
+     "<tmp>/src/b.png",
+     "<tmp>/src/a.png"
+    ],
+    "requested_stages": [
+     "movie_assembly"
+    ],
+    "schema": "stablenew.reprocess.v2.6",
+    "source": "video"
+   },
+   "reprocess_mode": true,
+   "reprocess_stages": [
+    "movie_assembly"
+   ],
+   "submission_source": "video"
+  },
+  "negative_prompt": "",
+  "positive_prompt": "Movie assembly: movie",
+  "sequence_intent": null,
+  "start_stage": "movie_assembly",
+  "variant_mode": "standard"
+ },
+ "workload_kind": "video"
+}

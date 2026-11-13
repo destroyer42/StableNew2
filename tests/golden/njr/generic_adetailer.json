@@ -1,0 +1,157 @@
+[
+ {
+  "job_id": "job-1",
+  "output_plan": {
+   "base_output_dir": "output",
+   "filename_template": "{seed}",
+   "route": null
+  },
+  "provenance": {
+   "aesthetic_embedding": null,
+   "aesthetic_enabled": false,
+   "aesthetic_text": null,
+   "aesthetic_weight": null,
+   "batch_index": 0,
+   "batch_total": 1,
+   "config_variant_index": 0,
+   "config_variant_label": "base",
+   "config_variant_overrides": {},
+   "img2img_prompt_info": null,
+   "learning_context": null,
+   "lora_tags": [],
+   "matrix_mode": null,
+   "matrix_name": null,
+   "matrix_prompt_mode": null,
+   "matrix_slot_values": {},
+   "metadata": {
+    "adetailer_mode": {
+     "classification": "multiple",
+     "effective_mode": "multiple",
+     "face_mask_limit": 0,
+     "hand_mask_limit": 6,
+     "inference_version": 1,
+     "reason": "explicit human count, pairing, or group wording",
+     "requested_mode": "auto",
+     "uncertain": false
+    }
+   },
+   "negative_embeddings": [],
+   "pack_usage": [],
+   "positive_embeddings": [],
+   "randomizer_summary": {},
+   "seed": 4242,
+   "txt2img_prompt_info": {
+    "final_negative_prompt": "blurry",
+    "final_prompt": "a portrait of three women at a table",
+    "global_negative_applied": false,
+    "global_negative_terms": "",
+    "original_negative_prompt": "blurry",
+    "original_prompt": "a portrait of three women at a table"
+   },
+   "variant_index": 0,
+   "variant_total": 1
+  },
+  "schema_version": "2.6",
+  "source": {
+   "display_name": null,
+   "id": null,
+   "kind": "cli",
+   "metadata": {},
+   "parent_artifact_id": null,
+   "parent_job_id": null,
+   "revision": null,
+   "row_index": null
+  },
+  "stages": [
+   {
+    "cfg_scale": 7.0,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {},
+    "model": "golden-model.safetensors",
+    "sampler_name": "Euler",
+    "scheduler": null,
+    "stage_type": "txt2img",
+    "steps": 20,
+    "vae": null
+   },
+   {
+    "cfg_scale": null,
+    "denoising_strength": null,
+    "enabled": true,
+    "extra": {
+     "ad_mask_k_largest": 0,
+     "ad_mask_merge_invert": "None",
+     "adetailer_confidence": 0.4,
+     "adetailer_enabled": true,
+     "adetailer_model": "face_yolov8n.pt",
+     "adetailer_steps": 12,
+     "enabled": true,
+     "face_mode": "multiple",
+     "mask_k_largest": 0,
+     "mask_merge_mode": "None"
+    },
+    "model": null,
+    "sampler_name": null,
+    "scheduler": null,
+    "stage_type": "adetailer",
+    "steps": null,
+    "vae": null
+   }
+  ],
+  "workload": {
+   "backend_options": {
+    "image": {
+     "backend_id": "forge_webui"
+    }
+   },
+   "config": {
+    "adetailer": {
+     "ad_mask_k_largest": 0,
+     "ad_mask_merge_invert": "None",
+     "adetailer_confidence": 0.4,
+     "adetailer_enabled": true,
+     "adetailer_model": "face_yolov8n.pt",
+     "adetailer_steps": 12,
+     "enabled": true,
+     "face_mode": "multiple",
+     "mask_k_largest": 0,
+     "mask_merge_mode": "None"
+    },
+    "cfg_scale": 7.0,
+    "height": 512,
+    "model": "golden-model.safetensors",
+    "negative_prompt": "blurry",
+    "pipeline": {
+     "adetailer_enabled": true,
+     "txt2img_enabled": true
+    },
+    "prompt": "a portrait of three women at a table",
+    "sampler": "Euler",
+    "sampler_name": "Euler",
+    "scheduler": "Normal",
+    "seed": 4242,
+    "steps": 20,
+    "txt2img": {
+     "cfg_scale": 7.0,
+     "model": "golden-model.safetensors",
+     "sampler_name": "Euler",
+     "scheduler": "Normal",
+     "steps": 20
+    },
+    "width": 512
+   },
+   "images_per_prompt": 1,
+   "input_image_paths": [],
+   "intent_config": {},
+   "loop_count": 1,
+   "loop_type": "pipeline",
+   "metadata": {},
+   "negative_prompt": "blurry",
+   "positive_prompt": "a portrait of three women at a table",
+   "start_stage": null,
+   "variant_mode": "standard"
+  },
+  "workload_kind": "image"
+ }
+]
