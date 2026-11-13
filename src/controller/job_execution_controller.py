@@ -4,24 +4,20 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Any
 
 from src.app.runtime_stack import build_queue_stack
-from src.history.history_record import HistoryRecord
-from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import normalize_run_result
 from src.pipeline.replay_engine import ReplayEngine, resolve_run_njr_kwargs
-from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
 from src.queue.job_history_store import JobHistoryStore
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import attach_envelope, get_attached_envelope
-from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -419,30 +415,3 @@ class JobExecutionController:
         """Persist queue control flags; jobs are persisted at each mutation."""
         self._history_store.set_setting("auto_run_enabled", self._auto_run_enabled)
         self._history_store.set_setting("queue_paused", self._queue.is_paused())
-
-    def replay(self, record: HistoryRecord | NormalizedJobRecord | Mapping[str, Any]) -> Any:
-        """Compile replay intent and submit it through the canonical queue path."""
-        if isinstance(record, NormalizedJobRecord):
-            source_record = record
-        else:
-            data = record.to_dict() if isinstance(record, HistoryRecord) else dict(record)
-            ok, errors = validate_entry(data)
-            if not ok:
-                raise InvalidHistoryRecord(errors)
-            source_record = normalized_job_from_snapshot(data.get("njr_snapshot") or {})
-            if source_record is None:
-                raise InvalidHistoryRecord(["njr_snapshot could not be hydrated"])
-        replay_record = compile_replay_intent(ReplayIntent(source_record))
-        job = Job(
-            job_id=replay_record.job_id,
-            priority=JobPriority.NORMAL,
-            run_mode="queue",
-            source=replay_record.source.kind.value,
-            prompt_source="manual",
-            snapshot={"normalized_job": replay_record.to_dict()},
-        )
-        job._normalized_record = replay_record
-        self._queue.submit(job)
-        if self._auto_run_enabled:
-            self._ensure_worker_started()
-        return job.job_id

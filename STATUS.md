@@ -119,7 +119,7 @@ of the roadmap; where they conflict with this file, this file and the repository
    (`docs/Subsystems/Video/VIDEO_PIPELINE.md` section 7); approved Comfy workflows are production video backends and Wan2.2
    TI2V-5B 1.2.0 is promoted; the frames-out 1.3.0 was promoted on 2026-10-21 after real acceptance runs.
 11. Material changes the roadmap holds for an owner decision (`docs/audits/2026-10-16_repo_audit_and_roadmap.md` section 8): a durable CANCELLING
-   status (decision 12) and moving the executor into `image_backends` (decision 14). Decision 11 (composition root) is accepted for the Tk host only; P3-2 stage A (one construction site `src/app/runtime_stack.py`, a read-only `RuntimeStack` record, the dormant `AppController` fallback removed) is implemented, and the full bootstrap-level runtime-stack composition remains open.
+   status (decision 12) and moving the executor into `image_backends` (decision 14). Decision 11 (composition root) is accepted for the Tk host only: one construction site `src/app/runtime_stack.py` plus a verified read-only `RuntimeStack` (P3-2A) is the accepted runtime-stack composition. On 2026-11-13 the coordinating session, by owner delegation, ruled that bootstrap-level inversion (`build_v2_app` injects the stack, a production flag) is not done now and is revisited only when a second production host (Qt) is authorized; P3-2B retired the dormant `AppController._execute_job`, `run_app` and the direct-admission replay path, and pinned pause/auto-run ownership by characterization tests only (OD-5).
 
 ## Holds and safety constraints
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
-from src.api.webui_process_manager import WebUIProcessManager, build_default_webui_process_config
+from src.api.webui_process_manager import WebUIProcessManager
 from src.controller.ports.presentation_actions import PresentationActions
 from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.app_state_v2 import AppStateV2
@@ -1917,46 +1917,6 @@ class MainWindowV2:
                 restore(video_state)
         except Exception as e:
             logger.warning(f"Failed to restore Video Workflow tab state: {e}")
-
-
-def run_app(
-    root: tk.Tk | None = None,
-    webui_manager: WebUIProcessManager | None = None,
-    app_controller=None,
-    packs_controller=None,
-    pipeline_controller=None,
-) -> None:
-    """Launch the V2 application shell."""
-
-    if root is None:
-        root = tk.Tk()
-
-    if webui_manager is None:
-        try:
-            proc_config = build_default_webui_process_config()
-        except (ValueError, RuntimeError) as exc:
-            # Fail closed: a configuration/setup problem (for example managed Forge not installed) is reported and no
-            # runtime is started or substituted; the connection controller surfaces the same error.
-            logger.error("WebUI runtime is not configured: %s", exc)
-            proc_config = None
-        if proc_config:
-            webui_manager = WebUIProcessManager(proc_config)
-            if proc_config.autostart_enabled:
-                try:
-                    webui_manager.start()
-                except Exception:
-                    pass
-
-    app_state = AppStateV2()
-    MainWindowV2(
-        root=root,
-        app_state=app_state,
-        webui_manager=webui_manager,
-        app_controller=app_controller,
-        packs_controller=packs_controller,
-        pipeline_controller=pipeline_controller,
-    )
-    root.mainloop()
 
 
 # Backward-compatible alias expected by controllers/tests

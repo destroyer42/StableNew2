@@ -57,29 +57,6 @@ def test_history_service_cancel(tmp_path):
     assert "queued" in stub.cancelled
 
 
-def test_history_service_retry_uses_canonical_replay(tmp_path):
-    store = JobRepository(tmp_path / "jobs.sqlite3")
-    queue = JobQueue(repository=store)
-
-    class StubController:
-        def __init__(self):
-            self.records = []
-
-        def replay(self, record):
-            self.records.append(record)
-            return "replay-new"
-
-    stub = StubController()
-    service = JobHistoryService(queue, store, job_controller=stub)
-    completed = make_queue_job("done")
-    queue.submit(completed)
-    queue.mark_running(completed.job_id)
-    queue.mark_completed(completed.job_id)
-
-    assert service.retry_job("done") == "replay-new"
-    assert stub.records == [completed._normalized_record]
-
-
 def test_history_service_records_result(tmp_path):
     store = JobRepository(tmp_path / "jobs.sqlite3")
     queue = JobQueue(repository=store)

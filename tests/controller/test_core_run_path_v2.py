@@ -119,59 +119,6 @@ def test_pipeline_controller_routes_jobs_through_job_service(
     assert stored._normalized_record == record
 
 
-def test_njr_backed_job_uses_njr_execution_path(tmp_path: Path) -> None:
-    """Job with _normalized_record should execute via PipelineController._run_job (PR-CORE1-B1)."""
-
-    controller = RecordingAppController(
-        main_window=None,
-        threaded=False,
-        tmp_history=tmp_path / "job_history.json",
-    )
-
-    # Create job with NJR
-    njr = _make_dummy_record()
-    job = Job(job_id="njr-test-1", priority=None)
-    job._normalized_record = njr
-
-    run_result_data = _canonical_run_result(job.job_id)
-    controller.pipeline_controller._run_job = lambda j: run_result_data
-
-    result = controller._execute_job(job)
-
-    assert result["success"] is True
-    assert result["metadata"]["execution_path"] == "njr"
-    assert result["metadata"]["job_id"] == job.job_id
-
-
-def test_njr_job_failure_returns_error_no_fallback_b2(tmp_path: Path) -> None:
-    """PR-CORE1-B2: Job with NJR that fails execution returns error (no pipeline_config fallback)."""
-
-    controller = RecordingAppController(
-        main_window=None,
-        threaded=False,
-        tmp_history=tmp_path / "job_history.json",
-    )
-
-    # Create job with NJR
-    njr = _make_dummy_record()
-    job = Job(job_id="njr-test-fail", priority=None)
-    job._normalized_record = njr
-
-    # Mock pipeline_controller._run_job to raise exception
-    def failing_run_job(j):
-        raise RuntimeError("NJR execution failed")
-
-    controller.pipeline_controller._run_job = failing_run_job
-
-    result = controller._execute_job(job)
-
-    # PR-CORE1-B2: Should return error status, not fall back to pipeline_config
-    assert result["success"] is False
-    assert "NJR execution failed" in result["error"]
-    assert result["metadata"]["execution_path"] == "njr"
-    assert result["metadata"]["job_id"] == job.job_id
-
-
 def test_queue_jobs_have_normalized_record_b2(tmp_path: Path) -> None:
     """PR-CORE1-B2: Jobs submitted through normal queue path should have _normalized_record."""
 
