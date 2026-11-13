@@ -1500,6 +1500,21 @@ class PipelineRunner:
         backend = self._image_backends.get(backend_id)
         raw_config = thaw_json(getattr(njr, "config", {}))
         stage_data = dict(stage_config or {})
+        # Historical records may only carry a stage or config seed.
+        nested_txt2img = raw_config.get("txt2img") if isinstance(raw_config, Mapping) else None
+        requested_seed = next(
+            (
+                seed
+                for seed in (
+                    njr.seed,
+                    stage_data.get("seed") if stage_name == "txt2img" else None,
+                    nested_txt2img.get("seed") if isinstance(nested_txt2img, Mapping) else None,
+                    raw_config.get("seed") if isinstance(raw_config, Mapping) else None,
+                )
+                if seed is not None
+            ),
+            None,
+        )
         request = ImageExecutionRequest(
                 backend_id=backend_id,
                 stage_name=stage_name,
@@ -1519,23 +1534,7 @@ class PipelineRunner:
                 cfg_scale=stage_data.get("cfg_scale") or getattr(njr, "cfg_scale", None) or None,
                 width=getattr(njr, "width", None) or None,
                 height=getattr(njr, "height", None) or None,
-                # Immutable NJR provenance is the canonical requested-seed
-                # authority. Keep construction-time fallbacks for historical
-                # records that only carry a nested txt2img value.
-                seed=(
-                    getattr(njr, "seed", None)
-                    if getattr(njr, "seed", None) is not None
-                    else (
-                        (stage_data.get("seed") if stage_name == "txt2img" else None)
-                        or (
-                            raw_config.get("txt2img", {}).get("seed")
-                            if isinstance(raw_config, Mapping)
-                            and isinstance(raw_config.get("txt2img"), Mapping)
-                            else None
-                        )
-                        or (raw_config.get("seed") if isinstance(raw_config, Mapping) else None)
-                    )
-                ),
+                seed=requested_seed,
                 image_count=image_count,
                 learning_sample_names=learning_sample_names,
                 execution_config=dict(raw_config) if isinstance(raw_config, Mapping) else {},

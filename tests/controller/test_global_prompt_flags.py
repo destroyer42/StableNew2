@@ -32,7 +32,7 @@ def test_global_prompt_flag_wiring():
 
     # Build config
     pack_config = {"pipeline": {}}
-    result_config = controller._build_config_snapshot_with_override(pack_config)
+    result_config = controller._capture_pack_draft_config().merge(pack_config)
 
     # Verify flags are set correctly
     assert "pipeline" in result_config, "Pipeline section missing from config"
@@ -61,7 +61,7 @@ def test_global_prompt_flag_wiring():
         "text": "low quality, worst quality",
     }
 
-    result_config = controller._build_config_snapshot_with_override(pack_config)
+    result_config = controller._capture_pack_draft_config().merge(pack_config)
 
     assert not result_config["pipeline"]["apply_global_positive_txt2img"], (
         "Global positive should be disabled"
@@ -82,7 +82,7 @@ def test_global_prompt_flag_wiring():
         "text": "low quality, worst quality",
     }
 
-    result_config = controller._build_config_snapshot_with_override(pack_config)
+    result_config = controller._capture_pack_draft_config().merge(pack_config)
 
     assert not result_config["pipeline"]["apply_global_positive_txt2img"], (
         "Global positive should be disabled"
@@ -95,7 +95,7 @@ def test_global_prompt_flag_wiring():
     # Test Case 4: No sidebar (defensive case)
     print("\n=== Test Case 4: No sidebar (defensive) ===")
     controller_no_sidebar = AppController(main_window=None, threaded=False)
-    result_config = controller_no_sidebar._build_config_snapshot_with_override(pack_config)
+    result_config = controller_no_sidebar._capture_pack_draft_config().merge(pack_config)
     # Should not crash, should use defaults
     print("[OK] No crash with missing sidebar")
 

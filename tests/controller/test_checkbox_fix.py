@@ -44,7 +44,7 @@ def verify_fix():
         }
 
         # Build config
-        config = controller._build_config_snapshot_with_override({"pipeline": {}})
+        config = controller._capture_pack_draft_config().merge({"pipeline": {}})
 
         # Verify flags
         actual_pos = config["pipeline"]["apply_global_positive_txt2img"]

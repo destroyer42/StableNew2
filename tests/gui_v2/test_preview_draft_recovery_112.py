@@ -110,6 +110,11 @@ def test_valid_zimage_completion_enables_queue_without_draft_rerender(preview):
     assert preview.panel.add_to_queue_button.instate(["!disabled"])
     assert preview.panel.preview_error_label.cget("text") == ""
 
+    assert "Clear Draft" in preview.panel.pack_draft_notice.cget("text")
+    assert preview.panel.pack_draft_notice.winfo_manager() == "grid"
+    preview.panel._on_clear_draft()
+    assert preview.panel.pack_draft_notice.winfo_manager() == ""
+
 
 @pytest.mark.gui
 @pytest.mark.parametrize("model", ["sdxl.safetensors", "other.safetensors", "flux-2-klein-4b-fp8.safetensors"])

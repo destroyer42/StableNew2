@@ -327,6 +327,14 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.clear_draft_button.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
+        self.pack_draft_notice = ttk.Label(
+            self.actions_frame,
+            text="The draft keeps the requested seeds captured when the PromptPacks were added. "
+            "To use an edited seed, enable the pack override, choose Clear Draft, then add the packs again.",
+            wraplength=440,
+            style=STATUS_LABEL_STYLE,
+        )
+
         self.preview_error_label = ttk.Label(
             self.actions_frame, text="", wraplength=440, style=STATUS_LABEL_STYLE
         )
@@ -602,7 +610,9 @@ class PreviewPanelV2(ttk.Frame):
         sampler = txt2img_config.get("sampler_name") or config.get("sampler") or "DPM++ 2M"
         steps = txt2img_config.get("steps") or config.get("steps") or 20
         cfg_scale = txt2img_config.get("cfg_scale") or config.get("cfg_scale") or 7.0
-        seed = txt2img_config.get("seed") or config.get("seed") or -1
+        seed = txt2img_config.get("seed")
+        if seed is None:
+            seed = config.get("seed", -1)
 
         label = f"{model}"
 
@@ -923,9 +933,9 @@ class PreviewPanelV2(ttk.Frame):
         self._set_label_text(self.cfg_label, f"CFG: {cfg_text}")
         # PR-PIPE-007: Show resolved seed when available
         requested_seed = getattr(summary_obj, "seed", None)
-        actual_seed = getattr(summary_obj, "actual_seed", None) or getattr(
-            summary_obj, "resolved_seed", None
-        )
+        actual_seed = getattr(summary_obj, "actual_seed", None)
+        if actual_seed is None:
+            actual_seed = getattr(summary_obj, "resolved_seed", None)
         seed_text = format_seed_display(requested_seed, actual_seed)
         self._set_label_text(self.seed_label, f"Seed: {seed_text}")
 
@@ -1159,6 +1169,10 @@ class PreviewPanelV2(ttk.Frame):
             detail = str(error).replace("\n", " ")[:240] if error else "No current compiled jobs."
             reason = f"Preview unavailable: {detail} Correct settings and rebuild Preview, or Clear Draft."
         self.preview_error_label.configure(text=reason)
+        if packs:
+            self.pack_draft_notice.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        else:
+            self.pack_draft_notice.grid_remove()
 
     @staticmethod
     def _can_add_to_queue(
