@@ -81,7 +81,10 @@ def build_plan_snapshot(
                 str(record.get("workflow_version") or ""),
                 str(record.get("governance_state") or ""),
             )
-    stages = (*GENERIC_IMAGE_STAGES if targets else (), *((VIDEO_STAGE,) if workflows else ()))
+    stages = (
+        *(GENERIC_IMAGE_STAGES if targets else ()),
+        *((VIDEO_STAGE,) if workflows else ()),
+    )
     facts = (
         PlanFacts(target_facts, workflow_facts, controller_preflight(video_controller))
         if video_controller is not None

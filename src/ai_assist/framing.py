@@ -102,13 +102,7 @@ def render_prompt(request: AssistRequest) -> str:
         + json.dumps({"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "..."})
         + ".",
         "",
-        BEGIN_MARKER,
-        "POSITIVE_PROMPT:",
-        request.positive_text,
-        "NEGATIVE_PROMPT:",
-        request.negative_text,
-        END_MARKER,
-        "",
+        *_authored_block(request),
     ]
     return "\n".join(lines)
 

@@ -94,6 +94,7 @@ class AiSuggestionDialog(tk.Toplevel):
         self.cancel_button.pack(side="left")
         self.protocol("WM_DELETE_WINDOW", self.close)
         self._set_requests(False)
+        self._set_advise(False)
         unavailable = [f"{KIND_LABELS[k]}: {v}" for k, v in explanations.items() if v]
         if advise_problem:
             unavailable.append(f"Advise plan: {advise_problem}")
