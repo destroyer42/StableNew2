@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+import pytest
 
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
@@ -52,7 +55,13 @@ def _complete(controller: LearningController, state: LearningState, vector, *, s
     return variant
 
 
-def test_runner_uses_njr_seed_for_neutral_request(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("provenance_seed", "stage_seed", "nested_seed", "expected"),
+    [(12345, 10, 20, 12345), (0, 10, 20, 0), (None, 0, 20, 0), (None, None, 0, 0)],
+)
+def test_runner_uses_njr_seed_for_neutral_request(
+    tmp_path: Path, provenance_seed, stage_seed, nested_seed, expected
+) -> None:
     backend = Mock()
     backend.backend_id = "fake"
     backend.execute.return_value = None
@@ -60,16 +69,16 @@ def test_runner_uses_njr_seed_for_neutral_request(tmp_path: Path) -> None:
     registry.get.return_value = backend
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path), image_backend_registry=registry)
     record = make_pipeline_njr(
-        seed=12345,
-        config={"txt2img": {"seed": 12345}},
+        config={"txt2img": {"seed": nested_seed}, "seed": 30},
         backend_options={"image": {"backend_id": "fake"}},
     )
+    record = replace(record, provenance=replace(record.provenance, seed=provenance_seed))
 
     runner._execute_image_backend(
         backend_id="fake",
         stage_name="txt2img",
         njr=record,
-        stage_config={"extra": {}},
+        stage_config={"seed": stage_seed, "extra": {}},
         run_dir=tmp_path,
         input_image_path=None,
         image_name="seed",
@@ -81,7 +90,7 @@ def test_runner_uses_njr_seed_for_neutral_request(tmp_path: Path) -> None:
     )
 
     request = backend.execute.call_args.args[1]
-    assert request.seed == 12345
+    assert request.seed == expected
 
 
 def test_a1111_adapter_sends_requested_seed_and_preserves_readback(tmp_path: Path) -> None:

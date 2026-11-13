@@ -319,6 +319,8 @@ class Txt2ImgOverrides:
     # Nested sub-configs
     refiner: RefinerOverrides | None = None
     hires: HiresOverrides | None = None
+    subseed: int | None = None
+    subseed_strength: float | None = None
 
 
 @dataclass
@@ -773,6 +775,10 @@ class ConfigMergerV2:
         if overrides.seed is not None:
             config["seed"] = overrides.seed
             txt2img["seed"] = overrides.seed
+        if overrides.subseed is not None:
+            txt2img["subseed"] = overrides.subseed
+        if overrides.subseed_strength is not None:
+            txt2img["subseed_strength"] = overrides.subseed_strength
 
         # Handle nested refiner config within txt2img overrides
         if overrides.refiner is not None:

@@ -37,7 +37,7 @@ def test_global_prompt_integration(tmp_path: Path):
     # Step 1: Controller builds config from GUI state
     controller = AppController(main_window=mock_main_window, threaded=False)
     pack_config = {"pipeline": {}}
-    final_config = controller._build_config_snapshot_with_override(pack_config)
+    final_config = controller._capture_pack_draft_config().merge(pack_config)
 
     print("\nConfig built by controller:")
     print(

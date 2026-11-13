@@ -79,7 +79,11 @@ from src.controller.app_controller_services.diagnostics_read_model import (
     DiagnosticsSources,
 )
 from src.controller.app_controller_services.dispatch_hold_status import describe_dispatch_hold
-from src.controller.app_controller_services.gui_config_service import GuiConfigService
+from src.controller.app_controller_services.gui_config_service import (
+    GuiConfigService,
+    PackDraftConfig,
+    build_stage_overrides,
+)
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
 )
@@ -96,10 +100,7 @@ from src.controller.app_controller_services.runtime_projection_coordinator impor
 )
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.generation_profile_controller import GenerationProfileController
-from src.controller.global_prompt_policy_service import (
-    overlay_config_in_place,
-    read_current_policy,
-)
+from src.controller.global_prompt_policy_service import read_current_policy
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
@@ -129,7 +130,6 @@ from src.pipeline.config_contract_v26 import (
     validate_svd_native_execution_config,
     validate_train_lora_execution_config,
 )
-from src.pipeline.config_merger_v2 import StageOverridesBundle
 from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 from src.pipeline.last_run_store_v2_5 import (
     LastRunStoreV2_5,
@@ -681,7 +681,8 @@ class AppController:
         except Exception as e:
             logger.error(f"[controller] Failed to initialize persistence worker: {e}")
 
-        # Compile-time (never execution-time) global prompt intent for preview builds
+        # Preview compilation may run on a worker, including the admission compile.
+        self.get_current_global_prompt_policy()
         self.pipeline_controller.get_current_global_prompt_policy = self.get_current_global_prompt_policy  # type: ignore[attr-defined]
         # Let the GUI wire its callbacks to us
         if self.main_window is not None:
@@ -2365,7 +2366,7 @@ class AppController:
         self._attach_to_gui()
         if hasattr(self.main_window, "connect_controller"):
             self.main_window.connect_controller(self)
-        # Initial status
+        self.get_current_global_prompt_policy()
         self._update_status("Idle")
         self.load_packs()
     def _bind_app_state_visibility_listener(self) -> None:
@@ -3964,13 +3965,12 @@ class AppController:
             self._append_log(f"[controller] Config updated: {field}={value}")
 
     def get_current_global_prompt_policy(self) -> dict[str, Any]:
-        """Project the editable sidebar policy for compilation, never execution."""
-
-        return read_current_policy(
-            getattr(getattr(self, "main_window", None), "sidebar_panel_v2", None),
-            getattr(self, "config_manager", None),
-            self._append_log,
-        )
+        """Read live policy on the GUI thread; compilation workers use its latest projection."""
+        if threading.get_ident() == getattr(self, "_ui_thread_id", threading.get_ident()):
+            self._global_prompt_policy = read_current_policy(
+                self._get_sidebar_panel(), getattr(self, "config_manager", None), self._append_log
+            )
+        return dict(self._global_prompt_policy)
 
     def _build_pipeline_config(self) -> DeprecatedPipelineConfigSnapshot:
         """DEPRECATED (PR-CORE1-12): Internal pipeline_config builder.
@@ -4212,7 +4212,7 @@ class AppController:
                 pass
 
     def _get_stage_cards_panel(self) -> Any:
-        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
+        pipeline_tab = getattr(getattr(self, "main_window", None), "pipeline_tab", None)
         if pipeline_tab is None:
             return None
         return getattr(pipeline_tab, "stage_cards_panel", None)
@@ -4284,29 +4284,6 @@ class AppController:
         self._append_log(
             f"[controller] Pack config override: {'ENABLED' if enabled else 'DISABLED'} - "
             f"Current stage settings will {'override' if enabled else 'not override'} pack configs"
-        )
-
-    def _build_stage_override_flags(self):  # type: ignore[no-untyped-def]
-        """Build StageOverrideFlags based on override checkbox state.
-
-        When override checkbox is ON, all stage overrides are enabled.
-        When OFF, all overrides are disabled (pack configs used as-is).
-
-        Returns:
-            StageOverrideFlags instance for use with ConfigMergerV2.merge_pipeline().
-        """
-        from src.pipeline.config_merger_v2 import (
-            StageOverrideFlags,
-        )
-
-        enabled = self.override_pack_config_enabled
-        return StageOverrideFlags(
-            txt2img_override_enabled=enabled,
-            img2img_override_enabled=enabled,
-            upscale_override_enabled=enabled,
-            refiner_override_enabled=enabled,
-            hires_override_enabled=enabled,
-            adetailer_override_enabled=enabled,
         )
 
     def on_adetailer_config_changed(self, config: dict[str, Any]) -> None:
@@ -4579,64 +4556,35 @@ class AppController:
         for failure in report.failed:
             self._append_log(f"[controller] Failed to apply {report.source} to pack '{failure.pack_id}': {failure.error}")
 
-    def _collect_current_stage_configs(self) -> dict[str, Any]:
-        """Collect current stage configurations from the GUI cards.
-
-        This is similar to the logic in on_pipeline_pack_apply_config but returns
-        the config instead of applying it to packs.
-        """
+    def _collect_current_stage_configs(self, *, strict: bool = False) -> dict[str, Any]:
+        """Read the stage cards, requiring successful exports for a pack override."""
         current_config: dict[str, Any] = {}
-
-        # Get stage cards panel (defensive check)
         try:
             stage_panel = self._get_stage_cards_panel()
         except (AttributeError, TypeError):
+            if strict:
+                raise
             stage_panel = None
-
-        if stage_panel:
-            # Gather from txt2img card
-            txt2img_card = getattr(stage_panel, "txt2img_card", None)
-            if txt2img_card and hasattr(txt2img_card, "to_config_dict"):
-                try:
-                    txt2img_config = txt2img_card.to_config_dict()
-                    current_config.update(txt2img_config)
-                except Exception as e:
-                    self._append_log(f"[controller] Error gathering txt2img config: {e}")
-
-            # Gather from img2img card
-            img2img_card = getattr(stage_panel, "img2img_card", None)
-            if img2img_card and hasattr(img2img_card, "to_config_dict"):
-                try:
-                    img2img_config = img2img_card.to_config_dict()
-                    current_config.update(img2img_config)
-                except Exception as e:
-                    self._append_log(f"[controller] Error gathering img2img config: {e}")
-
-            # Gather from upscale card
-            upscale_card = getattr(stage_panel, "upscale_card", None)
-            if upscale_card and hasattr(upscale_card, "to_config_dict"):
-                try:
-                    upscale_config = upscale_card.to_config_dict()
-                    current_config.update(upscale_config)
-                except Exception as e:
-                    self._append_log(f"[controller] Error gathering upscale config: {e}")
-
-            # Gather from adetailer card
-            adetailer_card = getattr(stage_panel, "adetailer_card", None)
-            if adetailer_card and hasattr(adetailer_card, "to_config_dict"):
-                try:
-                    adetailer_config = adetailer_card.to_config_dict()
-                    # Wrap in "adetailer" section to match pack structure
-                    if "adetailer" not in current_config:
-                        current_config["adetailer"] = {}
-                    current_config["adetailer"].update(adetailer_config)
-
-                    # Include enabled flag in adetailer section
-                    current_config["adetailer"]["adetailer_enabled"] = bool(
-                        self._get_pipeline_stage_flags_from_state()["adetailer"]
-                    )
-                except Exception as e:
-                    self._append_log(f"[controller] Error gathering adetailer config: {e}")
+        for stage in ("txt2img", "img2img", "upscale", "adetailer"):
+            card = getattr(stage_panel, f"{stage}_card", None)
+            export = getattr(card, "to_config_dict", None)
+            if not callable(export):
+                if strict and stage == "txt2img":
+                    raise ValueError("Txt2img settings are unavailable. Reopen the Pipeline tab and try again.")
+                continue
+            try:
+                values = export()
+                if stage == "adetailer":
+                    current_config["adetailer"] = {
+                        **values,
+                        "adetailer_enabled": bool(self._get_pipeline_stage_flags_from_state()["adetailer"]),
+                    }
+                else:
+                    current_config.update(values)
+            except Exception as exc:  # noqa: BLE001 - legacy callers accept partial exports
+                if strict:
+                    raise ValueError(f"Could not read {stage} settings. {exc}") from exc
+                self._append_log(f"[controller] Error gathering {stage} config: {exc}")
 
         # Add randomizer config (defensive check)
         try:
@@ -4651,286 +4599,112 @@ class AppController:
 
         return current_config
 
-    def _add_global_prompt_flags(self, config: dict[str, Any]) -> None:
-        """Add global prompt application flags from sidebar checkboxes to config.
-
-        Args:
-            config: Configuration dict to modify (modifies in-place)
-        """
-        try:
-            overlay_config_in_place(config, self.get_current_global_prompt_policy())
-        except Exception as e:
-            self._append_log(f"[controller] Failed to read global prompt flags: {e}")
-
-    def _build_config_snapshot_with_override(self, pack_config: dict[str, Any]) -> dict[str, Any]:
-        """Build config snapshot considering the override checkbox state.
-
-        Args:
-            pack_config: The base configuration from the pack
-
-        Returns:
-            A configuration dict that either uses the pack config as-is (override disabled)
-            or merges pack config with current GUI stage configs (override enabled)
-        """
-        base_config = self._run_config_with_lora()
-
-        # Check if override is enabled (defensive check for tests/incomplete setup)
-        override_enabled = getattr(self, 'override_pack_config_enabled', False)
-
-        if not override_enabled:
-            # Override disabled: use pack config merged with base run config
-            merged_config = {**base_config, **pack_config}
-            # Add global prompt flags from sidebar checkboxes
-            self._add_global_prompt_flags(merged_config)
-            self._append_log("[controller] Override disabled: using pack config as-is")
-            return merged_config
-
-        # Override enabled: merge current stage configs into pack config
-        try:
-            current_stage_configs = self._collect_current_stage_configs()
-
-            # Build stage overrides bundle from current GUI configs
-            stage_overrides = self._build_stage_overrides_from_current_config(current_stage_configs)
-
-            # Build override flags (all enabled when override checkbox is on)
-            override_flags = self._build_stage_override_flags()
-
-            # Merge pack config with stage overrides using ConfigMergerV2
-            from src.pipeline.config_merger_v2 import ConfigMergerV2
-
-            base_merged = {**base_config, **pack_config}
-            final_config = ConfigMergerV2().merge_pipeline(
-                base_config=base_merged,
-                stage_overrides=stage_overrides,
-                override_flags=override_flags
-            )
-
-            # Add global prompt flags from sidebar checkboxes
-            self._add_global_prompt_flags(final_config)
-
-            self._append_log("[controller] Override enabled: merged current stage configs with pack config")
-            return final_config
-
-        except Exception as e:
-            # Fallback: if anything goes wrong with override merging, use base config
-            self._append_log(f"[controller] Override merge failed: {e}, falling back to pack config")
-            return {**base_config, **pack_config}
-
-    def _build_stage_overrides_from_current_config(self, current_config: dict[str, Any]) -> StageOverridesBundle:
-        """Build a StageOverridesBundle from the current GUI stage configurations."""
-        from src.pipeline.config_merger_v2 import (
-            ADetailerOverrides,
-            HiresOverrides,
-            Img2ImgOverrides,
-            RefinerOverrides,
-            StageOverridesBundle,
-            Txt2ImgOverrides,
-            UpscaleOverrides,
-        )
-
-        # Extract txt2img settings (stage cards export under "txt2img")
-        txt2img_overrides = None
-        txt2img_config = current_config.get("txt2img", {}) or {}
-        if any(
-            key in txt2img_config
-            for key in ["model", "sampler_name", "scheduler", "steps", "cfg_scale", "width", "height"]
-        ):
-            txt2img_overrides = Txt2ImgOverrides(
-                model=txt2img_config.get("model"),
-                vae=txt2img_config.get("vae"),
-                sampler=txt2img_config.get("sampler_name"),  # Note: field is "sampler", not "sampler_name"
-                scheduler=txt2img_config.get("scheduler"),
-                steps=txt2img_config.get("steps"),
-                cfg_scale=txt2img_config.get("cfg_scale"),
-                width=txt2img_config.get("width"),
-                height=txt2img_config.get("height"),
-            )
-
-        # Extract img2img settings (if any)
-        img2img_overrides = None
-        img2img_config = current_config.get("img2img", {})
-        if img2img_config:
-            img2img_overrides = Img2ImgOverrides(
-                enabled=img2img_config.get("enabled", False),
-                denoise_strength=img2img_config.get("denoising_strength"),  # Note: field is "denoise_strength"
-            )
-
-        # Extract upscale settings (if any)
-        upscale_overrides = None
-        upscale_config = current_config.get("upscale", {})
-        if upscale_config:
-            upscale_overrides = UpscaleOverrides(
-                enabled=upscale_config.get("enabled", False),
-                upscaler_name=upscale_config.get("upscaler"),  # Note: field is "upscaler_name"
-                scale_factor=upscale_config.get("scale_factor"),
-                denoise_strength=upscale_config.get("denoise_strength"),
-            )
-
-        # Extract refiner settings (if any)
-        refiner_overrides = None
-        if any(key.startswith("refiner_") for key in txt2img_config.keys()) or "use_refiner" in txt2img_config:
-            refiner_overrides = RefinerOverrides(
-                enabled=txt2img_config.get("use_refiner", False),
-                model_name=txt2img_config.get("refiner_model_name") or txt2img_config.get("refiner_checkpoint"),
-                switch_at=txt2img_config.get("refiner_switch_at"),
-            )
-
-        # Extract hires fix settings (if any)
-        hires_overrides = None
-        if any(key.startswith("hr_") for key in txt2img_config.keys()) or "enable_hr" in txt2img_config:
-            hires_overrides = HiresOverrides(
-                enabled=txt2img_config.get("enable_hr", False),
-                scale_factor=txt2img_config.get("hr_scale"),
-                upscaler_name=txt2img_config.get("hr_upscaler"),
-                steps=txt2img_config.get("hr_second_pass_steps"),
-                denoise_strength=txt2img_config.get("denoising_strength"),
-            )
-
-
-        return StageOverridesBundle(
-            txt2img=txt2img_overrides,
-            img2img=img2img_overrides,
-            upscale=upscale_overrides,
-            refiner=refiner_overrides,
-            hires=hires_overrides,
-            adetailer=ADetailerOverrides.from_stage_config(current_config.get("adetailer") or {}),
+    def _capture_pack_draft_config(self) -> PackDraftConfig:
+        stage_overrides = None
+        if getattr(self, "override_pack_config_enabled", False):
+            stage_overrides = build_stage_overrides(self._collect_current_stage_configs(strict=True))
+            if stage_overrides.txt2img is None or stage_overrides.txt2img.seed is None:
+                raise ValueError("Txt2img Seed is unavailable. Reopen the Pipeline tab and try again.")
+        return PackDraftConfig(
+            base_config=deepcopy(self._run_config_with_lora()),
+            global_prompt_policy=self.get_current_global_prompt_policy(),
+            stage_overrides=stage_overrides,
         )
 
     def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
-        """
-        Add one or more packs to the current job draft.
-
-        PR-HB-002: This method now spawns a worker thread to avoid blocking the UI thread
-        during heavy I/O operations (reading pack files with 100s of prompts).
-        """
+        """Capture working settings on the GUI thread, then load pack rows off-thread."""
         if not pack_ids:
             return
 
-        # PR-HB-002: Set operation label for heartbeat stall diagnostics
+        action = f"on_pipeline_add_packs_to_job({pack_ids})"
         self.current_operation_label = f"Adding {len(pack_ids)} pack(s) to job"
-        self.last_ui_action = f"on_pipeline_add_packs_to_job({pack_ids})"
+        self.last_ui_action = action
 
-        logger.debug(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
-        self._append_log(f"[controller] Adding packs to job: {pack_ids}")
+        def report_failure(message: str) -> None:
+            self._append_log(f"[controller] {message}")
+            self._update_status(message)
+            self._clear_active_operation(action)
 
-        # Validate inputs and collect metadata on UI thread (fast)
-        stage_flags = self._build_stage_flags()
-        randomizer_metadata = self._build_randomizer_metadata()
+        try:
+            stage_flags = self._build_stage_flags()
+            randomizer_metadata = self._build_randomizer_metadata()
+            draft_config = self._capture_pack_draft_config()
+        except Exception as exc:  # noqa: BLE001 - refuse the entire Add to Job action
+            report_failure(f"Could not add PromptPacks. {exc}")
+            return
 
-        # PR-HB-002: Spawn worker thread for I/O-heavy work
-        def _worker():
+        def worker() -> None:
+            entries: list[PackJobEntry] = []
+            messages: list[str] = []
             try:
-                entries = []
-                logger.debug(f"[AppController] Stage flags: {stage_flags}")
-
                 for pack_id in pack_ids:
                     pack = self._find_pack_by_id(pack_id)
-                    logger.debug(f"[AppController] Looking for pack '{pack_id}': {pack}")
                     if pack is None:
-                        self._append_log(f"[controller] Pack not found: {pack_id}")
-                        logger.debug(f"[AppController] ERROR: Pack '{pack_id}' not found!")
+                        messages.append(f"Pack not found: {pack_id}")
                         continue
 
-                    # Resolve the stored generation config through ConfigManager;
-                    # prompt rows contain authored text, not runtime stage config.
-                    pack_config = {}
                     try:
-                        loaded_config = self._config_manager.load_pack_config(pack_id)
-                        if isinstance(loaded_config, dict):
-                            pack_config = loaded_config
-                    except Exception as e:
-                        self._append_log(f"[controller] Failed to read pack config for '{pack_id}': {e}")
+                        pack_config = self._config_manager.load_pack_config(pack_id)
+                    except Exception as exc:  # noqa: BLE001 - preserve the saved-settings path for legacy packs
+                        if draft_config.stage_overrides is not None:
+                            raise
+                        messages.append(f"Failed to read pack config for '{pack_id}': {exc}")
+                        pack_config = None
 
-                    # Build config snapshot considering override checkbox state
-                    config_snapshot = self._build_config_snapshot_with_override(pack_config)
-
-                    # Add stage enable flags to pipeline section so executor can check them
-                    pipeline_section = config_snapshot.setdefault("pipeline", {})
-                    pipeline_section["adetailer_enabled"] = stage_flags.get("adetailer", False)
-                    pipeline_section["upscale_enabled"] = stage_flags.get("upscale", False)
-                    pipeline_section["txt2img_enabled"] = stage_flags.get("txt2img", True)
-                    pipeline_section["img2img_enabled"] = stage_flags.get("img2img", False)
-
-                    # Ensure randomization is included
-                    if "randomization_enabled" not in config_snapshot:
-                        config_snapshot["randomization_enabled"] = (
-                            self.state.current_config.randomization_enabled
-                        )
-
-                    # Read all prompts from pack file (not just first)
                     try:
-                        all_prompts = read_prompt_pack(pack.path)
-                    except Exception as e:
-                        self._append_log(f"[controller] Failed to read pack '{pack_id}': {e}")
-                        all_prompts = []
+                        config_snapshot = draft_config.merge(pack_config or {})
+                    except (TypeError, ValueError, AttributeError) as exc:
+                        raise ValueError(f"Could not merge settings for '{pack_id}'. {exc}") from exc
 
-                    if not all_prompts:
-                        self._append_log(f"[controller] Pack '{pack_id}' has no prompts")
+                    pipeline_section = config_snapshot["pipeline"]
+                    for stage in ("adetailer", "upscale", "txt2img", "img2img"):
+                        pipeline_section[f"{stage}_enabled"] = stage_flags.get(stage, stage == "txt2img")
+                    config_snapshot.setdefault("randomization_enabled", randomizer_metadata["enabled"])
+
+                    try:
+                        prompts = read_prompt_pack(pack.path)
+                    except Exception as exc:  # noqa: BLE001 - report the unreadable pack and continue with others
+                        messages.append(f"Failed to read pack '{pack_id}': {exc}")
                         continue
+                    if not prompts:
+                        messages.append(f"Pack '{pack_id}' has no prompts")
 
-                    logger.debug(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
-
-                    # Create one PackJobEntry per prompt row
-                    for row_index, prompt_row in enumerate(all_prompts):
-                        prompt_text = prompt_row.get("positive", "").strip()
-                        negative_prompt_text = prompt_row.get("negative", "").strip()
-
-                        entry = PackJobEntry(
+                    for row_index, row in enumerate(prompts):
+                        entries.append(PackJobEntry(
                             pack_id=pack_id,
                             pack_name=pack.name,
                             config_snapshot=config_snapshot,
-                            prompt_text=prompt_text,
-                            negative_prompt_text=negative_prompt_text,
+                            prompt_text=row.get("positive", "").strip(),
+                            negative_prompt_text=row.get("negative", "").strip(),
                             stage_flags=stage_flags,
                             randomizer_metadata=randomizer_metadata,
                             pack_row_index=row_index,
-                        )
-                        entries.append(entry)
+                        ))
+            except Exception as exc:  # noqa: BLE001 - report worker failure on the GUI thread
+                logger.exception("Failed to build the PromptPack draft")
+                message = f"Could not add PromptPacks. {exc}"
+                self._ui_dispatch(lambda: report_failure(message))
+                return
 
-                    logger.debug(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
+            def publish() -> None:
+                for message in messages:
+                    self._append_log(f"[controller] {message}")
+                if entries and self.app_state:
+                    if self.app_state.add_packs_to_job_draft(entries) is not False:
+                        self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft")
+                        self.generation_profiles.note_draft_built()
+                    else:
+                        self._append_log("[controller] Packs not added: discard the open History variation first")
+                    self._mark_ui_dirty(preview=True)
+                self._clear_active_operation(action)
 
-                # PR-HB-003: Schedule UI updates on main thread using debounced refresh
-                def _update_ui():
-                    if entries and self.app_state:
-                        added = self.app_state.add_packs_to_job_draft(entries) is not False
-                        self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft" if added else "[controller] Packs not added: discard the open History variation first")
-                        if added:
-                            self.generation_profiles.note_draft_built()
-                        # Use debounced refresh instead of direct call
-                        self._mark_ui_dirty(preview=True)
+            self._ui_dispatch(publish)
 
-                    # Clear operation label
-                    self.current_operation_label = None
-                    self.last_ui_action = None
-
-                # Schedule callback on UI thread
-                if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
-                    self.main_window.run_in_main_thread(_update_ui)
-                else:
-                    # Fallback: direct call (for tests without GUI)
-                    _update_ui()
-
-            except Exception as exc:
-                logger.exception(f"[AppController] Worker error in on_pipeline_add_packs_to_job: {exc}")
-                self._append_log(f"[controller] Error adding packs: {exc}")
-                # Clear operation label on error
-                self.current_operation_label = None
-                self.last_ui_action = None
-
-        can_schedule_back_to_ui = bool(
-            getattr(self, "main_window", None)
-            and callable(getattr(self.main_window, "run_in_main_thread", None))
-        )
-        if not self.threaded or not can_schedule_back_to_ui:
-            _worker()
-            return
-
-        # PR-HB-002: Use tracked thread for clean shutdown
-        self._spawn_tracked_thread(
-            target=_worker,
-            name=f"PackAdd-{len(pack_ids)}",
-            purpose=f"Add {len(pack_ids)} pack(s) to job draft"
-        )
+        can_dispatch = callable(getattr(getattr(self, "main_window", None), "run_in_main_thread", None))
+        if self.threaded and can_dispatch:
+            self._spawn_tracked_thread(target=worker, name=f"PackAdd-{len(pack_ids)}", purpose=action)
+        else:
+            worker()
 
     def add_single_prompt_to_draft(self) -> None:
         """Capture the current prompt/negative pair in the pipeline draft summary."""
@@ -4953,6 +4727,7 @@ class AppController:
 
     def request_preview_refresh(self) -> None:
         """Request a debounced preview refresh suitable for GUI-triggered draft updates."""
+        self.get_current_global_prompt_policy()
         self.app_state.invalidate_preview()
         scheduler = getattr(self, "_ui_scheduler", None)
         main_window = getattr(self, "main_window", None)

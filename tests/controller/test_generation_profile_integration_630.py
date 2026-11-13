@@ -24,6 +24,7 @@ from tests.controller.test_generation_profile_controller_630 import (
     FakePanel,
     _compat,
 )
+from tests.controller.test_override_functionality import SeedCard, make_app
 
 PACK_SETTINGS = {
     "txt2img": {
@@ -34,6 +35,9 @@ PACK_SETTINGS = {
         "cfg_scale": 6.0,
         "width": 832,
         "height": 1216,
+        "seed": -1,
+        "subseed": 44,
+        "subseed_strength": 0.75,
     },
     "pipeline": {"images_per_prompt": 1, "adetailer_enabled": True},
     "adetailer": {"enabled": True, "adetailer_checkpoint_model": "face.safetensors"},
@@ -67,7 +71,13 @@ def env(tmp_path: Path):
                     "slots": [{"index": 0, "text": "a knight", "negative": "", "loras": []}],
                     "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []},
                 },
-                "preset_data": PACK_SETTINGS,
+                "preset_data": {
+                    **PACK_SETTINGS,
+                    "pipeline": {
+                        **PACK_SETTINGS["pipeline"],
+                        "output_dir": str(tmp_path / "output"),
+                    },
+                },
             }
         ),
         encoding="utf-8",
@@ -293,3 +303,89 @@ def test_explicit_published_learning_profile_reaches_next_sqlite_njr(env, tmp_pa
     assert pack.read_bytes() == pack_bytes
     assert publication.store.favorite_for(published.model.key) is None
     assert publication.store.load_startup_document() is None
+
+
+@pytest.mark.parametrize(
+    ("override", "working_seed", "expected"),
+    [
+        (True, "535291198", (535291198, -1, 0.0)),
+        (True, "0", (0, -1, 0.0)),
+        (False, "535291198", (-1, 44, 0.75)),
+    ],
+)
+def test_add_to_job_freezes_promptpack_seed_through_sqlite_and_replay(
+    env, tmp_path, override, working_seed, expected
+):
+    from src.controller.job_service import JobService
+    from src.controller.submission_policy_v26 import SubmissionPolicy
+    from src.image_backends import ImageBackendCapabilities, ImageExecutionResult
+    from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
+    from src.queue.job_queue import JobQueue
+    from src.queue.job_repository import JobRepository
+    from src.utils.prompt_packs import PromptPackInfo
+    from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
+    from tests.image_backends.test_image_backend_contract import _FakeTxt2ImgBackend, _runner
+
+    class SeedBackend(_FakeTxt2ImgBackend):
+        backend_id = "forge_webui"
+        capabilities = ImageBackendCapabilities(backend_id=backend_id, stage_types=("txt2img",))
+
+        def execute(self, pipeline, request):
+            result = super().execute(pipeline, request)
+            return ImageExecutionResult.from_stage_result(
+                backend_id=self.backend_id,
+                stage_name=request.stage_name,
+                result={**result.raw_result, "requested_seed": request.seed, "actual_seed": 271828},
+            )
+
+    pipeline, manager, _, _, pack = env
+    original_pack = pack.read_bytes()
+    card = SeedCard(working_seed)
+    app = make_app(card, override=override, manager=manager, app_state=pipeline._app_state)
+    app.packs = [PromptPackInfo(name="hero", path=pack)]
+    app.app_state.set_pipeline_stage_enabled("txt2img", True)
+    app.on_pipeline_add_packs_to_job(["hero"])
+    pipeline.refresh_preview_from_state()
+
+    [preview] = app.app_state.preview_jobs
+    assert preview.provenance.seed == expected[0]
+    assert tuple(preview.config[k] for k in ("seed", "subseed", "subseed_strength")) == expected
+
+    backend = SeedBackend()
+    runner = _runner(tmp_path / "artifacts", backend)
+    repository = JobRepository(tmp_path / "seed.sqlite3")
+    queue = JobQueue(repository=repository)
+
+    def execute(job):
+        record = normalized_job_from_snapshot(job.snapshot)
+        assert record is not None
+        return runner.run_njr(record, cancel_token=getattr(job, "_cancel_token", None))
+
+    service = JobService(queue, run_callable=execute, require_normalized_records=True)
+    service.auto_run_enabled = False
+    pipeline._job_service = service
+    card.seed_var.value = "9"
+    app.override_pack_config_enabled = not override
+    assert pipeline.enqueue_draft_jobs() == 1
+    stored = repository.get_job(preview.job_id)
+    assert stored.snapshot["normalized_job"] == preview.to_dict()
+    parent = normalized_job_from_snapshot(stored.snapshot)
+    assert parent is not None
+
+    replay = compile_replay_intent(ReplayIntent(record=parent), id_fn=lambda: "seed-replay")
+    assert replay.job_id != parent.job_id and replay.source.parent_job_id == parent.job_id
+    assert replay.provenance.seed == expected[0]
+    assert replay.workload == parent.workload
+    assert service.submit_njrs([replay], SubmissionPolicy(start_when_idle=False)) == [replay.job_id]
+
+    for record in (parent, replay):
+        service.runner.run_once(queue.get_job(record.job_id))
+        variant = repository.get_job(record.job_id).result["variants"][0]
+        assert variant["requested_seed"] == expected[0]
+        assert variant["actual_seed"] == 271828
+
+    assert [request.seed for request in backend.calls] == [expected[0], expected[0]]
+    for request in backend.calls:
+        assert request.execution_config["subseed"] == expected[1]
+        assert request.execution_config["subseed_strength"] == expected[2]
+    assert pack.read_bytes() == original_pack

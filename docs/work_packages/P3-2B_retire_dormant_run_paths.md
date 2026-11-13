@@ -73,5 +73,5 @@ service and `AppState`.
 
 ## Ratchets
 
-Controller ceilings lowered: `app_controller.py` 5438 -> 5386, `pipeline_controller.py` 1607 -> 1599,
-`job_history_service.py` 647 -> 619. mypy baseline 1418 -> 1414; ruff BLE001 1225 -> 1222, S110 480 -> 479.
+Controller ceilings lowered (against `main` at `32f52620`): `app_controller.py` 5213 -> 5161, `pipeline_controller.py` 1607 -> 1599,
+`job_history_service.py` 647 -> 619. mypy baseline 1412 -> 1408; ruff BLE001 1217 -> 1214, S110 480 -> 479; unformatted files unchanged (378).

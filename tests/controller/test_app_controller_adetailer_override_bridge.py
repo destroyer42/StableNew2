@@ -1,9 +1,7 @@
-from src.controller.app_controller import AppController
+from src.controller.app_controller_services.gui_config_service import build_stage_overrides
 
 
 def test_build_stage_overrides_from_current_config_preserves_adetailer_pass_local_fields() -> None:
-    controller = AppController.__new__(AppController)
-
     current_config = {
         "adetailer": {
             "adetailer_enabled": True,
@@ -30,7 +28,7 @@ def test_build_stage_overrides_from_current_config_preserves_adetailer_pass_loca
         }
     }
 
-    bundle = controller._build_stage_overrides_from_current_config(current_config)
+    bundle = build_stage_overrides(current_config)
 
     assert bundle.adetailer is not None
     assert bundle.adetailer.checkpoint_model == "juggernautXL_ragnarokBy.safetensors"
