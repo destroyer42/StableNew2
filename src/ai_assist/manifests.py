@@ -22,7 +22,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from src.ai_assist.contracts import OutcomeCode
-from src.ai_assist.paths import active_pointer_path, model_dir, runtime_dir
+from src.ai_assist.paths import (
+    active_pointer_path,
+    model_dir,
+    preview_enablement_path,
+    runtime_dir,
+)
 from src.utils.atomic_io import atomic_write_json
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -393,7 +398,12 @@ def record_active(root: Path, build: RuntimeBuild, entry: ModelEntry) -> Path:
         "runtime_files": {rel: _stat_snapshot(runtime_root / rel) for rel in sorted(build.files)},
         "model": _stat_snapshot(model_path),
     }
-    return atomic_write_json(active_pointer_path(root), payload, indent=2, sort_keys=True)
+    written = atomic_write_json(active_pointer_path(root), payload, indent=2, sort_keys=True)
+    # Changing the active model or runtime voids any AI Assist Preview enablement (owner decision D13). Voiding on every
+    # re-point, even to the same identity, is deliberate: re-enabling is one explicit operator action, and a stale
+    # enablement can then never outlive a pointer change.
+    preview_enablement_path(root).unlink(missing_ok=True)
+    return written
 
 
 @dataclass(frozen=True, slots=True)
@@ -407,6 +417,8 @@ class Verification:
     executable: Path | None = None
     model_path: Path | None = None
     details: dict[str, Any] = field(default_factory=dict)
+    #: Set by the service at admission: ``qualified``, ``preview`` or (harness only) ``candidate``.
+    trust_tier: str = ""
 
     @property
     def ok(self) -> bool:

@@ -14,7 +14,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from src.ai_assist.argv import RunLimits, Sampling
@@ -38,6 +38,13 @@ from src.ai_assist.manifests import (
 )
 from src.ai_assist.observe import ChildObserver, default_cap_gib
 from src.ai_assist.paths import events_path
+from src.ai_assist.preview import (
+    TRUST_CANDIDATE,
+    TRUST_PREVIEW,
+    TRUST_QUALIFIED,
+    preview_enabled_for,
+    trust_tier,
+)
 from src.ai_assist.runtime import AiRuntime
 from src.ai_assist.validators import validate_output
 from src.utils.thread_registry import get_thread_registry
@@ -57,6 +64,9 @@ GUARD_CONSECUTIVE = 2
 class ServicePolicy:
     #: Qualification harness only: also accept a registered-but-unqualified model and runtime.
     allow_candidate: bool = False
+    #: AI Assist Preview (owner decision D13): admit a candidate only while the operator's enablement record names its
+    #: exact model SHA-256 and runtime build id. Production composition sets this; the harness does not need it.
+    allow_preview: bool = False
     #: Require the operator's firewall attestation before any request runs (owner decision D8).
     strict_offline: bool = False
     watch_interval_seconds: float = 0.25
@@ -326,11 +336,24 @@ class AiAssistService:
                 self._root,
                 self._manifest,
                 self._registry,
-                allow_candidate=self._policy.allow_candidate,
+                allow_candidate=self._policy.allow_candidate or self._policy.allow_preview,
             )
             if not verification.ok:
                 assert verification.code is not None
                 return refuse(verification.code, verification.reason)
+            assert verification.entry is not None and verification.build is not None
+            tier = trust_tier(verification.entry, verification.build)
+            if tier != TRUST_QUALIFIED:
+                if self._policy.allow_candidate:
+                    tier = TRUST_CANDIDATE
+                elif self._policy.allow_preview and preview_enabled_for(
+                    self._root, verification.entry, verification.build
+                ):
+                    tier = TRUST_PREVIEW
+                else:
+                    # Fail closed: a missing, malformed or mismatched enablement record is "not enabled".
+                    return refuse(OutcomeCode.NOT_INSTALLED, "preview_not_enabled")
+            verification = replace(verification, trust_tier=tier)
             if self._policy.strict_offline and read_attestation(self._root) is None:
                 return refuse(OutcomeCode.EGRESS_NOT_ATTESTED, "operator_attestation_missing")
             activity = self._read_activity()
@@ -392,7 +415,7 @@ class AiAssistService:
                     request_id=request.request_id,
                     reason=result.reason,
                     elapsed_ms=result.elapsed_ms,
-                    details=observer.evidence.as_details(),
+                    details={**observer.evidence.as_details(), "trust_tier": verification.trust_tier},
                 )
             else:
                 output_chars = len(result.stdout)
@@ -403,7 +426,7 @@ class AiAssistService:
                     reason=validated.reason,
                     suggestion=validated.suggestion,
                     elapsed_ms=result.elapsed_ms,
-                    details=observer.evidence.as_details(),
+                    details={**observer.evidence.as_details(), "trust_tier": verification.trust_tier},
                 )
         except Exception:  # noqa: BLE001 - the request must always end in a typed outcome
             logger.exception("AI assist request failed unexpectedly")
@@ -443,6 +466,8 @@ class AiAssistService:
         ):
             record["model_sha256_prefix"] = verification.entry.sha256[:12]
             record["runtime_build_id"] = verification.build.build_id
+            if verification.trust_tier in (TRUST_QUALIFIED, TRUST_PREVIEW):
+                record["trust_tier"] = verification.trust_tier
         for key, field in (
             ("peak_tree_private_gib", "peak_private_gib"),
             ("priority_verified", "priority_verified"),

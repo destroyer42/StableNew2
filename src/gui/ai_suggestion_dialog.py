@@ -23,6 +23,7 @@ class AiSuggestionDialog(tk.Toplevel):
         on_cancel: Callable[[], None],
         on_close: Callable[[], None],
         explanations: dict[SuggestionKind, str],
+        trust_label: str = "",
     ) -> None:
         super().__init__(master)
         self.title("AI suggestion review")
@@ -38,6 +39,11 @@ class AiSuggestionDialog(tk.Toplevel):
             button.pack(side="left", padx=4)
             self._requests.append((button, kind))
         self._explanations = explanations
+        self._trust_label = trust_label
+        self.trust_var = tk.StringVar(value=trust_label)
+        ttk.Label(self, textvariable=self.trust_var, wraplength=760, justify="left").pack(
+            fill="x", padx=8
+        )
         self.status_var = tk.StringVar(
             value="Choose the assistance to request. Acceptance changes only the editing buffer."
         )
@@ -67,6 +73,15 @@ class AiSuggestionDialog(tk.Toplevel):
         unavailable = [f"{KIND_LABELS[k]}: {v}" for k, v in explanations.items() if v]
         self._text("\n".join(unavailable))
 
+    def set_trust_label(self, label: str) -> None:
+        """Every surface of a suggestion from an unqualified Preview model carries this label."""
+
+        self._trust_label = label
+        self.trust_var.set(label)
+
+    def status(self, text: str) -> None:
+        self.status_var.set(f"[{self._trust_label}] {text}" if self._trust_label else text)
+
     def _set_requests(self, running: bool) -> None:
         for button, kind in self._requests:
             button.state(["disabled"] if running or self._explanations.get(kind) else ["!disabled"])
@@ -78,14 +93,14 @@ class AiSuggestionDialog(tk.Toplevel):
         self.preview.configure(state="disabled")
 
     def running(self, kind: SuggestionKind) -> None:
-        self.status_var.set(f"{KIND_LABELS[kind]}: request running…")
+        self.status(f"{KIND_LABELS[kind]}: request running…")
         self._text("")
         self._set_requests(True)
         self.accept_button.state(["disabled"])
         self.cancel_button.state(["!disabled"])
 
     def show_review(self, model: SuggestionReview) -> None:
-        self.status_var.set(f"{model.kind}: {model.status}")
+        self.status(f"{model.kind}: {model.status}")
         self._set_requests(False)
         self.cancel_button.state(["disabled"])
         self.accept_button.state(["!disabled"] if model.can_accept else ["disabled"])

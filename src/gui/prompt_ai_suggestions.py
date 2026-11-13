@@ -10,7 +10,9 @@ from typing import Any
 from uuid import uuid4
 
 from src.ai_assist.contracts import AssistOutcome, AssistRequest, OutcomeCode, SuggestionKind
+from src.ai_assist.preview import PREVIEW_LABEL
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
+from src.gui.ai_preview_dialog import AiPreviewDialog
 from src.gui.ai_suggestion_dialog import AiSuggestionDialog
 from src.gui.tooltip import attach_tooltip
 from src.gui_v2.ai_suggestion_view import (
@@ -46,13 +48,22 @@ class PromptAiSuggestions:
         self._poll_id: str | None = None
         self.button = ttk.Button(header, text="Suggest…", command=self.open, state="disabled")
         header.add(self.button)
+        self.preview_button = ttk.Button(
+            header, text="AI Preview…", command=self.open_preview, state="disabled"
+        )
+        header.add(self.preview_button)
+        self.preview_dialog: AiPreviewDialog | None = None
+        attach_tooltip(
+            self.preview_button,
+            "Enable or revoke AI Assist Preview, which runs an unqualified local model for suggestions only.",
+        )
         attach_tooltip(
             self.button,
             "Request a local AI suggestion, then review and explicitly accept into the editing buffer.",
         )
         self.explanation = ttk.Label(
             tab.center_frame,
-            text="AI Assist needs an installed, qualified runtime and model.",
+            text=OUTCOME_TEXT[OutcomeCode.NOT_INSTALLED],
             wraplength=640,
             justify="left",
         )
@@ -176,10 +187,30 @@ class PromptAiSuggestions:
             if problem and rewrite_problem:
                 explanation = rewrite_problem
                 code = OutcomeCode.INVALID_REQUEST
+        label = self._trust_label()
+        if label and label not in explanation:
+            explanation = f"{label}. {explanation}"
         self.explanation.configure(text=explanation)
+        self.button.configure(text="Suggest… (Preview)" if label else "Suggest…")
+        self.preview_button.state(["!disabled"] if self.owner is not None else ["disabled"])
         self.button.state(
             ["!disabled"] if code is None and self._active_id is None else ["disabled"]
         )
+
+    def _trust_label(self) -> str:
+        try:
+            return str(self.owner.trust_label()) if self.owner is not None else ""
+        except Exception:  # noqa: BLE001 - a label failure must never enable or block anything
+            return ""
+
+    def open_preview(self) -> AiPreviewDialog | None:
+        if self._closed or self.owner is None or self.owner.closed:
+            return None
+        if self.preview_dialog is not None and self.preview_dialog.winfo_exists():
+            self.preview_dialog.lift()
+            return self.preview_dialog
+        self.preview_dialog = AiPreviewDialog(self.tab, owner=self.owner, on_change=self.refresh)
+        return self.preview_dialog
 
     def open(self) -> AiSuggestionDialog | None:
         self.refresh()
@@ -195,6 +226,7 @@ class PromptAiSuggestions:
             on_cancel=self.cancel,
             on_close=self.close,
             explanations={kind: self._problem(kind) for kind in SuggestionKind},
+            trust_label=self._trust_label(),
         )
         return self.dialog
 
@@ -264,6 +296,8 @@ class PromptAiSuggestions:
             self.refresh()
             return
         self.outcome = outcome
+        if outcome.details.get("trust_tier") == "preview":
+            dialog.set_trust_label(PREVIEW_LABEL)
         review = outcome_review(outcome, snapshot.request.kind)
         if outcome.code is OutcomeCode.SUGGESTION:
             suggestion = checked_suggestion(outcome, snapshot.request)
@@ -367,7 +401,7 @@ class PromptAiSuggestions:
         if self.tab.app_state is not None:
             self.tab.app_state.invalidate_preview()
         dialog.clear_sensitive()
-        dialog.status_var.set(
+        dialog.status(
             "Rewrite accepted into the editing buffer. Save and Preview through the ordinary workflow."
         )
         self.snapshot = self.outcome = None
@@ -393,6 +427,8 @@ class PromptAiSuggestions:
         self._active_id = None
 
     def destroy(self) -> None:
+        if self.preview_dialog is not None and self.preview_dialog.winfo_exists():
+            self.preview_dialog.destroy()
         if self.dialog is not None:
             self.dialog.close()
         self._closed = True
