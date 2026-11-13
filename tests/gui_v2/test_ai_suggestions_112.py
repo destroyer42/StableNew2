@@ -444,3 +444,63 @@ def test_real_application_and_window_bind_one_dormant_service(tk_root, tmp_path,
         controller.shutdown_app("ai112-test")
         window.cleanup()
     assert controller.ai_assist.quiescent is True and controller._shutdown_completed
+
+
+def test_preview_state_labels_button_explanation_dialog_and_review(journey):
+    from src.ai_assist.preview import PREVIEW_LABEL
+    from src.ai_assist.status import STATE_PREVIEW
+
+    j = journey
+    j.owner.status = lambda: AiAssistStatus(
+        STATE_PREVIEW, "Preview", egress="attested", trust="preview"
+    )
+    j.flow.refresh()
+    assert j.flow.button.cget("text") == "Suggest… (Preview)"
+    assert PREVIEW_LABEL in j.flow.explanation.cget("text")
+    assert j.flow.button.instate(["!disabled"])
+    dialog = start(j)
+    assert dialog.trust_var.get() == PREVIEW_LABEL
+    outcome = successful(j)
+    outcome.details["trust_tier"] = "preview"
+    finish(j, outcome)
+    assert PREVIEW_LABEL in dialog.status_var.get()
+
+
+def test_preview_dialog_enables_and_revokes_only_through_the_owner(journey):
+    j = journey
+    calls = []
+
+    class Owner:
+        closed = False
+        enabled = False
+
+        def preview_meaning(self):
+            return "meaning"
+
+        def preview_state(self):
+            from src.ai_assist.preview import PreviewState
+
+            return PreviewState("preview" if self.enabled else "candidate", "", "M", "b")
+
+        def enable_preview(self):
+            calls.append("enable")
+            self.enabled = True
+            return True, "enabled"
+
+        def revoke_preview(self):
+            calls.append("revoke")
+            self.enabled = False
+            return True, "revoked"
+
+    owner = Owner()
+    j.flow.owner = owner
+    dialog = j.flow.open_preview()
+    assert dialog is not None and not calls
+    assert dialog.enable_button.instate(["!disabled"]) and dialog.revoke_button.instate(
+        ["disabled"]
+    )
+    dialog.enable_button.invoke()
+    assert calls == ["enable"] and dialog.revoke_button.instate(["!disabled"])
+    dialog.revoke_button.invoke()
+    assert calls == ["enable", "revoke"]
+    dialog.destroy()

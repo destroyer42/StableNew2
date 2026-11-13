@@ -12,6 +12,7 @@ from src.ai_assist.contracts import (
     OutcomeCode,
     SuggestionKind,
 )
+from src.ai_assist.preview import PreviewState
 from src.ai_assist.validators import validate_output
 from src.gui_v2.prompt_adaptation_preview import AdaptationPreviewModel
 
@@ -26,7 +27,7 @@ OUTCOME_TEXT = {
     OutcomeCode.REFUSED_BY_MODEL: "The model refused this request. Authored content is unchanged.",
     OutcomeCode.MALFORMED: "The response failed validation. It cannot be accepted.",
     OutcomeCode.INVALID_REQUEST: "The authored input cannot be framed safely for this request.",
-    OutcomeCode.NOT_INSTALLED: "AI Assist needs an installed, qualified runtime and model.",
+    OutcomeCode.NOT_INSTALLED: "AI Assist needs an installed runtime and model (qualified, or an enabled Preview model).",
     OutcomeCode.INTEGRITY_FAILED: "AI integrity check failed. Open Operator Readiness for diagnostics.",
     OutcomeCode.EGRESS_NOT_ATTESTED: "Operator-managed outbound restriction must be attested before AI can run.",
     OutcomeCode.GENERATION_ACTIVE: "Generation is running, GPU dispatch is quarantined, or queue activity is unreadable. Retry after it clears.",
@@ -79,3 +80,28 @@ def checked_suggestion(outcome: AssistOutcome, request: AssistRequest) -> Assist
 def outcome_review(outcome: AssistOutcome, kind: SuggestionKind) -> SuggestionReview:
     # Never expose raw model refusal text, details, exception messages or malformed stdout.
     return SuggestionReview(OUTCOME_TEXT[outcome.code], KIND_LABELS[kind])
+
+
+_PREVIEW_MISSING = {
+    "pinned_build": "No runtime build is pinned in config/managed_ai_runtime.json. Pin one by reviewed change first.",
+    "imported_model": "No runtime and model are imported and activated. Import them from local files first.",
+    "integrity": "The installed files do not match their pinned identities. Re-import them from verified local files.",
+    "enablement": "AI Assist Preview is not enabled yet.",
+    "attestation": "The outbound firewall restriction is not attested. Record the attestation before any request can run.",
+}
+
+
+def preview_status_text(state: PreviewState) -> str:
+    """Exact, content-free explanation of the Preview state and of the next missing prerequisite."""
+
+    if state.trust == "qualified":
+        return "The installed model is qualified. AI Assist Preview is not needed."
+    detail = f" ({state.model_name}, runtime {state.build_id})" if state.model_name else ""
+    if state.enabled:
+        text = f"AI Assist Preview is ENABLED for the installed model{detail}. Revoke it to stop using it."
+    elif state.can_enable:
+        text = f"A verified but unqualified model is installed{detail}. Enable Preview to allow suggestions from it."
+    else:
+        text = "AI Assist Preview cannot be enabled yet."
+    reason = _PREVIEW_MISSING.get(state.missing, "")
+    return f"{text} {reason}".strip()

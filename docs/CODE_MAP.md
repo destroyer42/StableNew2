@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-717 of 872 modules have a docstring.
+719 of 874 modules have a docstring.
 
 ## src/
 
@@ -27,6 +27,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `manifests.py`: Pinned runtime manifest, provenance-gated model registry, local import and integrity verification
 - `observe.py`: Consume only the read capability minted by run_bounded for this request (F2)
 - `paths.py`: Where the offline AI runtime, weights and records live
+- `preview.py`: AI Assist Preview: the operator-recorded enablement of an unqualified candidate (owner decision D13, 2026-11-…
 - `runtime.py`: One bounded, contained, CPU-only inference as a short-lived child (owner decision D2)
 - `service.py`: Single-flight admission, yielding and outcome mapping for one AI request at a time
 - `status.py`: Read-only installation status for the Operator Readiness window
@@ -219,6 +220,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: GUI module
 - `advanced_prompt_editor.py`: Advanced Prompt Pack Editor with validation, embedding/LoRA discovery, and smart features
+- `ai_preview_dialog.py`: AI Assist Preview enablement dialog (owner decision D13): the one place an operator enables or revokes Preview
 - `ai_suggestion_dialog.py`: Read-only AI review dialog; only an explicit Accept callback can edit the authoring buffer
 - `api_status_panel.py`: APIStatusPanel - UI component for displaying API connection status
 - `app_state_projection_sink.py`: (no docstring)

@@ -10,6 +10,7 @@ from pathlib import Path
 ACTIVE_POINTER_NAME = "active.json"
 ATTESTATION_NAME = "egress_attestation.json"
 EVENTS_NAME = "events.jsonl"
+PREVIEW_ENABLEMENT_NAME = "preview_enablement.json"
 
 
 def resolve_ai_root(
@@ -57,6 +58,10 @@ def attestation_path(root: Path) -> Path:
     return root / ATTESTATION_NAME
 
 
+def preview_enablement_path(root: Path) -> Path:
+    return root / PREVIEW_ENABLEMENT_NAME
+
+
 def events_path(root: Path) -> Path:
     return root / EVENTS_NAME
 
@@ -69,10 +74,12 @@ __all__ = [
     "ACTIVE_POINTER_NAME",
     "ATTESTATION_NAME",
     "EVENTS_NAME",
+    "PREVIEW_ENABLEMENT_NAME",
     "active_pointer_path",
     "attestation_path",
     "events_path",
     "model_dir",
+    "preview_enablement_path",
     "resolve_ai_root",
     "runtime_dir",
     "work_dir",

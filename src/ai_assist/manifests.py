@@ -22,7 +22,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from src.ai_assist.contracts import OutcomeCode
-from src.ai_assist.paths import active_pointer_path, model_dir, runtime_dir
+from src.ai_assist.paths import (
+    active_pointer_path,
+    model_dir,
+    preview_enablement_path,
+    runtime_dir,
+)
 from src.utils.atomic_io import atomic_write_json
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -380,6 +385,66 @@ def import_runtime(archive: Path, build: RuntimeBuild, root: Path) -> Path:
     return final
 
 
+def describe_runtime_archive(
+    archive: Path,
+    *,
+    build_id: str,
+    upstream_repository: str,
+    upstream_tag: str,
+    license_spdx: str,
+    executable: str,
+    asset_name: str | None = None,
+) -> dict[str, Any]:
+    """A runtime-manifest build entry computed from a local zip, for a reviewed change to ``managed_ai_runtime.json``.
+
+    Read-only: the archive is hashed and each loadable member (the same suffix set ``import_runtime`` refuses to find
+    unlisted) is streamed through SHA-256 without being extracted, written or executed. The entry is ``qualified: false``;
+    only the qualification authority changes that. Raises :class:`ImportRefused` on a hostile or unreadable archive.
+    """
+
+    if not archive.is_file():
+        raise ImportRefused("source_missing")
+    archive_sha, archive_size = hash_file(archive)
+    files: dict[str, str] = {}
+    try:
+        with zipfile.ZipFile(archive) as bundle:
+            members = bundle.infolist()
+            if len(members) > _MAX_ARCHIVE_MEMBERS:
+                raise ImportRefused("archive_too_many_members")
+            total = 0
+            for info in members:
+                name = _check_member(info, total)
+                if not name:
+                    continue
+                total += info.file_size
+                if PurePosixPath(name).suffix.lower() not in _ACTIVE_CONTENT_SUFFIXES:
+                    continue
+                digest = hashlib.sha256()
+                with bundle.open(info) as source:
+                    while chunk := source.read(_CHUNK):
+                        digest.update(chunk)
+                files[name] = digest.hexdigest()
+    except zipfile.BadZipFile as exc:
+        raise ImportRefused("archive_unreadable") from exc
+    entry: dict[str, Any] = {
+        "build_id": build_id,
+        "upstream_repository": upstream_repository,
+        "upstream_tag": upstream_tag,
+        "asset_name": asset_name or archive.name,
+        "asset_sha256": archive_sha,
+        "asset_bytes": archive_size,
+        "license_spdx": license_spdx,
+        "executable": executable,
+        "files": dict(sorted(files.items())),
+        "qualified": False,
+    }
+    try:
+        _parse_build(entry)
+    except ValueError as exc:
+        raise ImportRefused("entry_invalid", str(exc)) from exc
+    return entry
+
+
 def record_active(root: Path, build: RuntimeBuild, entry: ModelEntry) -> Path:
     """Atomically point the installation at one runtime build and one model, with a stat snapshot for fast re-checks."""
 
@@ -393,7 +458,12 @@ def record_active(root: Path, build: RuntimeBuild, entry: ModelEntry) -> Path:
         "runtime_files": {rel: _stat_snapshot(runtime_root / rel) for rel in sorted(build.files)},
         "model": _stat_snapshot(model_path),
     }
-    return atomic_write_json(active_pointer_path(root), payload, indent=2, sort_keys=True)
+    written = atomic_write_json(active_pointer_path(root), payload, indent=2, sort_keys=True)
+    # Changing the active model or runtime voids any AI Assist Preview enablement (owner decision D13). Voiding on every
+    # re-point, even to the same identity, is deliberate: re-enabling is one explicit operator action, and a stale
+    # enablement can then never outlive a pointer change.
+    preview_enablement_path(root).unlink(missing_ok=True)
+    return written
 
 
 @dataclass(frozen=True, slots=True)
@@ -407,6 +477,8 @@ class Verification:
     executable: Path | None = None
     model_path: Path | None = None
     details: dict[str, Any] = field(default_factory=dict)
+    #: Set by the service at admission: ``qualified``, ``preview`` or (harness only) ``candidate``.
+    trust_tier: str = ""
 
     @property
     def ok(self) -> bool:
@@ -503,6 +575,7 @@ __all__ = [
     "RuntimeBuild",
     "RuntimeManifest",
     "Verification",
+    "describe_runtime_archive",
     "hash_file",
     "import_model",
     "import_runtime",

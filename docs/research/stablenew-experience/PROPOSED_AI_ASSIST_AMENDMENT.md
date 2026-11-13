@@ -73,6 +73,16 @@ The owner gave a **policy direction** (Tier-1 advisory planning first; advice vi
 - Single-item advice fits the three existing `AssistSuggestion` kinds and needs no amendment; *advisory planning* (ordered steps) needs R1, R2, R4, R7, R8 but **not R3**, because an advisory artifact has no approval-to-Preview path. D-1(b)'s wording "no new kind or invariant change" is accurate only for single-item advice.
 - Proposed (not applied) rule **P8: advice is not a plan.** An `ADVISORY` artifact is labelled differently from a validated, approvable plan and can never enter the Confirm & Queue path.
 
+### 6b. Owner decisions 2026-11-13
+
+Made under delegation to the coordinating session and recorded in `AI_ASSIST.md` as D13 to D17:
+
+- **D-1:** Tier-1 advisory planning without R3 (rules R1, R2, R4, R7, R8 and P8 "advice is not a plan"), as option (b) then advisory (a); a later package.
+- **D-2:** option (b), in the Preview form: application-level use of an unqualified candidate only under the operator-enabled AI Assist Preview (D13), never a global switch and never setting `qualified`.
+- **D-3:** R3 and Confirm & Queue are not adopted.
+- **D-4:** planning and suggestions stay refused while a job is RUNNING.
+- **D-5:** superseded for Preview by D14 (the operator's explicit Suggest request is the authorization); per-inference named authorization continues for qualification runs.
+
 ## 7. Facts to settle before any activation
 
 - Run `tests/ai_assist` and `tests/tools/test_architecture_ratchets.py` (per `AI_ASSIST.md` §9) on the exact SHA before any activation; this research did not run them.

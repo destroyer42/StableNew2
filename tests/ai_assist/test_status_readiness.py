@@ -59,9 +59,8 @@ def test_tampering_is_an_integrity_failure_with_the_reason(installation: Install
 
 def test_unqualified_candidates_do_not_make_the_feature_ready(installation: Install) -> None:
     manifest = RuntimeManifest((replace(installation.build, qualified=False),))
-    assert (
-        read_status(installation.root, manifest, installation.registry).state == STATE_NOT_INSTALLED
-    )
+    status = read_status(installation.root, manifest, installation.registry)
+    assert status.state == "preview_available" and status.trust == ""
 
 
 def test_status_reports_attestation_and_last_outcome_without_content(installation: Install) -> None:
