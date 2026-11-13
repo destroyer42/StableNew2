@@ -465,8 +465,12 @@ def isolated_gui_workspace_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     # An injected PHOTO_OPTIMIZE_ROOT is what ``get_photo_optimize_store`` honours without migrating operator data.
     monkeypatch.setattr(photo_store, "PHOTO_OPTIMIZE_ROOT", root / "PhotoOptimize")
     monkeypatch.setattr(photo_store, "_global_store", None)
-    monkeypatch.setattr(sidebar_panel_v2, "SIDEBAR_STATE_PATH", root / "state" / "sidebar_state.json")
-    monkeypatch.setattr(preview_panel_v2, "PREVIEW_STATE_PATH", root / "state" / "preview_panel_state.json")
+    monkeypatch.setattr(
+        sidebar_panel_v2, "SIDEBAR_STATE_PATH", root / "state" / "sidebar_state.json"
+    )
+    monkeypatch.setattr(
+        preview_panel_v2, "PREVIEW_STATE_PATH", root / "state" / "preview_panel_state.json"
+    )
     return root
 
 
