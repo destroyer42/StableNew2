@@ -191,9 +191,13 @@ def test_diagnostics_snapshot_includes_pipeline_tab_metrics() -> None:
 
 
 def test_diagnostics_snapshot_reuses_cached_heavy_sections(monkeypatch) -> None:
+    """Cache-reuse behavior now lives in test_diagnostics_read_model.py (the
+    read model owns the heavy cache). This keeps the controller-level
+    integration check: the adapter actually serves cached heavy sections."""
     controller = AppController(
         None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
     )
+    model = controller._diagnostics_read_model
     process_calls = 0
     thread_calls = 0
 
@@ -211,8 +215,8 @@ def test_diagnostics_snapshot_reuses_cached_heavy_sections(monkeypatch) -> None:
         thread_calls += 1
         return {"thread_count": 1, "threads": []}
 
-    monkeypatch.setattr(controller, "_build_process_inspector_snapshot", fake_process_snapshot)
-    monkeypatch.setattr(controller, "_build_thread_snapshot", fake_thread_snapshot)
+    monkeypatch.setattr(model, "build_process_inspector_snapshot", fake_process_snapshot)
+    monkeypatch.setattr(model, "build_thread_snapshot", fake_thread_snapshot)
 
     first = controller.get_diagnostics_snapshot()
     second = controller.get_diagnostics_snapshot()
@@ -224,16 +228,20 @@ def test_diagnostics_snapshot_reuses_cached_heavy_sections(monkeypatch) -> None:
 
 
 def test_diagnostics_snapshot_refreshes_stale_cache_async(monkeypatch) -> None:
+    """Stale-refresh scheduling detail now lives in test_diagnostics_read_model.py.
+    This keeps the controller-level integration check: the adapter surfaces a
+    stale cache and the controller's own tracked-thread authority is used."""
     controller = AppController(
         None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
     )
-    controller._diagnostics_process_snapshot_cache = {
+    model = controller._diagnostics_read_model
+    model._process_snapshot_cache = {
         "scanner_status": "cached",
         "risk": {"status": "normal"},
         "processes": ["pid=222 cached"],
     }
-    controller._diagnostics_thread_snapshot_cache = {"thread_count": 2, "threads": []}
-    controller._diagnostics_heavy_snapshot_ts = time.monotonic() - 10.0
+    model._thread_snapshot_cache = {"thread_count": 2, "threads": []}
+    model._heavy_snapshot_ts = time.monotonic() - 10.0
 
     scheduled: list[str] = []
 
@@ -252,14 +260,92 @@ def test_diagnostics_snapshot_refreshes_stale_cache_async(monkeypatch) -> None:
         raise AssertionError("stale cached diagnostics should not rebuild on the caller thread")
 
     monkeypatch.setattr(controller, "_spawn_tracked_thread", fake_spawn_tracked_thread)
-    monkeypatch.setattr(controller, "_build_process_inspector_snapshot", fail_if_called)
-    monkeypatch.setattr(controller, "_build_thread_snapshot", fail_if_called)
+    monkeypatch.setattr(model, "build_process_inspector_snapshot", fail_if_called)
+    monkeypatch.setattr(model, "build_thread_snapshot", fail_if_called)
 
     snapshot = controller.get_diagnostics_snapshot()
 
     assert snapshot["process_inspector"]["processes"] == ["pid=222 cached"]
     assert snapshot["threads"]["thread_count"] == 2
     assert scheduled == ["DiagnosticsSnapshotRefresh"]
+
+
+def test_snapshot_and_explanation_adapters_delegate_to_the_read_model(monkeypatch) -> None:
+    controller = AppController(
+        None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
+    )
+    model = controller._diagnostics_read_model
+    monkeypatch.setattr(model, "get_diagnostics_snapshot", lambda: {"sentinel": "snapshot"})
+    monkeypatch.setattr(model, "get_job_explanation_payload", lambda job_id: {"sentinel": job_id})
+
+    assert controller.get_diagnostics_snapshot() == {"sentinel": "snapshot"}
+    assert controller.get_job_explanation_payload("job-9") == {"sentinel": "job-9"}
+
+
+def test_bundle_generation_holds_the_read_model_lock(monkeypatch, tmp_path: Path) -> None:
+    held: list[bool] = []
+
+    def fake_build(**kwargs: object) -> Path:
+        held.append(controller._diagnostics_read_model.lock.locked())
+        return tmp_path / "locked.zip"
+
+    monkeypatch.setattr("src.controller.app_controller.build_crash_bundle", fake_build)
+    controller = AppController(
+        None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
+    )
+
+    controller.generate_diagnostics_bundle_manual()
+
+    assert held == [True]
+    assert controller._diagnostics_read_model.lock.locked() is False
+    snapshot = controller.get_diagnostics_snapshot()
+    assert snapshot["last_bundle"] == str(tmp_path / "locked.zip")
+    assert snapshot["last_bundle_reason"] == "manual_request"
+
+
+def test_controller_keeps_no_diagnostics_projection_state_or_forwarders() -> None:
+    controller = AppController(
+        None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
+    )
+    extracted = [
+        "_find_live_job",
+        "_extract_normalized_snapshot",
+        "_resolve_job_status_value",
+        "_resolve_stage_flow",
+        "_build_debug_job_label",
+        "_build_job_origin_text",
+        "_build_job_stage_prompt_rows",
+        "_build_job_metadata_payload",
+        "_build_diagnostics_app_state_snapshot",
+        "_build_enriched_diagnostics_jobs",
+        "_format_job_stage_display",
+        "_format_job_diagnostics_text",
+        "_build_process_inspector_snapshot",
+        "_build_thread_snapshot",
+        "_serialize_job_summary",
+        "_serialize_runtime_status",
+        "_get_cached_heavy_diagnostics_snapshots",
+        "_schedule_heavy_diagnostics_refresh",
+        "_refresh_heavy_diagnostics_snapshots_async",
+        "_store_heavy_diagnostics_snapshots",
+    ]
+    assert [name for name in extracted if hasattr(AppController, name)] == []
+    cache_state = [
+        "_diagnostics_lock",
+        "_diagnostics_process_snapshot_cache",
+        "_diagnostics_thread_snapshot_cache",
+        "_diagnostics_heavy_snapshot_ts",
+        "_diagnostics_heavy_snapshot_refresh_in_progress",
+    ]
+    assert [name for name in cache_state if hasattr(controller, name)] == []
+    hook_fields = [
+        "_original_excepthook",
+        "_original_threading_excepthook",
+        "_original_tk_report_callback_exception",
+    ]
+    assert [name for name in hook_fields if hasattr(controller, name)] == []
+    # Protected PIDs stay on the controller for ProcessAutoScannerService.
+    assert callable(controller._get_protected_process_pids)
 
 
 def test_diagnostics_snapshot_includes_optional_dependency_snapshot() -> None:

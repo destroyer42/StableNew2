@@ -73,6 +73,10 @@ from src.controller.app_controller_services.background_task_coordinator import (
 from src.controller.app_controller_services.diagnostics_coordinator import (
     DiagnosticsCoordinator,
 )
+from src.controller.app_controller_services.diagnostics_read_model import (
+    DiagnosticsReadModel,
+    DiagnosticsSources,
+)
 from src.controller.app_controller_services.dispatch_hold_status import describe_dispatch_hold
 from src.controller.app_controller_services.gui_config_service import GuiConfigService
 from src.controller.app_controller_services.learning_completion_router import (
@@ -164,11 +168,6 @@ from src.utils.error_envelope_v2 import (
     serialize_envelope,
 )
 from src.utils.file_io import load_image_to_base64, read_prompt_pack
-from src.utils.process_inspector_v2 import (
-    collect_process_risk_snapshot,
-    format_process_brief,
-    iter_stablenew_like_processes,
-)
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils.thread_registry import get_thread_registry
 from src.video.history_media_projection import (
@@ -184,7 +183,6 @@ logger = logging.getLogger(__name__)
 _QUEUE_PROJECTION_TIMING_INFO_MS = 150.0
 _QUEUE_PROJECTION_TIMING_WARN_MS = 1000.0
 _INITIAL_RESOURCE_PROBE_GRACE_SEC = 30.0
-_DIAGNOSTICS_HEAVY_SNAPSHOT_TTL_SEC = 4.0
 
 
 class LifecycleState(Enum):
@@ -514,15 +512,32 @@ class AppController:
         self._last_diagnostics_bundle_reason: str | None = None
         self._app_state_visibility_listener = None
 
-        self._diagnostics_lock = threading.Lock()
-        self._diagnostics_process_snapshot_cache: dict[str, Any] | None = None
-        self._diagnostics_thread_snapshot_cache: dict[str, Any] | None = None
-        self._diagnostics_heavy_snapshot_ts = 0.0
-        self._diagnostics_heavy_snapshot_refresh_in_progress = False
+        self._diagnostics_read_model = DiagnosticsReadModel(
+            DiagnosticsSources(
+                job_service=lambda: self.job_service,
+                spawn_tracked_thread=lambda **kwargs: self._spawn_tracked_thread(**kwargs),
+                is_shutting_down=lambda: self._is_shutting_down,
+                protected_pids=lambda: self._get_protected_process_pids(),
+                latest_runtime_status=lambda: self._get_latest_runtime_status(),
+                history_entry=lambda job_id: self._get_history_entry_by_job_id(job_id),
+                app_state=lambda: getattr(self, "app_state", None),
+                webui_process_manager=lambda: getattr(self, "webui_process_manager", None),
+                pipeline_controller=lambda: getattr(self, "pipeline_controller", None),
+                webui_connection_controller=lambda: getattr(self, "webui_connection_controller", None),
+                process_auto_scanner=lambda: getattr(self, "process_auto_scanner", None),
+                optional_dependency_snapshot=lambda: self._optional_dependency_snapshot,
+                main_window=lambda: getattr(self, "main_window", None),
+                last_ui_heartbeat_ts=lambda: self.last_ui_heartbeat_ts,
+                last_queue_activity_ts=lambda: self.last_queue_activity_ts,
+                last_runner_activity_ts=lambda: self.last_runner_activity_ts,
+                queue_projection_timing=lambda: self._last_queue_projection_timing,
+                projection_coordinator_metrics=self._runtime_projection_coordinator.get_metrics_snapshot,
+                projection_sink_metrics=self._projection_sink.get_metrics_snapshot,
+                last_bundle=lambda: self._last_diagnostics_bundle,
+                last_bundle_reason=lambda: self._last_diagnostics_bundle_reason,
+            )
+        )
         self._last_error_envelope: UnifiedErrorEnvelope | None = None
-        self._original_excepthook = sys.excepthook
-        self._original_threading_excepthook = getattr(threading, "excepthook", None)
-        self._original_tk_report_callback_exception: Callable[..., Any] | None = None
         self._shutdown_started_at: float | None = None
         self._shutdown_completed = False
         self._shutdown_watchdog_thread: threading.Thread | None = None
@@ -2505,9 +2520,6 @@ class AppController:
     def _setup_diagnostics_hooks(self) -> None:
         if not self.job_service:
             return
-        root = getattr(self.main_window, "root", None)
-        if root and hasattr(root, "report_callback_exception"):
-            self._original_tk_report_callback_exception = root.report_callback_exception
         self._diagnostics_coordinator.install(
             main_window=self.main_window,
             on_uncaught_exception=self._handle_uncaught_exception,
@@ -3187,44 +3199,7 @@ class AppController:
         return list(getattr(app_state, "preview_jobs", []) or [])
 
     def get_job_explanation_payload(self, job_id: str) -> dict[str, Any] | None:
-        if not job_id:
-            return None
-        live_job = self._find_live_job(job_id)
-        history_entry = self._get_history_entry_by_job_id(job_id)
-        normalized = self._extract_normalized_snapshot(live_job=live_job, history_entry=history_entry)
-        runtime_status = self._get_latest_runtime_status()
-        if getattr(runtime_status, "job_id", None) != job_id:
-            runtime_status = None
-        if not normalized and history_entry is None and live_job is None:
-            return None
-
-        status_value = self._resolve_job_status_value(live_job=live_job, history_entry=history_entry)
-        stage_flow = self._resolve_stage_flow(normalized, runtime_status)
-        return {
-            "job_id": job_id,
-            "display_label": self._build_debug_job_label(job_id, normalized),
-            "origin_text": self._build_job_origin_text(
-                job_id=job_id,
-                normalized=normalized,
-                live_job=live_job,
-                history_entry=history_entry,
-                runtime_status=runtime_status,
-            ),
-            "stage_flow": stage_flow,
-            "stage_prompts": self._build_job_stage_prompt_rows(
-                normalized=normalized,
-                stage_flow=stage_flow,
-                runtime_status=runtime_status,
-            ),
-            "metadata": self._build_job_metadata_payload(
-                job_id=job_id,
-                normalized=normalized,
-                live_job=live_job,
-                history_entry=history_entry,
-                runtime_status=runtime_status,
-                status_value=status_value,
-            ),
-        }
+        return self._diagnostics_read_model.get_job_explanation_payload(job_id)
 
     def _get_protected_process_pids(self) -> Iterable[int]:
         pids: set[int] = set()
@@ -3264,7 +3239,7 @@ class AppController:
         if self._last_error_envelope:
             context = dict(context or {})
             context.setdefault("error_envelope", serialize_envelope(self._last_error_envelope))
-        with self._diagnostics_lock:
+        with self._diagnostics_read_model.lock:
             path = build_crash_bundle(
                 reason=reason,
                 log_handler=self.gui_log_handler,
@@ -3305,15 +3280,13 @@ class AppController:
             "uncaught_exception",
             extra_context={"exception": str(exc_value), "traceback": tb},
         )
-        if self._original_excepthook:
-            self._original_excepthook(exc_type, exc_value, exc_traceback)
+        self._diagnostics_coordinator.forward_uncaught_exception(exc_type, exc_value, exc_traceback)
 
     def _handle_thread_exception(self, args: threading.ExceptHookArgs) -> None:
         tb = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
         context = {"thread": getattr(args.thread, "name", None), "traceback": tb}
         self._generate_diagnostics_bundle("thread_exception", extra_context=context)
-        if self._original_threading_excepthook:
-            self._original_threading_excepthook(args)
+        self._diagnostics_coordinator.forward_thread_exception(args)
 
     def _handle_tk_exception(
         self, exc_type: type[BaseException], exc_value: BaseException, exc_traceback
@@ -3323,11 +3296,7 @@ class AppController:
             "tk_exception",
             extra_context={"exception": str(exc_value), "traceback": tb},
         )
-        if callable(self._original_tk_report_callback_exception):
-            try:
-                self._original_tk_report_callback_exception(exc_type, exc_value, exc_traceback)
-            except Exception:
-                pass
+        self._diagnostics_coordinator.forward_tk_exception(exc_type, exc_value, exc_traceback)
 
     def _on_watchdog_violation_event(self, job_id: str, envelope: UnifiedErrorEnvelope) -> None:
         reason = envelope.context.get("watchdog_reason", envelope.error_type)
@@ -3337,628 +3306,7 @@ class AppController:
         )
 
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
-        snapshot = self.job_service.get_diagnostics_snapshot() if self.job_service else {}
-        data = dict(snapshot)
-        manager = getattr(self, "webui_process_manager", None)
-        if manager and hasattr(manager, "get_recent_output_tail"):
-            try:
-                data["webui_tail"] = manager.get_recent_output_tail()
-            except Exception:
-                data["webui_tail"] = None
-        data["controller"] = {
-            "last_ui_heartbeat_ts": getattr(self, "last_ui_heartbeat_ts", None),
-            "last_queue_activity_ts": getattr(self, "last_queue_activity_ts", None),
-            "last_runner_activity_ts": getattr(self, "last_runner_activity_ts", None),
-            "queue_projection_timing": (
-                dict(self._last_queue_projection_timing)
-                if isinstance(self._last_queue_projection_timing, Mapping)
-                else None
-            ),
-            "projection_coordinator": self._runtime_projection_coordinator.get_metrics_snapshot(),
-            "projection_sink": self._projection_sink.get_metrics_snapshot(),
-        }
-        pipeline_controller = getattr(self, "pipeline_controller", None)
-        preview_timing_getter = getattr(
-            pipeline_controller,
-            "get_preview_build_timing_snapshot",
-            None,
-        )
-        if callable(preview_timing_getter):
-            try:
-                data["pipeline_controller"] = {
-                    "preview_build_timing": preview_timing_getter(),
-                }
-            except Exception:
-                data["pipeline_controller"] = None
-        webui_connection = getattr(self, "webui_connection_controller", None)
-        if webui_connection is None and pipeline_controller is not None:
-            webui_connection = getattr(pipeline_controller, "_webui_connection", None)
-        readiness_timing_getter = getattr(
-            webui_connection,
-            "get_last_connection_timing_snapshot",
-            None,
-        )
-        readiness_state_getter = getattr(webui_connection, "get_state", None)
-        if callable(readiness_timing_getter):
-            try:
-                readiness_state = None
-                if callable(readiness_state_getter):
-                    state = readiness_state_getter()
-                    readiness_state = getattr(state, "value", str(state) if state is not None else None)
-                data["webui_connection"] = {
-                    "state": readiness_state,
-                    "timing": readiness_timing_getter(),
-                }
-            except Exception:
-                data["webui_connection"] = None
-        snapshot = getattr(self, "_optional_dependency_snapshot", None)
-        if snapshot is not None and hasattr(snapshot, "to_dict"):
-            try:
-                data["optional_dependencies"] = snapshot.to_dict()
-            except Exception:
-                data["optional_dependencies"] = None
-        pipeline_tab = getattr(getattr(self, "main_window", None), "pipeline_tab", None)
-        getter = getattr(pipeline_tab, "get_diagnostics_snapshot", None)
-        if callable(getter):
-            try:
-                data["pipeline_tab"] = getter()
-            except Exception:
-                data["pipeline_tab"] = None
-        log_trace_panel = getattr(getattr(self, "main_window", None), "log_trace_panel_v2", None)
-        log_trace_getter = getattr(log_trace_panel, "get_diagnostics_snapshot", None)
-        if callable(log_trace_getter):
-            try:
-                data["log_trace_panel"] = log_trace_getter()
-            except Exception:
-                data["log_trace_panel"] = None
-        data["app_state"] = self._build_diagnostics_app_state_snapshot()
-        data["jobs"] = self._build_enriched_diagnostics_jobs(data.get("jobs"))
-        process_snapshot, thread_snapshot = self._get_cached_heavy_diagnostics_snapshots()
-        data["process_inspector"] = process_snapshot
-        data["threads"] = thread_snapshot
-        data["last_bundle"] = (
-            str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
-        )
-        data["last_bundle_reason"] = self._last_diagnostics_bundle_reason
-        return data
-
-    def _get_cached_heavy_diagnostics_snapshots(
-        self,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        process_snapshot: dict[str, Any] | None = None
-        thread_snapshot: dict[str, Any] | None = None
-        refresh_needed = False
-        now = time.monotonic()
-        with self._diagnostics_lock:
-            if isinstance(self._diagnostics_process_snapshot_cache, dict):
-                process_snapshot = deepcopy(self._diagnostics_process_snapshot_cache)
-            if isinstance(self._diagnostics_thread_snapshot_cache, dict):
-                thread_snapshot = deepcopy(self._diagnostics_thread_snapshot_cache)
-            cache_ready = process_snapshot is not None and thread_snapshot is not None
-            cache_stale = (
-                cache_ready
-                and self._diagnostics_heavy_snapshot_ts > 0.0
-                and (now - self._diagnostics_heavy_snapshot_ts)
-                >= _DIAGNOSTICS_HEAVY_SNAPSHOT_TTL_SEC
-            )
-            if (
-                cache_stale
-                and not self._diagnostics_heavy_snapshot_refresh_in_progress
-                and not self._is_shutting_down
-            ):
-                self._diagnostics_heavy_snapshot_refresh_in_progress = True
-                refresh_needed = True
-        if process_snapshot is None or thread_snapshot is None:
-            process_snapshot = self._build_process_inspector_snapshot()
-            thread_snapshot = self._build_thread_snapshot()
-            self._store_heavy_diagnostics_snapshots(process_snapshot, thread_snapshot)
-            return process_snapshot, thread_snapshot
-        if refresh_needed:
-            self._schedule_heavy_diagnostics_refresh()
-        return process_snapshot, thread_snapshot
-
-    def _schedule_heavy_diagnostics_refresh(self) -> None:
-        try:
-            self._spawn_tracked_thread(
-                target=self._refresh_heavy_diagnostics_snapshots_async,
-                name="DiagnosticsSnapshotRefresh",
-                purpose="Refresh cached process and thread diagnostics snapshots",
-            )
-        except Exception:
-            with self._diagnostics_lock:
-                self._diagnostics_heavy_snapshot_refresh_in_progress = False
-
-    def _refresh_heavy_diagnostics_snapshots_async(self) -> None:
-        process_snapshot: dict[str, Any] | None = None
-        thread_snapshot: dict[str, Any] | None = None
-        try:
-            process_snapshot = self._build_process_inspector_snapshot()
-        except Exception:
-            process_snapshot = None
-        try:
-            thread_snapshot = self._build_thread_snapshot()
-        except Exception:
-            thread_snapshot = None
-        with self._diagnostics_lock:
-            if process_snapshot is not None:
-                self._diagnostics_process_snapshot_cache = deepcopy(process_snapshot)
-            if thread_snapshot is not None:
-                self._diagnostics_thread_snapshot_cache = deepcopy(thread_snapshot)
-            if process_snapshot is not None or thread_snapshot is not None:
-                self._diagnostics_heavy_snapshot_ts = time.monotonic()
-            self._diagnostics_heavy_snapshot_refresh_in_progress = False
-
-    def _store_heavy_diagnostics_snapshots(
-        self,
-        process_snapshot: dict[str, Any],
-        thread_snapshot: dict[str, Any],
-    ) -> None:
-        with self._diagnostics_lock:
-            self._diagnostics_process_snapshot_cache = deepcopy(process_snapshot)
-            self._diagnostics_thread_snapshot_cache = deepcopy(thread_snapshot)
-            self._diagnostics_heavy_snapshot_ts = time.monotonic()
-            self._diagnostics_heavy_snapshot_refresh_in_progress = False
-
-    def _find_live_job(self, job_id: str) -> Any | None:
-        job_service = getattr(self, "job_service", None)
-        job_queue = getattr(job_service, "job_queue", None)
-        getter = getattr(job_queue, "get_job", None)
-        if callable(getter):
-            try:
-                return getter(job_id)
-            except Exception:
-                return None
-        return None
-
-    def _extract_normalized_snapshot(
-        self,
-        *,
-        live_job: Any | None,
-        history_entry: Any | None,
-    ) -> dict[str, Any]:
-        candidates: list[Any] = []
-        if live_job is not None:
-            candidates.append(getattr(live_job, "_normalized_record", None))
-            candidates.append(getattr(live_job, "snapshot", None))
-        if history_entry is not None:
-            candidates.append(getattr(history_entry, "snapshot", None))
-        for candidate in candidates:
-            if candidate is None:
-                continue
-            if hasattr(candidate, "to_queue_snapshot") and callable(candidate.to_queue_snapshot):
-                try:
-                    snapshot = candidate.to_queue_snapshot()
-                    if isinstance(snapshot, dict):
-                        return dict(snapshot)
-                except Exception:
-                    continue
-            if isinstance(candidate, dict):
-                normalized = candidate.get("normalized_job") if "normalized_job" in candidate else candidate
-                if isinstance(normalized, dict):
-                    return dict(normalized)
-        return {}
-
-    @staticmethod
-    def _resolve_job_status_value(*, live_job: Any | None, history_entry: Any | None) -> str:
-        status = getattr(live_job, "status", None)
-        if hasattr(status, "value"):
-            return str(status.value)
-        if status is not None:
-            return str(status)
-        history_status = getattr(history_entry, "status", None)
-        if hasattr(history_status, "value"):
-            return str(history_status.value)
-        if history_status is not None:
-            return str(history_status)
-        return ""
-
-    def _resolve_stage_flow(
-        self,
-        normalized: Mapping[str, Any],
-        runtime_status: Any | None,
-    ) -> list[str]:
-        stage_chain = normalized.get("stage_chain") if isinstance(normalized, Mapping) else None
-        if isinstance(stage_chain, list) and stage_chain:
-            return [str(stage) for stage in stage_chain if stage]
-        runtime_stage = getattr(runtime_status, "current_stage", None)
-        if runtime_stage:
-            return [str(runtime_stage)]
-        return ["txt2img"]
-
-    def _build_debug_job_label(self, job_id: str, normalized: Mapping[str, Any]) -> str:
-        pack_name = str(
-            normalized.get("prompt_pack_name")
-            or normalized.get("pack_name")
-            or normalized.get("prompt_pack_id")
-            or normalized.get("model")
-            or job_id
-        )
-        row_index = normalized.get("prompt_pack_row_index")
-        variant_index = normalized.get("variant_index")
-        batch_index = normalized.get("batch_index")
-        parts = [pack_name]
-        if isinstance(row_index, int):
-            parts.append(f"row={row_index + 1}")
-        if isinstance(variant_index, int):
-            parts.append(f"v={variant_index + 1}")
-        if isinstance(batch_index, int):
-            parts.append(f"b={batch_index + 1}")
-        return " | ".join(parts + [job_id])
-
-    def _build_job_origin_text(
-        self,
-        *,
-        job_id: str,
-        normalized: Mapping[str, Any],
-        live_job: Any | None,
-        history_entry: Any | None,
-        runtime_status: Any | None,
-    ) -> str:
-        parts: list[str] = [f"Job: {job_id}"]
-        pack_usage = normalized.get("pack_usage") if isinstance(normalized, Mapping) else None
-        if isinstance(pack_usage, list) and pack_usage:
-            pack_labels = []
-            for item in pack_usage:
-                if isinstance(item, dict):
-                    name = item.get("pack_name") or item.get("pack_id")
-                    stage = item.get("used_for_stage")
-                    if name and stage:
-                        pack_labels.append(f"{name} ({stage})")
-                    elif name:
-                        pack_labels.append(str(name))
-            if pack_labels:
-                parts.append("Packs: " + ", ".join(pack_labels))
-        elif normalized.get("prompt_pack_name"):
-            parts.append(f"Pack: {normalized.get('prompt_pack_name')}")
-
-        prompt_source = getattr(live_job, "prompt_source", None) or getattr(
-            history_entry, "prompt_source", None
-        )
-        if prompt_source:
-            parts.append(f"source={prompt_source}")
-        run_mode = getattr(live_job, "run_mode", None) or getattr(history_entry, "run_mode", None)
-        if run_mode:
-            parts.append(f"run_mode={run_mode}")
-        status_value = self._resolve_job_status_value(live_job=live_job, history_entry=history_entry)
-        if status_value:
-            parts.append(f"status={status_value}")
-        if runtime_status is not None and hasattr(runtime_status, "get_stage_display"):
-            try:
-                parts.append(f"runtime={runtime_status.get_stage_display()}")
-            except Exception:
-                pass
-        return " | ".join(parts)
-
-    def _build_job_stage_prompt_rows(
-        self,
-        *,
-        normalized: Mapping[str, Any],
-        stage_flow: list[str],
-        runtime_status: Any | None,
-    ) -> list[dict[str, str]]:
-        def _prompt_info_for(stage_name: str) -> Mapping[str, Any]:
-            key = f"{stage_name}_prompt_info"
-            value = normalized.get(key)
-            return value if isinstance(value, Mapping) else {}
-
-        rows: list[dict[str, str]] = []
-        runtime_stage = str(getattr(runtime_status, "current_stage", "") or "")
-        for stage_name in stage_flow:
-            info = _prompt_info_for(str(stage_name))
-            prompt = str(info.get("final_prompt") or normalized.get("prompt") or "-")
-            negative = str(
-                info.get("final_negative_prompt") or normalized.get("negative_prompt") or "-"
-            )
-            global_terms = str(info.get("global_negative_terms") or "-")
-            status = "current" if runtime_stage and runtime_stage == str(stage_name) else "available"
-            rows.append(
-                {
-                    "stage": str(stage_name),
-                    "prompt": prompt,
-                    "negative": negative,
-                    "global_terms": global_terms,
-                    "status": status,
-                }
-            )
-        return rows
-
-    def _build_job_metadata_payload(
-        self,
-        *,
-        job_id: str,
-        normalized: Mapping[str, Any],
-        live_job: Any | None,
-        history_entry: Any | None,
-        runtime_status: Any | None,
-        status_value: str,
-    ) -> dict[str, Any]:
-        metadata: dict[str, Any] = {
-            "job_id": job_id,
-            "status": status_value,
-            "prompt_pack_id": normalized.get("prompt_pack_id"),
-            "prompt_pack_name": normalized.get("prompt_pack_name"),
-            "row_index": normalized.get("prompt_pack_row_index"),
-            "variant_index": normalized.get("variant_index"),
-            "batch_index": normalized.get("batch_index"),
-            "model": normalized.get("model"),
-            "sampler": normalized.get("sampler"),
-            "steps": normalized.get("steps"),
-            "cfg_scale": normalized.get("cfg_scale"),
-            "width": normalized.get("width"),
-            "height": normalized.get("height"),
-            "seed": normalized.get("seed"),
-            "output_dir": normalized.get("output_dir"),
-            "stage_chain": list(normalized.get("stage_chain") or []),
-            "randomization_enabled": normalized.get("randomization_enabled"),
-            "matrix_slot_values": normalized.get("matrix_slot_values"),
-            "config_layers": normalized.get("config_layers"),
-            "error_message": getattr(live_job, "error_message", None)
-            or getattr(history_entry, "error_message", None),
-        }
-        result = getattr(live_job, "result", None) or getattr(history_entry, "result", None)
-        if isinstance(result, dict):
-            metadata["result"] = dict(result)
-        if runtime_status is not None:
-            metadata["runtime_status"] = {
-                "current_stage": getattr(runtime_status, "current_stage", None),
-                "stage_index": getattr(runtime_status, "stage_index", None),
-                "total_stages": getattr(runtime_status, "total_stages", None),
-                "progress": getattr(runtime_status, "progress", None),
-                "eta_seconds": getattr(runtime_status, "eta_seconds", None),
-                "actual_seed": getattr(runtime_status, "actual_seed", None),
-                "current_step": getattr(runtime_status, "current_step", None),
-                "total_steps": getattr(runtime_status, "total_steps", None),
-                "stage_detail": getattr(runtime_status, "stage_detail", None),
-            }
-        return metadata
-
-    def _build_diagnostics_app_state_snapshot(self) -> dict[str, Any]:
-        app_state = getattr(self, "app_state", None)
-        running_job = getattr(app_state, "running_job", None)
-        runtime_status = getattr(app_state, "runtime_status", None) or self._get_latest_runtime_status()
-        queue_jobs = list(getattr(app_state, "queue_jobs", []) or [])
-        history_items = list(getattr(app_state, "history_items", []) or [])
-        return {
-            "running_job": self._serialize_job_summary(running_job),
-            "runtime_status": self._serialize_runtime_status(runtime_status),
-            "queue_job_count": len(queue_jobs),
-            "history_count": len(history_items),
-        }
-
-    def _build_enriched_diagnostics_jobs(self, jobs: Any) -> list[dict[str, Any]]:
-        if not isinstance(jobs, list):
-            return []
-        app_state = getattr(self, "app_state", None)
-        queue_jobs = list(getattr(app_state, "queue_jobs", []) or [])
-        running_job = getattr(app_state, "running_job", None)
-        history_items = list(getattr(app_state, "history_items", []) or [])
-        summary_index = {
-            summary.job_id: summary
-            for summary in ([running_job] if running_job is not None else []) + queue_jobs
-            if getattr(summary, "job_id", None)
-        }
-        history_index = {
-            getattr(entry, "job_id", None): entry
-            for entry in history_items
-            if getattr(entry, "job_id", None)
-        }
-        runtime_status = self._get_latest_runtime_status()
-
-        enriched: list[dict[str, Any]] = []
-        for entry in jobs:
-            if not isinstance(entry, dict):
-                continue
-            job_id = str(entry.get("job_id") or "")
-            live_job = self._find_live_job(job_id)
-            history_entry = history_index.get(job_id)
-            normalized = self._extract_normalized_snapshot(
-                live_job=live_job,
-                history_entry=history_entry,
-            )
-            summary = summary_index.get(job_id)
-            display_label = (
-                summary.get_display_summary()
-                if summary is not None and hasattr(summary, "get_display_summary")
-                else self._build_debug_job_label(job_id, normalized)
-            )
-            stage_display = self._format_job_stage_display(
-                job_id=job_id,
-                summary=summary,
-                normalized=normalized,
-                runtime_status=runtime_status,
-                result_summary=entry.get("result_summary"),
-            )
-            diagnostics_text = self._format_job_diagnostics_text(entry, history_entry)
-            pids = [int(pid) for pid in entry.get("external_pids", []) if isinstance(pid, int)]
-            enriched_entry = dict(entry)
-            enriched_entry["display_label"] = display_label
-            enriched_entry["stage_display"] = stage_display
-            enriched_entry["pid_display"] = ", ".join(str(pid) for pid in pids) if pids else "none"
-            enriched_entry["diagnostics_text"] = diagnostics_text
-            enriched.append(enriched_entry)
-        return enriched
-
-    def _format_job_stage_display(
-        self,
-        *,
-        job_id: str,
-        summary: Any | None,
-        normalized: Mapping[str, Any],
-        runtime_status: Any | None,
-        result_summary: Any,
-    ) -> str:
-        if getattr(runtime_status, "job_id", None) == job_id and hasattr(runtime_status, "get_stage_display"):
-            try:
-                stage_text = runtime_status.get_stage_display()
-                progress = getattr(runtime_status, "progress", None)
-                if isinstance(progress, (int, float)):
-                    return f"{stage_text} ({int(float(progress) * 100)}%)"
-                return stage_text
-            except Exception:
-                pass
-        stage_chain = normalized.get("stage_chain") if isinstance(normalized, Mapping) else None
-        if isinstance(stage_chain, list) and stage_chain:
-            return " -> ".join(str(stage) for stage in stage_chain if stage)
-        if summary is not None:
-            stage_labels = getattr(summary, "stage_chain_labels", None)
-            if isinstance(stage_labels, list) and stage_labels:
-                return " -> ".join(str(stage) for stage in stage_labels if stage)
-        if isinstance(result_summary, Mapping):
-            primary_stage = result_summary.get("primary_stage")
-            if primary_stage:
-                return str(primary_stage)
-        return "-"
-
-    def _format_job_diagnostics_text(self, entry: Mapping[str, Any], history_entry: Any | None) -> str:
-        parts: list[str] = []
-        result_summary = entry.get("result_summary")
-        if isinstance(result_summary, Mapping):
-            duration_ms = result_summary.get("duration_ms")
-            if isinstance(duration_ms, (int, float)):
-                parts.append(f"duration={float(duration_ms):.0f}ms")
-            output_count = result_summary.get("output_count")
-            if isinstance(output_count, int):
-                parts.append(f"outputs={output_count}")
-            error = result_summary.get("error")
-            if error:
-                parts.append(f"error={error}")
-        retries = entry.get("retry_attempts")
-        if isinstance(retries, list) and retries:
-            parts.append(f"retries={len(retries)}")
-        duration_ms = getattr(history_entry, "duration_ms", None)
-        if not parts and isinstance(duration_ms, int):
-            parts.append(f"duration={duration_ms}ms")
-        return " | ".join(parts) if parts else "no diagnostics"
-
-    def _build_process_inspector_snapshot(self) -> dict[str, Any]:
-        scanner = getattr(self, "process_auto_scanner", None)
-        scanner_summary = getattr(scanner, "summary", None)
-        summary_payload = None
-        if scanner_summary is not None:
-            summary_payload = {
-                "timestamp": getattr(scanner_summary, "timestamp", None),
-                "scanned": getattr(scanner_summary, "scanned", None),
-                "killed": list(getattr(scanner_summary, "killed", []) or []),
-            }
-        try:
-            risk = collect_process_risk_snapshot()
-        except Exception:
-            risk = None
-        try:
-            process_lines = [
-                format_process_brief(process)
-                for process in iter_stablenew_like_processes()
-            ]
-        except Exception:
-            process_lines = []
-        return {
-            "scanner_status": scanner.get_status_text() if scanner is not None else None,
-            "scanner_enabled": bool(getattr(scanner, "enabled", False)) if scanner is not None else False,
-            "scan_interval": float(getattr(scanner, "scan_interval", 0.0) or 0.0)
-            if scanner is not None
-            else 0.0,
-            "protected_pids": sorted(int(pid) for pid in self._get_protected_process_pids()),
-            "summary": summary_payload,
-            "risk": risk,
-            "processes": process_lines,
-        }
-
-    def _build_thread_snapshot(self) -> dict[str, Any]:
-        tracked_status = None
-        tracked_threads: dict[int, Any] = {}
-        try:
-            registry = get_thread_registry()
-            tracked_status = registry.dump_status()
-            tracked_threads = {
-                thread.thread.ident: thread
-                for thread in registry.get_active_threads()
-                if getattr(thread.thread, "ident", None) is not None
-            }
-        except Exception:
-            tracked_status = None
-        try:
-            frames = sys._current_frames()
-        except Exception:
-            frames = {}
-        threads: list[dict[str, Any]] = []
-        for thread in threading.enumerate():
-            ident = getattr(thread, "ident", None)
-            frame = frames.get(ident) if ident is not None else None
-            top_frame = None
-            if frame is not None:
-                try:
-                    top_frame = {
-                        "file": str(frame.f_code.co_filename),
-                        "line": int(frame.f_lineno),
-                        "function": str(frame.f_code.co_name),
-                    }
-                except Exception:
-                    top_frame = None
-            tracked = tracked_threads.get(ident) if ident is not None else None
-            threads.append(
-                {
-                    "name": thread.name,
-                    "ident": ident,
-                    "daemon": bool(thread.daemon),
-                    "alive": bool(thread.is_alive()),
-                    "tracked": tracked is not None,
-                    "purpose": getattr(tracked, "purpose", None) if tracked is not None else None,
-                    "top_frame": top_frame,
-                }
-            )
-        threads.sort(key=lambda item: (0 if item.get("name") == "MainThread" else 1, str(item.get("name") or "")))
-        return {
-            "thread_count": len(threads),
-            "tracked_status": tracked_status,
-            "threads": threads,
-        }
-
-    def _serialize_job_summary(self, summary: Any | None) -> dict[str, Any] | None:
-        if summary is None:
-            return None
-        display_label = None
-        getter = getattr(summary, "get_display_summary", None)
-        if callable(getter):
-            try:
-                display_label = getter()
-            except Exception:
-                display_label = None
-        return {
-            "job_id": getattr(summary, "job_id", None),
-            "display_label": display_label,
-            "prompt_pack_name": getattr(summary, "prompt_pack_name", None),
-            "stage_chain_labels": list(getattr(summary, "stage_chain_labels", []) or []),
-            "status": getattr(summary, "status", None),
-        }
-
-    def _serialize_runtime_status(self, status: Any | None) -> dict[str, Any] | None:
-        if status is None:
-            return None
-        stage_display = None
-        stage_label = getattr(status, "get_stage_display", None)
-        if callable(stage_label):
-            try:
-                stage_display = stage_label()
-            except Exception:
-                stage_display = None
-        eta_display = None
-        eta_getter = getattr(status, "get_eta_display", None)
-        if callable(eta_getter):
-            try:
-                eta_display = eta_getter()
-            except Exception:
-                eta_display = None
-        progress = getattr(status, "progress", None)
-        progress_pct = int(float(progress) * 100) if isinstance(progress, (int, float)) else None
-        started_at = getattr(status, "started_at", None)
-        return {
-            "job_id": getattr(status, "job_id", None),
-            "stage_display": stage_display,
-            "progress_pct": progress_pct,
-            "eta_display": eta_display,
-            "started_at": started_at.isoformat() if isinstance(started_at, datetime) else None,
-            "stage_detail": getattr(status, "stage_detail", None),
-        }
+        return self._diagnostics_read_model.get_diagnostics_snapshot()
 
     def show_log_trace_panel(self) -> None:
         """Expose helper that expands the LogTracePanelV2 if present."""

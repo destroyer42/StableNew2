@@ -387,9 +387,9 @@
   "rules": {
     "metric": "findings per src file",
     "totals": {
-      "BLE001": 1251,
-      "S110": 487,
-      "S112": 36
+      "BLE001": 1225,
+      "S110": 480,
+      "S112": 35
     },
     "counts": {
       "src/api/client.py": {
@@ -424,17 +424,13 @@
         "BLE001": 18
       },
       "src/controller/app_controller.py": {
-        "BLE001": 124,
-        "S110": 44,
-        "S112": 4
+        "BLE001": 102,
+        "S110": 41,
+        "S112": 3
       },
       "src/controller/app_controller_services/application_runtime_coordinator.py": {
         "BLE001": 3,
         "S110": 3
-      },
-      "src/controller/app_controller_services/diagnostics_coordinator.py": {
-        "BLE001": 4,
-        "S110": 4
       },
       "src/controller/app_controller_services/run_submission_service.py": {
         "BLE001": 1,
