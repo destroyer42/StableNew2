@@ -446,8 +446,34 @@ def test_g11_replace_queue_runner_keeps_one_runner_and_the_same_coordinators(
 
 
 # --------------------------------------------------------------------------------------------------------- G8
+@pytest.fixture
+def isolated_gui_workspace_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Keep ``build_v2_app`` from writing GUI state into the repository (the ``tests/gui_v2`` autouse fixture's job).
+
+    The full window builds the Photo Optimize tab, whose store otherwise creates ``output/PhotoOptimize/workspace`` in
+    the checkout; the Windows lane's repository-contents check rejects that.
+    """
+
+    import src.gui.preview_panel_v2 as preview_panel_v2
+    import src.gui.sidebar_panel_v2 as sidebar_panel_v2
+    import src.photo_optimize.store as photo_store
+    import src.services.ui_state_store as ui_state_store
+
+    root = tmp_path / "gui_workspace"
+    monkeypatch.setattr(ui_state_store, "UI_STATE_PATH", root / "state" / "ui_state.json")
+    monkeypatch.setattr(ui_state_store, "_global_store", None)
+    # An injected PHOTO_OPTIMIZE_ROOT is what ``get_photo_optimize_store`` honours without migrating operator data.
+    monkeypatch.setattr(photo_store, "PHOTO_OPTIMIZE_ROOT", root / "PhotoOptimize")
+    monkeypatch.setattr(photo_store, "_global_store", None)
+    monkeypatch.setattr(sidebar_panel_v2, "SIDEBAR_STATE_PATH", root / "state" / "sidebar_state.json")
+    monkeypatch.setattr(preview_panel_v2, "PREVIEW_STATE_PATH", root / "state" / "preview_panel_state.json")
+    return root
+
+
 @pytest.mark.gui
-def test_g8_app_state_binding_after_build_v2_app(tk_root: tk.Tk) -> None:
+def test_g8_app_state_binding_after_build_v2_app(
+    tk_root: tk.Tk, isolated_gui_workspace_state: Path
+) -> None:
     from src.app_factory import build_v2_app
 
     _, app_state, controller, window = build_v2_app(root=tk_root)
