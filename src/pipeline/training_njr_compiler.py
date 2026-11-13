@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
-from uuid import uuid4
 
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
@@ -13,7 +12,6 @@ from src.pipeline.config_contract_v26 import (
     validate_train_lora_execution_config,
 )
 from src.pipeline.job_models_v2 import (
-    CURRENT_NJR_SCHEMA_VERSION,
     NJRProvenance,
     NormalizedJobRecord,
     OutputPlan,
@@ -23,6 +21,7 @@ from src.pipeline.job_models_v2 import (
     TrainingWorkloadSpec,
     WorkloadKind,
 )
+from src.pipeline.njr_compiler import NjrDraft, PolicyState, compile_njr, mint_job_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,9 +55,8 @@ def compile_training_intent(
         "requested_job_label": intent.requested_job_label,
         "submission_source": "character_training",
     }
-    return NormalizedJobRecord(
-        schema_version=CURRENT_NJR_SCHEMA_VERSION,
-        job_id=str((id_fn or (lambda: uuid4().hex))()),
+    draft = NjrDraft(
+        job_id=mint_job_id(id_fn),
         workload_kind=WorkloadKind.TRAINING,
         source=SourceDescriptor(
             kind=SourceKind.TRAINING,
@@ -91,7 +89,9 @@ def compile_training_intent(
         ),
         output_plan=OutputPlan(base_output_dir=output_dir, filename_template="{seed}"),
         provenance=NJRProvenance(metadata=metadata),
+        policy_state=PolicyState.EFFECTIVE,  # validated above; a training draft runs no image steps and no checks
     )
+    return compile_njr(draft)
 
 
 __all__ = ["TrainingIntent", "compile_training_intent"]

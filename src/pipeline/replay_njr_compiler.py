@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any
-from uuid import uuid4
 
 from src.pipeline.animatediff_retirement import require_animatediff_not_enabled
-from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceDescriptor, SourceKind
+from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.njr_compiler import NjrDerivation, derive_njr, history_lineage, mint_job_id
 from src.pipeline.njr_core_v26 import thaw_json
 from src.pipeline.secondary_motion_retirement import require_secondary_motion_not_enabled
 from src.queue.batch_membership import (
@@ -45,17 +45,38 @@ def _without_run_directives(record: NormalizedJobRecord) -> NormalizedJobRecord:
     return replace(record, stages=stages, workload=replace(record.workload, config=config))
 
 
+def _with_run_directives(
+    record: NormalizedJobRecord, directives: Mapping[str, Mapping[str, Any]] | None
+) -> NormalizedJobRecord:
+    """Merge this execution's run directives into the named stage's ``extra`` and its config block."""
+
+    for stage_name, updates in (directives or {}).items():
+        stages = tuple(
+            replace(stage, extra={**thaw_json(stage.extra), **updates})
+            if stage.stage_type == stage_name
+            else stage
+            for stage in record.stage_chain
+        )
+        config = thaw_json(record.workload.config)
+        if isinstance(config.get(stage_name), Mapping):
+            config[stage_name] = {**config[stage_name], **updates}
+        record = replace(record, stages=stages, workload=replace(record.workload, config=config))
+    return record
+
+
 @dataclass(frozen=True, slots=True)
 class ReplayIntent:
     """A persisted NJR selected for a new execution.
 
     ``batch`` optionally places the new job in a *new* explicitly versioned batch (a selected retry).
-    It is never copied from the source record.
+    It is never copied from the source record. ``run_directives`` (stage name -> directive block, such as a sequence
+    resume) apply to this execution only; directives inherited from the source record are always dropped first.
     """
 
     record: NormalizedJobRecord
     parent_artifact_id: str | None = None
     batch: Mapping[str, Any] | None = None
+    run_directives: Mapping[str, Mapping[str, Any]] | None = None
 
 
 def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> NormalizedJobRecord:
@@ -82,20 +103,18 @@ def compile_replay_intent(intent: ReplayIntent, *, id_fn: Any | None = None) -> 
         metadata[REPLAY_ORIGIN_KEY] = build_replay_origin(parent.job_id, archived)
     if intent.batch is not None:
         metadata[VERSIONED_DESCRIPTOR_KEY] = dict(intent.batch)
-    return replace(
-        parent,
-        job_id=str((id_fn or (lambda: uuid4().hex))()),
-        source=SourceDescriptor(
-            kind=SourceKind.HISTORY_REPLAY,
-            parent_job_id=parent.job_id,
-            parent_artifact_id=intent.parent_artifact_id,
-            display_name=parent.source.display_name,
-            metadata={
-                "original_source_kind": parent.source.kind.value,
-                **parent.source.metadata,
-            },
+    directed = _with_run_directives(parent, intent.run_directives)
+    return derive_njr(
+        directed,
+        NjrDerivation(
+            job_id=mint_job_id(id_fn),
+            source=history_lineage(
+                parent,
+                parent_artifact_id=intent.parent_artifact_id,
+                metadata=parent.source.metadata,
+            ),
+            provenance=replace(parent.provenance, metadata=metadata),
         ),
-        provenance=replace(parent.provenance, metadata=metadata),
     )
 
 

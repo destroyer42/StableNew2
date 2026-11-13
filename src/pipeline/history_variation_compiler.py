@@ -18,16 +18,10 @@ import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any
-from uuid import uuid4
 
-from src.image_backends.forge_zimage_profile import validate_zimage_njr
 from src.image_backends.image_backend_types import resolve_image_backend_id
 from src.image_backends.model_policy import Support
-from src.image_backends.operation_compatibility import (
-    OperationNotSupportedError,
-    assess_njr,
-    policy_for_njr,
-)
+from src.image_backends.operation_compatibility import policy_for_njr
 from src.pipeline.history_variation_marker import (
     VARIATION_KEY,
     VARIATION_SCHEMA,
@@ -36,10 +30,16 @@ from src.pipeline.history_variation_marker import (
 from src.pipeline.job_models_v2 import (
     NJRProvenance,
     NormalizedJobRecord,
-    SourceDescriptor,
     SourceKind,
     StagePromptInfo,
     WorkloadKind,
+)
+from src.pipeline.njr_compiler import (
+    CompileCheck,
+    NjrDerivation,
+    derive_njr,
+    history_lineage,
+    mint_job_id,
 )
 from src.pipeline.njr_core_v26 import thaw_json
 from src.prompting.pack_lora_selection import SELECTION_METADATA_KEY
@@ -371,29 +371,22 @@ def compile_history_variation(
         metadata=provenance_metadata,
         **_reconciled_tags(source, edits.positive_prompt, edits.negative_prompt),
     )
-    job = replace(
+    return derive_njr(
         source,
-        job_id=str((id_fn or (lambda: uuid4().hex))()),
-        source=SourceDescriptor(
-            kind=SourceKind.HISTORY_REPLAY,
-            parent_job_id=source.job_id,
-            parent_artifact_id=draft.parent_artifact_id,
-            display_name=source.source.display_name,
-            metadata={
-                "original_source_kind": source.source.kind.value,
-                VARIATION_KEY: variation_block,
-            },
+        NjrDerivation(
+            job_id=mint_job_id(id_fn),
+            source=history_lineage(
+                source,
+                parent_artifact_id=draft.parent_artifact_id,
+                metadata={VARIATION_KEY: variation_block},
+            ),
+            stages=stages,
+            workload=workload,
+            provenance=provenance,
+            # Re-run the current operation policy and the exact-profile admission check on the *edited* record.
+            checks=(CompileCheck.OPERATION, CompileCheck.PROFILE_NJR),
         ),
-        stages=stages,
-        workload=workload,
-        provenance=provenance,
     )
-    # Re-run the current operation policy and the exact-profile admission check on the *edited* record.
-    assessment = assess_njr(job)
-    if not assessment.ready:
-        raise OperationNotSupportedError(assessment)
-    validate_zimage_njr(job)
-    return job
 
 
 __all__ = [

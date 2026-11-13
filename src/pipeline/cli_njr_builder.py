@@ -12,7 +12,6 @@ from src.pipeline.config_contract_v26 import (
     extract_secondary_motion_intent,
 )
 from src.pipeline.job_models_v2 import (
-    CURRENT_NJR_SCHEMA_VERSION,
     ImageWorkloadSpec,
     NJRProvenance,
     NormalizedJobRecord,
@@ -22,6 +21,7 @@ from src.pipeline.job_models_v2 import (
     StageConfig,
     WorkloadKind,
 )
+from src.pipeline.njr_compiler import NjrDraft, PolicyState, compile_njr
 
 _TXT2IMG_INACTIVE_HIRES_KEYS = (
     "hr_scale",
@@ -105,8 +105,8 @@ def build_cli_njr(
             _stage_config_from_section("upscale", dict(full_config.get("upscale", {}) or {}))
         )
 
-    return NormalizedJobRecord(
-        schema_version=CURRENT_NJR_SCHEMA_VERSION,
+    # The CLI runs model policy and ADetailer itself (no effective-config step); the profile check stays in the backend.
+    draft = NjrDraft(
         job_id=job_id,
         workload_kind=WorkloadKind.IMAGE,
         source=SourceDescriptor(kind=SourceKind.CLI, display_name=run_name),
@@ -144,4 +144,6 @@ def build_cli_njr(
                 **({"run_name": run_name} if run_name else {}),
             },
         ),
+        policy_state=PolicyState.EFFECTIVE,
     )
+    return compile_njr(draft)
