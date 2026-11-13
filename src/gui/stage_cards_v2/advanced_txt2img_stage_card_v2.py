@@ -931,9 +931,28 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         section = (cfg or {}).get("txt2img", {}) or {}
         self.load_from_section(section)
 
-    def _log_seed_values(self) -> dict:
-        """Debug logging helper for seed values (disabled)."""
-        return {}  # Disabled - use DEBUG level if needed
+    @staticmethod
+    def _parse_seed(value: str, label: str) -> int:
+        message = f"{label} must be blank, -1, or a whole number from 0 through 4294967295."
+        try:
+            seed = int(value.strip() or "-1")
+        except ValueError as exc:
+            raise ValueError(message) from exc
+        if not -1 <= seed <= 2**32 - 1:
+            raise ValueError(message)
+        return seed
+
+    def _seed_config(self) -> dict[str, int | float]:
+        seed = self._parse_seed(self.seed_var.get(), "Seed")
+        subseed = self._parse_seed(self.seed_section.subseed_var.get(), "Subseed")
+        message = "Subseed Strength must be blank or a number from 0 through 1."
+        try:
+            strength = float(self.seed_section.subseed_strength_var.get().strip() or "0")
+        except ValueError as exc:
+            raise ValueError(message) from exc
+        if not 0.0 <= strength <= 1.0:
+            raise ValueError(message)
+        return {"seed": seed, "subseed": subseed, "subseed_strength": strength}
 
     def to_config_dict(self) -> dict[str, Any]:
         # Use internal names for model/vae, and all selected values for payload correctness
@@ -959,11 +978,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 "width": int(self.width_var.get() or 512),
                 "height": int(self.height_var.get() or 512),
                 "clip_skip": int(self.clip_skip_var.get() or 2),
-                "seed": int(self.seed_var.get() or -1),
-                "subseed": int(self.seed_section.subseed_var.get() or -1),
-                "subseed_strength": float(self.seed_section.subseed_strength_var.get() or 0.0),
-                # Debug logging for seed values
-                **self._log_seed_values(),
+                **self._seed_config(),
                 # Refiner fields - only write if explicitly enabled
                 "use_refiner": use_refiner,
                 **(
