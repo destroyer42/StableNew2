@@ -6,7 +6,7 @@ import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from src.ai_assist.contracts import AssistOutcome, AssistRequest, OutcomeCode
 from src.ai_assist.host import GenerationActivity, read_host_memory
@@ -43,6 +43,8 @@ from src.ai_assist.status import (
 from src.queue.job_model import JobStatus
 
 logger = logging.getLogger(__name__)
+
+_J = TypeVar("_J")
 
 
 class ActivityUnreadable(RuntimeError):
@@ -218,6 +220,29 @@ class AiAssistIntegration:
     def submit(
         self, request: AssistRequest, on_done: Callable[[AssistOutcome], None]
     ) -> Submission:
+        return self._submit(request, lambda outcome: on_done(outcome), None)
+
+    def submit_plan(
+        self,
+        request: AssistRequest,
+        judge: Callable[[AssistOutcome], _J],
+        on_done: Callable[[AssistOutcome, _J | None], None],
+    ) -> Submission:
+        """Advisory planning (AI-210): the same single-flight request, plus a deterministic ``judge``.
+
+        ``judge`` runs once, on the AI worker thread, only for a validated suggestion (never on the GUI thread, because the
+        workflow preflight may read local state). A judge failure yields ``None`` and the GUI shows no steps. The result
+        is advice: this method adds no path to Intent, the compiler, the queue or any job.
+        """
+
+        return self._submit(request, on_done, judge)
+
+    def _submit(
+        self,
+        request: AssistRequest,
+        on_done: Callable[..., None],
+        judge: Callable[[AssistOutcome], Any] | None,
+    ) -> Submission:
         with self._lock:
             if self._closed or self.service is None:
                 return Submission(
@@ -233,12 +258,23 @@ class AiAssistIntegration:
 
             def completed(outcome: AssistOutcome) -> None:
                 # This callback runs on the service worker. It only enqueues; never reads a widget or invokes Tk.
+                judged: Any = None
+                if judge is not None and outcome.ok:
+                    try:
+                        judged = judge(outcome)
+                    except Exception:  # noqa: BLE001 - a failed judge shows nothing; content never reaches a log
+                        logger.warning("AI plan judge failed", exc_info=False)
+                        judged = None
+
                 def deliver() -> None:
                     with self._lock:
                         if self._closed or self._active_id != request.request_id:
                             return
                         self._active_id = None
-                    on_done(outcome)
+                    if judge is None:
+                        on_done(outcome)
+                    else:
+                        on_done(outcome, judged)
 
                 with self._lock:
                     if self._closed:

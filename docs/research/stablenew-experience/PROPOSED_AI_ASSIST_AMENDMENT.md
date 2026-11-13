@@ -1,5 +1,7 @@
 # Proposed amendment: AI-assisted planning (DRAFT FOR OWNER DECISION — NOT ACTIVE)
 
+**Update 2026-11-13:** the owner decided D-1 to D-4 (section 6b). The Tier-1 *advisory* part (R1, R2, R4, R7, R8, P1 to P3, P5 to P8) is implemented by package AI-210 and now lives in `AI_ASSIST.md`; the rest of this draft is history. R3 and Confirm & Queue are not adopted, so P4 and the Tier-2/3 text below remain inactive. The text below is unchanged.
+
 **Status: draft text for review. Nothing in this file changes `AI_ASSIST.md`, `STATUS.md`, `config/`, code, tests or any hold. The policy change is presented as a decision (section 6), not as an approved implementation.** Requested by the owner on 2026-11-05 (DR-A25) after the owner chose model-assisted planning before qualification completes (DR-A11). Quoted text is from `docs/Subsystems/AiAssist/AI_ASSIST.md` and `STATUS.md` at `ed1e989f`.
 
 ## 1. Vocabulary (the distinctions the owner asked for)
@@ -77,7 +79,7 @@ The owner gave a **policy direction** (Tier-1 advisory planning first; advice vi
 
 Made under delegation to the coordinating session and recorded in `AI_ASSIST.md` as D13 to D17:
 
-- **D-1:** Tier-1 advisory planning without R3 (rules R1, R2, R4, R7, R8 and P8 "advice is not a plan"), as option (b) then advisory (a); a later package.
+- **D-1:** Tier-1 advisory planning without R3 (rules R1, R2, R4, R7, R8 and P8 "advice is not a plan"), as option (b) then advisory (a). Implemented by package AI-210 (`docs/work_packages/AI-210_advisory_planning.md`; R1, R2, R4, R7, R8 are now in `AI_ASSIST.md`, the judge lives outside `src/ai_assist` per R10); demonstrated with fakes only, no model has run.
 - **D-2:** option (b), in the Preview form: application-level use of an unqualified candidate only under the operator-enabled AI Assist Preview (D13), never a global switch and never setting `qualified`.
 - **D-3:** R3 and Confirm & Queue are not adopted.
 - **D-4:** planning and suggestions stay refused while a job is RUNNING.

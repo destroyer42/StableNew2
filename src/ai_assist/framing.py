@@ -11,7 +11,11 @@ from typing import Any
 
 from src.ai_assist.contracts import (
     CHANGE_CODES,
+    MAX_PLAN_STEPS,
+    MAX_RATIONALE_CHARS,
+    MAX_STEP_COUNT,
     SUGGESTION_SCHEMA_ID,
+    VIDEO_STAGE,
     AssistRequest,
     SuggestionKind,
 )
@@ -19,6 +23,7 @@ from src.ai_assist.contracts import (
 BEGIN_MARKER = "=====BEGIN_AUTHORED_DATA====="
 END_MARKER = "=====END_AUTHORED_DATA====="
 _SECTION_MARKERS = ("POSITIVE_PROMPT:", "NEGATIVE_PROMPT:")
+_GOAL_MARKER = "GOAL:"
 FRAME_VERSION = "ai_assist.frame/1"
 
 
@@ -38,6 +43,13 @@ _INSTRUCTIONS = {
     SuggestionKind.WORKFLOW_CHOICE: (
         "Choose the single best-fitting workflow from the allowed workflows for the prompt."
     ),
+    SuggestionKind.PLAN_PROPOSAL: (
+        "Advise, as a short ordered list of steps, which allowed stage and which allowed model or workflow would fit the "
+        f"operator's goal. At most {MAX_PLAN_STEPS} steps. Each step names a stage; an image stage names one allowed "
+        f"model, the {VIDEO_STAGE} stage names one allowed workflow. Give a small count of images or clips per step "
+        f"(1 to {MAX_STEP_COUNT}) and a short rationale (at most {MAX_RATIONALE_CHARS} characters). This is advice for "
+        "a person to read, not a job."
+    ),
 }
 
 
@@ -45,6 +57,23 @@ def _check_text(label: str, text: str) -> None:
     for marker in (BEGIN_MARKER, END_MARKER, *_SECTION_MARKERS):
         if marker in text:
             raise FramingError(f"{label} contains a reserved marker")
+
+
+def _authored_block(request: AssistRequest) -> list[str]:
+    if request.kind is SuggestionKind.PLAN_PROPOSAL:
+        _check_text("goal_text", request.goal_text)
+        if _GOAL_MARKER in request.goal_text:
+            raise FramingError("goal_text contains a reserved marker")
+        return [BEGIN_MARKER, _GOAL_MARKER, request.goal_text, END_MARKER, ""]
+    return [
+        BEGIN_MARKER,
+        "POSITIVE_PROMPT:",
+        request.positive_text,
+        "NEGATIVE_PROMPT:",
+        request.negative_text,
+        END_MARKER,
+        "",
+    ]
 
 
 def render_prompt(request: AssistRequest) -> str:
@@ -66,18 +95,14 @@ def render_prompt(request: AssistRequest) -> str:
         lines.append("Allowed targets: " + " | ".join(request.allowed_targets))
     if request.allowed_workflows:
         lines.append("Allowed workflows: " + " | ".join(request.allowed_workflows))
+    if request.allowed_stages:
+        lines.append("Allowed stages: " + " | ".join(request.allowed_stages))
     lines += [
         "If you cannot or will not help, reply "
         + json.dumps({"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "..."})
         + ".",
         "",
-        BEGIN_MARKER,
-        "POSITIVE_PROMPT:",
-        request.positive_text,
-        "NEGATIVE_PROMPT:",
-        request.negative_text,
-        END_MARKER,
-        "",
+        *_authored_block(request),
     ]
     return "\n".join(lines)
 
@@ -102,6 +127,24 @@ def build_json_schema(request: AssistRequest) -> dict[str, Any]:
         properties["negative"] = {"type": "string"}
     elif request.kind is SuggestionKind.TARGET_FIT_ADVICE:
         properties["target"] = {"enum": list(request.allowed_targets)}
+    elif request.kind is SuggestionKind.PLAN_PROPOSAL:
+        properties["steps"] = {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": MAX_PLAN_STEPS,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "stage": {"enum": list(request.allowed_stages)},
+                    "target": {"enum": [*request.allowed_targets, None]},
+                    "workflow": {"enum": [*request.allowed_workflows, None]},
+                    "count": {"type": "integer", "minimum": 1, "maximum": MAX_STEP_COUNT},
+                    "rationale": {"type": "string", "maxLength": MAX_RATIONALE_CHARS},
+                },
+                "required": ["stage", "target", "workflow", "count", "rationale"],
+                "additionalProperties": False,
+            },
+        }
     else:
         properties["workflow"] = {"enum": list(request.allowed_workflows)}
     return {

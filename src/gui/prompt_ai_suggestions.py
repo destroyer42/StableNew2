@@ -14,7 +14,16 @@ from src.ai_assist.preview import PREVIEW_LABEL
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.ai_preview_dialog import AiPreviewDialog
 from src.gui.ai_suggestion_dialog import AiSuggestionDialog
+from src.gui.prompt_ai_plan_sources import PlanSnapshot
 from src.gui.tooltip import attach_tooltip
+from src.gui_v2.ai_plan_advice import (
+    PlanJudgement,
+    build_plan_request,
+    judge_plan,
+    outcome_plan_text,
+    plan_review,
+    unavailable_plan_review,
+)
 from src.gui_v2.ai_suggestion_view import (
     KIND_LABELS,
     OUTCOME_TEXT,
@@ -40,6 +49,9 @@ class PromptAiSuggestions:
         self._workflows: Callable[[], tuple[tuple[str, str], ...]] = lambda: ()
         self.dialog: AiSuggestionDialog | None = None
         self.snapshot: SuggestionSnapshot | None = None
+        self._plan_source: Callable[[], PlanSnapshot] | None = None
+        self._plan: PlanSnapshot | None = None
+        self._plan_request: AssistRequest | None = None
         self.outcome: AssistOutcome | None = None
         self._active_id: str | None = None
         self._closed = False
@@ -83,8 +95,14 @@ class PromptAiSuggestions:
             else self.tab._content_visibility_mode
         )
 
-    def bind(self, owner: Any, *, targets: Callable[[], tuple[tuple[str, str], ...]]) -> None:
-        self.owner, self._targets = owner, targets
+    def bind(
+        self,
+        owner: Any,
+        *,
+        targets: Callable[[], tuple[tuple[str, str], ...]],
+        plan: Callable[[], PlanSnapshot] | None = None,
+    ) -> None:
+        self.owner, self._targets, self._plan_source = owner, targets, plan
         self.refresh()
 
     def _context(self, kind: SuggestionKind, request_id: str) -> SuggestionSnapshot:
@@ -225,8 +243,10 @@ class PromptAiSuggestions:
             on_accept=self.accept,
             on_cancel=self.cancel,
             on_close=self.close,
-            explanations={kind: self._problem(kind) for kind in SuggestionKind},
+            explanations={kind: self._problem(kind) for kind in KIND_LABELS},
             trust_label=self._trust_label(),
+            on_advise=self.advise if self._plan_source is not None else None,
+            advise_problem=self._advise_problem(),
         )
         return self.dialog
 
@@ -260,6 +280,123 @@ class PromptAiSuggestions:
                 result.outcome
                 or AssistOutcome(OutcomeCode.UNAVAILABLE, snapshot.request.request_id)
             )
+
+    # -- advisory planning (AI-210): advice only, read-only, no path to Intent, a form, the compiler or the queue ----------
+
+    def _advise_problem(self) -> str:
+        if self._plan_source is None:
+            return "Planning advice is unavailable."
+        try:
+            snapshot = self._plan_source()
+        except Exception:  # noqa: BLE001 - fixed copy only
+            return "The model and workflow lists could not be read."
+        if not snapshot.stages:
+            return "No policy-valid models or approved workflows are available to plan with."
+        return ""
+
+    def advise(self, goal: str) -> None:
+        dialog = self.dialog
+        if dialog is None or self._active_id is not None or self._plan_source is None:
+            return
+        code, explanation = self.owner.availability()
+        if code is not None:
+            dialog.show_plan(unavailable_plan_review(explanation, trust_label=self._trust_label()))
+            return
+        text = goal.strip()
+        if not text:
+            dialog.show_plan(unavailable_plan_review("Type a goal in your own words first."))
+            return
+        try:
+            plan = self._plan_source()
+            request = build_plan_request(
+                uuid4().hex,
+                text,
+                targets=plan.targets,
+                workflows=plan.workflows,
+                stages=plan.stages,
+                target_policy_id=plan.target_policy_id,
+            )
+        except ValueError:
+            dialog.show_plan(
+                unavailable_plan_review(
+                    "The goal or the model and workflow lists do not meet the request limits."
+                )
+            )
+            return
+        except Exception:  # noqa: BLE001 - no raw context in UI errors
+            dialog.show_plan(
+                unavailable_plan_review("The planning context could not be read safely.")
+            )
+            return
+        self._plan, self._plan_request, self.snapshot, self.outcome = plan, request, None, None
+        self._review_cancelled = False
+        self._active_id = request.request_id
+        dialog.running_plan()
+        self.refresh()
+
+        def judge(outcome: AssistOutcome) -> PlanJudgement | None:
+            # Worker thread: the model's text is never the verdict; every step is judged from the facts captured above.
+            suggestion = checked_suggestion(outcome, request)
+            return None if suggestion is None else judge_plan(suggestion, plan.facts)
+
+        result = self.owner.submit_plan(request, judge, self._plan_completed)
+        if not result.accepted:
+            self._plan_completed(
+                result.outcome or AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id),
+                None,
+            )
+
+    def _plan_completed(self, outcome: AssistOutcome, judgement: PlanJudgement | None) -> None:
+        # Queued GUI delivery (or a synchronous admission refusal). Same lifetime and identity checks as ``_completed``.
+        plan, request, dialog = self._plan, self._plan_request, self.dialog
+        if (
+            self._closed
+            or self.owner.closed
+            or plan is None
+            or request is None
+            or dialog is None
+            or self._active_id != outcome.request_id
+            or request.request_id != outcome.request_id
+        ):
+            return
+        self._active_id = None
+        preview = outcome.details.get("trust_tier") == "preview"
+        trust = PREVIEW_LABEL if preview else self._trust_label()
+        if trust:
+            dialog.set_trust_label(trust)
+        if self._review_cancelled:
+            dialog.show_plan(
+                unavailable_plan_review(
+                    "Request cancelled. Nothing was planned.", trust_label=trust
+                )
+            )
+            self.refresh()
+            return
+        if outcome.code is not OutcomeCode.SUGGESTION:
+            dialog.show_plan(
+                unavailable_plan_review(outcome_plan_text(outcome, OUTCOME_TEXT), trust_label=trust)
+            )
+            self.refresh()
+            return
+        suggestion = checked_suggestion(outcome, request)
+        if suggestion is None:
+            review = unavailable_plan_review(OUTCOME_TEXT[OutcomeCode.MALFORMED], trust_label=trust)
+        elif judgement is None:
+            review = unavailable_plan_review(
+                "The plan could not be judged, so no steps are shown.", trust_label=trust
+            )
+        elif not ContentVisibilityResolver(self._mode()).is_visible(
+            {"positive_prompt": " ".join(step.rationale for step in suggestion.steps)}
+        ):
+            review = unavailable_plan_review(
+                "The advice is hidden by the current visibility mode.", trust_label=trust
+            )
+        else:
+            review = plan_review(
+                judgement, targets=plan.targets, workflows=plan.workflows, trust_label=trust
+            )
+        dialog.show_plan(review)
+        self.refresh()
 
     def _current(self, snapshot: SuggestionSnapshot) -> bool:
         try:
@@ -424,6 +561,7 @@ class PromptAiSuggestions:
         self.cancel()
         self.dialog = None
         self.snapshot = self.outcome = None
+        self._plan = self._plan_request = None
         self._active_id = None
 
     def destroy(self) -> None:
@@ -436,3 +574,4 @@ class PromptAiSuggestions:
             self.tab.after_cancel(self._poll_id)
             self._poll_id = None
         self.snapshot = self.outcome = None
+        self._plan = self._plan_request = None
