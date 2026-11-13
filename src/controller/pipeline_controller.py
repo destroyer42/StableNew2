@@ -17,6 +17,7 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Any
 
+from src.app.runtime_stack import RuntimeStack, assemble_runtime_stack
 from src.config.app_config import is_queue_execution_enabled
 from src.contracts import PackJobEntry, PreviewRequest
 from src.controller.core_pipeline_controller import CorePipelineController
@@ -676,15 +677,10 @@ class PipelineController(CorePipelineController):
         self._app_state_preview_updates_managed_externally = False
         self._job_lifecycle_logger = job_lifecycle_logger
 
-        queue = self._job_controller.get_queue()
-        runner = self._job_controller.get_runner()
-        history_store = self._job_controller.get_history_store()
-        history_service = self.get_job_history_service()
-        self._job_service = (
-            job_service
-            if job_service is not None
-            else JobService(queue, runner, history_store, history_service=history_service, require_normalized_records=True)
+        self._runtime_stack = assemble_runtime_stack(
+            self._job_controller, job_service, self.get_job_history_service()
         )
+        self._job_service = self._runtime_stack.job_service
         if self._job_lifecycle_logger and hasattr(self._job_service, "set_job_lifecycle_logger"):
             try:
                 self._job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
@@ -1577,6 +1573,9 @@ class PipelineController(CorePipelineController):
     def get_job_execution_controller(self) -> JobExecutionController:
         """Return the queue execution controller backing this pipeline controller."""
         return self._job_controller
+
+    def get_runtime_stack(self) -> RuntimeStack | None:
+        return getattr(self, "_runtime_stack", None)  # read-only record of the queue stack
 
     def get_job_service(self) -> JobService | None:
         """Return the queue service used by pipeline-facing GUI actions."""
