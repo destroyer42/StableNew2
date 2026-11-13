@@ -171,12 +171,16 @@ from src.utils.process_inspector_v2 import (
 )
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils.thread_registry import get_thread_registry
+from src.video.history_media_projection import (
+    history_image_path,
+    history_video_bundle,
+    latest_history_image_path,
+    latest_history_video_bundle,
+)
 from src.video.svd_history import project_recent_svd_history
-from src.video.video_artifact_helpers import history_video_artifact_summary
 
 logger = logging.getLogger(__name__)
 
-_IMAGE_OUTPUT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
 _QUEUE_PROJECTION_TIMING_INFO_MS = 150.0
 _QUEUE_PROJECTION_TIMING_WARN_MS = 1000.0
 _INITIAL_RESOURCE_PROBE_GRACE_SEC = 30.0
@@ -5922,22 +5926,12 @@ class AppController:
     def get_latest_output_image_path(self) -> str | None:
         app_state = getattr(self, "app_state", None)
         history_items = list(getattr(app_state, "history_items", []) or [])
-        for entry in history_items:
-            for candidate in self._iter_history_image_candidates(entry):
-                path = Path(candidate)
-                if path.suffix.lower() in _IMAGE_OUTPUT_EXTENSIONS and path.exists():
-                    return str(path)
-        return None
+        return latest_history_image_path(history_items)
 
     def get_latest_video_output_bundle(self) -> dict[str, Any] | None:
         app_state = getattr(self, "app_state", None)
         history_items = list(getattr(app_state, "history_items", []) or [])
-        for entry in history_items:
-            bundle = self._get_history_video_bundle(entry)
-            if isinstance(bundle, dict):
-                if bundle.get("primary_path") or bundle.get("output_paths") or bundle.get("frame_paths"):
-                    return bundle
-        return None
+        return latest_history_video_bundle(history_items)
 
     def send_image_to_svd(self, image_path: str | Path) -> str:
         path = Path(image_path)
@@ -6011,7 +6005,7 @@ class AppController:
         entry = self._get_history_entry_by_job_id(job_id)
         if entry is None:
             raise ValueError(f"History job not found: {job_id}")
-        image_path = self._get_history_image_path(entry)
+        image_path = history_image_path(entry)
         if image_path is None:
             raise ValueError(f"History job {job_id} has no image output available for SVD")
         return self.send_image_to_svd(image_path)
@@ -6026,7 +6020,7 @@ class AppController:
         entry = self._get_history_entry_by_job_id(job_id)
         if entry is None:
             raise ValueError(f"History job not found: {job_id}")
-        bundle = self._get_history_video_bundle(entry)
+        bundle = history_video_bundle(entry)
         if bundle:
             best_path = self._require_presentation_actions().bundle_to_video_workflow(
                 bundle=dict(bundle),
@@ -6038,7 +6032,7 @@ class AppController:
                 )
                 return str(best_path)
 
-        image_path = self._get_history_image_path(entry)
+        image_path = history_image_path(entry)
         if image_path is None:
             raise ValueError(
                 f"History job {job_id} has no usable image or video output available for Video Workflow"
@@ -6052,7 +6046,7 @@ class AppController:
             raise ValueError(f"History job not found: {job_id}")
         actions = self._require_presentation_actions()
 
-        bundle = self._get_history_video_bundle(entry)
+        bundle = history_video_bundle(entry)
         if bundle:
             actions.bundle_to_movie_clips(
                 bundle=dict(bundle),
@@ -6063,7 +6057,7 @@ class AppController:
             self._append_log(f"[movie_clips] Routed history output to Movie Clips{suffix}")
             return primary_path
 
-        image_path = self._get_history_image_path(entry)
+        image_path = history_image_path(entry)
         if image_path is None:
             raise ValueError(f"History job {job_id} has no usable output available for Movie Clips")
 
@@ -6104,39 +6098,6 @@ class AppController:
             history_items, limit=limit, read_manifest=self._load_svd_manifest_payload
         )
 
-    def _iter_history_image_candidates(self, entry: Any) -> list[str]:
-        candidates: list[str] = []
-        result = getattr(entry, "result", None)
-        if isinstance(result, dict):
-            artifact = result.get("artifact")
-            if isinstance(artifact, Mapping):
-                artifact_paths = artifact.get("output_paths") or [artifact.get("primary_path")]
-                candidates.extend(str(item) for item in artifact_paths if item)
-            for key in ("output_paths", "frame_paths", "video_paths", "gif_paths"):
-                value = result.get(key)
-                if isinstance(value, list):
-                    candidates.extend(str(item) for item in value if item)
-            path_value = result.get("path")
-            if path_value:
-                candidates.append(str(path_value))
-            thumbnail = result.get("thumbnail_path")
-            if thumbnail:
-                candidates.append(str(thumbnail))
-        snapshot = getattr(entry, "snapshot", None)
-        if isinstance(snapshot, dict):
-            normalized = snapshot.get("normalized_job")
-            if isinstance(normalized, dict):
-                for key in ("output_paths",):
-                    value = normalized.get(key)
-                    if isinstance(value, list):
-                        candidates.extend(str(item) for item in value if item)
-                thumbnail = normalized.get("thumbnail_path")
-                if thumbnail:
-                    candidates.append(str(thumbnail))
-
-        # Preserve the first usable candidate as the handoff preference.
-        return list(dict.fromkeys(candidate for candidate in candidates if candidate))
-
     def _get_history_entry_by_job_id(self, job_id: str) -> Any | None:
         app_state = getattr(self, "app_state", None)
         history_items = list(getattr(app_state, "history_items", []) or [])
@@ -6144,38 +6105,6 @@ class AppController:
             if getattr(entry, "job_id", None) == job_id:
                 return entry
         return None
-
-    def _get_history_image_path(self, entry: Any) -> str | None:
-        for candidate in self._iter_history_image_candidates(entry):
-            path = Path(candidate)
-            if path.suffix.lower() in _IMAGE_OUTPUT_EXTENSIONS and path.exists():
-                return str(path)
-        return None
-
-    def _get_history_video_bundle(self, entry: Any) -> dict[str, Any] | None:
-        result = getattr(entry, "result", None)
-        if not isinstance(result, dict):
-            return None
-        bundle = result.get("video_bundle")
-        if isinstance(bundle, dict):
-            return dict(bundle)
-        artifact = history_video_artifact_summary(result)
-        if not isinstance(artifact, dict):
-            return None
-        return {
-            "primary_path": artifact.get("primary_path"),
-            "stage": artifact.get("stage"),
-            "backend_id": artifact.get("backend_id"),
-            "artifact_type": "video",
-            "thumbnail_path": artifact.get("thumbnail_path"),
-            "manifest_paths": list(artifact.get("manifest_paths") or []),
-            "output_paths": list(artifact.get("output_paths") or []),
-            "video_paths": list(artifact.get("video_paths") or []),
-            "gif_paths": list(artifact.get("gif_paths") or []),
-            "frame_paths": list(artifact.get("frame_paths") or []),
-            "source_image_path": artifact.get("source_image_path"),
-            "count": artifact.get("count"),
-        }
 
     @staticmethod
     def _load_svd_manifest_payload(manifest_paths: Iterable[str]) -> dict[str, Any]:

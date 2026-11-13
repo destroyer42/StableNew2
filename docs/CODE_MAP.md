@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-714 of 869 modules have a docstring.
+715 of 870 modules have a docstring.
 
 ## src/
 
@@ -908,6 +908,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `driving_frame_consumption.py`: Which driving-video frames a workflow's graph consumes, verified against its pinned runtime
 - `driving_video_inspection.py`: Bounded, read-only inspection of a driving video (PR-VID-196)
 - `frames_out.py`: Frames-out Comfy workflows: StableNew encodes the PNG frames Comfy saved (PR-VID-WAN-324)
+- `history_media_projection.py`: Read-only media-selection decisions over existing Job History entries
 - `interpolation_contracts.py`: Pluggable interpolation contracts for post-video assembly
 - `loop_export.py`: Loop and ping-pong frame sequences for export (PR-VID-LOOP-303)
 - `managed_comfy_runtime.py`: Read-only production view of the StableNew-managed ComfyUI runtime contract

@@ -78,9 +78,6 @@ _BORROWED = (
     "_require_main_window",
     "_require_presentation_actions",
     "_get_history_entry_by_job_id",
-    "_get_history_image_path",
-    "_get_history_video_bundle",
-    "_iter_history_image_candidates",
 )
 
 

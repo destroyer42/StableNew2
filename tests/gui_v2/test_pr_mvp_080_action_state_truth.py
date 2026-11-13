@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
@@ -17,6 +16,7 @@ from src.queue.job_history_store import (
     JobStatus,
 )
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
+from src.video.history_media_projection import history_image_path
 from tests.helpers.job_helpers import make_test_njr
 
 
@@ -328,4 +328,4 @@ def test_controller_handoff_uses_canonical_direct_image_artifact(tmp_path) -> No
         },
     )
 
-    assert AppController.__new__(AppController)._get_history_image_path(entry) == str(image_path)
+    assert history_image_path(entry) == str(image_path)
