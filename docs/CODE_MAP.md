@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-720 of 875 modules have a docstring.
+722 of 877 modules have a docstring.
 
 ## src/
 
@@ -258,6 +258,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `presentation_actions.py`: Tk-owned dialogs, controller command bindings and workspace handoffs
 - `preview_panel_v2.py`: Preview panel for GUI v2 (PR-CORE1-A3: NJR-only display)
 - `prompt_adaptation_dialog.py`: Read-only Tk dialog for the explicit "Adapt for Target" preview (PR-IMG-130C)
+- `prompt_ai_plan_sources.py`: Closed lists and judge facts for advisory planning, read from the existing authorities (AI-210)
 - `prompt_ai_suggestions.py`: Prompt-tab AI coordination: snapshot, queued completion, read-only review and explicit stale-safe editing
 - `prompt_ai_targets.py`: Closed target advice options from the existing model picker and its canonical policy projection
 - `prompt_pack_adapter_v2.py`: Thin adapter that exposes prompt pack summaries for GUI V2 widgets
@@ -482,6 +483,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/gui_v2/
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
+- `ai_plan_advice.py`: Toolkit-neutral advisory planning: closed-list facts, the deterministic judge and the read-only review model…
 - `ai_suggestion_view.py`: Toolkit-neutral AI suggestion review: immutable source identity and content-free outcome copy
 - `asset_readiness_view.py`: Toolkit-neutral session and row projection for the read-only asset readiness view (PR-ASSET-130)
 - `controlnet_guidance.py`: Toolkit-neutral guidance and local readiness for ordered ControlNet units (PR-GUI-UX-550)
