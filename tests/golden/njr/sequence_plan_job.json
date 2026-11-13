@@ -175,7 +175,7 @@
      "sequence_id": "golden-sequence",
      "source": {
       "path": "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png",
-      "sha256": "9bda9198329e7626b41d7777d25e1838275bfcd11c35987fa7bcf7bee6becd63"
+      "sha256": "<env_digest>"
      },
      "stage": "video_workflow",
      "target_height": 832,
@@ -303,7 +303,7 @@
      "sequence_id": "golden-sequence",
      "source": {
       "path": "<tmp>/output/prepared_video_sources/9bda9198329e7626b41d_480x832_cover_resize_center_crop.png",
-      "sha256": "9bda9198329e7626b41d7777d25e1838275bfcd11c35987fa7bcf7bee6becd63"
+      "sha256": "<env_digest>"
      },
      "stage": "video_workflow",
      "target_height": 832,

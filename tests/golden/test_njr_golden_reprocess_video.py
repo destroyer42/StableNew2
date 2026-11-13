@@ -239,6 +239,13 @@ def test_sequence_plan_job(
     assert_golden("sequence_plan_job", mask_environment_digests(parent.to_dict()), tmp_path)
 
 
+def _frozen_source(plan: Any, original: Path) -> str:
+    """The image the plan froze (the prepared copy production hands the executor), else the original."""
+
+    frozen = (plan.source or {}).get("path")
+    return str(frozen) if frozen and Path(frozen).is_file() else str(original)
+
+
 def _failed_ledger(parent: NormalizedJobRecord, source: Path, run_dir: Path) -> Path:
     from src.pipeline.video_sequence_executor import VideoSequenceExecutor
     from tests.video.test_pr_vid_seq_330_executor import Segments, _fake_assemble
@@ -251,7 +258,7 @@ def _failed_ledger(parent: NormalizedJobRecord, source: Path, run_dir: Path) -> 
             run_dir=run_dir,
             run_segment=Segments(run_dir, fail_on=2),
             assemble=_fake_assemble,
-        ).execute(source_image_path=str(source))
+        ).execute(source_image_path=_frozen_source(plan, source))
     return run_dir / LEDGER_FILE_NAME
 
 
@@ -273,8 +280,12 @@ def mask_environment_digests(node: Any) -> Any:
 
     if isinstance(node, dict):
         out = {}
+        # A prepared video source is re-encoded by Pillow, so its bytes (and digest) follow the zlib build.
+        prepared = "prepared_video_sources" in str(node.get("path", ""))
         for key, value in node.items():
-            if key in _ENV_DIGEST_KEYS and isinstance(value, str):
+            if (key in _ENV_DIGEST_KEYS or (prepared and key == "sha256")) and isinstance(
+                value, str
+            ):
                 assert len(value) == 64 and int(value, 16) >= 0
                 out[key] = "<env_digest>"
             else:
