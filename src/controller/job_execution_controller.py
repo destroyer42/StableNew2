@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from src.app.runtime_stack import build_queue_stack
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -19,7 +19,6 @@ from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
-from src.state.workspace_paths import workspace_paths
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import attach_envelope, get_attached_envelope
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
@@ -51,25 +50,19 @@ class JobExecutionController:
             if repository is not None and queue.repository is not repository:
                 raise ValueError("Controller queue and repository must share one authority")
             repository = queue.repository
-        if repository is None:
-            path = (
-                ":memory:"
-                if os.environ.get("PYTEST_CURRENT_TEST")
-                else workspace_paths.job_repository()
-            )
-            repository = JobRepository(path)
-        self._history_store = repository
-        self._queue = queue or JobQueue(repository=repository)
         self._execute_job = execute_job
         self._auto_run_enabled = True
         self._queue_paused = False
         owns_runner = runner is None
-        self._runner = runner or SingleNodeJobRunner(
-            self._queue,
-            self._run_job_callback,
-            poll_interval=poll_interval,
+        repository, self._queue, self._runner = build_queue_stack(
+            repository=repository,
+            queue=queue,
+            runner=runner,
+            run_callable=self._run_job_callback,
             on_status_change=self._on_status,
+            poll_interval=poll_interval,
         )
+        self._history_store = repository
         if owns_runner:
             configure_continuous_dispatch = getattr(
                 self._runner, "set_continuous_dispatch_allowed", None

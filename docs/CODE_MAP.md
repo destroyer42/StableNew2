@@ -53,6 +53,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Shared application bootstrap and capability helpers
 - `bootstrap.py`: (no docstring)
 - `optional_dependency_probes.py`: (no docstring)
+- `runtime_stack.py`: The one construction site for the application's queue stack, and a read-only record of it (P3-2A)
 
 ## src/assets/
 

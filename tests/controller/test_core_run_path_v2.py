@@ -15,7 +15,6 @@ from unittest.mock import Mock
 import pytest
 
 from src.controller.app_controller import AppController
-from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
@@ -24,7 +23,6 @@ from src.controller.webui_connection_controller import (
 from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunResult
 from src.queue.job_model import Job
-from src.queue.stub_runner import StubRunner
 from src.utils.logger import StructuredLogger, close_all_structured_loggers
 from tests.helpers.njr_factory import make_pipeline_njr
 
@@ -46,19 +44,6 @@ class RecordingAppController(AppController):
                 output_dir=str(tmp_history.parent / "structured_logs")
             )
         super().__init__(*args, **kwargs)
-
-    def _single_node_runner_factory(
-        self,
-        job_queue,
-        run_callable: Callable[[Job], dict] | None,
-    ) -> StubRunner:
-        self.recorded_callables.append(run_callable)
-        return StubRunner(job_queue, run_callable=run_callable)
-
-    def _build_job_service(self) -> JobService:
-        if self._custom_history:
-            self._job_history_path = self._custom_history
-        return super()._build_job_service()
 
 
 def _make_dummy_record() -> NormalizedJobRecord:
