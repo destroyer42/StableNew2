@@ -17,7 +17,13 @@ Execution class: Standard (a deletion package with reachability proof).
 
 Static: no reference in `src`, `tools`, `scripts`, `pyproject.toml` entry points or runbooks beyond the definitions and
 the listed dormant call chain. Dynamic: an uncommitted pytest recorder wrapped each target and logged the immediate caller
-over the full census (see the completion report).
+over the first 44% of the census in directory order (about 7.3k of 16,459 tests, run on the #292 merge source, then
+stopped for time). Result: only tests called the targets. `AppController._execute_job` 9 calls, all from the nine tests
+mapped below; `JobHistoryService.retry_job` 2 and `JobExecutionController.replay` 2, from the mapped tests (one `replay` call
+came from `retry_job` itself); no call from any other `src` frame. `PipelineController._run_job` was called 191 times by
+`SingleNodeJobRunner` as a test-injected run callable, which is why it is kept. The unrun remainder is covered by the static
+proof and a grep of `tests/`: the mapped tests are the only ones that name these methods. The census cannot see
+subprocess-run tests.
 
 | Target | Verdict | Evidence |
 | --- | --- | --- |
