@@ -1,6 +1,7 @@
 # PR-AI-VL-220: LFM3-VL-2B visual candidate and offline evaluation
 
-Status: **implemented on a feature branch; PR open, not merged; nothing promoted.** The visual candidate is recorded, its two
+Status: **implemented on a feature branch; PR open, not merged; nothing promoted.** (The image invocation it specified was
+implemented afterwards; see "Image invocation implementation" at the end.) The visual candidate is recorded, its two
 files are staged and hash-verified outside the repository, and an evaluation contract plus harness scaffolding exist. **No
 model, binary or projector was loaded or run.** The image invocation a real run needs is a separate proposal that needs the
 owner's explicit approval (`docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md`).
@@ -165,3 +166,29 @@ adding `b11960-cpu-vision` to the manifest, or a Qwen visual arm would each be a
 
 `STATUS.md` one clause on the existing AI Assist line; `docs/CODEX_MAP.md` the AI Assist row; `AI_ASSIST.md` invariant 10 and
 section 13; `tools/qualification/README.md` inventory row; no roadmap or architecture change.
+
+
+## Image invocation implementation (follow-up package, 2026-11-14)
+
+Outcome: the owner-approved image invocation contract is implemented and has never been run. Delivered: the pinned build entry
+`b11960-cpu-vision` (same archive and per-file hashes as `b11960-cpu`, `llama-mtmd-cli.exe`, unqualified, listed by no model);
+the closed visual vocabulary and builder `tools/qualification/vl220/visual_argv.py` (the only place `--mmproj` or `--image` can
+be emitted; `src/ai_assist/argv.py` is byte-identical); the question text `prompts.py`; the driver `driver.py` (launches only
+through `run_bounded`, scrubbed `build_environment`, fail-closed admission before every launch, stdout-only strict JSON then
+`validate_response`, evidence of timing, memory, a path-free argv hash, exit code and reason code, no text persisted); the
+`evaluate` CLI command that needs `--i-have-the-plan-digest`; `contract.INVOCATION_APPROVED = True` with the new plan digest
+`fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`, proved to differ from the authorized
+`23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e` only by that flag and the comparator reason text; the
+documents; `tests/tools/test_ai_vl220_invocation.py`.
+
+Explicit exclusions kept: no llama.cpp binary or model was executed; no GPU; nothing written under
+`%LOCALAPPDATA%\StableNew\ManagedAi`; no firewall rule, no attestation, no license acknowledgement (all the owner's acts); no
+change to the text registry, the selector, Preview, activation, `import-model`, `FORBIDDEN_FLAGS`, `ALLOWED_FLAGS`,
+`build_argv`, `build_production_argv` or any frozen AI-111/AI-115 identity (their digest tests pass unmodified).
+
+Held, still the owner's before the first supervised CPU-only run: `license_acknowledgement.json` for text
+`30adf9d6478191fb87f2424f63ba0728598335aaf99cd2848ef17e8e545fe94b`; the outbound Block rule for `llama-mtmd-cli.exe` and the
+attestation for `b11960-cpu-vision`; the evaluation-root import; for existing assets, the chosen images and a human labeler; and
+the owner's confirmation in chat naming the current plan digest. Unverified without that run (contract section 5): that the
+tool loads this model and projector, memory and speed, the chat-template question (`--jinja`), grammar behavior in `mtmd-cli`,
+whether stdout carries only the answer, and the right `--max-image-tokens`.

@@ -10,16 +10,18 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from src.ai_assist.manifests import RuntimeManifest, load_runtime_manifest
 from src.ai_assist.paths import resolve_ai_root
 from tools.qualification.vl220.candidates import (
     REASON_CANCELLED,
-    REASON_RUNTIME_UNSUPPORTED,
     REASON_UNSAFE_PATH,
+    RUNTIME_MANIFEST_PATH,
     CancelCheck,
     StagedFile,
     VisualCandidate,
     has_link,
     license_reasons,
+    runtime_reasons,
     verify_pair,
 )
 
@@ -52,6 +54,7 @@ def stage_report(
     staging_dir: Path,
     *,
     build_id: str,
+    runtime_manifest: RuntimeManifest | None = None,
     acknowledgement: Mapping[str, Any] | None = None,
     cancel: CancelCheck | None = None,
 ) -> dict[str, Any]:
@@ -59,8 +62,12 @@ def stage_report(
 
     pair = verify_pair(candidate, staging_dir, cancel=cancel)
     reasons = [*pair.reasons, *license_reasons(candidate, acknowledgement)]
-    if build_id != candidate.runtime.required_build_id:
-        reasons.append(REASON_RUNTIME_UNSUPPORTED)
+    manifest = (
+        runtime_manifest
+        if runtime_manifest is not None
+        else load_runtime_manifest(RUNTIME_MANIFEST_PATH)
+    )
+    reasons.extend(runtime_reasons(candidate, build_id, manifest))
     return {
         "candidate_id": candidate.candidate_id,
         "build_id": build_id,
@@ -82,7 +89,7 @@ def stage_report(
     }
 
 
-def evaluation_root(path: Path) -> Path:
+def resolve_evaluation_root(path: Path) -> Path:
     path = path.absolute()
     if has_link(path):
         raise StagingRefused(REFUSED_NOT_ADMITTED, (REASON_UNSAFE_PATH,))
@@ -99,6 +106,14 @@ def evaluation_root(path: Path) -> Path:
     if any((parent / ".git").exists() for parent in (root, *root.parents)):
         raise StagingRefused(REFUSED_IN_REPOSITORY)
     return root
+
+
+def root_refusal(root: Path) -> str:
+    try:
+        resolve_evaluation_root(root)
+    except StagingRefused as exc:
+        return exc.reasons[0] if exc.reasons else exc.code
+    return ""
 
 
 def installed_pair(root: Path, candidate: VisualCandidate) -> Path:
@@ -138,15 +153,16 @@ def _copy_verified(
 def import_candidate(
     candidate: VisualCandidate,
     staging_dir: Path,
-    root: Path,
+    evaluation_root: Path,
     *,
     build_id: str,
     acknowledgement: Mapping[str, Any] | None,
+    runtime_manifest: RuntimeManifest | None = None,
     cancel: CancelCheck | None = None,
 ) -> Path:
     """Verify while staging, then publish the pair and its receipt together."""
 
-    root = evaluation_root(root)
+    root = resolve_evaluation_root(evaluation_root)
     target = installed_pair(root, candidate)
     if has_link(target):
         raise StagingRefused(REFUSED_NOT_ADMITTED, (REASON_UNSAFE_PATH,))
@@ -156,6 +172,7 @@ def import_candidate(
         candidate,
         staging_dir,
         build_id=build_id,
+        runtime_manifest=runtime_manifest,
         acknowledgement=acknowledgement,
         cancel=cancel,
     )

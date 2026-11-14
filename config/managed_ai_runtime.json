@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Pinned offline llama.cpp runtime builds for Offline AI Assist. A build is usable only when listed here with its archive SHA-256 and the SHA-256 of every loadable file. Two builds (llama.cpp b11840 and b11960, CPU x64, MIT) are pinned unqualified for AI Assist Preview (owner decisions D13/D15; b11960 is the floor for LFM3); qualification remains PR-AI-111. Nothing is downloaded by the application. The separate b11960-cpu-vision entry is for operator evaluation only.",
+  "description": "Pinned offline llama.cpp runtime builds for Offline AI Assist. A build is usable only when listed here with its archive SHA-256 and the SHA-256 of every loadable file. Two builds (llama.cpp b11840 and b11960, CPU x64, MIT) are pinned unqualified for AI Assist Preview (owner decisions D13/D15; b11960 is the floor for LFM3); a third entry, b11960-cpu-vision (the b11960 archive with llama-mtmd-cli.exe), exists only for the offline visual evaluation harness (PR-AI-VL-220): it is listed in no model's compatible_builds, so the selector, Preview, activation and import-model can never reach it; qualification remains PR-AI-111. Nothing is downloaded by the application.",
   "builds": [
     {
       "asset_bytes": 24156518,
@@ -135,6 +135,7 @@
       "asset_name": "llama-b11960-bin-win-cpu-x64.zip",
       "asset_sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287",
       "build_id": "b11960-cpu-vision",
+      "upstream_commit": "8642541b255bfb5dc39cd351a178be09013a55d6",
       "executable": "llama-mtmd-cli.exe",
       "files": {
         "ggml-base.dll": "200cd9b6f0a7934c2e1c85e55289d5498332713321b03e83eb2ae3da5eeb6137",
@@ -192,8 +193,7 @@
       "license_spdx": "MIT",
       "qualified": false,
       "upstream_repository": "https://github.com/ggml-org/llama.cpp",
-      "upstream_tag": "b11960",
-      "upstream_commit": "8642541b255bfb5dc39cd351a178be09013a55d6"
+      "upstream_tag": "b11960"
     }
   ]
 }

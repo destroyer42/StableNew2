@@ -2,8 +2,8 @@
 
 This module is a specification made executable. It defines what a visual evaluation case, its separate human reference label
 and a model's structured answer must look like, and rejects everything else. It runs no model and starts no process: the
-image invocation a real run would need is a separate, unapproved contract
-(``docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md``).
+image invocation a real run needs is the separate, owner-approved contract
+(``docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md``) that ``visual_argv.py`` and ``driver.py`` implement.
 
 Cases carry no reference data. Labels live in a separate document, keyed by case id, and for any asset that is not synthetic
 they must be written by a person. :func:`validate_case_set` and :func:`validate_label_set` enforce both rules.
@@ -23,7 +23,10 @@ CASES_SCHEMA = "stablenew.vl220.cases/1"
 LABELS_SCHEMA = "stablenew.vl220.labels/1"
 RESPONSE_SCHEMA = "stablenew.vl220.response/1"
 
-#: Owner-approved LFM operator adapter implemented under AI-VL-230.
+#: The owner approved the image invocation on 2026-11-14 and the driver, visual argument builder and ``b11960-cpu-vision`` build
+#: entry that implement every gate of ``PR-AI-VL-220_Image_Invocation_Contract.md`` exist (``visual_argv.py``, ``driver.py``).
+#: This flag does not run anything: a run still needs the owner's plan digest, license acknowledgement, firewall rule and
+#: attestation, and every admission gate in ``driver.py`` (a test pins the gates this flag stands for).
 INVOCATION_APPROVED = True
 
 KIND_ADHERENCE = "adherence"
@@ -644,7 +647,6 @@ def comparators() -> tuple[Comparator, ...]:
                 DIM_RESOURCES,
             ),
             (
-                "image_invocation_not_approved",
                 "license_not_acknowledged",
                 "not_imported_into_an_evaluation_root",
             ),

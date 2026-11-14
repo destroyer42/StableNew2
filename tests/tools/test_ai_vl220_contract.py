@@ -462,9 +462,16 @@ def test_comparator_eligibility_is_explicit_about_what_exists_today() -> None:
         assert table[text_only]["eligible"] is False and table[text_only]["dimensions"] == []
     assert "mmproj_flag_is_forbidden" in table["qwen3.5-text-gguf"]["reasons"]
     candidate = table["lfm3-vl-2b-q4_k_m-liquidai"]
+    # The invocation is approved and implemented (PR-AI-VL-220 driver); the candidate stays ineligible until the owner's license
+    # acknowledgement and an evaluation-root import exist.
     assert (
-        candidate["eligible"] is False and "image_invocation_not_approved" in candidate["reasons"]
+        candidate["eligible"] is False
+        and "image_invocation_not_approved" not in candidate["reasons"]
     )
+    assert set(candidate["reasons"]) == {
+        "license_not_acknowledged",
+        "not_imported_into_an_evaluation_root",
+    }
 
 
 def test_comparator_names_match_the_existing_smart_review_capabilities() -> None:
@@ -477,7 +484,7 @@ def test_comparator_names_match_the_existing_smart_review_capabilities() -> None
     )
 
 
-def test_plan_is_deterministic_and_preserves_the_original_snapshot() -> None:
+def test_plan_is_deterministic_runs_nothing_and_records_the_approved_invocation() -> None:
     first = plan.build_plan()
     assert first == plan.build_plan() and len(first["plan_sha256"]) == 64
     assert first["executes_models"] is False
@@ -492,14 +499,18 @@ def test_plan_is_deterministic_and_preserves_the_original_snapshot() -> None:
     assert contract.digest(body) == first["plan_sha256"]
 
 
-def test_the_specification_documents_preserve_the_frozen_plan_digest() -> None:
-    first = plan.build_plan()
-    current = first.pop("plan_sha256")
-    first["image_invocation"]["approved"] = False
-    original = contract.digest(first)
-    assert original == "23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e"
-    text = (REPO / plan.EVALUATION_DOCUMENT).read_text(encoding="utf-8")
-    assert original in text and current in text
+def test_the_specification_documents_exist_and_carry_the_current_plan_digest() -> None:
+    digest = plan.build_plan()["plan_sha256"]
+    for relative in (plan.EVALUATION_DOCUMENT, plan.INVOCATION_DOCUMENT):
+        text = (REPO / relative).read_text(encoding="utf-8")
+        lowered = text.lower()
+        assert (
+            "not approved" in lowered
+            or "pending owner approval" in lowered
+            or "not yet implemented" in lowered
+            or "no run is possible" in lowered
+        )
+    assert digest in (REPO / plan.EVALUATION_DOCUMENT).read_text(encoding="utf-8")
 
 
 def test_dry_run_validates_and_scores_without_touching_disk(

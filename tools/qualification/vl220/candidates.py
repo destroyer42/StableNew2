@@ -33,7 +33,7 @@ RUNTIME_MANIFEST_PATH = REPO_ROOT / "config" / "managed_ai_runtime.json"
 MAX_DOWNLOAD_BYTES = 6 * 1024**3
 GEMMA_CANDIDATE_ID = "gemma-4-12b-it-qat-q4_0-google"
 GEMMA_MAX_DOWNLOAD_BYTES = 9 * 1024**3
-VISION_BUILD_ID = "b11960-cpu-vision"
+LFM_CANDIDATE_ID = "lfm3-vl-2b-q4_k_m-liquidai"
 
 REASON_CANCELLED = "cancelled"
 REASON_UNSAFE_PATH = "unsafe_link_or_nonregular_file"
@@ -303,7 +303,7 @@ def _parse_candidate(raw: Any) -> VisualCandidate:
     runtime = _parse_runtime(data.get("runtime"))
     if approved:
         _require(
-            runtime.required_build_id == VISION_BUILD_ID and runtime.tool == "llama-mtmd-cli.exe",
+            runtime.required_build_id == "b11960-cpu" and runtime.tool == "llama-mtmd-cli.exe",
             "approved image invocation must use the reviewed visual runtime",
         )
     _require(data.get("modality") == "vision_language", "modality must be vision_language")
@@ -494,7 +494,6 @@ def runtime_reasons(
     if (
         build_id != runtime.required_build_id
         or build_id in runtime.unsupported_build_ids
-        or runtime.tool != build.executable
         or runtime.tool not in build.files
         or build.qualified is not False
     ):

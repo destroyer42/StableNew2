@@ -52,8 +52,7 @@ python -m tools.qualification.vl220 --candidate $candidate import --staging $sta
 python -m tools.qualification.vl220 --candidate $candidate import-runtime --evaluation-root $root --archive (Join-Path $downloads 'llama-b11960-bin-win-cpu-x64.zip')
 ```
 
-Import the runtime once for a shared evaluation root. Candidate import publishes the pair and its receipt together. Retry can
-reuse existing complete imports after verification. A failed copy cleans its own staging area.
+Import the runtime once for a shared evaluation root. Reuse the verified runtime installation when it already exists. Candidate import publishes the pair and its receipt together. A retry can reuse existing complete imports after verification. A failed copy cleans its own staging area.
 
 ## Firewall and attestation
 
@@ -83,24 +82,33 @@ host, RAM and commit headroom, verified images, and OS containment.
 
 ## Supervised evaluation
 
-`describe-execution` prints the execution digest and the exact runtime identities and limits it binds. `describe`
-prints the evaluation plan and its synthetic case and label digests. Use `write-synthetic --dest <empty-folder>` to
-materialize the fixed synthetic set. Existing assets require a frozen cases document, a separate human-labelled document,
-and PNGs or JPEGs named by asset ID (suffix `.png` or `.jpg`) beside the cases file.
+Use `describe` to obtain the candidate's plan digest and the fixed synthetic case and label digests. To materialize the
+synthetic images, run `write-synthetic --dest <empty-folder>` and use that folder as `--assets`. The default evaluation reads
+the synthetic case and label documents in memory. For existing assets, pass `--cases` and `--labels` together and point
+`--assets` at the PNG or JPEG files named by asset ID. Existing assets require human labels.
 
-With the exact supervised run authorized, pass the reviewed digests to the operator command. Digest case and label documents
-with `tools.qualification.vl220.contract.digest` over parsed JSON, the same canonical encoding used for the synthetic set.
+The LFM3-VL-2B invocation, sampling defaults and owner plan from VL-220 still apply. Its current plan digest is
+`fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`. Follow the
+[LFM staging runbook](ai_vl_candidate_staging.md) for the original LFM command. Pass `--ai-root $root` to use the isolated
+runtime installed above.
+
+For Gemma, record the plan digest printed by `describe`, the execution digest from `describe-execution`, and the canonical
+case and label digests. Use `tools.qualification.vl220.contract.digest` over parsed JSON for custom case and label documents.
+If the approved plan changes `--min-image-tokens` or `--max-image-tokens`, specify the same reviewed limits for
+`describe-execution` and `evaluate`.
+
+After review of the exact supervised run, set the corresponding variables and run the Gemma command from the operator shell.
 
 ```powershell
-python -m tools.qualification.vl220 --candidate $candidate evaluate --evaluation-root $root --acknowledgement $ack --cases $casesPath --labels $labelsPath --execution-sha256 $executionSha --case-sha256 $caseSha --label-sha256 $labelSha
+python -m tools.qualification.vl220 --candidate $candidate evaluate --evaluation-root $root --ai-root $root --assets $assetsPath --acknowledgement $ack --evidence-out $evidencePath --i-have-the-plan-digest $planSha --generation-idle --execution-sha256 $executionSha --case-sha256 $caseSha --label-sha256 $labelSha
 ```
 
-The driver passes ordered images and a generated case prompt and schema through private temporary files. It uses the same
-closed CPU-only profile for both candidates, with per-case 180-second and 4,096-context-token bounds. LFM has the original
-6 GiB working-set ceiling. Gemma uses a provisional 12 GiB ceiling because its artifacts alone exceed 6 GiB. The same figures
-cap committed memory in the Windows job object. The adapter reports observed working set, wall time, exit code, validation
-code, argv hash, scores and deterministic floors. The report excludes paths, image bytes, prompt text, output text and stderr.
+The driver passes ordered images, the rendered case prompt, and the schema through private temporary files. Gemma uses
+its bundled Jinja template, 180 seconds and 4,096 context tokens per case by default. Its provisional 12 GiB ceiling also
+caps committed memory in the Windows job object. LFM retains the original 6 GiB evaluation ceiling and VL-220 invocation.
+The evidence records a path-free argv hash, wall time, observed working set, exit code, validation code and scores.
+Gemma evidence includes deterministic floors. The `dry-run` command also prints the synthetic floors.
 
-Runtime compatibility is based on pinned source and artifact inspection. Deterministic tests inject a fake bounded child.
-Actual loading, prompt rendering, constrained decoding, speed, memory use and output quality require separate supervised
-evidence. These candidates carry no qualification or production eligibility.
+Runtime compatibility is based on pinned source and artifact inspection. Tests use fake children. Model loading, prompt
+rendering, constrained decoding, speed, memory use and output quality require supervised evidence. Both candidates remain
+unqualified and operator-only.

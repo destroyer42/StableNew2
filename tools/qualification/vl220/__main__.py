@@ -1,23 +1,33 @@
-"""Operator commands for staged verification, import, readiness and supervised offline evaluation."""
+"""``python -m tools.qualification.vl220 <command>``: operator helpers; exactly one command can launch a model.
+
+Commands: ``describe`` (the plan), ``dry-run`` (validate the synthetic set and score the no-look baselines), ``commands``
+(print the pinned download lines), ``verify-staging`` and ``import`` (D15 operator workflow), ``write-synthetic``, and
+``evaluate``: the supervised, CPU-only visual run of the owner-approved image invocation contract. ``evaluate`` refuses unless
+``--i-have-the-plan-digest`` equals the current plan digest and every admission gate in ``driver.py`` passes; it is never run by
+tests, CI or any gate against the real runtime.
+"""
 
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
 from src.ai_assist.manifests import ImportRefused, import_runtime, load_runtime_manifest
-from tools.qualification.vl220 import contract, driver, plan, staging, synthetic
+from tools.qualification.vl220 import driver, plan, staging, synthetic
 from tools.qualification.vl220.candidates import (
+    GEMMA_CANDIDATE_ID,
     RUNTIME_MANIFEST_PATH,
     CandidateInvalid,
+    VisualCandidate,
     find_candidate,
     has_link,
-    runtime_reasons,
 )
-from tools.qualification.vl220.invocation import InvocationRefused
+from tools.qualification.vl220.visual_argv import VISION_BUILD_ID, VisualLimits
 
 DEFAULT_CANDIDATE = "lfm3-vl-2b-q4_k_m-liquidai"
 
@@ -30,10 +40,103 @@ def _acknowledgement(path: Path | None) -> dict[str, Any] | None:
     if path is None:
         return None
     try:
-        loaded = driver.read_document(path)
+        loaded = _load_json(path)
     except (OSError, ValueError, RecursionError):
         return None
     return loaded if isinstance(loaded, dict) else None
+
+
+def _load_json(path: Path) -> Any:
+    if has_link(path.absolute()) or not path.is_file():
+        raise ValueError("invalid_document_path")
+    max_bytes = 4 * 1024**2
+    with path.open("rb") as handle:
+        raw = handle.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise ValueError("document_too_large")
+    return driver.load_strict_json(raw.decode("utf-8"))
+
+
+def _evaluate(args: argparse.Namespace, candidate: VisualCandidate) -> int:
+    """The one command that can launch the visual runtime. Every refusal here runs nothing."""
+
+    from src.ai_assist.host import GenerationActivity
+    from src.ai_assist.paths import resolve_ai_root
+    from tools.qualification.vl220 import contract
+
+    if contract.INVOCATION_APPROVED is not True:
+        sys.stderr.write(f"refused: {driver.REFUSED_NOT_APPROVED}\n")
+        return 2
+    current = plan.build_plan(candidate)["plan_sha256"]
+    if not hmac.compare_digest(str(args.i_have_the_plan_digest).strip().lower(), current):
+        sys.stderr.write(
+            f"refused: {driver.REFUSED_PLAN_DIGEST} (current plan digest: {current})\n"
+        )
+        return 2
+    if args.evidence_out.exists():
+        sys.stderr.write("refused: evidence file already exists\n")
+        return 2
+    if (args.cases is None) != (args.labels is None):
+        sys.stderr.write("refused: --cases and --labels go together\n")
+        return 2
+    try:
+        if args.cases is None:
+            _, case_doc, label_doc = synthetic.build_synthetic_set()
+        else:
+            case_doc, label_doc = _load_json(args.cases), _load_json(args.labels)
+        case_set = contract.validate_case_set(case_doc)
+        labels = contract.validate_label_set(label_doc, case_set)
+        limits = VisualLimits(
+            image_min_tokens=args.min_image_tokens, image_max_tokens=args.max_image_tokens
+        )
+    except (OSError, ValueError, RecursionError) as exc:
+        sys.stderr.write(f"refused: {exc.__class__.__name__}\n")
+        return 2
+
+    execution = None
+    case_sha = contract.digest(case_doc)
+    label_sha = contract.digest(label_doc)
+    frozen = (args.execution_sha256, args.case_sha256, args.label_sha256)
+    if candidate.candidate_id == GEMMA_CANDIDATE_ID or any(frozen):
+        try:
+            execution = driver.execution_identity(candidate, limits)
+        except (OSError, ValueError):
+            sys.stderr.write("refused: vision_build_refused\n")
+            return 2
+        if frozen != (execution["execution_sha256"], case_sha, label_sha):
+            sys.stderr.write("refused: evaluation_identity_mismatch\n")
+            return 2
+
+    acknowledgement = _acknowledgement(args.acknowledgement)
+    run = driver.VisualDriver(
+        candidate,
+        evaluation_root=args.evaluation_root,
+        ai_root=resolve_ai_root(args.ai_root),
+        assets_dir=args.assets,
+        acknowledgement=acknowledgement,
+        # Another process cannot read the running application's queue: the operator asserts the host is idle, and without
+        # the flag the driver sees no reading and refuses (an unreadable activity is never "idle").
+        activity=(lambda: GenerationActivity()) if args.generation_idle else None,
+        limits=limits,
+    ).run_cases(case_set, labels)
+    document = driver.evidence_document(
+        run, plan_sha256=current, case_set_sha256=case_sha, candidate=candidate
+    )
+    if execution is not None:
+        document.update(execution_sha256=execution["execution_sha256"], label_set_sha256=label_sha)
+    with args.evidence_out.open("x", encoding="utf-8") as handle:
+        json.dump(document, handle, indent=2, sort_keys=True, allow_nan=False)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    if run.refusal is not None:
+        sys.stderr.write(f"refused: {run.refusal}\n")
+        return 1
+    ran = sum(1 for row in run.evidence if row.launched)
+    sys.stdout.write(
+        f"evaluated {ran} of {len(run.evidence)} cases; evidence: {args.evidence_out}\n"
+    )
+    return 0 if run.complete else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -43,23 +146,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate", default=DEFAULT_CANDIDATE)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("describe")
-    sub.add_parser("describe-execution")
     sub.add_parser("dry-run")
+    execution = sub.add_parser("describe-execution")
+    execution.add_argument("--min-image-tokens", type=int, default=64)
+    execution.add_argument("--max-image-tokens", type=int, default=256)
+    status = sub.add_parser("status")
+    status.add_argument("--evaluation-root", type=Path, required=True)
+    status.add_argument("--ai-root", type=Path)
+    status.add_argument("--acknowledgement", type=Path)
+    archive = sub.add_parser("import-runtime")
+    archive.add_argument("--evaluation-root", type=Path, required=True)
+    archive.add_argument("--archive", type=Path, required=True)
     commands = sub.add_parser("commands")
     commands.add_argument("--dest", required=True)
-    for name in ("status", "import-runtime", "evaluate"):
-        item = sub.add_parser(name)
-        item.add_argument("--evaluation-root", type=Path, required=True)
-        if name == "import-runtime":
-            item.add_argument("--archive", type=Path, required=True)
-        else:
-            item.add_argument("--acknowledgement", type=Path)
-        if name == "evaluate":
-            item.add_argument("--cases", type=Path, required=True)
-            item.add_argument("--labels", type=Path, required=True)
-            item.add_argument("--execution-sha256", required=True)
-            item.add_argument("--case-sha256", required=True)
-            item.add_argument("--label-sha256", required=True)
     for name in ("verify-staging", "import"):
         item = sub.add_parser(name)
         item.add_argument("--staging", type=Path, required=True)
@@ -69,63 +168,82 @@ def main(argv: list[str] | None = None) -> int:
             item.add_argument("--evaluation-root", type=Path, required=True)
     synth = sub.add_parser("write-synthetic")
     synth.add_argument("--dest", type=Path, required=True)
+    evaluate = sub.add_parser("evaluate", description=_evaluate.__doc__)
+    evaluate.add_argument("--evaluation-root", type=Path, required=True)
+    evaluate.add_argument("--assets", type=Path, required=True)
+    evaluate.add_argument("--acknowledgement", type=Path, required=True)
+    evaluate.add_argument("--evidence-out", type=Path, required=True)
+    evaluate.add_argument(
+        "--i-have-the-plan-digest",
+        required=True,
+        help="must equal the current plan digest (see `describe`)",
+    )
+    evaluate.add_argument(
+        "--generation-idle",
+        action="store_true",
+        help="assert that no generation is running on this host (a separate process cannot read the queue)",
+    )
+    evaluate.add_argument("--ai-root", type=Path, default=None)
+    evaluate.add_argument("--cases", type=Path, default=None)
+    evaluate.add_argument("--labels", type=Path, default=None)
+    evaluate.add_argument("--min-image-tokens", type=int, default=64)
+    evaluate.add_argument("--max-image-tokens", type=int, default=256)
+    evaluate.add_argument("--execution-sha256")
+    evaluate.add_argument("--case-sha256")
+    evaluate.add_argument("--label-sha256")
     args = parser.parse_args(argv)
     try:
         candidate = find_candidate(args.candidate)
     except CandidateInvalid as exc:
         sys.stderr.write(f"refused: {exc}\n")
         return 2
-    if args.command == "describe-execution":
-        _print(driver.execution_identity(candidate))
-    elif args.command in {"status", "import-runtime", "evaluate"}:
+    if args.command == "describe":
+        _print(plan.build_plan(candidate))
+    elif args.command == "describe-execution":
         try:
-            root = staging.evaluation_root(args.evaluation_root)
-            if args.command == "import-runtime":
-                manifest = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
-                build_id = candidate.runtime.required_build_id
-                build = manifest.find(build_id)
-                if build is None or runtime_reasons(candidate, build_id, manifest):
-                    raise InvocationRefused("runtime_build_not_pinned_or_compatible")
-                if has_link(args.archive) or has_link(root / "runtimes" / build_id):
-                    raise InvocationRefused("unsafe_link_or_nonregular_file")
-                if not args.archive.is_file():
-                    raise InvocationRefused("runtime_archive_missing")
-                _print({"installed_runtime": str(import_runtime(args.archive, build, root))})
-            elif args.command == "status":
-                result = driver.readiness(root, candidate, _acknowledgement(args.acknowledgement))
-                _print(result)
-                return 0 if result["launch_prerequisites_met"] else 1
-            else:
-                result = driver.evaluate(
-                    candidate.candidate_id,
-                    root,
-                    args.cases,
-                    args.labels,
-                    _acknowledgement(args.acknowledgement),
-                    execution_sha256=args.execution_sha256,
-                    case_sha256=args.case_sha256,
-                    label_sha256=args.label_sha256,
+            _print(
+                driver.execution_identity(
+                    candidate,
+                    VisualLimits(
+                        image_min_tokens=args.min_image_tokens,
+                        image_max_tokens=args.max_image_tokens,
+                    ),
                 )
-                _print(result)
-                return 0 if result["complete"] else 1
-        except contract.ContractViolation as exc:
-            sys.stderr.write(f"refused: {exc.code}\n")
-            return 1
-        except (staging.StagingRefused, ImportRefused, InvocationRefused) as exc:
+            )
+        except (OSError, ValueError):
+            sys.stderr.write("refused: execution_profile_invalid\n")
+            return 2
+    elif args.command == "status":
+        status_report = driver.readiness(
+            candidate,
+            evaluation_root=args.evaluation_root,
+            ai_root=args.ai_root if args.ai_root is not None else args.evaluation_root,
+            acknowledgement=_acknowledgement(args.acknowledgement),
+        )
+        _print(status_report)
+        return 0 if status_report["launch_prerequisites_met"] else 1
+    elif args.command == "import-runtime":
+        try:
+            root = staging.resolve_evaluation_root(args.evaluation_root)
+            manifest = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
+            build = manifest.find(VISION_BUILD_ID)
+            if build is None or manifest.problems or build.qualified:
+                raise ImportRefused("visual_runtime_not_pinned")
+            if has_link(args.archive.absolute()) or has_link(root / "runtimes" / build.build_id):
+                raise ImportRefused("unsafe_link_or_nonregular_file")
+            _print({"installed_runtime": str(import_runtime(args.archive, build, root))})
+        except (ImportRefused, staging.StagingRefused) as exc:
             sys.stderr.write(f"refused: {exc}\n")
             return 1
-        except (OSError, ValueError, RecursionError):
-            sys.stderr.write("refused: invalid_evaluation_input_or_io_error\n")
+        except OSError:
+            sys.stderr.write("refused: import_io_error\n")
             return 1
-        except KeyboardInterrupt:
-            sys.stderr.write("refused: cancelled\n")
-            return 130
-    elif args.command == "describe":
-        _print(plan.build_plan(candidate))
     elif args.command == "dry-run":
         _print(plan.dry_run())
     elif args.command == "commands":
         sys.stdout.write("\n".join(staging.download_commands(candidate, args.dest)) + "\n")
+    elif args.command == "evaluate":
+        return _evaluate(args, candidate)
     elif args.command == "verify-staging":
         report = staging.stage_report(
             candidate,

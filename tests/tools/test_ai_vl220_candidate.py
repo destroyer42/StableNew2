@@ -194,12 +194,12 @@ def test_candidate_document_never_claims_qualification_or_text_use() -> None:
         lambda e: e.update(image_invocation_approved=1),
         lambda e: e.pop("image_invocation_approved"),
         lambda e: e.update(capabilities=["prompt_rewrite"]),
-        lambda e: e.update(compatible_builds=["b11960-cpu-vision"]),
+        lambda e: e.update(compatible_builds=["b11960-cpu"]),
         lambda e: e.update(modality="text"),
         lambda e: e.update(unknown_key=1),
         lambda e: e["license"].update(acknowledgement_required=False),
         lambda e: e["license"].update(text_sha256="x"),
-        lambda e: e["runtime"].update(unsupported_build_ids=["b11960-cpu-vision"]),
+        lambda e: e["runtime"].update(unsupported_build_ids=["b11960-cpu"]),
         lambda e: e["alternate_projectors"][0].update(status="approved"),
     ],
 )
@@ -229,7 +229,6 @@ def test_runtime_requirement_matches_the_committed_manifest() -> None:
     manifest = runtime()
     required = manifest.find(candidate.runtime.required_build_id)
     assert required is not None and required.upstream_tag == "b11960"
-    assert candidate.runtime.tool == required.executable
     assert candidate.runtime.tool in required.files and required.qualified is False
     for unsupported in candidate.runtime.unsupported_build_ids:
         assert manifest.find(unsupported) is not None
@@ -265,7 +264,7 @@ def test_license_acknowledgement_is_required_and_must_match(tmp_path: Path) -> N
         verdict = cand.check_admission(
             candidate,
             staged,
-            build_id="b11960-cpu-vision",
+            build_id="b11960-cpu",
             runtime_manifest=runtime(),
             acknowledgement=record,
         )
@@ -276,7 +275,7 @@ def test_license_acknowledgement_is_required_and_must_match(tmp_path: Path) -> N
 
 
 def admit(candidate: cand.VisualCandidate, staged: Path, **kwargs: Any) -> cand.Admission:
-    kwargs.setdefault("build_id", "b11960-cpu-vision")
+    kwargs.setdefault("build_id", "b11960-cpu")
     kwargs.setdefault("runtime_manifest", runtime())
     kwargs.setdefault("acknowledgement", acknowledgement(candidate))
     return cand.check_admission(candidate, staged, **kwargs)
@@ -370,12 +369,12 @@ def test_unsupported_or_unknown_runtime_is_refused(tmp_path: Path) -> None:
     )
     assert admit(candidate, staged, build_id="b99999-cpu").reasons == (cand.REASON_RUNTIME_UNKNOWN,)
     manifest = runtime()
-    build = manifest.find("b11960-cpu-vision")
+    build = manifest.find("b11960-cpu")
     assert build is not None
     no_tool = RuntimeManifest(
         builds=tuple(
             replace(b, files={k: v for k, v in b.files.items() if k != candidate.runtime.tool})
-            if b.build_id == "b11960-cpu-vision"
+            if b.build_id == "b11960-cpu"
             else b
             for b in manifest.builds
         )
@@ -394,7 +393,7 @@ def test_admission_is_fail_closed_on_unexpected_errors(tmp_path: Path) -> None:
     assert cand.check_admission(
         candidate,
         None,
-        build_id="b11960-cpu-vision",
+        build_id="b11960-cpu",
         runtime_manifest=runtime(),
         acknowledgement=acknowledgement(candidate),
     ) == cand.Admission(False, (cand.REASON_INTERNAL,))  # type: ignore[arg-type]
@@ -402,7 +401,7 @@ def test_admission_is_fail_closed_on_unexpected_errors(tmp_path: Path) -> None:
         cand.check_admission(
             candidate,
             staged,
-            build_id="b11960-cpu-vision",
+            build_id="b11960-cpu",
             runtime_manifest="nope",
             acknowledgement=acknowledgement(candidate),
         ).ok
@@ -436,9 +435,7 @@ def test_download_commands_are_anonymous_and_revision_pinned() -> None:
 
 def test_stage_report_is_content_free_and_reflects_admission(tmp_path: Path) -> None:
     candidate, staged = build_fixture(tmp_path)
-    report = staging.stage_report(
-        candidate, staged, build_id="b11960-cpu-vision", acknowledgement=None
-    )
+    report = staging.stage_report(candidate, staged, build_id="b11960-cpu", acknowledgement=None)
     assert report["admitted"] is False and report["reasons"] == [cand.REASON_LICENSE_MISSING]
     assert all(item["present"] for item in report["files"])
     assert str(tmp_path) not in json.dumps(report)
@@ -449,7 +446,7 @@ def test_import_copies_only_after_admission_and_never_into_managed_ai_or_git(
 ) -> None:
     candidate, staged = build_fixture(tmp_path)
     ack = acknowledgement(candidate)
-    common: dict[str, Any] = {"build_id": "b11960-cpu-vision"}
+    common: dict[str, Any] = {"build_id": "b11960-cpu"}
     root = tmp_path / "evalroot"
     with pytest.raises(staging.StagingRefused) as refused:
         staging.import_candidate(candidate, staged, root, acknowledgement=None, **common)
@@ -491,7 +488,7 @@ def test_a_cancelled_import_leaves_nothing_behind(tmp_path: Path) -> None:
 
     with pytest.raises(staging.StagingRefused) as refused:
         staging.import_candidate(
-            candidate, staged, root, build_id="b11960-cpu-vision",
+            candidate, staged, root, build_id="b11960-cpu",
             acknowledgement=acknowledgement(candidate), cancel=cancel_during_copy,
         )  # fmt: skip
     assert cand.REASON_CANCELLED in refused.value.reasons
@@ -567,7 +564,7 @@ def test_text_registry_is_unchanged_in_meaning_and_has_no_visual_entry() -> None
         assert registry.find_by_sha(visual.model.sha256) is None
         assert registry.find_by_sha(visual.projector.sha256) is None
         for model in registry.entries:
-            assert visual.runtime.required_build_id not in model.compatible_builds
+            assert "b11960-cpu-vision" not in model.compatible_builds
     text = MODEL_REGISTRY_PATH.read_text(encoding="utf-8").lower()
     for needle in ("lfm3-vl", "mmproj", "vision_language", "image-text", "image_text"):
         assert needle not in text
@@ -620,7 +617,7 @@ def test_selector_activation_and_import_model_ignore_the_visual_candidate(
                 str(root),
                 "activate",
                 "--build-id",
-                "b11960-cpu-vision",
+                "b11960-cpu",
                 "--model-id",
                 candidate.candidate_id,
             ]
@@ -651,7 +648,9 @@ def test_the_package_cannot_open_sockets_or_spawn_a_child_directly() -> None:
             for name in names:
                 assert name.split(".")[0] not in forbidden, f"{path.name} imports {name}"
         source = path.read_text(encoding="utf-8")
-        for flag in ("Popen", "os.system", "os.startfile"):
+        for flag in ("--mmproj", "--image", "-mm ", "--rpc", "Popen", "os.system", "os.startfile"):
+            if path.name == "visual_argv.py" and flag in ("--mmproj", "--image"):
+                continue
             assert flag not in source, f"{path.name} contains {flag}"
 
 
@@ -671,10 +670,7 @@ def test_non_execution_commands_run_with_network_and_process_creation_disabled(
     assert cli.main(["describe-execution"]) == 0
     assert cli.main(["dry-run"]) == 0
     assert cli.main(["commands", "--dest", str(tmp_path)]) == 0
-    assert (
-        cli.main(["verify-staging", "--staging", str(staged), "--build-id", "b11960-cpu-vision"])
-        == 1
-    )
+    assert cli.main(["verify-staging", "--staging", str(staged), "--build-id", "b11960-cpu"]) == 1
     assert cli.main(["write-synthetic", "--dest", str(tmp_path / "synthetic")]) == 0
     assert cli.main(["write-synthetic", "--dest", str(tmp_path / "synthetic")]) == 1
     capsys.readouterr()

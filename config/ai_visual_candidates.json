@@ -67,10 +67,9 @@
         }
       ],
       "runtime": {
-        "required_build_id": "b11960-cpu-vision",
+        "required_build_id": "b11960-cpu",
         "unsupported_build_ids": [
-          "b11840-cpu",
-          "b11960-cpu"
+          "b11840-cpu"
         ],
         "tool": "llama-mtmd-cli.exe",
         "basis": "CPU x64 b11960 implements lfm3vl. The separately pinned vision entry uses llama-mtmd-cli.exe."
@@ -130,10 +129,9 @@
         "selection_basis": "Google ships this pair at one revision. Headers agree on base name (Gemma 4 12B It) and width (3840)."
       },
       "runtime": {
-        "required_build_id": "b11960-cpu-vision",
+        "required_build_id": "b11960-cpu",
         "unsupported_build_ids": [
-          "b11840-cpu",
-          "b11960-cpu"
+          "b11840-cpu"
         ],
         "tool": "llama-mtmd-cli.exe",
         "basis": "b11960 source has the gemma4 language model and gemma4uv clip graph; the vision adapter uses the bundled chat template."
