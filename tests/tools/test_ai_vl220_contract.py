@@ -462,9 +462,16 @@ def test_comparator_eligibility_is_explicit_about_what_exists_today() -> None:
         assert table[text_only]["eligible"] is False and table[text_only]["dimensions"] == []
     assert "mmproj_flag_is_forbidden" in table["qwen3.5-text-gguf"]["reasons"]
     candidate = table["lfm3-vl-2b-q4_k_m-liquidai"]
+    # The invocation is approved and implemented (PR-AI-VL-220 driver); the candidate stays ineligible until the owner's license
+    # acknowledgement and an evaluation-root import exist.
     assert (
-        candidate["eligible"] is False and "image_invocation_not_approved" in candidate["reasons"]
+        candidate["eligible"] is False
+        and "image_invocation_not_approved" not in candidate["reasons"]
     )
+    assert set(candidate["reasons"]) == {
+        "license_not_acknowledged",
+        "not_imported_into_an_evaluation_root",
+    }
 
 
 def test_comparator_names_match_the_existing_smart_review_capabilities() -> None:
@@ -477,11 +484,11 @@ def test_comparator_names_match_the_existing_smart_review_capabilities() -> None
     )
 
 
-def test_plan_is_deterministic_runs_nothing_and_holds_the_invocation() -> None:
+def test_plan_is_deterministic_runs_nothing_and_records_the_approved_invocation() -> None:
     first = plan.build_plan()
     assert first == plan.build_plan() and len(first["plan_sha256"]) == 64
     assert first["executes_models"] is False
-    assert first["image_invocation"]["approved"] is False and contract.INVOCATION_APPROVED is False
+    assert first["image_invocation"]["approved"] is True and contract.INVOCATION_APPROVED is True
     assert (
         first["candidate"]["qualified"] is False
         and first["candidate"]["required_build_id"] == "b11960-cpu"

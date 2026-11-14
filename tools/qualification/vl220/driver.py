@@ -1,0 +1,722 @@
+"""The supervised visual evaluation driver (PR-AI-VL-220, owner-approved image invocation contract of 2026-11-14).
+
+One bounded, contained, CPU-only ``llama-mtmd-cli.exe`` child per case, launched only through
+:func:`src.utils.managed_process.run_bounded`: this module has no ``subprocess``, thread or socket code of its own, and the
+tests prove it (an import scan, and a run with sockets and process creation patched to fail around the fake child).
+
+Everything is fail-closed and happens before every launch, in this order, each refusal a stable code that runs nothing:
+
+1. the contract's ``INVOCATION_APPROVED`` flag (and, in the CLI, the owner's plan digest);
+2. the evaluation root is not the AI Assist root and not a Git working tree, and a single-flight lock (an exclusive lock file,
+   so a second driver in this or another process is refused rather than queued) is taken;
+3. generation is idle (an injected reading; an unreadable one is a refusal, never "idle");
+4. the ``b11960-cpu-vision`` build entry is pinned, is hash-identical to the required ``b11960-cpu`` build, carries
+   ``llama-mtmd-cli.exe``, is unqualified and is listed by no model; the unpacked runtime re-hashes to its pins; and the
+   operator's attestation covers ``(b11960-cpu-vision, llama-mtmd-cli.exe)``;
+5. host memory headroom for the model, the projector and a margin;
+6. every image is a pinned PNG or JPEG of at most 8 MiB and 4096 x 4096 (header read only), copied to a private work directory;
+7. :func:`tools.qualification.vl220.candidates.check_admission`: pinned bytes, matching GGUF headers, the required build and the
+   owner's license acknowledgement.
+
+Only then is the closed vocabulary of :mod:`tools.qualification.vl220.visual_argv` built and the child launched with a scrubbed
+environment. Output is stdout only and bounded; it is decoded, checked with a strict ``json.loads`` (no duplicate keys, no
+``NaN``) and then :func:`tools.qualification.vl220.contract.validate_response`.
+
+Evidence is timing, peak memory, the path-free argv hash, the exit code and a reason code. No image, prompt or answer text is
+written anywhere: the prompt and images exist only in a per-case work directory that is removed when the case ends, and the
+raw answers stay in memory long enough to be scored. The driver writes nothing under the AI Assist root, records no
+attestation, creates no firewall rule and never writes the license acknowledgement.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import shutil
+import time
+import uuid
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from src.ai_assist.activation import runtime_import_problem
+from src.ai_assist.argv import build_environment
+from src.ai_assist.attestation import attestation_covers
+from src.ai_assist.host import (
+    GenerationActivity,
+    HostMemory,
+    checked_activity,
+    checked_memory,
+    read_host_memory,
+)
+from src.ai_assist.manifests import (
+    ModelRegistry,
+    RuntimeBuild,
+    RuntimeManifest,
+    load_model_registry,
+    load_runtime_manifest,
+)
+from src.ai_assist.observe import ChildObserver
+from src.ai_assist.paths import runtime_dir
+from src.ai_assist.runtime import CommandFactory, Runner, default_command, strip_end_of_text
+from src.utils.managed_process import run_bounded
+from tools.qualification.vl220 import contract, scoring, staging
+from tools.qualification.vl220.candidates import (
+    REASON_CANCELLED,
+    REPO_ROOT,
+    RUNTIME_MANIFEST_PATH,
+    CancelCheck,
+    VisualCandidate,
+    check_admission,
+)
+from tools.qualification.vl220.contract import (
+    Asset,
+    Case,
+    CaseSet,
+    LabelSet,
+    Measurement,
+    ResourceLimits,
+)
+from tools.qualification.vl220.prompts import render_visual_prompt
+from tools.qualification.vl220.visual_argv import (
+    MAX_IMAGE_BYTES,
+    VISION_BUILD_ID,
+    VISION_TOOL,
+    VisualArgvRefused,
+    VisualLimits,
+    VisualSampling,
+    argv_shape_digest,
+    build_visual_argv,
+    inspect_image,
+)
+
+logger = logging.getLogger(__name__)
+
+MODEL_REGISTRY_PATH = REPO_ROOT / "config" / "ai_model_registry.json"
+EVIDENCE_SCHEMA = "stablenew.vl220.evidence/1"
+
+_GIB = 1024**3
+#: The same margins the production service uses before a launch and while a child runs.
+MEMORY_MARGIN_GIB = 4.0
+GUARD_AVAILABLE_GIB = 0.25
+GUARD_COMMIT_HEADROOM_GIB = 1.0
+GUARD_CONSECUTIVE = 2
+WATCH_INTERVAL_SECONDS = 1.0
+
+LOCK_NAME = "vl220.lock"
+WORK_NAME = "_work"
+
+# --- refusal codes (nothing was launched) -------------------------------------------------------------------------------
+REFUSED_NOT_APPROVED = "invocation_not_approved"
+REFUSED_PLAN_DIGEST = "plan_digest_mismatch"
+REFUSED_ROOT = "evaluation_root_refused"
+REFUSED_BUSY = "another_evaluation_active"
+REFUSED_ACTIVITY = "activity_unreadable"
+REFUSED_GENERATION = "generation_running"
+REFUSED_QUARANTINE = "gpu_quarantine"
+REFUSED_VISION_BUILD = "vision_build_refused"
+REFUSED_RUNTIME = "runtime_not_verified"
+REFUSED_ATTESTATION = "egress_not_attested"
+REFUSED_MEMORY_UNREADABLE = "memory_unreadable"
+REFUSED_MEMORY = "available_ram_below_requirement"
+REFUSED_COMMIT = "commit_headroom_below_requirement"
+REFUSED_IMAGE = "image_refused"
+REFUSED_CANDIDATE = "candidate_not_admitted"
+REFUSED_ARGV = "argv_refused"
+REFUSED_SCRATCH = "scratch_unavailable"
+REFUSED_CANCELLED = "cancelled"
+
+# --- per-case status ----------------------------------------------------------------------------------------------------
+STATUS_VALID = "valid"
+STATUS_MODEL_REFUSED = "model_refused"
+STATUS_INVALID = "invalid"
+STATUS_NOT_RUN = "not_run"
+STATUS_TIMEOUT = "timeout"
+STATUS_CANCELLED = "cancelled"
+STATUS_TOO_LARGE = "output_too_large"
+STATUS_CHILD_FAILED = "child_exit_nonzero"
+STATUS_LAUNCH_FAILED = "launch_failed"
+
+ActivityReader = Callable[[], GenerationActivity]
+MemoryReader = Callable[[], HostMemory | None]
+
+
+@dataclass(frozen=True, slots=True)
+class Refusal:
+    """Admission said no and nothing ran. ``code`` is stable; ``reasons`` carries sub-codes (admission reasons)."""
+
+    code: str
+    reasons: tuple[str, ...] = ()
+
+    def __str__(self) -> str:
+        return self.code if not self.reasons else f"{self.code}: {', '.join(self.reasons)}"
+
+
+@dataclass(frozen=True, slots=True)
+class CaseEvidence:
+    """Everything kept about one case: timing, memory, the path-free argv hash, the exit code and a reason code."""
+
+    case_id: str
+    status: str
+    reason: str = ""
+    wall_seconds: float = 0.0
+    peak_working_set_bytes: int = 0
+    peak_private_bytes: int = 0
+    exit_code: int | None = None
+    argv_shape_sha256: str = ""
+    context_tokens: int = 0
+    cpu_only: bool = True
+
+    def record(self) -> dict[str, Any]:
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+    @property
+    def launched(self) -> bool:
+        return bool(self.argv_shape_sha256) and self.status not in (
+            STATUS_NOT_RUN,
+            STATUS_LAUNCH_FAILED,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CaseRun:
+    evidence: CaseEvidence
+    #: The child's raw answer, in memory only so it can be scored; never written by this module.
+    text: str = field(default="", repr=False, compare=False)
+    refusal: Refusal | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationRun:
+    evidence: tuple[CaseEvidence, ...]
+    refusal: Refusal | None = None
+    #: Aggregate numbers only (``scoring.score_run``); ``None`` when the run was refused or cancelled.
+    report: Mapping[str, Any] | None = None
+    complete: bool = False
+
+
+# ----------------------------------------------------------------------------------------------------- pure admission
+
+
+def vision_build_reasons(
+    manifest: RuntimeManifest, registry: ModelRegistry, candidate: VisualCandidate
+) -> list[str]:
+    """Why ``b11960-cpu-vision`` may not carry the candidate. Empty only when the entry is pinned, is a hash-identical twin of the
+    required build, names ``llama-mtmd-cli.exe``, is unqualified and no model can reach it."""
+
+    build = manifest.find(VISION_BUILD_ID)
+    twin = manifest.find(candidate.runtime.required_build_id)
+    if manifest.problems or registry.problems:
+        return ["manifest_or_registry_invalid"]
+    if build is None or twin is None:
+        return ["vision_build_not_pinned"]
+    reasons: list[str] = []
+    if (
+        build.asset_sha256 != twin.asset_sha256
+        or build.asset_bytes != twin.asset_bytes
+        or build.asset_name != twin.asset_name
+        or build.upstream_tag != twin.upstream_tag
+        or dict(build.files) != dict(twin.files)
+    ):
+        reasons.append("vision_build_differs_from_required_build")
+    if (
+        build.executable != VISION_TOOL
+        or build.executable != candidate.runtime.tool
+        or VISION_TOOL not in build.files
+    ):
+        reasons.append("vision_build_wrong_executable")
+    if build.qualified is not False:
+        reasons.append("vision_build_qualified")
+    if any(VISION_BUILD_ID in entry.compatible_builds for entry in registry.entries):
+        reasons.append("vision_build_listed_by_a_model")
+    return reasons
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"non-finite constant {name}")
+
+
+def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate key")
+        result[key] = value
+    return result
+
+
+def strict_json(text: str) -> bool:
+    """Whether ``text`` is exactly one JSON document with no duplicate keys and no ``NaN``/``Infinity``."""
+
+    try:
+        json.loads(text, parse_constant=_reject_constant, object_pairs_hook=_no_duplicate_keys)
+    except (ValueError, RecursionError):
+        return False
+    return True
+
+
+def check_output(case: Case, stdout: bytes) -> tuple[str, contract.ResponseCheck, str]:
+    """``(status, check, text)`` for a successful child's stdout: strip one trailing end-of-text marker, decode, strict
+    ``json.loads``, then the contract validator."""
+
+    try:
+        text = strip_end_of_text(stdout).decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return STATUS_INVALID, contract.ResponseCheck("invalid", "not_utf8", {}), ""
+    if not strict_json(text):
+        return STATUS_INVALID, contract.ResponseCheck("invalid", "not_json", {}), text
+    check = contract.validate_response(case, text)
+    if check.status == "valid":
+        return STATUS_VALID, check, text
+    if check.status == "refused":
+        return STATUS_MODEL_REFUSED, check, text
+    return STATUS_INVALID, check, text
+
+
+class _Watch:
+    """The ``cancel`` callable handed to ``run_bounded``: the caller's token, the memory/process observer, and generation and
+    host-memory guards. The first reason that fires is kept and the child's tree is killed by the launcher."""
+
+    def __init__(
+        self,
+        *,
+        token: Callable[[], bool],
+        observer: ChildObserver,
+        activity: ActivityReader,
+        memory: MemoryReader,
+        clock: Callable[[], float],
+        interval: float,
+    ) -> None:
+        self._token, self._observer = token, observer
+        self._activity, self._memory = activity, memory
+        self._clock, self._interval = clock, interval
+        self._last = clock()
+        self._strikes = 0
+        self.reason = ""
+
+    def __call__(self) -> bool:
+        if self.reason:
+            return True
+        try:
+            if self._token():
+                self.reason = "request_cancelled"
+                return True
+        except Exception:  # noqa: BLE001 - an unreadable token is a stop, never a pass
+            self.reason = "cancel_token_error"
+            return True
+        reason = self._observer.poll()
+        if reason is not None:
+            self.reason = reason
+            return True
+        now = self._clock()
+        if now - self._last < self._interval:
+            return False
+        self._last = now
+        try:
+            activity = checked_activity(self._activity())
+        except Exception:  # noqa: BLE001
+            activity = None
+        if activity is None:
+            self.reason = REFUSED_ACTIVITY
+        elif activity.running_jobs > 0:
+            self.reason = REFUSED_GENERATION
+        elif activity.gpu_quarantined:
+            self.reason = REFUSED_QUARANTINE
+        if self.reason:
+            return True
+        try:
+            memory = checked_memory(self._memory())
+        except Exception:  # noqa: BLE001
+            memory = None
+        clear = (
+            memory is not None
+            and memory.available_gib >= GUARD_AVAILABLE_GIB
+            and memory.commit_headroom_gib >= GUARD_COMMIT_HEADROOM_GIB
+        )
+        self._strikes = 0 if clear else self._strikes + 1
+        if self._strikes >= GUARD_CONSECUTIVE:
+            self.reason = "memory_guard"
+            return True
+        return False
+
+
+_MEDIA_SUFFIX = {"image/png": ".png", "image/jpeg": ".jpg"}
+
+
+class VisualDriver:
+    """Runs pinned visual cases one at a time. Construct it, then call :meth:`run_case` or :meth:`run_cases`."""
+
+    def __init__(
+        self,
+        candidate: VisualCandidate,
+        *,
+        evaluation_root: Path,
+        ai_root: Path,
+        assets_dir: Path,
+        acknowledgement: Mapping[str, Any] | None,
+        activity: ActivityReader | None,
+        runtime_manifest: RuntimeManifest | None = None,
+        registry: ModelRegistry | None = None,
+        memory_probe: MemoryReader = read_host_memory,
+        clock: Callable[[], float] = time.monotonic,
+        environ: Mapping[str, str] | None = None,
+        command_factory: CommandFactory = default_command,
+        runner: Runner = run_bounded,
+        limits: VisualLimits | None = None,
+        sampling: VisualSampling | None = None,
+        cancel: CancelCheck | None = None,
+        watch_interval: float = WATCH_INTERVAL_SECONDS,
+    ) -> None:
+        self._candidate = candidate
+        self._root = Path(evaluation_root)
+        self._ai_root = Path(ai_root)
+        self._assets = Path(assets_dir)
+        self._ack = acknowledgement
+        self._activity = activity
+        self._manifest = runtime_manifest
+        self._registry = registry
+        self._memory = memory_probe
+        self._clock = clock
+        self._environ = os.environ if environ is None else environ
+        self._command_factory = command_factory
+        self._runner = runner
+        self._limits = limits if limits is not None else VisualLimits()
+        self._sampling = sampling if sampling is not None else VisualSampling()
+        self._cancel: CancelCheck = cancel if cancel is not None else (lambda: False)
+        self._interval = watch_interval
+
+    # -- locations ------------------------------------------------------------------------------------------------------
+
+    @property
+    def staged_dir(self) -> Path:
+        """Where ``import`` put the pair: ``<root>/<candidate id>/<model sha prefix>``."""
+
+        return self._root / self._candidate.candidate_id / self._candidate.model.sha256[:16]
+
+    # -- admission ------------------------------------------------------------------------------------------------------
+
+    def _acquire(self) -> Path | None:
+        path = self._root / LOCK_NAME
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        except OSError:  # exists (another evaluation, or a stale lock the operator must remove) or cannot be made
+            return None
+        return path
+
+    def _activity_refusal(self) -> Refusal | None:
+        if self._activity is None:
+            return Refusal(REFUSED_ACTIVITY)
+        try:
+            activity = checked_activity(self._activity())
+        except Exception:  # noqa: BLE001 - no answer is never "idle"
+            activity = None
+        if activity is None:
+            return Refusal(REFUSED_ACTIVITY)
+        if activity.running_jobs > 0:
+            return Refusal(REFUSED_GENERATION)
+        if activity.gpu_quarantined:
+            return Refusal(REFUSED_QUARANTINE)
+        return None
+
+    def _runtime_refusal(
+        self,
+    ) -> tuple[Refusal | None, RuntimeBuild | None, RuntimeManifest | None]:
+        try:
+            manifest = (
+                self._manifest
+                if self._manifest is not None
+                else load_runtime_manifest(RUNTIME_MANIFEST_PATH)
+            )
+            registry = (
+                self._registry
+                if self._registry is not None
+                else load_model_registry(MODEL_REGISTRY_PATH)
+            )
+            reasons = vision_build_reasons(manifest, registry, self._candidate)
+            if reasons:
+                return Refusal(REFUSED_VISION_BUILD, tuple(reasons)), None, manifest
+            build = manifest.find(VISION_BUILD_ID)
+            assert build is not None
+            problem = runtime_import_problem(self._ai_root, build, deep=True)
+            if problem:
+                return Refusal(REFUSED_RUNTIME, (problem,)), None, manifest
+            if not attestation_covers(self._ai_root, build.build_id, build.executable):
+                return Refusal(REFUSED_ATTESTATION), None, manifest
+            return None, build, manifest
+        except Exception:  # noqa: BLE001 - admission is fail-closed
+            return Refusal(REFUSED_VISION_BUILD, ("admission_error",)), None, None
+
+    def _memory_refusal(self) -> Refusal | None:
+        needed = self._candidate.download_bytes / _GIB + MEMORY_MARGIN_GIB
+        try:
+            memory = checked_memory(self._memory())
+        except Exception:  # noqa: BLE001
+            memory = None
+        if memory is None:
+            return Refusal(REFUSED_MEMORY_UNREADABLE)
+        if not memory.available_gib >= needed:
+            return Refusal(REFUSED_MEMORY)
+        if not memory.commit_headroom_gib >= needed:
+            return Refusal(REFUSED_COMMIT)
+        return None
+
+    def _stage_images(
+        self, case: Case, assets: Mapping[str, Asset], scratch: Path
+    ) -> list[Path] | Refusal:
+        """Copy each pinned image into the private work directory after proving its pin, then read its header."""
+
+        staged: list[Path] = []
+        for position, asset_id in enumerate(case.asset_ids):
+            asset = assets.get(asset_id)
+            if asset is None:
+                return Refusal(REFUSED_IMAGE, ("unknown_asset",))
+            source = self._assets / f"{asset.asset_id}{_MEDIA_SUFFIX[asset.media_type]}"
+            try:
+                if not source.is_file():
+                    return Refusal(REFUSED_IMAGE, ("image_missing",))
+                if not 0 < source.stat().st_size <= MAX_IMAGE_BYTES:
+                    return Refusal(REFUSED_IMAGE, ("image_size_out_of_range",))
+                data = source.read_bytes()
+            except OSError:
+                return Refusal(REFUSED_IMAGE, ("image_unreadable",))
+            if len(data) != asset.bytes or hashlib.sha256(data).hexdigest() != asset.sha256:
+                return Refusal(REFUSED_IMAGE, ("image_does_not_match_its_pin",))
+            target = scratch / f"image_{position}{_MEDIA_SUFFIX[asset.media_type]}"
+            target.write_bytes(data)
+            try:
+                media, _, _ = inspect_image(target)
+            except VisualArgvRefused as exc:
+                return Refusal(REFUSED_IMAGE, (exc.code,))
+            if media != asset.media_type:
+                return Refusal(REFUSED_IMAGE, ("image_media_type_mismatch",))
+            staged.append(target)
+        return staged
+
+    # -- one case -------------------------------------------------------------------------------------------------------
+
+    def run_case(self, case_set: CaseSet, case: Case) -> CaseRun:
+        """Admit and (only if every gate passes) run one case. Never raises; a refusal runs nothing."""
+
+        try:
+            return self._run_case(case_set, case)
+        except Exception:  # noqa: BLE001 - fail closed: an unexpected problem is a refusal that launched nothing
+            logger.warning("Visual case could not be run", exc_info=True)
+            return _refused(case, Refusal(REFUSED_SCRATCH, ("unexpected_error",)))
+
+    def _run_case(self, case_set: CaseSet, case: Case) -> CaseRun:
+        if contract.INVOCATION_APPROVED is not True:
+            return _refused(case, Refusal(REFUSED_NOT_APPROVED))
+        if self._cancel():
+            return _refused(case, Refusal(REFUSED_CANCELLED))
+        refused_root = staging.root_refusal(self._root)
+        if refused_root or not self._root.is_dir():
+            return _refused(
+                case, Refusal(REFUSED_ROOT, (refused_root or "evaluation_root_missing",))
+            )
+        lock = self._acquire()
+        if lock is None:
+            return _refused(case, Refusal(REFUSED_BUSY))
+        scratch = self._root / WORK_NAME / uuid.uuid4().hex
+        try:
+            return self._admitted_run(case_set, case, scratch)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+            lock.unlink(missing_ok=True)
+
+    def _admitted_run(self, case_set: CaseSet, case: Case, scratch: Path) -> CaseRun:
+        refusal = self._activity_refusal()
+        if refusal is not None:
+            return _refused(case, refusal)
+        refusal, build, manifest = self._runtime_refusal()
+        if refusal is not None or build is None or manifest is None:
+            return _refused(case, refusal or Refusal(REFUSED_VISION_BUILD))
+        refusal = self._memory_refusal()
+        if refusal is not None:
+            return _refused(case, refusal)
+        try:
+            scratch.mkdir(parents=True, exist_ok=False)
+        except OSError:
+            return _refused(case, Refusal(REFUSED_SCRATCH))
+        staged = self._stage_images(
+            case, {asset.asset_id: asset for asset in case_set.assets}, scratch
+        )
+        if isinstance(staged, Refusal):
+            return _refused(case, staged)
+        admission = check_admission(
+            self._candidate,
+            self.staged_dir,
+            build_id=self._candidate.runtime.required_build_id,
+            runtime_manifest=manifest,
+            acknowledgement=self._ack,
+            cancel=self._cancel,
+        )
+        if not admission.ok:
+            code = (
+                REFUSED_CANCELLED if admission.reasons == (REASON_CANCELLED,) else REFUSED_CANDIDATE
+            )
+            return _refused(case, Refusal(code, admission.reasons))
+        schema = contract.build_response_schema(case.kind)
+        prompt_file, schema_file = scratch / "prompt.txt", scratch / "schema.json"
+        prompt_file.write_text(render_visual_prompt(case), encoding="utf-8", newline="\n")
+        schema_file.write_text(json.dumps(schema), encoding="utf-8", newline="\n")
+        try:
+            argv = build_visual_argv(
+                model_path=self.staged_dir / self._candidate.model.filename,
+                projector_path=self.staged_dir / self._candidate.projector.filename,
+                prompt_file=prompt_file,
+                schema_file=schema_file,
+                image_paths=staged,
+                evaluation_root=self._root,
+                work_dir=scratch,
+                limits=self._limits,
+                sampling=self._sampling,
+            )
+        except VisualArgvRefused as exc:
+            return _refused(case, Refusal(REFUSED_ARGV, (exc.code,)))
+        return self._launch(case, build, argv, scratch)
+
+    def _launch(self, case: Case, build: RuntimeBuild, argv: list[str], scratch: Path) -> CaseRun:
+        shape = argv_shape_digest(argv)
+        limits = ResourceLimits()
+        observer = ChildObserver(
+            cap_gib=limits.max_peak_working_set_bytes / _GIB, clock=self._clock
+        )
+        watch = _Watch(
+            token=self._cancel,
+            observer=observer,
+            activity=self._activity,
+            memory=self._memory,
+            clock=self._clock,
+            interval=self._interval,
+        )
+        assert self._activity is not None  # admission refused without a reading
+        runtime_root = runtime_dir(self._ai_root, build.build_id)
+        executable = runtime_root / build.executable
+        started = self._clock()
+        outcome = self._runner(
+            self._command_factory(executable, argv),
+            timeout_seconds=self._limits.timeout_seconds,
+            max_stdout_bytes=self._limits.max_stdout_bytes,
+            cancel=watch,
+            cwd=scratch,
+            env=build_environment(runtime_root, self._environ, scratch),
+            observe=observer.bind,
+        )
+        wall = max(0.0, self._clock() - started)
+        evidence = {
+            "case_id": case.case_id,
+            "wall_seconds": round(wall, 3),
+            "peak_working_set_bytes": int(observer.evidence.peak_tree_working_set_gib * _GIB),
+            "peak_private_bytes": int(observer.evidence.peak_tree_private_gib * _GIB),
+            "exit_code": outcome.returncode,
+            "argv_shape_sha256": shape,
+            "context_tokens": self._limits.context_tokens,
+            "cpu_only": True,
+        }
+        if outcome.launch_error:
+            reason = (
+                "containment_unavailable"
+                if outcome.launch_error.startswith("containment unavailable")
+                else "launch_failed"
+            )
+            return CaseRun(CaseEvidence(status=STATUS_LAUNCH_FAILED, reason=reason, **evidence))
+        if outcome.cancelled:
+            return CaseRun(
+                CaseEvidence(
+                    status=STATUS_CANCELLED, reason=watch.reason or "request_cancelled", **evidence
+                )
+            )
+        if outcome.timed_out:
+            return CaseRun(
+                CaseEvidence(status=STATUS_TIMEOUT, reason="wall_clock_limit", **evidence)
+            )
+        if outcome.output_truncated:
+            return CaseRun(
+                CaseEvidence(status=STATUS_TOO_LARGE, reason="output_too_large", **evidence)
+            )
+        if outcome.returncode != 0:
+            return CaseRun(
+                CaseEvidence(status=STATUS_CHILD_FAILED, reason="child_exit_nonzero", **evidence)
+            )
+        status, check, text = check_output(case, outcome.stdout)
+        return CaseRun(CaseEvidence(status=status, reason=check.reason, **evidence), text)
+
+    # -- a whole case set -----------------------------------------------------------------------------------------------
+
+    def run_cases(self, case_set: CaseSet, labels: LabelSet) -> EvaluationRun:
+        """Run every case in order. The first admission refusal stops the run (the same gate would refuse every case);
+        a case that ran and failed is kept and scored as a wrong answer, never skipped. A cancel stops cleanly."""
+
+        rows: list[CaseEvidence] = []
+        responses: dict[str, str] = {}
+        measurements: dict[str, Measurement] = {}
+        for case in case_set.cases:
+            run = self.run_case(case_set, case)
+            rows.append(run.evidence)
+            if run.refusal is not None:
+                return EvaluationRun(tuple(rows), refusal=run.refusal)
+            if run.evidence.status == STATUS_CANCELLED:
+                return EvaluationRun(
+                    tuple(rows), refusal=Refusal(REFUSED_CANCELLED, (run.evidence.reason,))
+                )
+            responses[case.case_id] = run.text
+            if run.evidence.launched:
+                measurements[case.case_id] = Measurement(
+                    wall_seconds=run.evidence.wall_seconds,
+                    peak_working_set_bytes=run.evidence.peak_working_set_bytes,
+                    context_tokens=run.evidence.context_tokens,
+                    cpu_only=run.evidence.cpu_only,
+                )
+        report = scoring.score_run(case_set, labels, responses, measurements, ResourceLimits())
+        return EvaluationRun(tuple(rows), report=report, complete=True)
+
+
+def _refused(case: Case, refusal: Refusal) -> CaseRun:
+    return CaseRun(
+        CaseEvidence(case_id=case.case_id, status=STATUS_NOT_RUN, reason=refusal.code),
+        refusal=refusal,
+    )
+
+
+def evidence_document(
+    run: EvaluationRun, *, plan_sha256: str, case_set_sha256: str, candidate: VisualCandidate
+) -> dict[str, Any]:
+    """The only thing a run writes: timing, memory, the path-free argv hash, exit codes and reason codes, plus the aggregate
+    score numbers. It contains no image, prompt or answer text."""
+
+    return {
+        "schema": EVIDENCE_SCHEMA,
+        "contract_id": contract.CONTRACT_ID,
+        "plan_sha256": plan_sha256,
+        "case_set_sha256": case_set_sha256,
+        "candidate_id": candidate.candidate_id,
+        "build_id": VISION_BUILD_ID,
+        "executable": VISION_TOOL,
+        "complete": run.complete,
+        "refusal": None
+        if run.refusal is None
+        else {"code": run.refusal.code, "reasons": list(run.refusal.reasons)},
+        "cases": [row.record() for row in run.evidence],
+        "report": None if run.report is None else dict(run.report),
+    }
+
+
+__all__ = [
+    "EVIDENCE_SCHEMA",
+    "LOCK_NAME",
+    "MODEL_REGISTRY_PATH",
+    "REFUSED_NOT_APPROVED",
+    "REFUSED_PLAN_DIGEST",
+    "CaseEvidence",
+    "CaseRun",
+    "EvaluationRun",
+    "Refusal",
+    "VisualDriver",
+    "check_output",
+    "evidence_document",
+    "strict_json",
+    "vision_build_reasons",
+]

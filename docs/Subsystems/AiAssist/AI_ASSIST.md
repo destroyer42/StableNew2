@@ -101,7 +101,7 @@ Not run yet [U]; a separately versioned, unapproved LFM3-1.7B model/runtime cont
 7. Nothing derived from prompts is persisted beyond digests, counts and codes, and a prompt left on disk by a crash is swept before the next request.
 8. A missing, malformed or non-finite provider reading is never read as idle or plenty, and nothing may escape the watch.
 9. Advice is not a plan: a `PLAN_PROPOSAL` result and its review have no field or action that creates Intent, edits authored intent, fills a form, compiles, previews or queues; they carry the "Advice, not a plan" label (and the Preview label in Preview). Any future conversion code belongs outside `src/ai_assist` and needs its own owner decision.
-10. A visual (vision-language) candidate is never a text model: it is recorded only in `config/ai_visual_candidates.json`, which nothing under `src/`, the selector, Preview, activation or `import-model` reads; `--mmproj`, `-mmu`/`--mmproj-url` and `--rpc` stay in `FORBIDDEN_FLAGS`, and an image invocation exists only as an unapproved proposal (section 13).
+10. A visual (vision-language) candidate is never a text model: it is recorded only in `config/ai_visual_candidates.json`, which nothing under `src/`, the selector, Preview, activation or `import-model` reads; `--mmproj`, `-mmu`/`--mmproj-url` and `--rpc` stay in `FORBIDDEN_FLAGS`, and an image invocation exists only in the evaluation harness (`tools/qualification/vl220/visual_argv.py`, run by `driver.py` on the separate unqualified `b11960-cpu-vision` build that no model lists; section 13).
 
 ## 9. How to test
 
@@ -164,6 +164,9 @@ with repository, 40-character revision, file name, size, SHA-256; license text h
 `tools/qualification/vl220/` (fail-closed admission: pinned bytes, matching GGUF headers, required build, license
 acknowledgement). The two files were downloaded by an operator-authorized step into a staging folder and hash-verified; nothing is
 imported into the AI root. The evaluation contract (`PR-AI-VL-220_Visual_Evaluation_Contract.md`) is a specification plus
-harness that runs no model; the image invocation a real run needs was approved by the owner on 2026-11-14 as a specification and is not implemented yet
-(`PR-AI-VL-220_Image_Invocation_Contract.md`). The runbook is `docs/runbooks/ai_vl_candidate_staging.md`; the work package is
+harness; the image invocation a real run needs was approved by the owner on 2026-11-14 and is implemented (`visual_argv.py` closed
+vocabulary, `driver.py` through `run_bounded` with fail-closed admission, the `evaluate` command behind the owner's plan digest,
+the `b11960-cpu-vision` build entry; `PR-AI-VL-220_Image_Invocation_Contract.md` section 7) but has never been run: the license
+acknowledgement, the owner's firewall rule and attestation, the evaluation-root import and the chosen assets and labeler are still
+the owner's. The runbook is `docs/runbooks/ai_vl_candidate_staging.md`; the work package is
 `docs/work_packages/AI-VL-220_lfm3_vl_candidate.md`.

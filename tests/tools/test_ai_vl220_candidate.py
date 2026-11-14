@@ -618,6 +618,8 @@ def test_the_package_cannot_reach_the_network_or_start_a_process() -> None:
     }  # fmt: skip
     files = sorted(PACKAGE.glob("*.py"))
     assert len(files) >= 8
+    # The one module allowed to spell the projector and image flags is the closed visual builder (image invocation contract).
+    spelling_exempt = {"visual_argv.py"}
     for path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
@@ -630,6 +632,8 @@ def test_the_package_cannot_reach_the_network_or_start_a_process() -> None:
                 assert name.split(".")[0] not in forbidden, f"{path.name} imports {name}"
         source = path.read_text(encoding="utf-8")
         for flag in ("--mmproj", "--image", "-mm ", "--rpc", "Popen", "os.system", "os.startfile"):
+            if path.name in spelling_exempt and flag in ("--mmproj", "--image"):
+                continue
             assert flag not in source, f"{path.name} contains {flag}"
 
 

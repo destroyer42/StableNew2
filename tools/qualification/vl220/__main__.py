@@ -1,13 +1,18 @@
-"""``python -m tools.qualification.vl220 <command>``: read-only helpers; there is deliberately no command that runs a model.
+"""``python -m tools.qualification.vl220 <command>``: operator helpers; exactly one command can launch a model.
 
 Commands: ``describe`` (the plan), ``dry-run`` (validate the synthetic set and score the no-look baselines), ``commands``
-(print the pinned download lines), ``verify-staging`` and ``import`` (D15 operator workflow), ``write-synthetic``.
+(print the pinned download lines), ``verify-staging`` and ``import`` (D15 operator workflow), ``write-synthetic``, and
+``evaluate``: the supervised, CPU-only visual run of the owner-approved image invocation contract. ``evaluate`` refuses unless
+``--i-have-the-plan-digest`` equals the current plan digest and every admission gate in ``driver.py`` passes; it is never run by
+tests, CI or any gate against the real runtime.
 """
 
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -32,6 +37,76 @@ def _acknowledgement(path: Path | None) -> dict[str, Any] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
+def _load_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
+    """The one command that can launch the visual runtime. Every refusal here runs nothing."""
+
+    from src.ai_assist.host import GenerationActivity
+    from src.ai_assist.paths import resolve_ai_root
+    from tools.qualification.vl220 import contract, driver
+    from tools.qualification.vl220.visual_argv import VisualLimits
+
+    if contract.INVOCATION_APPROVED is not True:
+        sys.stderr.write(f"refused: {driver.REFUSED_NOT_APPROVED}\n")
+        return 2
+    current = plan.build_plan(candidate)["plan_sha256"]
+    if not hmac.compare_digest(str(args.i_have_the_plan_digest).strip().lower(), current):
+        sys.stderr.write(
+            f"refused: {driver.REFUSED_PLAN_DIGEST} (current plan digest: {current})\n"
+        )
+        return 2
+    if args.evidence_out.exists():
+        sys.stderr.write("refused: evidence file already exists\n")
+        return 2
+    if (args.cases is None) != (args.labels is None):
+        sys.stderr.write("refused: --cases and --labels go together\n")
+        return 2
+    try:
+        if args.cases is None:
+            _, case_doc, label_doc = synthetic.build_synthetic_set()
+        else:
+            case_doc, label_doc = _load_json(args.cases), _load_json(args.labels)
+        case_set = contract.validate_case_set(case_doc)
+        labels = contract.validate_label_set(label_doc, case_set)
+        limits = VisualLimits(
+            image_min_tokens=args.min_image_tokens, image_max_tokens=args.max_image_tokens
+        )
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"refused: {exc.__class__.__name__}: {exc}\n")
+        return 2
+    acknowledgement = _acknowledgement(args.acknowledgement)
+    run = driver.VisualDriver(
+        candidate,
+        evaluation_root=args.evaluation_root,
+        ai_root=resolve_ai_root(args.ai_root),
+        assets_dir=args.assets,
+        acknowledgement=acknowledgement,
+        # Another process cannot read the running application's queue: the operator asserts the host is idle, and without
+        # the flag the driver sees no reading and refuses (an unreadable activity is never "idle").
+        activity=(lambda: GenerationActivity()) if args.generation_idle else None,
+        limits=limits,
+    ).run_cases(case_set, labels)
+    document = driver.evidence_document(
+        run, plan_sha256=current, case_set_sha256=contract.digest(case_doc), candidate=candidate
+    )
+    with args.evidence_out.open("x", encoding="utf-8") as handle:
+        json.dump(document, handle, indent=2, sort_keys=True, allow_nan=False)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    if run.refusal is not None:
+        sys.stderr.write(f"refused: {run.refusal}\n")
+        return 1
+    ran = sum(1 for row in run.evidence if row.launched)
+    sys.stdout.write(
+        f"evaluated {ran} of {len(run.evidence)} cases; evidence: {args.evidence_out}\n"
+    )
+    return 0 if run.complete else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m tools.qualification.vl220", description=__doc__
@@ -51,6 +126,26 @@ def main(argv: list[str] | None = None) -> int:
             item.add_argument("--evaluation-root", type=Path, required=True)
     synth = sub.add_parser("write-synthetic")
     synth.add_argument("--dest", type=Path, required=True)
+    evaluate = sub.add_parser("evaluate", description=_evaluate.__doc__)
+    evaluate.add_argument("--evaluation-root", type=Path, required=True)
+    evaluate.add_argument("--assets", type=Path, required=True)
+    evaluate.add_argument("--acknowledgement", type=Path, required=True)
+    evaluate.add_argument("--evidence-out", type=Path, required=True)
+    evaluate.add_argument(
+        "--i-have-the-plan-digest",
+        required=True,
+        help="must equal the current plan digest (see `describe`)",
+    )
+    evaluate.add_argument(
+        "--generation-idle",
+        action="store_true",
+        help="assert that no generation is running on this host (a separate process cannot read the queue)",
+    )
+    evaluate.add_argument("--ai-root", type=Path, default=None)
+    evaluate.add_argument("--cases", type=Path, default=None)
+    evaluate.add_argument("--labels", type=Path, default=None)
+    evaluate.add_argument("--min-image-tokens", type=int, default=64)
+    evaluate.add_argument("--max-image-tokens", type=int, default=256)
     args = parser.parse_args(argv)
     try:
         candidate = find_candidate(args.candidate)
@@ -63,6 +158,8 @@ def main(argv: list[str] | None = None) -> int:
         _print(plan.dry_run())
     elif args.command == "commands":
         sys.stdout.write("\n".join(staging.download_commands(candidate, args.dest)) + "\n")
+    elif args.command == "evaluate":
+        return _evaluate(args, candidate)
     elif args.command == "verify-staging":
         report = staging.stage_report(
             candidate,

@@ -36,18 +36,22 @@ annual revenue) at the `text_source_url` in `config/ai_visual_candidates.json`, 
 `license_acknowledgement.TEMPLATE.json` (in the staging folder) to `license_acknowledgement.json`, set `owner_acknowledged` to
 `true` and fill `owner_statement` in your words. StableNew never writes this record.
 
-## 4. Import into an evaluation root (held)
+## 4. Import into an evaluation root
 
 ```bash
 python -m tools.qualification.vl220 import --staging <staging dir> --evaluation-root <new dir outside Git and outside ManagedAi> --acknowledgement <license_acknowledgement.json>
 ```
 
 It re-verifies everything, copies both files while re-hashing (a cancelled or failed copy leaves nothing), and never
-overwrites. It refuses the AI Assist root and any Git working tree. **Do not run it yet:** a visual evaluation cannot run until
-you approve the image invocation contract (`docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md`), so an import
-has no use today. It is here so the workflow is explicit and reviewable.
+overwrites. It refuses the AI Assist root and any Git working tree. You approved the image invocation contract on 2026-11-14
+(`docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md`) and it is implemented, so an import is now the step after
+the license acknowledgement; nothing has been imported yet.
 
 ## 5. What this does not do
 
-No run, no GPU, no firewall rule, no attestation, no change to `FORBIDDEN_FLAGS` or any registry. Running the evaluation is a
-separate owner decision (`PR-AI-VL-220_Visual_Evaluation_Contract.md` section 7).
+No run, no GPU, no firewall rule, no attestation, no change to `FORBIDDEN_FLAGS` or any registry. A supervised run
+(`python -m tools.qualification.vl220 evaluate`, CPU only) additionally needs, all yours: the `llama-mtmd-cli.exe` outbound Block
+rule; `ai_assist_admin import-runtime --build-id b11960-cpu-vision` and `record-attestation` (list every build you attest in one
+command, the record is replaced); your confirmation in chat; and `--i-have-the-plan-digest` naming the current plan digest
+(`python -m tools.qualification.vl220 describe`). The driver refuses, with a stable code, anything missing
+(`PR-AI-VL-220_Image_Invocation_Contract.md` section 7).

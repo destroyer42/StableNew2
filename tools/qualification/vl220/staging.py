@@ -101,6 +101,17 @@ def _is_managed_ai(path: Path) -> bool:
     return False
 
 
+def root_refusal(root: Path) -> str:
+    """Why ``root`` may not be an evaluation root (``""`` when it may): never the AI Assist root, never a Git working tree."""
+
+    resolved = Path(root).resolve()
+    if _is_managed_ai(resolved):
+        return REFUSED_UNDER_MANAGED_AI
+    if _inside_git(resolved):
+        return REFUSED_IN_REPOSITORY
+    return ""
+
+
 def _copy_verified(
     source: Path, target: Path, pinned: StagedFile, cancel: CancelCheck | None
 ) -> bool:
@@ -147,10 +158,9 @@ def import_candidate(
     root and any Git working tree; never overwrites. A cancel removes everything written by this call."""
 
     root = Path(evaluation_root).resolve()
-    if _is_managed_ai(root):
-        raise StagingRefused(REFUSED_UNDER_MANAGED_AI)
-    if _inside_git(root):
-        raise StagingRefused(REFUSED_IN_REPOSITORY)
+    refused = root_refusal(root)
+    if refused:
+        raise StagingRefused(refused)
     admission: Admission = check_admission(
         candidate, staging_dir, build_id=build_id, runtime_manifest=runtime_manifest,
         acknowledgement=acknowledgement, cancel=cancel,
@@ -187,5 +197,6 @@ __all__ = [
     "StagingRefused",
     "download_commands",
     "import_candidate",
+    "root_refusal",
     "stage_report",
 ]

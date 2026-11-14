@@ -33,8 +33,13 @@ def test_shipped_manifests_parse_cleanly_and_nothing_is_qualified() -> None:
     runtime = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
     registry = load_model_registry(MODEL_REGISTRY_PATH)
     assert runtime.problems == () and registry.problems == ()
-    # Two unqualified builds (llama.cpp b11840 and b11960, CPU x64) are pinned for AI Assist Preview (D13/D15/D18).
-    assert [build.build_id for build in runtime.builds] == ["b11840-cpu", "b11960-cpu"]
+    # Two unqualified builds (llama.cpp b11840 and b11960, CPU x64) are pinned for AI Assist Preview (D13/D15/D18); the third
+    # entry is the visual harness's `llama-mtmd-cli.exe` view of the b11960 archive (PR-AI-VL-220) and no model lists it.
+    assert [build.build_id for build in runtime.builds] == [
+        "b11840-cpu",
+        "b11960-cpu",
+        "b11960-cpu-vision",
+    ]
     assert not any(build.qualified for build in runtime.builds)
     assert len(registry.entries) >= 1 and not any(entry.qualified for entry in registry.entries)
 
