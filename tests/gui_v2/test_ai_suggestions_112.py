@@ -477,6 +477,9 @@ def test_preview_dialog_enables_and_revokes_only_through_the_owner(journey):
         def preview_meaning(self):
             return "meaning"
 
+        def model_choices(self):
+            return ()
+
         def preview_state(self):
             from src.ai_assist.preview import PreviewState
 
@@ -503,6 +506,68 @@ def test_preview_dialog_enables_and_revokes_only_through_the_owner(journey):
     assert calls == ["enable"] and dialog.revoke_button.instate(["!disabled"])
     dialog.revoke_button.invoke()
     assert calls == ["enable", "revoke"]
+    dialog.destroy()
+
+
+def test_preview_dialog_model_dropdown_selects_only_through_the_owner(journey):
+    """AI-202b: a dropdown of verified models by display name; choosing one calls the owner, never enable/revoke."""
+
+    from src.ai_assist.preview import PreviewState
+    from src.ai_assist.selector import ModelChoice
+
+    j = journey
+    calls = []
+
+    def choice(model_id, name, active, build="b11960-cpu"):
+        return ModelChoice(model_id, name, model_id * 4, build, active, "candidate", True)
+
+    class Owner:
+        closed = False
+        busy = False
+        active = "qwen"
+
+        def preview_meaning(self):
+            return "meaning"
+
+        def model_choices(self):
+            return (
+                choice("qwen", "Qwen3.5-4B Q4_K_M", self.active == "qwen", "b11840-cpu"),
+                choice("lfm", "LFM3-1.7B Q4_K_M", self.active == "lfm"),
+            )
+
+        def preview_state(self):
+            return PreviewState("candidate", "", "M", "b")
+
+        def select_model(self, model_id):
+            calls.append(("select", model_id))
+            self.active = model_id
+            return True, "Switched."
+
+        def enable_preview(self):
+            calls.append("enable")
+            return True, "enabled"
+
+        def revoke_preview(self):
+            calls.append("revoke")
+            return True, "revoked"
+
+    owner = Owner()
+    j.flow.owner = owner
+    dialog = j.flow.open_preview()
+    assert dialog is not None and not calls
+    assert list(dialog.model_box.cget("values")) == ["Qwen3.5-4B Q4_K_M", "LFM3-1.7B Q4_K_M"]
+    assert dialog.model_var.get() == "Qwen3.5-4B Q4_K_M"  # the active model is selected
+    assert "b11840-cpu" in dialog.model_detail_var.get()
+    assert dialog.model_box.instate(["!disabled"])
+    dialog.model_box.set("LFM3-1.7B Q4_K_M")
+    dialog.model_box.event_generate("<<ComboboxSelected>>")
+    dialog.update()
+    assert calls == [("select", "lfm")]  # selecting enables nothing
+    assert dialog.model_var.get() == "LFM3-1.7B Q4_K_M" and dialog.result_var.get() == "Switched."
+    assert "b11960-cpu" in dialog.model_detail_var.get()
+    owner.busy = True
+    dialog.refresh()
+    assert dialog.model_box.instate(["disabled"]) and "running" in dialog.model_detail_var.get()
     dialog.destroy()
 
 

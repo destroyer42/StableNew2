@@ -34,7 +34,7 @@ python -m tools.ai_assist_admin import-model D:\staging\Qwen3.5-9B-Q4_K_M.gguf -
 python -m tools.ai_assist_admin activate --build-id bNNNN-cpu --model-id <model_id>
 ```
 
-`activate` also voids any earlier Preview enablement; enable it again in step 4.
+`activate` refuses a build the registry does not list for that model (`compatible_builds` in `config/ai_model_registry.json`: LFM3 `b11960-cpu` only, Qwen `b11840-cpu` and `b11960-cpu`; `refused: build_incompatible`) and a model or build that is not imported. It does not erase any Preview enablement: the record lists one entry per model and runtime build, and an entry only ever admits that exact pair, so a pair you enabled earlier still applies. A pair you have not enabled needs step 4.
 
 StableNew launches **`llama-completion.exe`** from the runtime directory (`%LOCALAPPDATA%\StableNew\ManagedAi\runtimes\<build id>\`). It is not `llama-cli.exe`: that tool rejects the flag StableNew needs and was the cause of the first run's `child_exit_nonzero`.
 
@@ -66,7 +66,25 @@ Preview still requires this (D16): `strict_offline` is the preventive egress bar
 
 Start the application, open the **Prompt** tab, press **AI Preview...**. Read the statement, then **Enable AI Assist
 Preview**. The record binds the exact model SHA-256 and runtime build id and holds no prompt content. **Revoke Preview** in
-the same dialog removes it. Any change of the active model or runtime also voids it.
+the same dialog removes the entry of the active model only. Enabling one model never enables another, and the record may hold
+several (one per model and runtime build).
+
+### Switching models in the application (D20)
+
+The **Model** dropdown at the top of the same dialog lists the models that are imported and verified here, by display name
+(for example "Qwen3.5-4B Q4_K_M" and "LFM3-1.7B Q4_K_M"); the active one is selected. Choosing another switches to it:
+
+- it runs on a build the registry lists for it (LFM3 on `b11960-cpu`; a Qwen model on the build that is already active when that
+  build is listed for it, otherwise the first listed one), after the build's files are checked against their pins;
+- it is refused while an AI request is running, and unless the outbound-restriction attestation of step 3 already covers the
+  build it would use (the same wording as the Suggest hint appears); the dialog never records an attestation;
+- it does not enable Preview: a model you have not enabled for that build is activated and then needs **Enable AI Assist
+  Preview**; going back to a pair you enabled before needs nothing;
+- nothing is loaded or started by switching; the model is read only when you press Suggest.
+
+A model that does not appear is not imported, its file has the wrong size, or none of its listed builds is imported and intact.
+The terminal alternative is `python -m tools.ai_assist_admin activate --build-id <id> --model-id <id>`, which uses the same
+function.
 
 Check the whole chain at any time (no hashing, nothing is run):
 
@@ -105,7 +123,10 @@ Only the model id, its label and the stages it supports are added to the request
 | Suggest hint, `status` | needs a pinned runtime build (`missing: pinned_build`) | No build in `config/managed_ai_runtime.json`. Do step 1. |
 | Suggest hint, `status` | needs an imported runtime and model (`imported_model`) | Nothing imported and activated. Do step 2. |
 | Suggest hint | Preview is not enabled (`enablement`) | A verified unqualified model is installed. Do step 4. |
-| Suggest hint, `NOT_INSTALLED` / `preview_not_enabled` | The enablement record is missing, malformed, or names another model or build | Enable again in step 4. |
+| Suggest hint, `NOT_INSTALLED` / `preview_not_enabled` | The enablement record is missing, malformed, or has no entry for the active model and runtime build | Enable it in step 4. |
+| Model dropdown: "Another AI request is running" | A Suggest or plan request is in flight | Wait or cancel it, then choose again. |
+| Model dropdown: "does not cover runtime ..." or "must be attested" | The attestation does not name the build the model would run on | Do step 3 for that build, then choose again. |
+| Model dropdown: "not imported and verified" | The model or every build listed for it is missing, resized or altered | Import it (step 2) or re-import from verified files. |
 | `EGRESS_NOT_ATTESTED` | No attestation, a pre-AI-202a one, or one that does not cover the active build and its executable (`status` shows `egress: not_covered`) | Do step 3 for the active build. |
 | `INTEGRITY_FAILED` | Installed files differ from the pins | Re-import from verified files; never edit installed files. |
 | `GENERATION_ACTIVE`, `YIELDED_TO_GENERATION` | A job is running, GPU quarantined, or activity unreadable | Retry when generation is idle. AI always yields. |

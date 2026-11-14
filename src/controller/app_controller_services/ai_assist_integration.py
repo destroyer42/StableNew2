@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+from src.ai_assist.activation import ActivationRefused
 from src.ai_assist.contracts import AssistOutcome, AssistRequest, OutcomeCode
 from src.ai_assist.host import GenerationActivity, read_host_memory
 from src.ai_assist.manifests import (
@@ -15,16 +16,27 @@ from src.ai_assist.manifests import (
     RuntimeManifest,
     load_model_registry,
     load_runtime_manifest,
+    verify_installation,
 )
 from src.ai_assist.paths import resolve_ai_root
 from src.ai_assist.preview import (
     PREVIEW_LABEL,
     PREVIEW_MEANING,
+    TRUST_CANDIDATE,
     TRUST_PREVIEW,
     PreviewRefused,
     PreviewState,
     enable_preview,
     revoke_preview,
+)
+from src.ai_assist.selector import (
+    REFUSED_IN_FLIGHT,
+    REFUSED_NOT_ATTESTED,
+    REFUSED_NOT_COVERED,
+    ModelChoice,
+    SelectionRefused,
+    list_model_choices,
+    select_model,
 )
 from src.ai_assist.service import AiAssistService, ServicePolicy, Submission
 from src.ai_assist.status import (
@@ -47,6 +59,18 @@ from src.queue.job_model import JobStatus
 logger = logging.getLogger(__name__)
 
 _J = TypeVar("_J")
+
+
+def egress_refusal_text(egress: str, build_id: str) -> str:
+    """The operator-facing words for a missing or non-covering egress attestation (one copy, shared by the request gate and
+    the model selector)."""
+
+    if egress == EGRESS_NOT_COVERED:
+        return (
+            f"The recorded outbound restriction does not cover runtime {build_id}. "
+            "Record an attestation for this build and its executable."
+        )
+    return "Operator-managed outbound restriction must be attested."
 
 
 class ActivityUnreadable(RuntimeError):
@@ -168,9 +192,70 @@ class AiAssistIntegration:
         return True, "AI Assist Preview is enabled for the installed model and runtime."
 
     def revoke_preview(self) -> tuple[bool, str]:
-        if revoke_preview(self._root):
+        """Revoke Preview for the active model and runtime build only; other enabled models stay enabled (D20)."""
+
+        entry = build = None
+        if self._manifests is not None:
+            verification = verify_installation(self._root, *self._manifests, allow_candidate=True)
+            if verification.ok:
+                entry, build = verification.entry, verification.build
+        if revoke_preview(self._root, entry, build):
             return True, "AI Assist Preview is revoked."
         return False, "AI Assist Preview could not be revoked."
+
+    # -- Model selector (owner decision D20) ------------------------------------------------------------------------
+
+    def model_choices(self) -> tuple[ModelChoice, ...]:
+        """Models imported and verified here, with the runtime build each would use. Read-only."""
+
+        if self._manifests is None:
+            return ()
+        try:
+            return list_model_choices(self._root, *self._manifests)
+        except Exception:  # noqa: BLE001 - an unreadable installation lists nothing
+            return ()
+
+    def select_model(self, model_id: str) -> tuple[bool, str]:
+        """Switch the active model on the operator's explicit choice. Synchronous; no thread, no process, no download.
+
+        Refused while a request is running, and unless the egress attestation already covers the build it would use. It
+        never records an attestation and never enables Preview: a model that is not enabled yet is activated and then
+        needs the same explicit Enable confirmation as before."""
+
+        if self._manifests is None:
+            return False, "AI Assist is unavailable."
+        with self._lock:
+            if self._closed:
+                return False, "Application shutdown has begun."
+            in_flight = self._active_id is not None or bool(
+                self.service is not None and self.service.busy
+            )
+            try:
+                selection = select_model(
+                    self._root, *self._manifests, model_id, request_in_flight=in_flight
+                )
+            except SelectionRefused as exc:
+                return False, self._selection_refusal_text(exc)
+            except ActivationRefused as exc:
+                return False, f"The model could not be activated ({exc.code})."
+            except Exception:  # noqa: BLE001 - fixed copy only
+                return False, "The model could not be activated."
+        choice = selection.choice
+        if not selection.changed:
+            return True, f"{choice.display_name} is already active."
+        text = f"Switched to {choice.display_name} on runtime {choice.build_id}."
+        if choice.trust == TRUST_CANDIDATE:
+            text += " AI Assist Preview is not enabled for it yet: use Enable AI Assist Preview to confirm."
+        return True, text
+
+    @staticmethod
+    def _selection_refusal_text(exc: SelectionRefused) -> str:
+        if exc.code == REFUSED_IN_FLIGHT:
+            return "Another AI request is running. Wait for it to finish before switching models."
+        if exc.code in (REFUSED_NOT_COVERED, REFUSED_NOT_ATTESTED):
+            egress = EGRESS_NOT_COVERED if exc.code == REFUSED_NOT_COVERED else ""
+            return egress_refusal_text(egress, exc.build_id)
+        return "That model is not imported and verified here with a compatible runtime build."
 
     def availability(self) -> tuple[OutcomeCode | None, str]:
         if self.closed:
@@ -205,16 +290,10 @@ class AiAssistIntegration:
                 OutcomeCode.NOT_INSTALLED,
                 "AI Assist needs an installed runtime and model (qualified, or an enabled Preview model).",
             )
-        if status.egress == EGRESS_NOT_COVERED:
-            return (
-                OutcomeCode.EGRESS_NOT_ATTESTED,
-                f"The recorded outbound restriction does not cover runtime {status.build_id}. "
-                "Record an attestation for this build and its executable.",
-            )
         if status.egress != EGRESS_ATTESTED:
             return (
                 OutcomeCode.EGRESS_NOT_ATTESTED,
-                "Operator-managed outbound restriction must be attested.",
+                egress_refusal_text(status.egress, status.build_id),
             )
         if status.trust == TRUST_PREVIEW:
             return None, f"{PREVIEW_LABEL}. Suggestions are advisory. Review before accepting."
