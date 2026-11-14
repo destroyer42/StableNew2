@@ -10,13 +10,18 @@ from typing import Any
 
 from src.controller.reprocess_admission import submit_reprocess_njrs
 from src.controller.review_batch_service import require_history_iterate_identity
-from src.image_backends.image_backend_types import normalize_image_backend_options
+from src.image_backends.image_backend_types import (
+    configured_image_backend_id,
+    normalize_image_backend_options,
+)
 from src.image_backends.masked_inpaint import require_mask_target
 from src.image_backends.model_policy import FamilyLookup
 from src.image_backends.operation_compatibility import require_njr_operation
 from src.pipeline.image_edit_inputs import EDIT_OPERATION_KEY, KEY, freeze_inputs, verified_inputs
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ImageEditSpec, ReprocessJobBuilder, ReprocessSourceItem
+from src.review.correction_advice import GuidedReprocess, resolve_target
+from src.review.findings import CORRECTION_KEY, Action, correction_context
 from src.utils.image_metadata import ImageMetadataContractV26, read_image_metadata
 
 
@@ -119,9 +124,23 @@ def prepare_mask_edit(
     fallback_config: dict[str, Any],
     baseline: dict[str, Any],
     family_lookup: FamilyLookup | None = None,
+    guided: GuidedReprocess | None = None,
 ) -> MaskEditPreview:
     """Worker-side preparation. No queue or GUI mutation; snapshots contain the exact inspected bytes."""
     settings.validate()
+    if guided is not None:
+        if (
+            guided.action is not Action.MASK
+            or Path(source_path) != guided.source.path
+            or source_sha256 != guided.source.identity.file_sha256
+        ):
+            raise ValueError("The mask draft does not match the inspected source.")
+        target = resolve_target(baseline, fallback_config, "img2img", family_lookup=family_lookup)
+        if (target.model, target.backend) != (
+            guided.model,
+            guided.backend,
+        ) or target.backend != configured_image_backend_id():
+            raise ValueError("The correction target changed. Reopen Inspect & Improve.")
     return build_frozen_edit_preview(
         source_path=source_path,
         prompt=settings.prompt,
@@ -138,6 +157,7 @@ def prepare_mask_edit(
             inpaint_full_res_padding=settings.padding,
         ),
         lineage_sha=lambda frozen: frozen["source"]["sha256"],
+        guided=guided,
     )
 
 
@@ -154,6 +174,7 @@ def build_frozen_edit_preview(
     edit_spec: Callable[[dict[str, Any]], ImageEditSpec],
     lineage_sha: Callable[[dict[str, Any]], str],
     operation: str | None = None,
+    guided: GuidedReprocess | None = None,
 ) -> MaskEditPreview:
     """Shared builder for frozen Review image edits: one img2img NJR through the existing reprocess builder."""
     builder = ReprocessJobBuilder()  # type: ignore[no-untyped-call]  # existing unannotated constructor
@@ -218,6 +239,15 @@ def build_frozen_edit_preview(
             "parent_job_id": baseline.get("job_id"),
             "parent_artifact_id": artifact_id,
             KEY: deepcopy(frozen),
+            **(
+                {
+                    CORRECTION_KEY: correction_context(
+                        guided.source, guided.category, guided.region, guided.action
+                    )
+                }
+                if guided is not None
+                else {}
+            ),
         },
     )
     job = plan.jobs[0]

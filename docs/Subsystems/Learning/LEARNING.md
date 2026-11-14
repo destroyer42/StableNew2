@@ -660,6 +660,19 @@ Recommendations view (Apply still confirms); and for identity or research, guida
 
 Output folders for experiment jobs are `output/.../<bounded sanitized experiment label + short id>` with variable/value/variant in file names (`experiment_naming.py`); the full identity stays in metadata.
 
+### 4.1 Guided correction feedback
+
+Review's **Inspect & Improve** can attach bounded region judgments to the existing Review
+feedback record after resolving a completed result and verifying its source artifact digest.
+The context records the source and result digests, the result job ID, result-pixel region
+coordinates, operator outcomes and optional overall preference. The existing overall and
+subscore ratings stay operator inputs. Undo uses the existing saved record identity.
+
+These observational judgments report what the operator saw in a particular pair. Backend
+acknowledgement, observable pixel change, region judgment, overall preference, and controlled
+experiment membership retain their own evidence. The judgments do not publish a Learning
+profile or change defaults.
+
 ## 5. The Learning tab and what is reachable
 
 Reachable and working [V]: Learning mode toggle (`LearningTabFrame._on_learning_toggle`; it stores a flag and does not gate `record_rating`); New / Clone / Experiment Library / save and resume; Build Preview and Run; plan table; per-image rating with subscores, Save & Next, drafts and Discard Draft; View Analytics; send to curation; Discovered Outputs scan, rating and cleanup; Staged Curation decisions, derived-job queueing, Review handoff and the derived-job suggestion preview/apply; Model Comparison; Two-Axis Grid design (Study Type), the Comparison Grid pane and Export Contact Sheet.

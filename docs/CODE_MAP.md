@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-725 of 880 modules have a docstring.
+731 of 886 modules have a docstring.
 
 ## src/
 
@@ -238,6 +238,8 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `enhanced_slider.py`: Enhanced slider widget with arrow buttons for precise control
 - `generation_profile_strip.py`: Compact generation-profile selector for the Base Generation panel (PR-IMG-PROFILE-630)
 - `gui_invoker.py`: (no docstring)
+- `guided_reprocess_dialog.py`: Editable guided draft using Review's established batch Preview and admission dialog
+- `guided_review_dialog.py`: Inspect & Improve in Review, with explicit observation, draft and feedback actions
 - `history_browser_panel_v2.py`: Searchable, paged browser over the whole job history (every row, not only the newest few)
 - `history_compare_dialog.py`: Read-only "Compare with Parent" window (PR-HISTORY-610B): parent image left, child image right, typed differe…
 - `history_iterate_dialog.py`: The "Iterate from History" choice dialog (PR-HISTORY-610A)
@@ -812,6 +814,10 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `__init__.py`: Review metadata services and contracts
 - `adetailer_outcome.py`: Operator before/after review of an ADetailer output (PR-REFINE-160), carried by the existing Review feedback…
 - `artifact_metadata_inspector.py`: Read-only artifact metadata inspection payload builder
+- `correction_advice.py`: Project guided Review eligibility through the existing model and operation contracts
+- `findings.py`: Bounded, source-bound observations and advisory choices for guided Review
+- `improvement_evidence.py`: Verify Review comparison evidence and prepare bounded judgments for the existing feedback writer
+- `inspection.py`: Bounded inspection and explicit Smart Review imports for the guided finding workspace
 - `review_metadata_service.py`: Portable review metadata stamping for reviewed image artifacts
 - `workflow_adapter.py`: Non-render review workflow logic for Review tab
 - `workspace_io.py`: Worker-side file work for the Review workspace (PR-GUI-UX-580)
