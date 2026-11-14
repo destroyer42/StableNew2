@@ -113,10 +113,13 @@ def runtime_detail_text(detail: RuntimeDetail | None) -> str:
     lines: list[str] = []
     if detail.exit_code is not None:
         lines.append(f"Exit code: {detail.exit_code}")
-    if detail.stderr_tail:
-        lines += ["", "stderr (last part):", detail.stderr_tail]
+    if detail.reason:
+        lines.append(f"Reason: {detail.reason}")
+    # The model's own output first: the stderr tail is long and can push it out of the small detail box (AI-202c).
     if detail.stdout_head:
         lines += ["", "stdout (first part):", detail.stdout_head]
+    if detail.stderr_tail:
+        lines += ["", "stderr (last part):", detail.stderr_tail]
     return "\n".join(lines).strip()
 
 

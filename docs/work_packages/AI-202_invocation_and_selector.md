@@ -1,6 +1,6 @@
 # AI-202: a runtime invocation the pinned builds accept, and an in-app model selector
 
-Status: **AI-202a implemented (PR 1)**; AI-202b (model selector) follows in a second PR after 202a merges.
+Status: **AI-202a merged (PR #303); AI-202c implemented (section 10)**; AI-202b (model selector, section 9) follows in its own PR.
 Execution class: **Standard**. Model recommendation: Claude Code, Sonnet 5.5, medium effort (bounded, evidence-led,
 no architecture change); Codex equivalent per `docs/AI_MODEL_SELECTION.md`.
 Controller Surface Assessment: `ai_assist_integration.py` gains one status message and no new responsibility; no ceiling
@@ -154,3 +154,92 @@ In-app model selector in the AI Preview dialog (decisions D20 recorded with that
 trust label and size; an explicit per-model list of compatible pinned builds (LFM3: `b11960-cpu` only) with disabled
 reasons; activation through the one shared function the admin tool uses; multi-identity Preview enablement with migration of
 the single-identity record; refusal while a request is in flight; the attestation rule of section 7 applied per selection.
+
+## 10. AI-202c: the output schema must force a complete answer
+
+Execution class: **Standard** (one module, pure function, deterministic tests). Model recommendation: Claude Code, Sonnet 5.5,
+medium effort. Controller Surface Assessment: none; no controller or coordinator code is touched.
+
+### 10.1 Finding
+
+After PR #303 the owner's first real run reached the model: the last `events.jsonl` record shows kind `plan_proposal`, exit
+code 0, 7086 ms, 2.47 GiB peak, `output_chars` 52, outcome `malformed`, reason `kind_mismatch`. The invocation works. 52
+characters is exactly `{"schema": "ai_assist.suggestion/1", "status": "ok"}`.
+
+Root cause: `framing.build_json_schema` declared `required = ["schema", "status"]` for every kind, so the grammar admitted an
+object with no `kind` and no payload, the small model stopped as soon as the grammar allowed it, and `validate_output`
+(`validators.py`, the `kind` comparison) answered `kind_mismatch`. All four kinds were affected. The grammar guaranteed valid
+JSON, not a complete answer.
+
+### 10.2 Fix
+
+`build_json_schema` now returns `{"oneOf": [ok_branch, refused_branch]}`:
+
+* **ok branch** - `status` const `ok`; required `schema`, `status`, `kind` and the kind's payload (`positive` + `negative`;
+  `target`; `workflow`; `steps`); `changes` stays optional; `additionalProperties: false`; properties ordered `schema`,
+  `status`, `kind`, payload, `changes`.
+* **refused branch** - `status` const `refused`; required `schema`, `status`, `refusal_reason` (at most 400 characters);
+  `additionalProperties: false`.
+
+The two-field document therefore matches neither branch. The schema is deliberately stricter than the validator in two places
+(`negative` of a rewrite and `refusal_reason` of a refusal are required by the grammar although the validator would tolerate
+their absence); a test names that difference so it cannot grow unnoticed. The runtime also stopped writing the schema file with
+`sort_keys=True`: both pinned tags emit properties in file order, so sorting would have moved `kind` ahead of `schema`.
+
+### 10.3 Grammar-support proof (llama.cpp source at both pinned tags; nothing was executed)
+
+Fetched as text with `gh api` from `ggml-org/llama.cpp`: `common/json-schema.cpp` (the schema parser,
+`common_chat_schema_builder`), `common/json-schema-to-grammar.cpp` (the converter) and `common/arg.cpp`. Between `b11840` and
+`b11960` the two schema files differ **only** in recursion-depth guards (`COMMON_RECURSIVE_LIMIT` is 128 in `b11960`) and in how
+rule names are escaped (a hand-written loop instead of `std::regex`); the parse and conversion logic of every construct below
+is the same. This schema nests about seven levels and uses no `pattern`, so neither difference applies. Line numbers are
+`b11840` / `b11960`.
+
+| Construct | Parser (`json-schema.cpp`) | Converter (`json-schema-to-grammar.cpp`) |
+|---|---|---|
+| `oneOf` (and `anyOf`) | `234-235 / 253-254`: either key makes an `any_of` node of the children; **a sibling keyword is never read**, so the root holds only `oneOf` | `884 / 916`: the children become alternatives of one rule; `oneOf` is not exclusive-or here, which is harmless because the `status` constants are disjoint |
+| `const` | `257 / 276`, checked before `enum` and `type` | `888 / 920`: a literal of the JSON text |
+| `enum` with `null` | `260 / 279`: a non-empty array, each value kept as JSON (an empty one is an error, which is why request validation requires non-empty closed lists) | `890 / 922`: each value dumped as a literal, so `null` becomes the literal `null` |
+| `required` | `137 / 149`: a property is required when named | `910 / 942`: required properties first, in property order, then the optional ones |
+| `additionalProperties: false` | `155-162 / 167-174`: no extra-property rule is built | `910 / 942`: only the declared keys can be emitted |
+| `minItems` / `maxItems` | `192-193 / 204-205` | `931 / 963`: bounded repetition of the item rule |
+| `maxLength` | `208 / 220` | `948 / 980`: bounded repetition of the `char` rule |
+| integer `minimum` / `maximum` | `214, 219 / 226, 231` | `959 / 991`: `build_min_max_int` |
+
+`common_json` keeps object keys in insertion order in both tags (`common/json.h`: "object keys keep the order in which they are
+added"), which is what makes the property order in the schema file meaningful. `--json-schema-file` feeds
+`json_schema_to_grammar(json::parse(...))` (`arg.cpp:2306 / 2314`). `tests/ai_assist/test_ai202c.py` carries the closed keyword
+list above and fails on any schema node that uses another keyword, so an unproven construct cannot slip in later.
+
+### 10.4 Frozen identities
+
+Determined before editing: nothing in `tools/qualification/ai111/` (the Qwen screening plan `17814e40...`, the final plan
+`3017c427...`, the corpus `a89297be...`, `lfm3_contract.py` and its `FROZEN_CONTRACT_SHA256` `41e65d67...`) digests the output of
+`build_json_schema`, the text of `render_prompt` or the source of `framing.py`. They digest corpus cases, the argv vocabulary
+(`ALLOWED_FLAGS`, `FORBIDDEN_FLAGS`, `build_argv`) and sampling profiles; `execution_evidence` calls `render_prompt` only to
+reproduce the reserved-marker refusal. So `build_json_schema` was edited in place (no second schema authority), `render_prompt`
+and `argv.py` are untouched, and the four digests are unchanged (the digest tests pass unmodified). One consequence to know:
+the physical qualification harness builds its runtime from `AiRuntime`, so a future run of it constrains decoding with the new
+schema. The frozen plans do not pin the grammar, and the new schema is the one production uses, which is what a qualification
+should measure; any earlier harness result was measured against the weaker grammar.
+
+### 10.5 Review dialog
+
+"Show runtime detail" now begins with the exit code and the validation reason code (for example `kind_mismatch`), then shows the
+stdout head, then the stderr tail. The reason is the same fixed token the event log already records. In the owner's screenshot
+the box showed five stderr lines and no model output; the stdout head was placed after the long stderr tail, so it was at best below the visible part (inferred from the layout, not observed). Nothing else changed: the
+text is in memory only, never saved, bounded to 2 KiB per stream, and cleared on a new request and on close.
+
+### 10.6 Acceptance and evidence boundary
+
+*Implemented and demonstrated by deterministic tests:* the two-field document is rejected by the production schema (and by the
+validator) for all four kinds; one validator-accepted document per kind, with and without `changes`, and a refusal satisfy the
+schema; the schema's required fields are measured against the validator so the two cannot drift; property order and the closed
+keyword list; the runtime writes the schema in declared order; the reason code and the stdout-before-stderr order in the detail
+text; the reason reaches the dialog text for malformed and failing outcomes and never reaches the event log with runtime text.
+
+*Held / unverified without a real run:* that the pinned `llama-completion.exe` binaries accept this exact schema file (the proof
+is from source; the binaries were not run); that Qwen3.5 and LFM3 now produce a complete, well-formed answer for every kind
+within the token budget (`-n`) when they cannot stop early, including whether the alternation slows grammar sampling noticeably
+on CPU; and answer quality, which stays the qualification package's question. A model that fills the grammar badly still ends
+as `malformed` with its reason, never as a suggestion. Nothing here is qualification and `qualified` stays `false`.

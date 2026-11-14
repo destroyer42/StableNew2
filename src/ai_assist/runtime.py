@@ -96,7 +96,9 @@ def runtime_detail(
 
     tail = stderr[-MAX_RUNTIME_DETAIL_BYTES:] if stderr else b""
     head = stdout[:MAX_RUNTIME_DETAIL_BYTES] if with_stdout and stdout else b""
-    return RuntimeDetail(exit_code, _printable(tail), _printable(head))
+    return RuntimeDetail(
+        exit_code=exit_code, stderr_tail=_printable(tail), stdout_head=_printable(head)
+    )
 
 
 class AiRuntime:
@@ -159,9 +161,7 @@ class AiRuntime:
             prompt_file = scratch / "prompt.txt"
             schema_file = scratch / "schema.json"
             prompt_file.write_text(prompt, encoding="utf-8", newline="\n")
-            schema_file.write_text(
-                json.dumps(schema, sort_keys=True), encoding="utf-8", newline="\n"
-            )
+            schema_file.write_text(json.dumps(schema), encoding="utf-8", newline="\n")
             argv = self._argv_builder(
                 verification.model_path, prompt_file, schema_file, limits, sampling
             )

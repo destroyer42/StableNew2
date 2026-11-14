@@ -13,6 +13,7 @@ from src.ai_assist.contracts import (
     CHANGE_CODES,
     MAX_PLAN_STEPS,
     MAX_RATIONALE_CHARS,
+    MAX_REFUSAL_REASON_CHARS,
     MAX_STEP_COUNT,
     SUGGESTION_SCHEMA_ID,
     VIDEO_STAGE,
@@ -107,26 +108,22 @@ def render_prompt(request: AssistRequest) -> str:
     return "\n".join(lines)
 
 
-def build_json_schema(request: AssistRequest) -> dict[str, Any]:
-    """JSON Schema (for the runtime's constrained decoding) of the one object this request may produce."""
+def _ok_branch(request: AssistRequest) -> dict[str, Any]:
+    """The branch of a normal answer: ``kind`` and the kind's payload are required, ``changes`` stays optional."""
 
     properties: dict[str, Any] = {
         "schema": {"const": SUGGESTION_SCHEMA_ID},
-        "status": {"enum": ["ok", "refused"]},
+        "status": {"const": "ok"},
         "kind": {"const": request.kind.value},
-        "changes": {
-            "type": "array",
-            "items": {"enum": sorted(CHANGE_CODES)},
-            "maxItems": len(CHANGE_CODES),
-        },
-        "refusal_reason": {"type": "string", "maxLength": 400},
     }
-    required = ["schema", "status"]
+    required = ["schema", "status", "kind"]
     if request.kind is SuggestionKind.PROMPT_REWRITE:
         properties["positive"] = {"type": "string"}
         properties["negative"] = {"type": "string"}
+        required += ["positive", "negative"]
     elif request.kind is SuggestionKind.TARGET_FIT_ADVICE:
         properties["target"] = {"enum": list(request.allowed_targets)}
+        required.append("target")
     elif request.kind is SuggestionKind.PLAN_PROPOSAL:
         properties["steps"] = {
             "type": "array",
@@ -145,14 +142,48 @@ def build_json_schema(request: AssistRequest) -> dict[str, Any]:
                 "additionalProperties": False,
             },
         }
+        required.append("steps")
     else:
         properties["workflow"] = {"enum": list(request.allowed_workflows)}
+        required.append("workflow")
+    properties["changes"] = {
+        "type": "array",
+        "items": {"enum": sorted(CHANGE_CODES)},
+        "maxItems": len(CHANGE_CODES),
+    }
     return {
         "type": "object",
         "properties": properties,
         "required": required,
         "additionalProperties": False,
     }
+
+
+def _refused_branch() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "schema": {"const": SUGGESTION_SCHEMA_ID},
+            "status": {"const": "refused"},
+            "refusal_reason": {"type": "string", "maxLength": MAX_REFUSAL_REASON_CHARS},
+        },
+        "required": ["schema", "status", "refusal_reason"],
+        "additionalProperties": False,
+    }
+
+
+def build_json_schema(request: AssistRequest) -> dict[str, Any]:
+    """JSON Schema (for the runtime's constrained decoding) of the one object this request may produce.
+
+    Two branches, told apart by ``status``: a complete answer (``kind`` and the kind's payload are required) or a refusal
+    (``refusal_reason`` is required). No third shape exists, so grammar-constrained decoding cannot stop at
+    ``{"schema": ..., "status": "ok"}`` (AI-202c). The root holds only ``oneOf``: both pinned llama.cpp tags convert a
+    ``oneOf``/``anyOf`` node to a plain alternation and ignore any sibling keyword, and they emit properties in the
+    order given, so ``schema``, ``status`` and ``kind`` come first. Only constructs proven supported in b11840 and b11960
+    are used (``docs/work_packages/AI-202_invocation_and_selector.md`` section 10).
+    """
+
+    return {"oneOf": [_ok_branch(request), _refused_branch()]}
 
 
 __all__ = [
