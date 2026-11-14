@@ -28,6 +28,8 @@ from src.ai_assist.preview import (
 )
 from src.ai_assist.service import AiAssistService, ServicePolicy, Submission
 from src.ai_assist.status import (
+    EGRESS_ATTESTED,
+    EGRESS_NOT_COVERED,
     MISSING_IMPORTED_MODEL,
     MISSING_PINNED_BUILD,
     MODEL_REGISTRY_PATH,
@@ -203,7 +205,13 @@ class AiAssistIntegration:
                 OutcomeCode.NOT_INSTALLED,
                 "AI Assist needs an installed runtime and model (qualified, or an enabled Preview model).",
             )
-        if status.egress != "attested":
+        if status.egress == EGRESS_NOT_COVERED:
+            return (
+                OutcomeCode.EGRESS_NOT_ATTESTED,
+                f"The recorded outbound restriction does not cover runtime {status.build_id}. "
+                "Record an attestation for this build and its executable.",
+            )
+        if status.egress != EGRESS_ATTESTED:
             return (
                 OutcomeCode.EGRESS_NOT_ATTESTED,
                 "Operator-managed outbound restriction must be attested.",

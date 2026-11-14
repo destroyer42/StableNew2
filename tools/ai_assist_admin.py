@@ -1,10 +1,10 @@
 """Operator terminal tool for Offline AI Assist: local files only, never a download, never an execution.
 
     python -m tools.ai_assist_admin describe-runtime <archive.zip> --build-id ID --upstream-repository URL \\
-        --upstream-tag TAG --license-spdx SPDX --executable llama-cli.exe
+        --upstream-tag TAG --license-spdx SPDX --executable llama-completion.exe
     python -m tools.ai_assist_admin import-runtime <archive.zip> --build-id ID
     python -m tools.ai_assist_admin import-model <model.gguf> --model-id ID
-    python -m tools.ai_assist_admin record-attestation --statement "outbound firewall rule name"
+    python -m tools.ai_assist_admin record-attestation --statement "outbound firewall rule name" --build-id ID [--build-id ID]
     python -m tools.ai_assist_admin activate --build-id ID --model-id ID
     python -m tools.ai_assist_admin status
 
@@ -22,7 +22,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from src.ai_assist.attestation import record_attestation
+from src.ai_assist.attestation import read_covers, record_attestation
 from src.ai_assist.manifests import (
     ImportRefused,
     describe_runtime_archive,
@@ -73,6 +73,13 @@ def _parser() -> argparse.ArgumentParser:
         "record-attestation", help="record that an outbound firewall restriction exists"
     )
     attest.add_argument("--statement", required=True)
+    attest.add_argument(
+        "--build-id",
+        action="append",
+        required=True,
+        dest="build_ids",
+        help="pinned runtime build the firewall rule covers (repeat for several); its pinned executable name is recorded",
+    )
     activate = sub.add_parser(
         "activate", help="point the installation at an imported runtime and model"
     )
@@ -122,7 +129,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 2
             print(f"imported model to {import_model(args.file, entry, root)}")
         elif args.command == "record-attestation":
-            print(f"recorded attestation at {record_attestation(root, args.statement)}")
+            covers: list[tuple[str, str]] = []
+            for build_id in args.build_ids:
+                pinned = runtime.find(build_id)
+                if pinned is None:
+                    print(f"refused: build_not_pinned ({build_id})")
+                    return 2
+                covers.append((build_id, Path(pinned.executable).name))
+            written = record_attestation(root, args.statement, covers)
+            print(f"recorded attestation at {written}")
+            for build_id, executable in covers:
+                print(f"  covers {build_id}: {executable}")
             print("This is the operator's statement; StableNew does not verify the firewall.")
         elif args.command == "activate":
             build = runtime.find(args.build_id)
@@ -138,6 +155,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(
                 "activated; any AI Assist Preview enablement was voided (re-enable it in the application)."
             )
+            print(
+                "The firewall attestation must cover this build and its executable "
+                f"({build.build_id}: {Path(build.executable).name}); record-attestation lists what it covers."
+            )
         else:
             status = read_status(root, runtime, registry)
             view = preview_state(status)
@@ -149,6 +170,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "missing": view.missing,
                     "can_enable_preview": view.can_enable,
                     "egress": status.egress,
+                    "attestation_covers": [
+                        {"build_id": build_id, "executable": executable}
+                        for build_id, executable in read_covers(root)
+                    ],
                     "blockers": list(status.blockers),
                     "actions": list(status.actions),
                 }

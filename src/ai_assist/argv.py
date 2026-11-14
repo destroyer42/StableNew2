@@ -5,8 +5,10 @@ option (``-hf``, ``-mu``, ``-dr``, ``--connect``, ``--ui-mcp-proxy``), a multimo
 flag that is not named here. Execution is CPU-only and offline by construction (owner decisions D2, D3, D8). Prompt text and
 the JSON Schema go to the child as files, never on the command line, which other processes can read.
 
-The flag spellings below are PROVISIONAL until PR-AI-111 validates them against the pinned build; a spelling the build does
-not accept makes the child exit non-zero (``UNAVAILABLE``), it can never widen what is allowed.
+Production launches ``llama-completion.exe`` (not ``llama-cli.exe``, which rejects ``--no-conversation``) with
+:func:`build_production_argv`; the flag set was checked against the llama.cpp source of both pinned tags (AI-202a), never by
+running a binary. A spelling a build does not accept makes the child exit non-zero (``UNAVAILABLE``), it can never widen what
+is allowed. ``build_argv`` and ``ALLOWED_FLAGS`` are the frozen qualification vocabulary and must not change.
 """
 
 from __future__ import annotations
@@ -150,6 +152,35 @@ def build_argv(
     return argv
 
 
+#: The production vocabulary (AI-202a). ``--log-disable`` is deliberately absent: in the pinned llama.cpp builds the tool prints
+#: the generation through the same log that flag pauses and a paused log DISCARDS what is written to it, so the flag would
+#: leave stdout empty (``docs/work_packages/AI-202_invocation_and_selector.md``). ``ALLOWED_FLAGS`` and ``build_argv`` stay as
+#: they are because the frozen AI-111/AI-115 qualification plans digest them.
+PRODUCTION_ALLOWED_FLAGS: frozenset[str] = ALLOWED_FLAGS - {"--log-disable"}
+
+
+def build_production_argv(
+    model_path: Path,
+    prompt_file: Path,
+    schema_file: Path,
+    limits: RunLimits,
+    sampling: Sampling = Sampling(),  # noqa: B008 - frozen dataclass default
+) -> list[str]:
+    """Arguments (without the executable) for production: for ``llama-completion.exe``, one raw-prompt one-shot generation.
+
+    The same as :func:`build_argv` without ``--log-disable``. Raw prompt mode (``--no-conversation``) means the prompt file
+    is tokenized exactly as written (``framing.py`` renders plain text, no chat markup), nothing is interactive and the
+    process exits after one generation."""
+
+    argv = [
+        token
+        for token in build_argv(model_path, prompt_file, schema_file, limits, sampling)
+        if token != "--log-disable"
+    ]
+    assert_argv_allowed(argv, PRODUCTION_ALLOWED_FLAGS)
+    return argv
+
+
 def assert_argv_allowed(argv: list[str], allowed: frozenset[str] = ALLOWED_FLAGS) -> None:
     """Raise if any flag-shaped token is not in the closed vocabulary (values may be negative numbers or paths).
 
@@ -204,9 +235,11 @@ def build_environment(
 __all__ = [
     "ALLOWED_FLAGS",
     "FORBIDDEN_FLAGS",
+    "PRODUCTION_ALLOWED_FLAGS",
     "RunLimits",
     "Sampling",
     "assert_argv_allowed",
     "build_argv",
     "build_environment",
+    "build_production_argv",
 ]

@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from src.ai_assist.argv import RunLimits, Sampling
+from src.ai_assist.argv import ALLOWED_FLAGS, RunLimits, Sampling, build_argv
 from src.ai_assist.attestation import read_attestation
 from src.ai_assist.contracts import AiCancelToken, OutcomeCode
 from src.ai_assist.host import GenerationActivity, MemoryProbe, read_host_memory
@@ -569,6 +569,12 @@ def _run_session(
         },
     )
     import_runtime(paths.runtime_archive, build, ai_root)
+    if attest:
+        # AI-202a (D19): the service binds the attestation to the build id and executable it runs, so the operator's
+        # statement is re-recorded for exactly the derived build. The statement text is unchanged.
+        from src.ai_assist.attestation import record_attestation as _record_covered
+
+        _record_covered(ai_root, attest, [(build.build_id, Path(build.executable).name)])
     model_arms = [a for a in arms if a not in plan_module.BASELINE_ARMS]
     for arm_id in model_arms:
         model_id = arm_specs[arm_id].model.model_id if arm_id in arm_specs else arm_id
@@ -868,7 +874,8 @@ _UNTRUSTWORTHY_OBSERVATION = frozenset(
 
 def _argv_options(arm: Any) -> dict[str, Any]:
     if arm is None:
-        return {}
+        # The frozen Qwen plans digest ``build_argv`` and ``ALLOWED_FLAGS``; production uses its own builder (AI-202a).
+        return {"argv_builder": build_argv, "allowed_flags": ALLOWED_FLAGS}
     from tools.qualification.ai111.lfm3_contract import LFM3_ALLOWED_FLAGS
 
     return {"argv_builder": arm.argv, "allowed_flags": LFM3_ALLOWED_FLAGS}

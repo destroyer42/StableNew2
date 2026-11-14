@@ -7,7 +7,6 @@ from dataclasses import replace
 
 import pytest
 
-from src.ai_assist.attestation import record_attestation
 from src.ai_assist.contracts import OutcomeCode
 from src.ai_assist.events import EventLog
 from src.ai_assist.manifests import ModelRegistry, RuntimeManifest, record_active
@@ -32,7 +31,7 @@ from src.controller.app_controller_services.ai_assist_integration import AiAssis
 from src.gui_v2.ai_suggestion_view import preview_status_text
 from src.services.operator_readiness_service import OperatorReadinessService
 
-from .conftest import Install, request_for
+from .conftest import Install, attest, request_for
 from .test_service_runtime import SpawnSpy, make_service
 
 PREVIEW_POLICY = ServicePolicy(allow_preview=True, strict_offline=True, watch_interval_seconds=0.05)
@@ -81,7 +80,7 @@ def test_status_distinguishes_qualified_available_enabled_and_not_installed(
 def test_enable_use_label_and_revoke(candidate: Install) -> None:
     spy = SpawnSpy()
     service = make_service(candidate, policy=PREVIEW_POLICY, runner=spy)
-    record_attestation(candidate.root, "outbound block rule")
+    attest(candidate, "outbound block rule")
     refused = service.run(request_for())
     assert refused.code is OutcomeCode.NOT_INSTALLED and refused.reason == "preview_not_enabled"
     assert spy.calls == 0
@@ -128,7 +127,7 @@ def test_malformed_record_fails_closed(candidate: Install, content: str) -> None
     preview_enablement_path(candidate.root).write_text(content, encoding="utf-8")
     assert read_preview_enablement(candidate.root) is None
     spy = SpawnSpy()
-    record_attestation(candidate.root, "rule")
+    attest(candidate, "rule")
     outcome = make_service(candidate, policy=PREVIEW_POLICY, runner=spy).run(request_for())
     assert outcome.code is OutcomeCode.NOT_INSTALLED and spy.calls == 0
 
@@ -142,7 +141,7 @@ def test_missing_attestation_still_blocks_in_preview(candidate: Install) -> None
 
 def test_preview_policy_off_never_admits_a_candidate_even_with_a_record(candidate: Install) -> None:
     enable(candidate)
-    record_attestation(candidate.root, "rule")
+    attest(candidate, "rule")
     policy = ServicePolicy(strict_offline=True, watch_interval_seconds=0.05)
     assert (
         make_service(candidate, policy=policy).run(request_for()).code is OutcomeCode.NOT_INSTALLED
@@ -150,7 +149,7 @@ def test_preview_policy_off_never_admits_a_candidate_even_with_a_record(candidat
 
 
 def test_qualified_path_is_unchanged_and_labelled_qualified(installation: Install) -> None:
-    record_attestation(installation.root, "rule")
+    attest(installation, "rule")
     outcome = make_service(installation, policy=PREVIEW_POLICY).run(request_for())
     assert outcome.code is OutcomeCode.SUGGESTION and outcome.details["trust_tier"] == "qualified"
     assert EventLog(events_path(installation.root)).tail(1)[0]["trust_tier"] == "qualified"
@@ -193,7 +192,7 @@ def test_integration_names_each_missing_prerequisite_then_runs_labelled(
     assert ai.enable_preview()[0]
     code, text = ai.availability()
     assert code is OutcomeCode.EGRESS_NOT_ATTESTED
-    record_attestation(candidate.root, "rule")
+    attest(candidate, "rule")
     code, text = ai.availability()
     assert code is None and PREVIEW_LABEL in text and ai.trust_label() == PREVIEW_LABEL
     assert ai.revoke_preview()[0] and ai.trust_label() == ""

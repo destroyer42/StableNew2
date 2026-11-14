@@ -7,7 +7,7 @@
       "asset_name": "llama-b11840-bin-win-cpu-x64.zip",
       "asset_sha256": "f805935dec8a6f527bf3d587419865c1cf486ba6a430dc0381ca97aedf0da034",
       "build_id": "b11840-cpu",
-      "executable": "llama-cli.exe",
+      "executable": "llama-completion.exe",
       "files": {
         "ggml-base.dll": "b1e742ad3d1c1927e0042fdf15d01497747cb9cc295e0933f62b771dd527d48d",
         "ggml-cpu-alderlake.dll": "47d48a3a6163eb081fb3aa4f07986c6118178fef00ef06fdb1271dc425950e45",
@@ -71,7 +71,7 @@
       "asset_name": "llama-b11960-bin-win-cpu-x64.zip",
       "asset_sha256": "73f962f82850d244db47eaacb9d913637027b82399124324298576d58c5f4287",
       "build_id": "b11960-cpu",
-      "executable": "llama-cli.exe",
+      "executable": "llama-completion.exe",
       "files": {
         "ggml-base.dll": "200cd9b6f0a7934c2e1c85e55289d5498332713321b03e83eb2ae3da5eeb6137",
         "ggml-cpu-alderlake.dll": "8ae4c14de9eeb5528e42cff69ed8485e6cd0e3f8601837add873a9d12199ca95",
