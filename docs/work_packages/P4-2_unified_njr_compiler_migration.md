@@ -119,6 +119,27 @@ Risk: low. Rollback: revert the commit; no production effect.
 
 ## P4-2B — Assembly core and leaf routes
 
+### Status (2026-11-13): implemented on `refactor/p4-2b-njr-assembly-core`
+
+- `njr_compiler.py` provides `PolicyState`, `CompileCheck`, `NjrDraft`, `NjrDerivation`, `compile_njr`, `derive_njr`,
+  plus `RawImagePlan`, `FrozenExpectation`, `history_lineage` and `mint_job_id`. `checks` is an ordered tuple (not a
+  set), so a route's refusal order is kept exactly.
+- Through the core: the CLI (S1, `EFFECTIVE`), Character Training (S5, `EFFECTIVE`, constructor swap only, OD-8), history
+  replay and batch retry (V1), Regenerate with Changes (V2, declared checks `OPERATION`, `PROFILE_NJR`) and the sequence
+  resume and replay (V4). V4 now passes its directive to `compile_replay_intent` as `ReplayIntent.run_directives`, so
+  the record is no longer amended after derivation.
+- Kept in the planners, so that nothing changes: the replay's retired-execution checks run on the parent before the new
+  identity is minted (the error carries the parent's `job_id`), and the batch-membership archive stays in
+  `compile_replay_intent`.
+- No route uses `RAW` yet; it is unit-tested only. P4-2E decides whether `JobBuilderV2` uses `RAW` (with a
+  `RawImagePlan`) or `EFFECTIVE`.
+- Ownership ratchet: `tests/pipeline/test_njr_compiler.py` fails if a migrated file constructs a record or calls
+  `replace(..., job_id=...)`, or if the core names a model family. P4-2F replaces it with the repository-wide guard.
+- Direct constructors that remain: S2 `job_builder_v2.py` and S3 `prompt_pack_job_builder.py` (P4-2E); S4
+  `reprocess_builder.py` (P4-2C); S6 `learning_njr.py`, S7 `ordinary_njr.py` and V5 `ordinary_njr.py:98` (P4-2D); V3
+  `replay_engine.py:161` (P4-2F); R1 `migrate_legacy_njr` (read path) and T1 `tools/qualification/img_forge_100/run.py`
+  (operator-only, a named exception in P4-2F).
+
 ### Objective
 
 - Outcome: `src/pipeline/njr_compiler.py` provides `NjrDraft`, `PolicyState`, `CompileCheck`, `compile_njr` and

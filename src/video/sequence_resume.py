@@ -217,21 +217,6 @@ def copy_prefix(
     return copied
 
 
-def _with_stage_extra(
-    njr: NormalizedJobRecord, stage_name: str, updates: Mapping[str, Any]
-) -> NormalizedJobRecord:
-    stages = tuple(
-        replace(stage, extra={**thaw_json(stage.extra), **updates})
-        if stage.stage_type == stage_name
-        else stage
-        for stage in njr.stage_chain
-    )
-    config = thaw_json(njr.workload.config)
-    if isinstance(config.get(stage_name), Mapping):
-        config[stage_name] = {**config[stage_name], **updates}
-    return replace(njr, stages=stages, workload=replace(njr.workload, config=config))
-
-
 def build_resume_njr(
     parent: NormalizedJobRecord,
     *,
@@ -269,7 +254,6 @@ def build_resume_njr(
         verify_provided_anchors(plan, hash_file=hash_file, from_segment=start)
     except SequencePlanError as exc:
         raise SequenceResumeError(str(exc)) from exc
-    child = compile_replay_intent(ReplayIntent(record=parent), id_fn=id_fn)
     block = {
         "parent_job_id": parent.job_id,
         "parent_ledger_path": str(ledger_file),
@@ -277,7 +261,9 @@ def build_resume_njr(
         "plan_sha256": plan.plan_sha256(),
         "from_segment": start,
     }
-    return _with_stage_extra(child, stage_name, {RESUME_KEY: block})
+    return compile_replay_intent(
+        ReplayIntent(record=parent, run_directives={stage_name: {RESUME_KEY: block}}), id_fn=id_fn
+    )
 
 
 def sequence_stage_name(njr: NormalizedJobRecord) -> str:
@@ -323,20 +309,23 @@ def build_replay_njr(
     so the replay can record whether each recomputed final frame equals the original, as divergence, never a failure."""
 
     plan_from_njr(parent, stage_name)  # the job must carry a sequence plan
-    child = compile_replay_intent(ReplayIntent(record=parent), id_fn=id_fn)
-    if ledger_path is None:
-        return child
-    ledger_file = Path(ledger_path)
-    try:
-        digest = sha256_of(ledger_file)
-    except OSError:
-        return child  # no readable reference: the replay still runs, it just has nothing to compare with
-    block = {
-        "parent_job_id": parent.job_id,
-        "parent_ledger_path": str(ledger_file),
-        "parent_ledger_sha256": digest,
-    }
-    return _with_stage_extra(child, stage_name, {REPLAY_KEY: block})
+    directives = None
+    if ledger_path is not None:
+        ledger_file = Path(ledger_path)
+        try:
+            digest = sha256_of(ledger_file)
+        except OSError:
+            digest = None  # no readable reference: the replay still runs, it just has nothing to compare with
+        if digest is not None:
+            block = {
+                "parent_job_id": parent.job_id,
+                "parent_ledger_path": str(ledger_file),
+                "parent_ledger_sha256": digest,
+            }
+            directives = {stage_name: {REPLAY_KEY: block}}
+    return compile_replay_intent(
+        ReplayIntent(record=parent, run_directives=directives), id_fn=id_fn
+    )
 
 
 def parse_resume_block(raw: Any) -> dict[str, Any]:
