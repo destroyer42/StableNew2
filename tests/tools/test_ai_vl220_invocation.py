@@ -95,8 +95,14 @@ def test_the_vision_build_is_a_pinned_unqualified_twin_of_the_required_build() -
     assert twin.executable == "llama-completion.exe"
     assert vision.qualified is False and twin.qualified is False
     (candidate,) = cand.load_candidates()
-    assert candidate.runtime.required_build_id == "b11960-cpu" and candidate.runtime.tool == VISION_TOOL
-    assert driver.vision_build_reasons(manifest, load_model_registry(MODEL_REGISTRY_PATH), candidate) == []
+    assert (
+        candidate.runtime.required_build_id == "b11960-cpu"
+        and candidate.runtime.tool == VISION_TOOL
+    )
+    assert (
+        driver.vision_build_reasons(manifest, load_model_registry(MODEL_REGISTRY_PATH), candidate)
+        == []
+    )
 
 
 def test_no_model_lists_the_vision_build_and_the_registry_text_is_untouched() -> None:
@@ -111,7 +117,9 @@ def test_no_model_lists_the_vision_build_and_the_registry_text_is_untouched() ->
     assert VISION_BUILD_ID not in text and VISION_TOOL not in text
 
 
-def _installed_world(tmp_path: Path) -> tuple[Path, RuntimeManifest, ModelRegistry, manifests.ModelEntry]:
+def _installed_world(
+    tmp_path: Path,
+) -> tuple[Path, RuntimeManifest, ModelRegistry, manifests.ModelEntry]:
     """An AI root holding one registered text model and both b11960 builds, all tiny and hash-correct."""
 
     files = {"llama-completion.exe": b"completion", "llama-mtmd-cli.exe": b"mtmd"}
@@ -161,8 +169,13 @@ def test_selector_activation_preview_and_import_model_cannot_reach_the_vision_bu
         assert (
             ai_assist_admin.main(
                 [
-                    "--root", str(tmp_path / "ai"), "activate", "--build-id", VISION_BUILD_ID,
-                    "--model-id", item.model_id,
+                    "--root",
+                    str(tmp_path / "ai"),
+                    "activate",
+                    "--build-id",
+                    VISION_BUILD_ID,
+                    "--model-id",
+                    item.model_id,
                 ]
             )  # fmt: skip
             == 2
@@ -232,16 +245,19 @@ ROW_FLAGS = {
 def test_the_vocabulary_is_exactly_the_yes_rows_of_the_contract_table() -> None:
     assert visual_argv.VISUAL_ALLOWED_FLAGS == ROW_FLAGS
     assert visual_argv.VISUAL_SWITCHES == {"--offline", "--no-mmproj-offload"}
-    document = (REPO / "docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md").read_text(
-        encoding="utf-8"
-    )
+    document = (
+        REPO / "docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md"
+    ).read_text(encoding="utf-8")
     for flag in ROW_FLAGS:
         pattern = rf"`[^`]*(?<![\w-]){re.escape(flag)}(?![\w-])[^`]*`"
         assert re.search(pattern, document), flag
     # The explicit "no" rows and every production-forbidden flag are refused by name.
     for flag in ("-p", "--prompt", "--log-disable", "--jinja", "-hf", "-mu", "--mmproj-url", "-mmu", "--rpc",
                  "--host", "--port", "--lora", "--control-vector", "--media-path"):  # fmt: skip
-        assert flag in visual_argv.VISUAL_REFUSED_FLAGS and flag not in visual_argv.VISUAL_ALLOWED_FLAGS
+        assert (
+            flag in visual_argv.VISUAL_REFUSED_FLAGS
+            and flag not in visual_argv.VISUAL_ALLOWED_FLAGS
+        )
     assert "--mmproj" not in visual_argv.VISUAL_REFUSED_FLAGS
 
 
@@ -275,15 +291,17 @@ def make_files(tmp_path: Path, images: int = 1) -> Files:
 
 
 def build_from(files: Files, **changes: Any) -> list[str]:
-    arguments: dict[str, Any] = dict(
-        model_path=files.model, projector_path=files.projector, prompt_file=files.prompt,
-        schema_file=files.schema, image_paths=files.images, evaluation_root=files.root, work_dir=files.work,
-    )  # fmt: skip
+    arguments: dict[str, Any] = {
+        "model_path": files.model, "projector_path": files.projector, "prompt_file": files.prompt,
+        "schema_file": files.schema, "image_paths": files.images, "evaluation_root": files.root, "work_dir": files.work,
+    }  # fmt: skip
     arguments.update(changes)
     return build_visual_argv(**arguments)
 
 
-def test_the_builder_emits_only_the_closed_vocabulary_with_exactly_one_projector(tmp_path: Path) -> None:
+def test_the_builder_emits_only_the_closed_vocabulary_with_exactly_one_projector(
+    tmp_path: Path,
+) -> None:
     files = make_files(tmp_path, images=2)
     argv = build_from(files)
     flags = [token for token in argv if token.startswith("-") and token not in ("-1",)]
@@ -294,10 +312,28 @@ def test_the_builder_emits_only_the_closed_vocabulary_with_exactly_one_projector
     for required in ("--offline", "--no-mmproj-offload"):
         assert required in argv
     assert argv[argv.index("-ngl") + 1] == "0" and argv[argv.index("-mmdev") + 1] == "none"
-    for forbidden in ("-p", "--log-disable", "--jinja", "-hf", "-mu", "--mmproj-url", "-mmu", "--rpc", "--host"):
+    for forbidden in (
+        "-p",
+        "--log-disable",
+        "--jinja",
+        "-hf",
+        "-mu",
+        "--mmproj-url",
+        "-mmu",
+        "--rpc",
+        "--host",
+    ):
         assert forbidden not in argv
     # GPU: nothing but CPU settings.
-    assert not {"--n-gpu-layers", "-dev", "--device", "-sm", "--split-mode", "-mg", "--main-gpu"} & set(argv)
+    assert not {
+        "--n-gpu-layers",
+        "-dev",
+        "--device",
+        "-sm",
+        "--split-mode",
+        "-mg",
+        "--main-gpu",
+    } & set(argv)
     check_visual_argv(argv)
     # The prompt is only ever a file path, never its text.
     assert "Describe the image." not in " ".join(argv)
@@ -333,7 +369,9 @@ def test_the_builder_refuses_an_empty_prompt_or_a_missing_file(
     assert refused.value.code == code
 
 
-def test_the_builder_refuses_wrong_image_counts_and_paths_outside_their_directories(tmp_path: Path) -> None:
+def test_the_builder_refuses_wrong_image_counts_and_paths_outside_their_directories(
+    tmp_path: Path,
+) -> None:
     files = make_files(tmp_path)
     for images in ([], [files.images[0]] * 3):
         with pytest.raises(VisualArgvRefused) as refused:
@@ -357,7 +395,9 @@ def test_the_builder_refuses_wrong_image_counts_and_paths_outside_their_director
     with pytest.raises(VisualArgvRefused) as refused:
         build_from(files, image_paths=[stray_image])
     assert refused.value.code == "image_outside_work_dir"
-    with pytest.raises(VisualArgvRefused) as refused:  # a `..` hop out of the root is resolved, not trusted
+    with pytest.raises(
+        VisualArgvRefused
+    ) as refused:  # a `..` hop out of the root is resolved, not trusted
         build_from(files, model_path=files.root / "_work" / ".." / ".." / "elsewhere" / "m.gguf")
     assert refused.value.code == "model_outside_evaluation_root"
     with pytest.raises(VisualArgvRefused) as refused:
@@ -437,13 +477,13 @@ def test_the_checker_refuses_stray_values_missing_values_and_non_numbers(tmp_pat
 
 def test_limits_and_sampling_are_bounded() -> None:
     for bad in (
-        dict(context_tokens=100), dict(threads=0), dict(timeout_seconds=0.1), dict(max_stdout_bytes=10),
-        dict(image_min_tokens=0), dict(image_min_tokens=300, image_max_tokens=200), dict(image_max_tokens=5000),
+        {"context_tokens": 100}, {"threads": 0}, {"timeout_seconds": 0.1}, {"max_stdout_bytes": 10},
+        {"image_min_tokens": 0}, {"image_min_tokens": 300, "image_max_tokens": 200}, {"image_max_tokens": 5000},
     ):  # fmt: skip
         with pytest.raises(ValueError):
             VisualLimits(**bad)
-    for bad_sampling in (dict(temperature=-1), dict(top_p=0), dict(top_k=0), dict(seed=-1), dict(repeat_penalty=0.5),
-                         dict(temperature=float("nan"))):  # fmt: skip
+    for bad_sampling in ({"temperature": -1}, {"top_p": 0}, {"top_k": 0}, {"seed": -1}, {"repeat_penalty": 0.5},
+                         {"temperature": float("nan")}):  # fmt: skip
         with pytest.raises(ValueError):
             VisualSampling(**bad_sampling)
     assert VisualSampling().temperature == 0.0 and VisualLimits().timeout_seconds == 180.0
@@ -453,7 +493,13 @@ def test_limits_and_sampling_are_bounded() -> None:
 
 
 def png_header(width: int, height: int) -> bytes:
-    return b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", width, height) + b"\x08\x02\x00\x00\x00"
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", 13)
+        + b"IHDR"
+        + struct.pack(">II", width, height)
+        + b"\x08\x02\x00\x00\x00"
+    )
 
 
 def jpeg(width: int, height: int) -> bytes:
@@ -475,16 +521,16 @@ def test_image_pre_checks_read_only_the_header(tmp_path: Path) -> None:
 
 
 REFUSED_IMAGES: list[tuple[bytes, str]] = [
-        (png_header(4097, 10), "image_dimensions_out_of_range"),
-        (png_header(10, 4097), "image_dimensions_out_of_range"),
-        (png_header(0, 10), "image_dimensions_out_of_range"),
-        (jpeg(5000, 100), "image_dimensions_out_of_range"),
-        (b"GIF89a" + b"\x00" * 40, "image_not_png_or_jpeg"),
-        (b"%PDF-1.7 " + b"\x00" * 40, "image_not_png_or_jpeg"),
-        (b"\x89PNG\r\n\x1a\n" + b"junk" * 3, "image_header_invalid"),
-        (b"\xff\xd8\xff\xe0\x00\x02", "image_header_invalid"),
-        (b"", "image_size_out_of_range"),
-        (png_header(10, 10) + b"\x00" * (visual_argv.MAX_IMAGE_BYTES), "image_size_out_of_range"),
+    (png_header(4097, 10), "image_dimensions_out_of_range"),
+    (png_header(10, 4097), "image_dimensions_out_of_range"),
+    (png_header(0, 10), "image_dimensions_out_of_range"),
+    (jpeg(5000, 100), "image_dimensions_out_of_range"),
+    (b"GIF89a" + b"\x00" * 40, "image_not_png_or_jpeg"),
+    (b"%PDF-1.7 " + b"\x00" * 40, "image_not_png_or_jpeg"),
+    (b"\x89PNG\r\n\x1a\n" + b"junk" * 3, "image_header_invalid"),
+    (b"\xff\xd8\xff\xe0\x00\x02", "image_header_invalid"),
+    (b"", "image_size_out_of_range"),
+    (png_header(10, 10) + b"\x00" * (visual_argv.MAX_IMAGE_BYTES), "image_size_out_of_range"),
 ]
 
 
@@ -567,7 +613,11 @@ class World:
 
     @property
     def staged(self) -> Path:
-        return self.kwargs["evaluation_root"] / self.candidate.candidate_id / self.candidate.model.sha256[:16]
+        return (
+            self.kwargs["evaluation_root"]
+            / self.candidate.candidate_id
+            / self.candidate.model.sha256[:16]
+        )
 
     @property
     def ai_root(self) -> Path:
@@ -623,23 +673,19 @@ def world(tmp_path: Path) -> World:
         launches.append((executable, list(argv)))
         return [sys.executable, str(child), str(record), str(response), *argv]
 
-    kwargs: dict[str, Any] = dict(
-        evaluation_root=evaluation_root, ai_root=ai_root, assets_dir=assets,
-        acknowledgement=acknowledgement(candidate), activity=idle,
-        runtime_manifest=RuntimeManifest((twin, vision)), registry=load_model_registry(MODEL_REGISTRY_PATH),
-        memory_probe=roomy, command_factory=factory,
-        environ={"SystemRoot": "C:/Windows", "SECRET_TOKEN": "must-not-leak", "HTTP_PROXY": "http://x"},
-        limits=VisualLimits(timeout_seconds=60.0),
-    )  # fmt: skip
-    return World(
-        tmp_path, candidate, case_set, labels, kwargs, launches, record, response
-    )
+    kwargs: dict[str, Any] = {
+        "evaluation_root": evaluation_root, "ai_root": ai_root, "assets_dir": assets,
+        "acknowledgement": acknowledgement(candidate), "activity": idle,
+        "runtime_manifest": RuntimeManifest((twin, vision)), "registry": load_model_registry(MODEL_REGISTRY_PATH),
+        "memory_probe": roomy, "command_factory": factory,
+        "environ": {"SystemRoot": "C:/Windows", "SECRET_TOKEN": "must-not-leak", "HTTP_PROXY": "http://x"},
+        "limits": VisualLimits(timeout_seconds=60.0),
+    }  # fmt: skip
+    return World(tmp_path, candidate, case_set, labels, kwargs, launches, record, response)
 
 
 def answer(world: World, kind: str, **fields: Any) -> str:
-    return json.dumps(
-        {"schema": contract.RESPONSE_SCHEMA, "status": "ok", "kind": kind, **fields}
-    )
+    return json.dumps({"schema": contract.RESPONSE_SCHEMA, "status": "ok", "kind": kind, **fields})
 
 
 # ===================================================================================================== driver: happy path
@@ -663,9 +709,15 @@ def test_a_case_runs_through_the_real_launcher_with_a_scrubbed_cpu_only_command(
     assert executable == world.ai_root / "runtimes" / VISION_BUILD_ID / VISION_TOOL
     seen = world.recorded()
     assert seen["argv"] == argv and argv.count("--mmproj") == 1
-    assert argv[argv.index("-ngl") + 1] == "0" and "--no-mmproj-offload" in argv and "-p" not in argv
+    assert (
+        argv[argv.index("-ngl") + 1] == "0" and "--no-mmproj-offload" in argv and "-p" not in argv
+    )
     env = seen["env"]
-    assert env["CUDA_VISIBLE_DEVICES"] == "-1" and env["NO_PROXY"] == "*" and env["HF_HUB_OFFLINE"] == "1"
+    assert (
+        env["CUDA_VISIBLE_DEVICES"] == "-1"
+        and env["NO_PROXY"] == "*"
+        and env["HF_HUB_OFFLINE"] == "1"
+    )
     assert env["PATH"] == str(world.ai_root / "runtimes" / VISION_BUILD_ID)
     assert "SECRET_TOKEN" not in env and "HTTP_PROXY" not in env
     scratch = Path(seen["work"])
@@ -673,7 +725,9 @@ def test_a_case_runs_through_the_real_launcher_with_a_scrubbed_cpu_only_command(
     assert scratch.parent == world.kwargs["evaluation_root"] / driver.WORK_NAME
     assert env["TEMP"] == env["TMP"] == str(scratch)
     assert seen["images_exist"] == [True] and "Request:" in seen["prompt"]
-    assert not scratch.exists() and not (world.kwargs["evaluation_root"] / driver.LOCK_NAME).exists()
+    assert (
+        not scratch.exists() and not (world.kwargs["evaluation_root"] / driver.LOCK_NAME).exists()
+    )
 
 
 def test_the_prompt_lists_the_elements_and_the_answer_shape(world: World) -> None:
@@ -690,7 +744,10 @@ def test_the_prompt_lists_the_elements_and_the_answer_shape(world: World) -> Non
 def test_a_before_after_case_passes_both_images(world: World) -> None:
     run = world.driver().run_case(world.case_set, world.case(contract.KIND_BEFORE_AFTER))
     assert run.evidence.status == driver.STATUS_VALID, run.evidence
-    assert world.launches[0][1].count("--image") == 2 and world.recorded()["images_exist"] == [True, True]
+    assert world.launches[0][1].count("--image") == 2 and world.recorded()["images_exist"] == [
+        True,
+        True,
+    ]
 
 
 def test_the_whole_synthetic_set_runs_and_is_scored_with_measurements(world: World) -> None:
@@ -715,10 +772,15 @@ def test_no_image_prompt_or_answer_text_is_persisted(
     assert run.text and MARKER in run.text  # the answer exists in memory for scoring
     full = world.driver().run_cases(world.case_set, world.labels)
     document = driver.evidence_document(
-        full, plan_sha256=NEW_PLAN_DIGEST, case_set_sha256=contract.digest({}), candidate=world.candidate
+        full,
+        plan_sha256=NEW_PLAN_DIGEST,
+        case_set_sha256=contract.digest({}),
+        candidate=world.candidate,
     )
     evidence_file = world.tmp / "evidence.json"
-    evidence_file.write_text(json.dumps(document, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
+    evidence_file.write_text(
+        json.dumps(document, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
+    )
     secrets: list[bytes] = [MARKER.encode(), b"\x89PNG"]
     for case in world.case_set.cases:
         secrets.append(case.prompt.encode())
@@ -735,7 +797,11 @@ def test_no_image_prompt_or_answer_text_is_persisted(
                     assert secret not in data, f"{path} holds run text"
     assert scanned > 3
     assert not any(MARKER in record.getMessage() for record in caplog.records)
-    assert not any(case.prompt in record.getMessage() for case in world.case_set.cases for record in caplog.records)
+    assert not any(
+        case.prompt in record.getMessage()
+        for case in world.case_set.cases
+        for record in caplog.records
+    )
     assert set(document["cases"][0]) == {
         "case_id", "status", "reason", "wall_seconds", "peak_working_set_bytes", "peak_private_bytes", "exit_code",
         "argv_shape_sha256", "context_tokens", "cpu_only",
@@ -748,7 +814,9 @@ def test_no_image_prompt_or_answer_text_is_persisted(
 # ============================================================================================== driver: admission refusals
 
 
-def refused(world: World, code: str, *reasons: str, kind: str = contract.KIND_ADHERENCE, **overrides: Any) -> None:
+def refused(
+    world: World, code: str, *reasons: str, kind: str = contract.KIND_ADHERENCE, **overrides: Any
+) -> None:
     run = world.driver(**overrides).run_case(world.case_set, world.case(kind))
     assert run.refusal is not None, run.evidence
     assert run.refusal.code == code, run.refusal
@@ -761,7 +829,9 @@ def refused(world: World, code: str, *reasons: str, kind: str = contract.KIND_AD
     assert not (root / driver.WORK_NAME).exists() or list((root / driver.WORK_NAME).iterdir()) == []
 
 
-def test_refuses_while_the_invocation_is_not_approved(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refuses_while_the_invocation_is_not_approved(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(contract, "INVOCATION_APPROVED", False)
     refused(world, driver.REFUSED_NOT_APPROVED)
 
@@ -769,16 +839,27 @@ def test_refuses_while_the_invocation_is_not_approved(world: World, monkeypatch:
 def test_refuses_an_evaluation_root_that_is_the_ai_root_or_a_git_tree(world: World) -> None:
     managed = world.tmp / "ManagedAi"
     managed.mkdir()
-    refused(world, driver.REFUSED_ROOT, "evaluation_root_is_the_ai_assist_root", evaluation_root=managed)
-    refused(world, driver.REFUSED_ROOT, "evaluation_root_inside_a_git_working_tree", evaluation_root=REPO)
-    refused(world, driver.REFUSED_ROOT, "evaluation_root_missing", evaluation_root=world.tmp / "nowhere")
+    refused(
+        world, driver.REFUSED_ROOT, "evaluation_root_is_the_ai_assist_root", evaluation_root=managed
+    )
+    refused(
+        world,
+        driver.REFUSED_ROOT,
+        "evaluation_root_inside_a_git_working_tree",
+        evaluation_root=REPO,
+    )
+    refused(
+        world, driver.REFUSED_ROOT, "evaluation_root_missing", evaluation_root=world.tmp / "nowhere"
+    )
 
 
 def test_single_flight_refuses_a_second_launch_while_one_is_held(world: World) -> None:
     lock = world.kwargs["evaluation_root"] / driver.LOCK_NAME
     lock.write_text("held", encoding="utf-8")
     run = world.driver().run_case(world.case_set, world.case(contract.KIND_ADHERENCE))
-    assert run.refusal is not None and run.refusal.code == driver.REFUSED_BUSY and world.launches == []
+    assert (
+        run.refusal is not None and run.refusal.code == driver.REFUSED_BUSY and world.launches == []
+    )
     assert lock.exists(), "a lock this call did not take is never removed"
 
 
@@ -791,7 +872,9 @@ def test_single_flight_holds_during_a_run_and_is_released_after(world: World) ->
         nested.append(other.run_case(world.case_set, world.case(contract.KIND_DEFECT)))
         return inner_factory(executable, argv)
 
-    run = world.driver(command_factory=factory).run_case(world.case_set, world.case(contract.KIND_ADHERENCE))
+    run = world.driver(command_factory=factory).run_case(
+        world.case_set, world.case(contract.KIND_ADHERENCE)
+    )
     assert run.evidence.status == driver.STATUS_VALID
     assert nested[0].refusal is not None and nested[0].refusal.code == driver.REFUSED_BUSY
     assert not (world.kwargs["evaluation_root"] / driver.LOCK_NAME).exists()
@@ -807,7 +890,9 @@ def test_refuses_without_a_trustworthy_generation_reading(world: World) -> None:
     refused(world, driver.REFUSED_ACTIVITY, activity=broken)
     refused(world, driver.REFUSED_ACTIVITY, activity=lambda: "idle")
     refused(world, driver.REFUSED_GENERATION, activity=lambda: GenerationActivity(running_jobs=1))
-    refused(world, driver.REFUSED_QUARANTINE, activity=lambda: GenerationActivity(gpu_quarantined=True))
+    refused(
+        world, driver.REFUSED_QUARANTINE, activity=lambda: GenerationActivity(gpu_quarantined=True)
+    )
 
 
 def with_builds(world: World, **vision_changes: Any) -> RuntimeManifest:
@@ -816,9 +901,16 @@ def with_builds(world: World, **vision_changes: Any) -> RuntimeManifest:
     return RuntimeManifest((twin, replace(vision, **vision_changes)))
 
 
-def test_refuses_a_vision_build_that_is_missing_changed_qualified_or_reachable(world: World) -> None:
+def test_refuses_a_vision_build_that_is_missing_changed_qualified_or_reachable(
+    world: World,
+) -> None:
     manifest: RuntimeManifest = world.kwargs["runtime_manifest"]
-    refused(world, driver.REFUSED_VISION_BUILD, "vision_build_not_pinned", runtime_manifest=RuntimeManifest((manifest.builds[0],)))
+    refused(
+        world,
+        driver.REFUSED_VISION_BUILD,
+        "vision_build_not_pinned",
+        runtime_manifest=RuntimeManifest((manifest.builds[0],)),
+    )
     refused(world, driver.REFUSED_VISION_BUILD, "vision_build_differs_from_required_build",
             runtime_manifest=with_builds(world, asset_sha256="b" * 64))  # fmt: skip
     refused(world, driver.REFUSED_VISION_BUILD, "vision_build_differs_from_required_build",
@@ -828,7 +920,10 @@ def test_refuses_a_vision_build_that_is_missing_changed_qualified_or_reachable(w
     refused(world, driver.REFUSED_VISION_BUILD, "vision_build_qualified",
             runtime_manifest=with_builds(world, qualified=True))  # fmt: skip
     registry = load_model_registry(MODEL_REGISTRY_PATH)
-    listing = replace(registry.entries[0], compatible_builds=(*registry.entries[0].compatible_builds, VISION_BUILD_ID))
+    listing = replace(
+        registry.entries[0],
+        compatible_builds=(*registry.entries[0].compatible_builds, VISION_BUILD_ID),
+    )
     refused(world, driver.REFUSED_VISION_BUILD, "vision_build_listed_by_a_model",
             registry=ModelRegistry((listing, *registry.entries[1:])))  # fmt: skip
     refused(world, driver.REFUSED_VISION_BUILD, "manifest_or_registry_invalid",
@@ -866,7 +961,9 @@ def test_refuses_without_memory_headroom(world: World) -> None:
     refused(world, driver.REFUSED_MEMORY_UNREADABLE, memory_probe=broken)
     refused(world, driver.REFUSED_MEMORY, memory_probe=lambda: HostMemory(1.0, 64.0))
     refused(world, driver.REFUSED_COMMIT, memory_probe=lambda: HostMemory(64.0, 1.0))
-    refused(world, driver.REFUSED_MEMORY_UNREADABLE, memory_probe=lambda: HostMemory(float("nan"), 64.0))
+    refused(
+        world, driver.REFUSED_MEMORY_UNREADABLE, memory_probe=lambda: HostMemory(float("nan"), 64.0)
+    )
 
 
 def test_refuses_images_that_are_missing_unpinned_or_unsafe(world: World) -> None:
@@ -883,21 +980,33 @@ def test_refuses_images_that_are_missing_unpinned_or_unsafe(world: World) -> Non
     junk = b"GIF89a" + b"\x00" * 64
     path.write_bytes(junk)
     pinned = replace(asset, sha256=sha(junk), bytes=len(junk))
-    edited = replace(world.case_set, assets=tuple(pinned if a is asset else a for a in world.case_set.assets))
+    edited = replace(
+        world.case_set, assets=tuple(pinned if a is asset else a for a in world.case_set.assets)
+    )
     run = world.driver().run_case(edited, case)
-    assert run.refusal is not None and run.refusal.reasons == ("image_not_png_or_jpeg",) and world.launches == []
+    assert (
+        run.refusal is not None
+        and run.refusal.reasons == ("image_not_png_or_jpeg",)
+        and world.launches == []
+    )
     # Pinned and well-formed but larger than the dimension ceiling.
     huge = png_header(5000, 10) + b"\x00" * 32
     path.write_bytes(huge)
     pinned = replace(asset, sha256=sha(huge), bytes=len(huge))
-    edited = replace(world.case_set, assets=tuple(pinned if a is asset else a for a in world.case_set.assets))
+    edited = replace(
+        world.case_set, assets=tuple(pinned if a is asset else a for a in world.case_set.assets)
+    )
     run = world.driver().run_case(edited, case)
     assert run.refusal is not None and run.refusal.reasons == ("image_dimensions_out_of_range",)
     path.write_bytes(original)
     # An asset id the case set does not know.
     foreign = replace(case, asset_ids=("ghost",))
     run = world.driver().run_case(world.case_set, foreign)
-    assert run.refusal is not None and run.refusal.reasons == ("unknown_asset",) and world.launches == []
+    assert (
+        run.refusal is not None
+        and run.refusal.reasons == ("unknown_asset",)
+        and world.launches == []
+    )
 
 
 def test_refuses_a_candidate_that_admission_refuses(world: World) -> None:
@@ -952,7 +1061,10 @@ def test_generation_that_starts_mid_run_stops_the_child(world: World) -> None:
     run = world.driver(activity=activity, watch_interval=0.0).run_case(
         world.case_set, world.case(contract.KIND_ADHERENCE)
     )
-    assert run.evidence.status == driver.STATUS_CANCELLED and run.evidence.reason == driver.REFUSED_GENERATION
+    assert (
+        run.evidence.status == driver.STATUS_CANCELLED
+        and run.evidence.reason == driver.REFUSED_GENERATION
+    )
 
 
 def test_the_wall_clock_limit_kills_a_stuck_child(world: World) -> None:
@@ -960,7 +1072,9 @@ def test_the_wall_clock_limit_kills_a_stuck_child(world: World) -> None:
     run = world.driver(limits=VisualLimits(timeout_seconds=1.0)).run_case(
         world.case_set, world.case(contract.KIND_ADHERENCE)
     )
-    assert run.evidence.status == driver.STATUS_TIMEOUT and run.evidence.reason == "wall_clock_limit"
+    assert (
+        run.evidence.status == driver.STATUS_TIMEOUT and run.evidence.reason == "wall_clock_limit"
+    )
     assert run.evidence.wall_seconds < 20
 
 
@@ -996,11 +1110,27 @@ def test_output_goes_through_strict_json_then_the_contract_validator(world: Worl
         (json.dumps({"schema": "wrong/1", "status": "ok"}), driver.STATUS_INVALID, "bad_schema"),
         (answer(world, contract.KIND_DEFECT, findings=[]), driver.STATUS_INVALID, "kind_mismatch"),
         (answer(world, case.kind, answers=[]), driver.STATUS_INVALID, "bad_list"),
-        (answer(world, case.kind, answers=[{"id": "nope", "value": True}]), driver.STATUS_INVALID,
-         "answers_do_not_match_elements"),  # fmt: skip
-        (answer(world, case.kind, **adherence_payload(world), extra=1), driver.STATUS_INVALID, "unknown_keys"),
-        (json.dumps({"schema": contract.RESPONSE_SCHEMA, "status": "refused", "refusal_reason": "cannot tell"}),
-         driver.STATUS_MODEL_REFUSED, ""),  # fmt: skip
+        (
+            answer(world, case.kind, answers=[{"id": "nope", "value": True}]),
+            driver.STATUS_INVALID,
+            "answers_do_not_match_elements",
+        ),  # fmt: skip
+        (
+            answer(world, case.kind, **adherence_payload(world), extra=1),
+            driver.STATUS_INVALID,
+            "unknown_keys",
+        ),
+        (
+            json.dumps(
+                {
+                    "schema": contract.RESPONSE_SCHEMA,
+                    "status": "refused",
+                    "refusal_reason": "cannot tell",
+                }
+            ),
+            driver.STATUS_MODEL_REFUSED,
+            "",
+        ),  # fmt: skip
         ("", driver.STATUS_INVALID, "not_json"),
     ]
     for text, status, reason in cases:
@@ -1022,7 +1152,9 @@ def test_a_failed_case_in_a_set_is_scored_as_wrong_never_skipped(world: World) -
 def test_the_first_admission_refusal_stops_a_set(world: World) -> None:
     run = world.driver(activity=None).run_cases(world.case_set, world.labels)
     assert run.refusal is not None and run.refusal.code == driver.REFUSED_ACTIVITY
-    assert len(run.evidence) == 1 and run.report is None and not run.complete and world.launches == []
+    assert (
+        len(run.evidence) == 1 and run.report is None and not run.complete and world.launches == []
+    )
 
 
 # ======================================================================================== no own process, thread or socket
@@ -1044,7 +1176,15 @@ def test_the_driver_has_no_process_thread_or_socket_code_of_its_own() -> None:
                 modules = [node.module]
             for module in modules:
                 assert module.split(".")[0] not in forbidden, f"{name} imports {module}"
-        for needle in ("Popen", "os.system", "os.startfile", "os.spawn", "os.kill", "terminate(", ".kill("):
+        for needle in (
+            "Popen",
+            "os.system",
+            "os.startfile",
+            "os.spawn",
+            "os.kill",
+            "terminate(",
+            ".kill(",
+        ):
             assert needle not in source, f"{name} contains {needle}"
     driver_source = (PACKAGE / "driver.py").read_text(encoding="utf-8")
     assert "from src.utils.managed_process import run_bounded" in driver_source
@@ -1057,8 +1197,13 @@ def test_the_driver_writes_nothing_under_the_ai_root(world: World) -> None:
     stamps = {path: path.stat().st_mtime_ns for path in world.ai_root.rglob("*") if path.is_file()}
     run = world.driver().run_case(world.case_set, world.case(contract.KIND_ADHERENCE))
     assert run.evidence.status == driver.STATUS_VALID
-    assert sorted(path.relative_to(world.ai_root).as_posix() for path in world.ai_root.rglob("*")) == before
-    assert {path: path.stat().st_mtime_ns for path in world.ai_root.rglob("*") if path.is_file()} == stamps
+    assert (
+        sorted(path.relative_to(world.ai_root).as_posix() for path in world.ai_root.rglob("*"))
+        == before
+    )
+    assert {
+        path: path.stat().st_mtime_ns for path in world.ai_root.rglob("*") if path.is_file()
+    } == stamps
 
 
 # ================================================================================================================ the CLI
@@ -1080,7 +1225,19 @@ def test_the_cli_refuses_a_missing_or_wrong_plan_digest_before_touching_anything
 
     monkeypatch.setattr(driver, "VisualDriver", boom)
     with pytest.raises(SystemExit):
-        cli.main(["evaluate", "--evaluation-root", "x", "--assets", "y", "--acknowledgement", "z", "--evidence-out", "e"])
+        cli.main(
+            [
+                "evaluate",
+                "--evaluation-root",
+                "x",
+                "--assets",
+                "y",
+                "--acknowledgement",
+                "z",
+                "--evidence-out",
+                "e",
+            ]
+        )
     for wrong in (OLD_PLAN_DIGEST, "0" * 64, "", NEW_PLAN_DIGEST[:-1], NEW_PLAN_DIGEST + "0"):
         assert cli.main(cli_args(world, wrong)) == 2
         assert driver.REFUSED_PLAN_DIGEST in capsys.readouterr().err
@@ -1100,7 +1257,9 @@ def test_the_cli_with_the_right_digest_still_needs_every_gate(
 ) -> None:
     digest = plan.build_plan()["plan_sha256"]
     assert digest == NEW_PLAN_DIGEST
-    (world.tmp / "ack.json").write_text(json.dumps(acknowledgement(world.candidate)), encoding="utf-8")
+    (world.tmp / "ack.json").write_text(
+        json.dumps(acknowledgement(world.candidate)), encoding="utf-8"
+    )
     # No --generation-idle: the activity reading is absent, so the very first gate refuses and nothing launches.
     assert cli.main(cli_args(world, digest.upper())) == 1
     assert driver.REFUSED_ACTIVITY in capsys.readouterr().err
@@ -1118,7 +1277,9 @@ def test_the_cli_with_the_right_digest_still_needs_every_gate(
     assert refusal["code"] in (driver.REFUSED_VISION_BUILD, driver.REFUSED_RUNTIME)
 
 
-def test_the_cli_cases_and_labels_go_together(world: World, capsys: pytest.CaptureFixture[str]) -> None:
+def test_the_cli_cases_and_labels_go_together(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
     digest = plan.build_plan()["plan_sha256"]
     assert cli.main(cli_args(world, digest, "--cases", str(world.tmp / "cases.json"))) == 2
     assert "go together" in capsys.readouterr().err
@@ -1138,8 +1299,12 @@ def test_the_flag_flips_only_because_every_contract_gate_is_implemented() -> Non
     assert contract.INVOCATION_APPROVED is True
     manifest = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
     assert manifest.find(VISION_BUILD_ID) is not None  # gate 1: the separate pinned build entry
-    assert callable(build_visual_argv) and callable(check_visual_argv)  # gate 2: the closed vocabulary and builder
-    assert inspect.signature(driver.VisualDriver.__init__).parameters["runner"].default is run_bounded  # gate 3
+    assert callable(build_visual_argv) and callable(
+        check_visual_argv
+    )  # gate 2: the closed vocabulary and builder
+    assert (
+        inspect.signature(driver.VisualDriver.__init__).parameters["runner"].default is run_bounded
+    )  # gate 3
     for refusal in (  # gate 4: fail-closed admission, each a stable code
         driver.REFUSED_NOT_APPROVED, driver.REFUSED_BUSY, driver.REFUSED_ACTIVITY, driver.REFUSED_GENERATION,
         driver.REFUSED_VISION_BUILD, driver.REFUSED_RUNTIME, driver.REFUSED_ATTESTATION, driver.REFUSED_MEMORY,
@@ -1148,28 +1313,35 @@ def test_the_flag_flips_only_because_every_contract_gate_is_implemented() -> Non
         assert isinstance(refusal, str) and refusal
     assert callable(driver.check_output) and callable(driver.strict_json)  # gate 5: output handling
     assert callable(driver.evidence_document)  # gate 6: evidence
-    assert "-ngl" in visual_argv.VISUAL_VALUE_FLAGS and "--no-mmproj-offload" in visual_argv.VISUAL_SWITCHES  # gate 7
+    assert (
+        "-ngl" in visual_argv.VISUAL_VALUE_FLAGS
+        and "--no-mmproj-offload" in visual_argv.VISUAL_SWITCHES
+    )  # gate 7
 
 
-def test_the_new_plan_digest_differs_from_the_approved_one_only_by_the_flag_and_the_reason_text() -> None:
+def test_the_new_plan_digest_differs_from_the_approved_one_only_by_the_flag_and_the_reason_text() -> (
+    None
+):
     current = plan.build_plan()
     assert current["plan_sha256"] == NEW_PLAN_DIGEST != OLD_PLAN_DIGEST
     body = copy.deepcopy({key: value for key, value in current.items() if key != "plan_sha256"})
     reverted = copy.deepcopy(body)
     reverted["image_invocation"]["approved"] = False
     candidate_row = next(
-        row for row in reverted["comparators"] if row["comparator_id"] == "lfm3-vl-2b-q4_k_m-liquidai"
+        row
+        for row in reverted["comparators"]
+        if row["comparator_id"] == "lfm3-vl-2b-q4_k_m-liquidai"
     )
     candidate_row["reasons"] = ["image_invocation_not_approved", *candidate_row["reasons"]]
     assert contract.digest(reverted) == OLD_PLAN_DIGEST
     # And nothing else differs: every other field of the plan is the one the owner authorized.
-    changed = {
-        key for key in body if body[key] != reverted[key]
-    }
+    changed = {key for key in body if body[key] != reverted[key]}
     assert changed == {"image_invocation", "comparators"}
-    assert {k for k in body["image_invocation"] if body["image_invocation"][k] != reverted["image_invocation"][k]} == {
-        "approved"
-    }
+    assert {
+        k
+        for k in body["image_invocation"]
+        if body["image_invocation"][k] != reverted["image_invocation"][k]
+    } == {"approved"}
     assert body["executes_models"] is False
 
 

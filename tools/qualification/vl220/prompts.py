@@ -19,19 +19,19 @@ _HEAD = (
 def _shape(case: Case) -> str:
     base = f'"schema":"{contract.RESPONSE_SCHEMA}","status":"ok","kind":"{case.kind}"'
     if case.kind in (contract.KIND_ADHERENCE, contract.KIND_CONSISTENCY):
-        return '{' + base + ',"answers":[{"id":"<element id>","value":true}]}'
+        return "{" + base + ',"answers":[{"id":"<element id>","value":true}]}'
     if case.kind == contract.KIND_DEFECT:
         return (
-            '{' + base + ',"findings":[{"region":"<one of: ' + ", ".join(contract.REGIONS) + '>",'
+            "{" + base + ',"findings":[{"region":"<one of: ' + ", ".join(contract.REGIONS) + '>",'
             '"category":"<one of: ' + ", ".join(contract.DEFECT_CATEGORIES) + '>",'
             '"severity":"<one of: ' + ", ".join(contract.SEVERITIES) + '>"}]}'
         )
     if case.kind == contract.KIND_BEFORE_AFTER:
         return (
-            '{' + base + ',"preferred":"<one of: ' + ", ".join(contract.PREFERENCES) + '>",'
+            "{" + base + ',"preferred":"<one of: ' + ", ".join(contract.PREFERENCES) + '>",'
             '"reason":"<one of: ' + ", ".join(contract.PREFERENCE_REASONS) + '>"}'
         )
-    return '{' + base + ',"objects":["<short object name>"]}'
+    return "{" + base + ',"objects":["<short object name>"]}'
 
 
 def _guidance(case: Case) -> str:

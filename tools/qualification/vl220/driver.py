@@ -72,7 +72,14 @@ from tools.qualification.vl220.candidates import (
     VisualCandidate,
     check_admission,
 )
-from tools.qualification.vl220.contract import Asset, Case, CaseSet, LabelSet, Measurement, ResourceLimits
+from tools.qualification.vl220.contract import (
+    Asset,
+    Case,
+    CaseSet,
+    LabelSet,
+    Measurement,
+    ResourceLimits,
+)
 from tools.qualification.vl220.prompts import render_visual_prompt
 from tools.qualification.vl220.visual_argv import (
     MAX_IMAGE_BYTES,
@@ -168,7 +175,10 @@ class CaseEvidence:
 
     @property
     def launched(self) -> bool:
-        return bool(self.argv_shape_sha256) and self.status not in (STATUS_NOT_RUN, STATUS_LAUNCH_FAILED)
+        return bool(self.argv_shape_sha256) and self.status not in (
+            STATUS_NOT_RUN,
+            STATUS_LAUNCH_FAILED,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,7 +421,9 @@ class VisualDriver:
             return Refusal(REFUSED_QUARANTINE)
         return None
 
-    def _runtime_refusal(self) -> tuple[Refusal | None, RuntimeBuild | None, RuntimeManifest | None]:
+    def _runtime_refusal(
+        self,
+    ) -> tuple[Refusal | None, RuntimeBuild | None, RuntimeManifest | None]:
         try:
             manifest = (
                 self._manifest
@@ -451,7 +463,9 @@ class VisualDriver:
             return Refusal(REFUSED_COMMIT)
         return None
 
-    def _stage_images(self, case: Case, assets: Mapping[str, Asset], scratch: Path) -> list[Path] | Refusal:
+    def _stage_images(
+        self, case: Case, assets: Mapping[str, Asset], scratch: Path
+    ) -> list[Path] | Refusal:
         """Copy each pinned image into the private work directory after proving its pin, then read its header."""
 
         staged: list[Path] = []
@@ -499,7 +513,9 @@ class VisualDriver:
             return _refused(case, Refusal(REFUSED_CANCELLED))
         refused_root = staging.root_refusal(self._root)
         if refused_root or not self._root.is_dir():
-            return _refused(case, Refusal(REFUSED_ROOT, (refused_root or "evaluation_root_missing",)))
+            return _refused(
+                case, Refusal(REFUSED_ROOT, (refused_root or "evaluation_root_missing",))
+            )
         lock = self._acquire()
         if lock is None:
             return _refused(case, Refusal(REFUSED_BUSY))
@@ -524,7 +540,9 @@ class VisualDriver:
             scratch.mkdir(parents=True, exist_ok=False)
         except OSError:
             return _refused(case, Refusal(REFUSED_SCRATCH))
-        staged = self._stage_images(case, {asset.asset_id: asset for asset in case_set.assets}, scratch)
+        staged = self._stage_images(
+            case, {asset.asset_id: asset for asset in case_set.assets}, scratch
+        )
         if isinstance(staged, Refusal):
             return _refused(case, staged)
         admission = check_admission(
@@ -536,7 +554,9 @@ class VisualDriver:
             cancel=self._cancel,
         )
         if not admission.ok:
-            code = REFUSED_CANCELLED if admission.reasons == (REASON_CANCELLED,) else REFUSED_CANDIDATE
+            code = (
+                REFUSED_CANCELLED if admission.reasons == (REASON_CANCELLED,) else REFUSED_CANDIDATE
+            )
             return _refused(case, Refusal(code, admission.reasons))
         schema = contract.build_response_schema(case.kind)
         prompt_file, schema_file = scratch / "prompt.txt", scratch / "schema.json"
@@ -586,16 +606,16 @@ class VisualDriver:
             observe=observer.bind,
         )
         wall = max(0.0, self._clock() - started)
-        evidence = dict(
-            case_id=case.case_id,
-            wall_seconds=round(wall, 3),
-            peak_working_set_bytes=int(observer.evidence.peak_tree_working_set_gib * _GIB),
-            peak_private_bytes=int(observer.evidence.peak_tree_private_gib * _GIB),
-            exit_code=outcome.returncode,
-            argv_shape_sha256=shape,
-            context_tokens=self._limits.context_tokens,
-            cpu_only=True,
-        )
+        evidence = {
+            "case_id": case.case_id,
+            "wall_seconds": round(wall, 3),
+            "peak_working_set_bytes": int(observer.evidence.peak_tree_working_set_gib * _GIB),
+            "peak_private_bytes": int(observer.evidence.peak_tree_private_gib * _GIB),
+            "exit_code": outcome.returncode,
+            "argv_shape_sha256": shape,
+            "context_tokens": self._limits.context_tokens,
+            "cpu_only": True,
+        }
         if outcome.launch_error:
             reason = (
                 "containment_unavailable"
@@ -605,12 +625,18 @@ class VisualDriver:
             return CaseRun(CaseEvidence(status=STATUS_LAUNCH_FAILED, reason=reason, **evidence))
         if outcome.cancelled:
             return CaseRun(
-                CaseEvidence(status=STATUS_CANCELLED, reason=watch.reason or "request_cancelled", **evidence)
+                CaseEvidence(
+                    status=STATUS_CANCELLED, reason=watch.reason or "request_cancelled", **evidence
+                )
             )
         if outcome.timed_out:
-            return CaseRun(CaseEvidence(status=STATUS_TIMEOUT, reason="wall_clock_limit", **evidence))
+            return CaseRun(
+                CaseEvidence(status=STATUS_TIMEOUT, reason="wall_clock_limit", **evidence)
+            )
         if outcome.output_truncated:
-            return CaseRun(CaseEvidence(status=STATUS_TOO_LARGE, reason="output_too_large", **evidence))
+            return CaseRun(
+                CaseEvidence(status=STATUS_TOO_LARGE, reason="output_too_large", **evidence)
+            )
         if outcome.returncode != 0:
             return CaseRun(
                 CaseEvidence(status=STATUS_CHILD_FAILED, reason="child_exit_nonzero", **evidence)
@@ -633,7 +659,9 @@ class VisualDriver:
             if run.refusal is not None:
                 return EvaluationRun(tuple(rows), refusal=run.refusal)
             if run.evidence.status == STATUS_CANCELLED:
-                return EvaluationRun(tuple(rows), refusal=Refusal(REFUSED_CANCELLED, (run.evidence.reason,)))
+                return EvaluationRun(
+                    tuple(rows), refusal=Refusal(REFUSED_CANCELLED, (run.evidence.reason,))
+                )
             responses[case.case_id] = run.text
             if run.evidence.launched:
                 measurements[case.case_id] = Measurement(

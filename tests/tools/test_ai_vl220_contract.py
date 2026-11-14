@@ -464,7 +464,10 @@ def test_comparator_eligibility_is_explicit_about_what_exists_today() -> None:
     candidate = table["lfm3-vl-2b-q4_k_m-liquidai"]
     # The invocation is approved and implemented (PR-AI-VL-220 driver); the candidate stays ineligible until the owner's license
     # acknowledgement and an evaluation-root import exist.
-    assert candidate["eligible"] is False and "image_invocation_not_approved" not in candidate["reasons"]
+    assert (
+        candidate["eligible"] is False
+        and "image_invocation_not_approved" not in candidate["reasons"]
+    )
     assert set(candidate["reasons"]) == {
         "license_not_acknowledged",
         "not_imported_into_an_evaluation_root",

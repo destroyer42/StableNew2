@@ -59,7 +59,9 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_IMAGE_SIDE = 4096
 _HEADER_BYTES = 256 * 1024
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-_SOF_MARKERS = frozenset({0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF})
+_SOF_MARKERS = frozenset(
+    {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
+)
 
 
 class VisualArgvRefused(ValueError):
@@ -115,10 +117,18 @@ class VisualSampling:
     seed: int = 321
 
     def __post_init__(self) -> None:
-        numbers = (self.temperature, self.top_p, self.min_p, self.presence_penalty, self.repeat_penalty)
+        numbers = (
+            self.temperature,
+            self.top_p,
+            self.min_p,
+            self.presence_penalty,
+            self.repeat_penalty,
+        )
         if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in numbers):
             raise ValueError("sampling values must be finite numbers")
-        if not (0.0 <= self.temperature <= 2.0 and 0.0 < self.top_p <= 1.0 and 0.0 <= self.min_p <= 1.0):
+        if not (
+            0.0 <= self.temperature <= 2.0 and 0.0 < self.top_p <= 1.0 and 0.0 <= self.min_p <= 1.0
+        ):
             raise ValueError("sampling value out of range")
         if not (0.0 <= self.presence_penalty <= 2.0 and 1.0 <= self.repeat_penalty <= 2.0):
             raise ValueError("penalty out of range")

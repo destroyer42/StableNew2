@@ -54,7 +54,9 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         return 2
     current = plan.build_plan(candidate)["plan_sha256"]
     if not hmac.compare_digest(str(args.i_have_the_plan_digest).strip().lower(), current):
-        sys.stderr.write(f"refused: {driver.REFUSED_PLAN_DIGEST} (current plan digest: {current})\n")
+        sys.stderr.write(
+            f"refused: {driver.REFUSED_PLAN_DIGEST} (current plan digest: {current})\n"
+        )
         return 2
     if args.evidence_out.exists():
         sys.stderr.write("refused: evidence file already exists\n")
@@ -99,7 +101,9 @@ def _evaluate(args: argparse.Namespace, candidate: Any) -> int:
         sys.stderr.write(f"refused: {run.refusal}\n")
         return 1
     ran = sum(1 for row in run.evidence if row.launched)
-    sys.stdout.write(f"evaluated {ran} of {len(run.evidence)} cases; evidence: {args.evidence_out}\n")
+    sys.stdout.write(
+        f"evaluated {ran} of {len(run.evidence)} cases; evidence: {args.evidence_out}\n"
+    )
     return 0 if run.complete else 1
 
 
@@ -128,7 +132,9 @@ def main(argv: list[str] | None = None) -> int:
     evaluate.add_argument("--acknowledgement", type=Path, required=True)
     evaluate.add_argument("--evidence-out", type=Path, required=True)
     evaluate.add_argument(
-        "--i-have-the-plan-digest", required=True, help="must equal the current plan digest (see `describe`)"
+        "--i-have-the-plan-digest",
+        required=True,
+        help="must equal the current plan digest (see `describe`)",
     )
     evaluate.add_argument(
         "--generation-idle",
