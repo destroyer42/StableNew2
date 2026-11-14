@@ -107,6 +107,8 @@ class SmartReviewDialog(tk.Toplevel):
         open_editor: Callable[[Path, bytes, str], None] | None = None,
         visibility_mode: Callable[[], str] | None = None,
         draft_current: Callable[[], bool] | None = None,
+        on_suggestion: Callable[[CaptionProposal | SegmentProposal], None] | None = None,
+        expected_source_sha256: str | None = None,
     ) -> None:
         super().__init__(master)
         apply_toplevel_theme(self)
@@ -122,6 +124,8 @@ class SmartReviewDialog(tk.Toplevel):
         self._prompt_binding = prompt_binding
         self._visibility_mode = visibility_mode
         self._draft_current = draft_current
+        self._on_suggestion = on_suggestion
+        self._expected_source_sha256 = expected_source_sha256
         self._application = (
             CaptionApplication(prompt_binding, self._refresh_controls) if prompt_binding else None
         )
@@ -152,9 +156,7 @@ class SmartReviewDialog(tk.Toplevel):
         for cap, var in self.enable_vars.items():
             var.trace_add("write", lambda *_, c=cap: self._on_enable(c))
         self.protocol("WM_DELETE_WINDOW", self._close)
-        self.bind(
-            "<Destroy>", lambda e: setattr(self, "_closed", True) if e.widget is self else None
-        )
+        self.bind("<Destroy>", self._on_destroy, add="+")
         self._runner.start(
             "SmartReviewLoad",
             lambda: WorkOutcome(_content_free(lambda: load_source(self.source_path))),
@@ -236,7 +238,9 @@ class SmartReviewDialog(tk.Toplevel):
         )
         self.propose_button.pack(side="left")
         self.accept_button = ttk.Button(
-            row, text="Accept mask", command=self._accept, state="disabled"
+            row,
+            text="Send mask to inspection" if self._on_suggestion else "Accept mask",
+            command=self._accept, state="disabled"
         )
         self.accept_button.pack(side="left", padx=4)
         self.reject_button = ttk.Button(
@@ -264,17 +268,22 @@ class SmartReviewDialog(tk.Toplevel):
         caption_row = ttk.Frame(panel)
         caption_row.pack(fill="x", pady=4)
         self.copy_button = ttk.Button(
-            caption_row, text="Copy", command=self._copy, state="disabled"
+            caption_row,
+            text="Send caption to inspection" if self._on_suggestion else "Copy",
+            command=self._send_caption if self._on_suggestion else self._copy,
+            state="disabled"
         )
         self.copy_button.pack(side="left")
         self.apply_button = ttk.Button(
             caption_row, text="Add to prompt draft", command=self._apply, state="disabled"
         )
-        self.apply_button.pack(side="left", padx=4)
+        if self._on_suggestion is None:
+            self.apply_button.pack(side="left", padx=4)
         self.undo_button = ttk.Button(
             caption_row, text="Undo", command=self._undo, state="disabled"
         )
-        self.undo_button.pack(side="left")
+        if self._on_suggestion is None:
+            self.undo_button.pack(side="left")
         self.dismiss_button = ttk.Button(
             panel, text="Dismiss suggestion", command=self._dismiss, state="disabled"
         )
@@ -294,6 +303,12 @@ class SmartReviewDialog(tk.Toplevel):
             self.status.set(f"Image unavailable: {outcome.error}")
             return
         loaded: LoadedSource = outcome.value
+        if self._expected_source_sha256 is not None and (
+            loaded.identity.file_sha256 != self._expected_source_sha256
+            or (self._draft_current is not None and not self._draft_current())
+        ):
+            self.status.set("The inspection source changed. Reopen Inspect & Improve.")
+            return
         self.session.bind(loaded, self.source_path)
         self._image = Image.fromarray(loaded.rgb)
         identity = loaded.identity
@@ -504,11 +519,14 @@ class SmartReviewDialog(tk.Toplevel):
         score = f", model confidence {proposal.score:.2f}" if proposal.score is not None else ""
         self.status.set(
             f"Suggested mask covers {proposal.coverage:.0%} of the image{score} ({proposal.model.label}). "
-            "It is a suggestion: Accept to refine it in the mask editor, or Reject."
+            "Unqualified suggestion. Review the mask before choosing an action."
         )
         self._render()
 
     def _accept(self) -> None:
+        if self._on_suggestion is not None:
+            self._send(self.session.segment)
+            return
         try:
             sha256 = self.session.identity.file_sha256 if self.session.identity else ""
             data = self.session.accept_mask()
@@ -519,6 +537,19 @@ class SmartReviewDialog(tk.Toplevel):
             self._refresh_controls()
             return
         self._open_editor(self.source_path, data, sha256)
+        self._close()
+
+    def _send_caption(self) -> None:
+        if self._current_view() is not None:
+            self._send(self.session.caption)
+
+    def _send(self, proposal: CaptionProposal | SegmentProposal | None) -> None:
+        if proposal is None or self._busy or self._on_suggestion is None:
+            return
+        if self._draft_current is not None and not self._draft_current():
+            self.status.set("The Review selection changed.")
+            return
+        self._on_suggestion(proposal)
         self._close()
 
     def _reject_mask(self) -> None:
@@ -649,9 +680,12 @@ class SmartReviewDialog(tk.Toplevel):
         self.status.set("Cancelling. Suggestions were discarded; nothing was changed or queued.")
         self._render()
 
+    def _on_destroy(self, event: Any) -> None:
+        if event.widget is self and not self._closed:
+            self._closed = True
+            self.session.close()
+
     def _close(self) -> None:
-        self._closed = True
-        self.session.close()
         self.destroy()
 
 

@@ -11,13 +11,24 @@ from typing import Any
 from PIL import Image
 
 from src.curation.curation_manifest import build_review_chunk_lineage_block
+from src.image_backends.image_backend_types import configured_image_backend_id
 from src.image_backends.operation_compatibility import (
     OperationAssessment,
     OperationNotSupportedError,
     assess_njr,
 )
+from src.pipeline.adetailer_contract import classify_detector
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
+from src.review.assist.contracts import AssistError
+from src.review.assist.identity import current_file_sha256
+from src.review.correction_advice import (
+    GuidedReprocess,
+    detectors_for,
+    resolve_target,
+    target_refusal,
+)
+from src.review.findings import CORRECTION_KEY, Action, correction_context
 from src.review.workflow_adapter import ReviewWorkflowAdapter
 from src.utils.image_metadata import (
     ImageMetadataContractV26,
@@ -45,6 +56,7 @@ class ReviewBatchPreview:
     jobs: tuple[NormalizedJobRecord, ...]
     group_count: int
     group_by_model: bool
+    guided: bool = False
 
     @property
     def blocked(self) -> tuple[ReviewBatchItem, ...]:
@@ -64,7 +76,8 @@ class ReviewBatchPreview:
             stat = Path(item.path).stat()
             if (stat.st_size, stat.st_mtime_ns) != item.fingerprint:
                 raise ValueError(f"Source changed; preview again: {item.path}")
-            if _source_sha256(Path(item.path)) != item.source_sha256:
+            hash_source = current_file_sha256 if self.guided else _source_sha256
+            if hash_source(Path(item.path)) != item.source_sha256:
                 raise ValueError(f"Source content changed; preview again: {item.path}")
 
 
@@ -104,6 +117,7 @@ def prepare_review_batch(
     negative_prompt_mode: str = "append", batch_size: int = 1,
     source_metadata_by_image: dict[str, dict[str, Any]] | None = None,
     group_by_model: bool = False,
+    guided: GuidedReprocess | None = None,
 ) -> ReviewBatchPreview:
     """Compile every source with the existing builder; report every refusal before admission."""
     if not image_paths or not stages:
@@ -114,14 +128,28 @@ def prepare_review_batch(
         raise ValueError("Prompt modes must be append, replace or modify")
     if batch_size <= 0:
         raise ValueError("batch_size must be >= 1")
+    if guided is not None and (
+        guided.action not in (Action.REPROCESS, Action.FACE, Action.HANDS)
+        or guided.resources is None
+        or (guided.stage == "adetailer" and classify_detector(guided.detector) != (
+            "face" if guided.action is Action.FACE else "hand"
+        ))
+        or len(image_paths) != 1 or batch_size != 1 or stages != [guided.stage]
+    ):
+        raise ValueError("A guided correction prepares exactly one source and one stage.")
     batch_id = str(uuid.uuid4())
     builder, sources, rows, jobs = ReprocessJobBuilder(), [], [], []
+    hash_source = current_file_sha256 if guided is not None else _source_sha256
 
     def extra(chunk: list[ReprocessSourceItem], _output: str) -> dict[str, Any]:
         metadata = dict(chunk[0].metadata)
         result = build_review_chunk_lineage_block(metadata, target_stage=" -> ".join(stages))
         result.update(batch_id=batch_id, parent_job_id=metadata.get("source_job_id"),
                       parent_artifact_id=metadata.get("source_artifact_id"))
+        if guided is not None:
+            result[CORRECTION_KEY] = correction_context(
+                guided.source, guided.category, guided.region, guided.action
+            )
         result["review_batch"] = {"batch_id": batch_id, "source_count": len(image_paths),
                                   "group_by_model": group_by_model}
         return result
@@ -133,7 +161,11 @@ def prepare_review_batch(
             if not path.is_file():
                 raise ValueError("Input image not found")
             before = path.stat()
-            source_sha256 = _source_sha256(path)
+            source_sha256 = hash_source(path)
+            if guided is not None and (
+                path != guided.source.path or source_sha256 != guided.source.identity.file_sha256
+            ):
+                raise ValueError("The inspected source changed. Inspect it again before Preview.")
             with Image.open(path) as image:
                 image.load()
             baseline = controller._extract_reprocess_baseline_from_image(path)
@@ -151,12 +183,46 @@ def prepare_review_batch(
             kv = read_image_metadata(path)
             embedded_job_id = kv.get(ImageMetadataContractV26.KEY_JOB_ID)
             _require_history_iterate_identity(metadata, embedded_job_id or baseline.get("job_id"), source_sha256)
-            metadata.update(source_job_id=embedded_job_id or baseline.get("job_id") or metadata.get("source_job_id"),
+            parent_job_id = embedded_job_id or baseline.get("job_id") or metadata.get("source_job_id")
+            metadata.update(source_job_id=parent_job_id,
                             source_artifact_id=f"sha256:{source_sha256}",
                             source_path=str(path.resolve()))
+            config = dict(baseline.get("config") or {})
+            if guided is not None:
+                target = resolve_target(baseline, fallback_config, guided.stage)
+                if (
+                    (target.model, target.backend) != (guided.model, guided.backend)
+                    or target.backend != configured_image_backend_id()
+                ):
+                    raise ValueError("The correction target changed. Reopen Inspect & Improve.")
+                assert guided.resources is not None
+                refusal = target_refusal(
+                    guided.action, target, guided.resources, source_size=guided.source.identity.size
+                )
+                if refusal:
+                    raise ValueError(refusal)
+                if guided.stage == "adetailer" and guided.detector not in detectors_for(
+                    guided.action, guided.resources
+                ):
+                    raise ValueError("The selected detector is unavailable for this pass.")
+                model = target.model
+                if guided.stage == "adetailer":
+                    face = guided.action is Action.FACE
+                    config["adetailer"] = {
+                        **dict(config.get("adetailer") or {}),
+                        "enable_face_pass": face,
+                        "enable_hands_pass": not face,
+                        "ad_hands_enabled": not face,
+                        ("adetailer_model" if face else "adetailer_hands_model"): guided.detector,
+                    }
+                    if not face:
+                        if prompt_delta:
+                            config["adetailer"]["adetailer_hands_prompt"] = prompt
+                        if negative_prompt_delta:
+                            config["adetailer"]["adetailer_hands_negative_prompt"] = negative
             source = ReprocessSourceItem(
                 input_image_path=str(path), prompt=prompt, negative_prompt=negative,
-                model=model or None, vae=baseline.get("vae"), config=dict(baseline.get("config") or {}),
+                model=model or None, vae=baseline.get("vae"), config=config,
                 metadata=metadata,
             )
             plan = builder.build_grouped_reprocess_jobs(
@@ -170,13 +236,13 @@ def prepare_review_batch(
                 raise OperationNotSupportedError(assessment)
             after = path.stat()
             fingerprint = (after.st_size, after.st_mtime_ns)
-            if fingerprint != (before.st_size, before.st_mtime_ns) or _source_sha256(path) != source_sha256:
+            if fingerprint != (before.st_size, before.st_mtime_ns) or hash_source(path) != source_sha256:
                 raise ValueError("Source changed while preparing; preview again")
             sources.append(source)
             jobs.extend(plan.jobs)
             rows.append(ReviewBatchItem(str(path), model, prompt, origin,
                                        fingerprint=fingerprint, source_sha256=source_sha256))
-        except (ValueError, OSError, TypeError) as exc:
+        except (ValueError, OSError, TypeError, AssistError) as exc:
             rows.append(ReviewBatchItem(str(path), model, prompt, origin, error=str(exc),
                                        assessment=exc.assessment if isinstance(exc, OperationNotSupportedError) else None))
 
@@ -194,4 +260,4 @@ def prepare_review_batch(
     group_count = len({group_key(job) for job in jobs})
     if group_by_model:
         jobs.sort(key=group_key)
-    return ReviewBatchPreview(batch_id, tuple(rows), tuple(jobs), group_count, group_by_model)
+    return ReviewBatchPreview(batch_id, tuple(rows), tuple(jobs), group_count, group_by_model, guided is not None)

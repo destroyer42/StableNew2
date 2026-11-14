@@ -18,6 +18,7 @@ from src.gui.ui_dispatcher import tk_dispatcher_for
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.edit_work_runner import build_edit_work_runner
 from src.gui.view_contracts.media_image_decode import (
+    VIEWPORT_EDGE,
     InspectionImage,
     decode_inspection_image,
     render_viewport,
@@ -60,6 +61,7 @@ class MediaInspector(ttk.Frame):
         shown_var: tk.BooleanVar | None = None,
         image_decoder: Callable[[str, threading.Event], InspectionImage] | None = None,
         follow_workspace: bool = True,
+        on_region: Callable[[tuple[int, int, int, int]], None] | None = None,
         **kwargs: Any,
     ) -> None:
         kwargs.pop("bg", None)
@@ -74,6 +76,12 @@ class MediaInspector(ttk.Frame):
         self._edge = min(620, edge or (min(300, max_width) if max_width else width))
         self._height = min(620, min(300, max_height) if max_height else height)
         self._on_source_changed = on_source_changed
+        self._on_region = on_region
+        self._source_region: tuple[int, int, int, int] | None = None
+        self._region_geometry: tuple[float, float, float, float, int, int] | None = None
+        self._region_origin = (0, 0)
+        self._region_start: tuple[int, int] | None = None
+        self._selecting_region = False
         self._decode_video = decode
         # A host that already proved the file's identity supplies a decoder bound to that proof (History compare).
         self._decode_image = image_decoder or decode_inspection_image
@@ -194,6 +202,10 @@ class MediaInspector(ttk.Frame):
         self._canvas.bind("<Button-5>", lambda _e: self._wheel(-1))
         self._canvas.bind("<ButtonPress-1>", lambda e: self._canvas.scan_mark(e.x, e.y))
         self._canvas.bind("<B1-Motion>", self._pan)
+        if self._on_region is not None:
+            self._canvas.configure(cursor="crosshair" if self._selecting_region else "")
+            self._canvas.bind("<ButtonPress-1>", self._begin_region, add="+")
+            self._canvas.bind("<ButtonRelease-1>", self._end_region, add="+")
         self._status_label = ttk.Label(
             host, textvariable=self.status_var, style="Muted.TLabel", wraplength=min(380, width)
         )
@@ -244,6 +256,7 @@ class MediaInspector(ttk.Frame):
         if eligible is not None:
             self._host_eligible = eligible
         if changed:
+            self._source_region = None
             self._release()
             if self._window is not None:
                 self.dock()
@@ -432,6 +445,20 @@ class MediaInspector(ttk.Frame):
                 scrollregion=(0, 0, max(size[0], virtual[0]), max(size[1], virtual[1]))
             )
             self._canvas.create_image(*position, image=self._photo_image, anchor="nw")
+            if self._on_region is not None:
+                self._region_geometry = (
+                    position[0],
+                    position[1],
+                    virtual[0] / image.source_size[0],
+                    virtual[1] / image.source_size[1],
+                    rendered.width,
+                    rendered.height,
+                )
+                self._region_origin = (
+                    max(0, (min(VIEWPORT_EDGE, max(1, size[0])) - virtual[0]) // 2),
+                    max(0, (min(VIEWPORT_EDGE, max(1, size[1])) - virtual[1]) // 2),
+                )
+                self._draw_region()
             label = (
                 "Fit"
                 if zoom is None
@@ -474,9 +501,51 @@ class MediaInspector(ttk.Frame):
         self._canvas.yview(*args)
         self._schedule_render()
 
+    def set_region(self, box: tuple[int, int, int, int] | None, *, selecting: bool = False) -> None:
+        self._source_region = box
+        self._selecting_region = selecting and self._on_region is not None
+        self._region_start = None
+        self._canvas.configure(cursor="crosshair" if self._selecting_region else "")
+        self._draw_region()
+
+    def _draw_region(self) -> None:
+        self._canvas.delete("source-region")
+        if self._source_region is None or self._region_geometry is None or not self.model.renderable:
+            return
+        _, _, sx, sy, _, _ = self._region_geometry
+        x, y = self._region_origin
+        left, top, right, bottom = self._source_region
+        self._canvas.create_rectangle(
+            x + left * sx, y + top * sy, x + right * sx, y + bottom * sy,
+            outline="#ffda33", width=2, tags="source-region",
+        )
+
+    def _region_pixel(self, event: Any) -> tuple[int, int] | None:
+        if not self.model.renderable or self._image is None or self._region_geometry is None or self._resize_id:
+            return None
+        x, y = self._canvas.canvasx(event.x), self._canvas.canvasy(event.y)
+        left, top, sx, sy, width, height = self._region_geometry
+        if not (left <= x < left + width and top <= y < top + height):
+            return None
+        ox, oy = self._region_origin
+        return int((x - ox) / sx), int((y - oy) / sy)
+
+    def _begin_region(self, event: Any) -> None:
+        if self._selecting_region:
+            self._region_start = self._region_pixel(event)
+
+    def _end_region(self, event: Any) -> None:
+        start, self._region_start = self._region_start, None
+        end = self._region_pixel(event) if start is not None else None
+        if start is not None and end is not None and self._on_region is not None:
+            left, right = sorted((start[0], end[0]))
+            top, bottom = sorted((start[1], end[1]))
+            self._on_region((left, top, right + 1, bottom + 1))
+
     def _pan(self, event: Any) -> None:
-        self._canvas.scan_dragto(event.x, event.y, gain=1)
-        self._schedule_render()
+        if not self._selecting_region:
+            self._canvas.scan_dragto(event.x, event.y, gain=1)
+            self._schedule_render()
 
     def detach(self) -> None:
         if self._closed or self._window is not None or not self.model.path:
@@ -531,6 +600,8 @@ class MediaInspector(ttk.Frame):
         self._cancel.set()
         self._cancel = threading.Event()
         self._loaded_revision = -1
+        self._region_geometry = None
+        self._region_start = None
         self._image = None
         self._photo_image = None
         if self._resize_id is not None:

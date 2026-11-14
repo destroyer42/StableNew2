@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import tkinter as tk
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from tkinter import ttk
@@ -25,6 +26,7 @@ from src.gui.view_contracts.video_experiment_contract import BackgroundWorkRunne
 from src.gui_v2.mask_editor_state import MaskDocument, MaskViewport
 from src.pipeline.image_edit_inputs import read_source
 from src.pipeline.njr_core_v26 import thaw_json
+from src.review.correction_advice import GuidedReprocess
 from src.utils.thread_registry import get_thread_registry
 
 
@@ -39,6 +41,8 @@ class MaskEditorDialog(tk.Toplevel):
         suggested_mask: bytes | None = None,
         suggested_source_sha256: str = "",
         lineage: dict[str, Any] | None = None,
+        guided: GuidedReprocess | None = None,
+        guided_current: Callable[[], bool] | None = None,
     ) -> None:
         super().__init__(master)
         apply_toplevel_theme(self)
@@ -47,6 +51,8 @@ class MaskEditorDialog(tk.Toplevel):
         self.minsize(800, 600)
         self._controller = controller
         self.source_path = source_path
+        self._guided = guided
+        self._guided_current = guided_current
         self.document: MaskDocument | None = None
         self.viewport = MaskViewport()
         self._image: Image.Image | None = None
@@ -174,6 +180,8 @@ class MaskEditorDialog(tk.Toplevel):
 
     def _load(self) -> WorkOutcome:
         source = read_source(self.source_path)
+        if self._guided is not None and source.sha256 != self._guided.source.identity.file_sha256:
+            raise ValueError("The inspected source changed. Inspect it again before editing.")
         with Image.open(io.BytesIO(source.data)) as image:
             pixels = image.convert("RGB")
         baseline = self._controller._extract_reprocess_baseline_from_image(self.source_path)
@@ -307,9 +315,22 @@ class MaskEditorDialog(tk.Toplevel):
         self._photo = ImageTk.PhotoImage(self.document.render(self._image, self.viewport, size))
         self.canvas.delete("all")
         self.canvas.create_image(0, 0, image=self._photo, anchor="nw")
+        region = self._guided.region if self._guided is not None else None
+        if region is not None:
+            left, top, right, bottom = region.box
+            self.canvas.create_rectangle(
+                self.viewport.x + left * self.viewport.scale,
+                self.viewport.y + top * self.viewport.scale,
+                self.viewport.x + right * self.viewport.scale,
+                self.viewport.y + bottom * self.viewport.scale,
+                outline="#ffda33", dash=(4, 3), width=2,
+            )
 
     def _prepare(self) -> None:
         if self.document is None or self._busy:
+            return
+        if self._guided_current is not None and not self._guided_current():
+            self.status.set("The Review selection or target changed. Open a new correction draft.")
             return
         self._invalidate()
         self.prompt.edit_modified(False)
@@ -328,6 +349,7 @@ class MaskEditorDialog(tk.Toplevel):
             self.status.set(str(exc))
             return
         mask = self.document.mask.copy()
+        guided = self._guided
         source_path, source_sha, baseline = (
             str(self.source_path),
             self._source_sha256,
@@ -345,6 +367,7 @@ class MaskEditorDialog(tk.Toplevel):
                     settings=settings,
                     fallback_config=fallback,
                     baseline=baseline,
+                    guided=guided,
                 )
             )
 
@@ -357,7 +380,9 @@ class MaskEditorDialog(tk.Toplevel):
                 return
             self._busy = False
             self.preview_button.state(["!disabled"])
-            if version != self._version:
+            if version != self._version or (
+                self._guided_current is not None and not self._guided_current()
+            ):
                 self.status.set("Draft changed during preparation. Preview again.")
                 return
             if outcome.error:
@@ -388,7 +413,12 @@ class MaskEditorDialog(tk.Toplevel):
                 if isinstance(value, dict):
                     return {
                         key: visibility.redact_text(
-                            item, item={"positive_prompt": job.positive_prompt}
+                            item,
+                            item={
+                                "positive_prompt": job.positive_prompt,
+                                "negative_prompt": job.negative_prompt,
+                                "prompt": item,
+                            },
                         )
                         if "prompt" in key and isinstance(item, str)
                         else redact(item)
@@ -411,6 +441,13 @@ class MaskEditorDialog(tk.Toplevel):
 
     def _submit(self) -> None:
         if self._preview is None or self._busy or self._attempted:
+            return
+        if self._guided_current is not None and not self._guided_current():
+            self._invalidate()
+            self.status.set("The Review selection or target changed. Open a new correction draft.")
+            return
+        if self.prompt.edit_modified():
+            self._invalidate()
             return
         preview, service = self._preview, self._controller.job_service
         self._attempted = True

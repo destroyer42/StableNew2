@@ -197,6 +197,40 @@ per Review tab and in memory only (a new session starts off); no model is ever d
   `tests/review/assist/test_assist_pure_320.py`, `tests/review/assist/test_assist_session_320.py`,
   `tests/gui_v2/test_smart_review_320.py`, `tests/assets/test_review_assist_catalog_320.py`.
 
+### 3.3.3 Inspect & Improve
+
+Select and show one still image in Review, then open **Inspect & Improve**. Draw a box on the shared
+image inspector or choose **Whole image**. Fill in the visible issue, category, certainty and confirmation,
+then **Record finding**. A session supports up to 24 findings. Coordinates use half-open rectangles
+in the stored pixel orientation, matching Edit Mask even when EXIF specifies a display rotation.
+Changing the Review selection or hiding it closes inspection and drops late replies.
+
+**Smart Review** still requires explicit enablement and a separate Analyze or Propose action.
+**Send to inspection** imports an unreviewed suggestion with its existing model label and
+unqualified status. Confirming an imported suggestion requires the operator to describe the
+visible issue. Caption text stays in inspection. A model result cannot open a draft or queue work.
+
+The action picker explains eligibility from the recorded target, ModelPolicy, stage compatibility,
+and the current cached checkpoint and detector lists. Guided img2img and ADetailer require a
+registry-resolved SDXL base target. Edit Mask also requires Forge. A face or hand pass may affect
+other regions that its detector finds. A rectangular finding marks the region for manual painting
+in Edit Mask. An explicitly imported, source-matched SAM mask is editable there.
+
+**Open correction draft** checks the source digest on a worker and opens the editable mask or
+reprocess draft. **Preview frozen job** uses the existing mask or Review batch compiler. Edit any
+draft field to expire that Preview. **Add to Queue** uses the existing confirmed admission and
+checks the source again. A correction records the selected action and region with the job's
+source artifact identity. Finding text stays in the inspection session.
+
+On a completed result, **Compare completed result** checks History and the recorded source
+digest. It can show an unverified recorded pair for inspection. Saving region judgments requires
+verified source lineage. The summary shows request and backend acknowledgement, pixel change,
+operator region judgments, overall preference and controlled experiment evidence independently.
+Review Feedback keeps the existing rating and Undo behavior. Guided judgments are stored in
+Learning with both file digests. Normal Review feedback can stamp portable metadata, changing
+a file digest and expiring a source-bound Preview. Mask edits freeze input snapshots. Ordinary
+reprocess checks the source at Preview and admission, then the runner opens its recorded path.
+
 ### 3.4 Thumbnails and compare
 
 - `ThumbnailWidget` (`src/gui/widgets/thumbnail_widget_v2.py`): latest-request-wins, one in-flight decode per path, decode via `load_image_thumbnail` (`src/utils/image_utils.py`) on a thread from `ThreadRegistry.spawn`, result marshalled with `after(0)`. Responsive mode decodes once at the maximum edge and rescales on resize (`src/gui/view_contracts/workspace_density_contract.py`). A failed worker start releases only its own request marker and shows "Preview unavailable".

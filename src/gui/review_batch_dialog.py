@@ -1,22 +1,27 @@
 """Transient whole-selection review; confirmation admits the exact prepared NJRs."""
 from __future__ import annotations
 
+import json
 import tkinter as tk
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
 from src.controller.review_batch_service import ReviewBatchPreview
+from src.pipeline.njr_core_v26 import thaw_json
 
 
 class ReviewBatchDialog(tk.Toplevel):
     def __init__(self, parent: Any, preview: ReviewBatchPreview, *, submit: Any,
-                 repreview: Any, visibility: Any) -> None:
+                 repreview: Any, visibility: Any,
+                 is_current: Callable[[], bool] | None = None) -> None:
         super().__init__(parent)
         self.title("Review batch preview")
         self.geometry("1000x540")
         self.transient(parent.winfo_toplevel())
         self.preview, self._submit, self._repreview, self._visibility = preview, submit, repreview, visibility
+        self._is_current = is_current
         self._attempted = False
         self._inflight = False
         self.protocol("WM_DELETE_WINDOW", lambda: None if self._inflight else self.destroy())
@@ -66,6 +71,10 @@ class ReviewBatchDialog(tk.Toplevel):
             self.rows.selection_set(first[0])
             self._show_details()
 
+    @property
+    def inflight(self) -> bool:
+        return self._inflight
+
     def _show_details(self) -> None:
         selected = self.rows.selection()
         if not selected:
@@ -76,12 +85,24 @@ class ReviewBatchDialog(tk.Toplevel):
         job = next((job for job in self.preview.jobs if item.path in job.input_image_paths), None)
         detail = f"Source: {item.path}\nCheckpoint: {values[1]}\nPositive prompt: {values[2]}\n{values[5]}"
         if job is not None:
-            negative = self._visibility.redact_text(job.negative_prompt, item={"positive_prompt": job.positive_prompt})
+            negative = self._visibility.redact_text(job.negative_prompt, item={
+                "positive_prompt": job.positive_prompt, "negative_prompt": job.negative_prompt
+            })
             settings = "\n".join(
                 f"{stage.stage_type}: sampler={stage.sampler_name}, scheduler={stage.scheduler}, "
                 f"steps={stage.steps}, CFG={stage.cfg_scale}, denoise={stage.denoising_strength}"
                 for stage in job.stage_chain if stage.enabled
             )
+            if self._is_current is not None:
+                def redact(value: Any) -> Any:
+                    if isinstance(value, Mapping):
+                        return {key: redact(item) for key, item in value.items()}
+                    if isinstance(value, (list, tuple)):
+                        return [redact(item) for item in value]
+                    return self._visibility.redact_text(value) if isinstance(value, str) else value
+
+                details = [redact(thaw_json(stage.to_dict())) for stage in job.stage_chain if stage.enabled]
+                settings += "\nFrozen stage settings\n" + json.dumps(details, indent=2, default=str)
             detail += (f"\nNegative prompt: {negative}\n{settings}\nBackend/profile: {job.backend_options}"
                        f"\nOutput directory: {job.output_plan.base_output_dir}\nJob: {job.job_id}"
                        f"\nParent job: {job.source.parent_job_id or 'unavailable'}"
@@ -105,6 +126,10 @@ class ReviewBatchDialog(tk.Toplevel):
 
     def _confirm(self) -> None:
         if self._attempted or self.preview.blocked or not self.preview.jobs:
+            return
+        if self._is_current is not None and not self._is_current():
+            self.submit_button.state(["disabled"])
+            messagebox.showwarning("Preview expired", "The correction draft or selection changed. Preview again.", parent=self)
             return
         self._attempted = True
         self._inflight = True

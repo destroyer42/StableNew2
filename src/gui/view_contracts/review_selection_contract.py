@@ -48,6 +48,9 @@ class ReviewSelectionRevisions:
         self._compare += 1
         return SelectionToken(selection=self._selection, image=self._image, path=str(path))
 
+    def current_image(self, path: str) -> SelectionToken:
+        return SelectionToken(selection=self._selection, image=self._image, path=path)
+
     def begin_folder_scan(self) -> SelectionToken:
         self._folder += 1
         return SelectionToken(selection=self._selection, image=self._folder)

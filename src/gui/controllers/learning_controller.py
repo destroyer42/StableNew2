@@ -120,6 +120,7 @@ from src.pipeline.job_models_v2 import (
 )
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
 from src.review.artifact_metadata_inspector import ArtifactMetadataInspector
+from src.review.improvement_evidence import ImprovementPair
 from src.review.review_metadata_service import (
     INTERNAL_REVIEW_SUMMARY_SCHEMA,
     PortableReviewSummary,
@@ -2568,10 +2569,25 @@ class LearningController:
             extract_primary=_extract_primary,
             metadata=metadata,
         )
+        proof = feedback.get("guided_source_proof")
+        if proof is not None:
+            # Check again at the writer, after any delay in GUI dispatch and payload preparation.
+            if (
+                not isinstance(proof, ImprovementPair)
+                or not proof.verified
+                or Path(image_path) != proof.after.path
+            ):
+                raise ValueError("The selected result no longer matches the guided comparison.")
+            proof.require_current()
         if self._learning_record_writer.append_record(record) is False:
             raise OSError(
                 "Review feedback was not confirmed saved to Learning records; see the log before retrying."
             )
+        if proof is not None:
+            # Keep these digest-bound observations in Learning. Stamping a mutable
+            # path would reopen the identity race and rewrite the reviewed result.
+            record.metadata["recommendation_refresh_error"] = refresh_saved_feedback(self.refresh_recommendations)
+            return record
         try:
             stamp_result = self._review_metadata_service.stamp_review_metadata(
                 image_path=image_path,
