@@ -61,6 +61,7 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "peak_private_gib",
         "priority_verified",
         "child_observed",
+        "exit_code",
     }
 )
 

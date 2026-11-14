@@ -13,7 +13,6 @@ import psutil
 import pytest
 
 from src.ai_assist.argv import RunLimits, Sampling
-from src.ai_assist.attestation import record_attestation
 from src.ai_assist.contracts import AiCancelToken, OutcomeCode
 from src.ai_assist.events import ALLOWED_FIELDS, EventLog
 from src.ai_assist.host import GenerationActivity, HostMemory
@@ -22,7 +21,7 @@ from src.ai_assist.paths import events_path, work_dir
 from src.ai_assist.service import AiAssistService, ServicePolicy
 from src.utils.managed_process import containment_required, run_bounded
 
-from .conftest import Install, idle, request_for, roomy
+from .conftest import Install, attest, idle, request_for, roomy
 
 FAST = RunLimits(timeout_seconds=20.0)
 
@@ -410,7 +409,7 @@ def test_strict_offline_requires_the_operator_attestation(installation: Install)
     strict = ServicePolicy(strict_offline=True, watch_interval_seconds=0.05)
     refused = make_service(installation, policy=strict).run(request_for("ok"))
     assert refused.code is OutcomeCode.EGRESS_NOT_ATTESTED
-    record_attestation(installation.root, "Windows Firewall outbound block on the pinned binary")
+    attest(installation, "Windows Firewall outbound block on the pinned binary")
     assert make_service(installation, policy=strict).run(request_for("ok", request_id="r2")).ok
 
 

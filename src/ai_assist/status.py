@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.ai_assist.attestation import read_attestation
+from src.ai_assist.attestation import attestation_covers, read_attestation, read_covers
 from src.ai_assist.contracts import OutcomeCode
 from src.ai_assist.events import EventLog
 from src.ai_assist.manifests import (
@@ -38,6 +38,11 @@ STATE_PREVIEW_AVAILABLE = "preview_available"
 #: A candidate is installed, verified and enabled by the operator (AI Assist Preview, owner decision D13).
 STATE_PREVIEW = "preview"
 
+EGRESS_ATTESTED = "attested"
+EGRESS_NOT_ATTESTED = "not_attested"
+#: An attestation exists but does not name the active runtime build and executable (or is a legacy free-text record).
+EGRESS_NOT_COVERED = "not_covered"
+
 MISSING_PINNED_BUILD = "pinned_build"
 MISSING_IMPORTED_MODEL = "imported_model"
 MISSING_ENABLEMENT = "enablement"
@@ -51,7 +56,7 @@ class AiAssistStatus:
     blockers: tuple[str, ...] = ()
     actions: tuple[str, ...] = ()
     last_outcome: str | None = None
-    egress: str = "not_attested"
+    egress: str = EGRESS_NOT_ATTESTED
     #: ``qualified``, ``preview`` or ``""``. A preview model is unqualified and must be labelled as such everywhere.
     trust: str = ""
     #: The exact next prerequisite the operator is missing (``MISSING_*``), or ``""``.
@@ -80,7 +85,9 @@ def read_status(
         )
     runtime = runtime if runtime is not None else load_runtime_manifest(RUNTIME_MANIFEST_PATH)
     registry = registry if registry is not None else load_model_registry(MODEL_REGISTRY_PATH)
-    egress = "attested" if read_attestation(base) is not None else "not_attested"
+    # Without a verified active build the only question is whether any (version 2) attestation exists; once the active
+    # build is known, only an attestation that names that build id and its executable counts (D19).
+    egress = EGRESS_ATTESTED if read_covers(base) else EGRESS_NOT_ATTESTED
 
     last: str | None = None
     try:
@@ -107,6 +114,12 @@ def read_status(
     verification = verify_installation(base, runtime, registry, allow_candidate=True)
     if verification.ok and verification.entry is not None and verification.build is not None:
         entry, build = verification.entry, verification.build
+        if attestation_covers(base, build.build_id, build.executable):
+            egress = EGRESS_ATTESTED
+        elif read_attestation(base) is not None:
+            egress = EGRESS_NOT_COVERED
+        else:
+            egress = EGRESS_NOT_ATTESTED
         if trust_tier(entry, build) == TRUST_QUALIFIED:
             return AiAssistStatus(
                 STATE_READY,
@@ -125,12 +138,14 @@ def read_status(
                 f"{PREVIEW_LABEL} (enabled by the operator): {entry.display_name} is installed and verified but not qualified.",
                 blockers=problems,
                 actions=()
-                if egress == "attested"
-                else ("Record the outbound firewall attestation.",),
+                if egress == EGRESS_ATTESTED
+                else (
+                    "Record the outbound firewall attestation for this runtime build and executable.",
+                ),
                 last_outcome=last,
                 egress=egress,
                 trust=TRUST_PREVIEW,
-                missing="" if egress == "attested" else MISSING_ATTESTATION,
+                missing="" if egress == EGRESS_ATTESTED else MISSING_ATTESTATION,
                 model_name=entry.display_name,
                 build_id=build.build_id,
                 model_sha256=entry.sha256,
@@ -178,12 +193,15 @@ def preview_state(status: AiAssistStatus) -> PreviewState:
     missing = status.missing
     if status.state == STATE_INTEGRITY_FAILED:
         missing = "integrity"
-    elif trust and not missing and status.egress != "attested":
+    elif trust and not missing and status.egress != EGRESS_ATTESTED:
         missing = MISSING_ATTESTATION
     return PreviewState(trust, missing, status.model_name, status.build_id, status.model_sha256)
 
 
 __all__ = [
+    "EGRESS_ATTESTED",
+    "EGRESS_NOT_ATTESTED",
+    "EGRESS_NOT_COVERED",
     "MODEL_REGISTRY_PATH",
     "RUNTIME_MANIFEST_PATH",
     "STATE_INTEGRITY_FAILED",

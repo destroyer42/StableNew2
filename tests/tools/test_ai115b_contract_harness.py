@@ -12,7 +12,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.ai_assist.argv import ALLOWED_FLAGS, RunLimits, Sampling, build_argv
+from src.ai_assist.argv import (
+    ALLOWED_FLAGS,
+    RunLimits,
+    Sampling,
+    build_argv,
+    build_production_argv,
+)
 from src.ai_assist.contracts import OutcomeCode
 from src.ai_assist.runtime import AiRuntime
 from src.utils.managed_process import ProcessOutcome
@@ -140,7 +146,9 @@ def test_injected_builder_cannot_escape_allowlist(tmp_path, flag):
     assert calls == []
 
 
-def test_default_runtime_builder_uses_existing_runner(tmp_path):
+def test_default_runtime_builder_is_the_production_builder_and_the_frozen_one_is_injectable(
+    tmp_path,
+):
     calls = []
     runtime = AiRuntime(
         tmp_path,
@@ -163,14 +171,17 @@ def test_default_runtime_builder_uses_existing_runner(tmp_path):
         lambda: (OutcomeCode.CANCELLED, "test"),
     )
     assert result.code is None and len(calls) == 1
-    expected = build_argv(
+    args = (
         verification.model_path,
         Path(calls[0][calls[0].index("-f") + 1]),
         Path(calls[0][calls[0].index("--json-schema-file") + 1]),
         RunLimits(),
         Sampling(),
     )
-    assert calls[0] == [str(verification.executable), *expected]
+    # AI-202a: production no longer passes --log-disable; the frozen build_argv (digested by the AI-111/115 plans) is
+    # unchanged and is what the qualification harness injects explicitly.
+    assert calls[0] == [str(verification.executable), *build_production_argv(*args)]
+    assert "--log-disable" not in calls[0] and "--log-disable" in build_argv(*args)
 
 
 @pytest.mark.parametrize(
@@ -758,3 +769,11 @@ def test_contract_stage_a_report_uses_frozen_cases_and_judge(tmp_path, monkeypat
     else:
         assert result["attribution_problems"]
         assert result["models"][ARM]["judgement"]["recommendation"] == "INCONCLUSIVE"
+
+
+def test_the_default_harness_arm_keeps_the_frozen_argv_builder_and_vocabulary():
+    # AI-202a: production changed its own defaults; the frozen Qwen plans digest build_argv and ALLOWED_FLAGS.
+    assert physical._argv_options(None) == {
+        "argv_builder": build_argv,
+        "allowed_flags": ALLOWED_FLAGS,
+    }

@@ -31,6 +31,7 @@ from src.gui_v2.ai_suggestion_view import (
     SuggestionSnapshot,
     checked_suggestion,
     outcome_review,
+    runtime_detail_text,
 )
 from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
 from src.prompting.prompt_adaptation import adapt_prompt_for_target
@@ -376,6 +377,7 @@ class PromptAiSuggestions:
             dialog.show_plan(
                 unavailable_plan_review(outcome_plan_text(outcome, OUTCOME_TEXT), trust_label=trust)
             )
+            dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
             self.refresh()
             return
         suggestion = checked_suggestion(outcome, request)
@@ -396,6 +398,7 @@ class PromptAiSuggestions:
                 judgement, targets=plan.targets, workflows=plan.workflows, trust_label=trust
             )
         dialog.show_plan(review)
+        dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
         self.refresh()
 
     def _current(self, snapshot: SuggestionSnapshot) -> bool:
@@ -448,6 +451,7 @@ class PromptAiSuggestions:
                     self.outcome = None
                     review = SuggestionReview(OUTCOME_TEXT[OutcomeCode.UNAVAILABLE], review.kind)
         dialog.show_review(review)
+        dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
         self.refresh()
 
     def _review(self, snapshot: SuggestionSnapshot, suggestion: Any) -> SuggestionReview:

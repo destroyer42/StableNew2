@@ -658,3 +658,40 @@ def test_closing_the_dialog_scrubs_the_goal_and_drops_a_late_plan(journey):
     j.service.callbacks[-1](_plan_outcome(request))
     j.scheduled.pop(0)()
     assert j.flow.dialog is None and j.flow._plan is None
+
+
+def test_runtime_detail_is_hidden_until_asked_labelled_raw_and_cleared_on_new_request(journey):
+    from src.ai_assist.contracts import RuntimeDetail
+    from src.gui_v2.ai_suggestion_view import RUNTIME_DETAIL_BUTTON, RUNTIME_DETAIL_LABEL
+
+    j = journey
+    dialog = start(j)
+    assert dialog.detail_button.instate(["disabled"])
+    request = j.service.requests[-1]
+    detail = RuntimeDetail(1, "error: invalid argument: RAW_STDERR_CANARY")
+    finish(
+        j,
+        AssistOutcome(
+            OutcomeCode.UNAVAILABLE,
+            request.request_id,
+            reason="child_exit_nonzero",
+            details={"exit_code": 1},
+            runtime_detail=detail,
+        ),
+    )
+    shown = dialog.status_var.get() + dialog.preview.get("1.0", "end")
+    assert "RAW_STDERR_CANARY" not in shown
+    assert dialog.detail_view.get("1.0", "end").strip() == ""
+    assert dialog.detail_button.instate(["!disabled"])
+    assert dialog.detail_button.cget("text") == RUNTIME_DETAIL_BUTTON
+    dialog._toggle_detail()
+    assert "Exit code: 1" in dialog.detail_view.get("1.0", "end")
+    assert "RAW_STDERR_CANARY" in dialog.detail_view.get("1.0", "end")
+    assert "not reviewed" in RUNTIME_DETAIL_LABEL and "never saved" in RUNTIME_DETAIL_LABEL
+    assert dialog.detail_label.cget("text") == RUNTIME_DETAIL_LABEL
+    dialog._toggle_detail()
+    assert dialog.detail_view.get("1.0", "end").strip() == ""
+    dialog._toggle_detail()
+    j.flow.request(SuggestionKind.PROMPT_REWRITE)  # a new request clears the previous detail
+    assert dialog.detail_view.get("1.0", "end").strip() == ""
+    assert dialog.detail_button.instate(["disabled"])

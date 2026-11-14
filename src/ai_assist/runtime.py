@@ -13,18 +13,23 @@ import os
 import shutil
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.ai_assist.argv import (
-    ALLOWED_FLAGS,
+    PRODUCTION_ALLOWED_FLAGS,
     RunLimits,
     Sampling,
     assert_argv_allowed,
-    build_argv,
     build_environment,
+    build_production_argv,
 )
-from src.ai_assist.contracts import AssistRequest, OutcomeCode
+from src.ai_assist.contracts import (
+    MAX_RUNTIME_DETAIL_BYTES,
+    AssistRequest,
+    OutcomeCode,
+    RuntimeDetail,
+)
 from src.ai_assist.framing import FramingError, build_json_schema, render_prompt
 from src.ai_assist.manifests import Verification
 from src.ai_assist.paths import runtime_dir, work_dir
@@ -54,6 +59,44 @@ class RuntimeResult:
     stdout: bytes = b""
     elapsed_ms: int = 0
     exit_code: int | None = None
+    #: Raw runtime output for the operator's "Show runtime detail" control; in memory only (see ``RuntimeDetail``).
+    detail: RuntimeDetail | None = field(default=None, repr=False, compare=False)
+
+
+#: ``llama-completion`` ends a generation that stopped on an end-of-generation token with this line on stdout
+#: (``LOG(" [end of text]\n")`` in ``tools/completion/completion.cpp``, both pinned tags). It is not model output.
+_END_OF_TEXT = b"[end of text]"
+
+
+def strip_end_of_text(stdout: bytes) -> bytes:
+    """Drop the tool's trailing ``[end of text]`` line (and the whitespace around it); nothing else is touched.
+
+    On Windows the line ends in CR LF. Only one marker at the very end is removed, so text the model itself wrote inside
+    its JSON can never be mistaken for it."""
+
+    trimmed = stdout.rstrip()
+    if trimmed.endswith(_END_OF_TEXT):
+        return trimmed[: -len(_END_OF_TEXT)].rstrip()
+    return stdout
+
+
+def _printable(raw: bytes) -> str:
+    """Decode bounded raw runtime output for display: replacement for bad UTF-8, control characters shown as ``?``."""
+
+    text = raw.decode("utf-8", errors="replace")
+    return "".join(
+        ch if ch in "\n\t" or ch.isprintable() else "?" for ch in text.replace("\r\n", "\n")
+    )
+
+
+def runtime_detail(
+    exit_code: int | None, stderr: bytes, stdout: bytes, *, with_stdout: bool
+) -> RuntimeDetail:
+    """The bounded, in-memory detail: the last 2 KB of stderr and, when asked, the first 2 KB of stdout."""
+
+    tail = stderr[-MAX_RUNTIME_DETAIL_BYTES:] if stderr else b""
+    head = stdout[:MAX_RUNTIME_DETAIL_BYTES] if with_stdout and stdout else b""
+    return RuntimeDetail(exit_code, _printable(tail), _printable(head))
 
 
 class AiRuntime:
@@ -65,8 +108,8 @@ class AiRuntime:
         environ: Mapping[str, str] | None = None,
         runner: Runner = run_bounded,
         clock: Callable[[], float] = time.monotonic,
-        argv_builder: ArgvBuilder = build_argv,
-        allowed_flags: frozenset[str] = ALLOWED_FLAGS,
+        argv_builder: ArgvBuilder = build_production_argv,
+        allowed_flags: frozenset[str] = PRODUCTION_ALLOWED_FLAGS,
     ) -> None:
         self._root = root
         self._command_factory = command_factory
@@ -149,22 +192,43 @@ class AiRuntime:
                 else "launch_failed"
             )
             return RuntimeResult(OutcomeCode.UNAVAILABLE, reason, elapsed_ms=elapsed_ms)
+        code_value = outcome.returncode
         if outcome.cancelled:
             code, reason = cancelled_outcome()
-            return RuntimeResult(code, reason, elapsed_ms=elapsed_ms, exit_code=outcome.returncode)
+            return RuntimeResult(code, reason, elapsed_ms=elapsed_ms, exit_code=code_value)
         if outcome.timed_out:
-            return RuntimeResult(OutcomeCode.TIMEOUT, "wall_clock_limit", elapsed_ms=elapsed_ms)
+            return RuntimeResult(
+                OutcomeCode.TIMEOUT,
+                "wall_clock_limit",
+                elapsed_ms=elapsed_ms,
+                exit_code=code_value,
+                detail=runtime_detail(code_value, outcome.stderr, b"", with_stdout=False),
+            )
         if outcome.output_truncated:
-            return RuntimeResult(OutcomeCode.MALFORMED, "output_too_large", elapsed_ms=elapsed_ms)
-        if outcome.returncode != 0:
+            return RuntimeResult(
+                OutcomeCode.MALFORMED,
+                "output_too_large",
+                elapsed_ms=elapsed_ms,
+                exit_code=code_value,
+                detail=runtime_detail(code_value, outcome.stderr, outcome.stdout, with_stdout=True),
+            )
+        if code_value != 0:
             return RuntimeResult(
                 OutcomeCode.UNAVAILABLE,
                 "child_exit_nonzero",
                 elapsed_ms=elapsed_ms,
-                exit_code=outcome.returncode,
+                exit_code=code_value,
+                detail=runtime_detail(code_value, outcome.stderr, b"", with_stdout=False),
             )
+        stdout = strip_end_of_text(outcome.stdout)
         return RuntimeResult(
-            None, "", stdout=outcome.stdout, elapsed_ms=elapsed_ms, exit_code=outcome.returncode
+            None,
+            "",
+            stdout=stdout,
+            elapsed_ms=elapsed_ms,
+            exit_code=code_value,
+            # Kept so a MALFORMED verdict can show the start of the output; the service drops it for a suggestion.
+            detail=runtime_detail(code_value, outcome.stderr, stdout, with_stdout=True),
         )
 
     def sweep_stale_scratch(
@@ -211,4 +275,11 @@ class AiRuntime:
             logger.warning("AI assist scratch directory could not be removed", exc_info=True)
 
 
-__all__ = ["AiRuntime", "CommandFactory", "RuntimeResult", "default_command"]
+__all__ = [
+    "AiRuntime",
+    "CommandFactory",
+    "RuntimeResult",
+    "default_command",
+    "runtime_detail",
+    "strip_end_of_text",
+]

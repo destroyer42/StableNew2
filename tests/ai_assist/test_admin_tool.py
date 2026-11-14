@@ -81,9 +81,43 @@ def test_cli_describe_prints_json_and_imports_refuse_unpinned(tmp_path: Path, ca
     assert not (tmp_path / "ai").exists()
 
 
-def test_cli_attestation_and_status(tmp_path: Path, capsys) -> None:
+def test_cli_attestation_binds_builds_and_executables_and_status_reports_them(
+    tmp_path: Path, capsys
+) -> None:
     root = ["--root", str(tmp_path / "ai")]
-    assert ai_assist_admin.main([*root, "record-attestation", "--statement", "rule X"]) == 0
-    capsys.readouterr()
+    # A build the manifest does not pin cannot be attested, and nothing is written.
+    assert (
+        ai_assist_admin.main(
+            [*root, "record-attestation", "--statement", "rule X", "--build-id", "b0-nope"]
+        )
+        == 2
+    )
+    assert "build_not_pinned" in capsys.readouterr().out
+    assert not (tmp_path / "ai" / "egress_attestation.json").exists()
+    assert (
+        ai_assist_admin.main(
+            [
+                *root,
+                "record-attestation",
+                "--statement",
+                "rule X",
+                "--build-id",
+                "b11840-cpu",
+                "--build-id",
+                "b11960-cpu",
+            ]
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "covers b11840-cpu: llama-completion.exe" in out
+    assert "covers b11960-cpu: llama-completion.exe" in out
     assert ai_assist_admin.main([*root, "status"]) == 0
-    assert json.loads(capsys.readouterr().out)["egress"] == "attested"
+    document = json.loads(capsys.readouterr().out)
+    assert document["egress"] == "attested"
+    assert document["attestation_covers"] == [
+        {"build_id": "b11840-cpu", "executable": "llama-completion.exe"},
+        {"build_id": "b11960-cpu", "executable": "llama-completion.exe"},
+    ]
+    with pytest.raises(SystemExit):  # a statement alone is no longer a way to attest
+        ai_assist_admin.main([*root, "record-attestation", "--statement", "rule only"])

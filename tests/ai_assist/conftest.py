@@ -96,6 +96,14 @@ FAKE_CHILD = textwrap.dedent(
                           "steps": [dict(plan_step, target="not-installed")]}))
     elif mode == "plan_too_many":
         print(json.dumps({"schema": schema, "status": "ok", "kind": "plan_proposal", "steps": [plan_step] * 7}))
+    elif mode == "end_marker":
+        sys.stdout.write(json.dumps({"schema": schema, "status": "ok", "kind": "prompt_rewrite", "positive": positive,
+                                     "negative": "", "changes": []}) + " [end of text]\\n")
+    elif mode == "stderr_fail":
+        sys.stderr.write("HEAD-OF-STDERR " + "x" * 6000 + " error: invalid argument: --no-conversation\\n")
+        sys.exit(7)
+    elif mode == "malformed_echo":
+        sys.stdout.write("{not json " + positive + " " + "y" * 4000)
     elif mode == "exit3":
         sys.exit(3)
     elif mode == "wrong_enum":
@@ -237,3 +245,13 @@ def idle() -> GenerationActivity:
 
 def roomy() -> HostMemory:
     return HostMemory(available_gib=24.0, commit_headroom_gib=30.0)
+
+
+def attest(install: Install, statement: str = "outbound block rule") -> Path:
+    """A version 2 attestation that covers this installation's active runtime build and executable (D19)."""
+
+    from src.ai_assist.attestation import record_attestation
+
+    return record_attestation(
+        install.root, statement, [(install.build.build_id, install.build.executable)]
+    )
