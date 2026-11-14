@@ -46,6 +46,7 @@ from src.review.adetailer_outcome import (
     build_review_context,
     resolve_adetailer_pair,
 )
+from src.review.improvement_evidence import ImprovementPair
 from src.review.workflow_adapter import (
     ReviewWorkflowAdapter,
     ReviewWorkspaceHandoff,
@@ -133,6 +134,7 @@ class ReviewTabFrame(ttk.Frame):
         self._compare_photo: Any = None
         self._compare_mode = "single"
         self._history_import_window: tk.Toplevel | None = None
+        self._inspection: tk.Toplevel | None = None
         self._active_handoff: ReviewWorkspaceHandoff | None = None
         self._content_visibility_mode = str(
             getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
@@ -382,6 +384,7 @@ class ReviewTabFrame(ttk.Frame):
         self.preview.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.preview._canvas.bind("<Double-Button-1>", lambda _event: self._open_compare_viewer())
         self.preview.bind("<<MediaHidden>>", self._hide_compare_media, add="+")
+        self.preview.bind("<<MediaHidden>>", lambda _event: self._close_inspection(), add="+")
 
         self.meta_label = ttk.Label(
             right,
@@ -657,6 +660,9 @@ class ReviewTabFrame(ttk.Frame):
             command=self._open_smart_review,
         )
         self.smart_review_button.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        ttk.Button(edit_row, text="Inspect & Improve…", command=self._open_guided_review).grid(
+            row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0)
+        )
         attach_tooltip(
             self.smart_review_button,
             "Opt-in local helpers: click an object to suggest a mask, or get a caption suggestion. "
@@ -948,6 +954,7 @@ class ReviewTabFrame(ttk.Frame):
     def _begin_selection_context(self, handoff: ReviewWorkspaceHandoff | None) -> None:
         """An incoming selection was accepted: outstanding work of the old context is stale, its claims are gone."""
 
+        self._close_inspection()
         self._revisions.accept_selection()
         self._active_handoff = handoff
         self._pending_overlay = None
@@ -1137,6 +1144,7 @@ class ReviewTabFrame(ttk.Frame):
     def _on_image_select(self, _event: tk.Event) -> None:
         idxs = self.images_list.curselection()
         if not idxs:
+            self._close_inspection()
             return
         idx = int(idxs[0])
         if idx < 0 or idx >= len(self._image_index_by_row):
@@ -1189,6 +1197,7 @@ class ReviewTabFrame(ttk.Frame):
     def _show_image(self, path: Path) -> None:
         """Show ``path`` now (preview) and fill its metadata when the worker finishes, if it is still the latest."""
 
+        self._close_inspection()
         token = self._revisions.begin_image(str(path))
         overlay = self._pending_overlay
         if overlay is not None and overlay[1] != path:
@@ -1785,6 +1794,49 @@ class ReviewTabFrame(ttk.Frame):
         payload_summary = str(getattr(entry, "payload_summary", "") or "").strip()
         return payload_summary[:80] if payload_summary else "History job"
 
+    def _close_inspection(self) -> None:
+        inspection = getattr(self, "_inspection", None)
+        if inspection is not None and inspection.winfo_exists():
+            inspection.destroy()
+        self._inspection = None
+
+    def _open_guided_review(self) -> None:
+        from src.gui.guided_review_dialog import GuidedReviewDialog
+
+        path = self._selected_image_path
+        if (
+            path is None
+            or self._get_selected_review_paths() != [path]
+            or not self.preview.model.renderable
+            or self.app_controller is None
+            or not self._image_ready
+        ):
+            messagebox.showinfo(
+                "Inspect & Improve", "Select and show one still image in Review.", parent=self
+            )
+            return
+        if self._inspection is not None and self._inspection.winfo_exists():
+            self._inspection.lift()
+            return
+        token = self._revisions.current_image(str(path))
+
+        def current() -> bool:
+            return bool(
+                self.winfo_exists()
+                and self._revisions.is_current_image(token)
+                and self._get_selected_review_paths() == [path]
+                and self.preview.model.renderable
+                and self._visibility_resolver().is_visible(self._current_visibility_subject())
+            )
+
+        self._inspection = GuidedReviewDialog(
+            self,
+            path=path,
+            revision=(token.selection, token.image),
+            current=current,
+            save=self._save_feedback,
+        )
+
     def _open_mask_editor(self) -> None:
         from src.controller.masked_edit_service import history_lineage_for
         from src.gui.mask_editor_dialog import MaskEditorDialog
@@ -1994,6 +2046,7 @@ class ReviewTabFrame(ttk.Frame):
             or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
             or "nsfw"
         )
+        self._close_inspection()
         self._pending_visibility_refresh = False
         self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
@@ -2345,7 +2398,9 @@ class ReviewTabFrame(ttk.Frame):
             learning_tab, "controller", None
         )
 
-    def _save_feedback(self) -> None:
+    def _save_feedback(
+        self, context: dict[str, Any] | None = None, *, source_proof: ImprovementPair | None = None
+    ) -> None:
         if self._selected_image_path is None:
             messagebox.showwarning("No image", "Select an image first.")
             return
@@ -2369,6 +2424,10 @@ class ReviewTabFrame(ttk.Frame):
                 "Save failed", "Unable to build feedback payload for selected image."
             )
             return
+        if context:
+            payload["context"] = {**payload.get("context", {}), **context}
+        if source_proof is not None:
+            payload["guided_source_proof"] = source_proof
         try:
             record = save(payload)
             run_id = str(getattr(record, "run_id", "") or "")
@@ -2379,6 +2438,7 @@ class ReviewTabFrame(ttk.Frame):
                 f"Save not confirmed: {exc} Check the log before retrying."
             )
             return
+        self._close_inspection()
         self._feedback_undo_stack.append(
             [{"run_id": run_id, "image_path": str(self._selected_image_path)}]
         )
@@ -2447,6 +2507,7 @@ class ReviewTabFrame(ttk.Frame):
             except Exception:
                 failed.append(str(target))
         if tokens:
+            self._close_inspection()
             self._feedback_undo_stack.append(tokens)
         status = f"Saved {len(tokens)} feedback record(s); not confirmed {len(failed)}."
         if tokens:

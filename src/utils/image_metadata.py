@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import gzip
 import hashlib
+import io
 import json
 import logging
 from dataclasses import dataclass
@@ -182,12 +183,13 @@ def write_image_metadata(path: Path, kv: dict[str, str]) -> bool:
     return False
 
 
-def read_image_metadata(path: Path) -> dict[str, str]:
+def read_image_metadata(path: Path, *, source_bytes: bytes | None = None) -> dict[str, str]:
     suffix = path.suffix.lower()
-    if suffix in {".png"}:
-        return read_png_metadata(path)
+    source = io.BytesIO(source_bytes) if source_bytes is not None else path
+    if suffix == ".png":
+        return read_png_metadata(source)
     if suffix in {".jpg", ".jpeg"}:
-        return read_jpg_metadata(path)
+        return read_jpg_metadata(source)
     return {}
 
 
@@ -211,7 +213,7 @@ def write_png_metadata(path: Path, kv: dict[str, str]) -> bool:
         return False
 
 
-def read_png_metadata(path: Path) -> dict[str, str]:
+def read_png_metadata(path: Path | io.BytesIO) -> dict[str, str]:
     try:
         with Image.open(path) as img:
             info: dict[str, str] = {}
@@ -262,7 +264,7 @@ def write_jpg_metadata(path: Path, kv: dict[str, str]) -> bool:
         return False
 
 
-def read_jpg_metadata(path: Path) -> dict[str, str]:
+def read_jpg_metadata(path: Path | io.BytesIO) -> dict[str, str]:
     try:
         with Image.open(path) as img:
             exif = img.getexif()
@@ -294,7 +296,9 @@ def read_jpg_metadata(path: Path) -> dict[str, str]:
         return {}
 
 
-def decode_payload(kv: dict[str, str]) -> ReadPayloadResult:
+def decode_payload(
+    kv: dict[str, str], *, max_decoded_bytes: int | None = None
+) -> ReadPayloadResult:
     if not kv:
         return ReadPayloadResult(None, "missing")
     if kv.get(ImageMetadataContractV26.KEY_PAYLOAD_OMITTED) == "true":
@@ -306,11 +310,17 @@ def decode_payload(kv: dict[str, str]) -> ReadPayloadResult:
     elif payload_gz:
         try:
             compressed = base64.b64decode(payload_gz)
-            raw_bytes = gzip.decompress(compressed)
+            if max_decoded_bytes is None:
+                raw_bytes = gzip.decompress(compressed)
+            else:
+                with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
+                    raw_bytes = stream.read(max_decoded_bytes + 1)
         except Exception as exc:
             return ReadPayloadResult(None, "corrupt", str(exc))
     else:
         return ReadPayloadResult(None, "missing")
+    if max_decoded_bytes is not None and len(raw_bytes) > max_decoded_bytes:
+        return ReadPayloadResult(None, "corrupt", "payload_size_limit")
     expected = kv.get(ImageMetadataContractV26.KEY_PAYLOAD_SHA256)
     actual = sha256_hex(raw_bytes)
     if expected and expected != actual:
@@ -324,8 +334,10 @@ def decode_payload(kv: dict[str, str]) -> ReadPayloadResult:
     return ReadPayloadResult(None, "corrupt", "payload_not_dict")
 
 
-def extract_embedded_metadata(image_path: Path) -> ReadPayloadResult:
-    kv = read_image_metadata(image_path)
+def extract_embedded_metadata(
+    image_path: Path, *, source_bytes: bytes | None = None
+) -> ReadPayloadResult:
+    kv = read_image_metadata(image_path, source_bytes=source_bytes)
     if kv.get(ImageMetadataContractV26.KEY_SCHEMA) != ImageMetadataContractV26.SCHEMA:
         return ReadPayloadResult(None, "missing")
     return decode_payload(kv)
