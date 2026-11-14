@@ -543,8 +543,9 @@ class PromptPackNormalizedJobBuilder:
         drafts: list[NjrDraft] = []
         for item in expansion:
             # The second compile-policy application, on the flat payload this record carries (once per record). It is
-            # not redundant with the one in _prepare_entry: the flattening drops the profile's backend options, the
-            # txt2img section and some profile keys, which only this application restores in ``workload.config``.
+            # not redundant with the one in _prepare_entry: the payload built by _build_config_payload omits the
+            # profile's backend options, the txt2img section and some profile keys, which only this application
+            # restores in ``workload.config``.
             record_config, _evidence = prepare_image_config(config_mapping(item.config))
             prompt_info = stage_prompt_info(record_config)
             # The expansion numbers variants within one Matrix variant; combine them with the Matrix position.
