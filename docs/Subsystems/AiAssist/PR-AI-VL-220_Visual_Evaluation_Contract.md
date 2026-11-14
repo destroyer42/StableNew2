@@ -1,12 +1,18 @@
 # PR-AI-VL-220: visual evaluation contract (specification and harness scaffolding)
 
 Status: **specified and tested on synthetic data; no model has been run.** The owner approved the image invocation a real run
-needs on 2026-11-14 (`PR-AI-VL-220_Image_Invocation_Contract.md`) and authorized a first supervised CPU-only run of this plan
-digest; the driver, the `b11960-cpu-vision` build entry, the license acknowledgement and the firewall rule do not exist yet, so
-no run is possible today. Nothing here is qualification.
+needs on 2026-11-14 (`PR-AI-VL-220_Image_Invocation_Contract.md`) and authorized a first supervised CPU-only run; the driver, the
+visual argument builder and the `b11960-cpu-vision` build entry are now implemented (section 7 of that document), but the license
+acknowledgement, the firewall rule and attestation, the evaluation-root import and (for existing assets) the owner's chosen
+images and labeler do not exist yet, so no run is possible today. Nothing here is qualification.
 
 Plan digest (`python -m tools.qualification.vl220 describe`, field `plan_sha256`; a test fails if this line goes stale):
-`23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`
+`fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`
+
+The digest the owner's authorization named, `23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`, differs from it only
+by `image_invocation.approved` (now `true`) and the removed comparator reason `image_invocation_not_approved`; a test reproduces the
+old digest from the current plan by undoing exactly those two edits. The `evaluate` command asks the owner to name the current
+digest.
 
 ## 1. Purpose and boundary
 
@@ -14,7 +20,9 @@ Prepare a like-for-like, repeatable way to compare the visual candidate (LFM3-VL
 eligible existing capability, on StableNew-shaped questions, **without** treating vendor benchmarks as StableNew evidence and
 without changing production. The harness is read-only and deterministic: it validates cases and labels, validates and scores
 answers, reports measurements against limits, and prints a plan. `tools/qualification/vl220/` imports no network, process or
-inference library (a test scans every module), contains no image or projector flag, and has no command that runs a model.
+inference library (a test scans every module), contains no image or projector flag outside the one visual builder
+(`visual_argv.py`), and has exactly one command that can launch a model (`evaluate`, behind the owner's plan digest and every
+admission gate in `driver.py`; never run by tests or CI).
 
 ## 2. What is measured
 
@@ -64,7 +72,7 @@ guarantees structure, not truth: a well-formed wrong answer is scored as wrong.
 | Smart Review segmentation (SAM2) | no | none | No text output |
 | Qwen3.5 text GGUFs | no | none | Registered as text models; no projector is registered and `--mmproj` is in `FORBIDDEN_FLAGS` |
 | LFM3-1.7B text GGUFs | no | none | The language model has no vision encoder |
-| LFM3-VL-2B candidate | not yet | all | Image invocation approved but not implemented; license not acknowledged; not imported into an evaluation root |
+| LFM3-VL-2B candidate | not yet | all | Image invocation approved and implemented but never run; license not acknowledged; not imported into an evaluation root |
 
 The audit found **no existing eligible vision-language capability that answers structured questions**; the Qwen3.5 models may be
 multimodal upstream, but StableNew registers and runs them as text only, so a Qwen visual arm would need its own projector pin,

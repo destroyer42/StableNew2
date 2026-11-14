@@ -1,4 +1,4 @@
-# PR-AI-VL-220: image invocation contract (approved by the owner 2026-11-14; not yet implemented)
+# PR-AI-VL-220: image invocation contract (approved by the owner 2026-11-14; implemented, never run)
 
 ## Owner decision (2026-11-14, recorded from the chat)
 
@@ -9,10 +9,13 @@ run on the synthetic set, then existing assets, naming plan digest
 
 What this does **not** do, and what is still missing before any run is possible:
 
-1. **Nothing is implemented.** There is no `b11960-cpu-vision` manifest entry, no visual driver and no visual argument builder;
-   they are a follow-up package. `contract.INVOCATION_APPROVED` stays `False` (and so does the plan field and the comparator
-   reason `image_invocation_not_approved`, which read "approved and implemented") because the authorized plan digest includes
-   them; it flips in the implementing package, which must then name the new digest and prove it differs only by that flag.
+1. **Implemented since (section 7), never run.** The `b11960-cpu-vision` manifest entry, the visual argument builder and the
+   driver are in the follow-up package, and `contract.INVOCATION_APPROVED` is now `True` (as is the plan field; the comparator
+   reason `image_invocation_not_approved`, which read "approved and implemented", is gone). The plan digest the owner named,
+   `23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`, therefore changed by exactly that flag and that reason text
+   (section 7 proves it); the current digest is `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`. The owner's
+   authorization (decision C) named the old digest, so the driver's `evaluate` command asks the owner to name the current one
+   (`--i-have-the-plan-digest`); no run is possible until the prerequisites in items 2 to 4 exist and the owner confirms.
 2. **The license acknowledgement is still the owner's act and has not been made** (record `license_acknowledgement.json`, text
    `30adf9d6...`); admission refuses without it.
 3. **The firewall Block rule for `llama-mtmd-cli.exe` and the attestation for `b11960-cpu-vision`** are the owner's acts; the
@@ -114,3 +117,49 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
 * **C.** Authorize a first supervised, CPU-only run on the synthetic set, then on existing assets, naming the plan digest
   (`PR-AI-VL-220_Visual_Evaluation_Contract.md`). **Authorized 2026-11-14** for the first supervised run only (see the owner
   decision above for the conditions still unmet).
+
+## 7. Implementation (delivered; nothing was run)
+
+* **Build entry.** `config/managed_ai_runtime.json` pins `b11960-cpu-vision`: the same archive and per-file hashes as
+  `b11960-cpu`, `executable: llama-mtmd-cli.exe`, `qualified: false`, listed in no model's `compatible_builds`. Tests prove the
+  selector, Preview, activation (`build_incompatible`) and `import-model` cannot reach it, and that the frozen AI-111/AI-115
+  identities (Qwen screening plan `17814e40...`, final plan `3017c427...`, corpus `a89297be...`, LFM3
+  `FROZEN_CONTRACT_SHA256` `41e65d67...`) did not move: their digest tests pass unmodified. The only existing assertion changed is
+  the list of shipped build ids in `tests/ai_assist/test_manifests.py`. The operator reaches the entry through
+  `ai_assist_admin import-runtime --build-id b11960-cpu-vision` and `record-attestation`; the attestation file is one record, so
+  name **every** build you attest in the same command (a new record replaces the old one).
+* **Vocabulary and builder.** `tools/qualification/vl220/visual_argv.py`: exactly the "yes" rows of the section 2 table, one
+  `--mmproj` inside the evaluation root, images and the prompt/schema files inside a private work directory, refusal of an empty
+  prompt file, a missing image, `-p`, `--log-disable`, `--jinja`, `-hf`/`-mu`/`--mmproj-url`/`--rpc` and every other flag, a
+  check of the finished command line (`check_visual_argv`), and a path-free argv hash for evidence. `src/ai_assist/argv.py` is
+  byte-identical. Image values `--image-min-tokens 64` / `--image-max-tokens 256` are conservative starting points, owner-tunable
+  and bounded, because section 5 item 5 (the right value) is still unverified.
+* **Driver.** `tools/qualification/vl220/driver.py` launches through `run_bounded` only (an AST scan proves no `subprocess`,
+  thread or socket code), with `build_environment` (no proxy, `CUDA_VISIBLE_DEVICES=-1`, `PATH` = the runtime directory,
+  `TEMP` = the per-case work directory). Admission, before every launch and in this order: the contract flag; the evaluation
+  root is neither the AI Assist root nor a Git tree; single-flight (an exclusive `vl220.lock` file in the evaluation root; a
+  stale lock after a hard crash is removed by the operator, never by killing anything); generation idle (an injected reading,
+  absent or unreadable means refuse); the vision build is pinned, hash-identical to `b11960-cpu`, unqualified and unreachable
+  from any model, the unpacked runtime re-hashes, and the attestation covers `(b11960-cpu-vision, llama-mtmd-cli.exe)`; memory
+  headroom for model, projector and a 4 GiB margin; every image matches its pin and its PNG/JPEG header (at most 8 MiB and
+  4096 x 4096); then `check_admission` (pinned bytes, GGUF headers, required build, license acknowledgement). Each refusal is a
+  stable code and runs nothing. The model and projector are re-hashed for every case (a few seconds each).
+* **Output and evidence.** stdout only and bounded; one trailing end-of-text marker stripped; strict `json.loads` (no duplicate
+  keys, no `NaN`); then `validate_response`. Evidence per case: wall time, peak working set and private bytes, the path-free argv
+  hash, exit code, reason code. The prompt and images exist only in a per-case work directory that is removed when the case ends;
+  raw answers stay in memory to be scored. A test scans every file under the evaluation and AI roots and the evidence for prompt,
+  element, answer and image bytes. A failed case in a set is scored as a wrong answer, never skipped; the first admission refusal
+  stops the set.
+* **CLI.** `python -m tools.qualification.vl220 evaluate ...` refuses unless `--i-have-the-plan-digest` equals the current plan
+  digest and `--generation-idle` is given (a separate process cannot read the application's queue); it never overwrites an
+  evidence file. It is the only command that can launch the runtime and is never run by tests, CI or any gate against the real
+  runtime.
+* **The plan digest.** Flipping the flag and dropping the comparator reason changed the plan digest from `23df6fa4...880e` to
+  `fa63304dc98e6aeb0eeb8e7d922cc61d23507ef58fb4994232bd723e9e66339a`. A test rebuilds the plan, sets
+  `image_invocation.approved` back to `false`, restores the reason `image_invocation_not_approved` to the candidate comparator and
+  reproduces `23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e` exactly, so those two edits are the only difference.
+
+Still missing before any run (none is created by the implementing package): the license acknowledgement
+(`license_acknowledgement.json`, text `30adf9d6...`), the owner's outbound Block rule for `llama-mtmd-cli.exe` and the attestation
+for `b11960-cpu-vision`, the import of the pair into an evaluation root, and for existing assets the owner's chosen images and a
+human labeler. The first supervised CPU-only run is not started; the owner confirms in chat once each exists.
