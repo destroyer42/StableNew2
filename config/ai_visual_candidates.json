@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "description": "Visual (vision-language) CANDIDATES for offline evaluation only (PR-AI-VL-220, decision D22). This file is deliberately separate from config/ai_model_registry.json: that registry feeds the in-app model selector, Preview enablement and import-model, all of which treat an entry as a text model, so a visual entry there would be offered for text use. Nothing in src/ or in the production import-model, activation, selector or Preview path reads this file; a test proves it. Every candidate is unqualified, not production eligible, not text-registry eligible and has NO approved image invocation (the proposed invocation is a separate document that needs explicit owner approval). Sizes and SHA-256 are the Hugging Face LFS values reviewed on 2026-11-14 and verified against the locally downloaded bytes the same day. Every source is pinned to a 40-character commit revision, never a branch. Nothing is downloaded by the application.",
+  "candidates": [
+    {
+      "candidate_id": "lfm3-vl-2b-q4_k_m-liquidai",
+      "display_name": "LFM3-VL-2B Q4_K_M with F16 vision projector (Liquid AI GGUF)",
+      "modality": "vision_language",
+      "qualified": false,
+      "production_eligible": false,
+      "text_registry_eligible": false,
+      "image_invocation_approved": false,
+      "license": {
+        "spdx": "LicenseRef-LFM-Open-License-1.0",
+        "name": "LFM Open License v1.0",
+        "text_bytes": 10574,
+        "text_sha256": "30adf9d6478191fb87f2424f63ba0728598335aaf99cd2848ef17e8e545fe94b",
+        "text_source_url": "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/1add221a5ea6c047fcf1eaaf2d247939d7cf8849/LICENSE",
+        "acknowledgement_required": true
+      },
+      "publisher": {
+        "repository": "LiquidAI/LFM3-VL-2B",
+        "revision": "23387beda43c60310348e83e25f78f33c3140d3a"
+      },
+      "converter": "Liquid AI GGUF export (converter build is not stated in the repository metadata)",
+      "model": {
+        "repository": "LiquidAI/LFM3-VL-2B-GGUF",
+        "revision": "1add221a5ea6c047fcf1eaaf2d247939d7cf8849",
+        "filename": "LFM3-VL-2B-Q4_K_M.gguf",
+        "bytes": 1099627808,
+        "sha256": "56dac2e192ff0d9ab8507f4f1aeb4aed0463449bbbefaac79497f041c95f21eb",
+        "source_url": "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/1add221a5ea6c047fcf1eaaf2d247939d7cf8849/LFM3-VL-2B-Q4_K_M.gguf",
+        "architecture": "lfm3",
+        "quantization": "Q4_K_M",
+        "gguf_file_type": 15,
+        "embedding_length": 2048,
+        "native_context_tokens": 128000
+      },
+      "projector": {
+        "repository": "LiquidAI/LFM3-VL-2B-GGUF",
+        "revision": "1add221a5ea6c047fcf1eaaf2d247939d7cf8849",
+        "filename": "mmproj-LFM3-VL-2B-F16.gguf",
+        "bytes": 378996032,
+        "sha256": "1d8e6e58eefc093e09d6332f081516e1ddbd5b35cfca7f35463fb270db230b1e",
+        "source_url": "https://huggingface.co/LiquidAI/LFM3-VL-2B-GGUF/resolve/1add221a5ea6c047fcf1eaaf2d247939d7cf8849/mmproj-LFM3-VL-2B-F16.gguf",
+        "architecture": "clip",
+        "projector_type": "lfm3vl",
+        "precision": "F16",
+        "gguf_file_type": 1,
+        "projection_dim": 2048,
+        "selection_basis": "The publisher states that every mmproj file in the repository is used unchanged across language-model quantizations (the model card's NVFP4 section) and benchmarks edge inference with a Q4_0 language model and an F16 projector. F16 is pinned so the vision front end is not a second quantization variable in the comparison. The projector's declared base model equals the language model's, and its projection_dim (2048) equals the language model's embedding_length (2048)."
+      },
+      "alternate_projectors": [
+        {
+          "filename": "mmproj-LFM3-VL-2B-Q8_0.gguf",
+          "bytes": 203031872,
+          "sha256": "c5c5b58d544a18da919172d2d0368090ea1a4a351b6feb7f8a326a264a5918ab",
+          "precision": "Q8_0",
+          "status": "listed_not_downloaded_not_approved"
+        },
+        {
+          "filename": "mmproj-LFM3-VL-2B-BF16.gguf",
+          "bytes": 378996032,
+          "sha256": "8e75a88afc0e6a3bcd637becbe720447ea0794934b7b417a1f42d5cfe0d9c288",
+          "precision": "BF16",
+          "status": "listed_not_downloaded_not_approved"
+        }
+      ],
+      "runtime": {
+        "required_build_id": "b11960-cpu",
+        "unsupported_build_ids": [
+          "b11840-cpu"
+        ],
+        "tool": "llama-mtmd-cli.exe",
+        "basis": "The publisher's model card requires llama.cpp b11960 or newer. The llama.cpp source at tag b11840 has no lfm3vl projector (tools/mtmd/clip-impl.h) and tag b11960 does (reviewed as text; no binary was run). llama-mtmd-cli.exe is already hashed in the pinned b11960-cpu file map."
+      },
+      "known_limits": [
+        "Vendor benchmarks do not establish StableNew quality; nothing here claims superiority over the Qwen3.5 or LFM3 text models.",
+        "The LFM Open License v1.0 caps commercial use by an entity at a revenue threshold; the owner must acknowledge this exact license text before any import.",
+        "No inference has been run; image invocation is not approved."
+      ]
+    }
+  ]
+}
