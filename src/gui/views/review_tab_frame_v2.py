@@ -1805,10 +1805,15 @@ class ReviewTabFrame(ttk.Frame):
 
         path = self._selected_image_path
         if (
-            path is None or self._get_selected_review_paths() != [path]
-            or not self.preview.model.renderable or self.app_controller is None or not self._image_ready
+            path is None
+            or self._get_selected_review_paths() != [path]
+            or not self.preview.model.renderable
+            or self.app_controller is None
+            or not self._image_ready
         ):
-            messagebox.showinfo("Inspect & Improve", "Select and show one still image in Review.", parent=self)
+            messagebox.showinfo(
+                "Inspect & Improve", "Select and show one still image in Review.", parent=self
+            )
             return
         if self._inspection is not None and self._inspection.winfo_exists():
             self._inspection.lift()
@@ -1817,13 +1822,19 @@ class ReviewTabFrame(ttk.Frame):
 
         def current() -> bool:
             return bool(
-                self.winfo_exists() and self._revisions.is_current_image(token)
-                and self._get_selected_review_paths() == [path] and self.preview.model.renderable
+                self.winfo_exists()
+                and self._revisions.is_current_image(token)
+                and self._get_selected_review_paths() == [path]
+                and self.preview.model.renderable
                 and self._visibility_resolver().is_visible(self._current_visibility_subject())
             )
 
         self._inspection = GuidedReviewDialog(
-            self, path=path, revision=(token.selection, token.image), current=current, save=self._save_feedback,
+            self,
+            path=path,
+            revision=(token.selection, token.image),
+            current=current,
+            save=self._save_feedback,
         )
 
     def _open_mask_editor(self) -> None:

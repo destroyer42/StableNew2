@@ -510,18 +510,32 @@ class MediaInspector(ttk.Frame):
 
     def _draw_region(self) -> None:
         self._canvas.delete("source-region")
-        if self._source_region is None or self._region_geometry is None or not self.model.renderable:
+        if (
+            self._source_region is None
+            or self._region_geometry is None
+            or not self.model.renderable
+        ):
             return
         _, _, sx, sy, _, _ = self._region_geometry
         x, y = self._region_origin
         left, top, right, bottom = self._source_region
         self._canvas.create_rectangle(
-            x + left * sx, y + top * sy, x + right * sx, y + bottom * sy,
-            outline="#ffda33", width=2, tags="source-region",
+            x + left * sx,
+            y + top * sy,
+            x + right * sx,
+            y + bottom * sy,
+            outline="#ffda33",
+            width=2,
+            tags="source-region",
         )
 
     def _region_pixel(self, event: Any) -> tuple[int, int] | None:
-        if not self.model.renderable or self._image is None or self._region_geometry is None or self._resize_id:
+        if (
+            not self.model.renderable
+            or self._image is None
+            or self._region_geometry is None
+            or self._resize_id
+        ):
             return None
         x, y = self._canvas.canvasx(event.x), self._canvas.canvasy(event.y)
         left, top, sx, sy, width, height = self._region_geometry

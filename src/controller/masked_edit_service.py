@@ -130,15 +130,16 @@ def prepare_mask_edit(
     settings.validate()
     if guided is not None:
         if (
-            guided.action is not Action.MASK or Path(source_path) != guided.source.path
+            guided.action is not Action.MASK
+            or Path(source_path) != guided.source.path
             or source_sha256 != guided.source.identity.file_sha256
         ):
             raise ValueError("The mask draft does not match the inspected source.")
         target = resolve_target(baseline, fallback_config, "img2img", family_lookup=family_lookup)
-        if (
-            (target.model, target.backend) != (guided.model, guided.backend)
-            or target.backend != configured_image_backend_id()
-        ):
+        if (target.model, target.backend) != (
+            guided.model,
+            guided.backend,
+        ) or target.backend != configured_image_backend_id():
             raise ValueError("The correction target changed. Reopen Inspect & Improve.")
     return build_frozen_edit_preview(
         source_path=source_path,
@@ -238,9 +239,15 @@ def build_frozen_edit_preview(
             "parent_job_id": baseline.get("job_id"),
             "parent_artifact_id": artifact_id,
             KEY: deepcopy(frozen),
-            **({CORRECTION_KEY: correction_context(
-                guided.source, guided.category, guided.region, guided.action
-            )} if guided is not None else {}),
+            **(
+                {
+                    CORRECTION_KEY: correction_context(
+                        guided.source, guided.category, guided.region, guided.action
+                    )
+                }
+                if guided is not None
+                else {}
+            ),
         },
     )
     job = plan.jobs[0]

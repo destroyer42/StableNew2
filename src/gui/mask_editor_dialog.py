@@ -323,7 +323,9 @@ class MaskEditorDialog(tk.Toplevel):
                 self.viewport.y + top * self.viewport.scale,
                 self.viewport.x + right * self.viewport.scale,
                 self.viewport.y + bottom * self.viewport.scale,
-                outline="#ffda33", dash=(4, 3), width=2,
+                outline="#ffda33",
+                dash=(4, 3),
+                width=2,
             )
 
     def _prepare(self) -> None:

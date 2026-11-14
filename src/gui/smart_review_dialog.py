@@ -240,7 +240,8 @@ class SmartReviewDialog(tk.Toplevel):
         self.accept_button = ttk.Button(
             row,
             text="Send mask to inspection" if self._on_suggestion else "Accept mask",
-            command=self._accept, state="disabled"
+            command=self._accept,
+            state="disabled",
         )
         self.accept_button.pack(side="left", padx=4)
         self.reject_button = ttk.Button(
@@ -271,7 +272,7 @@ class SmartReviewDialog(tk.Toplevel):
             caption_row,
             text="Send caption to inspection" if self._on_suggestion else "Copy",
             command=self._send_caption if self._on_suggestion else self._copy,
-            state="disabled"
+            state="disabled",
         )
         self.copy_button.pack(side="left")
         self.apply_button = ttk.Button(
