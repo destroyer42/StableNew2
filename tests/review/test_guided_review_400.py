@@ -138,7 +138,12 @@ def test_untrusted_caption_is_unreviewed_and_rejection_has_no_action(tmp_path):
 
 def test_policy_inventory_and_mask_are_visible_refusals(tmp_path):
     source = inspect_source(make_image(tmp_path / "source.png"), (1, 1)).source
-    resources = ReviewResources(frozenset({MODEL}), ("face_yolov8n.pt", "hand_yolov8n.pt"), BACKEND)
+    resources = ReviewResources(
+        frozenset({MODEL}),
+        ("face_yolov8n.pt", "hand_yolov8n.pt"),
+        BACKEND,
+        adetailer_available=True,
+    )
     whole = recommend(finding(source), targets(), resources)
     assert [row.action for row in whole if row.eligible] == [Action.FACE]
     local = finding(source, Region(3, 5, 20, 29), Category.HANDS)
@@ -150,6 +155,13 @@ def test_policy_inventory_and_mask_are_visible_refusals(tmp_path):
     ):
         assert all(not row.eligible for row in recommend(local, targets(), resource))
     assert not recommend(local, targets(), replace(resources, detectors=()))[1].eligible
+    missing_extension = recommend(local, targets(), replace(resources, adetailer_available=False))[
+        1
+    ]
+    assert (
+        not missing_extension.eligible
+        and "Check ADetailer availability" in missing_extension.reason
+    )
     for model in ("FLUX.2-klein-4B-fp8.safetensors", "looks-like-SDXL.safetensors"):
         unverified = targets(model, lambda _model: None)
         assert all(
@@ -170,7 +182,7 @@ def prepared(tmp_path, action=Action.HANDS):
         MODEL,
         BACKEND,
         detector,
-        ReviewResources(frozenset({MODEL}), (detector,), BACKEND),
+        ReviewResources(frozenset({MODEL}), (detector,), BACKEND, adetailer_available=True),
     )
     controller = SimpleNamespace(_extract_reprocess_baseline_from_image=lambda _: {})
     request = {

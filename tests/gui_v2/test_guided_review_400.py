@@ -39,7 +39,15 @@ def review(tk_root, tmp_path, monkeypatch):
     state.set_resources(
         {"models": [MODEL], "adetailer_detectors": ["face_yolov8n.pt", "hand_yolov8n.pt"]}
     )
+    scripts = Mock(return_value={"img2img": ["ADetailer"]})
+    endpoint = "http://127.0.0.1:7871"
     controller = SimpleNamespace(
+        resource_service=SimpleNamespace(
+            client=SimpleNamespace(get_scripts=scripts, base_url=endpoint)
+        ),
+        webui_connection_controller=SimpleNamespace(
+            ready_epoch=1, get_base_url=lambda: endpoint, get_state=Mock(return_value="ready")
+        ),
         _extract_reprocess_baseline_from_image=lambda _: {"model": MODEL},
         _build_reprocess_config=lambda _: CONFIG,
         submit_review_reprocess_batch_async=Mock(),
@@ -77,6 +85,31 @@ def test_selection_to_editable_pass_to_exact_once_confirmed_preview(review):
     _record(dialog, Category.FACE, (7, 7, 19, 21))
     _record(dialog, Category.HANDS, (15, 28, 25, 40))
     assert len(dialog._findings) == 2
+    scripts = controller.resource_service.client.get_scripts
+    scripts.assert_not_called()
+    dialog._action.set(Action.HANDS)
+    dialog._open_draft()
+    assert dialog._child is None and "Check ADetailer" in dialog._status.get()
+    client = controller.resource_service.client
+    endpoint = client.base_url
+    client.base_url = "http://127.0.0.1:7860"
+    dialog._check_availability()
+    registry.run_all()
+    scripts.assert_not_called()
+    assert not dialog._resources().adetailer_available
+    client.base_url = endpoint
+    dialog._check_availability()
+    scripts.assert_not_called()
+    registry.run_all()
+    scripts.assert_called_once()
+    connection = controller.webui_connection_controller
+    connection.get_state.return_value = "error"
+    assert not dialog._resources().adetailer_available
+    connection.get_state.return_value = "ready"
+    connection.ready_epoch += 1
+    assert not dialog._resources().adetailer_available
+    dialog._check_availability()
+    registry.run_all()
     dialog._action.set(Action.HANDS)
     dialog._open_draft()
     assert dialog._child is None  # digest verification is still on the worker

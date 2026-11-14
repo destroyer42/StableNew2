@@ -211,8 +211,10 @@ unqualified status. Confirming an imported suggestion requires the operator to d
 visible issue. Caption text stays in inspection. A model result cannot open a draft or queue work.
 
 The action picker explains eligibility from the recorded target, ModelPolicy, stage compatibility,
-and the current cached checkpoint and detector lists. Guided img2img and ADetailer require a
-registry-resolved SDXL base target. Edit Mask also requires Forge. A face or hand pass may affect
+and the current cached checkpoint and detector lists. **Check correction availability**
+reads the connected backend's script catalog. Face and hand passes require an ADetailer
+entry for img2img. Guided img2img and ADetailer require a registry-resolved SDXL base target.
+Edit Mask also requires Forge. A face or hand pass may affect
 other regions that its detector finds. A rectangular finding marks the region for manual painting
 in Edit Mask. An explicitly imported, source-matched SAM mask is editable there.
 

@@ -28,6 +28,7 @@ from src.review.correction_advice import (
     CorrectionTarget,
     GuidedReprocess,
     ReviewResources,
+    adetailer_available,
     detectors_for,
     recommend,
     resolve_target,
@@ -74,6 +75,7 @@ class GuidedReviewDialog(tk.Toplevel):
         self._work = build_edit_work_runner(self)
         self._loaded: GuidedSource | None = None
         self._targets: dict[str, CorrectionTarget] = {}
+        self._adetailer_connection: tuple[str, tuple[str, int, str]] | None = None
         self._findings: list[tuple[Finding, bytes | None]] = []
         self._judgments: list[tuple[Category, Region | None, str]] = []
         self._region: Region | None = None
@@ -143,7 +145,9 @@ class GuidedReviewDialog(tk.Toplevel):
         row.pack(fill="x", pady=4)
         ttk.Button(row, text="New finding", command=self._new_finding).pack(side="left")
         ttk.Button(row, text="Smart Review…", command=self._open_smart).pack(side="left", padx=4)
-        ttk.Button(row, text="Refresh actions", command=self._refresh_targets).pack(side="left")
+        ttk.Button(
+            row, text="Check correction availability", command=self._check_availability
+        ).pack(side="left")
         row = ttk.Frame(panel)
         row.pack(fill="x")
         ttk.Button(row, text="Draw region", command=self._draw_region).pack(side="left")
@@ -240,9 +244,41 @@ class GuidedReviewDialog(tk.Toplevel):
         catalog = getattr(state, "resources", None)
         names = available_model_names(catalog) or set()
         detectors = tuple(getattr(state, "adetailer_detectors", ()))
-        return ReviewResources(frozenset(names), detectors, getattr(self, "_backend", ""))
+        backend = getattr(self, "_backend", "")
+        connection = self._connection_key()
+        client = getattr(getattr(self._controller, "resource_service", None), "client", None)
+        verified = (
+            connection is not None
+            and self._adetailer_connection == (backend, connection)
+            and str(getattr(client, "base_url", "")).rstrip("/") == connection[2]
+        )
+        return ReviewResources(frozenset(names), detectors, backend, verified)
 
-    def _refresh_targets(self) -> None:
+    def _connection_key(self) -> tuple[str, int, str] | None:
+        connection = getattr(self._controller, "webui_connection_controller", None)
+        endpoint = getattr(connection, "get_base_url", None)
+        state = getattr(connection, "get_state", None)
+        if not callable(endpoint) or not callable(state):
+            return None
+        try:
+            current = state()
+            state_name = str(getattr(current, "value", current))
+            epoch = getattr(connection, "ready_epoch", None)
+            if state_name != "ready" or type(epoch) is not int:
+                return None
+            url = str(endpoint() or "").rstrip("/")
+        except (ValueError, OSError):
+            return None
+        return (state_name, epoch, url) if url else None
+
+    def _check_availability(self) -> None:
+        if not self._can_open():
+            return
+        self._adetailer_connection = None
+        self._refresh_advice()
+        self._refresh_targets(check_adetailer=True)
+
+    def _refresh_targets(self, *, check_adetailer: bool = False) -> None:
         if self._loaded is None or not self._current():
             return
         self._targets.clear()
@@ -258,18 +294,45 @@ class GuidedReviewDialog(tk.Toplevel):
             )
             return
 
-        def prepare() -> tuple[str, dict[str, CorrectionTarget]]:
+        if check_adetailer:
+            self._status.set("Checking the connected backend's image script catalog…")
+        connection = self._connection_key()
+        client = getattr(getattr(self._controller, "resource_service", None), "client", None)
+        scripts = getattr(client, "get_scripts", None)
+
+        def prepare() -> tuple[str, dict[str, CorrectionTarget], bool]:
             backend = configured_image_backend_id()
             baseline = self._controller._extract_reprocess_baseline_from_image(self._path)
-            return backend, {
+            targets = {
                 stage: resolve_target(baseline, config, stage)
                 for stage, config in fallbacks.items()
             }
+            if (
+                not check_adetailer
+                or connection is None
+                or not callable(scripts)
+                or str(getattr(client, "base_url", "")).rstrip("/") != connection[2]
+            ):
+                return backend, targets, False
+            catalog = scripts() or {}
+            return backend, targets, adetailer_available(catalog)
 
-        def ready(result: tuple[str, dict[str, CorrectionTarget]]) -> None:
+        def ready(result: tuple[str, dict[str, CorrectionTarget], bool]) -> None:
             if self._current():
-                self._backend, self._targets = result
+                self._backend, self._targets, available = result
+                current_connection = self._connection_key()
+                self._adetailer_connection = (
+                    (self._backend, connection)
+                    if available and connection is not None and connection == current_connection
+                    else None
+                )
                 self._refresh_advice()
+                if check_adetailer:
+                    self._status.set(
+                        "ADetailer is available for img2img."
+                        if self._adetailer_connection is not None
+                        else "The connected backend did not report ADetailer for img2img."
+                    )
 
         self._work.submit(
             "targets",

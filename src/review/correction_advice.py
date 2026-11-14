@@ -50,6 +50,7 @@ class ReviewResources:
     models: frozenset[str]
     detectors: tuple[str, ...]
     backend: str
+    adetailer_available: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,8 +115,28 @@ def resolve_target(
     )
 
 
+def adetailer_available(catalog: Mapping[str, Any]) -> bool:
+    """The existing scripts endpoint can list names or structured script rows."""
+
+    scripts = catalog.get("img2img")
+    if not isinstance(scripts, list):
+        return False
+    return any(
+        isinstance(name, str)
+        and name.strip().casefold() in {"adetailer", "adetailer neo", "adetailer-neo"}
+        for item in scripts
+        for name in (item.get("name") if isinstance(item, Mapping) else item,)
+    )
+
+
 def detectors_for(action: Action, resources: ReviewResources) -> tuple[str, ...]:
-    faces, hands = split_detectors(resources.detectors)
+    usable = (
+        name
+        for name in resources.detectors
+        if resources.backend != FORGE_IMAGE_BACKEND_ID
+        or not name.casefold().startswith("mediapipe")
+    )
+    faces, hands = split_detectors(usable)
     return tuple(faces if action is Action.FACE else hands if action is Action.HANDS else ())
 
 
@@ -145,6 +166,8 @@ def target_refusal(
     elif action in (Action.FACE, Action.HANDS):
         if target.policy.policy_id != "sdxl":
             return f"Guided ADetailer requires a registry-resolved SDXL base checkpoint ({target.policy.display_name})."
+        if not resources.adetailer_available:
+            return "Check ADetailer availability on the connected backend before choosing a pass."
         if not detectors_for(action, resources):
             return "The current backend inventory contains no detector for this pass."
     elif target.policy.policy_id != "sdxl":
