@@ -16,7 +16,7 @@ frozen document, which can never carry a grant.
 
 The contract is code, not prose: `tools/qualification/ai111/lfm3_contract.py` (`stablenew.ai115.lfm3.v1`). Regenerate it with
 `python -m tools.qualification.ai111.lfm3_contract --out <new empty directory>`. The Qwen corpus, plans and digests are untouched
-and re-asserted by the tests (section 7). LFM3 candidates live only in the contract, never in `config/`.
+and re-asserted by the tests (section 7). The LFM3 candidates are also registered, unqualified, in `config/ai_model_registry.json` for Preview only (owner decision D18, 2026-11-13); this contract stays frozen and unchanged and the registry entries are not qualification evidence. The production registry may hold only entries equal to this contract's candidates (`production_lfm3_problems`).
 
 ## 1. Reconciled status (observed 2026-10-29, base `origin/main` 7ccb9a8b)
 

@@ -109,10 +109,25 @@ def digest(value: Any) -> str:
     ).hexdigest()
 
 
+#: The frozen screening candidates, in frozen order. The plan selects exactly these registry entries so that adding an
+#: unrelated entry to the mutable production registry (for example the LFM3 candidates, owner decision D18) can never
+#: change a frozen plan digest.
+FROZEN_CANDIDATE_IDS: tuple[str, ...] = (
+    "qwen3.5-9b-q4_k_m-unsloth",
+    "qwen3.5-9b-q5_k_m-unsloth",
+    "qwen3.5-4b-q8_0-unsloth",
+    "qwen3.5-4b-q4_k_m-unsloth",
+)
+
+
 def candidate_models(registry_path: Path = REGISTRY_PATH) -> list[dict[str, Any]]:
     registry = load_model_registry(registry_path)
     if registry.problems:
         raise ValueError("model registry has problems: " + "; ".join(registry.problems))
+    by_id = {e.model_id: e for e in registry.entries}
+    missing = [model_id for model_id in FROZEN_CANDIDATE_IDS if model_id not in by_id]
+    if missing:
+        raise ValueError("frozen candidate missing from the model registry: " + ", ".join(missing))
     return [
         {
             "model_id": e.model_id,
@@ -123,7 +138,7 @@ def candidate_models(registry_path: Path = REGISTRY_PATH) -> list[dict[str, Any]
             "source_url": e.provenance.source_url,
             "qualified": e.qualified,
         }
-        for e in registry.entries
+        for e in (by_id[model_id] for model_id in FROZEN_CANDIDATE_IDS)
     ]
 
 

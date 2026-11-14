@@ -2,8 +2,8 @@
 
 This is a separately versioned contract. It does not touch the Qwen corpus, plan or digests (``plan.py``, ``final_plan.py``),
 the committed registry or the runtime manifest, and it authorizes nothing: every approval is a separate owner act that must
-name this contract's digest and the exact artifacts it covers. LFM3 candidates live here, never in ``config/``, so no
-unqualified model is added to production.
+name this contract's digest and the exact artifacts it covers. The production registry may carry exactly these two candidates, unqualified (owner decision D18, 2026-11-13;
+see ``production_lfm3_problems``); nothing there is qualification evidence.
 
 Every value below was read from public metadata on 2026-10-29 (Hugging Face repository API at the pinned commit SHAs, the
 GitHub release API and tag objects, the model card, ``generation_config.json``, the LICENSE text, and the llama.cpp
@@ -624,6 +624,50 @@ def contract_digest(document: Mapping[str, Any] | None = None) -> str:
 # -- fail-closed validators --------------------------------------------------------------------------------------------
 
 
+def production_lfm3_problems(production: ModelRegistry) -> list[str]:
+    """D18 (2026-11-13): any ``lfm3-`` production registry entry must be an unqualified copy of a contract candidate.
+
+    Compared field for field: model id, filename, size, SHA-256, licence identifier, provenance, and ``qualified`` false.
+    An unknown id, a different hash or size, or ``qualified: true`` is a problem.
+    """
+
+    problems: list[str] = []
+    pinned = {c["model_id"]: c for c in CANDIDATES}
+    for e in production.entries:
+        if not e.model_id.startswith(MODEL_PREFIX):
+            continue
+        want = pinned.get(e.model_id)
+        if want is None:
+            problems.append(f"{e.model_id}: unknown lfm3 entry in the production registry")
+            continue
+        if e.qualified:
+            problems.append(f"{e.model_id}: production lfm3 entry claims qualified=true")
+        p = e.provenance
+        have = {
+            "filename": e.filename,
+            "bytes": e.bytes,
+            "sha256": e.sha256,
+            "license_spdx": e.license_spdx,
+            "provenance": {
+                "publisher_repo": p.publisher_repo,
+                "publisher_revision": p.publisher_revision,
+                "packager_repo": p.packager_repo,
+                "packager_revision": p.packager_revision,
+                "converter": p.converter,
+                "source_url": p.source_url,
+            },
+        }
+        expected = {
+            k: want[k] for k in ("filename", "bytes", "sha256", "license_spdx", "provenance")
+        }
+        for key in expected:
+            if have[key] != expected[key]:
+                problems.append(
+                    f"{e.model_id}: production {key} differs from the contract candidate"
+                )
+    return problems
+
+
 def candidate_problems(entry: Mapping[str, Any], production: ModelRegistry) -> list[str]:
     """Why a LFM3 candidate entry may not be used. Empty means only that its metadata is internally consistent."""
 
@@ -660,7 +704,13 @@ def candidate_problems(entry: Mapping[str, Any], production: ModelRegistry) -> l
         problems.append("filename is not one of the two pinned quantizations")
     elif (model.bytes, model.sha256) != (pinned["bytes"], pinned["sha256"]):
         problems.append("size or SHA-256 differs from the pinned LFS values")
-    if any(e.sha256 == model.sha256 or e.model_id == model.model_id for e in production.entries):
+    # D18 (2026-11-13): the production registry may hold exactly these candidates (checked by production_lfm3_problems);
+    # a collision is only a problem with a non-LFM3 production entry.
+    if any(
+        (e.sha256 == model.sha256 or e.model_id == model.model_id)
+        and not e.model_id.startswith(MODEL_PREFIX)
+        for e in production.entries
+    ):
         problems.append("candidate collides with a production registry entry")
     return problems
 
@@ -880,8 +930,7 @@ def validate_contract(
     for step, spec in steps.items():
         if not set(spec["prerequisites"]) <= set(steps) - {step}:
             problems.append(f"{step}: prerequisites name an unknown step")
-    if any(e.model_id.startswith(MODEL_PREFIX) for e in production.entries):
-        problems.append("an LFM3 entry is present in the production registry")
+    problems += production_lfm3_problems(production)
     if not set(document["argv"]["allowed_flags"]) <= LFM3_ALLOWED_FLAGS:
         problems.append("argv vocabulary exceeds the closed LFM3 set")
     if set(document["argv"]["allowed_flags"]) & FORBIDDEN_FLAGS:
