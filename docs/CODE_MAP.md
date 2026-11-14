@@ -19,7 +19,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `__init__.py`: Offline AI Assist (PR-AI-110): typed, validated, advisory suggestions from a locally stored model
 - `argv.py`: The only way a command line or child environment for the offline runtime is made
-- `attestation.py`: Operator attestation that an outbound firewall restriction exists for the runtime (owner decision D8)
+- `attestation.py`: Operator attestation that an outbound firewall restriction exists for the runtime (owner decisions D8 and D19)
 - `contracts.py`: Typed, versioned contracts for Offline AI Assist
 - `events.py`: Content-free event record (owner decision D7: no training-data capture)
 - `framing.py`: The fixed instruction frame and the JSON Schema for one request

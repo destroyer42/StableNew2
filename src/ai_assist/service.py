@@ -359,6 +359,7 @@ class AiAssistService:
                 assert verification.code is not None
                 return refuse(verification.code, verification.reason)
             assert verification.entry is not None and verification.build is not None
+            build = verification.build
             tier = trust_tier(verification.entry, verification.build)
             if tier != TRUST_QUALIFIED:
                 if self._policy.allow_candidate:
@@ -372,7 +373,7 @@ class AiAssistService:
                     return refuse(OutcomeCode.NOT_INSTALLED, "preview_not_enabled")
             verification = replace(verification, trust_tier=tier)
             if self._policy.strict_offline and not attestation_covers(
-                self._root, verification.build.build_id, verification.build.executable
+                self._root, build.build_id, build.executable
             ):
                 # No record, a legacy record without coverage, or one that does not name this build and executable.
                 return refuse(OutcomeCode.EGRESS_NOT_ATTESTED, "operator_attestation_missing")
