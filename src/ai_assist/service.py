@@ -67,14 +67,19 @@ GUARD_COMMIT_HEADROOM_GIB = 1.0
 GUARD_CONSECUTIVE = 2
 
 
-def _failure_detail(detail: RuntimeDetail | None, code: OutcomeCode) -> RuntimeDetail | None:
-    """Runtime detail only for a request that produced no suggestion; the stdout head only when the output was malformed."""
+def _failure_detail(
+    detail: RuntimeDetail | None, code: OutcomeCode, reason: str = ""
+) -> RuntimeDetail | None:
+    """Runtime detail only for a request that produced no suggestion; the stdout head only when the output was malformed.
+
+    ``reason`` is the outcome's own reason code; it travels with the detail so the review dialog can show why the output
+    was rejected (AI-202c)."""
 
     if detail is None or code is OutcomeCode.SUGGESTION:
         return None
     if code is OutcomeCode.MALFORMED:
-        return detail
-    return replace(detail, stdout_head="")
+        return replace(detail, reason=reason)
+    return replace(detail, stdout_head="", reason=reason)
 
 
 @dataclass(frozen=True, slots=True)
@@ -443,7 +448,11 @@ class AiAssistService:
                     reason=result.reason,
                     elapsed_ms=result.elapsed_ms,
                     details=details,
-                    runtime_detail=result.detail,
+                    runtime_detail=(
+                        replace(result.detail, reason=result.reason)
+                        if result.detail is not None
+                        else None
+                    ),
                 )
             else:
                 output_chars = len(result.stdout)
@@ -455,7 +464,7 @@ class AiAssistService:
                     suggestion=validated.suggestion,
                     elapsed_ms=result.elapsed_ms,
                     details=details,
-                    runtime_detail=_failure_detail(result.detail, validated.code),
+                    runtime_detail=_failure_detail(result.detail, validated.code, validated.reason),
                 )
         except Exception:  # noqa: BLE001 - the request must always end in a typed outcome
             logger.exception("AI assist request failed unexpectedly")

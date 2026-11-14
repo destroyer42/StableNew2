@@ -43,7 +43,8 @@ FAKE_CHILD = textwrap.dedent(
         with open(record, "w", encoding="utf-8") as handle:
             json.dump({"argv": argv, "cuda": os.environ.get("CUDA_VISIBLE_DEVICES"), "env": sorted(os.environ),
                        "no_proxy": os.environ.get("NO_PROXY"), "cwd": os.getcwd(),
-                       "llama": {k: v for k, v in os.environ.items() if k.upper().startswith("LLAMA")}}, handle)
+                       "llama": {k: v for k, v in os.environ.items() if k.upper().startswith("LLAMA")},
+                       "schema_text": open(argv[argv.index("--json-schema-file") + 1], encoding="utf-8").read()}, handle)
     alloc_mb = int(lines.get("TEST_ALLOC_MB", "0"))
     held = (bytearray(b"x") * (alloc_mb * 1024 * 1024)) if alloc_mb else None
     time.sleep(float(lines.get("TEST_SLEEP", "0")))
@@ -74,6 +75,8 @@ FAKE_CHILD = textwrap.dedent(
         print("{not json")
     elif mode == "extra_text":
         print("Sure! " + json.dumps({"schema": schema, "status": "ok"}))
+    elif mode == "two_field":
+        print(json.dumps({"schema": schema, "status": "ok"}))
     elif mode == "big":
         sys.stdout.write("x" * (2 * 1024 * 1024))
     elif mode == "echo_prompt":

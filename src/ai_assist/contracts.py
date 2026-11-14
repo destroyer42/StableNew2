@@ -234,6 +234,9 @@ class RuntimeDetail:
     exit_code: int | None = None
     stderr_tail: str = field(default="", repr=False)
     stdout_head: str = field(default="", repr=False)
+    #: The outcome's machine-readable reason code (for example ``kind_mismatch``): a fixed token, never model text, so it is
+    #: safe to show and to repeat in ``repr``.
+    reason: str = ""
 
     @property
     def has_text(self) -> bool:
