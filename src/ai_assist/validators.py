@@ -24,12 +24,16 @@ from src.ai_assist.contracts import (
     MAX_REFUSAL_REASON_CHARS,
     MAX_STEP_COUNT,
     MAX_TEXT_CHARS,
+    MAX_VARIETY_NEW_VALUES,
+    MAX_VARIETY_RATIONALE_CHARS,
+    MAX_VARIETY_VALUE_CHARS,
     SUGGESTION_SCHEMA_ID,
     VIDEO_STAGE,
     AssistRequest,
     AssistSuggestion,
     OutcomeCode,
     PlanStep,
+    SlotValues,
     SuggestionKind,
 )
 from src.prompting.prompt_compatibility import NON_PROSE_PATTERN
@@ -46,9 +50,11 @@ _ALLOWED_KEYS = frozenset(
         "changes",
         "refusal_reason",
         "steps",
+        "slots",
     }
 )
 _STEP_KEYS = frozenset({"stage", "target", "workflow", "count", "rationale"})
+_SLOT_ENTRY_KEYS = frozenset({"slot", "values", "rationale"})
 #: A rewrite may not grow without bound relative to what the operator wrote.
 _MAX_GROWTH_FACTOR = 4
 _GROWTH_ALLOWANCE = 400
@@ -151,6 +157,43 @@ def _validate_steps(value: Any, request: AssistRequest) -> tuple[tuple[PlanStep,
     return tuple(steps), ""
 
 
+def _validate_slot_values(value: Any, request: AssistRequest) -> tuple[tuple[SlotValues, ...], str]:
+    """Structure and bounds of a slot-variety answer (AI-212). Per-value judgement is the GUI-side judge's job; this only
+    guarantees a bounded, typed, closed-list shape. Returns ``(entries, "")`` or ``((), reason)``; never repairs."""
+
+    if not isinstance(value, list) or not value:
+        return (), "slots_missing"
+    if len(value) > len(request.matrix_slots):
+        return (), "too_many_slots"
+    names = {name for name, _values in request.matrix_slots}
+    seen: set[str] = set()
+    entries: list[SlotValues] = []
+    for item in value:
+        if not isinstance(item, dict) or set(item) != _SLOT_ENTRY_KEYS:
+            return (), "slot_fields_invalid"
+        slot, values = item["slot"], item["values"]
+        if not isinstance(slot, str) or slot not in names:
+            return (), "slot_not_in_closed_list"
+        if slot in seen:
+            return (), "slot_repeated"
+        seen.add(slot)
+        if not isinstance(values, list) or not values:
+            return (), "values_missing"
+        if len(values) > MAX_VARIETY_NEW_VALUES:
+            return (), "too_many_values"
+        for proposal in values:
+            _text, problem = _text_field(proposal, "value", limit=MAX_VARIETY_VALUE_CHARS)
+            if problem or proposal is None:
+                return (), problem or "value_not_text"
+        text, problem = _text_field(
+            item["rationale"], "rationale", limit=MAX_VARIETY_RATIONALE_CHARS
+        )
+        if problem or text is None or not text.strip():
+            return (), problem or "rationale_missing"
+        entries.append(SlotValues(slot, tuple(values), text))
+    return tuple(entries), ""
+
+
 def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResult:
     """Classify the model's complete stdout for ``request``."""
 
@@ -203,10 +246,24 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
     target = document.get("target")
     workflow = document.get("workflow")
     steps: tuple[PlanStep, ...] = ()
+    slot_values: tuple[SlotValues, ...] = ()
 
     if "steps" in document and request.kind is not SuggestionKind.PLAN_PROPOSAL:
         return _malformed("unexpected_steps_field")
-    if request.kind is SuggestionKind.PLAN_PROPOSAL:
+    if "slots" in document and request.kind is not SuggestionKind.SLOT_VARIETY:
+        return _malformed("unexpected_slots_field")
+    if request.kind is SuggestionKind.SLOT_VARIETY:
+        if (
+            positive is not None
+            or negative is not None
+            or target is not None
+            or workflow is not None
+        ):
+            return _malformed("unexpected_text_field")
+        slot_values, problem = _validate_slot_values(document.get("slots"), request)
+        if problem:
+            return _malformed(problem)
+    elif request.kind is SuggestionKind.PLAN_PROPOSAL:
         if (
             positive is not None
             or negative is not None
@@ -253,6 +310,7 @@ def validate_output(raw: bytes | str, request: AssistRequest) -> ValidationResul
         workflow=workflow if request.kind is SuggestionKind.WORKFLOW_CHOICE else None,
         changes=tuple(changes),
         steps=steps,
+        slot_values=slot_values,
     )
     return ValidationResult(OutcomeCode.SUGGESTION, "", suggestion)
 

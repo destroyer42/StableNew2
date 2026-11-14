@@ -192,3 +192,17 @@ def test_prompts_and_digests_without_a_selection_are_byte_identical_to_before(na
     request, prompt_sha, digest = _GOLDEN[name]
     assert hashlib.sha256(render_prompt(request).encode("utf-8")).hexdigest() == prompt_sha
     assert request.digest() == digest
+
+
+def test_a_slot_variety_request_cannot_carry_a_selection_and_keeps_its_prompt() -> None:
+    base = {
+        "request_id": "v1",
+        "kind": SuggestionKind.SLOT_VARIETY,
+        "goal_text": "more variety",
+        "matrix_slots": (("lighting", ("golden hour",)),),
+    }
+    request = AssistRequest(**base)
+    assert request.current_target == ""
+    with pytest.raises(ValueError, match="plan requests only"):
+        AssistRequest(**base, current_target="klein-b", current_target_stages=("txt2img",))
+    assert "Currently selected" not in render_prompt(request)

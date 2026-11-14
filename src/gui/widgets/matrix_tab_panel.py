@@ -11,7 +11,6 @@ explicit edit calls ``on_matrix_changed``.
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
-from typing import Any
 
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.models.prompt_pack_model import MatrixConfig, MatrixSlot
@@ -25,14 +24,14 @@ from src.gui_v2.matrix_editor_view import (
     build_matrix_editor_view,
     parse_seed_entry,
 )
-from src.utils.prompt_pack_utils import normalize_matrix_slot_name
+from src.utils.prompt_pack_utils import (
+    matrix_values_text,
+    normalize_matrix_slot_name,
+    parse_matrix_values_text,
+)
 
 _MODES = ["fanout", "sequential", "random"]
 _HELP_WRAP = 560
-
-
-def _values_text(values: list[Any]) -> str:
-    return ",".join(str(value) for value in values)
 
 
 class MatrixTabPanel(ttk.Frame):
@@ -290,7 +289,7 @@ class MatrixTabPanel(ttk.Frame):
 
         # Rebuild slot rows
         for i, slot in enumerate(matrix_config.slots):
-            self._add_slot_row(i + 1, slot.name, _values_text(slot.values))
+            self._add_slot_row(i + 1, slot.name, matrix_values_text(slot.values))
 
         self._schedule_preview_update(immediate=True)
 
@@ -400,7 +399,7 @@ class MatrixTabPanel(ttk.Frame):
             return
         matrix_config.slots.append(MatrixSlot(name=choice.name, values=list(choice.values)))
         self._add_slot_row(
-            len(self.slot_widgets) + 1, choice.name, _values_text(list(choice.values))
+            len(self.slot_widgets) + 1, choice.name, matrix_values_text(list(choice.values))
         )
         self.example_message_var.set(
             f"Added '{choice.name}'. Use [[{choice.name}]] in a prompt, and turn Matrix on to use it."
@@ -434,10 +433,10 @@ class MatrixTabPanel(ttk.Frame):
 
         if index < len(matrix_config.slots):
             slot = matrix_config.slots[index]
-            if name == slot.name.strip() and values_text == _values_text(slot.values).strip():
+            if name == slot.name.strip() and values_text == matrix_values_text(slot.values).strip():
                 return
         # Parse values (comma-separated)
-        values = [v.strip() for v in values_text.split(",") if v.strip()]
+        values = parse_matrix_values_text(values_text)
 
         # Update matrix config
         if index < len(matrix_config.slots):
@@ -452,6 +451,28 @@ class MatrixTabPanel(ttk.Frame):
 
         self.on_matrix_changed()
         self._schedule_preview_update()
+
+    def append_slot_value(self, index: int, value: str) -> bool:
+        """Add ``value`` to the end of slot ``index`` exactly as typing ``,value`` at the end of its Values entry does.
+
+        The one edit path stays ``_on_slot_changed``: this only puts the text into the row's entry and calls it, so the pack
+        state, dirty tracking and refreshes are those of a manual edit. Refuses (returns ``False``, changes nothing) when
+        the row does not exist or its entries differ from the stored slot, i.e. a manual edit is pending."""
+        config = self.workspace_state.get_matrix_config()
+        if not 0 <= index < min(len(self.slot_widgets), len(config.slots)):
+            return False
+        name_entry, values_entry, _ = self.slot_widgets[index]
+        slot = config.slots[index]
+        current = matrix_values_text(slot.values)
+        if (
+            name_entry.get().strip() != slot.name.strip()
+            or values_entry.get().strip() != current.strip()
+        ):
+            return False
+        values_entry.delete(0, "end")
+        values_entry.insert(0, f"{current},{value}" if current else value)
+        self._on_slot_changed(index)
+        return True
 
     def _cancel_pending_preview(self) -> None:
         if self._preview_refresh_after_id is not None:

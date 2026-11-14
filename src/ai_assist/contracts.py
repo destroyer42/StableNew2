@@ -27,6 +27,14 @@ MAX_PLAN_STEPS = 6
 MAX_STEP_COUNT = 8
 MAX_PLAN_TOTAL_COUNT = 24
 MAX_RATIONALE_CHARS = 240
+#: Slot-variety bounds (AI-212). The request side keeps the frame plus the answer budget inside the runtime's context.
+MAX_VARIETY_SLOTS = 12
+MAX_VARIETY_SLOT_NAME_CHARS = 64
+MAX_VARIETY_EXISTING_VALUES = 64
+MAX_VARIETY_INPUT_CHARS = 6000
+MAX_VARIETY_NEW_VALUES = 6
+MAX_VARIETY_VALUE_CHARS = 80
+MAX_VARIETY_RATIONALE_CHARS = 160
 #: The one stage that takes a workflow; every other allowed stage takes a model target.
 VIDEO_STAGE = "video"
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -38,6 +46,8 @@ class SuggestionKind(str, Enum):
     WORKFLOW_CHOICE = "workflow_choice"
     #: Advisory, read-only step list (owner decision D17). Never an executable plan; see ``PlanStep``.
     PLAN_PROPOSAL = "plan_proposal"
+    #: More values for the pack's existing matrix slots (AI-212). Each value is added only by an explicit operator action.
+    SLOT_VARIETY = "slot_variety"
 
 
 class OutcomeCode(str, Enum):
@@ -119,6 +129,8 @@ class AssistRequest:
     current_target: str = ""
     current_target_label: str = ""
     current_target_stages: tuple[str, ...] = ()
+    #: ``SLOT_VARIETY`` only: the pack's existing matrix slots as ``(name, existing values)`` (authored data for the model).
+    matrix_slots: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request_id, str) or not _REQUEST_ID.match(self.request_id):
@@ -152,9 +164,13 @@ class AssistRequest:
                 raise ValueError(
                     "a plan request needs closed lists of stages and models or workflows"
                 )
+        elif self.kind is SuggestionKind.SLOT_VARIETY:
+            self._check_variety()
         elif self.goal_text or self.allowed_stages:
             raise ValueError("goal_text and allowed_stages belong to plan requests only")
         self._check_current_target()
+        if self.matrix_slots and self.kind is not SuggestionKind.SLOT_VARIETY:
+            raise ValueError("matrix_slots belong to slot-variety requests only")
         if self.kind is SuggestionKind.PROMPT_REWRITE and not self.positive_text.strip():
             raise ValueError("a rewrite request needs a positive prompt")
         if self.kind is SuggestionKind.TARGET_FIT_ADVICE and not self.allowed_targets:
@@ -184,8 +200,58 @@ class AssistRequest:
         if not stages or not all(s in self.allowed_stages and s != VIDEO_STAGE for s in stages):
             raise ValueError("current_target_stages must be image stages from allowed_stages")
 
+    def _check_variety(self) -> None:
+        if not self.goal_text.strip():
+            raise ValueError("a slot-variety request needs a goal")
+        if (
+            self.positive_text
+            or self.negative_text
+            or self.target_policy_id
+            or self.allowed_targets
+            or self.allowed_workflows
+            or self.allowed_stages
+        ):
+            raise ValueError("a slot-variety request carries only a goal and the matrix slots")
+        slots = self.matrix_slots
+        if not isinstance(slots, tuple) or not 1 <= len(slots) <= MAX_VARIETY_SLOTS:
+            raise ValueError(f"a slot-variety request needs 1 to {MAX_VARIETY_SLOTS} matrix slots")
+        names: set[str] = set()
+        for entry in slots:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise ValueError("a matrix slot is a (name, values) pair")
+            name, values = entry
+            if (
+                not isinstance(name, str)
+                or not name.strip()
+                or len(name) > MAX_VARIETY_SLOT_NAME_CHARS
+            ):
+                raise ValueError("a matrix slot name must be 1-64 characters of text")
+            if name in names:
+                raise ValueError("matrix slot names must be unique")
+            names.add(name)
+            if not isinstance(values, tuple) or len(values) > MAX_VARIETY_EXISTING_VALUES:
+                raise ValueError(
+                    f"a matrix slot holds a tuple of at most {MAX_VARIETY_EXISTING_VALUES} values"
+                )
+            if not all(isinstance(value, str) for value in values):
+                raise ValueError("matrix slot values must be text")
+        if self.matrix_chars() > MAX_VARIETY_INPUT_CHARS:
+            raise ValueError(
+                f"matrix slot names and values must total at most {MAX_VARIETY_INPUT_CHARS} characters"
+            )
+
+    def matrix_chars(self) -> int:
+        return sum(
+            len(name) + sum(len(value) for value in values) for name, values in self.matrix_slots
+        )
+
     def input_chars(self) -> int:
-        return len(self.positive_text) + len(self.negative_text) + len(self.goal_text)
+        return (
+            len(self.positive_text)
+            + len(self.negative_text)
+            + len(self.goal_text)
+            + self.matrix_chars()
+        )
 
     def digest(self) -> str:
         """Short content digest for correlation. The text itself is never persisted or logged."""
@@ -212,6 +278,11 @@ class AssistRequest:
                 ),
             )
         )
+        if self.matrix_slots:
+            # Appended only when present, so the digests of the other kinds are unchanged.
+            payload += "\x1f" + "\x1e".join(
+                "\x1d".join((name, *values)) for name, values in self.matrix_slots
+            )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
@@ -231,6 +302,18 @@ class PlanStep:
 
 
 @dataclass(frozen=True, slots=True)
+class SlotValues:
+    """New values proposed for one existing matrix slot (AI-212). ``slot`` comes from the request's closed list.
+
+    Proposals only: each value still faces the deterministic judge and is added solely by an explicit operator action
+    through the Matrix editor's own edit path. ``rationale`` is display text."""
+
+    slot: str
+    values: tuple[str, ...]
+    rationale: str
+
+
+@dataclass(frozen=True, slots=True)
 class AssistSuggestion:
     """A validated suggestion. Text fields are proposals for an editing buffer, not payloads."""
 
@@ -244,6 +327,8 @@ class AssistSuggestion:
     changes: tuple[str, ...] = ()
     #: ``PLAN_PROPOSAL`` only. Advice, not a plan: no field converts these to Intent, a job or a queue entry.
     steps: tuple[PlanStep, ...] = ()
+    #: ``SLOT_VARIETY`` only.
+    slot_values: tuple[SlotValues, ...] = ()
 
     def to_diagnostics(self) -> dict[str, Any]:
         """Content-free view (kind, counts, codes) safe for logs and the event record."""
@@ -257,6 +342,8 @@ class AssistSuggestion:
             "has_target": self.target is not None,
             "has_workflow": self.workflow is not None,
             "step_count": len(self.steps),
+            "slot_count": len(self.slot_values),
+            "value_count": sum(len(entry.values) for entry in self.slot_values),
         }
 
 
@@ -319,6 +406,13 @@ __all__ = [
     "MAX_REFUSAL_REASON_CHARS",
     "MAX_STEP_COUNT",
     "MAX_TEXT_CHARS",
+    "MAX_VARIETY_EXISTING_VALUES",
+    "MAX_VARIETY_INPUT_CHARS",
+    "MAX_VARIETY_NEW_VALUES",
+    "MAX_VARIETY_RATIONALE_CHARS",
+    "MAX_VARIETY_SLOTS",
+    "MAX_VARIETY_SLOT_NAME_CHARS",
+    "MAX_VARIETY_VALUE_CHARS",
     "SUGGESTION_SCHEMA_ID",
     "VIDEO_STAGE",
     "AiCancelToken",
@@ -328,5 +422,6 @@ __all__ = [
     "OutcomeCode",
     "PlanStep",
     "RuntimeDetail",
+    "SlotValues",
     "SuggestionKind",
 ]

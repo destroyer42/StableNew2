@@ -15,6 +15,9 @@ from src.ai_assist.contracts import (
     MAX_RATIONALE_CHARS,
     MAX_REFUSAL_REASON_CHARS,
     MAX_STEP_COUNT,
+    MAX_VARIETY_NEW_VALUES,
+    MAX_VARIETY_RATIONALE_CHARS,
+    MAX_VARIETY_VALUE_CHARS,
     SUGGESTION_SCHEMA_ID,
     VIDEO_STAGE,
     AssistRequest,
@@ -25,6 +28,17 @@ BEGIN_MARKER = "=====BEGIN_AUTHORED_DATA====="
 END_MARKER = "=====END_AUTHORED_DATA====="
 _SECTION_MARKERS = ("POSITIVE_PROMPT:", "NEGATIVE_PROMPT:")
 _GOAL_MARKER = "GOAL:"
+_SLOT_MARKER = "SLOT:"
+_VALUE_MARKER = "VALUE:"
+#: Every marker the slot-variety data block uses. Authored text containing any of them is refused, never rewritten.
+VARIETY_RESERVED_MARKERS = (
+    BEGIN_MARKER,
+    END_MARKER,
+    *_SECTION_MARKERS,
+    _GOAL_MARKER,
+    _SLOT_MARKER,
+    _VALUE_MARKER,
+)
 FRAME_VERSION = "ai_assist.frame/1"
 
 
@@ -51,6 +65,14 @@ _INSTRUCTIONS = {
         f"(1 to {MAX_STEP_COUNT}) and a short rationale (at most {MAX_RATIONALE_CHARS} characters). This is advice for "
         "a person to read, not a job."
     ),
+    SuggestionKind.SLOT_VARIETY: (
+        "Suggest additional values for the operator's existing matrix slots that serve the operator's goal. Use only "
+        f"slot names that appear after {_SLOT_MARKER} in the data; never invent a slot. For each slot you choose, give 1 "
+        f"to {MAX_VARIETY_NEW_VALUES} new values that are not already listed after {_VALUE_MARKER}, each a short phrase of "
+        f"at most {MAX_VARIETY_VALUE_CHARS} characters with no commas, no square or angle brackets and no line breaks, and "
+        f"a short rationale (at most {MAX_VARIETY_RATIONALE_CHARS} characters). These are suggestions a person reviews "
+        "one by one."
+    ),
 }
 
 
@@ -67,7 +89,29 @@ def _check_text(label: str, text: str) -> None:
             raise FramingError(f"{label} contains a reserved marker")
 
 
+def _check_variety_text(label: str, text: str, *, single_line: bool) -> None:
+    for marker in VARIETY_RESERVED_MARKERS:
+        if marker in text:
+            raise FramingError(f"{label} contains a reserved marker")
+    if single_line and ("\n" in text or "\r" in text):
+        raise FramingError(f"{label} contains a line break")
+
+
+def _variety_block(request: AssistRequest) -> list[str]:
+    _check_variety_text("goal_text", request.goal_text, single_line=False)
+    lines = [BEGIN_MARKER, _GOAL_MARKER, request.goal_text]
+    for name, values in request.matrix_slots:
+        _check_variety_text("slot name", name, single_line=True)
+        lines.append(f"{_SLOT_MARKER} {name}")
+        for value in values:
+            _check_variety_text("slot value", value, single_line=True)
+            lines.append(f"{_VALUE_MARKER} {value}")
+    return [*lines, END_MARKER, ""]
+
+
 def _authored_block(request: AssistRequest) -> list[str]:
+    if request.kind is SuggestionKind.SLOT_VARIETY:
+        return _variety_block(request)
     if request.kind is SuggestionKind.PLAN_PROPOSAL:
         _check_text("goal_text", request.goal_text)
         if _GOAL_MARKER in request.goal_text:
@@ -164,6 +208,29 @@ def _ok_branch(request: AssistRequest) -> dict[str, Any]:
             },
         }
         required.append("steps")
+    elif request.kind is SuggestionKind.SLOT_VARIETY:
+        # Every field is required and both lists need an item, so the grammar cannot close an empty answer (AI-202c).
+        properties["slots"] = {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": len(request.matrix_slots),
+            "items": {
+                "type": "object",
+                "properties": {
+                    "slot": {"enum": [name for name, _values in request.matrix_slots]},
+                    "values": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": MAX_VARIETY_NEW_VALUES,
+                        "items": {"type": "string", "maxLength": MAX_VARIETY_VALUE_CHARS},
+                    },
+                    "rationale": {"type": "string", "maxLength": MAX_VARIETY_RATIONALE_CHARS},
+                },
+                "required": ["slot", "values", "rationale"],
+                "additionalProperties": False,
+            },
+        }
+        required.append("slots")
     else:
         properties["workflow"] = {"enum": list(request.allowed_workflows)}
         required.append("workflow")
@@ -212,6 +279,7 @@ __all__ = [
     "END_MARKER",
     "FRAME_VERSION",
     "PLAN_SELECTED_MODEL_RULE",
+    "VARIETY_RESERVED_MARKERS",
     "FramingError",
     "build_json_schema",
     "render_prompt",
