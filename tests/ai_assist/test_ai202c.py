@@ -74,7 +74,13 @@ PLAN = AssistRequest(
     allowed_workflows=("svd_xt",),
     allowed_stages=("txt2img", "video"),
 )
-REQUESTS = {r.kind: r for r in (REWRITE, TARGET, WORKFLOW, PLAN)}
+VARIETY = AssistRequest(
+    request_id="s5",
+    kind=SuggestionKind.SLOT_VARIETY,
+    goal_text="more variety in the lighting",
+    matrix_slots=(("lighting", ("soft light",)), ("location", ())),
+)
+REQUESTS = {r.kind: r for r in (REWRITE, TARGET, WORKFLOW, PLAN, VARIETY)}
 
 #: One document the validator accepts for each kind (``changes`` omitted: it is the only optional field).
 ACCEPTED: dict[SuggestionKind, dict[str, Any]] = {
@@ -118,6 +124,18 @@ ACCEPTED: dict[SuggestionKind, dict[str, Any]] = {
             },
         ],
     },
+    SuggestionKind.SLOT_VARIETY: {
+        "schema": SUGGESTION_SCHEMA_ID,
+        "status": "ok",
+        "kind": "slot_variety",
+        "slots": [
+            {
+                "slot": "lighting",
+                "values": ["golden hour", "neon glow"],
+                "rationale": "Warmer and cooler.",
+            }
+        ],
+    },
 }
 REFUSED = {"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "cannot help"}
 #: Fields the schema requires although the validator would tolerate their absence (the schema is the stricter of the two).
@@ -126,6 +144,7 @@ SCHEMA_STRICTER_THAN_VALIDATOR = {
     SuggestionKind.TARGET_FIT_ADVICE: set(),
     SuggestionKind.WORKFLOW_CHOICE: set(),
     SuggestionKind.PLAN_PROPOSAL: set(),
+    SuggestionKind.SLOT_VARIETY: set(),
 }
 
 
@@ -228,7 +247,7 @@ def test_the_schema_requires_what_the_validator_requires(kind: SuggestionKind) -
         assert key == "changes"
     assert set(ok_branch["properties"]) <= validators._ALLOWED_KEYS
     # A payload field of another kind is rejected by both.
-    foreign = {"positive": "x", "target": "sdxl", "workflow": "svd_xt", "steps": []}
+    foreign = {"positive": "x", "target": "sdxl", "workflow": "svd_xt", "steps": [], "slots": []}
     for key, value in foreign.items():
         if key in ok_branch["properties"]:
             continue
@@ -263,6 +282,10 @@ def test_the_payload_requirements_are_per_kind() -> None:
     assert required[SuggestionKind.TARGET_FIT_ADVICE][3:] == ["target"]
     assert required[SuggestionKind.WORKFLOW_CHOICE][3:] == ["workflow"]
     assert required[SuggestionKind.PLAN_PROPOSAL][3:] == ["steps"]
+    assert required[SuggestionKind.SLOT_VARIETY][3:] == ["slots"]
+    slots = framing.build_json_schema(VARIETY)["oneOf"][0]["properties"]["slots"]
+    assert slots["minItems"] == 1 and slots["items"]["properties"]["values"]["minItems"] == 1
+    assert slots["items"]["required"] == ["slot", "values", "rationale"]
     steps = framing.build_json_schema(PLAN)["oneOf"][0]["properties"]["steps"]
     assert steps["minItems"] == 1 and steps["maxItems"] == MAX_PLAN_STEPS
 
@@ -276,6 +299,14 @@ def test_choices_stay_pinned_to_the_closed_lists() -> None:
     plan["steps"][0]["count"] = 1
     plan["steps"][0]["stage"] = "inpaint"
     assert not conforms(plan, framing.build_json_schema(PLAN))
+    variety = json.loads(json.dumps(ACCEPTED[SuggestionKind.SLOT_VARIETY]))
+    variety["slots"][0]["slot"] = "weather"
+    assert not conforms(variety, framing.build_json_schema(VARIETY))
+    variety["slots"][0]["slot"] = "lighting"
+    variety["slots"][0]["values"] = []
+    assert not conforms(variety, framing.build_json_schema(VARIETY))
+    variety["slots"] = []
+    assert not conforms(variety, framing.build_json_schema(VARIETY))
 
 
 def test_the_runtime_writes_the_schema_in_declared_order(installation: Install, tmp_path) -> None:

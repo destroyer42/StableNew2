@@ -99,6 +99,12 @@ FAKE_CHILD = textwrap.dedent(
                           "steps": [dict(plan_step, target="not-installed")]}))
     elif mode == "plan_too_many":
         print(json.dumps({"schema": schema, "status": "ok", "kind": "plan_proposal", "steps": [plan_step] * 7}))
+    elif mode == "variety_ok":
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "slot_variety", "slots": [
+            {"slot": "lighting", "values": ["golden hour", "neon glow"], "rationale": "warmer and cooler light"}]}))
+    elif mode == "variety_invented_slot":
+        print(json.dumps({"schema": schema, "status": "ok", "kind": "slot_variety", "slots": [
+            {"slot": "weather", "values": ["rain"], "rationale": "new slot"}]}))
     elif mode == "end_marker":
         sys.stdout.write(json.dumps({"schema": schema, "status": "ok", "kind": "prompt_rewrite", "positive": positive,
                                      "negative": "", "changes": []}) + " [end of text]\\n")

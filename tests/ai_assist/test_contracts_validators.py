@@ -14,6 +14,7 @@ from src.ai_assist.contracts import (
     AssistRequest,
     AssistSuggestion,
     OutcomeCode,
+    SlotValues,
     SuggestionKind,
 )
 from src.ai_assist.validators import looks_like_refusal, protected_tokens, validate_output
@@ -91,7 +92,10 @@ def test_suggestion_has_no_executable_field_and_diagnostics_hold_no_text() -> No
         "workflow",
         "changes",
         "steps",
+        "slot_values",
     }
+    # AI-212: a slot-variety entry names an existing slot and carries display text only.
+    assert set(SlotValues.__slots__) == {"slot", "values", "rationale"}
     suggestion = AssistSuggestion(
         SUGGESTION_SCHEMA_ID, SuggestionKind.PROMPT_REWRITE, "r1", "secret words", "more secret"
     )

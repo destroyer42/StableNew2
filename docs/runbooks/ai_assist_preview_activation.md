@@ -81,6 +81,17 @@ running, then press **Suggest... (Preview)**, choose **Rewrite Prompt**, review 
 compatibility, and press **Accept rewrite** only if you want it. Accept edits the editing buffer only; save and Preview
 as usual.
 
+**More values for matrix slots (Suggest variety, AI-212).** With a pack whose prompt uses `[[slot]]` markers and whose
+Matrix tab lists the slots, open the same dialog, type a goal in **Matrix slot variety** (for example "more variety in the
+lighting and the locations") and press **Suggest variety**. Only the goal and the slot names and values are sent; no
+prompt, model or stage list. Each proposed value is listed as *can add* or *rejected* with the reason (already in the slot,
+comma, brackets, `<...>` token, `__` wildcard, line break, too long, empty or hidden). Select one *can add* value and press
+**Add selected value**: it is appended to that slot exactly as if you had typed `,value` at the end of its Values entry in
+the Matrix tab, so the pack becomes modified and unsaved. Nothing is saved, previewed, queued or generated; no slot is
+created and no existing value or prompt is changed. If you edit the matrix or switch pack after the request, adding is
+refused; request again. A slot whose values contain a comma or are not plain text, or whose name is shared or padded, is not
+offered (the status line counts them). Whether the suggestions are any good is unverified until you try it.
+
 ## What each message means
 
 | Where | Message or code | Meaning and next step |
@@ -94,6 +105,8 @@ as usual.
 | `GENERATION_ACTIVE`, `YIELDED_TO_GENERATION` | A job is running, GPU quarantined, or activity unreadable | Retry when generation is idle. AI always yields. |
 | `RESOURCE_INSUFFICIENT` | RAM or commit headroom below model size plus 4 GiB, or the memory guard fired | Close other programs; retry. |
 | `BUSY` | Another AI request is running | Wait or cancel it. |
+| Suggest variety: "changed since the request" | The pack or a matrix slot changed after the request (including your own edit) | Request again; nothing was added. |
+| Suggest variety: "unfinished edit in that slot" | The slot's Values entry holds text its handler has not stored yet | Finish or undo the typing in the Matrix tab, then add again. |
 | `TIMEOUT`, `CANCELLED` | Time limit or your cancel | Authored work is unchanged. |
 | `REFUSED_BY_MODEL` | The model declined | Shown as a refusal; never repaired. |
 | `MALFORMED`, `UNAVAILABLE` | Output failed the strict schema, or the process could not start or exited non-zero | In the review dialog press **Show runtime detail**: it shows the exit code and the end of the runtime's own error output (and, for `MALFORMED`, the start of its output). That text is raw runtime output, kept in memory only, never saved; it can contain fragments of your own prompt. Report the exit code and the error line. |
