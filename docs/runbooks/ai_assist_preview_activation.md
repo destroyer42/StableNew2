@@ -14,7 +14,7 @@ sub-command to use a different AI directory (default: `STABLENEW_AI_DIR`, else `
 
 ## 1. Pin the runtime build (reviewed pull request)
 
-`config/managed_ai_runtime.json` pins one unqualified build today (`b11840-cpu`, AI-201a); to pin another, compute the entry from the staged archive; this only **reads** the zip
+`config/managed_ai_runtime.json` pins two unqualified builds today (`b11840-cpu` for the Qwen models, `b11960-cpu` for LFM3; AI-201a/b); to pin another, compute the entry from the staged archive; this only **reads** the zip
 (archive SHA-256 plus the SHA-256 of every loadable `.exe`, `.dll`, `.so`, `.dylib`, script file) and extracts nothing:
 
 ```bash
@@ -25,6 +25,8 @@ Paste the printed JSON into the `builds` array of `config/managed_ai_runtime.jso
 `"qualified": false`. The reviewer must check the archive hash against what you staged and the executable path.
 
 ## 2. Import the runtime and a registered model
+
+The LFM3-1.7B models (D18) need build `b11960-cpu`; activating one with `b11840-cpu` fails closed as `UNAVAILABLE` (no `lfm3` architecture). The b11960 archive also contains `ggml-rpc.dll` and `ggml-rpc-server.exe`: `--rpc` stays forbidden and the server is never launched.
 
 ```bash
 python -m tools.ai_assist_admin import-runtime D:\staging\llama-bNNNN-bin-win-cpu-x64.zip --build-id bNNNN-cpu

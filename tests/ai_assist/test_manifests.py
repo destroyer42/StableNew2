@@ -33,8 +33,8 @@ def test_shipped_manifests_parse_cleanly_and_nothing_is_qualified() -> None:
     runtime = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
     registry = load_model_registry(MODEL_REGISTRY_PATH)
     assert runtime.problems == () and registry.problems == ()
-    # One unqualified build (llama.cpp b11840 CPU x64) is pinned for AI Assist Preview (D13/D15); qualification is PR-AI-111.
-    assert [build.build_id for build in runtime.builds] == ["b11840-cpu"]
+    # Two unqualified builds (llama.cpp b11840 and b11960, CPU x64) are pinned for AI Assist Preview (D13/D15/D18).
+    assert [build.build_id for build in runtime.builds] == ["b11840-cpu", "b11960-cpu"]
     assert not any(build.qualified for build in runtime.builds)
     assert len(registry.entries) >= 1 and not any(entry.qualified for entry in registry.entries)
 
@@ -47,7 +47,12 @@ def test_shipped_candidate_pins_are_complete_unique_and_content_addressed() -> N
     assert len({e.sha256 for e in registry.entries}) == len(registry.entries)
     for entry in registry.entries:
         assert re.fullmatch(r"[0-9a-f]{64}", entry.sha256) and entry.bytes > 10**8
-        assert entry.filename.endswith(".gguf") and entry.license_spdx == "Apache-2.0"
+        expected_licence = (
+            "LicenseRef-LFM-Open-License-1.0"
+            if entry.model_id.startswith("lfm3-")
+            else "Apache-2.0"
+        )
+        assert entry.filename.endswith(".gguf") and entry.license_spdx == expected_licence
         assert re.fullmatch(r"[0-9a-f]{40}", entry.provenance.publisher_revision)
         assert re.fullmatch(r"[0-9a-f]{40}", entry.provenance.packager_revision)
         assert entry.provenance.source_url.startswith("https://huggingface.co/")

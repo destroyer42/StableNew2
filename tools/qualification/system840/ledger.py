@@ -383,15 +383,8 @@ def reconcile_with_live(ledger: Ledger, *, repo_root: Path = REPO_ROOT) -> list[
                         }
                     )
                 continue
-            if str(model_id).startswith("lfm3"):
-                drift.append(
-                    {
-                        "capability": entry.id,
-                        "field": "registry",
-                        "recorded": "contract-only",
-                        "live": "registered",
-                    }
-                )
+            # D18 (2026-11-13): the LFM3 candidates are registered (unqualified); their size and SHA-256 are still
+            # compared below, so registration alone is no longer drift.
             if live_model.get("sha256") != entry.identity.get("model_sha256"):
                 drift.append(
                     {

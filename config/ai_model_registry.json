@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Pinned model weights for Offline AI Assist. An entry is usable only with complete provenance (publisher and packager repository and revision, converter, https source URL), an exact byte size and SHA-256. An unknown or mismatched hash is refused. Every entry below is a CANDIDATE (qualified: false): its size and SHA-256 are the Hugging Face LFS values reported on 2026-10-23 and have NOT been verified against local bytes, because no weights have been downloaded. They are verified when the operator imports the file (import_model hashes it before installing). Nothing is downloaded by the application.",
+  "description": "Pinned model weights for Offline AI Assist. An entry is usable only with complete provenance (publisher and packager repository and revision, converter, https source URL), an exact byte size and SHA-256. An unknown or mismatched hash is refused. Every entry below is a CANDIDATE (qualified: false): its size and SHA-256 are the Hugging Face LFS values reported on 2026-10-23 and have NOT been verified against local bytes, because no weights have been downloaded. They are verified when the operator imports the file (import_model hashes it before installing). Nothing is downloaded by the application. The two LFM3-1.7B entries (owner decision D18, 2026-11-13) have local bytes verified against these pins and need llama.cpp b11960 or later.",
   "models": [
     {
       "model_id": "qwen3.5-9b-q4_k_m-unsloth",
@@ -100,6 +100,56 @@
         "packager_revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
         "converter": "unsloth GGUF quantisation (converter build is not stated in the repository metadata)",
         "source_url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf"
+      }
+    },
+    {
+      "model_id": "lfm3-1.7b-q4_k_m-liquidai",
+      "display_name": "LFM3-1.7B Q4_K_M (Liquid AI GGUF)",
+      "license_spdx": "LicenseRef-LFM-Open-License-1.0",
+      "architecture": "lfm3",
+      "quantization": "Q4_K_M",
+      "filename": "LFM3-1.7B-Q4_K_M.gguf",
+      "bytes": 1099627808,
+      "sha256": "3793e1e6e2266919d6e015287221b41100175a98eddaba92e111aed3b05c93c4",
+      "max_context": 8192,
+      "capabilities": [
+        "prompt_rewrite",
+        "target_fit_advice",
+        "workflow_choice"
+      ],
+      "qualified": false,
+      "provenance": {
+        "publisher_repo": "LiquidAI/LFM3-1.7B",
+        "publisher_revision": "ac2586a34f1a1c03329dbdcdefabd8b6478ddaa7",
+        "packager_repo": "LiquidAI/LFM3-1.7B-GGUF",
+        "packager_revision": "bad5729bba61d076fff20d2548e62526665af215",
+        "converter": "Liquid AI GGUF export (converter build is not stated in the repository metadata)",
+        "source_url": "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/bad5729bba61d076fff20d2548e62526665af215/LFM3-1.7B-Q4_K_M.gguf"
+      }
+    },
+    {
+      "model_id": "lfm3-1.7b-q8_0-liquidai",
+      "display_name": "LFM3-1.7B Q8_0 (Liquid AI GGUF)",
+      "license_spdx": "LicenseRef-LFM-Open-License-1.0",
+      "architecture": "lfm3",
+      "quantization": "Q8_0",
+      "filename": "LFM3-1.7B-Q8_0.gguf",
+      "bytes": 1846238496,
+      "sha256": "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6",
+      "max_context": 8192,
+      "capabilities": [
+        "prompt_rewrite",
+        "target_fit_advice",
+        "workflow_choice"
+      ],
+      "qualified": false,
+      "provenance": {
+        "publisher_repo": "LiquidAI/LFM3-1.7B",
+        "publisher_revision": "ac2586a34f1a1c03329dbdcdefabd8b6478ddaa7",
+        "packager_repo": "LiquidAI/LFM3-1.7B-GGUF",
+        "packager_revision": "bad5729bba61d076fff20d2548e62526665af215",
+        "converter": "Liquid AI GGUF export (converter build is not stated in the repository metadata)",
+        "source_url": "https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/bad5729bba61d076fff20d2548e62526665af215/LFM3-1.7B-Q8_0.gguf"
       }
     }
   ]
