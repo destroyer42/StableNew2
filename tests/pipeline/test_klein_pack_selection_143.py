@@ -106,13 +106,14 @@ def test_one_batch_review_before_any_njr(tmp_path, monkeypatch, mode, index, exp
     builder, entry, _ = make_builder(
         tmp_path, table={"lora_ok": S.COMPATIBLE, "lora_extra": S.COMPATIBLE}, review=review
     )
-    original = builder._job_builder.build_jobs
+    original = builder._job_builder.plan_expansion
 
     def build(**kwargs):
         built.append(True)
         return original(**kwargs)
 
-    monkeypatch.setattr(builder._job_builder, "build_jobs", build)
+    # The expansion is the first step towards a record's draft (P4-2E): it must follow the review.
+    monkeypatch.setattr(builder._job_builder, "plan_expansion", build)
     records = builder.build_jobs([entry, copy.deepcopy(entry)])
     assert len(calls) == 1 and len(calls[0]) == 2
     for record in records:
@@ -130,7 +131,7 @@ def test_cancel_or_failed_assessment_constructs_no_jobs(tmp_path, monkeypatch):
         builder, entry, _ = make_builder(tmp_path, resolver=resolver, review=review)
         monkeypatch.setattr(
             builder._job_builder,
-            "build_jobs",
+            "plan_expansion",
             lambda **_: pytest.fail("NJR created before complete selection"),
         )
         with pytest.raises(KleinSelectionError):

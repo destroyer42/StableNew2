@@ -85,17 +85,27 @@ def _generic_builder() -> JobBuilderV2:
     return JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator())
 
 
-def _pack_records(tmp_path: Path, *, loop_count: int = 1, matrix: dict[str, Any] | None = None) -> list[Any]:
+def _pack_records(
+    tmp_path: Path, *, loop_count: int = 1, matrix: dict[str, Any] | None = None
+) -> list[Any]:
     manager = StubConfigManager(tmp_path)
-    manager._config = {**BASE_PACK_CONFIG, "pipeline": {**BASE_PACK_CONFIG["pipeline"], "loop_count": loop_count}}
+    manager._config = {
+        **BASE_PACK_CONFIG,
+        "pipeline": {**BASE_PACK_CONFIG["pipeline"], "loop_count": loop_count},
+    }
     text = "A [[job]] in the snow" if matrix else "A fox in the snow"
     pack = _write_native_pack(manager.packs_dir / "count-pack.json", text=text, matrix=matrix)
     builder = pack_module.PromptPackNormalizedJobBuilder(
         config_manager=manager, job_builder=_generic_builder(), packs_dir=manager.packs_dir
     )
     entry = pack_module.PackJobEntry(
-        pack_id=pack.name, pack_name="Count Pack", prompt_text=text, config_snapshot={},
-        stage_flags={"txt2img": True}, randomizer_metadata={"enabled": False}, pack_row_index=0,
+        pack_id=pack.name,
+        pack_name="Count Pack",
+        prompt_text=text,
+        config_snapshot={},
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
     )
     return builder.build_jobs([entry])
 
@@ -109,7 +119,9 @@ def test_a_generic_record_runs_each_shared_step_once_in_the_core(calls: Counter[
         variants=[ConfigVariant("a", {"cfg_scale": 4.0}, 0), ConfigVariant("b", {"steps": 35}, 1)],
     )
     jobs = _generic_builder().build_jobs(
-        base_config=generic_config(), config_variant_plan=plan, batch_settings=make_batch_settings(batch_runs=2)
+        base_config=generic_config(),
+        config_variant_plan=plan,
+        batch_settings=make_batch_settings(batch_runs=2),
     )
 
     assert len(jobs) == 4
@@ -171,15 +183,23 @@ def test_the_prompt_pack_compile_policy_runs_once_per_configuration_shape(
 
 
 def test_each_matrix_variant_is_one_prepared_prompt(tmp_path: Path, calls: Counter[str]) -> None:
-    matrix = {"enabled": True, "mode": "fanout", "limit": 8,
-              "slots": [{"name": "job", "values": ["wizard", "knight", "bard"]}]}
+    matrix = {
+        "enabled": True,
+        "mode": "fanout",
+        "limit": 8,
+        "slots": [{"name": "job", "values": ["wizard", "knight", "bard"]}],
+    }
     records = _pack_records(tmp_path, loop_count=2, matrix=matrix)
 
     assert len(records) == 6
     assert calls["pack.apply_model_compile_policy"] == 3
     assert calls["pack.compile_adetailer"] == 3
     assert calls["core.apply_model_compile_policy"] == 6
-    assert (calls["construct"], calls["check.profile_njr"], calls["pack.normalize_image_backend_options"]) == (6, 6, 6)
+    assert (
+        calls["construct"],
+        calls["check.profile_njr"],
+        calls["pack.normalize_image_backend_options"],
+    ) == (6, 6, 6)
 
 
 # --------------------------------------------- characterization: what each of the two PromptPack applications produces
@@ -191,34 +211,55 @@ def test_the_nested_application_produces_the_stage_chain_profile_values(tmp_path
     record = _pack_job(tmp_path, KLEIN)
     txt2img = record.stage_chain[0]
 
-    assert (txt2img.stage_type, txt2img.scheduler, txt2img.steps, txt2img.cfg_scale) == ("txt2img", "Beta", 4, 1.0)
+    assert (txt2img.stage_type, txt2img.scheduler, txt2img.steps, txt2img.cfg_scale) == (
+        "txt2img",
+        "Beta",
+        4,
+        1.0,
+    )
 
 
-def test_the_flat_application_produces_the_records_profile_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_flat_application_produces_the_records_profile_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Z-Image: ``workload.config`` holds what the policy adds to the flat payload: the flattening drops these keys."""
 
     builder, entry, _path, _original = zimage_pack(tmp_path, monkeypatch)
     config = builder.build_jobs([entry])[0].config
 
-    assert config["backend_options"]["image"]["model_profile"] == {"id": "z_image_turbo_fp8_scaled", "version": 1}
+    assert config["backend_options"]["image"]["model_profile"] == {
+        "id": "z_image_turbo_fp8_scaled",
+        "version": 1,
+    }
     assert config["txt2img"]["distilled_cfg_scale"] == config["distilled_cfg_scale"] == 9.0
     assert config["sampler_name"] == config["txt2img"]["sampler_name"] == "Euler"
-    assert config["global_prompt_policy_source"] == "frozen_njr"  # the planner had written "legacy_runtime_fallback"
-    assert config["vae"] == ""  # effective-config preparation of the flat payload; the flattening copied None
+    assert (
+        config["global_prompt_policy_source"] == "frozen_njr"
+    )  # the planner had written "legacy_runtime_fallback"
+    assert (
+        config["vae"] == ""
+    )  # effective-config preparation of the flat payload; the flattening copied None
 
 
-def test_removing_the_nested_application_would_change_the_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_removing_the_nested_application_would_change_the_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     for name in ("a", "b"):
         (tmp_path / name).mkdir()
     expected = _pack_job(tmp_path / "a", KLEIN).to_dict()["stages"]
     monkeypatch.setattr(pack_module, "apply_model_compile_policy", lambda config: config)
 
     stages = _pack_job(tmp_path / "b", KLEIN).to_dict()["stages"]
-    assert (stages[0]["scheduler"], stages[0]["steps"]) == ("DDIM", 24)  # the user's values would reach the stage
+    assert (stages[0]["scheduler"], stages[0]["steps"]) == (
+        "DDIM",
+        24,
+    )  # the user's values would reach the stage
     assert (expected[0]["scheduler"], expected[0]["steps"]) == ("Beta", 4)
 
 
-def test_removing_the_flat_application_would_change_the_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_removing_the_flat_application_would_change_the_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     for name in ("a", "b"):
         (tmp_path / name).mkdir()
     builder, entry, _path, _original = zimage_pack(tmp_path / "a", monkeypatch)

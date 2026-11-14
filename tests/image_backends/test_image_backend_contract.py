@@ -353,7 +353,7 @@ def test_a1111_adapter_delegates_each_supported_stage(stage_name: str, tmp_path:
 @pytest.mark.parametrize(
     "producer",
     [
-        "src/pipeline/job_builder_v2.py",  # Pipeline normal jobs
+        "src/pipeline/njr_compiler.py",  # Pipeline normal jobs (RAW drafts from job_builder_v2, P4-2E)
         "src/pipeline/prompt_pack_job_builder.py",  # PromptPack jobs
         "src/pipeline/cli_njr_builder.py",  # CLI
         "src/pipeline/reprocess_builder.py",  # Review / image reprocess

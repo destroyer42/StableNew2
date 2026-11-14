@@ -18,7 +18,7 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from enum import Enum
 from operator import attrgetter
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from src.image_backends.exact_model_profile import validate_profile_njr
@@ -68,12 +68,25 @@ _CHECKS: Mapping[CompileCheck, Callable[[NormalizedJobRecord], None]] = {
 }
 
 
+def _always(_config: Mapping[str, Any]) -> bool:
+    return True
+
+
 @dataclass(frozen=True, slots=True)
 class RawImagePlan:
-    """Planner rules a ``RAW`` image draft needs after the shared steps have run on its configuration."""
+    """Planner rules a ``RAW`` image draft needs while and after the shared steps run on its configuration.
 
-    stages_for: Callable[[Mapping[str, Any]], tuple[StageConfig, ...]]
+    ``bind`` fills the parts the planner derives from the effective configuration (prompt text and its provenance)
+    before the stage-conditional step; ``adetailer_applies`` decides whether that step runs; ``stages_for`` receives the
+    final configuration and the ADetailer decision (empty when none). ``mint_job_id``, when given, mints the identity
+    after the stage-conditional step, so a draft refused by an earlier step consumes none.
+    """
+
+    stages_for: Callable[[Mapping[str, Any], Mapping[str, Any]], tuple[StageConfig, ...]]
     model_name_for: Callable[[Mapping[str, Any]], str | None]
+    bind: Callable[[NjrDraft, Mapping[str, Any]], NjrDraft] | None = None
+    adetailer_applies: Callable[[Mapping[str, Any]], bool] = _always
+    mint_job_id: Callable[[], str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +185,19 @@ def reprocess_source_kind(source: object, *, is_video: bool) -> SourceKind:
     return _REPROCESS_SOURCE_ALIASES.get(str(source).lower(), SourceKind.REPROCESS)
 
 
+def prepare_image_config(config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Steps 1-2 on one merged image configuration (in place on the mapping it is given): the exact profile's
+    effective-configuration preparation, then the model compile policy. Returns the configuration and its content-free
+    ``effective_configuration`` evidence (``None`` when nothing was adapted).
+
+    A ``RAW`` draft runs it inside ``compile_njr``; a planner that prepares its own values (PromptPack) calls it for
+    the configuration its ``EFFECTIVE`` draft will carry.
+    """
+
+    effective = prepare_effective_config(config)
+    return apply_model_compile_policy(effective.config), effective.evidence()
+
+
 def _prepare_raw(draft: NjrDraft) -> NjrDraft:
     """Steps 1-5 for a ``RAW`` image draft: effective config, model policy, ADetailer, backend options, intent.
 
@@ -181,29 +207,35 @@ def _prepare_raw(draft: NjrDraft) -> NjrDraft:
     workload = draft.workload
     if not isinstance(workload, ImageWorkloadSpec) or draft.workload_kind is not WorkloadKind.IMAGE:
         raise ValueError("a RAW draft must carry an image workload")
-    if draft.raw_plan is None:
+    plan = draft.raw_plan
+    if plan is None:
         raise ValueError("a RAW draft needs a raw_plan")
-    effective = prepare_effective_config(deepcopy(thaw_json(workload.config)))
-    config = apply_model_compile_policy(effective.config)
-    config, adetailer_mode = compile_adetailer(config, workload.positive_prompt)
+    config, evidence = prepare_image_config(deepcopy(thaw_json(workload.config)))
+    if plan.bind is not None:
+        draft = plan.bind(draft, config)
+        workload = cast(ImageWorkloadSpec, draft.workload)
+    adetailer_mode: Mapping[str, Any] = {}
+    if plan.adetailer_applies(config):
+        config, adetailer_mode = compile_adetailer(config, workload.positive_prompt)
     metadata = dict(thaw_json(draft.provenance.metadata))
-    evidence = effective.evidence()
     if evidence:
         metadata["effective_configuration"] = evidence
     if adetailer_mode:
         metadata["adetailer_mode"] = adetailer_mode
+    job_id = plan.mint_job_id() if plan.mint_job_id is not None else draft.job_id
     backend_options = normalize_image_backend_options(
-        config.get("backend_options"), model_name=draft.raw_plan.model_name_for(config)
+        config.get("backend_options"), model_name=plan.model_name_for(config)
     )
     return replace(
         draft,
+        job_id=job_id,
         workload=replace(
             workload,
             config=config,
             backend_options=backend_options,
             intent_config=canonicalize_intent_config(thaw_json(workload.intent_config)),
         ),
-        stages=draft.raw_plan.stages_for(config),
+        stages=plan.stages_for(config, adetailer_mode),
         provenance=replace(draft.provenance, metadata=metadata),
     )
 
@@ -271,5 +303,6 @@ __all__ = [
     "derive_njr",
     "history_lineage",
     "mint_job_id",
+    "prepare_image_config",
     "reprocess_source_kind",
 ]

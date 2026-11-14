@@ -334,6 +334,112 @@ Risk: medium. Rollback: revert; saved experiments are not rewritten.
 
 ## P4-2E — Generic and PromptPack
 
+### Status (2026-11-14): implemented on `refactor/p4-2e-njr-generic-promptpack`
+
+- `JobBuilderV2` is split. `plan_expansion` returns one `ExpansionItem` per record (configuration, seed, variant and
+  batch indexes, config variant, randomizer summary) for config variants, randomizer, seed mode and batch runs, in the
+  old order. `build_jobs` (generic, S2) turns each item into a `RAW` draft with `checks=(PROFILE_NJR,)`; the core runs
+  effective config, model policy, ADetailer (only without a `stages` key and with `pipeline.adetailer_enabled`),
+  backend options and intent once per record. The identity is minted after the stage-conditional step, as before, so
+  a refused draft consumes none. `SourceKind.CLI` (X1) is kept.
+- `PromptPackNormalizedJobBuilder` (S3) consumes `plan_expansion` directly and builds one `EFFECTIVE` draft per record
+  with `checks=(PROFILE_NJR,)`; the discarded intermediate `CLI` record, its second backend-option normalization and
+  its second `validate_zimage_njr` are gone. Matrix planning, the Klein review (still complete before the first
+  expansion), ControlNet/OpenPose, prompt adaptation and rendering and config resolution are unchanged.
+- Core changes: `prepare_image_config` (steps 1-2, public so a planner can prepare the configuration its `EFFECTIVE`
+  draft carries) and a reshaped `RawImagePlan` (`bind`, `adetailer_applies`, `stages_for(config, adetailer_mode)`,
+  `mint_job_id`). No route but generic uses `RAW`; no service, registry or configuration manager was added.
+- **Finding (X2 reclassified).** The two PromptPack policy applications aren't a redundant double call. Each one
+  produces part of the record:
+  - **Nested application** in `_prepare_entry`, once per prepared prompt. The stage chain, ADetailer, randomizer and
+    batch inputs are built from its result, and its exact-profile refusals surface before the Klein review. Without
+    it, a Klein pack's txt2img stage keeps the user's `DDIM`/24/7.5 instead of `Beta`/4/1.0 and fails backend admission.
+  - **Flat application** on the payload, once per record. `_build_config_payload` drops the profile's
+    `backend_options`, the `txt2img` section, `distilled_cfg_scale` and `sampler_name`, copies `vae: null` and carries
+    the planner's `global_prompt_policy_source: legacy_runtime_fallback`. This application restores them (Z-Image:
+    the profile's `txt2img` defaults section, `backend_options.model_profile`, `distilled_cfg_scale` 9.0,
+    `sampler_name`, `vae: ""`, `frozen_njr`; Klein: `backend_options` and its `txt2img` section), and `workload.config`
+    freezes its result; the exact-profile goldens pin these values.
+- **Decision** (coordinating session under the owner's delegation, 2026-11-13): first (a), "one application, at the
+  payload". It was withdrawn after the Klein evidence above. Then option 4: keep one application per configuration
+  shape, with no output or policy-module change. **The plan's outcome "the model compile policy runs exactly once per
+  record" is not achieved for PromptPack.** It is replaced by pinned counts (`tests/pipeline/test_njr_compile_invocations_p42e.py`):
+  - generic: every shared step once per record;
+  - PromptPack: per record, construction, exact-profile check, backend-option normalization, intent canonicalization
+    and flat effective-config preparation once each; per prepared prompt, ADetailer once;
+  - model policy: once per prepared prompt on the nested configuration plus once per record on the flat payload.
+  Characterization tests pin what each application produces and that removing either changes the record.
+- **Open design decision, after P4-2F, not implemented:** one policy result projected onto both shapes through a
+  neutral projection seam in `src/image_backends/model_policy.py` (option 2). Rejected for E: profile rules copied into
+  the planner (a second policy authority) and rebuilding the stage chain at draft time (moves stage construction
+  relative to the Klein review).
+- **Invocation counts, before → after.** Before is the instrumented `d46660fc`, 185 tests / 585 records; after is
+  pinned by tests.
+
+  | Step | Before (per PromptPack record) | After |
+  |---|---|---|
+  | Record constructions | 2 (S2 discarded + S3) | 1 |
+  | `validate_zimage_njr` | 2 | 1 (`PROFILE_NJR`) |
+  | Backend-option normalization | 2 | 1 |
+  | Model policy | 1 per prepared prompt + 1 per record | unchanged, now explicit |
+  | `prepare_effective_config` | 1 (S2) | 1 (`prepare_image_config`) |
+  | ADetailer | 1 per prepared prompt | unchanged |
+  | Intent canonicalization | 1 | unchanged |
+- **Differential proof.** `to_dict()` (or refusal type and message) was captured for 86 inputs on unchanged
+  `d46660fc` and again after the split: identical for all 86. The harness lives outside the repository; the inputs are
+  covered in the repository by the goldens and the subsystem suites.
+  - Generic: the golden inputs; config variants × batch runs; ADetailer on, off and with a `stages` key; Z-Image (plain,
+    global positive composed and disabled, operator overrides of sampler/steps/CFG/VAE/CLIP skip/distilled CFG,
+    seed `None`, profile without its checkpoint, bad geometry); Klein (plain, with ADetailer); SDXL nested model; a
+    dataclass config; randomizer with choices and with fixed seed; seed modes FIXED, PER_VARIANT and NONE on the
+    non-randomized path; output settings and pack usage; an unsupported config type. Every generic case was followed
+    by a second build on the same builder, to show the id sequence after success and after refusal.
+  - PromptPack, SDXL: plain; two entries; 2x2 Matrix; randomizer seeded and unseeded; Matrix × randomizer × batch; 3
+    batch runs; LoRA, embeddings and negatives; hires on and off (the flattening keeps or drops the hires keys);
+    refiner; operator values; ADetailer; frozen global positive; output dir and images per prompt; invalid loop type;
+    `learning_` pack without pack config; enabled AnimateDiff refusal.
+  - PromptPack, Z-Image: plain; adapted LoRA and embedding; negative; operator overrides; explicit profile values;
+    global positive on; randomizer; ADetailer, upscale and hires refusals; bad geometry; loop-count refusal; weighted
+    prose.
+  - PromptPack, Klein: SDXL-style user defaults; Matrix; no LoRAs; operator overrides with 2 batch runs; ADetailer;
+    batch selection `last` and `specific`; cancelled selection.
+  - PromptPack, SDXL adaptation.
+- All goldens, refusal tables, refusal order and Klein tests pass unchanged. No baseline data file changed and
+  `STABLENEW_UPDATE_GOLDEN` was not set. Metadata is covered by the `to_dict()` equality: the flat application's
+  `effective_configuration` evidence is discarded, as S2's was; `adetailer_mode` comes from the planner's single
+  ADetailer compile; `global_prompt_policy_source` comes from the flat application.
+- Tests that watched the old seam now watch the new one: the Klein "no draft before review" sentinels patch
+  `plan_expansion` instead of `build_jobs`; the "one model compile policy" identity check and the backend-normalization
+  producer check name `njr_compiler.py` for the generic route. The ownership ratchet covers `job_builder_v2.py` and
+  `prompt_pack_job_builder.py`.
+- Preserved although it looks wrong (excluded from E): X1 (generic `SourceKind.CLI`), X6 (the generic path swallows
+  every compile exception, `pipeline_controller.py`), X7 (an unloadable pack entry is dropped with a log line),
+  `STATUS.md` decision 4 (batch runs on the state-fallback path), the two policy applications above. Also the
+  PromptPack randomizer plan: it has no choices, so `max_variants > 1` still yields one variant.
+- Direct constructors that remain: V3 `replay_engine.py:161` (P4-2F); `njr_core_v26.py:1276` (`migrate_legacy_njr`, read
+  path); T1 `tools/qualification/img_forge_100/run.py` (operator-only); the `pipeline_controller.py` references and the
+  `replace(..., job_id=...)` comparisons in `replay_njr_compiler.py` and `learning/qualification_batch.py:400`, all for
+  the P4-2F guard to classify.
+
+#### Routes on the core (facts for the later harmonisation decision)
+
+Shared steps: E effective-config preparation, P model compile policy, A ADetailer compile, B backend-option
+normalization, I intent canonicalization. "Planner" means the route runs the step itself before handing over its draft.
+
+| Route | Entry | `PolicyState` | `CompileCheck` tuple (in order) | Shared steps run | Not run |
+|---|---|---|---|---|---|
+| CLI (S1) | `cli_njr_builder.build_cli_njr` | `EFFECTIVE` | `()` | P, A, B, I (planner) | E |
+| Generic Pipeline tab (S2) | `JobBuilderV2.build_jobs` | `RAW` | `(PROFILE_NJR,)` | E, P, A (conditional), B, I (core, once per record) | none |
+| PromptPack (S3) | `PromptPackNormalizedJobBuilder.build_jobs` | `EFFECTIVE` | `(PROFILE_NJR,)` | P twice: nested per prepared prompt (planner) and flat per record (`prepare_image_config`); E per record (`prepare_image_config`; Z-Image also `normalize_profile_owned_values` per prepared prompt); A per prepared prompt; B and I per record (planner) | none |
+| Reprocess family (S4: Reprocess, Review, Photo Optimize, curation, masked edit, outpaint, SVD, Video Workflow, sequences, Movie Clips, Learning non-txt2img) | `ReprocessJobBuilder.build_reprocess_job` | `EFFECTIVE` | `()` | B (planner) | E, P, A, I |
+| Character Training (S5) | `training_njr_compiler` | `EFFECTIVE` | `()` | I (planner) | E, P, A, B |
+| Learning frozen arm (S6: Model Comparison, Two-Axis Grid, Prompt x Model Matrix) | `learning_njr.assemble_txt2img_njr` | `FROZEN` (prompt, negative, backend options) | `(PROFILE_NJR,)` | none at Run (validated at freeze) | E, P, A, B, I |
+| Learning ordinary txt2img (S7) | `ordinary_njr._materialize_txt2img` | `FROZEN` (prompt, negative) | `()` | B (planner) | E, P, A, I |
+| Learning non-txt2img re-identification (V5) | `ordinary_njr` | derivation | `()` | none | all |
+| History replay and batch retry (V1) | `compile_replay_intent` | derivation | `()` (retired checks run on the parent in the planner) | none | all |
+| Sequence resume and replay (V4) | `sequence_resume` via `compile_replay_intent` | derivation | `()` | none | all |
+| Regenerate with Changes (V2) | `history_variation_compiler` | derivation | `(OPERATION, PROFILE_NJR)` | none | all |
+
 ### Objective
 
 - Outcome: each PromptPack job is compiled once and the model compile policy runs exactly once per record. The generic

@@ -16,10 +16,7 @@ from src.conditioning.openpose import SLOT_FIELD as OPENPOSE_SLOT_FIELD
 from src.contracts import PackJobEntry
 from src.image_backends.forge_klein_lora import LoraResolver
 from src.image_backends.forge_klein_profile import klein_selected
-from src.image_backends.forge_zimage_profile import (
-    validate_zimage_njr,
-    zimage_selected,
-)
+from src.image_backends.forge_zimage_profile import zimage_selected
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.image_backends.model_policy import (
     FamilyLookup,
@@ -38,16 +35,14 @@ from src.pipeline.config_contract_v26 import (
 )
 from src.pipeline.controlnet_compile import CompiledUnits, compile_units
 from src.pipeline.global_prompt_policy import has_frozen_global_prompt_policy
-from src.pipeline.job_builder_v2 import JobBuilderV2
+from src.pipeline.job_builder_v2 import JobBuilderV2, config_mapping, stage_prompt_info
 from src.pipeline.job_models_v2 import (
-    CURRENT_NJR_SCHEMA_VERSION,
     BatchSettings,
     ImageWorkloadSpec,
     LoRATag,
     NJRProvenance,
     NormalizedJobRecord,
     OutputPlan,
-    OutputSettings,
     PackUsageInfo,
     SourceDescriptor,
     SourceKind,
@@ -59,6 +54,13 @@ from src.pipeline.matrix_expansion_plan import (
     MatrixExpansionPlan,
     matrix_randomizer_limit_hint,
     plan_matrix_expansion,
+)
+from src.pipeline.njr_compiler import (
+    CompileCheck,
+    NjrDraft,
+    PolicyState,
+    compile_njr,
+    prepare_image_config,
 )
 from src.pipeline.openpose_compile import CompiledConditioning, OpenPoseCompiler
 from src.pipeline.prompt_pack_parser import PackRow
@@ -523,32 +525,33 @@ class PromptPackNormalizedJobBuilder:
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
         batch_settings = self._build_batch_settings(merged_config)
 
-        # Output settings: just specify directory, filenames are handled by runner
+        # Output: just the directory, filenames are handled by runner
         pipeline_section = merged_config.get("pipeline", {})
         base_output_dir = pipeline_section.get("output_dir", "output")
-        output_settings = OutputSettings(base_output_dir=base_output_dir)
 
-        jobs = self._job_builder.build_jobs(
+        # The shared expansion (randomizer variants, seed mode, batch runs); each item becomes one record.
+        expansion = self._job_builder.plan_expansion(
             base_config=config_for_builder,
             randomization_plan=randomizer_plan,
             batch_settings=batch_settings,
-            output_settings=output_settings,
         )
 
-        pipeline_section = merged_config.get("pipeline", {})
         aesthetic_section = merged_config.get("aesthetic", {})
         matrix_section = merged_config.get("randomization", {}).get("matrix", {})
         pack_path = self._resolve_pack_json_path(entry.pack_id)
 
-        finalized_jobs: list[NormalizedJobRecord] = []
-        for record in jobs:
-            # JobBuilderV2 numbers variants within one matrix expansion. Matrix
-            # expansion happens before final NJR construction, so combine the
-            # immutable provenance values without mutating the NJR.
-            inner_variant_total = max(1, int(record.variant_total))
+        drafts: list[NjrDraft] = []
+        for item in expansion:
+            # The second compile-policy application, on the flat payload this record carries (once per record). It is
+            # not redundant with the one in _prepare_entry: the flattening drops the profile's backend options, the
+            # txt2img section and some profile keys, which only this application restores in ``workload.config``.
+            record_config, _evidence = prepare_image_config(config_mapping(item.config))
+            prompt_info = stage_prompt_info(record_config)
+            # The expansion numbers variants within one Matrix variant; combine them with the Matrix position.
+            inner_variant_total = max(1, int(item.variant_total))
             final_variant_total = max(1, matrix_variant_count) * inner_variant_total
             final_variant_index = (
-                max(0, matrix_variant_index) * inner_variant_total + record.variant_index
+                max(0, matrix_variant_index) * inner_variant_total + item.variant_index
             )
             positive_embeddings = tuple(
                 render_embedding_invocation(name, weight)
@@ -582,10 +585,9 @@ class PromptPackNormalizedJobBuilder:
                 intent_payload["plan_origin"] = copy.deepcopy(plan_origin)
             if story_plan:
                 intent_payload["story_plan"] = copy.deepcopy(story_plan)
-            finalized_jobs.append(
-                NormalizedJobRecord(
-                    schema_version=CURRENT_NJR_SCHEMA_VERSION,
-                    job_id=record.job_id,
+            drafts.append(
+                NjrDraft(
+                    job_id=self._job_builder.mint_job_id(),
                     workload_kind=WorkloadKind.IMAGE,
                     source=SourceDescriptor(
                         kind=SourceKind.PROMPT_PACK,
@@ -597,7 +599,7 @@ class PromptPackNormalizedJobBuilder:
                     workload=ImageWorkloadSpec(
                         positive_prompt=prompt_resolution.positive,
                         negative_prompt=prompt_resolution.negative,
-                        config=record.config,
+                        config=record_config,
                         images_per_prompt=int(pipeline_section.get("images_per_prompt", 1)),
                         loop_type=pipeline_section.get("loop_type", "pipeline"),
                         loop_count=int(pipeline_section.get("loop_count", 1) or 1),
@@ -606,8 +608,8 @@ class PromptPackNormalizedJobBuilder:
                         ),
                         intent_config=canonicalize_intent_config(intent_payload),
                         backend_options=normalize_image_backend_options(
-                            derive_backend_options(record.config),
-                            model_name=str(_mapping_dict(record.config).get("model") or "") or None,
+                            derive_backend_options(record_config),
+                            model_name=str(_mapping_dict(record_config).get("model") or "") or None,
                         ),
                         metadata=copy.deepcopy(record_metadata),
                     ),
@@ -617,11 +619,11 @@ class PromptPackNormalizedJobBuilder:
                         filename_template="{seed}",
                     ),
                     provenance=NJRProvenance(
-                        seed=record.seed,
+                        seed=item.seed,
                         variant_index=final_variant_index,
                         variant_total=final_variant_total,
-                        batch_index=record.batch_index,
-                        batch_total=record.batch_total,
+                        batch_index=item.batch_index,
+                        batch_total=item.batch_total,
                         randomizer_summary={
                             "enabled": bool(
                                 randomizer_metadata.get("enabled")
@@ -639,9 +641,9 @@ class PromptPackNormalizedJobBuilder:
                         matrix_mode=(prepared.matrix_expansion or {}).get("mode") or matrix_section.get("mode"),
                         matrix_prompt_mode=matrix_section.get("prompt_mode"),
                         matrix_name=matrix_section.get("name"),
-                        config_variant_label=record.config_variant_label,
-                        config_variant_index=record.config_variant_index,
-                        config_variant_overrides=record.config_variant_overrides,
+                        config_variant_label=item.config_variant.label,
+                        config_variant_index=item.config_variant.index,
+                        config_variant_overrides=item.config_variant.overrides.copy(),
                         positive_embeddings=positive_embeddings,
                         negative_embeddings=negative_embeddings,
                         lora_tags=lora_tags,
@@ -652,18 +654,20 @@ class PromptPackNormalizedJobBuilder:
                                 prompt_index=entry.pack_row_index or 0,
                             ),
                         ),
-                        txt2img_prompt_info=record.txt2img_prompt_info,
+                        txt2img_prompt_info=prompt_info,
                         aesthetic_enabled=bool(aesthetic_section.get("enabled")),
                         aesthetic_weight=aesthetic_section.get("weight"),
                         aesthetic_text=aesthetic_section.get("text"),
                         aesthetic_embedding=aesthetic_section.get("embedding"),
                         metadata=copy.deepcopy(provenance_metadata),
                     ),
+                    # Everything above was prepared by this planner in its own order; the core assembles the record
+                    # and runs the exact-profile check once.
+                    policy_state=PolicyState.EFFECTIVE,
+                    checks=(CompileCheck.PROFILE_NJR,),
                 )
             )
-        for job in finalized_jobs:
-            validate_zimage_njr(job)
-        return finalized_jobs
+        return [compile_njr(draft) for draft in drafts]
 
     def _resolve_source_intent(
         self,

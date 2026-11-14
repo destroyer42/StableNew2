@@ -699,7 +699,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `history_variation_marker.py`: The persisted marker of an edited history variation (PR-HISTORY-610A); dependency-free so projections can rea…
 - `image_edit_inputs.py`: Bounded, content-addressed image-edit inputs in existing mutable state, like OpenPose snapshots
 - `intent_artifact_contract.py`: (no docstring)
-- `job_builder_v2.py`: JobBuilderV2: Build normalized job records from merged configs
+- `job_builder_v2.py`: JobBuilderV2: the expansion planner for merged image configurations, and the generic (Pipeline tab) route
 - `job_models_v2.py`: Job models for V2 queue system
 - `klein_edit_reprocess.py`: FLUX.2 Klein single-reference edit as a normal Review/reprocess job (PR-IMG-116)
 - `last_run_store_v2_5.py`: (no docstring)

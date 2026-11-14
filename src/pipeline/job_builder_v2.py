@@ -1,14 +1,12 @@
 # Subsystem: Pipeline
 # Role: Centralized job construction for Pipeline V2.
 
-"""JobBuilderV2: Build normalized job records from merged configs.
+"""JobBuilderV2: the expansion planner for merged image configurations, and the generic (Pipeline tab) route.
 
-This module provides centralized job construction that:
-- Accepts already-merged base configs (from ConfigMergerV2)
-- Applies randomization via the Randomizer engine
-- Applies seed mode semantics
-- Expands batch_runs into separate jobs
-- Produces NormalizedJobRecord instances
+``plan_expansion`` owns cardinality: config variants, randomizer variants, seed mode and batch runs, returned as one
+``ExpansionItem`` per record with its configuration and indexes. ``build_jobs`` turns each item into a ``RAW`` draft
+that ``njr_compiler.compile_njr`` assembles (the core runs the shared steps once per record). The PromptPack builder
+consumes ``plan_expansion`` directly and builds its own ``EFFECTIVE`` drafts.
 
 The builder is pure pipeline logic: no GUI, no AppState, no Tkinter.
 """
@@ -17,19 +15,13 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from copy import deepcopy
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from typing import Any
 
-from src.image_backends.forge_zimage_profile import validate_zimage_njr
-from src.image_backends.image_backend_types import normalize_image_backend_options
-from src.image_backends.model_policy import apply_model_compile_policy
-from src.pipeline.adetailer_profiles import compile_adetailer
-from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
-from src.pipeline.exact_profile_effective_config import prepare_effective_config
+from src.pipeline.config_variant_plan_v2 import ConfigVariant, ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
-    CURRENT_NJR_SCHEMA_VERSION,
     BatchSettings,
     ImageWorkloadSpec,
     NJRProvenance,
@@ -43,11 +35,137 @@ from src.pipeline.job_models_v2 import (
     StagePromptInfo,
     WorkloadKind,
 )
+from src.pipeline.njr_compiler import (
+    CompileCheck,
+    NjrDraft,
+    PolicyState,
+    RawImagePlan,
+    compile_njr,
+)
 from src.randomizer import (
     RandomizationPlanV2,
     RandomizationSeedMode,
     generate_run_config_variants,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ExpansionItem:
+    """One record's place in an expansion: its configuration and indexes.
+
+    The batch runs of one variant share the same ``config`` object; a consumer copies it (``config_mapping``).
+    """
+
+    config: Any
+    seed: int | None
+    variant_index: int
+    variant_total: int
+    batch_index: int
+    batch_total: int
+    config_variant: ConfigVariant
+    randomizer_summary: dict[str, Any]
+
+
+def config_mapping(config: Any) -> dict[str, Any]:
+    """A detached mapping of one expanded configuration (a mapping, a dataclass or an object with fields)."""
+
+    if isinstance(config, dict):
+        return deepcopy(config)
+    if is_dataclass(config) and not isinstance(config, type):
+        return asdict(config)
+    if hasattr(config, "__dict__"):
+        return deepcopy(vars(config))
+    raise TypeError("base_config must be a mapping or object with configuration fields")
+
+
+def _config_text(config: Any, key: str) -> str:
+    """Safely extract a string value from a config dict or object."""
+
+    value = config.get(key) if isinstance(config, dict) else getattr(config, key, None)
+    return "" if value is None else str(value)
+
+
+def stage_prompt_info(config: Mapping[str, Any]) -> StagePromptInfo:
+    """The txt2img prompt metadata of a prepared configuration: its own prompt and negative, verbatim."""
+
+    prompt = _config_text(config, "prompt")
+    negative = _config_text(config, "negative_prompt")
+    return StagePromptInfo(
+        original_prompt=prompt,
+        final_prompt=prompt,
+        original_negative_prompt=negative,
+        final_negative_prompt=negative,
+        global_negative_applied=False,
+        global_negative_terms="",
+    )
+
+
+def _optional_int(value: Any) -> int | None:
+    return int(value) if value not in (None, "") else None
+
+
+def _optional_float(value: Any) -> float | None:
+    return float(value) if value not in (None, "") else None
+
+
+def _generic_model_name(config: Mapping[str, Any]) -> str | None:
+    txt2img = config.get("txt2img")
+    nested = txt2img.get("model") if isinstance(txt2img, dict) else None
+    return str(nested or config.get("model") or "") or None
+
+
+def _generic_pack_usage(config: Mapping[str, Any]) -> tuple[PackUsageInfo, ...]:
+    """Prompt pack usage metadata if the configuration names a pack."""
+
+    pack_name = _config_text(config, "pack_name")
+    if not pack_name:
+        return ()
+    pack_path = _config_text(config, "pack_path")
+    return (PackUsageInfo(pack_name=pack_name, pack_path=pack_path or None),)
+
+
+def _generic_bind(draft: NjrDraft, config: Mapping[str, Any]) -> NjrDraft:
+    """The prompt text and its provenance come from the effective configuration."""
+
+    prompt_info = stage_prompt_info(config)
+    return replace(
+        draft,
+        workload=replace(
+            draft.workload,
+            positive_prompt=prompt_info.final_prompt,
+            negative_prompt=prompt_info.final_negative_prompt,
+        ),
+        provenance=replace(
+            draft.provenance,
+            txt2img_prompt_info=prompt_info,
+            pack_usage=_generic_pack_usage(config),
+        ),
+    )
+
+
+def _generic_adetailer_applies(config: Mapping[str, Any]) -> bool:
+    """ADetailer is compiled only when no stage list is supplied and the pipeline enables it."""
+
+    pipeline = config.get("pipeline") or {}
+    return "stages" not in config and pipeline.get("adetailer_enabled") is True
+
+
+def _generic_stages(
+    config: Mapping[str, Any], adetailer_mode: Mapping[str, Any]
+) -> tuple[StageConfig, ...]:
+    stages: tuple[StageConfig, ...] = (
+        StageConfig(
+            stage_type="txt2img",
+            enabled=True,
+            steps=_optional_int(config.get("steps")),
+            cfg_scale=_optional_float(config.get("cfg_scale")),
+            sampler_name=str(config.get("sampler") or "") or None,
+            model=str(config.get("model") or "") or None,
+        ),
+    )
+    if adetailer_mode:
+        stages += (StageConfig("adetailer", enabled=True, extra=config["adetailer"]),)
+    return stages
 
 
 class JobBuilderV2:
@@ -74,6 +192,10 @@ class JobBuilderV2:
         """
         self._time_fn = time_fn or time.time
         self._id_fn = id_fn or (lambda: uuid.uuid4().hex)
+
+    def mint_job_id(self) -> str:
+        """The next job identity from this builder's injected id function."""
+        return self._id_fn()
 
     def build_jobs(
         self,
@@ -108,106 +230,100 @@ class JobBuilderV2:
 
         Total jobs = len(config_variants) * len(matrix_variants) * batch_runs
         """
-        # Apply defaults
-        batch = batch_settings or BatchSettings()
         output = output_settings or OutputSettings()
+        expansion = self.plan_expansion(
+            base_config=base_config,
+            randomization_plan=randomization_plan,
+            config_variant_plan=config_variant_plan,
+            batch_settings=batch_settings,
+            rng_seed=rng_seed,
+        )
+        plan = RawImagePlan(
+            stages_for=_generic_stages,
+            model_name_for=_generic_model_name,
+            bind=_generic_bind,
+            adetailer_applies=_generic_adetailer_applies,
+            mint_job_id=self._id_fn,
+        )
+        return [compile_njr(self._generic_draft(item, output, plan)) for item in expansion]
+
+    def plan_expansion(
+        self,
+        *,
+        base_config: Any,
+        randomization_plan: RandomizationPlanV2 | None = None,
+        config_variant_plan: ConfigVariantPlanV2 | None = None,
+        batch_settings: BatchSettings | None = None,
+        rng_seed: int | None = None,
+    ) -> list[ExpansionItem]:
+        """One ``ExpansionItem`` per record, in the order ``build_jobs`` documents.
+
+        Config variants (dot-path overrides), then randomizer variants (or the seed mode on the non-randomized
+        path), then batch runs. Nothing here compiles a configuration.
+        """
+        batch = batch_settings or BatchSettings()
         config_plan = config_variant_plan or ConfigVariantPlanV2.single_variant()
-
-        # Step 1: Iterate over config variants (PR-CORE-E)
-        jobs: list[NormalizedJobRecord] = []
-
+        items: list[ExpansionItem] = []
         for config_variant in config_plan.iter_variants():
-            # Apply config variant overrides to base_config
             config_with_overrides = self._apply_config_overrides(
                 base_config, config_variant.overrides
             )
-
-            # Step 2: Generate matrix variants via randomizer
             variant_configs = self._generate_variants(
                 config_with_overrides, randomization_plan, rng_seed
             )
             variant_total = len(variant_configs)
-
-            # Step 3: Apply seed mode for non-randomized path
             if randomization_plan is None or not randomization_plan.enabled:
                 variant_configs = self._apply_seed_mode_non_randomized(
                     variant_configs, randomization_plan
                 )
-
-            # Step 4: Expand by batch_runs and build job records
             for variant_index, matrix_config in enumerate(variant_configs):
                 for batch_index in range(batch.batch_runs):
-                    # Extract seed from config
-                    seed = self._extract_seed(matrix_config)
-
-                    # Build randomizer summary if applicable
-                    randomizer_summary = None
+                    summary: dict[str, Any] = {}
                     if randomization_plan and randomization_plan.enabled:
-                        randomizer_summary = self._build_randomizer_summary(
-                            randomization_plan, variant_index
-                        )
-
-                    # An exact profile's inherited values/global terms are made effective first (a no-op otherwise).
-                    effective = prepare_effective_config(self._config_mapping(matrix_config))
-                    config = apply_model_compile_policy(effective.config)
-                    effective_evidence = effective.evidence()
-                    prompt_info = self._build_stage_prompt_info(config)
-                    stage = StageConfig(
-                        stage_type="txt2img",
-                        enabled=True,
-                        steps=self._optional_int(config.get("steps")),
-                        cfg_scale=self._optional_float(config.get("cfg_scale")),
-                        sampler_name=str(config.get("sampler") or "") or None,
-                        model=str(config.get("model") or "") or None,
-                    )
-                    stages: tuple[StageConfig, ...] = (stage,)
-                    metadata: dict[str, Any] = {}
-                    if effective_evidence:
-                        metadata["effective_configuration"] = effective_evidence
-                    # PromptPack compilation owns its supplied stage list and has already selected its profile.
-                    pipeline = config.get("pipeline") or {}
-                    if "stages" not in config and pipeline.get("adetailer_enabled") is True:
-                        config, decision = compile_adetailer(config, prompt_info.final_prompt)
-                        if decision:
-                            stages += (
-                                StageConfig("adetailer", enabled=True, extra=config["adetailer"]),
-                            )
-                            metadata["adetailer_mode"] = decision
-                    job = NormalizedJobRecord(
-                        schema_version=CURRENT_NJR_SCHEMA_VERSION,
-                        job_id=self._id_fn(),
-                        workload_kind=WorkloadKind.IMAGE,
-                        source=SourceDescriptor(kind=SourceKind.CLI),
-                        workload=ImageWorkloadSpec(
-                            positive_prompt=prompt_info.final_prompt,
-                            negative_prompt=prompt_info.final_negative_prompt,
-                            config=config,
-                            backend_options=normalize_image_backend_options(
-                                config.get("backend_options"),
-                                model_name=self._model_name(config),
-                            ),
-                        ),
-                        stages=stages,
-                        output_plan=OutputPlan(base_output_dir=output.base_output_dir),
-                        provenance=NJRProvenance(
-                            seed=seed,
+                        summary = self._build_randomizer_summary(randomization_plan, variant_index)
+                    items.append(
+                        ExpansionItem(
+                            config=matrix_config,
+                            seed=self._extract_seed(matrix_config),
                             variant_index=variant_index,
                             variant_total=variant_total,
                             batch_index=batch_index,
                             batch_total=batch.batch_runs,
-                            config_variant_label=config_variant.label,
-                            config_variant_index=config_variant.index,
-                            config_variant_overrides=config_variant.overrides.copy(),
-                            randomizer_summary=randomizer_summary or {},
-                            txt2img_prompt_info=prompt_info,
-                            pack_usage=tuple(self._build_pack_usage(config)),
-                            metadata=metadata,
-                        ),
+                            config_variant=config_variant,
+                            randomizer_summary=summary,
+                        )
                     )
-                    validate_zimage_njr(job)
-                    jobs.append(job)
+        return items
 
-        return jobs
+    @staticmethod
+    def _generic_draft(item: ExpansionItem, output: OutputSettings, plan: RawImagePlan) -> NjrDraft:
+        """A ``RAW`` draft: the merged configuration and its indexes; the core prepares the rest.
+
+        Generic records keep the ``CLI`` source label (assessment finding X1, frozen as observed) and run the
+        exact-profile check after construction, as they did before the move onto the core.
+        """
+        return NjrDraft(
+            job_id="",  # minted by the plan after the shared steps (a refused draft consumes no identity)
+            workload_kind=WorkloadKind.IMAGE,
+            source=SourceDescriptor(kind=SourceKind.CLI),
+            workload=ImageWorkloadSpec(config=config_mapping(item.config)),
+            stages=(),
+            output_plan=OutputPlan(base_output_dir=output.base_output_dir),
+            provenance=NJRProvenance(
+                seed=item.seed,
+                variant_index=item.variant_index,
+                variant_total=item.variant_total,
+                batch_index=item.batch_index,
+                batch_total=item.batch_total,
+                config_variant_label=item.config_variant.label,
+                config_variant_index=item.config_variant.index,
+                config_variant_overrides=item.config_variant.overrides.copy(),
+                randomizer_summary=item.randomizer_summary,
+            ),
+            policy_state=PolicyState.RAW,
+            checks=(CompileCheck.PROFILE_NJR,),
+            raw_plan=plan,
+        )
 
     def _apply_config_overrides(
         self,
@@ -347,61 +463,5 @@ class JobBuilderV2:
 
         return summary
 
-    def _build_stage_prompt_info(self, config: Any) -> StagePromptInfo:
-        """Capture prompt metadata for the txt2img stage."""
-        prompt = self._extract_config_value(config, "prompt")
-        negative = self._extract_config_value(config, "negative_prompt")
-        return StagePromptInfo(
-            original_prompt=prompt,
-            final_prompt=prompt,
-            original_negative_prompt=negative,
-            final_negative_prompt=negative,
-            global_negative_applied=False,
-            global_negative_terms="",
-        )
 
-    def _build_pack_usage(self, config: Any) -> list[PackUsageInfo]:
-        """Record prompt pack usage metadata if present."""
-        pack_name = self._extract_config_value(config, "pack_name")
-        if not pack_name:
-            return []
-        pack_path = self._extract_config_value(config, "pack_path")
-        return [PackUsageInfo(pack_name=pack_name, pack_path=pack_path or None)]
-
-    @staticmethod
-    def _model_name(config: dict[str, Any]) -> str | None:
-        txt2img = config.get("txt2img")
-        nested = txt2img.get("model") if isinstance(txt2img, dict) else None
-        return str(nested or config.get("model") or "") or None
-
-    @staticmethod
-    def _config_mapping(config: Any) -> dict[str, Any]:
-        if isinstance(config, dict):
-            return deepcopy(config)
-        if is_dataclass(config) and not isinstance(config, type):
-            return asdict(config)
-        if hasattr(config, "__dict__"):
-            return deepcopy(vars(config))
-        raise TypeError("base_config must be a mapping or object with configuration fields")
-
-    @staticmethod
-    def _optional_int(value: Any) -> int | None:
-        return int(value) if value not in (None, "") else None
-
-    @staticmethod
-    def _optional_float(value: Any) -> float | None:
-        return float(value) if value not in (None, "") else None
-
-    @staticmethod
-    def _extract_config_value(config: Any, key: str) -> str:
-        """Safely extract string value from config dict or object."""
-        if isinstance(config, dict):
-            value = config.get(key)
-        else:
-            value = getattr(config, key, None)
-        if value is None:
-            return ""
-        return str(value)
-
-
-__all__ = ["JobBuilderV2"]
+__all__ = ["ExpansionItem", "JobBuilderV2", "config_mapping", "stage_prompt_info"]
