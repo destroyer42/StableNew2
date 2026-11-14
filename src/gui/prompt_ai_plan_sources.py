@@ -32,6 +32,11 @@ class PlanSnapshot:
     stages: tuple[str, ...]
     facts: PlanFacts
     target_policy_id: str = ""
+    #: The operator's selected model when it is one of ``targets`` and supports an image stage (AI-211); otherwise empty,
+    #: which the dialog states in one fixed sentence. The label and stages come from the same closed-list facts.
+    current_target: str = ""
+    current_target_label: str = ""
+    current_target_stages: tuple[str, ...] = ()
 
 
 def _gate_sentence(gate: Any) -> str:
@@ -51,8 +56,39 @@ def controller_preflight(video_controller: Any) -> Preflight:
     return run
 
 
-def build_plan_snapshot(base_panel: Any, app_controller: Any, visibility_mode: str) -> PlanSnapshot:
-    """Read the closed lists and their facts now (GUI thread). Missing sources give empty lists, never invented ones."""
+def _current_selection(
+    projection: Any,
+    targets: tuple[tuple[str, str], ...],
+    target_facts: dict[str, TargetFact],
+    stages: tuple[str, ...],
+) -> tuple[str, str, tuple[str, ...], str]:
+    """``(id, label, stages, policy id)`` of the model selected in Pipeline, or empty values when it cannot anchor a plan.
+
+    ``projection`` is the Prompt tab's ``_model_projection``: the model-policy projection of the Base Generation selection,
+    the same object the "Prompt Target" header is built from. Only a selection that is one of the closed ``targets`` (so
+    not blocked, not hidden by the visibility mode, with explicit capabilities) and supports an allowed image stage counts.
+    Nothing is read from the goal text or the prompt.
+    """
+
+    name = str(getattr(projection, "model_name", "") or "")
+    labels = dict(targets)
+    fact = target_facts.get(name)
+    if not name or name not in labels or fact is None:
+        return "", "", (), ""
+    supported = tuple(s for s in stages if s != VIDEO_STAGE and s in fact.stages)
+    if not supported:
+        return "", "", (), ""
+    policy_id = str(getattr(getattr(projection, "policy", None), "policy_id", "") or "")
+    return name, labels[name], supported, policy_id
+
+
+def build_plan_snapshot(
+    base_panel: Any, app_controller: Any, visibility_mode: str, selection: Any = None
+) -> PlanSnapshot:
+    """Read the closed lists and their facts now (GUI thread). Missing sources give empty lists, never invented ones.
+
+    ``selection`` is the Prompt tab's current model projection (``tab._model_projection``); see ``_current_selection``.
+    """
 
     targets = tuple(prompt_ai_targets(base_panel, visibility_mode))
     backend = configured_image_backend_id()
@@ -83,12 +119,17 @@ def build_plan_snapshot(base_panel: Any, app_controller: Any, visibility_mode: s
         *(GENERIC_IMAGE_STAGES if targets else ()),
         *((VIDEO_STAGE,) if workflows else ()),
     )
-    facts = (
-        PlanFacts(target_facts, workflow_facts, controller_preflight(video_controller))
-        if video_controller is not None
-        else PlanFacts(target_facts, workflow_facts)
+    current, label, supported, policy_id = _current_selection(
+        selection, targets, target_facts, stages
     )
-    return PlanSnapshot(targets, tuple(workflows), stages, facts)
+    facts = (
+        PlanFacts(target_facts, workflow_facts, controller_preflight(video_controller), current)
+        if video_controller is not None
+        else PlanFacts(target_facts, workflow_facts, current_target=current)
+    )
+    return PlanSnapshot(
+        targets, tuple(workflows), stages, facts, policy_id, current, label, supported
+    )
 
 
 __all__ = ["PlanSnapshot", "build_plan_snapshot", "controller_preflight"]

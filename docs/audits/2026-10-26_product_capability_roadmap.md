@@ -1,23 +1,25 @@
 # StableNew — Product Capability Assessment and Forward Roadmap (2026-10-26)
 
-**Status:** Owner-selected product-priority direction, not new code/merge/physical-runtime authorization. **Evidence:** remote main at 2142e9d95aceaa72c152a89e1a27a0c83d226a5e (October 26, 2026), plus current PR and CI metadata. Local Windows checkout, assets, live Tk UI and physical devices **not examined**. This is a **partial v1.2 Comprehensive assessment**, not an all-controls-green certification.
+**Status:** Owner-selected product-priority direction, not new code/merge/physical-runtime authorization. **October assessment baseline:** remote main at 2142e9d95aceaa72c152a89e1a27a0c83d226a5e (October 26, 2026), plus current PR and CI metadata. Local Windows checkout, assets, live Tk UI and physical devices **not examined**. This is a **partial v1.2 Comprehensive assessment**, not an all-controls-green certification.
 
-**Important later discovery:** [PR #223, IMG-EMBED-720](https://github.com/destroyer42/StableNew2/pull/223) already fixes the aesthetic-embedding syntax defect highlighted in the original October 26 report. At this verification point it is open, with successful required/full-suite/Windows checks, and not merged. The requested IMG-EMBED-730 must **not duplicate** it.
+[PR #223, IMG-EMBED-720](https://github.com/destroyer42/StableNew2/pull/223) merged the aesthetic-embedding syntax repair. IMG-EMBED-730 remains conditional on a distinct reproduced gap.
 
 ## Executive decision
 
-StableNew is beyond its initial MVP. The best next work is to demonstrate complete, reliable value from the large recent investment in model profiles, PromptPacks, History, Learning, GUI, editing and video. The current primary package is [WF-740 model/profile/Learning round-trip](../work_packages/WF-740_model_profile_learning_roundtrip.md). The existing [#223](https://github.com/destroyer42/StableNew2/pull/223) owns the aesthetic syntax repair; [IMG-EMBED-730](../work_packages/IMG-EMBED-730_conditional_post_720_fidelity.md) is a conditional follow-up only for a distinct reproduced gap after #223's disposition.
+StableNew is beyond its initial MVP. The best next work is to demonstrate complete, reliable value from the large recent investment in model profiles, PromptPacks, History, Learning, GUI, editing and video. The current primary package is [WF-740 model/profile/Learning round-trip](../work_packages/WF-740_model_profile_learning_roundtrip.md). The existing [#223](https://github.com/destroyer42/StableNew2/pull/223) owns the aesthetic syntax repair; [IMG-EMBED-730](../work_packages/IMG-EMBED-730_conditional_post_720_fidelity.md) is a conditional follow-up only for a distinct reproduced gap after #223.
 
 The 2026-10-16 [repository audit](2026-10-16_repo_audit_and_roadmap.md) remains historical baseline and structural inventory, not today's open-task log. Current source/SHA, [AGENTS.md](../../AGENTS.md) and [STATUS.md](../../STATUS.md) remain above this dated decision report. The owner-accepted video roadmap (2026-10-20) and GUI audit (2026-10-22) remain specialist evidence, rechecked before every new package.
 
 ## Verified evidence and scope limits
 
-- Main 2142e9d9 had successful [required/full-suite/Windows CI](https://github.com/destroyer42/StableNew2/actions/runs/40365723929). Main was protected in branch metadata; detailed privileged bypass setting was not accessible. At the first scan there were zero open PRs; #223 appeared afterward and is open with green required, full-suite and Windows checks. Neither green CI nor a merged PR proves live operator visual quality.
+- Main 2142e9d9 had successful [required/full-suite/Windows CI](https://github.com/destroyer42/StableNew2/actions/runs/40365723929). Main was protected in branch metadata; detailed privileged bypass setting was not accessible. Neither green CI nor a merged PR proves live operator visual quality.
 - Canonical execution remains Intent -> Compiler -> immutable NJR -> JobService -> SQLite Queue/Repository -> PipelineRunner.run_njr -> Handler -> Artifacts/History. Fresh Run Now and Send Job are queue-first. Replay creates lineage. External A1111/Forge/Comfy is never adopted, killed or restarted. An ambiguous dispatched POST is not replayed.
 - AGENTS.md **now authorizes** native SVD XT and individually approved Comfy video workflows for production; TI2V-5B 1.2.0/1.3.0 are approved. Older SVD-only project material is superseded. Wan A14B physical feasibility ran three dispatches but froze an **INCONCLUSIVE** technical verdict (teardown verification missing), not a production promotion.
 - [PR #208](https://github.com/destroyer42/StableNew2/pull/208) added versioned Research/Custom/Learning generation profiles and saved startup defaults; [#213](https://github.com/destroyer42/StableNew2/pull/213) enabled explicit immutable Learning profile publication; [#210](https://github.com/destroyer42/StableNew2/pull/210), [#212](https://github.com/destroyer42/StableNew2/pull/212) and [#222](https://github.com/destroyer42/StableNew2/pull/222) improved guided Learning, independent baselines and Prompt x Model comparison. No real live Windows end-to-end round-trip was independently run for this assessment.
-- [#201](https://github.com/destroyer42/StableNew2/pull/201) added Iterate from History, while parent/child visual compare is still out of scope. Masked editing, outpaint, reference-map ControlNet and Smart Review are implemented; real visual/model-quality qualification remains deferred.
-- Video has Make Video, in-app playback, Movie Clips, one-job multi-shot sequences, ledger and strict resume. Persistent Storyboard, FLF control and selective shot rerender remain. Offline AI Assist Suggest is wired but disabled until a qualified offline installation; protected ETW/model qualification is still pending.
+- [#201](https://github.com/destroyer42/StableNew2/pull/201) added Iterate from History. Compare with Parent now shows a direct
+  still-image pair and frozen settings diff. Masked editing, outpaint, reference-map ControlNet and Smart Review are
+  implemented. Real visual/model-quality qualification remains deferred.
+- Video has Make Video, in-app playback, Movie Clips, one-job multi-shot sequences, ledger and strict resume. Persistent Storyboard, FLF control and selective shot rerender remain. Offline AI Assist supports operator-enabled text Preview with verified local assets and an attested runtime.
 - The October 16 audit's claims that main was unprotected, CI full census informational and Windows absent are obsolete. Its architectural risks (composition, multiple NJR producers, large controllers, tested vs production divergence) remain candidates requiring fresh proof.
 
 ## Critical-control ledger (eight surfaces)
@@ -42,12 +44,12 @@ The six-factor evaluation is: implementation; user reachability; executed correc
 | Journey | Implemented | Remaining user-facing value/evidence |
 | --- | --- | --- |
 | Model-aware generation | Forge default, A1111 rollback, exact Klein and Z-Image slices, Research/Learning/Custom profiles and startup defaults | Broader source-backed recommendations, real profile->Preview->queue parity, Z-Image repeated-run stability |
-| Prompt and conditioning | PromptPacks, optimizer, adaptation, Matrix, LoRA asset UI, guided Canny/depth/pose ControlNet | Actual effective outbound prompt evidence and ControlNet/image quality; current aesthetic syntax fixed by pending #223 |
-| Edit and curate | Quick Edit/Managed Photo Set, masked inpaint, outpaint, Smart Review advisory | Physical output and SAM/Florence real-model quality, before/after comparison |
+| Prompt and conditioning | PromptPacks, optimizer, adaptation, Matrix, LoRA asset UI, guided Canny/depth/pose ControlNet | Actual effective outbound prompt evidence and ControlNet/image quality; physical acceptance of the merged aesthetic-embedding repair |
+| Edit and curate | Quick Edit/Managed Photo Set, masked inpaint, outpaint, Smart Review advisory, Compare with Parent | Physical output, SAM/Florence real-model quality and operator-reviewed improvement |
 | Learn | Design/Preview/Run/Compare/Rate, controlled one-variable, two-axis, LoRA/Embedding/Prompt Slot/Prompt x Model studies and publication | End-to-end profile payoff, saved rating usage, provenance validation; descriptive studies correctly do not auto-recommend |
-| Reuse history | Search/pagination, replay, single-image Iterate, parent lineage | Parent/child visual and effective-recipe diff, richer search |
+| Reuse history | Search/pagination, replay, single-image Iterate and direct parent comparison | Richer search and physical iteration acceptance |
 | Video | SVD and approved Wan, Movie Clips, sequence ledger and checkpoint/resume | Persistent Storyboard, selective shot rerender, end-frame control, quality/identity assessment |
-| Offline assistance | Prompt Suggest and bounded Smart Review CPU children | Model and installation qualification gates, safe operator evaluation |
+| Offline assistance | Text AI Assist Preview, selected-model advice, Matrix variety and Smart Review CPU children | Local readiness and runtime evidence, visual model qualification and operator benefit |
 
 ## Current roadmap phase adjudication
 
@@ -64,23 +66,30 @@ Safety-gating read-only GPU/device-loss analysis runs alongside discretionary wo
 
 | Order | Work package | Outcome / dependency |
 | --- | --- | --- |
-| Current overlapping repair | **IMG-EMBED-720 #223** | Already fixes aesthetic outbound notation; review accepted diff/CI and obtain separate owner merge decision; **no duplicate PR** |
 | 1 | **WF-740** | Verify and narrowly repair model -> working settings -> Preview/NJR -> queue -> controlled Learning -> explicit profile reuse; [full contract](../work_packages/WF-740_model_profile_learning_roundtrip.md) |
 | Conditional | **IMG-EMBED-730** | Only a separately proven post-720 mismatch in Preview or actual TI evidence; [NO-GO/conditional contract](../work_packages/IMG-EMBED-730_conditional_post_720_fidelity.md) |
 | 2 | TEST-HERMETIC-750 | Test-only production branches and ambient retries/endpoint dependencies, selected by fresh reproduction |
-| 3 | HISTORY-610B | Parent-child media and effective-recipe comparisons on existing lineage |
-| 4 | VID-STORYBOARD-350 | Persistent ordered shot plans, selective rerender, anchored shot boundaries using existing one-job sequence authority |
-| 5 | VID-QUALITY-351 | Controlled motion, temporal quality, consistency and human preference acceptance before model promotion |
-| 6 | GUI-COMPLETE-760 | Remaining real DPI/keyboard/reachability and Tk-thread I/O, not wholesale rewrite |
+| 3 | VID-STORYBOARD-350 | Persistent ordered shot plans, selective rerender, anchored shot boundaries using existing one-job sequence authority |
+| 4 | VID-QUALITY-351 | Controlled motion, temporal quality, consistency and human preference acceptance before model promotion |
+| 5 | GUI-COMPLETE-760 | Remaining real DPI/keyboard/reachability and Tk-thread I/O, not wholesale rewrite |
 | Architecture decision | P3-2 | One composition root; **material owner approval first**, followed by golden wiring/ownership tests |
 | Architectural candidates | P4-2, P4-3, P4-4 | NJR compiler policy parity; split Learning from Tk; typed stage settings, bounded parity packages |
 | Conditional expansion | MODEL-EDIT-800, AI-QUAL-115, VIDEO-MODEL-360 | Qualified Qwen/Flux editing, safely enabled offline AI, new video models only after actual resource/quality proof |
 | Release maturity | RELEASE-900 | Fresh install, readiness, restart/recovery, version/license and documented operator journey proof |
 
+### Intelligent image review and AI assistance
+
+The owner selected a Review workflow that turns operator-confirmed findings into editable corrective drafts, confirmed work
+through Preview and Queue, and comparisons with human outcome evidence. Review the existing visual invocation driver first.
+The roadmap and guided manual Review packages can proceed in parallel. Qualified multimodal review follows accepted driver
+and manual Review evidence, then evidence-driven Learning and planning. GPU deep review, read-only diagnostics and supervised
+training are conditional later packages. The [intelligent image review roadmap](../Subsystems/AiAssist/INTELLIGENT_IMAGE_REVIEW_ROADMAP.md)
+defines ownership, evaluation and exit gates.
+
 ### Waves and measurable product exits
 
-1. **Existing-work payoff:** WF-740 with a legitimate no-code PASS if all contracts hold; review #223 rather than building the same syntax fix. Exit: model/profile and Preview/NJR admit equality, explicit qualified Learning publication/reuse.
-2. **Complete image and video journey:** HISTORY-610B, editing acceptance, saved multi-shot Storyboard and selective shot reuse. Exit: input -> iteration -> compared output and saved shots -> checkpoint -> playable movie.
+1. **Existing-work payoff:** WF-740 with a legitimate no-code PASS if all contracts hold. Exit: model/profile and Preview/NJR admit equality, explicit qualified Learning publication/reuse.
+2. **Complete image and video journey:** Use the existing direct parent comparison for editing acceptance. For video, demonstrate saved multi-shot Storyboard and selective shot reuse. Exit: input -> iteration -> compared output and saved shots -> checkpoint -> playable movie.
 3. **Risk-reducing architecture:** P3-2 only after decision, then P4-2/P4-3/P4-4 via parity gates. Exit: single service authority and fewer cross-cutting model/GUI files, no behavior or test regressions.
 4. **Qualified expansion:** broader exact model families, offline AI, advanced video after deliberate resource/safety/visual promotion evidence. Exit: new production capability proven on target and consented.
 5. **Release:** reproducible Windows install, clear missing assets, reliable recovery, version/license and bounded start-to-output acceptance.
@@ -90,7 +99,9 @@ No assumed weeks or pseudo-percent-complete bars. One coherent PR and one top-le
 ## Holds, owner choices and conflict handling
 
 - Physical device-loss root cause remains unresolved (STATUS reports repeated events and quarantine); no new physical GPU/model run or WebUI/Comfy restart without fresh explicit owner authorization even though STATUS notes the prior general hold lifted October 18. Z-Image stability work specifically remains not authorized.
-- Offline AI Assist is not qualified or enabled; model runtime ETW/safety/corpus tests remain owner-gated. Smart Review real model inference, mask/caption usefulness also unqualified.
+- Text AI Assist qualification remains held on D12b and a fresh protected ETW canary. Smart Review real-model quality
+  and LFM3-VL qualification remain open. See the [capability roadmap](../Subsystems/AiAssist/INTELLIGENT_IMAGE_REVIEW_ROADMAP.md)
+  for visual evaluation and promotion gates.
 - P3-2 composition, CANCELLING status, moving executor to image_backends, new NJR SourceKind, destructive user-data migration, releasing/training and licensing/version each require explicit owner decision.
 - Learning experiment snapshot dedup is forward-only decided; historical backfill and deleted-artifact job pruning require separate evidence and authorization. Character Training stays held.
 - Protected actions: branch publication/open PR is separate from merge to main, tag/release, force push, destructive migrations and secrets changes, each needing explicit current target authorization.
@@ -102,4 +113,4 @@ No assumed weeks or pseudo-percent-complete bars. One coherent PR and one top-le
 
 ## Next action
 
-Select the current source and exact SHA; finish review/disposition of #223 through its existing PR lane, without implicitly merging it. Execute WF-740 as the next newly authorized bounded implementation package; if actual data supports only a small residual embedding UI/readback defect, first make an independent acceptance case before activating IMG-EMBED-730. Keep STATUS.md's current-state and next-action lines aligned with this selected priority, never with old candidate lists.
+For intelligent image review, review the exact AI-VL-221 evidence and complete the independent roadmap and guided Review packages. The broader WF-740 round-trip retains its own acceptance scope. Activate IMG-EMBED-730 only on evidence of a distinct residual defect.
