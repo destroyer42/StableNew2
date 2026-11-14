@@ -2,8 +2,10 @@
 
 Preview lets production run a registered, installed, hash-verified *candidate* model on a pinned runtime build, but only
 while a record written by an explicit operator action names exactly that model SHA-256 and runtime build id. The record
-holds identities and a timestamp, never prompt content. It is not a global switch: any identity change makes the record
-not match, it is revocable, and a missing, malformed or mismatched record means "not enabled" (never an admission).
+holds identities and timestamps, never prompt content. Since owner decision D20 it may hold several identities, one per
+(model SHA-256, runtime build id) the operator confirmed; enabling one never enables another. It is not a global switch:
+any identity change makes an entry not match, each entry is revocable, and a missing, malformed or mismatched record means
+"not enabled" (never an admission).
 
 ``qualified`` keeps its meaning and is set only by the qualification authority (PR-AI-111). Nothing here sets it.
 """
@@ -26,7 +28,11 @@ from src.ai_assist.manifests import (
 from src.ai_assist.paths import preview_enablement_path
 from src.utils.atomic_io import atomic_write_json
 
-PREVIEW_SCHEMA_VERSION = 1
+PREVIEW_SCHEMA_VERSION = 2
+#: The single-identity record of owner decision D13; still read (as one identity), no longer written.
+PREVIEW_LEGACY_SCHEMA_VERSION = 1
+#: Far more than the registry holds; a bound so a damaged or hostile record cannot grow without limit.
+MAX_PREVIEW_IDENTITIES = 32
 TRUST_QUALIFIED = "qualified"
 TRUST_PREVIEW = "preview"
 #: Harness-only tier for a candidate admitted through ``ServicePolicy.allow_candidate``; never recorded in events.
@@ -46,18 +52,12 @@ def trust_tier(entry: ModelEntry, build: RuntimeBuild) -> str:
     return TRUST_QUALIFIED if entry.qualified and build.qualified else TRUST_CANDIDATE
 
 
-def read_preview_enablement(root: Path) -> dict[str, str] | None:
-    """The well-formed enablement record, or ``None``. Absent, unreadable and malformed are the same: not enabled."""
-
-    try:
-        document = json.loads(preview_enablement_path(root).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+def _parse_identity(raw: object) -> dict[str, str] | None:
+    if not isinstance(raw, dict):
         return None
-    if not isinstance(document, dict) or document.get("schema_version") != PREVIEW_SCHEMA_VERSION:
-        return None
-    model = document.get("model_sha256")
-    build = document.get("runtime_build_id")
-    stamp = document.get("enabled_utc")
+    model = raw.get("model_sha256")
+    build = raw.get("runtime_build_id")
+    stamp = raw.get("enabled_utc")
     if (
         not isinstance(model, str)
         or not _SHA256.match(model)
@@ -71,22 +71,74 @@ def read_preview_enablement(root: Path) -> dict[str, str] | None:
     return {"model_sha256": model, "runtime_build_id": build, "enabled_utc": stamp}
 
 
-def preview_enabled_for(root: Path, entry: ModelEntry, build: RuntimeBuild) -> bool:
-    """True only when the record names exactly this model SHA-256 and this runtime build id."""
+def read_preview_identities(root: Path) -> tuple[dict[str, str], ...]:
+    """Every well-formed enabled identity, or ``()``. Absent, unreadable and malformed are the same: nothing is enabled.
 
-    record = read_preview_enablement(root)
-    return (
-        record is not None
-        and record["model_sha256"] == entry.sha256
-        and record["runtime_build_id"] == build.build_id
+    Schema 2 holds a list of identities (owner decision D20); the schema 1 record of D13 is one identity and is read as
+    such, so enabling made before the model selector keeps working. One malformed identity is dropped, never repaired,
+    and never takes a valid neighbour with it."""
+
+    try:
+        document = json.loads(preview_enablement_path(root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ()
+    if not isinstance(document, dict):
+        return ()
+    version = document.get("schema_version")
+    if version == PREVIEW_LEGACY_SCHEMA_VERSION:
+        legacy = _parse_identity(document)
+        return (legacy,) if legacy is not None else ()
+    if version != PREVIEW_SCHEMA_VERSION:
+        return ()
+    raw = document.get("identities")
+    if not isinstance(raw, list):
+        return ()
+    seen: dict[tuple[str, str], dict[str, str]] = {}
+    for item in raw[:MAX_PREVIEW_IDENTITIES]:
+        parsed = _parse_identity(item)
+        if parsed is not None:
+            seen.setdefault((parsed["model_sha256"], parsed["runtime_build_id"]), parsed)
+    return tuple(seen.values())
+
+
+def preview_enabled_for(root: Path, entry: ModelEntry, build: RuntimeBuild) -> bool:
+    """True only when an identity in the record names exactly this model SHA-256 and this runtime build id."""
+
+    return any(
+        item["model_sha256"] == entry.sha256 and item["runtime_build_id"] == build.build_id
+        for item in read_preview_identities(root)
     )
 
 
-def revoke_preview(root: Path) -> bool:
-    """Remove the enablement record. ``True`` when nothing is left (a missing record is already revoked)."""
+def _write_identities(root: Path, identities: tuple[dict[str, str], ...]) -> Path | None:
+    path = preview_enablement_path(root)
+    if not identities:
+        path.unlink(missing_ok=True)
+        return None
+    return atomic_write_json(
+        path,
+        {"schema_version": PREVIEW_SCHEMA_VERSION, "identities": list(identities)},
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def revoke_preview(
+    root: Path, entry: ModelEntry | None = None, build: RuntimeBuild | None = None
+) -> bool:
+    """Revoke Preview. With ``entry`` and ``build`` only that identity is removed (the others stay enabled); without them
+    the whole record is. ``True`` when nothing is left for the revoked identity (a missing record is already revoked)."""
 
     try:
-        preview_enablement_path(root).unlink(missing_ok=True)
+        if entry is None or build is None:
+            preview_enablement_path(root).unlink(missing_ok=True)
+            return True
+        kept = tuple(
+            item
+            for item in read_preview_identities(root)
+            if (item["model_sha256"], item["runtime_build_id"]) != (entry.sha256, build.build_id)
+        )
+        _write_identities(root, kept)
     except OSError:
         return False
     return True
@@ -104,7 +156,8 @@ def enable_preview(root: Path, runtime: RuntimeManifest, registry: ModelRegistry
     """Record the operator's explicit enablement for the *currently active, verified* model and runtime build.
 
     Refused unless the active installation verifies (identity check, candidates allowed) and is actually a candidate:
-    a qualified installation needs no enablement. The identities written are the verified ones, never caller input.
+    a qualified installation needs no enablement. The identity written is the verified one, never caller input. It is
+    added to the record; identities enabled earlier for other models stay as they were (owner decision D20).
     """
 
     verification = verify_installation(root, runtime, registry, allow_candidate=True)
@@ -112,17 +165,20 @@ def enable_preview(root: Path, runtime: RuntimeManifest, registry: ModelRegistry
         raise PreviewRefused(verification.reason or "not_installed")
     if trust_tier(verification.entry, verification.build) == TRUST_QUALIFIED:
         raise PreviewRefused("already_qualified")
-    return atomic_write_json(
-        preview_enablement_path(root),
-        {
-            "schema_version": PREVIEW_SCHEMA_VERSION,
-            "model_sha256": verification.entry.sha256,
-            "runtime_build_id": verification.build.build_id,
-            "enabled_utc": datetime.now(UTC).isoformat(),
-        },
-        indent=2,
-        sort_keys=True,
+    identity = (verification.entry.sha256, verification.build.build_id)
+    others = tuple(
+        item
+        for item in read_preview_identities(root)
+        if (item["model_sha256"], item["runtime_build_id"]) != identity
     )
+    fresh = {
+        "model_sha256": identity[0],
+        "runtime_build_id": identity[1],
+        "enabled_utc": datetime.now(UTC).isoformat(),
+    }
+    written = _write_identities(root, (*others[-(MAX_PREVIEW_IDENTITIES - 1) :], fresh))
+    assert written is not None
+    return written
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,7 +205,9 @@ class PreviewState:
 __all__ = [
     "PREVIEW_LABEL",
     "PREVIEW_MEANING",
+    "PREVIEW_LEGACY_SCHEMA_VERSION",
     "PREVIEW_SCHEMA_VERSION",
+    "MAX_PREVIEW_IDENTITIES",
     "TRUST_CANDIDATE",
     "TRUST_PREVIEW",
     "TRUST_QUALIFIED",
@@ -157,7 +215,7 @@ __all__ = [
     "PreviewState",
     "enable_preview",
     "preview_enabled_for",
-    "read_preview_enablement",
+    "read_preview_identities",
     "revoke_preview",
     "trust_tier",
 ]

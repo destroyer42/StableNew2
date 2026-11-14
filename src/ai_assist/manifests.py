@@ -25,7 +25,6 @@ from src.ai_assist.contracts import OutcomeCode
 from src.ai_assist.paths import (
     active_pointer_path,
     model_dir,
-    preview_enablement_path,
     runtime_dir,
 )
 from src.utils.atomic_io import atomic_write_json
@@ -95,6 +94,9 @@ class ModelEntry:
     capabilities: tuple[str, ...] = ()
     #: ``False`` = a registered candidate that may only be used by the qualification harness; ``True`` = qualified.
     qualified: bool = False
+    #: Pinned runtime builds this model may be activated on (owner decision D20), in order of preference. The architecture
+    #: decides compatibility (AI-201b), so the list is explicit and reviewed, never inferred. Empty means "not selectable".
+    compatible_builds: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +214,13 @@ def _parse_model(raw: Any) -> ModelEntry:
     capabilities = raw.get("capabilities", [])
     if not isinstance(capabilities, list) or not all(isinstance(c, str) for c in capabilities):
         raise ValueError(f"{model_id}: capabilities must be a list of names")
+    compatible = raw.get("compatible_builds", [])
+    if (
+        not isinstance(compatible, list)
+        or len(set(compatible)) != len(compatible)
+        or not all(isinstance(b, str) and _SAFE_ID.match(b) for b in compatible)
+    ):
+        raise ValueError(f"{model_id}: compatible_builds must be a list of distinct build ids")
     return ModelEntry(
         model_id=model_id,
         display_name=_text(raw["display_name"]),
@@ -225,6 +234,7 @@ def _parse_model(raw: Any) -> ModelEntry:
         max_context=context,
         capabilities=tuple(capabilities),
         qualified=raw.get("qualified") is True,
+        compatible_builds=tuple(compatible),
     )
 
 
@@ -458,12 +468,10 @@ def record_active(root: Path, build: RuntimeBuild, entry: ModelEntry) -> Path:
         "runtime_files": {rel: _stat_snapshot(runtime_root / rel) for rel in sorted(build.files)},
         "model": _stat_snapshot(model_path),
     }
-    written = atomic_write_json(active_pointer_path(root), payload, indent=2, sort_keys=True)
-    # Changing the active model or runtime voids any AI Assist Preview enablement (owner decision D13). Voiding on every
-    # re-point, even to the same identity, is deliberate: re-enabling is one explicit operator action, and a stale
-    # enablement can then never outlive a pointer change.
-    preview_enablement_path(root).unlink(missing_ok=True)
-    return written
+    # This is the one writer of the pointer. It does not touch the AI Assist Preview record: since D20 that record lists
+    # exact (model SHA-256, runtime build id) identities and is matched against the verified active identity on every use,
+    # so an enablement can only ever admit the identity the operator enabled, however the pointer moves.
+    return atomic_write_json(active_pointer_path(root), payload, indent=2, sort_keys=True)
 
 
 @dataclass(frozen=True, slots=True)

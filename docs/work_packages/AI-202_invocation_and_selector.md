@@ -1,6 +1,6 @@
 # AI-202: a runtime invocation the pinned builds accept, and an in-app model selector
 
-Status: **AI-202a merged (PR #303); AI-202c implemented (section 10)**; AI-202b (model selector, section 9) follows in its own PR.
+Status: **AI-202a merged (PR #303); AI-202c merged (PR #305, section 10); AI-202b implemented (section 11)**.
 Execution class: **Standard**. Model recommendation: Claude Code, Sonnet 5.5, medium effort (bounded, evidence-led,
 no architecture change); Codex equivalent per `docs/AI_MODEL_SELECTION.md`.
 Controller Surface Assessment: `ai_assist_integration.py` gains one status message and no new responsibility; no ceiling
@@ -148,12 +148,9 @@ handling; exit code, bounded detail and no-content event log; attestation bindin
 **Held / unverified:** every item of section 4; no binary was executed, the first real run is the owner's. The coordinating session relayed an owner authorization for supervised test runs, but the session's permission layer denied launching the runtime, so the prepared run (3 build/model pairs, every suggestion kind, `--version`/`--help`) was **NOT RUN**; read-only preconditions seen: enabled outbound Block rules exist for both `llama-completion.exe` paths. Nothing here is
 qualification, and `qualified` stays `false`.
 
-## 9. AI-202b (planned, separate PR after 202a merges)
+## 9. AI-202b (planned here, implemented in section 11)
 
-In-app model selector in the AI Preview dialog (decisions D20 recorded with that PR): installed and verified models with
-trust label and size; an explicit per-model list of compatible pinned builds (LFM3: `b11960-cpu` only) with disabled
-reasons; activation through the one shared function the admin tool uses; multi-identity Preview enablement with migration of
-the single-identity record; refusal while a request is in flight; the attestation rule of section 7 applied per selection.
+The in-app model selector, decision D20, was planned here and is specified and recorded in section 11.
 
 ## 10. AI-202c: the output schema must force a complete answer
 
@@ -243,3 +240,79 @@ is from source; the binaries were not run); that Qwen3.5 and LFM3 now produce a 
 within the token budget (`-n`) when they cannot stop early, including whether the alternation slows grammar sampling noticeably
 on CPU; and answer quality, which stays the qualification package's question. A model that fills the grammar badly still ends
 as `malformed` with its reason, never as a suggestion. Nothing here is qualification and `qualified` stays `false`.
+
+## 11. AI-202b: in-app model selector (owner decision D20, 2026-11-14)
+
+Execution class: **Standard**. Model recommendation: Claude Code, Sonnet 5.5, medium effort (bounded; one new module pair, one
+dialog control, deterministic tests). Controller Surface Assessment: `ai_assist_integration.py` (320 lines, not a ratcheted
+controller) gains `model_choices` and `select_model`, both thin delegations to `src/ai_assist/selector.py`, plus the shared
+`egress_refusal_text`; no new responsibility, no ceiling change.
+
+### 11.1 Decisions as implemented
+
+1. **Dropdown.** The AI Preview dialog (`src/gui/ai_preview_dialog.py`) shows a read-only `Combobox` of the models that are
+   imported and verified in the AI root, by registry display name, the active one selected. It is disabled while a request runs.
+2. **Compatible builds.** Every registry entry carries `compatible_builds`, an explicit, reviewed, ordered list (LFM3:
+   `b11960-cpu` only; Qwen: `b11840-cpu`, `b11960-cpu`). The parser treats it as optional (so registry-shaped documents of the
+   frozen LFM3 contract still parse) and a missing or empty list means "not selectable". A selection picks the currently active
+   build when it is listed for the model, imported and verified, otherwise the first such listed build.
+3. **One activation authority.** `src/ai_assist/activation.py::activate` checks that the pair is pinned, listed, imported and
+   intact, then calls `record_active` (still the single writer of `active.json`) and the usual fast identity check. The admin
+   tool's `activate` and the selector both call it; a test scans `src/` and `tools/` and allows exactly one caller of
+   `record_active` outside the qualification harness, which keeps its own call for its derived roots.
+4. **Per-identity Preview enablement.** `preview_enablement.json` is schema 2: a list of `(model SHA-256, runtime build id,
+   timestamp)` identities, at most 32. Enabling adds the verified active identity; it never touches the others. The schema 1
+   record of D13 is read as one identity and rewritten as schema 2 on the next enable. `revoke_preview` in the dialog removes
+   the active identity only; without arguments it still removes the whole record. A pointer change **no longer erases the
+   record** (`record_active` used to unlink it): the request gate and the status compare the verified active identity with the
+   list on every use, so an entry can only admit the exact pair the operator enabled. Switching to a pair that is not in the
+   list activates it and then needs the same explicit **Enable AI Assist Preview** click as before; going back to a listed
+   pair needs nothing.
+5. **Attestation.** Before activating, the selector requires `attestation_covers` for the selected build and its executable;
+   otherwise it refuses with the existing wording (`egress_refusal_text`, now also used by `availability`). It never calls
+   `record_attestation`.
+6. **No switch while busy, nothing in the background.** `select_model` refuses when the integration has an active request id or
+   `AiAssistService.busy` (new read-only property) is true, under the integration lock that also guards submission. Listing and
+   switching are synchronous, read-only until the explicit choice, and start no thread or process (a test patches
+   `subprocess.Popen` and counts threads).
+7. **`qualified` stays false** for every model and build; nothing here sets it.
+
+### 11.2 What "verified" means in the list
+
+A model is listed when its file exists in the content-addressed directory with exactly the pinned size (its bytes were hashed
+at import; re-hashing a multi-gigabyte file on every look would freeze the window) **and** at least one build listed for it has
+every pinned file present and re-hashed against its pin (a build is tens of megabytes; each build is hashed once per listing).
+Activation repeats those checks for the chosen pair before anything is written.
+
+### 11.3 Frozen identities
+
+The registry gained one field per entry and a sentence in its description. Nothing frozen reads either: the screening plan
+selects `FROZEN_CANDIDATE_IDS` entries and copies named fields (`candidate_models`), the LFM3 contract validates its own
+registry-shaped candidate documents with `load_model_registry` (field optional, so unchanged), and the system840 ledger
+reconciles `model_id`-keyed claims. `tests/tools/test_ai111_final.py`, `test_ai115_lfm3_contract.py`,
+`test_ai115b_contract_harness.py`, `test_ai115b_repair.py` and the system840 tests pass without edits, so the Qwen screening plan
+`17814e40...`, final plan `3017c427...`, corpus `a89297be...` and LFM3 `FROZEN_CONTRACT_SHA256` `41e65d67...` are unchanged.
+`build_argv`, `ALLOWED_FLAGS`, `render_prompt` and `build_json_schema` are untouched by this PR.
+
+### 11.4 Consequences the owner should know
+
+* **A build preference can mean one more Enable click.** Because the active build is preferred when listed, switching from
+  LFM3 (on `b11960-cpu`) back to a Qwen model selects Qwen on `b11960-cpu`, a pair that was not enabled if Qwen was enabled
+  on `b11840-cpu`. The dialog then says Preview is not enabled for it. Enabling the second pair keeps the first. If this is
+  unwanted, the alternative is to prefer an already enabled pair over the active build; that is a one-function change.
+* **`activate` no longer voids Preview.** It used to; see decision 4.
+* **`activate` is stricter.** It now refuses a build the registry does not list for the model and an unimported or altered
+  model or build, before writing.
+
+### 11.5 Acceptance and evidence boundary
+
+*Implemented and demonstrated by deterministic tests* (`tests/ai_assist/test_ai202b.py`, `test_preview_tier.py`, the dialog test
+in `tests/gui_v2/test_ai_suggestions_112.py`): only verified models are listed (a damaged build or wrong-size model leaves the
+list); build compatibility and preference; empty or malformed `compatible_builds`; the pinned registry lists the decided builds
+and stays unqualified; per-identity enablement and its migration; revocation of one identity; refusal while busy (selector
+and a real in-flight fake request) and when unattested or not covered, with no attestation written; activation through the
+shared function and a single `record_active` caller; no process or thread started.
+
+*Held / unverified:* the dialog was driven with a stub owner under Tk, not by a person; no real model or binary was loaded, so
+whether `b11960-cpu` loads the Qwen 4B model, or either build runs after a switch, is unproven; the owner's attestation must
+exist for `b11960-cpu` before LFM3 can be selected (the runbook step 3 commands). Nothing here is qualification.
