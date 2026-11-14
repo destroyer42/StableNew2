@@ -153,7 +153,7 @@ def test_automatic_selection_rejects_change_during_evidence(tmp_path, monkeypatc
 
     monkeypatch.setattr(CompileEvidence, "prepare_lora_selection", prepare)
     monkeypatch.setattr(
-        builder._job_builder, "build_jobs", lambda **_: pytest.fail("stale source admitted")
+        builder._job_builder, "plan_expansion", lambda **_: pytest.fail("stale source admitted")
     )
     with pytest.raises(KleinSelectionError, match="source changed"):
         builder.build_jobs(overlay_current_policy(controller, [entry]))

@@ -242,8 +242,9 @@ def test_the_model_compile_policy_leaves_ordinary_models_untouched() -> None:
 
 
 def test_every_compiler_entry_point_uses_the_one_model_compile_policy() -> None:
-    from src.pipeline import cli_njr_builder, job_builder_v2, prompt_pack_job_builder
+    # The generic route's policy runs inside the assembly core for its RAW drafts (P4-2E).
+    from src.pipeline import cli_njr_builder, njr_compiler, prompt_pack_job_builder
 
-    for module in (cli_njr_builder, job_builder_v2, prompt_pack_job_builder):
+    for module in (cli_njr_builder, njr_compiler, prompt_pack_job_builder):
         assert module.apply_model_compile_policy is apply_model_compile_policy, module.__name__
         assert not hasattr(module, "apply_klein_compile_policy"), module.__name__

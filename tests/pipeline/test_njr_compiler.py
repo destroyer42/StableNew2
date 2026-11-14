@@ -92,7 +92,7 @@ def step_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return calls
 
 
-def _stages_from_config(config: Any) -> tuple[StageConfig, ...]:
+def _stages_from_config(config: Any, adetailer_mode: Any) -> tuple[StageConfig, ...]:
     return (
         StageConfig(stage_type="txt2img", enabled=True, model=config["txt2img"]["model"], steps=30),
     )
@@ -185,6 +185,72 @@ def test_a_raw_draft_needs_an_image_workload_and_a_plan() -> None:
     )
     with pytest.raises(ValueError, match="image workload"):
         compile_njr(training)
+
+
+def test_a_raw_plan_can_skip_the_stage_conditional_step(step_calls: list[str]) -> None:
+    plan = replace(RAW_PLAN, adetailer_applies=lambda config: False)
+
+    compile_njr(_image_draft(PolicyState.RAW, raw_plan=plan))
+
+    assert step_calls == [name for name in STEPS if name != "compile_adetailer"]
+
+
+def test_a_raw_plan_binds_planner_parts_from_the_effective_config_before_adetailer(
+    step_calls: list[str],
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def bind(draft: NjrDraft, config: Any) -> NjrDraft:
+        seen["steps_before_bind"] = list(step_calls)
+        return replace(
+            draft,
+            workload=replace(draft.workload, positive_prompt=f"bound {config['txt2img']['model']}"),
+        )
+
+    def stages_for(config: Any, adetailer_mode: Any) -> tuple[StageConfig, ...]:
+        seen["adetailer_mode"] = adetailer_mode
+        return _stages_from_config(config, adetailer_mode)
+
+    record = compile_njr(
+        _image_draft(PolicyState.RAW, raw_plan=replace(RAW_PLAN, bind=bind, stages_for=stages_for))
+    )
+
+    assert seen["steps_before_bind"] == ["prepare_effective_config", "apply_model_compile_policy"]
+    assert record.positive_prompt == "bound model-a.safetensors"
+    assert seen["adetailer_mode"] == {}  # no authored ADetailer mode in this configuration
+
+
+def test_a_raw_plan_mints_the_identity_after_the_shared_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    minted: list[str] = []
+
+    def mint() -> str:
+        minted.append(f"job-{len(minted) + 1}")
+        return minted[-1]
+
+    plan = replace(RAW_PLAN, mint_job_id=mint)
+    record = compile_njr(_image_draft(PolicyState.RAW, job_id="", raw_plan=plan))
+    assert record.job_id == "job-1"
+
+    def refuse(config: Any) -> Any:
+        raise ValueError("refused by the policy")
+
+    monkeypatch.setattr(njr_compiler, "apply_model_compile_policy", refuse)
+    with pytest.raises(ValueError, match="refused by the policy"):
+        compile_njr(_image_draft(PolicyState.RAW, job_id="", raw_plan=plan))
+    assert minted == ["job-1"]  # a refused draft consumed no identity
+
+
+def test_prepare_image_config_runs_steps_one_and_two_and_returns_their_evidence(
+    step_calls: list[str],
+) -> None:
+    config = {"txt2img": {"model": "model-a.safetensors"}, "prompt": "a lighthouse"}
+
+    prepared, evidence = njr_compiler.prepare_image_config(config)
+
+    assert step_calls == ["prepare_effective_config", "apply_model_compile_policy"]
+    assert prepared is config and evidence is None  # an ordinary model is left untouched
 
 
 def test_declared_checks_run_in_the_declared_order_on_the_constructed_record(
@@ -382,7 +448,7 @@ def test_replay_run_directives_replace_inherited_ones_on_the_named_stage() -> No
     }
 
 
-# --- ownership ratchet for the routes moved in P4-2B and P4-2C ----------------------------------------------------------------
+# --- ownership ratchet for the routes moved in P4-2B to P4-2E ----------------------------------------------------------------
 
 MIGRATED = (
     "src/pipeline/cli_njr_builder.py",
@@ -393,6 +459,8 @@ MIGRATED = (
     "src/pipeline/reprocess_builder.py",
     "src/learning/learning_njr.py",
     "src/learning/ordinary_njr.py",
+    "src/pipeline/job_builder_v2.py",
+    "src/pipeline/prompt_pack_job_builder.py",
 )
 FAMILY_IDENTIFIERS = re.compile(
     r"z_?image|klein|flux|sdxl|sd15|animatediff|qwen|hunyuan|wan2|ltx", re.IGNORECASE
