@@ -23,8 +23,8 @@ CASES_SCHEMA = "stablenew.vl220.cases/1"
 LABELS_SCHEMA = "stablenew.vl220.labels/1"
 RESPONSE_SCHEMA = "stablenew.vl220.response/1"
 
-#: This package specifies the invocation but does not approve it; an owner decision flips this, in a later change.
-INVOCATION_APPROVED = False
+#: Owner-approved LFM operator adapter implemented under AI-VL-230.
+INVOCATION_APPROVED = True
 
 KIND_ADHERENCE = "adherence"
 KIND_DEFECT = "defect_triage"

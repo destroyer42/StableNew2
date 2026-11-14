@@ -1,32 +1,26 @@
-"""Operator staging, verification and import of a visual candidate (PR-AI-VL-220, decision D15).
-
-The application never downloads anything, and neither does this module: the operator fetches the two pinned files with the
-exact commands the runbook prints (:func:`download_commands`), then runs :func:`stage_report` to verify them and, only with
-the owner's license acknowledgement, :func:`import_candidate` to copy them into an evaluation root the operator names.
-
-The evaluation root is never the AI Assist root (``%LOCALAPPDATA%\\StableNew\\ManagedAi``) and never inside a Git working tree,
-so an imported visual file can never be seen by the production activation, selector, Preview or ``import-model`` path.
-Nothing is executed or loaded; a cancelled or failed copy leaves no partial file behind.
-"""
+"""Verify and import visual candidates into an operator-owned evaluation root."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-import shutil
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from src.ai_assist.manifests import RuntimeManifest
+from src.ai_assist.paths import resolve_ai_root
 from tools.qualification.vl220.candidates import (
     REASON_CANCELLED,
-    Admission,
+    REASON_RUNTIME_UNSUPPORTED,
+    REASON_UNSAFE_PATH,
     CancelCheck,
     StagedFile,
     VisualCandidate,
-    check_admission,
+    has_link,
+    license_reasons,
+    verify_pair,
 )
 
 REFUSED_UNDER_MANAGED_AI = "evaluation_root_is_the_ai_assist_root"
@@ -36,7 +30,7 @@ REFUSED_EXISTS = "destination_exists"
 
 
 class StagingRefused(Exception):
-    """Nothing was copied. ``code`` is stable; ``reasons`` carries admission reason codes when that was the cause."""
+    """The operation was refused. The code and reasons are safe to report."""
 
     def __init__(self, code: str, reasons: tuple[str, ...] = ()) -> None:
         super().__init__(code if not reasons else f"{code}: {', '.join(reasons)}")
@@ -45,12 +39,12 @@ class StagingRefused(Exception):
 
 
 def download_commands(candidate: VisualCandidate, destination: str) -> list[str]:
-    """The exact anonymous, revision-pinned ``curl`` lines for the operator. Printed, never run."""
-
-    lines: list[str] = []
-    for item in (candidate.model, candidate.projector):
-        lines.append(f'curl -sS -L --fail -o "{destination}/{item.filename}" "{item.source_url}"')
-    return lines
+    """Print the exact pinned, HTTPS-only downloads for the operator."""
+    return [
+        f'curl --proto "=https" --proto-redir "=https" -sS -L --fail --max-filesize {item.bytes}'
+        f' -o "{destination}/{item.filename}" "{item.source_url}"'
+        for item in (candidate.model, candidate.projector)
+    ]
 
 
 def stage_report(
@@ -58,21 +52,22 @@ def stage_report(
     staging_dir: Path,
     *,
     build_id: str,
-    runtime_manifest: RuntimeManifest | None = None,
     acknowledgement: Mapping[str, Any] | None = None,
     cancel: CancelCheck | None = None,
 ) -> dict[str, Any]:
-    """A content-free verification report: pinned identities, what was found, and the fail-closed admission verdict."""
+    """Report pair integrity and import readiness using the same checks as import."""
 
-    admission = check_admission(
-        candidate, staging_dir, build_id=build_id, runtime_manifest=runtime_manifest,
-        acknowledgement=acknowledgement, cancel=cancel,
-    )  # fmt: skip
+    pair = verify_pair(candidate, staging_dir, cancel=cancel)
+    reasons = [*pair.reasons, *license_reasons(candidate, acknowledgement)]
+    if build_id != candidate.runtime.required_build_id:
+        reasons.append(REASON_RUNTIME_UNSUPPORTED)
     return {
         "candidate_id": candidate.candidate_id,
         "build_id": build_id,
-        "admitted": admission.ok,
-        "reasons": list(admission.reasons),
+        "pair_verified": pair.ok,
+        "import_ready": not reasons,
+        "admitted": not reasons,
+        "reasons": reasons,
         "files": [
             {
                 "filename": item.filename,
@@ -87,105 +82,102 @@ def stage_report(
     }
 
 
-def _inside_git(path: Path) -> bool:
-    return any((candidate / ".git").exists() for candidate in (path, *path.parents))
-
-
-def _is_managed_ai(path: Path) -> bool:
-    if any(part.lower() == "managedai" for part in path.parts):
-        return True
+def evaluation_root(path: Path) -> Path:
+    path = path.absolute()
+    if has_link(path):
+        raise StagingRefused(REFUSED_NOT_ADMITTED, (REASON_UNSAFE_PATH,))
+    root = path.resolve()
+    managed = resolve_ai_root().resolve()
     local = os.environ.get("LOCALAPPDATA")
-    if local:
-        managed = (Path(local) / "StableNew" / "ManagedAi").resolve()
-        return path == managed or managed in path.parents
-    return False
+    default = (Path(local) / "StableNew" / "ManagedAi").resolve() if local else managed
+    if (
+        root.is_relative_to(managed)
+        or root.is_relative_to(default)
+        or any(part.lower() == "managedai" for part in root.parts)
+    ):
+        raise StagingRefused(REFUSED_UNDER_MANAGED_AI)
+    if any((parent / ".git").exists() for parent in (root, *root.parents)):
+        raise StagingRefused(REFUSED_IN_REPOSITORY)
+    return root
+
+
+def installed_pair(root: Path, candidate: VisualCandidate) -> Path:
+    return root / candidate.candidate_id / candidate.model.sha256[:16]
+
+
+def import_record(candidate: VisualCandidate) -> dict[str, Any]:
+    return {
+        "candidate_id": candidate.candidate_id,
+        "build_id": candidate.runtime.required_build_id,
+        "model_sha256": candidate.model.sha256,
+        "projector_sha256": candidate.projector.sha256,
+        "license_text_sha256": candidate.license.text_sha256,
+    }
 
 
 def _copy_verified(
     source: Path, target: Path, pinned: StagedFile, cancel: CancelCheck | None
-) -> bool:
-    """Copy while hashing; keep the file only when it matches the pin. ``False`` means cancelled."""
-
-    partial = target.with_name(target.name + ".part")
+) -> None:
     digest = hashlib.sha256()
     size = 0
-    try:
-        with open(source, "rb") as reader, open(partial, "wb") as writer:
-            while chunk := reader.read(4 * 1024 * 1024):
-                if cancel is not None and cancel():
-                    raise _Cancelled
-                digest.update(chunk)
-                size += len(chunk)
-                writer.write(chunk)
-        if size != pinned.bytes or digest.hexdigest() != pinned.sha256:
-            raise StagingRefused(REFUSED_NOT_ADMITTED, ("copied_bytes_do_not_match_the_pin",))
-        os.replace(partial, target)
-        return True
-    except _Cancelled:
-        return False
-    finally:
-        partial.unlink(missing_ok=True)
-
-
-class _Cancelled(Exception):
-    pass
+    if has_link(source) or not source.is_file():
+        raise StagingRefused(REFUSED_NOT_ADMITTED, (REASON_UNSAFE_PATH,))
+    with source.open("rb") as reader, target.open("xb") as writer:
+        while chunk := reader.read(4 * 1024 * 1024):
+            if cancel is not None and cancel():
+                raise StagingRefused(REFUSED_NOT_ADMITTED, (REASON_CANCELLED,))
+            size += len(chunk)
+            if size > pinned.bytes:
+                break
+            digest.update(chunk)
+            writer.write(chunk)
+    if size != pinned.bytes or digest.hexdigest() != pinned.sha256:
+        raise StagingRefused(REFUSED_NOT_ADMITTED, ("copied_bytes_do_not_match_the_pin",))
 
 
 def import_candidate(
     candidate: VisualCandidate,
     staging_dir: Path,
-    evaluation_root: Path,
+    root: Path,
     *,
     build_id: str,
     acknowledgement: Mapping[str, Any] | None,
-    runtime_manifest: RuntimeManifest | None = None,
     cancel: CancelCheck | None = None,
 ) -> Path:
-    """Copy the verified pair into ``evaluation_root/<candidate_id>/<model sha prefix>/``; return that directory.
+    """Verify while staging, then publish the pair and its receipt together."""
 
-    Refuses (and writes nothing) unless admission passes, including the owner's license acknowledgement; refuses the AI Assist
-    root and any Git working tree; never overwrites. A cancel removes everything written by this call."""
-
-    root = Path(evaluation_root).resolve()
-    if _is_managed_ai(root):
-        raise StagingRefused(REFUSED_UNDER_MANAGED_AI)
-    if _inside_git(root):
-        raise StagingRefused(REFUSED_IN_REPOSITORY)
-    admission: Admission = check_admission(
-        candidate, staging_dir, build_id=build_id, runtime_manifest=runtime_manifest,
-        acknowledgement=acknowledgement, cancel=cancel,
-    )  # fmt: skip
-    if not admission.ok:
-        raise StagingRefused(REFUSED_NOT_ADMITTED, admission.reasons)
-    target = root / candidate.candidate_id / candidate.model.sha256[:16]
+    root = evaluation_root(root)
+    target = installed_pair(root, candidate)
+    if has_link(target):
+        raise StagingRefused(REFUSED_NOT_ADMITTED, (REASON_UNSAFE_PATH,))
     if target.exists():
         raise StagingRefused(REFUSED_EXISTS)
-    target.mkdir(parents=True)
-    try:
+    report = stage_report(
+        candidate,
+        staging_dir,
+        build_id=build_id,
+        acknowledgement=acknowledgement,
+        cancel=cancel,
+    )
+    if not report["import_ready"]:
+        raise StagingRefused(REFUSED_NOT_ADMITTED, tuple(report["reasons"]))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".import-", dir=target.parent) as scratch:
+        pending = Path(scratch) / "pair"
+        pending.mkdir()
         for item in (candidate.model, candidate.projector):
-            if not _copy_verified(
-                Path(staging_dir) / item.filename, target / item.filename, item, cancel
-            ):
-                raise StagingRefused(REFUSED_NOT_ADMITTED, (REASON_CANCELLED,))
-        record = {
-            "candidate_id": candidate.candidate_id,
-            "build_id": build_id,
-            "model_sha256": candidate.model.sha256,
-            "projector_sha256": candidate.projector.sha256,
-            "license_text_sha256": candidate.license.text_sha256,
-        }
-        (target / "import_record.json").write_text(
-            json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            _copy_verified(staging_dir / item.filename, pending / item.filename, item, cancel)
+        (pending / "import_record.json").write_text(
+            json.dumps(import_record(candidate), indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-    except BaseException:
-        shutil.rmtree(target, ignore_errors=True)
-        raise
+        if cancel is not None and cancel():
+            raise StagingRefused(REFUSED_NOT_ADMITTED, (REASON_CANCELLED,))
+        if target.exists() or target.is_symlink():
+            raise StagingRefused(REFUSED_EXISTS)
+        try:
+            pending.rename(target)
+        except OSError as exc:
+            if target.exists() or target.is_symlink():
+                raise StagingRefused(REFUSED_EXISTS) from exc
+            raise
     return target
-
-
-__all__ = [
-    "StagingRefused",
-    "download_commands",
-    "import_candidate",
-    "stage_report",
-]

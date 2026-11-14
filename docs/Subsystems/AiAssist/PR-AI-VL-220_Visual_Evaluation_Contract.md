@@ -1,20 +1,20 @@
 # PR-AI-VL-220: visual evaluation contract (specification and harness scaffolding)
 
-Status: **specified and tested on synthetic data; no model has been run.** The owner approved the image invocation a real run
-needs on 2026-11-14 (`PR-AI-VL-220_Image_Invocation_Contract.md`) and authorized a first supervised CPU-only run of this plan
-digest; the driver, the `b11960-cpu-vision` build entry, the license acknowledgement and the firewall rule do not exist yet, so
-no run is possible today. Nothing here is qualification.
+AI-VL-230 adds the operator-only driver and the Gemma candidate. The [operator runbook](../../runbooks/ai_visual_evaluation.md)
+covers staging, readiness, and supervised evaluation.
 
-Plan digest (`python -m tools.qualification.vl220 describe`, field `plan_sha256`; a test fails if this line goes stale):
-`23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`
+The original LFM plan digest was
+`23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`.
+The LFM plan printed by `python -m tools.qualification.vl220 describe` changes only the invocation approval bit and has digest
+`9d6fbdfd6d2fa2dd5af7edb37ef7810286b3fed9dc7a598685db7d3f6223d5b5`.
+The plan retains the original upstream archive identity and comparator snapshot. `describe-execution` binds the exact visual
+build, executable, launch profile, and resource limits for a supervised run.
 
 ## 1. Purpose and boundary
 
-Prepare a like-for-like, repeatable way to compare the visual candidate (LFM3-VL-2B Q4_K_M with its F16 projector) with every
-eligible existing capability, on StableNew-shaped questions, **without** treating vendor benchmarks as StableNew evidence and
-without changing production. The harness is read-only and deterministic: it validates cases and labels, validates and scores
-answers, reports measurements against limits, and prints a plan. `tools/qualification/vl220/` imports no network, process or
-inference library (a test scans every module), contains no image or projector flag, and has no command that runs a model.
+Compare the vision-language candidates with existing capabilities on StableNew-shaped questions. The operator tool validates
+the frozen cases and labels, runs the pinned CPU adapter when admitted, and scores the responses against the reference
+labels and deterministic floors. The application has no entry point to the adapter.
 
 ## 2. What is measured
 
@@ -64,7 +64,7 @@ guarantees structure, not truth: a well-formed wrong answer is scored as wrong.
 | Smart Review segmentation (SAM2) | no | none | No text output |
 | Qwen3.5 text GGUFs | no | none | Registered as text models; no projector is registered and `--mmproj` is in `FORBIDDEN_FLAGS` |
 | LFM3-1.7B text GGUFs | no | none | The language model has no vision encoder |
-| LFM3-VL-2B candidate | not yet | all | Image invocation approved but not implemented; license not acknowledged; not imported into an evaluation root |
+| LFM3-VL-2B candidate | not yet | all | Operator prerequisites apply. See the evaluation runbook. |
 
 The audit found **no existing eligible vision-language capability that answers structured questions**; the Qwen3.5 models may be
 multimodal upstream, but StableNew registers and runs them as text only, so a Qwen visual arm would need its own projector pin,
@@ -79,7 +79,7 @@ Nothing in a report sets `qualified`.
 
 ## 7. Owner decisions this contract needs before a real run
 
-1. Approve (or change) the image invocation contract.
+1. Review the exact supervised execution, case and label digests.
 2. Acknowledge the exact license text (`30adf9d6...`; section 3 of the work package).
 3. Choose the existing assets and the person who labels them (minimum suggested: 30 cases per kind).
 4. Confirm the proposed limits and whether the Florence-2 comparator is in scope.

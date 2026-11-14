@@ -1,18 +1,13 @@
-"""The visual evaluation plan: one deterministic document that says what would be measured, against what, and what is held.
-
-``build_plan`` runs nothing. It records the contract (dimensions, response schemas, limits), the synthetic wiring set's
-digests, the candidate's pinned identities and the comparator eligibility table, and states that no model is executed and that
-the image invocation is not approved. Its digest changes whenever any of those change, so the document the owner approves is
-the document that is checked.
-"""
+"""Describe the frozen VL-220 evaluation inputs and score the synthetic baselines."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from tools.qualification.vl220 import contract, scoring, synthetic
-from tools.qualification.vl220.candidates import VisualCandidate, load_candidates
+from tools.qualification.vl220.candidates import VisualCandidate, find_candidate
 
+LFM_CANDIDATE_ID = "lfm3-vl-2b-q4_k_m-liquidai"
 INVOCATION_DOCUMENT = "docs/Subsystems/AiAssist/PR-AI-VL-220_Image_Invocation_Contract.md"
 EVALUATION_DOCUMENT = "docs/Subsystems/AiAssist/PR-AI-VL-220_Visual_Evaluation_Contract.md"
 
@@ -34,13 +29,13 @@ def dry_run() -> dict[str, Any]:
 
 
 def build_plan(candidate: VisualCandidate | None = None) -> dict[str, Any]:
-    chosen = candidate if candidate is not None else load_candidates()[0]
+    chosen = candidate if candidate is not None else find_candidate(LFM_CANDIDATE_ID)
     images, case_doc, label_doc = synthetic.build_synthetic_set()
     plan: dict[str, Any] = {
         "contract_id": contract.CONTRACT_ID,
         "executes_models": False,
         "image_invocation": {
-            "approved": contract.INVOCATION_APPROVED,
+            "approved": chosen.image_invocation_approved,
             "document": INVOCATION_DOCUMENT,
         },
         "evaluation_document": EVALUATION_DOCUMENT,
@@ -65,7 +60,13 @@ def build_plan(candidate: VisualCandidate | None = None) -> dict[str, Any]:
             "candidate_id": chosen.candidate_id,
             "model_sha256": chosen.model.sha256,
             "projector_sha256": chosen.projector.sha256,
-            "required_build_id": chosen.runtime.required_build_id,
+            # Preserve the archive identity and comparator snapshot in the original LFM plan.
+            # describe-execution binds the exact vision build, hashes, and launch limits.
+            "required_build_id": (
+                "b11960-cpu"
+                if chosen.candidate_id == LFM_CANDIDATE_ID
+                else chosen.runtime.required_build_id
+            ),
             "tool": chosen.runtime.tool,
             "license_text_sha256": chosen.license.text_sha256,
             "qualified": False,

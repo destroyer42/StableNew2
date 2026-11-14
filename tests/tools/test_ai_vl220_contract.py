@@ -477,11 +477,11 @@ def test_comparator_names_match_the_existing_smart_review_capabilities() -> None
     )
 
 
-def test_plan_is_deterministic_runs_nothing_and_holds_the_invocation() -> None:
+def test_plan_is_deterministic_and_preserves_the_original_snapshot() -> None:
     first = plan.build_plan()
     assert first == plan.build_plan() and len(first["plan_sha256"]) == 64
     assert first["executes_models"] is False
-    assert first["image_invocation"]["approved"] is False and contract.INVOCATION_APPROVED is False
+    assert first["image_invocation"]["approved"] is True and contract.INVOCATION_APPROVED is True
     assert (
         first["candidate"]["qualified"] is False
         and first["candidate"]["required_build_id"] == "b11960-cpu"
@@ -492,18 +492,14 @@ def test_plan_is_deterministic_runs_nothing_and_holds_the_invocation() -> None:
     assert contract.digest(body) == first["plan_sha256"]
 
 
-def test_the_specification_documents_exist_and_carry_the_current_plan_digest() -> None:
-    digest = plan.build_plan()["plan_sha256"]
-    for relative in (plan.EVALUATION_DOCUMENT, plan.INVOCATION_DOCUMENT):
-        text = (REPO / relative).read_text(encoding="utf-8")
-        lowered = text.lower()
-        assert (
-            "not approved" in lowered
-            or "pending owner approval" in lowered
-            or "not yet implemented" in lowered
-            or "no run is possible" in lowered
-        )
-    assert digest in (REPO / plan.EVALUATION_DOCUMENT).read_text(encoding="utf-8")
+def test_the_specification_documents_preserve_the_frozen_plan_digest() -> None:
+    first = plan.build_plan()
+    current = first.pop("plan_sha256")
+    first["image_invocation"]["approved"] = False
+    original = contract.digest(first)
+    assert original == "23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e"
+    text = (REPO / plan.EVALUATION_DOCUMENT).read_text(encoding="utf-8")
+    assert original in text and current in text
 
 
 def test_dry_run_validates_and_scores_without_touching_disk(

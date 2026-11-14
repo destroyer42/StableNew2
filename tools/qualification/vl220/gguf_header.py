@@ -32,6 +32,8 @@ KEPT_KEYS: frozenset[str] = frozenset(
         "general.base_model.0.name",
         "lfm3.embedding_length",
         "lfm3.context_length",
+        "gemma4.embedding_length",
+        "gemma4.context_length",
         "clip.has_vision_encoder",
         "clip.has_audio_encoder",
         "clip.vision.projector_type",

@@ -1,4 +1,4 @@
-# PR-AI-VL-220: image invocation contract (approved by the owner 2026-11-14; not yet implemented)
+# PR-AI-VL-220: image invocation contract (approved by the owner 2026-11-14)
 
 ## Owner decision (2026-11-14, recorded from the chat)
 
@@ -7,24 +7,13 @@ the separate `b11960-cpu-vision` build entry, a firewall Block rule and attestat
 run on the synthetic set, then existing assets, naming plan digest
 `23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`). Recorded as given, with no change to section 3.
 
-What this does **not** do, and what is still missing before any run is possible:
+AI-VL-230 implements the separate runtime entry and visual adapter. The [evaluation contract](PR-AI-VL-220_Visual_Evaluation_Contract.md)
+records the plan digest transition. The original authorization named LFM and its first supervised run. See the
+[operator runbook](../../runbooks/ai_visual_evaluation.md) for the exact execution identity and prerequisites.
 
-1. **Nothing is implemented.** There is no `b11960-cpu-vision` manifest entry, no visual driver and no visual argument builder;
-   they are a follow-up package. `contract.INVOCATION_APPROVED` stays `False` (and so does the plan field and the comparator
-   reason `image_invocation_not_approved`, which read "approved and implemented") because the authorized plan digest includes
-   them; it flips in the implementing package, which must then name the new digest and prove it differs only by that flag.
-2. **The license acknowledgement is still the owner's act and has not been made** (record `license_acknowledgement.json`, text
-   `30adf9d6...`); admission refuses without it.
-3. **The firewall Block rule for `llama-mtmd-cli.exe` and the attestation for `b11960-cpu-vision`** are the owner's acts; the
-   session that implements this creates no rule and records no attestation.
-4. The authorization in C is for the first supervised run only (synthetic set, then existing assets once the owner has chosen
-   them and a labeler); each run still needs the implementing package's own gates to pass, and it does not extend to any
-   change of the plan, the invocation, the model or the projector.
-
-Status of the text below: approved as the specification to implement. `FORBIDDEN_FLAGS`, `ALLOWED_FLAGS`,
-`build_argv`, `build_production_argv`, the runtime process authority, the firewall attestation and the protected-token
-validators are unchanged by this package; the owner's wish to use LFM3-VL-2B as a comparator does not approve this contract.
-A visual evaluation run is impossible until the pieces listed under the owner decision exist.
+The sections below record the original approved specification and source review. The pinned source uses Jinja by default
+in `common_params`. The adapter passes `--jinja` explicitly for the LFM and Gemma templates. Template rendering, grammar
+behavior, and image-token tuning on actual models await supervised measurement.
 
 ## 1. Why a separate contract
 
@@ -54,7 +43,7 @@ cannot reach.
 | `--image` | yes (`MTMD, CLI`) | yes: one file per case (two for before/after), copied to a private work directory |
 | `--no-mmproj-offload`, `-mmdev none` | yes (`mmproj_examples`) | yes: keep the projector on the CPU |
 | `--image-min-tokens`, `--image-max-tokens` | yes (`mmproj_examples`) | yes: bound image memory (values set from the first supervised measurement) |
-| `--jinja` | yes | **open**: MTMD defaults to the legacy template engine; whether it renders this model's template is unproven (section 5) |
+| `--jinja` | yes | **open**: the adapter explicitly selects the bundled Jinja template; rendering is unmeasured (section 5) |
 | `--log-disable` | accepted | **no**: it pauses the log that prints the generation, so stdout would be empty |
 | `--no-conversation`, `--no-display-prompt`, `--reasoning` | **not accepted** | no (not needed; single-turn is implied) |
 | `-p` | yes | **no**: the prompt goes in a file (`-f`), never on a command line other processes can read |

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Visual (vision-language) CANDIDATES for offline evaluation only (PR-AI-VL-220, decision D22). This file is deliberately separate from config/ai_model_registry.json: that registry feeds the in-app model selector, Preview enablement and import-model, all of which treat an entry as a text model, so a visual entry there would be offered for text use. Nothing in src/ or in the production import-model, activation, selector or Preview path reads this file; a test proves it. Every candidate is unqualified, not production eligible, not text-registry eligible and has NO approved image invocation (the proposed invocation is a separate document that needs explicit owner approval). Sizes and SHA-256 are the Hugging Face LFS values reviewed on 2026-11-14 and verified against the locally downloaded bytes the same day. Every source is pinned to a 40-character commit revision, never a branch. Nothing is downloaded by the application.",
+  "description": "Pinned, unqualified vision-language candidates for offline operator evaluation. The text selector, Preview, activation and import-model use a separate registry.",
   "candidates": [
     {
       "candidate_id": "lfm3-vl-2b-q4_k_m-liquidai",
@@ -9,7 +9,7 @@
       "qualified": false,
       "production_eligible": false,
       "text_registry_eligible": false,
-      "image_invocation_approved": false,
+      "image_invocation_approved": true,
       "license": {
         "spdx": "LicenseRef-LFM-Open-License-1.0",
         "name": "LFM Open License v1.0",
@@ -67,17 +67,80 @@
         }
       ],
       "runtime": {
-        "required_build_id": "b11960-cpu",
+        "required_build_id": "b11960-cpu-vision",
         "unsupported_build_ids": [
-          "b11840-cpu"
+          "b11840-cpu",
+          "b11960-cpu"
         ],
         "tool": "llama-mtmd-cli.exe",
-        "basis": "The publisher's model card requires llama.cpp b11960 or newer. The llama.cpp source at tag b11840 has no lfm3vl projector (tools/mtmd/clip-impl.h) and tag b11960 does (reviewed as text; no binary was run). llama-mtmd-cli.exe is already hashed in the pinned b11960-cpu file map."
+        "basis": "CPU x64 b11960 implements lfm3vl. The separately pinned vision entry uses llama-mtmd-cli.exe."
       },
       "known_limits": [
         "Vendor benchmarks do not establish StableNew quality; nothing here claims superiority over the Qwen3.5 or LFM3 text models.",
         "The LFM Open License v1.0 caps commercial use by an entity at a revenue threshold; the owner must acknowledge this exact license text before any import.",
-        "No inference has been run; image invocation is not approved."
+        "The operator evaluation adapter is implemented. Real model loading, output and resource use remain unmeasured."
+      ]
+    },
+    {
+      "candidate_id": "gemma-4-12b-it-qat-q4_0-google",
+      "display_name": "Gemma 4 12B Instruct QAT Q4_0 (Google GGUF with matching projector)",
+      "modality": "vision_language",
+      "qualified": false,
+      "production_eligible": false,
+      "text_registry_eligible": false,
+      "image_invocation_approved": true,
+      "license": {
+        "spdx": "Apache-2.0",
+        "name": "Apache License 2.0",
+        "text_bytes": 11358,
+        "text_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "text_source_url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+        "acknowledgement_required": true
+      },
+      "publisher": {
+        "repository": "google/gemma-4-12B-it-qat-q4_0-gguf",
+        "revision": "29d097773436b69ff9feafd636ab4cf873786537"
+      },
+      "converter": "Official Google GGUF export",
+      "model": {
+        "repository": "google/gemma-4-12B-it-qat-q4_0-gguf",
+        "revision": "29d097773436b69ff9feafd636ab4cf873786537",
+        "filename": "gemma-4-12b-it-qat-q4_0.gguf",
+        "bytes": 6975879296,
+        "sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+        "source_url": "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/29d097773436b69ff9feafd636ab4cf873786537/gemma-4-12b-it-qat-q4_0.gguf",
+        "architecture": "gemma4",
+        "quantization": "Q4_0",
+        "gguf_file_type": 2,
+        "embedding_length": 3840,
+        "native_context_tokens": 262144
+      },
+      "projector": {
+        "repository": "google/gemma-4-12B-it-qat-q4_0-gguf",
+        "revision": "29d097773436b69ff9feafd636ab4cf873786537",
+        "filename": "mmproj-gemma-4-12b-it-qat-q4_0.gguf",
+        "bytes": 175115616,
+        "sha256": "cb018338a7538a9814d994bfe54644c71eb7ed54e31eae2f721e45fd3c260da7",
+        "source_url": "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/29d097773436b69ff9feafd636ab4cf873786537/mmproj-gemma-4-12b-it-qat-q4_0.gguf",
+        "architecture": "clip",
+        "projector_type": "gemma4uv",
+        "precision": "BF16 (GGUF file type 32)",
+        "gguf_file_type": 32,
+        "projection_dim": 3840,
+        "selection_basis": "Google ships this pair at one revision. Headers agree on base name (Gemma 4 12B It) and width (3840)."
+      },
+      "runtime": {
+        "required_build_id": "b11960-cpu-vision",
+        "unsupported_build_ids": [
+          "b11840-cpu",
+          "b11960-cpu"
+        ],
+        "tool": "llama-mtmd-cli.exe",
+        "basis": "b11960 source has the gemma4 language model and gemma4uv clip graph; the vision adapter uses the bundled chat template."
+      },
+      "known_limits": [
+        "The header reports audio support. The adapter accepts only pinned PNG and JPEG files.",
+        "Real model loading, chat rendering, grammar constraints, output, timing and memory remain unmeasured."
       ]
     }
   ]
