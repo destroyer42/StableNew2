@@ -25,7 +25,6 @@ from typing import Any
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.learning import baseline_authoring as authoring
 from src.pipeline.job_models_v2 import (
-    CURRENT_NJR_SCHEMA_VERSION,
     ImageWorkloadSpec,
     LearningJobContext,
     LoRATag,
@@ -36,6 +35,14 @@ from src.pipeline.job_models_v2 import (
     SourceKind,
     StageConfig,
     WorkloadKind,
+)
+from src.pipeline.njr_compiler import (
+    FrozenExpectation,
+    NjrDerivation,
+    NjrDraft,
+    PolicyState,
+    compile_njr,
+    derive_njr,
 )
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 
@@ -95,16 +102,18 @@ def materialize_njr(
             learning_metadata=learning_metadata,
             strict=strict,
         )
-        record = replace(
+        record = derive_njr(
             record,
-            job_id=job_id,
-            provenance=replace(
-                record.provenance,
-                variant_index=variant_index,
-                variant_total=variant_total,
-                learning_context=learning_ctx,
-                lora_tags=tuple(selected_loras.values()),
-                metadata=learning_metadata,
+            NjrDerivation(
+                job_id=job_id,
+                provenance=replace(
+                    record.provenance,
+                    variant_index=variant_index,
+                    variant_total=variant_total,
+                    learning_context=learning_ctx,
+                    lora_tags=tuple(selected_loras.values()),
+                    metadata=learning_metadata,
+                ),
             ),
         )
     else:
@@ -234,36 +243,46 @@ def _materialize_txt2img(
         vae=vae,
         extra={},
     )
-    return NormalizedJobRecord(
-        schema_version=CURRENT_NJR_SCHEMA_VERSION,
-        job_id=job_id,
-        workload_kind=WorkloadKind.IMAGE,
-        source=SourceDescriptor(kind=SourceKind.LEARNING, display_name=experiment.name),
-        workload=ImageWorkloadSpec(
-            positive_prompt=prompt,
-            negative_prompt=negative_prompt,
-            config=final_config,
-            images_per_prompt=max(1, int(experiment.images_per_value or 1)),
-            metadata=learning_metadata,
-            backend_options=normalize_image_backend_options(final_config.get("backend_options")),
-        ),
-        stages=(stage,),
-        output_plan=OutputPlan(
-            base_output_dir=output_dir or "output", filename_template=filename_template
-        ),
-        provenance=NJRProvenance(
-            seed=seed,
-            variant_index=variant_index,
-            variant_total=variant_total,
-            learning_context=learning_ctx,
-            lora_tags=tuple(selected_loras.values()),
-            metadata={
-                **learning_metadata,
-                "subseed": subseed,
-                "subseed_strength": subseed_strength,
-                "seed_resize_from_h": seed_resize_from_h,
-                "seed_resize_from_w": seed_resize_from_w,
-                "clip_skip": clip_skip,
-            },
-        ),
+    # The values come from the frozen snapshot and are never transformed here: a FROZEN draft whose record differs
+    # from the frozen prompts is refused.  Strict parity with Preview follows in ``materialize_njr``.
+    return compile_njr(
+        NjrDraft(
+            job_id=job_id,
+            workload_kind=WorkloadKind.IMAGE,
+            source=SourceDescriptor(kind=SourceKind.LEARNING, display_name=experiment.name),
+            workload=ImageWorkloadSpec(
+                positive_prompt=prompt,
+                negative_prompt=negative_prompt,
+                config=final_config,
+                images_per_prompt=max(1, int(experiment.images_per_value or 1)),
+                metadata=learning_metadata,
+                backend_options=normalize_image_backend_options(
+                    final_config.get("backend_options")
+                ),
+            ),
+            stages=(stage,),
+            output_plan=OutputPlan(
+                base_output_dir=output_dir or "output", filename_template=filename_template
+            ),
+            provenance=NJRProvenance(
+                seed=seed,
+                variant_index=variant_index,
+                variant_total=variant_total,
+                learning_context=learning_ctx,
+                lora_tags=tuple(selected_loras.values()),
+                metadata={
+                    **learning_metadata,
+                    "subseed": subseed,
+                    "subseed_strength": subseed_strength,
+                    "seed_resize_from_h": seed_resize_from_h,
+                    "seed_resize_from_w": seed_resize_from_w,
+                    "clip_skip": clip_skip,
+                },
+            ),
+            policy_state=PolicyState.FROZEN,
+            frozen=FrozenExpectation(
+                values={"positive_prompt": prompt, "negative_prompt": negative_prompt},
+                message="The compiled Learning job does not match its frozen prompts.",
+            ),
+        )
     )
