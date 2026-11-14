@@ -106,6 +106,37 @@ boundary, so an order is never derived from a projection that lags committed row
 Repository observers may read the queue during admission; the projection lock is held
 only for the projection step.
 
+### 3.1 Single assembly boundary (P4-2)
+
+`src/pipeline/njr_compiler.py` is the only module that assembles a `NormalizedJobRecord`
+(`compile_njr`) or gives an existing one a new identity (`derive_njr`). The record's own read
+path (`NormalizedJobRecord.from_dict` and `migrate_legacy_njr`) is the only other constructor.
+Source planners keep cardinality and source-specific preparation (CLI, Pipeline tab, PromptPack,
+reprocess and video, Learning, training, history and sequence replay) and hand the core one
+envelope-shaped `NjrDraft` per record; the core is not a configuration IR, takes no service,
+registry handle or configuration manager, calls only neutral seams, and names no model family.
+
+A draft declares how far its values were prepared, in one of three policy states:
+
+| `PolicyState` | Meaning | Used by |
+|---|---|---|
+| `RAW` | A merged image configuration. The core runs effective-config preparation, the model compile policy, the stage-conditional ADetailer step, backend-option normalization and intent canonicalization once, in a fixed order. | Pipeline tab |
+| `EFFECTIVE` | The planner already ran the shared steps it runs today, in its own order; the core only assembles. | CLI, PromptPack, reprocess family (Review, Photo Optimize, edits, native SVD, Comfy Video Workflow, sequences, Movie Clips), training, ordinary Learning, non-txt2img Learning variants |
+| `FROZEN` | Values come from a validated frozen snapshot. The core never transforms them and verifies that the declared values are reproduced. | Learning arms (Model Comparison, Two-Axis Grid, Prompt x Model Matrix) |
+
+A draft also lists, in order, the post-construction checks its route runs (`CompileCheck`:
+exact-profile NJR admission, operation compatibility, retired execution), so each route keeps
+its own refusal order and timing. A derivation (`NjrDerivation`) carries a new `job_id` and any
+of source, workload, stages and provenance over a parent; replay, Regenerate with Changes,
+checkpoint resume and sequence resume use it, with `history_lineage` for the parent link.
+
+`tests/system/test_njr_construction_guard.py` fails when a construction or a
+`replace(..., job_id=...)` re-identification appears outside this module and a short, commented
+list of exact files, or when a model-family name appears here. Known and deliberate: PromptPack
+applies the model compile policy once per configuration shape (nested per prepared prompt, flat
+per record), so "once per record" does not hold for that route; unifying the two applications
+is an open design decision recorded in `docs/work_packages/P4-2_unified_njr_compiler_migration.md`.
+
 ## 4. NormalizedJobRecord
 
 ### 4.1 Responsibility
