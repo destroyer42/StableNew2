@@ -18,6 +18,8 @@ SUGGESTION_SCHEMA_ID = "ai_assist.suggestion/1"
 MAX_TEXT_CHARS = 8000
 MAX_LIST_ITEMS = 256
 MAX_NAME_CHARS = 200
+#: A model's display label (its id plus the policy's display name) as stated to the model for a plan request (AI-211).
+MAX_LABEL_CHARS = 400
 MAX_REFUSAL_REASON_CHARS = 400
 #: Planning bounds (P3). Exceeding any of them is a rejection, never a truncation.
 MAX_GOAL_CHARS = 1000
@@ -111,6 +113,12 @@ class AssistRequest:
     #: ``PLAN_PROPOSAL`` only: the operator's goal in their own words (data for the model) and the closed stage list.
     goal_text: str = ""
     allowed_stages: tuple[str, ...] = ()
+    #: ``PLAN_PROPOSAL`` only (AI-211): the model the operator has selected in Pipeline, empty when none is usable. It is
+    #: exactly one of ``allowed_targets``; the label and the stages its policy supports (a subset of ``allowed_stages``)
+    #: come from the same closed-list authority and are stated to the model. Never derived from the goal text.
+    current_target: str = ""
+    current_target_label: str = ""
+    current_target_stages: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request_id, str) or not _REQUEST_ID.match(self.request_id):
@@ -146,12 +154,35 @@ class AssistRequest:
                 )
         elif self.goal_text or self.allowed_stages:
             raise ValueError("goal_text and allowed_stages belong to plan requests only")
+        self._check_current_target()
         if self.kind is SuggestionKind.PROMPT_REWRITE and not self.positive_text.strip():
             raise ValueError("a rewrite request needs a positive prompt")
         if self.kind is SuggestionKind.TARGET_FIT_ADVICE and not self.allowed_targets:
             raise ValueError("target advice needs a closed list of targets")
         if self.kind is SuggestionKind.WORKFLOW_CHOICE and not self.allowed_workflows:
             raise ValueError("workflow advice needs a closed list of workflows")
+
+    def _check_current_target(self) -> None:
+        stages = self.current_target_stages
+        if not isinstance(self.current_target, str) or not isinstance(
+            self.current_target_label, str
+        ):
+            raise ValueError("current_target and its label must be text")
+        if not isinstance(stages, tuple):
+            raise ValueError("current_target_stages must be a tuple")
+        if not (self.current_target or self.current_target_label or stages):
+            return
+        if self.kind is not SuggestionKind.PLAN_PROPOSAL:
+            raise ValueError("current_target belongs to plan requests only")
+        if not self.current_target:
+            raise ValueError("a target label or stages need a current_target")
+        if self.current_target not in self.allowed_targets:
+            raise ValueError("current_target must be one of allowed_targets")
+        label = self.current_target_label
+        if len(label) > MAX_LABEL_CHARS or not label.isprintable():
+            raise ValueError("current_target_label must be short printable text")
+        if not stages or not all(s in self.allowed_stages and s != VIDEO_STAGE for s in stages):
+            raise ValueError("current_target_stages must be image stages from allowed_stages")
 
     def input_chars(self) -> int:
         return len(self.positive_text) + len(self.negative_text) + len(self.goal_text)
@@ -169,6 +200,16 @@ class AssistRequest:
                 "|".join(self.allowed_workflows),
                 self.goal_text,
                 "|".join(self.allowed_stages),
+                # Appended only when a plan request carries a selection, so every other request keeps its digest (AI-211).
+                *(
+                    (
+                        "current:" + self.current_target,
+                        self.current_target_label,
+                        "|".join(self.current_target_stages),
+                    )
+                    if self.current_target
+                    else ()
+                ),
             )
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
@@ -268,6 +309,7 @@ __all__ = [
     "CHANGE_CODES",
     "CONTENT_CLASSES",
     "MAX_GOAL_CHARS",
+    "MAX_LABEL_CHARS",
     "MAX_LIST_ITEMS",
     "MAX_NAME_CHARS",
     "MAX_PLAN_STEPS",

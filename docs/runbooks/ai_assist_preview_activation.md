@@ -81,6 +81,23 @@ running, then press **Suggest... (Preview)**, choose **Rewrite Prompt**, review 
 compatibility, and press **Accept rewrite** only if you want it. Accept edits the editing buffer only; save and Preview
 as usual.
 
+## 6. Advise plan (optional)
+
+In the same dialog, type a goal in your own words and press **Advise plan**. The answer is advice, not a plan: it creates no
+job, changes no prompt or setting and queues nothing. Each step is judged by StableNew's own checks, not by the model.
+
+The request is anchored to the model selected in **Pipeline** when that model is in the plan's model list (installed, not
+blocked, not hidden by the visibility mode, with a verified policy). The line above the result says what was sent:
+
+- `Planning for: <model> (selected in Pipeline)`: the model was told to plan with it unless your goal names a different
+  allowed model, and to use only the stages that model supports. A step that uses another model carries the note "This step
+  uses a model other than the one selected in Pipeline." (a note, not a verdict).
+- `The model selected in Pipeline is not available for planning ... so this advice is not anchored to your selection.`: the
+  selection is not in the list (for example an ordinary checkpoint with no verified policy), so the model chose from the
+  list alone. Change the selection to a listed model, or treat the steps as general advice.
+
+Only the model id, its label and the stages it supports are added to the request; your prompt, PromptPack and matrix are not.
+
 ## What each message means
 
 | Where | Message or code | Meaning and next step |

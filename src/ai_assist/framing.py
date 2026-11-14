@@ -54,6 +54,13 @@ _INSTRUCTIONS = {
 }
 
 
+#: Added to a plan request's prompt only when the operator has a usable model selected (AI-211, decision D21).
+PLAN_SELECTED_MODEL_RULE = (
+    "Plan with the currently selected model unless the goal explicitly names a different allowed model. "
+    "For image steps use only stages that the selected model supports; a video step names an allowed workflow instead."
+)
+
+
 def _check_text(label: str, text: str) -> None:
     for marker in (BEGIN_MARKER, END_MARKER, *_SECTION_MARKERS):
         if marker in text:
@@ -74,6 +81,18 @@ def _authored_block(request: AssistRequest) -> list[str]:
         request.negative_text,
         END_MARKER,
         "",
+    ]
+
+
+def _selected_model_lines(request: AssistRequest) -> list[str]:
+    """The operator's current model for a plan request (AI-211). Plan requests only; other kinds never reach this."""
+
+    label = request.current_target_label or request.current_target
+    _check_text("current_target_label", label)
+    return [
+        f"Currently selected model: {label}. Use this id for it: {request.current_target}. "
+        f"Stages it supports: {' | '.join(request.current_target_stages)}.",
+        PLAN_SELECTED_MODEL_RULE,
     ]
 
 
@@ -98,6 +117,8 @@ def render_prompt(request: AssistRequest) -> str:
         lines.append("Allowed workflows: " + " | ".join(request.allowed_workflows))
     if request.allowed_stages:
         lines.append("Allowed stages: " + " | ".join(request.allowed_stages))
+    if request.kind is SuggestionKind.PLAN_PROPOSAL and request.current_target:
+        lines += _selected_model_lines(request)
     lines += [
         "If you cannot or will not help, reply "
         + json.dumps({"schema": SUGGESTION_SCHEMA_ID, "status": "refused", "refusal_reason": "..."})
@@ -190,6 +211,7 @@ __all__ = [
     "BEGIN_MARKER",
     "END_MARKER",
     "FRAME_VERSION",
+    "PLAN_SELECTED_MODEL_RULE",
     "FramingError",
     "build_json_schema",
     "render_prompt",

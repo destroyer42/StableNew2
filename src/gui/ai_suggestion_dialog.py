@@ -195,11 +195,11 @@ class AiSuggestionDialog(tk.Toplevel):
         self.clipboard_clear()
         self.clipboard_append(text)
 
-    def running_plan(self) -> None:
+    def running_plan(self, planning_for: str = "") -> None:
         self._clear_copy_buttons()
         self.clear_runtime_detail()
         self.status("Advise plan: request running…")
-        self._text("")
+        self._text(planning_for)
         self._set_requests(True)
         self._set_advise(True)
         self.accept_button.state(["disabled"])

@@ -695,3 +695,70 @@ def test_runtime_detail_is_hidden_until_asked_labelled_raw_and_cleared_on_new_re
     j.flow.request(SuggestionKind.PROMPT_REWRITE)  # a new request clears the previous detail
     assert dialog.detail_view.get("1.0", "end").strip() == ""
     assert dialog.detail_button.instate(["disabled"])
+
+
+# -- AI-211: the dialog shows what the plan request was anchored to ---------------------------------------------------------
+
+
+def _anchored_snapshot():
+    from dataclasses import replace
+
+    return replace(
+        _plan_snapshot(),
+        target_policy_id="sdxl",
+        current_target=SDXL,
+        current_target_label="SDXL",
+        current_target_stages=("txt2img", "img2img"),
+    )
+
+
+def test_plan_dialog_shows_the_selected_model_while_running_and_in_the_result(journey):
+    j = journey
+    j.flow.bind(j.owner, targets=lambda: tuple(j.targets), plan=_anchored_snapshot)
+    dialog = j.flow.open()
+    dialog.goal_var.set("more variety in poses")
+    dialog.advise_button.invoke()
+    request = j.service.requests[-1]
+    assert request.current_target == SDXL and request.target_policy_id == "sdxl"
+    assert request.current_target_stages == ("txt2img", "img2img")
+    line = "Planning for: SDXL (selected in Pipeline)"
+    assert line in _dialog_text(dialog)  # visible while the request runs
+    j.service.callbacks[-1](_plan_outcome(request))
+    j.scheduled.pop(0)()
+    text = _dialog_text(dialog)
+    assert line in text and text.index(line) < text.index("[valid]")
+
+
+def test_plan_dialog_says_so_when_no_selection_was_sent(journey):
+    from src.gui_v2.ai_plan_advice import UNANCHORED_NOTICE
+
+    j = journey
+    _bind_plan(j)  # the plain snapshot: nothing selected / not allowed
+    dialog = j.flow.open()
+    dialog.goal_var.set("anything")
+    dialog.advise_button.invoke()
+    request = j.service.requests[-1]
+    assert request.current_target == "" and request.target_policy_id == ""
+    assert UNANCHORED_NOTICE in _dialog_text(dialog)
+    j.service.callbacks[-1](_plan_outcome(request))
+    j.scheduled.pop(0)()
+    text = _dialog_text(dialog)
+    assert UNANCHORED_NOTICE in text and text.index(UNANCHORED_NOTICE) < text.index("[valid]")
+
+
+def test_plan_failures_still_show_what_was_sent_and_stay_read_only(journey):
+    j = journey
+    j.flow.bind(j.owner, targets=lambda: tuple(j.targets), plan=_anchored_snapshot)
+    before = copy.deepcopy(j.frame.workspace_state.current_pack)
+    dialog = j.flow.open()
+    dialog.goal_var.set("go")
+    dialog.advise_button.invoke()
+    request = j.service.requests[-1]
+    j.service.callbacks[-1](
+        AssistOutcome(OutcomeCode.REFUSED_BY_MODEL, request.request_id, reason="secret")
+    )
+    j.scheduled.pop(0)()
+    text = _dialog_text(dialog)
+    assert "Planning for: SDXL (selected in Pipeline)" in text and "secret" not in text
+    assert dialog._copy_buttons == [] and dialog.accept_button.instate(["disabled"])
+    assert j.frame.workspace_state.current_pack == before and not j.frame.workspace_state.dirty
