@@ -26,19 +26,18 @@ from src.image_backends.image_backend_types import normalize_image_backend_optio
 from src.pipeline.animatediff_retirement import ANIMATEDIFF_STAGE, AnimateDiffRetiredError
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.job_models_v2 import (
-    CURRENT_NJR_SCHEMA_VERSION,
     ImageWorkloadSpec,
     LearningJobContext,
     NJRProvenance,
     NormalizedJobRecord,
     OutputPlan,
     SourceDescriptor,
-    SourceKind,
     StageConfig,
     VideoWorkloadSpec,
     WorkloadKind,
 )
 from src.pipeline.klein_edit_reprocess import is_klein_edit_item, prepare_klein_edit_item
+from src.pipeline.njr_compiler import NjrDraft, PolicyState, compile_njr, reprocess_source_kind
 
 REPROCESS_SCHEMA_VERSION = "stablenew.reprocess.v2.6"
 IMAGE_EDIT_SCHEMA_VERSION = "stablenew.image_edit.v2.6"
@@ -298,19 +297,6 @@ class ReprocessJobBuilder:
         metadata = self._merge_nested_dicts(base_metadata, extra_metadata or {})
         video_stage_names = {"svd_native", "video_workflow", "movie_assembly"}
         is_video = bool(set(stages) & video_stage_names)
-        source_aliases = {
-            "image_edit": SourceKind.IMAGE_EDIT,
-            "learning": SourceKind.LEARNING,
-            "history": SourceKind.HISTORY_REPLAY,
-            "history_replay": SourceKind.HISTORY_REPLAY,
-            "video": SourceKind.VIDEO_WORKFLOW,
-            "video_workflow": SourceKind.VIDEO_WORKFLOW,
-        }
-        source_kind = (
-            SourceKind.VIDEO_WORKFLOW
-            if is_video
-            else source_aliases.get(str(source).lower(), SourceKind.REPROCESS)
-        )
         workload_type = WorkloadKind.VIDEO if is_video else WorkloadKind.IMAGE
         workload_common = {
             "positive_prompt": prompt,
@@ -338,20 +324,24 @@ class ReprocessJobBuilder:
                 ),
             )
         )
-        return NormalizedJobRecord(
-            schema_version=CURRENT_NJR_SCHEMA_VERSION,
-            job_id=self._id_fn(),
-            workload_kind=workload_type,
-            source=SourceDescriptor(
-                kind=source_kind,
-                display_name=pack_name,
-                parent_job_id=metadata.get("parent_job_id"),
-                parent_artifact_id=metadata.get("parent_artifact_id"),
-            ),
-            workload=workload,
-            stages=tuple(stage_chain),
-            output_plan=OutputPlan(base_output_dir=output_dir),
-            provenance=NJRProvenance(metadata=metadata, learning_context=learning_context),
+        # No construction-time checks: admission is the caller's (reprocess_admission, the edit services), as before.
+        return compile_njr(
+            NjrDraft(
+                job_id=self._id_fn(),
+                workload_kind=workload_type,
+                source=SourceDescriptor(
+                    kind=reprocess_source_kind(source, is_video=is_video),
+                    display_name=pack_name,
+                    parent_job_id=metadata.get("parent_job_id"),
+                    parent_artifact_id=metadata.get("parent_artifact_id"),
+                ),
+                workload=workload,
+                stages=tuple(stage_chain),
+                output_plan=OutputPlan(base_output_dir=output_dir),
+                provenance=NJRProvenance(metadata=metadata, learning_context=learning_context),
+                policy_state=PolicyState.EFFECTIVE,
+                checks=(),
+            )
         )
 
     @staticmethod
