@@ -130,6 +130,30 @@ def normalize_matrix_slot_name(name: str | None) -> str:
     return _SLOT_NAME_NORMALIZER.sub("", text)
 
 
+def matrix_values_text(values: list[Any] | tuple[Any, ...]) -> str:
+    """A matrix slot's Values entry text in the Matrix editor: the values joined with ``,``."""
+    return ",".join(str(value) for value in values)
+
+
+def parse_matrix_values_text(text: str) -> list[str]:
+    """What the Matrix editor stores for a typed Values entry: split on ``,``, each value stripped, empties dropped."""
+    return [value.strip() for value in text.split(",") if value.strip()]
+
+
+def matrix_slot_round_trips(name: Any, values: list[Any] | tuple[Any, ...]) -> bool:
+    """Whether an edit of this slot's row in the Matrix editor leaves its name and every existing value unchanged.
+
+    The editor re-parses the whole row, so a value holding a comma would be split, a non-text value turned into text and
+    a name with surrounding spaces stripped. Only a slot that survives that round trip can take an added value safely.
+    """
+    return (
+        isinstance(name, str)
+        and name == name.strip()
+        and all(isinstance(value, str) for value in values)
+        and parse_matrix_values_text(matrix_values_text(values)) == list(values)
+    )
+
+
 def resolve_matrix_slot_value(
     token_name: str,
     slots: dict[str, str] | None,

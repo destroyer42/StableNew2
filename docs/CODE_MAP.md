@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-724 of 879 modules have a docstring.
+725 of 880 modules have a docstring.
 
 ## src/
 
@@ -486,6 +486,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 
 - `adaptation_notice.py`: Compact, content-free adaptation notice for the job Preview (PR-IMG-MODELS-159)
 - `ai_plan_advice.py`: Toolkit-neutral advisory planning: closed-list facts, the deterministic judge and the read-only review model…
+- `ai_slot_variety.py`: Toolkit-neutral slot variety (AI-212): the matrix snapshot, the deterministic per-value judge and the review…
 - `ai_suggestion_view.py`: Toolkit-neutral AI suggestion review: immutable source identity and content-free outcome copy
 - `asset_readiness_view.py`: Toolkit-neutral session and row projection for the read-only asset readiness view (PR-ASSET-130)
 - `controlnet_guidance.py`: Toolkit-neutral guidance and local readiness for ordered ControlNet units (PR-GUI-UX-550)

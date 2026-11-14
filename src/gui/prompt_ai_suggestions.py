@@ -24,6 +24,16 @@ from src.gui_v2.ai_plan_advice import (
     plan_review,
     unavailable_plan_review,
 )
+from src.gui_v2.ai_slot_variety import (
+    REASON_TEXT,
+    VarietyContext,
+    VarietyReview,
+    build_variety_request,
+    judge_variety,
+    matrix_state,
+    unavailable_variety_review,
+    variety_review,
+)
 from src.gui_v2.ai_suggestion_view import (
     KIND_LABELS,
     OUTCOME_TEXT,
@@ -53,6 +63,12 @@ class PromptAiSuggestions:
         self._plan_source: Callable[[], PlanSnapshot] | None = None
         self._plan: PlanSnapshot | None = None
         self._plan_request: AssistRequest | None = None
+        # Slot variety (AI-212): the request, the matrix state it was built from (plus values added since) and the
+        # validated suggestion. All in memory only; cleared on close, a new request and any stale context.
+        self._variety: VarietyContext | None = None
+        self._variety_request: AssistRequest | None = None
+        self._variety_suggestion: Any = None
+        self._variety_added: set[int] = set()
         self.outcome: AssistOutcome | None = None
         self._active_id: str | None = None
         self._closed = False
@@ -248,6 +264,9 @@ class PromptAiSuggestions:
             trust_label=self._trust_label(),
             on_advise=self.advise if self._plan_source is not None else None,
             advise_problem=self._advise_problem(),
+            on_variety=self.suggest_variety,
+            on_add_value=self.add_variety_value,
+            variety_problem=self._variety_problem(),
         )
         return self.dialog
 
@@ -271,6 +290,7 @@ class PromptAiSuggestions:
             )
             return
         self.snapshot, self.outcome, self._accepted = snapshot, None, False
+        self._drop_variety()
         self._review_cancelled = False
         self._active_id = snapshot.request.request_id
         self.dialog.running(kind)
@@ -330,6 +350,7 @@ class PromptAiSuggestions:
             )
             return
         self._plan, self._plan_request, self.snapshot, self.outcome = plan, request, None, None
+        self._drop_variety()
         self._review_cancelled = False
         self._active_id = request.request_id
         dialog.running_plan()
@@ -400,6 +421,233 @@ class PromptAiSuggestions:
         dialog.show_plan(review)
         dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
         self.refresh()
+
+    # -- slot variety (AI-212): proposals for existing matrix slots, each added only by an explicit per-value press ------
+    # The only mutation is ``MatrixTabPanel.append_slot_value``, the Matrix editor's own edit path. Nothing here saves,
+    # previews, compiles or queues, creates a slot, or touches an existing value or the prompt sentence.
+
+    def _capture_matrix(self) -> VarietyContext:
+        tab = self.tab
+        if self._closed or self.owner is None or self.owner.closed:
+            raise ContextUnavailable("AI Assist is unavailable during shutdown.")
+        pack = tab.workspace_state.current_pack
+        if pack is None:
+            raise ContextUnavailable("Select a PromptPack first.")
+        matrix = tab.workspace_state.get_matrix_config()
+        return VarietyContext(id(pack), id(matrix), matrix_state(matrix.slots), self._mode())
+
+    def _current_variety(self) -> VarietyContext | None:
+        try:
+            return self._capture_matrix()
+        except Exception:  # noqa: BLE001 - an unreadable source invalidates acceptance
+            return None
+
+    def _variety_context(self) -> VarietyContext:
+        context = self._capture_matrix()
+        if not context.slots:
+            raise ContextUnavailable(
+                "This pack has no matrix slots. Add slots in the Matrix tab first."
+            )
+        if not any(slot.editable for slot in context.slots):
+            raise ContextUnavailable(
+                "No matrix slot can take a new value: each needs a unique name and text values without commas."
+            )
+        return context
+
+    def _variety_problem(self) -> str:
+        try:
+            self._variety_context()
+            return ""
+        except ContextUnavailable as exc:
+            return str(exc)
+        except Exception:  # noqa: BLE001 - fixed copy only
+            return "The matrix slots could not be read safely."
+
+    def _variety_visible(self) -> Any:
+        resolver = ContentVisibilityResolver(self._mode())
+        return lambda text: resolver.is_visible({"positive_prompt": text})
+
+    def _drop_variety(self) -> None:
+        self._variety = self._variety_request = self._variety_suggestion = None
+        self._variety_added = set()
+
+    def suggest_variety(self, goal: str) -> None:
+        dialog = self.dialog
+        if dialog is None or self._active_id is not None or self.owner is None:
+            return
+        code, explanation = self.owner.availability()
+        if code is not None:
+            dialog.show_variety(
+                unavailable_variety_review(explanation, trust_label=self._trust_label())
+            )
+            return
+        text = goal.strip()
+        if not text:
+            dialog.show_variety(unavailable_variety_review("Type a goal in your own words first."))
+            return
+        try:
+            context = self._variety_context()
+            resolver = ContentVisibilityResolver(self._mode())
+            offered = [slot for slot in context.slots if slot.editable]
+            subject = {
+                "name": self.tab.workspace_state.get_current_pack_name(),
+                "positive_prompt": "\n".join(
+                    [text, *(f"{s.name}: {', '.join(map(str, s.values))}" for s in offered)]
+                ),
+            }
+            if not resolver.is_visible(subject):
+                raise ContextUnavailable(
+                    "This authored content is hidden by the current visibility mode."
+                )
+            request = build_variety_request(
+                uuid4().hex,
+                text,
+                context.slots,
+                content_class="sensitive"
+                if resolver.classify_item(subject).rating == "nsfw"
+                else "standard",
+            )
+        except ContextUnavailable as exc:
+            dialog.show_variety(unavailable_variety_review(str(exc)))
+            return
+        except ValueError:
+            dialog.show_variety(
+                unavailable_variety_review(
+                    "The goal or the matrix slots do not meet the request limits."
+                )
+            )
+            return
+        except Exception:  # noqa: BLE001 - no raw context in UI errors
+            dialog.show_variety(
+                unavailable_variety_review("The matrix slots could not be read safely.")
+            )
+            return
+        self._drop_variety()
+        self._variety, self._variety_request = context, request
+        self.snapshot = self.outcome = None
+        self._review_cancelled = False
+        self._active_id = request.request_id
+        dialog.running_variety()
+        self.refresh()
+        result = self.owner.submit(request, self._variety_completed)
+        if not result.accepted:
+            self._variety_completed(
+                result.outcome or AssistOutcome(OutcomeCode.UNAVAILABLE, request.request_id)
+            )
+
+    def _variety_review(self, context: VarietyContext, trust: str) -> VarietyReview:
+        visible = self._variety_visible()
+        rows = judge_variety(self._variety_suggestion, context.slots, is_visible=visible)
+        return variety_review(
+            rows,
+            self._variety_suggestion,
+            is_visible=visible,
+            trust_label=trust,
+            added=frozenset(self._variety_added),
+            excluded_count=context.excluded_count,
+        )
+
+    def _variety_trust(self) -> str:
+        return self.dialog.trust_label if self.dialog is not None else self._trust_label()
+
+    def _variety_completed(self, outcome: AssistOutcome) -> None:
+        # Queued GUI delivery (or a synchronous admission refusal). Same lifetime and identity checks as ``_completed``.
+        context, request, dialog = self._variety, self._variety_request, self.dialog
+        if (
+            self._closed
+            or self.owner is None
+            or self.owner.closed
+            or context is None
+            or request is None
+            or dialog is None
+            or self._active_id != outcome.request_id
+            or request.request_id != outcome.request_id
+        ):
+            return
+        self._active_id = None
+        trust = (
+            PREVIEW_LABEL if outcome.details.get("trust_tier") == "preview" else self._trust_label()
+        )
+        if trust:
+            dialog.set_trust_label(trust)
+        if self._review_cancelled:
+            self._drop_variety()
+            dialog.show_variety(
+                unavailable_variety_review(
+                    "Request cancelled. Nothing was added.", trust_label=trust
+                )
+            )
+            self.refresh()
+            return
+        suggestion = checked_suggestion(outcome, request) if outcome.ok else None
+        if suggestion is None:
+            self._drop_variety()
+            code = outcome.code if not outcome.ok else OutcomeCode.MALFORMED
+            dialog.show_variety(unavailable_variety_review(OUTCOME_TEXT[code], trust_label=trust))
+            dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
+            self.refresh()
+            return
+        if self._current_variety() != context:
+            # The pack or its slots changed while the model ran: never offer values judged against another state.
+            self._drop_variety()
+            dialog.clear_sensitive()
+            self.refresh()
+            return
+        self._variety_suggestion = suggestion
+        dialog.show_variety(self._variety_review(context, trust))
+        dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
+        self.refresh()
+
+    def add_variety_value(self, row_index: int) -> None:
+        """Add one offered value to its slot through the Matrix editor's own edit path, after a full stale check."""
+
+        context, suggestion, dialog = self._variety, self._variety_suggestion, self.dialog
+        if (
+            context is None
+            or suggestion is None
+            or dialog is None
+            or self._active_id is not None
+            or row_index in self._variety_added
+        ):
+            return
+        current = self._current_variety()
+        if current is None or current != context:
+            self._drop_variety()
+            dialog.clear_sensitive()
+            dialog.status(
+                "The pack or its matrix slots changed since the request. Nothing was added; request again."
+            )
+            return
+        rows = judge_variety(suggestion, current.slots, is_visible=self._variety_visible())
+        row = rows[row_index] if 0 <= row_index < len(rows) else None
+        trust = self._variety_trust()
+        if row is None or not row.offered:
+            dialog.show_variety(self._variety_review(current, trust))
+            if row is not None:
+                dialog.status(f"That value cannot be added. {REASON_TEXT[row.reason]}")
+            return
+        index = next(i for i, slot in enumerate(current.slots) if slot.name == row.slot)
+        expected = current.with_value_added(index, row.value)
+        if not self.tab.matrix_tab_panel.append_slot_value(index, row.value):
+            dialog.status(
+                "The Matrix tab has an unfinished edit in that slot. Finish it, then add the value again."
+            )
+            return
+        after = self._current_variety()
+        if after is None or after != expected:
+            # Fail closed: the edit did not produce exactly the one appended value. Offer nothing further.
+            self._drop_variety()
+            dialog.clear_sensitive()
+            dialog.status(
+                "The matrix did not change as expected. Check the Matrix tab, then request again."
+            )
+            return
+        self._variety = after
+        self._variety_added.add(row_index)
+        dialog.show_variety(self._variety_review(after, trust))
+        dialog.status(
+            f"Added to slot {row.slot}. The pack is modified and unsaved; save it through the ordinary workflow."
+        )
 
     def _current(self, snapshot: SuggestionSnapshot) -> bool:
         try:
@@ -566,6 +814,7 @@ class PromptAiSuggestions:
         self.dialog = None
         self.snapshot = self.outcome = None
         self._plan = self._plan_request = None
+        self._drop_variety()
         self._active_id = None
 
     def destroy(self) -> None:
@@ -579,3 +828,4 @@ class PromptAiSuggestions:
             self._poll_id = None
         self.snapshot = self.outcome = None
         self._plan = self._plan_request = None
+        self._drop_variety()
