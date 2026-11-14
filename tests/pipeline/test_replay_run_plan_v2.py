@@ -6,7 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import (
+    NormalizedJobRecord,
+    SourceDescriptor,
+    SourceKind,
+    StageConfig,
+)
 from src.pipeline.replay_engine import ReplayEngine
 from src.pipeline.run_plan import build_run_plan_from_njr
 from src.queue.job_model import Job, StageCheckpoint
@@ -110,6 +115,56 @@ def test_replay_engine_resumes_from_last_valid_checkpoint(tmp_path: Path) -> Non
     assert resumed.source.parent_job_id == njr.job_id
     assert resumed.start_stage == "upscale"
     assert resumed.input_image_paths == (str(checkpoint_file),)
+
+
+def test_a_resumed_record_is_derived_with_the_exact_pre_core_lineage(tmp_path: Path) -> None:
+    """P4-2F: the checkpoint resume (V3) derives through the core; its record keeps the lineage it always had.
+
+    The lineage carries the parent id and ``original_source_kind`` only: the parent's display name and artifact id are
+    not inherited, and the metadata gains the two resume keys on top of the parent's.
+    """
+
+    checkpoint_file = tmp_path / "adetailer.png"
+    checkpoint_file.write_bytes(b"png")
+    njr = _make_njr()
+    njr = replace(
+        njr,
+        source=replace(njr.source, display_name="Parent label"),
+        stages=(
+            StageConfig(stage_type="txt2img", enabled=True),
+            StageConfig(stage_type="adetailer", enabled=True),
+            StageConfig(stage_type="upscale", enabled=True),
+        ),
+    )
+    job = Job(job_id=njr.job_id, prompt_pack_id="test-pack")
+    job.execution_metadata.stage_checkpoints.append(
+        StageCheckpoint(stage_name="adetailer", output_paths=[str(checkpoint_file)])
+    )
+    runner = StubRunner()
+
+    ReplayEngine(runner, cancel_token=None).replay_njr(njr, job=job)
+
+    resumed = runner.calls[0]["njr"]
+    assert resumed.source == SourceDescriptor(
+        kind=SourceKind.HISTORY_REPLAY,
+        parent_job_id=njr.job_id,
+        metadata={"original_source_kind": njr.source.kind.value},
+    )
+    assert resumed.source.display_name is None
+    assert len(resumed.job_id) == 32
+    assert dict(resumed.provenance.metadata) == {
+        **dict(njr.provenance.metadata),
+        "resumed_from_stage": "adetailer",
+        "resume_input_count": 1,
+    }
+    unchanged = replace(
+        resumed,
+        job_id=njr.job_id,
+        source=njr.source,
+        workload=njr.workload,
+        provenance=njr.provenance,
+    )
+    assert unchanged.to_dict() == njr.to_dict()
 
 
 def test_replay_engine_checkpoint_callback_updates_job_metadata() -> None:

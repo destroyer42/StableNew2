@@ -948,41 +948,6 @@ class ReprocessJobBuilder:
             )
         return str(value) if value is not None else None
 
-    def build_reprocess_jobs_batched(
-        self,
-        input_image_paths: list[str | Path],
-        stages: list[
-            Literal[
-                "img2img", "adetailer", "upscale", "svd_native", "video_workflow", "movie_assembly"
-            ]
-        ],
-        batch_size: int = 10,
-        **kwargs,
-    ) -> list[NormalizedJobRecord]:
-        """Build multiple reprocessing jobs, batching input images.
-
-        Useful for processing large numbers of images without overwhelming the queue.
-
-        Args:
-            input_image_paths: All input image paths.
-            stages: Stages to run on each batch.
-            batch_size: Maximum images per job.
-            **kwargs: Additional args passed to build_reprocess_job.
-
-        Returns:
-            List of NormalizedJobRecords, one per batch.
-        """
-        jobs = []
-        for i in range(0, len(input_image_paths), batch_size):
-            batch = input_image_paths[i : i + batch_size]
-            job = self.build_reprocess_job(
-                input_image_paths=batch,
-                stages=stages,
-                **kwargs,
-            )
-            jobs.append(job)
-        return jobs
-
     def build_grouped_reprocess_jobs(
         self,
         *,
@@ -1129,64 +1094,3 @@ def extract_reprocess_output_paths(record: Any, result: Any) -> list[str]:
             paths = paths[-input_count:]
         return paths
     return []
-
-
-def create_adetailer_fixup_jobs(
-    image_folder: str | Path,
-    output_dir: str = "output",
-    include_upscale: bool = True,
-    adetailer_config: dict[str, Any] | None = None,
-    upscale_config: dict[str, Any] | None = None,
-    batch_size: int = 10,
-) -> list[NormalizedJobRecord]:
-    """Convenience function to create ADetailer fix-up jobs for a folder of images.
-
-    Scans a folder for image files and creates reprocessing jobs to run them
-    through ADetailer (and optionally upscale).
-
-    Args:
-        image_folder: Folder containing images to reprocess.
-        output_dir: Where to save processed images.
-        include_upscale: Whether to also run upscale after adetailer.
-        adetailer_config: ADetailer settings (model, confidence, etc.).
-        upscale_config: Upscale settings (upscaler, scale, etc.).
-        batch_size: Images per job.
-
-    Returns:
-        List of reprocessing jobs ready for queue.
-    """
-    folder = Path(image_folder)
-    if not folder.exists():
-        raise ValueError(f"Image folder not found: {image_folder}")
-
-    # Find all image files
-    image_extensions = {".png", ".jpg", ".jpeg", ".webp"}
-    image_files = [
-        f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in image_extensions
-    ]
-
-    if not image_files:
-        raise ValueError(f"No images found in: {image_folder}")
-
-    # Build config
-    config = {}
-    if adetailer_config:
-        config["adetailer"] = adetailer_config
-    if upscale_config:
-        config["upscale"] = upscale_config
-
-    # Determine stages
-    stages: list[Literal["img2img", "adetailer", "upscale"]] = ["adetailer"]
-    if include_upscale:
-        stages.append("upscale")
-
-    # Create jobs
-    builder = ReprocessJobBuilder()
-    return builder.build_reprocess_jobs_batched(
-        input_image_paths=[str(f) for f in sorted(image_files)],
-        stages=stages,
-        batch_size=batch_size,
-        config=config,
-        output_dir=output_dir,
-        pack_name=f"Reprocess_{folder.name}",
-    )

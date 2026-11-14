@@ -495,6 +495,61 @@ Risk: high relative to the others. Rollback: revert one commit; nothing persiste
 
 ## P4-2F — Guard and cleanup
 
+### Status (2026-11-14): implemented on `refactor/p4-2f-njr-guard-cleanup`
+
+- **V3 moved.** `replay_engine._build_resumed_record` (checkpoint resume) now calls `derive_njr` with `mint_job_id()` and
+  `history_lineage(njr, display_name=None)`; its workload and provenance edits are unchanged. No core interface changed
+  and `njr_compiler.py` was not edited. `test_a_resumed_record_is_derived_with_the_exact_pre_core_lineage` pins the
+  lineage (parent id and `original_source_kind` only; the parent's display name and artifact id are not inherited), the
+  resume metadata and that nothing else differs; it passes on the unchanged pre-F code too.
+- **Guard.** `tests/system/test_njr_construction_guard.py` (the repository's architecture-enforcement home; there is no
+  `tests/architecture/`) replaced the per-file ratchet in `tests/pipeline/test_njr_compiler.py`. It scans `src`, `tools`
+  and `scripts` with `ast` and fails on three shapes outside the core: a `NormalizedJobRecord(...)` call (also under an
+  import alias or as `module.NormalizedJobRecord`), `dataclasses.replace(<any>, job_id=...)`, and
+  `dataclasses.replace(<value named record, njr or parent>, <workload|stages|output_plan|provenance|...>=...)`. It also
+  keeps the model-family check on the core. Allow-lists are exact file paths with an exact site count and a reason, so a
+  second site in an allowed file fails and so does an entry whose site is gone. The tests prove it: synthetic trees with
+  a deliberately added site fail, the clean tree passes, and a probe file added to `src/` makes the real scan fail.
+  Limits: it cannot see `type(record)(...)`, `cls(...)` (only `NormalizedJobRecord.from_dict` does that, in the read
+  path) or a `replace` on a differently named value; it is a tripwire, not a proof.
+- **Dead code removed.** `ReprocessJobBuilder.build_reprocess_jobs_batched` and `create_adetailer_fixup_jobs`: a search of
+  every tracked file (`src`, `tests`, `tools`, `scripts`, docs, configuration) found only their definitions (the second
+  called the first) and two documentation mentions of this plan. Nothing else became dead through A to F that could be
+  shown to have no caller, so nothing else was removed.
+- **Classification** of every site that constructs a record or rebuilds one with `replace` outside `njr_compiler.py`
+  (verified on `3521d1ec`; the pre-F line numbers were the ones in the hand-off):
+
+  | Site | Route | What it does | Decision |
+  |---|---|---|---|
+  | `njr_compiler.py` `compile_njr` / `derive_njr` | all | the single assembly and derivation boundary | the core |
+  | `njr_core_v26.py` `migrate_legacy_njr` | read path | lifts a pre-2.6 payload to a record | allowed: read/migration path (`from_dict` also builds with `cls(`) |
+  | `replay_engine.py` `_build_resumed_record` (V3) | queue checkpoint resume | new identity, history lineage, new inputs | **moved to the core** (`derive_njr`) |
+  | `replay_njr_compiler.py` `_without_run_directives`, `_with_run_directives` | history replay, sequence resume | prepare the parent's stages and config before `derive_njr` mints the identity | allowed: the copy keeps the parent's `job_id` and is never submitted; moving it needs a new core interface |
+  | `learning/qualification_batch.py` `replace(new, job_id=old.job_id)` | Learning admission | compares a fresh compile with the stored record's `to_dict()` | allowed, not a construction: the copy is never kept, queued or returned |
+  | `learning_controller_services/embedding_experiment.py`, `prompt_slot.py` `replace(record, provenance=...)` | Learning | add the declared embeddings to the record `materialize_njr` just built | allowed: same identity, no new job; moving it means changing `materialize_njr`, which is outside F |
+  | `tools/qualification/img_forge_100/run.py` | operator qualification | hand-built case record | allowed: operator-only, named exception in the plan |
+  | `tools/acceptance/img_116_*`, `img_156_*`, `img_forge_100_*`, `img_forge_120_*` `replace(njr, output_plan=...)` | operator acceptance | redirect the output directory (`img_156` also names the record after the attempt) | allowed: operator-only |
+  | `job_builder_v2.py`, `queue/batch_projection.py`, `api/webui_identity_attestation.py`, `video/storyboard_history.py` and every other `replace` | various | copy a draft, a queue projection or another dataclass | not a record rebuild |
+  | `tests/**` | tests | fixtures | out of scope; test code builds records freely |
+  | `JobExecutionController.replay` (X15), the CLI's direct run (X14) | execution entries | do not build a record | excluded (OD-9) |
+
+- **Left deliberately.** Everything marked allowed above, X1, X6, X7, X14, X15, `STATUS.md` decision 4, and the generic
+  record's `SourceKind.CLI`. No golden file, refusal baseline or snapshot changed and `STABLENEW_UPDATE_GOLDEN` was not set.
+- **Open post-F design decision (unchanged from E, not implemented).** PromptPack applies the model compile policy twice
+  per record, once on the nested configuration per prepared prompt and once on the flat payload per record, because each
+  application produces part of the record (see the E block). "Exactly once per record" is therefore not true for that
+  route. Option 2, one policy result projected onto both shapes through a neutral seam in
+  `src/image_backends/model_policy.py`, needs an owner decision and its own package; `model_policy.py` is untouched here.
+- **Documentation.** `docs/ARCHITECTURE_v2.6.md` section 3.1 (single assembly boundary and the three policy states),
+  `STATUS.md` known debt, `docs/CODEX_MAP.md` compilers row, `docs/Subsystems/Testing/TESTING_AND_CI.md` (the guard), and
+  the two "eight construction sites" notes in `docs/Subsystems/Image/IMAGE_PIPELINE.md` and
+  `docs/Subsystems/PromptPacks/PROMPTPACKS_AND_PROMPTING.md`, which A to F made untrue. `docs/CODE_MAP.md` is generated from
+  module docstrings and none changed.
+- **Plan deviations.** The plan names `tests/architecture/` or the existing ratchet location for the guard: it lives in
+  `tests/system/`, the repository's architecture-enforcement directory. The plan's rule "a `replace` on a record sets
+  `job_id`" was widened to the record-rebuild shape above, with exact counts, so that the learning, replay-directive and
+  acceptance rebuilds are listed with reasons instead of passing unseen.
+
 ### Objective
 
 - Outcome: a new independent construction or derivation site fails CI, and the leftovers of the migration are gone.
