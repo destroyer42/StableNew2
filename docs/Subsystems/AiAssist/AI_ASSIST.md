@@ -101,6 +101,7 @@ Not run yet [U]; a separately versioned, unapproved LFM3-1.7B model/runtime cont
 7. Nothing derived from prompts is persisted beyond digests, counts and codes, and a prompt left on disk by a crash is swept before the next request.
 8. A missing, malformed or non-finite provider reading is never read as idle or plenty, and nothing may escape the watch.
 9. Advice is not a plan: a `PLAN_PROPOSAL` result and its review have no field or action that creates Intent, edits authored intent, fills a form, compiles, previews or queues; they carry the "Advice, not a plan" label (and the Preview label in Preview). Any future conversion code belongs outside `src/ai_assist` and needs its own owner decision.
+10. A visual (vision-language) candidate is never a text model: it is recorded only in `config/ai_visual_candidates.json`, which nothing under `src/`, the selector, Preview, activation or `import-model` reads; `--mmproj`, `-mmu`/`--mmproj-url` and `--rpc` stay in `FORBIDDEN_FLAGS`, and an image invocation exists only as an unapproved proposal (section 13).
 
 ## 9. How to test
 
@@ -151,3 +152,18 @@ queued completion, cancellation and quiescence. These tests are not physical-mod
 ## 12. Learning evidence summary (not yet consumed) [V]
 
 `src/learning/ai_evidence_summary.py` builds a versioned, token-only, size-bounded summary of one model's Learning evidence and its allowed next actions (`docs/Subsystems/Learning/LEARNING.md` section 3.16). Nothing in `src/ai_assist` calls it, and it is not a trust grant: a later advisory caller belongs outside `src/ai_assist` (which may import only `ai_assist`, `utils` and `prompting`), must be its own package, and must revalidate any AI answer with `resolve_ai_candidate` against freshly derived evidence.
+
+## 13. Visual candidates (PR-AI-VL-220, owner decision D22)
+
+The owner asked for a vision-language model, LFM3-VL-2B (Liquid AI, Q4_K_M with the F16 `mmproj` projector, llama.cpp `b11960` or
+later), prepared as a comparator. It is **not** in `config/ai_model_registry.json`: that registry feeds the selector (AI-202b lists
+every imported and verified entry), Preview enablement and `import-model`, all of which treat an entry as a text model, so a
+visual entry there would be offered for text use. It is recorded in `config/ai_visual_candidates.json` (model and projector each
+with repository, 40-character revision, file name, size, SHA-256; license text hash; required build; `qualified`,
+`production_eligible`, `text_registry_eligible` and `image_invocation_approved` all false), read only by
+`tools/qualification/vl220/` (fail-closed admission: pinned bytes, matching GGUF headers, required build, license
+acknowledgement). The two files were downloaded by an operator-authorized step into a staging folder and hash-verified; nothing is
+imported into the AI root. The evaluation contract (`PR-AI-VL-220_Visual_Evaluation_Contract.md`) is a specification plus
+harness that runs no model; the image invocation a real run needs was approved by the owner on 2026-11-14 as a specification and is not implemented yet
+(`PR-AI-VL-220_Image_Invocation_Contract.md`). The runbook is `docs/runbooks/ai_vl_candidate_staging.md`; the work package is
+`docs/work_packages/AI-VL-220_lfm3_vl_candidate.md`.
