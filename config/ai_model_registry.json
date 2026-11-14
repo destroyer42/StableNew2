@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Pinned model weights for Offline AI Assist. An entry is usable only with complete provenance (publisher and packager repository and revision, converter, https source URL), an exact byte size and SHA-256. An unknown or mismatched hash is refused. Every entry below is a CANDIDATE (qualified: false): its size and SHA-256 are the Hugging Face LFS values reported on 2026-10-23 and have NOT been verified against local bytes, because no weights have been downloaded. They are verified when the operator imports the file (import_model hashes it before installing). Nothing is downloaded by the application. The two LFM3-1.7B entries (owner decision D18, 2026-11-13) have local bytes verified against these pins and need llama.cpp b11960 or later.",
+  "description": "Pinned model weights for Offline AI Assist. An entry is usable only with complete provenance (publisher and packager repository and revision, converter, https source URL), an exact byte size and SHA-256. An unknown or mismatched hash is refused. Every entry below is a CANDIDATE (qualified: false): its size and SHA-256 are the Hugging Face LFS values reported on 2026-10-23 and have NOT been verified against local bytes, because no weights have been downloaded. They are verified when the operator imports the file (import_model hashes it before installing). Nothing is downloaded by the application. compatible_builds (owner decision D20) lists, in order of preference, the pinned runtime builds a model may be activated on; compatibility follows the llama.cpp architecture (AI-201b), so the list is explicit and reviewed, never inferred. The two LFM3-1.7B entries (owner decision D18, 2026-11-13) have local bytes verified against these pins and need llama.cpp b11960 or later.",
   "models": [
     {
       "model_id": "qwen3.5-9b-q4_k_m-unsloth",
@@ -18,6 +18,10 @@
         "workflow_choice"
       ],
       "qualified": false,
+      "compatible_builds": [
+        "b11840-cpu",
+        "b11960-cpu"
+      ],
       "provenance": {
         "publisher_repo": "Qwen/Qwen3.5-9B",
         "publisher_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
@@ -43,6 +47,10 @@
         "workflow_choice"
       ],
       "qualified": false,
+      "compatible_builds": [
+        "b11840-cpu",
+        "b11960-cpu"
+      ],
       "provenance": {
         "publisher_repo": "Qwen/Qwen3.5-9B",
         "publisher_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
@@ -68,6 +76,10 @@
         "workflow_choice"
       ],
       "qualified": false,
+      "compatible_builds": [
+        "b11840-cpu",
+        "b11960-cpu"
+      ],
       "provenance": {
         "publisher_repo": "Qwen/Qwen3.5-4B",
         "publisher_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
@@ -93,6 +105,10 @@
         "workflow_choice"
       ],
       "qualified": false,
+      "compatible_builds": [
+        "b11840-cpu",
+        "b11960-cpu"
+      ],
       "provenance": {
         "publisher_repo": "Qwen/Qwen3.5-4B",
         "publisher_revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
@@ -118,6 +134,9 @@
         "workflow_choice"
       ],
       "qualified": false,
+      "compatible_builds": [
+        "b11960-cpu"
+      ],
       "provenance": {
         "publisher_repo": "LiquidAI/LFM3-1.7B",
         "publisher_revision": "ac2586a34f1a1c03329dbdcdefabd8b6478ddaa7",
@@ -143,6 +162,9 @@
         "workflow_choice"
       ],
       "qualified": false,
+      "compatible_builds": [
+        "b11960-cpu"
+      ],
       "provenance": {
         "publisher_repo": "LiquidAI/LFM3-1.7B",
         "publisher_revision": "ac2586a34f1a1c03329dbdcdefabd8b6478ddaa7",

@@ -6,7 +6,7 @@ One line per module under `src/`, taken from its docstring. Regenerate with `pyt
 `tests/tools/test_code_map.py` fails when this file is stale. To improve an entry, edit the module docstring.
 For where to start on a task, use `docs/CODEX_MAP.md`.
 
-723 of 878 modules have a docstring.
+725 of 880 modules have a docstring.
 
 ## src/
 
@@ -18,6 +18,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 ## src/ai_assist/
 
 - `__init__.py`: Offline AI Assist (PR-AI-110): typed, validated, advisory suggestions from a locally stored model
+- `activation.py`: The one activation authority (owner decision D20): point the installation at one imported runtime build and o…
 - `argv.py`: The only way a command line or child environment for the offline runtime is made
 - `attestation.py`: Operator attestation that an outbound firewall restriction exists for the runtime (owner decisions D8 and D19)
 - `contracts.py`: Typed, versioned contracts for Offline AI Assist
@@ -29,6 +30,7 @@ For where to start on a task, use `docs/CODEX_MAP.md`.
 - `paths.py`: Where the offline AI runtime, weights and records live
 - `preview.py`: AI Assist Preview: the operator-recorded enablement of an unqualified candidate (owner decision D13, 2026-11-…
 - `runtime.py`: One bounded, contained, CPU-only inference as a short-lived child (owner decision D2)
+- `selector.py`: The in-app model selector (owner decision D20): list the models that are ready to use and switch between them
 - `service.py`: Single-flight admission, yielding and outcome mapping for one AI request at a time
 - `status.py`: Read-only installation status for the Operator Readiness window
 - `validators.py`: Pure, deterministic validation of model output

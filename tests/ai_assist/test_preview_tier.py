@@ -16,7 +16,7 @@ from src.ai_assist.preview import (
     PreviewRefused,
     enable_preview,
     preview_enabled_for,
-    read_preview_enablement,
+    read_preview_identities,
     revoke_preview,
 )
 from src.ai_assist.service import ServicePolicy
@@ -91,7 +91,7 @@ def test_enable_use_label_and_revoke(candidate: Install) -> None:
     assert last["trust_tier"] == "preview" and last["strict_offline"] is True
     assert SECRET not in events_path(candidate.root).read_text(encoding="utf-8")
     assert SECRET not in preview_enablement_path(candidate.root).read_text(encoding="utf-8")
-    assert revoke_preview(candidate.root) and read_preview_enablement(candidate.root) is None
+    assert revoke_preview(candidate.root) and read_preview_identities(candidate.root) == ()
     again = service.run(request_for(request_id="r3"))
     assert again.reason == "preview_not_enabled" and spy.calls == 1
 
@@ -99,33 +99,72 @@ def test_enable_use_label_and_revoke(candidate: Install) -> None:
 def test_enablement_record_holds_identities_and_a_timestamp_only(candidate: Install) -> None:
     enable(candidate)
     document = json.loads(preview_enablement_path(candidate.root).read_text(encoding="utf-8"))
-    assert set(document) == {"schema_version", "model_sha256", "runtime_build_id", "enabled_utc"}
-    assert document["model_sha256"] == candidate.entry.sha256
-    assert document["runtime_build_id"] == candidate.build.build_id
+    assert set(document) == {"schema_version", "identities"} and document["schema_version"] == 2
+    (identity,) = document["identities"]
+    assert set(identity) == {"model_sha256", "runtime_build_id", "enabled_utc"}
+    assert identity["model_sha256"] == candidate.entry.sha256
+    assert identity["runtime_build_id"] == candidate.build.build_id
 
 
-def test_identity_mismatch_and_repointing_void_the_enablement(candidate: Install) -> None:
+def test_identity_mismatch_voids_the_enablement_and_repointing_keeps_exact_identities(
+    candidate: Install,
+) -> None:
     enable(candidate)
     path = preview_enablement_path(candidate.root)
     good = json.loads(path.read_text(encoding="utf-8"))
+    (identity,) = good["identities"]
     for key, value in (("model_sha256", "0" * 64), ("runtime_build_id", "other-build")):
-        path.write_text(json.dumps({**good, key: value}), encoding="utf-8")
+        path.write_text(
+            json.dumps({**good, "identities": [{**identity, key: value}]}), encoding="utf-8"
+        )
         assert not preview_enabled_for(candidate.root, candidate.entry, candidate.build)
         service = make_service(candidate, policy=PREVIEW_POLICY)
         assert service.run(request_for()).reason == "preview_not_enabled"
     path.write_text(json.dumps(good), encoding="utf-8")
     assert preview_enabled_for(candidate.root, candidate.entry, candidate.build)
+    # D20: re-pointing no longer erases the record; it is matched against the verified active identity on every use.
     record_active(candidate.root, candidate.build, candidate.entry)
-    assert not path.exists()
+    assert path.exists() and preview_enabled_for(candidate.root, candidate.entry, candidate.build)
+
+
+def test_the_legacy_single_identity_record_is_read_as_one_identity(candidate: Install) -> None:
+    preview_enablement_path(candidate.root).write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "model_sha256": candidate.entry.sha256,
+                "runtime_build_id": candidate.build.build_id,
+                "enabled_utc": "2026-11-13T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert preview_enabled_for(candidate.root, candidate.entry, candidate.build)
+    assert len(read_preview_identities(candidate.root)) == 1
+    enable(
+        candidate
+    )  # rewriting migrates it to schema 2 without losing or duplicating the identity
+    document = json.loads(preview_enablement_path(candidate.root).read_text(encoding="utf-8"))
+    assert document["schema_version"] == 2 and len(document["identities"]) == 1
 
 
 @pytest.mark.parametrize(
     "content",
-    ["", "not json", "[]", '{"schema_version": 2}', '{"schema_version": 1}', "null"],
+    [
+        "",
+        "not json",
+        "[]",
+        '{"schema_version": 2}',
+        '{"schema_version": 2, "identities": "x"}',
+        '{"schema_version": 2, "identities": [{"model_sha256": "x"}]}',
+        '{"schema_version": 3, "identities": []}',
+        '{"schema_version": 1}',
+        "null",
+    ],
 )
 def test_malformed_record_fails_closed(candidate: Install, content: str) -> None:
     preview_enablement_path(candidate.root).write_text(content, encoding="utf-8")
-    assert read_preview_enablement(candidate.root) is None
+    assert read_preview_identities(candidate.root) == ()
     spy = SpawnSpy()
     attest(candidate, "rule")
     outcome = make_service(candidate, policy=PREVIEW_POLICY, runner=spy).run(request_for())
