@@ -194,6 +194,25 @@ Risk: low to medium (five small, single-purpose call sites). Rollback: revert; n
 
 ## P4-2C — Reprocess and video
 
+### Status (2026-11-13): implemented on `refactor/p4-2c-njr-reprocess-video`
+
+- `ReprocessJobBuilder.build_reprocess_job` (S4) now assembles through `compile_njr` with `PolicyState.EFFECTIVE` and
+  `checks=()`: the planner still prepares stages, metadata, the video/image split and the image workload's backend
+  options exactly as before; only the `NormalizedJobRecord(...)` statement and the source-kind alias table moved. The
+  table is `reprocess_source_kind(source, is_video=...)` in the core (a video stage wins, then the alias, else
+  `REPROCESS`); no other core interface changed, so the five package-B routes are untouched.
+- Every route that reaches the statement is covered without editing its module: Reprocess, Review, Photo Optimize,
+  curation, masked edit, outpaint, native SVD, Comfy Video Workflow, sequences, Movie Clips and Learning non-txt2img
+  variants. All goldens and refusal baselines pass unchanged; no baseline data file was touched and
+  `STABLENEW_UPDATE_GOLDEN` was not set.
+- Ownership ratchet: `tests/pipeline/test_njr_compiler.py` now also covers `reprocess_builder.py` (no construction, no
+  `replace(..., job_id=...)`); it grew a table test for `reprocess_source_kind` and a test that the builder declares an
+  `EFFECTIVE` draft with no checks.
+- Direct constructors that remain: S2 `job_builder_v2.py` and S3 `prompt_pack_job_builder.py` (P4-2E); S6
+  `learning_njr.py`, S7 `ordinary_njr.py` and V5 `ordinary_njr.py:98` (P4-2D); V3 `replay_engine.py:161` (P4-2F);
+  `njr_core_v26.py:1276`, R1 `migrate_legacy_njr` (read path) and T1 `tools/qualification/img_forge_100/run.py`
+  (operator-only), plus the `pipeline_controller.py` references the P4-2F guard will classify.
+
 ### Objective
 
 - Outcome: `ReprocessJobBuilder.build_reprocess_job` assembles through the core. Reprocess, Review, Photo Optimize,

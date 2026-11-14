@@ -39,6 +39,7 @@ from src.pipeline.njr_compiler import (
     derive_njr,
     history_lineage,
     mint_job_id,
+    reprocess_source_kind,
 )
 from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
 
@@ -225,6 +226,52 @@ def test_mint_job_id_uses_the_injected_identity_or_a_random_hex() -> None:
     assert re.fullmatch(r"[0-9a-f]{32}", generated)
 
 
+@pytest.mark.parametrize(
+    ("source", "is_video", "expected"),
+    [
+        ("reprocess", False, SourceKind.REPROCESS),
+        ("something-new", False, SourceKind.REPROCESS),
+        ("image_edit", False, SourceKind.IMAGE_EDIT),
+        ("Learning", False, SourceKind.LEARNING),
+        ("history", False, SourceKind.HISTORY_REPLAY),
+        ("HISTORY_REPLAY", False, SourceKind.HISTORY_REPLAY),
+        ("video", False, SourceKind.VIDEO_WORKFLOW),
+        ("video_workflow", False, SourceKind.VIDEO_WORKFLOW),
+        ("reprocess", True, SourceKind.VIDEO_WORKFLOW),
+        ("learning", True, SourceKind.VIDEO_WORKFLOW),
+        ("image_edit", True, SourceKind.VIDEO_WORKFLOW),
+    ],
+)
+def test_reprocess_source_kind_keeps_the_alias_table_and_lets_a_video_stage_win(
+    source: str, is_video: bool, expected: SourceKind
+) -> None:
+    assert reprocess_source_kind(source, is_video=is_video) is expected
+
+
+def test_the_reprocess_builder_assembles_through_the_core_with_no_construction_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.pipeline.reprocess_builder import ReprocessJobBuilder
+
+    image = tmp_path / "source.png"
+    image.write_bytes(b"x")
+    drafts: list[NjrDraft] = []
+    real = njr_compiler.compile_njr
+
+    def spy(draft: NjrDraft) -> NormalizedJobRecord:
+        drafts.append(draft)
+        return real(draft)
+
+    monkeypatch.setattr("src.pipeline.reprocess_builder.compile_njr", spy)
+
+    record = ReprocessJobBuilder(id_fn=lambda: "reprocess-1").build_reprocess_job(
+        input_image_paths=[str(image)], stages=["upscale"], config={"upscale": {}}
+    )
+
+    assert record.job_id == "reprocess-1"
+    assert [(d.policy_state, d.checks) for d in drafts] == [(PolicyState.EFFECTIVE, ())]
+
+
 # --- derivation -----------------------------------------------------------------------------------------------------
 
 
@@ -335,7 +382,7 @@ def test_replay_run_directives_replace_inherited_ones_on_the_named_stage() -> No
     }
 
 
-# --- ownership ratchet for the routes moved in P4-2B ----------------------------------------------------------------
+# --- ownership ratchet for the routes moved in P4-2B and P4-2C ----------------------------------------------------------------
 
 MIGRATED = (
     "src/pipeline/cli_njr_builder.py",
@@ -343,6 +390,7 @@ MIGRATED = (
     "src/pipeline/replay_njr_compiler.py",
     "src/pipeline/history_variation_compiler.py",
     "src/video/sequence_resume.py",
+    "src/pipeline/reprocess_builder.py",
 )
 FAMILY_IDENTIFIERS = re.compile(
     r"z_?image|klein|flux|sdxl|sd15|animatediff|qwen|hunyuan|wan2|ltx", re.IGNORECASE

@@ -151,6 +151,27 @@ def history_lineage(
     )
 
 
+_REPROCESS_SOURCE_ALIASES: Mapping[str, SourceKind] = {
+    "image_edit": SourceKind.IMAGE_EDIT,
+    "learning": SourceKind.LEARNING,
+    "history": SourceKind.HISTORY_REPLAY,
+    "history_replay": SourceKind.HISTORY_REPLAY,
+    "video": SourceKind.VIDEO_WORKFLOW,
+    "video_workflow": SourceKind.VIDEO_WORKFLOW,
+}
+
+
+def reprocess_source_kind(source: object, *, is_video: bool) -> SourceKind:
+    """The ``SourceKind`` of a reprocess-shaped record: any video stage wins, then the submission-source alias.
+
+    An unknown submission source is a plain ``REPROCESS`` record.
+    """
+
+    if is_video:
+        return SourceKind.VIDEO_WORKFLOW
+    return _REPROCESS_SOURCE_ALIASES.get(str(source).lower(), SourceKind.REPROCESS)
+
+
 def _prepare_raw(draft: NjrDraft) -> NjrDraft:
     """Steps 1-5 for a ``RAW`` image draft: effective config, model policy, ADetailer, backend options, intent.
 
@@ -250,4 +271,5 @@ __all__ = [
     "derive_njr",
     "history_lineage",
     "mint_job_id",
+    "reprocess_source_kind",
 ]
