@@ -40,6 +40,7 @@ from src.ai_assist.status import (
 )
 from src.ai_assist.validators import validate_output
 from tools.qualification.ai111 import lfm3_contract as lfm3
+from tools.qualification.ai111 import plan as plan_module
 from tools.qualification.ai111 import stage_a_report as report
 from tools.qualification.ai111.baselines import ARMS
 from tools.qualification.ai111.corpus import corpus_digest
@@ -141,13 +142,16 @@ def test_the_qwen_plan_corpus_and_digests_are_unchanged() -> None:
     assert "lfm3" not in json.dumps(frozen_plan()).lower()
 
 
-def test_production_configuration_is_untouched_and_never_names_lfm3() -> None:
+def test_production_registry_holds_exactly_the_unqualified_lfm3_candidates() -> None:
+    # D18 (2026-11-13): the registry carries the two LFM3 candidates, unqualified, equal to the contract's.
     registry = load_model_registry(MODEL_REGISTRY_PATH)
     assert not registry.problems
-    assert all(
-        not e.model_id.startswith("lfm3-") and e.qualified is False for e in registry.entries
+    assert all(e.qualified is False for e in registry.entries)
+    lfm3_entries = [e for e in registry.entries if e.model_id.startswith("lfm3-")]
+    assert sorted(e.model_id for e in lfm3_entries) == sorted(
+        c["model_id"] for c in lfm3.CANDIDATES
     )
-    assert "lfm3" not in MODEL_REGISTRY_PATH.read_text(encoding="utf-8").lower()
+    assert lfm3.production_lfm3_problems(registry) == []
     manifest = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
     assert not manifest.problems and not any(build.qualified for build in manifest.builds)
 
@@ -869,3 +873,66 @@ def test_the_contract_cli_writes_only_its_contract_and_refuses_an_existing_direc
     assert sorted(p.name for p in out.iterdir()) == ["contract.json"]
     with pytest.raises(FileExistsError):
         lfm3.main(["--out", str(out)])
+
+
+# -- D18 (2026-11-13): LFM3 candidates live in the production registry; the frozen plans must not notice ----------------
+
+
+def _registry_document(
+    *, drop: str | None = None, extra: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    document = json.loads(MODEL_REGISTRY_PATH.read_text(encoding="utf-8"))
+    document["models"] = [m for m in document["models"] if m["model_id"] != drop]
+    if extra is not None:
+        document["models"].append(extra)
+    return document
+
+
+def _write(tmp_path: Path, document: dict[str, Any]) -> Path:
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return path
+
+
+def test_an_extra_registry_entry_changes_neither_the_frozen_plan_nor_its_digest(
+    tmp_path: Path,
+) -> None:
+    extra = {**copy.deepcopy(lfm3.CANDIDATES[0]), "model_id": "qwen3.5-extra", "sha256": "e" * 64}
+    path = _write(tmp_path, _registry_document(extra=extra))
+    assert frozen_plan(path) == frozen_plan()
+    assert digest(frozen_plan(path)) == GOLDEN_QWEN["screening_plan_sha256"]
+    assert [m["model_id"] for m in frozen_plan()["models"]] == list(
+        plan_module.FROZEN_CANDIDATE_IDS
+    )
+
+
+def test_a_missing_frozen_qwen_candidate_fails_closed(tmp_path: Path) -> None:
+    path = _write(tmp_path, _registry_document(drop="qwen3.5-4b-q8_0-unsloth"))
+    with pytest.raises(ValueError, match="qwen3.5-4b-q8_0-unsloth"):
+        frozen_plan(path)
+
+
+def test_the_shipped_lfm3_entries_equal_the_contract_candidates() -> None:
+    assert lfm3.production_lfm3_problems(load_model_registry(MODEL_REGISTRY_PATH)) == []
+    assert lfm3.validate_contract(lfm3.contract()) == []
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda e: e.update(model_id="lfm3-unknown"),
+        lambda e: e.update(sha256="d" * 64),
+        lambda e: e.update(bytes=e["bytes"] + 1),
+        lambda e: e.update(qualified=True),
+        lambda e: e.update(license_spdx="Apache-2.0"),
+        lambda e: e["provenance"].update(packager_revision="f" * 40),
+        lambda e: e.update(filename="other.gguf"),
+    ],
+)
+def test_any_other_lfm3_production_entry_is_a_problem(mutate: Any) -> None:
+    document = _registry_document(drop=lfm3.CANDIDATES[0]["model_id"])
+    entry = copy.deepcopy(lfm3.CANDIDATES[0])
+    mutate(entry)
+    document["models"].append(entry)
+    registry = load_model_registry(json.dumps(document))
+    assert registry.problems or lfm3.production_lfm3_problems(registry)
