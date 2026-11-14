@@ -12,6 +12,7 @@ integration calls on the AI worker thread (never the GUI thread).
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
@@ -46,6 +47,14 @@ _VERDICT_TEXT = {
     VERDICT_UNAVAILABLE: "unavailable",
     VERDICT_NEEDS_INPUT: "needs your input",
 }
+
+#: Informational note (not a verdict) on an image step whose model is not the one the operator selected (AI-211).
+OTHER_MODEL_NOTE = "This step uses a model other than the one selected in Pipeline."
+#: Shown in place of the "Planning for" line when no selection was sent with the request (AI-211).
+UNANCHORED_NOTICE = (
+    "The model selected in Pipeline is not available for planning (none selected, blocked, hidden or without a verified "
+    "policy), so this advice is not anchored to your selection."
+)
 
 _GOVERNANCE_APPROVED = "approved"
 _GOVERNANCE_EXPERIMENTAL = "experimental"
@@ -86,6 +95,8 @@ class PlanFacts:
     targets: Mapping[str, TargetFact] = field(default_factory=dict)
     workflows: Mapping[str, WorkflowFact] = field(default_factory=dict)
     preflight: Preflight = _no_preflight
+    #: The model id sent as the request's ``current_target`` (empty when none was sent); only drives the informational note.
+    current_target: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +104,8 @@ class StepVerdict:
     step: PlanStep
     verdict: str
     reason: str = ""
+    #: Informational only; never changes ``verdict`` (AI-211).
+    note: str = ""
 
     def __post_init__(self) -> None:
         if self.verdict not in VERDICTS:
@@ -113,7 +126,10 @@ def judge_step(step: PlanStep, facts: PlanFacts) -> StepVerdict:
 
     if step.stage == VIDEO_STAGE:
         return _judge_workflow_step(step, facts)
-    return _judge_model_step(step, facts)
+    verdict = _judge_model_step(step, facts)
+    if facts.current_target and step.target != facts.current_target:
+        return dataclasses.replace(verdict, note=OTHER_MODEL_NOTE)
+    return verdict
 
 
 def _judge_model_step(step: PlanStep, facts: PlanFacts) -> StepVerdict:
@@ -190,6 +206,7 @@ class PlanRow:
     reason: str
     #: The text the per-step "Copy text" action puts on the clipboard. Plain text, never a payload.
     copy_text: str
+    note: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +218,8 @@ class PlanReview:
     trust_label: str = ""
     rows: tuple[PlanRow, ...] = ()
     summary: str = ""
+    #: What was sent with the request: the selected model, or the fixed sentence saying nothing was anchored (AI-211).
+    planning_for: str = ""
 
     @property
     def actions(self) -> tuple[str, ...]:
@@ -225,9 +244,10 @@ def _row(
     unit = noun if step.count == 1 else f"{noun}s"
     state = _VERDICT_TEXT[verdict.verdict]
     reason = f" ({verdict.reason})" if verdict.reason else ""
+    note = f"; note: {verdict.note}" if verdict.note else ""
     copy_text = (
         f"Step {index}: {step.stage} with {choice}, {step.count} {unit}. {step.rationale} "
-        f"[judged {state}{reason}; advice only]"
+        f"[judged {state}{reason}{note}; advice only]"
     )
     return PlanRow(
         index,
@@ -238,6 +258,7 @@ def _row(
         verdict.verdict,
         verdict.reason,
         copy_text,
+        verdict.note,
     )
 
 
@@ -247,6 +268,7 @@ def plan_review(
     targets: tuple[tuple[str, str], ...],
     workflows: tuple[tuple[str, str], ...],
     trust_label: str = "",
+    planning_for: str = "",
 ) -> PlanReview:
     target_labels, workflow_labels = dict(targets), dict(workflows)
     rows = tuple(
@@ -260,13 +282,16 @@ def plan_review(
         trust_label=trust_label,
         rows=rows,
         summary=summary,
+        planning_for=planning_for,
     )
 
 
-def unavailable_plan_review(text: str, *, trust_label: str = "") -> PlanReview:
+def unavailable_plan_review(
+    text: str, *, trust_label: str = "", planning_for: str = ""
+) -> PlanReview:
     """A refusal, failure or admission outcome: the manual path is unchanged; only the fixed copy is shown."""
 
-    return PlanReview(status=text, trust_label=trust_label)
+    return PlanReview(status=text, trust_label=trust_label, planning_for=planning_for)
 
 
 _OUTCOME_COPY = {
@@ -289,6 +314,8 @@ def review_text(review: PlanReview) -> str:
     lines = [review.notice]
     if review.trust_label:
         lines.append(review.trust_label)
+    if review.planning_for:
+        lines.append(review.planning_for)
     lines.append("")
     if not review.rows:
         return "\n".join(lines).rstrip()
@@ -302,6 +329,8 @@ def review_text(review: PlanReview) -> str:
         lines.append(f"   Why (model's words): {row.rationale}")
         if row.reason:
             lines.append(f"   Check: {row.reason}")
+        if row.note:
+            lines.append(f"   Note: {row.note}")
     return "\n".join(lines)
 
 
@@ -317,6 +346,9 @@ def build_plan_request(
     workflows: tuple[tuple[str, str], ...],
     stages: tuple[str, ...],
     target_policy_id: str = "",
+    current_target: str = "",
+    current_target_label: str = "",
+    current_target_stages: tuple[str, ...] = (),
 ) -> AssistRequest:
     """The only constructor of a plan request: the closed lists come from the caller's authorities, the goal is data."""
 
@@ -328,13 +360,27 @@ def build_plan_request(
         allowed_workflows=tuple(key for key, _label in workflows),
         allowed_stages=stages,
         goal_text=goal_text,
+        current_target=current_target,
+        current_target_label=current_target_label,
+        current_target_stages=current_target_stages,
     )
+
+
+def planning_for_text(request: AssistRequest) -> str:
+    """The dialog line stating what the plan request was anchored to (fixed copy plus the label from the closed list)."""
+
+    if request.current_target:
+        label = request.current_target_label or request.current_target
+        return f"Planning for: {label} (selected in Pipeline)"
+    return UNANCHORED_NOTICE
 
 
 __all__ = [
     "PLAN_ADVICE_LABEL",
     "PLAN_ADVICE_NOTICE",
     "PLAN_REVIEW_ACTIONS",
+    "OTHER_MODEL_NOTE",
+    "UNANCHORED_NOTICE",
     "VERDICTS",
     "VERDICT_INCOMPATIBLE",
     "VERDICT_NEEDS_INPUT",
@@ -353,6 +399,7 @@ __all__ = [
     "outcome_plan_text",
     "plan_review",
     "plan_trust_prefix",
+    "planning_for_text",
     "review_text",
     "unavailable_plan_review",
 ]

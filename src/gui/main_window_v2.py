@@ -486,6 +486,7 @@ class MainWindowV2:
                     getattr(self.sidebar_panel_v2, "base_generation_panel", None),
                     self.app_controller,
                     self.prompt_tab._content_visibility_mode,
+                    getattr(self.prompt_tab, "_model_projection", None),
                 ),
             )
         self._wire_learning_model_target()

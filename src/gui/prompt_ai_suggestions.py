@@ -22,6 +22,7 @@ from src.gui_v2.ai_plan_advice import (
     judge_plan,
     outcome_plan_text,
     plan_review,
+    planning_for_text,
     unavailable_plan_review,
 )
 from src.gui_v2.ai_slot_variety import (
@@ -336,6 +337,9 @@ class PromptAiSuggestions:
                 workflows=plan.workflows,
                 stages=plan.stages,
                 target_policy_id=plan.target_policy_id,
+                current_target=plan.current_target,
+                current_target_label=plan.current_target_label,
+                current_target_stages=plan.current_target_stages,
             )
         except ValueError:
             dialog.show_plan(
@@ -353,7 +357,7 @@ class PromptAiSuggestions:
         self._drop_variety()
         self._review_cancelled = False
         self._active_id = request.request_id
-        dialog.running_plan()
+        dialog.running_plan(planning_for_text(request))
         self.refresh()
 
         def judge(outcome: AssistOutcome) -> PlanJudgement | None:
@@ -384,39 +388,53 @@ class PromptAiSuggestions:
         self._active_id = None
         preview = outcome.details.get("trust_tier") == "preview"
         trust = PREVIEW_LABEL if preview else self._trust_label()
+        # What was sent with the request, shown above every result (AI-211).
+        sent = planning_for_text(request)
         if trust:
             dialog.set_trust_label(trust)
         if self._review_cancelled:
             dialog.show_plan(
                 unavailable_plan_review(
-                    "Request cancelled. Nothing was planned.", trust_label=trust
+                    "Request cancelled. Nothing was planned.", trust_label=trust, planning_for=sent
                 )
             )
             self.refresh()
             return
         if outcome.code is not OutcomeCode.SUGGESTION:
             dialog.show_plan(
-                unavailable_plan_review(outcome_plan_text(outcome, OUTCOME_TEXT), trust_label=trust)
+                unavailable_plan_review(
+                    outcome_plan_text(outcome, OUTCOME_TEXT), trust_label=trust, planning_for=sent
+                )
             )
             dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))
             self.refresh()
             return
         suggestion = checked_suggestion(outcome, request)
         if suggestion is None:
-            review = unavailable_plan_review(OUTCOME_TEXT[OutcomeCode.MALFORMED], trust_label=trust)
+            review = unavailable_plan_review(
+                OUTCOME_TEXT[OutcomeCode.MALFORMED], trust_label=trust, planning_for=sent
+            )
         elif judgement is None:
             review = unavailable_plan_review(
-                "The plan could not be judged, so no steps are shown.", trust_label=trust
+                "The plan could not be judged, so no steps are shown.",
+                trust_label=trust,
+                planning_for=sent,
             )
         elif not ContentVisibilityResolver(self._mode()).is_visible(
             {"positive_prompt": " ".join(step.rationale for step in suggestion.steps)}
         ):
             review = unavailable_plan_review(
-                "The advice is hidden by the current visibility mode.", trust_label=trust
+                "The advice is hidden by the current visibility mode.",
+                trust_label=trust,
+                planning_for=sent,
             )
         else:
             review = plan_review(
-                judgement, targets=plan.targets, workflows=plan.workflows, trust_label=trust
+                judgement,
+                targets=plan.targets,
+                workflows=plan.workflows,
+                trust_label=trust,
+                planning_for=sent,
             )
         dialog.show_plan(review)
         dialog.set_runtime_detail(runtime_detail_text(outcome.runtime_detail))

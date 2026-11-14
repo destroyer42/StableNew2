@@ -18,6 +18,8 @@ SUGGESTION_SCHEMA_ID = "ai_assist.suggestion/1"
 MAX_TEXT_CHARS = 8000
 MAX_LIST_ITEMS = 256
 MAX_NAME_CHARS = 200
+#: A model's display label (its id plus the policy's display name) as stated to the model for a plan request (AI-211).
+MAX_LABEL_CHARS = 400
 MAX_REFUSAL_REASON_CHARS = 400
 #: Planning bounds (P3). Exceeding any of them is a rejection, never a truncation.
 MAX_GOAL_CHARS = 1000
@@ -121,6 +123,12 @@ class AssistRequest:
     #: ``PLAN_PROPOSAL`` only: the operator's goal in their own words (data for the model) and the closed stage list.
     goal_text: str = ""
     allowed_stages: tuple[str, ...] = ()
+    #: ``PLAN_PROPOSAL`` only (AI-211): the model the operator has selected in Pipeline, empty when none is usable. It is
+    #: exactly one of ``allowed_targets``; the label and the stages its policy supports (a subset of ``allowed_stages``)
+    #: come from the same closed-list authority and are stated to the model. Never derived from the goal text.
+    current_target: str = ""
+    current_target_label: str = ""
+    current_target_stages: tuple[str, ...] = ()
     #: ``SLOT_VARIETY`` only: the pack's existing matrix slots as ``(name, existing values)`` (authored data for the model).
     matrix_slots: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
@@ -160,6 +168,7 @@ class AssistRequest:
             self._check_variety()
         elif self.goal_text or self.allowed_stages:
             raise ValueError("goal_text and allowed_stages belong to plan requests only")
+        self._check_current_target()
         if self.matrix_slots and self.kind is not SuggestionKind.SLOT_VARIETY:
             raise ValueError("matrix_slots belong to slot-variety requests only")
         if self.kind is SuggestionKind.PROMPT_REWRITE and not self.positive_text.strip():
@@ -168,6 +177,28 @@ class AssistRequest:
             raise ValueError("target advice needs a closed list of targets")
         if self.kind is SuggestionKind.WORKFLOW_CHOICE and not self.allowed_workflows:
             raise ValueError("workflow advice needs a closed list of workflows")
+
+    def _check_current_target(self) -> None:
+        stages = self.current_target_stages
+        if not isinstance(self.current_target, str) or not isinstance(
+            self.current_target_label, str
+        ):
+            raise ValueError("current_target and its label must be text")
+        if not isinstance(stages, tuple):
+            raise ValueError("current_target_stages must be a tuple")
+        if not (self.current_target or self.current_target_label or stages):
+            return
+        if self.kind is not SuggestionKind.PLAN_PROPOSAL:
+            raise ValueError("current_target belongs to plan requests only")
+        if not self.current_target:
+            raise ValueError("a target label or stages need a current_target")
+        if self.current_target not in self.allowed_targets:
+            raise ValueError("current_target must be one of allowed_targets")
+        label = self.current_target_label
+        if len(label) > MAX_LABEL_CHARS or not label.isprintable():
+            raise ValueError("current_target_label must be short printable text")
+        if not stages or not all(s in self.allowed_stages and s != VIDEO_STAGE for s in stages):
+            raise ValueError("current_target_stages must be image stages from allowed_stages")
 
     def _check_variety(self) -> None:
         if not self.goal_text.strip():
@@ -235,6 +266,16 @@ class AssistRequest:
                 "|".join(self.allowed_workflows),
                 self.goal_text,
                 "|".join(self.allowed_stages),
+                # Appended only when a plan request carries a selection, so every other request keeps its digest (AI-211).
+                *(
+                    (
+                        "current:" + self.current_target,
+                        self.current_target_label,
+                        "|".join(self.current_target_stages),
+                    )
+                    if self.current_target
+                    else ()
+                ),
             )
         )
         if self.matrix_slots:
@@ -355,6 +396,7 @@ __all__ = [
     "CHANGE_CODES",
     "CONTENT_CLASSES",
     "MAX_GOAL_CHARS",
+    "MAX_LABEL_CHARS",
     "MAX_LIST_ITEMS",
     "MAX_NAME_CHARS",
     "MAX_PLAN_STEPS",

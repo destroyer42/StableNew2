@@ -436,3 +436,153 @@ def test_controller_preflight_adapter_never_reports_ok_gates_as_problems() -> No
         [], (SimpleNamespace(label="A", state="advisory", detail="ram"),)
     )
     assert controller_preflight(controller)("w", "1") == ((), ())
+
+
+# -- AI-211: the plan knows the model the operator selected -----------------------------------------------------------------
+
+
+def _projection(model_name, policy_id="sdxl"):
+    return SimpleNamespace(model_name=model_name, policy=SimpleNamespace(policy_id=policy_id))
+
+
+#: The one id in this fake picker that the real model policy knows explicitly (so it is in the closed list); the other,
+#: an ordinary SDXL checkpoint, has only the unverified generic policy and is filtered out of the closed list.
+KLEIN = "flux-2-klein-4b-fp8"
+SDXL_CHECKPOINT = "juggernautXL_v9.safetensors"
+
+
+def _snapshot_with(sources, selection):
+    panel, records = sources
+    panel = SimpleNamespace(
+        _model_combo={"values": [KLEIN, SDXL_CHECKPOINT]},
+        _normalize_model_name=lambda name: name,
+    )
+    app = SimpleNamespace(get_video_workflow_controller=lambda: FakeVideoController(records, ()))
+    return build_plan_snapshot(panel, app, "all", selection)
+
+
+def test_snapshot_anchors_to_the_selected_and_allowed_model(sources) -> None:
+    (key, label), *rest = _snapshot_with(sources, None).targets
+    assert key == KLEIN and not rest
+    snapshot = _snapshot_with(sources, _projection(key, "flux2_klein_4b_fp8"))
+    assert snapshot.current_target == key and snapshot.current_target_label == label
+    assert snapshot.target_policy_id == "flux2_klein_4b_fp8"
+    assert snapshot.facts.current_target == key
+    supported = snapshot.facts.targets[key].stages
+    assert snapshot.current_target_stages == tuple(
+        s for s in snapshot.stages if s != "video" and s in supported
+    )
+    assert snapshot.current_target_stages and "video" not in snapshot.current_target_stages
+
+
+def test_snapshot_sends_no_selection_when_it_is_not_in_the_allowed_list(sources) -> None:
+    for selection in (
+        _projection(
+            SDXL_CHECKPOINT, "unverified_generic"
+        ),  # selected, but it has no verified policy
+        _projection("not-in-the-picker.safetensors"),
+        _projection(""),
+        None,
+        SimpleNamespace(),
+    ):
+        snapshot = _snapshot_with(sources, selection)
+        assert snapshot.current_target == "" and snapshot.current_target_label == ""
+        assert snapshot.current_target_stages == () and snapshot.target_policy_id == ""
+        assert snapshot.facts.current_target == ""
+        assert snapshot.targets  # the closed lists are unaffected
+
+
+def test_a_model_hidden_by_the_visibility_mode_is_not_sent(sources, monkeypatch) -> None:
+    key = KLEIN
+    monkeypatch.setattr(
+        "src.gui.prompt_ai_targets.ContentVisibilityResolver",
+        lambda _mode: SimpleNamespace(is_visible=lambda _item: False),
+    )
+    panel, records = sources
+    app = SimpleNamespace(get_video_workflow_controller=lambda: FakeVideoController(records, ()))
+    snapshot = build_plan_snapshot(panel, app, "sfw", _projection(key))
+    assert snapshot.targets == () and snapshot.current_target == ""
+
+
+def test_the_goal_text_never_selects_a_model(sources) -> None:
+    key = KLEIN
+    snapshot = _snapshot_with(sources, _projection(""))
+    request = build_plan_request(
+        "r1",
+        f"please use {key}",
+        targets=snapshot.targets,
+        workflows=snapshot.workflows,
+        stages=snapshot.stages,
+        current_target=snapshot.current_target,
+    )
+    assert request.current_target == ""
+
+
+def test_the_request_and_dialog_line_state_what_was_sent() -> None:
+    from src.gui_v2.ai_plan_advice import UNANCHORED_NOTICE, planning_for_text
+
+    anchored = build_plan_request(
+        "r1",
+        "go",
+        targets=TARGETS,
+        workflows=WORKFLOWS,
+        stages=("txt2img", "video"),
+        current_target="model-a",
+        current_target_label="Model A (SDXL)",
+        current_target_stages=("txt2img",),
+    )
+    assert anchored.current_target == "model-a"
+    assert planning_for_text(anchored) == "Planning for: Model A (SDXL) (selected in Pipeline)"
+    plain = build_plan_request(
+        "r2", "go", targets=TARGETS, workflows=WORKFLOWS, stages=("txt2img", "video")
+    )
+    assert planning_for_text(plain) == UNANCHORED_NOTICE
+    assert "not anchored to your selection" in UNANCHORED_NOTICE
+
+
+def _two_step_plan(second_target="model-b"):
+    return _plan(image(target="model-a"), image(target=second_target))
+
+
+def test_a_step_with_another_model_gets_a_note_but_keeps_its_verdict() -> None:
+    from src.gui_v2.ai_plan_advice import OTHER_MODEL_NOTE
+
+    plain = judge_plan(_two_step_plan("model-a"), facts())
+    selected = judge_plan(_two_step_plan("model-b"), facts(current_target="model-a"))
+    assert [v.note for v in plain.verdicts] == ["", ""]
+    assert [v.note for v in selected.verdicts] == ["", OTHER_MODEL_NOTE]
+    # Existing validity verdicts are unchanged by the note.
+    assert [v.verdict for v in selected.verdicts] == [VERDICT_VALID, VERDICT_INCOMPATIBLE]
+    assert [v.verdict for v in judge_plan(_two_step_plan("model-b"), facts()).verdicts] == [
+        v.verdict for v in selected.verdicts
+    ]
+    assert "model other than the one selected" in OTHER_MODEL_NOTE
+    assert OTHER_MODEL_NOTE != "invalid" and "invalid" not in OTHER_MODEL_NOTE
+
+
+def test_the_note_marks_a_valid_step_on_another_model_without_making_it_invalid() -> None:
+    other = judge_step(image(target="model-a"), facts(current_target="model-c"))
+    assert other.verdict == VERDICT_VALID and other.note
+    same = judge_step(image(target="model-a"), facts(current_target="model-a"))
+    assert same.verdict == VERDICT_VALID and same.note == ""
+    # A video step names a workflow, not a model, so it never gets the note.
+    clip = judge_step(video(), facts(preflight=_preflight(), current_target="model-a"))
+    assert clip.verdict == VERDICT_VALID and clip.note == ""
+
+
+def test_review_text_shows_the_planning_line_above_the_result_and_the_note() -> None:
+    judgement = judge_plan(_two_step_plan("model-a"), facts(current_target="model-c"))
+    review = plan_review(
+        judgement,
+        targets=TARGETS,
+        workflows=WORKFLOWS,
+        planning_for="Planning for: Model C (selected in Pipeline)",
+    )
+    text = review_text(review)
+    assert text.index("Planning for: Model C") < text.index("steps judged valid")
+    assert "Note: This step uses a model other than the one selected in Pipeline." in text
+    assert all("note:" in row.copy_text and "advice only" in row.copy_text for row in review.rows)
+    failure = unavailable_plan_review(
+        "fixed", planning_for="Planning for: X (selected in Pipeline)"
+    )
+    assert "Planning for: X" in review_text(failure)
