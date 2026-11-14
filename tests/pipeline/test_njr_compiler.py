@@ -7,7 +7,6 @@ contract the replay and variation compilers had before they moved onto the core.
 
 from __future__ import annotations
 
-import ast
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -448,41 +447,5 @@ def test_replay_run_directives_replace_inherited_ones_on_the_named_stage() -> No
     }
 
 
-# --- ownership ratchet for the routes moved in P4-2B to P4-2E ----------------------------------------------------------------
-
-MIGRATED = (
-    "src/pipeline/cli_njr_builder.py",
-    "src/pipeline/training_njr_compiler.py",
-    "src/pipeline/replay_njr_compiler.py",
-    "src/pipeline/history_variation_compiler.py",
-    "src/video/sequence_resume.py",
-    "src/pipeline/reprocess_builder.py",
-    "src/learning/learning_njr.py",
-    "src/learning/ordinary_njr.py",
-    "src/pipeline/job_builder_v2.py",
-    "src/pipeline/prompt_pack_job_builder.py",
-)
-FAMILY_IDENTIFIERS = re.compile(
-    r"z_?image|klein|flux|sdxl|sd15|animatediff|qwen|hunyuan|wan2|ltx", re.IGNORECASE
-)
-
-
-@pytest.mark.parametrize("path", MIGRATED)
-def test_a_migrated_route_neither_constructs_nor_re_identifies_a_record(path: str) -> None:
-    source = (REPO / path).read_text(encoding="utf-8")
-
-    assert "NormalizedJobRecord(" not in source
-    re_identifications = [
-        node.lineno
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.Call)
-        and getattr(node.func, "id", getattr(node.func, "attr", None)) == "replace"
-        and any(keyword.arg == "job_id" for keyword in node.keywords)
-    ]
-    assert re_identifications == []
-
-
-def test_the_core_names_no_model_family() -> None:
-    source = (REPO / "src/pipeline/njr_compiler.py").read_text(encoding="utf-8")
-
-    assert FAMILY_IDENTIFIERS.findall(source) == []
+# The repository-wide ownership guard (no construction, no re-identification outside the core, no model family in the
+# core) is `tests/system/test_njr_construction_guard.py` (P4-2F); it replaced the per-file ratchet that lived here.

@@ -6,7 +6,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
@@ -16,7 +15,8 @@ from src.pipeline.intent_artifact_contract import (
     compute_intent_hash,
     validate_intent_artifact_contract,
 )
-from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceDescriptor, SourceKind
+from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.njr_compiler import NjrDerivation, derive_njr, history_lineage, mint_job_id
 from src.pipeline.run_plan import build_run_plan_from_njr
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
@@ -158,20 +158,18 @@ def _build_resumed_record(
             "resumed_from_stage": stage_name,
             "resume_input_count": len(output_paths),
         }
-        resumed = replace(
+        resumed = derive_njr(
             njr,
-            job_id=uuid4().hex,
-            source=SourceDescriptor(
-                kind=SourceKind.HISTORY_REPLAY,
-                parent_job_id=njr.job_id,
-                metadata={"original_source_kind": njr.source.kind.value},
+            NjrDerivation(
+                job_id=mint_job_id(),
+                source=history_lineage(njr, display_name=None),
+                workload=replace(
+                    njr.workload,
+                    input_image_paths=tuple(output_paths),
+                    start_stage=stage_sequence[next_index],
+                ),
+                provenance=replace(njr.provenance, metadata=metadata),
             ),
-            workload=replace(
-                njr.workload,
-                input_image_paths=tuple(output_paths),
-                start_stage=stage_sequence[next_index],
-            ),
-            provenance=replace(njr.provenance, metadata=metadata),
         )
         return resumed, {
             "from_stage": stage_name,

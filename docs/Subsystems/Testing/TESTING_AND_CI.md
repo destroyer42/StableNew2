@@ -163,7 +163,7 @@ Top-level directories follow the source packages; the ones that need explanation
 
 | Directory | Contents / role |
 |---|---|
-| `tests/system/` | Repository-truth and policy tests: completeness, architecture enforcement (AST rules on `src`), CI truth, pins, quarantine policy, status/rules contracts, construction identity contract, runtime isolation, managed runtime pins. Mostly in the required smoke. |
+| `tests/system/` | Repository-truth and policy tests: completeness, architecture enforcement (AST rules on `src`), the NJR assembly guard (`test_njr_construction_guard.py`: no `NormalizedJobRecord(` construction, no `replace(..., job_id=...)` re-identification and no record `replace` rebuild in `src`, `tools` or `scripts` outside `njr_compiler.py` and an exact-path, exact-count allow-list with reasons; a stale or exceeded entry fails too), CI truth, pins, quarantine policy, status/rules contracts, construction identity contract, runtime isolation, managed runtime pins. Mostly in the required smoke. |
 | `tests/tools/` | Tests of `tools/` including all `tools/ci` policy (validation plan, shards, ratchets, previous evidence, windows lane, code map) and the qualification/acceptance harnesses (offline, fakes only). |
 | `tests/safety/` | Import-isolation and process-safety guards (no Tk in controllers/adapters/utils, backend isolation, runtime-state hygiene). |
 | `tests/integration/` | Canonical-path tests with fake inference: `tests/helpers/njr_queue_harness.py` `run_njr_via_queue` (NJR -> `JobService` -> SQLite -> `PipelineRunner.run_njr`, HTTP mocked). There is no separate journeys lane. |
