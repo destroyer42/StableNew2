@@ -149,7 +149,7 @@ def test_production_configuration_is_untouched_and_never_names_lfm3() -> None:
     )
     assert "lfm3" not in MODEL_REGISTRY_PATH.read_text(encoding="utf-8").lower()
     manifest = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
-    assert manifest.builds == () and not manifest.problems
+    assert not manifest.problems and not any(build.qualified for build in manifest.builds)
 
 
 def test_the_contract_authorizes_nothing_and_promotes_nothing() -> None:

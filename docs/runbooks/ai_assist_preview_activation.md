@@ -14,7 +14,7 @@ sub-command to use a different AI directory (default: `STABLENEW_AI_DIR`, else `
 
 ## 1. Pin the runtime build (reviewed pull request)
 
-`config/managed_ai_runtime.json` ships with no build. Compute the entry from the staged archive; this only **reads** the zip
+`config/managed_ai_runtime.json` pins one unqualified build today (`b11840-cpu`, AI-201a); to pin another, compute the entry from the staged archive; this only **reads** the zip
 (archive SHA-256 plus the SHA-256 of every loadable `.exe`, `.dll`, `.so`, `.dylib`, script file) and extracts nothing:
 
 ```bash
