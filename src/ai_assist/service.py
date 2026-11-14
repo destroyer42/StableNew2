@@ -238,6 +238,15 @@ class AiAssistService:
 
     # -- public API ---------------------------------------------------------------------------------------------------
 
+    @property
+    def busy(self) -> bool:
+        """Whether a request is admitted or its worker is still alive (the model selector refuses to switch then)."""
+
+        with self._lock:
+            return self._active is not None or (
+                self._worker is not None and self._worker.is_alive()
+            )
+
     def run(self, request: AssistRequest, token: AiCancelToken | None = None) -> AssistOutcome:
         """Admit and run one request on the calling thread. Never raises for an operational failure."""
 

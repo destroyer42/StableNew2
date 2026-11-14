@@ -5,7 +5,7 @@
     python -m tools.ai_assist_admin import-runtime <archive.zip> --build-id ID
     python -m tools.ai_assist_admin import-model <model.gguf> --model-id ID
     python -m tools.ai_assist_admin record-attestation --statement "outbound firewall rule name" --build-id ID [--build-id ID]
-    python -m tools.ai_assist_admin activate --build-id ID --model-id ID
+    python -m tools.ai_assist_admin activate --build-id ID --model-id ID   # the build must be listed for the model
     python -m tools.ai_assist_admin status
 
 ``describe-runtime`` reads the archive and prints a manifest build entry for a reviewed pull request; it extracts and runs
@@ -22,6 +22,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from src.ai_assist.activation import ActivationRefused, activate
 from src.ai_assist.attestation import read_covers, record_attestation
 from src.ai_assist.manifests import (
     ImportRefused,
@@ -30,8 +31,6 @@ from src.ai_assist.manifests import (
     import_runtime,
     load_model_registry,
     load_runtime_manifest,
-    record_active,
-    verify_installation,
 )
 from src.ai_assist.paths import resolve_ai_root
 from src.ai_assist.status import (
@@ -142,18 +141,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"  covers {build_id}: {executable}")
             print("This is the operator's statement; StableNew does not verify the firewall.")
         elif args.command == "activate":
-            build = runtime.find(args.build_id)
-            entry = next((e for e in registry.entries if e.model_id == args.model_id), None)
-            if build is None or entry is None:
-                print("refused: unknown_build_or_model")
+            # The same function the in-app model selector uses: one activation authority (owner decision D20).
+            try:
+                activation = activate(
+                    root, runtime, registry, build_id=args.build_id, model_id=args.model_id
+                )
+            except ActivationRefused as exc:
+                print(f"refused: {exc.code}")
                 return 2
-            record_active(root, build, entry)
-            verification = verify_installation(root, runtime, registry, allow_candidate=True)
-            if not verification.ok:
-                print(f"activated, but verification failed: {verification.reason}")
+            build = activation.build
+            if not activation.verification.ok:
+                print(f"activated, but verification failed: {activation.verification.reason}")
                 return 1
             print(
-                "activated; any AI Assist Preview enablement was voided (re-enable it in the application)."
+                "activated. AI Assist Preview is enabled per model and runtime build: an earlier enablement of this exact "
+                "pair still applies, any other pair must be enabled in the application."
             )
             print(
                 "The firewall attestation must cover this build and its executable "
