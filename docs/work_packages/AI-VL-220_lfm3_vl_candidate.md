@@ -90,7 +90,7 @@ load, no binary). Records kept outside Git in that folder: `download_verificatio
 `docs/runbooks/ai_vl_candidate_staging.md`: print pinned `curl` commands, `verify-staging` (hashes, headers, build pin), the owner's
 license acknowledgement, and an explicit `import` into an **evaluation root** the operator names (never `ManagedAi`, never a Git
 working tree, never overwrites, cancel-safe). The application downloads nothing; the tool imports no network or process module.
-`import` is documented as held until the owner approves the invocation contract. Nothing was imported anywhere.
+`import` is documented as held until the driver exists (the owner approved the invocation contract on 2026-11-14, see below). Nothing was imported anywhere.
 
 ## 4. Evaluation contract (requirement 4)
 
@@ -146,6 +146,15 @@ not move because the registry and the argument vocabulary were not touched.
 4. Choose the existing assets and the person who labels them, and whether Florence-2 is a comparator.
 5. Authorize a first supervised CPU-only run by plan digest (a later package; this PR authorizes none), and create the
    `llama-mtmd-cli.exe` outbound Block rule yourself.
+
+## Owner decision after review (2026-11-14, from the chat)
+
+Owner statement (verbatim): "A: Approve. B: Approve. C: Authorize". Decisions 1 (invocation contract and the
+`b11960-cpu-vision` build-entry approach) and 5's run authorization are now given for the first supervised CPU-only run, naming
+plan digest `23df6fa4...880e`; this PR changes only documentation and one test assertion to record that. Still open and not
+done by this PR: the license acknowledgement (decision 2), the projector and limits confirmation (3), the real assets and
+labeler (4), the owner's `llama-mtmd-cli.exe` firewall rule and attestation, and the implementing package (manifest entry,
+visual argument builder, driver reusing `run_bounded`, tests). `INVOCATION_APPROVED` stays `False` until that package lands.
 
 ## Stop conditions
 

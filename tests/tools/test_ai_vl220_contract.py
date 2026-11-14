@@ -496,7 +496,13 @@ def test_the_specification_documents_exist_and_carry_the_current_plan_digest() -
     digest = plan.build_plan()["plan_sha256"]
     for relative in (plan.EVALUATION_DOCUMENT, plan.INVOCATION_DOCUMENT):
         text = (REPO / relative).read_text(encoding="utf-8")
-        assert "not approved" in text.lower() or "pending owner approval" in text.lower()
+        lowered = text.lower()
+        assert (
+            "not approved" in lowered
+            or "pending owner approval" in lowered
+            or "not yet implemented" in lowered
+            or "no run is possible" in lowered
+        )
     assert digest in (REPO / plan.EVALUATION_DOCUMENT).read_text(encoding="utf-8")
 
 

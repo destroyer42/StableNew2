@@ -1,9 +1,30 @@
-# PR-AI-VL-220: proposed image invocation contract (pending owner approval, not approved)
+# PR-AI-VL-220: image invocation contract (approved by the owner 2026-11-14; not yet implemented)
 
-Status: **proposal only. Nothing in this document is implemented, wired or approved.** `FORBIDDEN_FLAGS`, `ALLOWED_FLAGS`,
+## Owner decision (2026-11-14, recorded from the chat)
+
+Owner statement (verbatim): "A: Approve. B: Approve. C: Authorize" - answering decisions A (approve this contract), B (approve
+the separate `b11960-cpu-vision` build entry, a firewall Block rule and attestation) and C (authorize a first supervised, CPU-only
+run on the synthetic set, then existing assets, naming plan digest
+`23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`). Recorded as given, with no change to section 3.
+
+What this does **not** do, and what is still missing before any run is possible:
+
+1. **Nothing is implemented.** There is no `b11960-cpu-vision` manifest entry, no visual driver and no visual argument builder;
+   they are a follow-up package. `contract.INVOCATION_APPROVED` stays `False` (and so does the plan field and the comparator
+   reason `image_invocation_not_approved`, which read "approved and implemented") because the authorized plan digest includes
+   them; it flips in the implementing package, which must then name the new digest and prove it differs only by that flag.
+2. **The license acknowledgement is still the owner's act and has not been made** (record `license_acknowledgement.json`, text
+   `30adf9d6...`); admission refuses without it.
+3. **The firewall Block rule for `llama-mtmd-cli.exe` and the attestation for `b11960-cpu-vision`** are the owner's acts; the
+   session that implements this creates no rule and records no attestation.
+4. The authorization in C is for the first supervised run only (synthetic set, then existing assets once the owner has chosen
+   them and a labeler); each run still needs the implementing package's own gates to pass, and it does not extend to any
+   change of the plan, the invocation, the model or the projector.
+
+Status of the text below: approved as the specification to implement. `FORBIDDEN_FLAGS`, `ALLOWED_FLAGS`,
 `build_argv`, `build_production_argv`, the runtime process authority, the firewall attestation and the protected-token
 validators are unchanged by this package; the owner's wish to use LFM3-VL-2B as a comparator does not approve this contract.
-A visual evaluation run is impossible until the owner approves it (or a changed version of it) in words.
+A visual evaluation run is impossible until the pieces listed under the owner decision exist.
 
 ## 1. Why a separate contract
 
@@ -87,8 +108,9 @@ network access; `--mmproj` anywhere in `src/`; an unattested or unhashed executa
 
 ## 6. Owner decisions
 
-* **A.** Approve this contract, approve it with changes, or decline (then the harness stays a specification).
+* **A.** Approve this contract, approve it with changes, or decline (then the harness stays a specification). **Approved 2026-11-14.**
 * **B.** Approve the separate `b11960-cpu-vision` build entry and its firewall rule and attestation (a follow-up package would
-  add the manifest entry, the driver and its tests).
+  add the manifest entry, the driver and its tests). **Approved 2026-11-14.**
 * **C.** Authorize a first supervised, CPU-only run on the synthetic set, then on existing assets, naming the plan digest
-  (`PR-AI-VL-220_Visual_Evaluation_Contract.md`). This document does not give that authorization.
+  (`PR-AI-VL-220_Visual_Evaluation_Contract.md`). **Authorized 2026-11-14** for the first supervised run only (see the owner
+  decision above for the conditions still unmet).

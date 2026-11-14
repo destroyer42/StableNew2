@@ -1,7 +1,9 @@
 # PR-AI-VL-220: visual evaluation contract (specification and harness scaffolding)
 
-Status: **specified and tested on synthetic data; no model has been run.** The owner has not approved the image invocation a
-real run needs (`PR-AI-VL-220_Image_Invocation_Contract.md`, pending owner approval). Nothing here is qualification.
+Status: **specified and tested on synthetic data; no model has been run.** The owner approved the image invocation a real run
+needs on 2026-11-14 (`PR-AI-VL-220_Image_Invocation_Contract.md`) and authorized a first supervised CPU-only run of this plan
+digest; the driver, the `b11960-cpu-vision` build entry, the license acknowledgement and the firewall rule do not exist yet, so
+no run is possible today. Nothing here is qualification.
 
 Plan digest (`python -m tools.qualification.vl220 describe`, field `plan_sha256`; a test fails if this line goes stale):
 `23df6fa436f4e4292b4421e5155ee232729ea1b4942ff8b6807b50dbc755880e`
@@ -62,7 +64,7 @@ guarantees structure, not truth: a well-formed wrong answer is scored as wrong.
 | Smart Review segmentation (SAM2) | no | none | No text output |
 | Qwen3.5 text GGUFs | no | none | Registered as text models; no projector is registered and `--mmproj` is in `FORBIDDEN_FLAGS` |
 | LFM3-1.7B text GGUFs | no | none | The language model has no vision encoder |
-| LFM3-VL-2B candidate | not yet | all | Image invocation not approved; license not acknowledged; not imported into an evaluation root |
+| LFM3-VL-2B candidate | not yet | all | Image invocation approved but not implemented; license not acknowledged; not imported into an evaluation root |
 
 The audit found **no existing eligible vision-language capability that answers structured questions**; the Qwen3.5 models may be
 multimodal upstream, but StableNew registers and runs them as text only, so a Qwen visual arm would need its own projector pin,

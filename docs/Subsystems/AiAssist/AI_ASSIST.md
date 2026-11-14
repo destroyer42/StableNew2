@@ -161,6 +161,6 @@ with repository, 40-character revision, file name, size, SHA-256; license text h
 `tools/qualification/vl220/` (fail-closed admission: pinned bytes, matching GGUF headers, required build, license
 acknowledgement). The two files were downloaded by an operator-authorized step into a staging folder and hash-verified; nothing is
 imported into the AI root. The evaluation contract (`PR-AI-VL-220_Visual_Evaluation_Contract.md`) is a specification plus
-harness that runs no model; the image invocation a real run needs is a separate proposal pending owner approval
+harness that runs no model; the image invocation a real run needs was approved by the owner on 2026-11-14 as a specification and is not implemented yet
 (`PR-AI-VL-220_Image_Invocation_Contract.md`). The runbook is `docs/runbooks/ai_vl_candidate_staging.md`; the work package is
 `docs/work_packages/AI-VL-220_lfm3_vl_candidate.md`.
