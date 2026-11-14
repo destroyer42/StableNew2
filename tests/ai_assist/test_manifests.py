@@ -33,8 +33,8 @@ def test_shipped_manifests_parse_cleanly_and_nothing_is_qualified() -> None:
     runtime = load_runtime_manifest(RUNTIME_MANIFEST_PATH)
     registry = load_model_registry(MODEL_REGISTRY_PATH)
     assert runtime.problems == () and registry.problems == ()
-    # No runtime build is pinned until the operator imports the archive and every loadable file can be hashed.
-    assert runtime.builds == ()
+    # One unqualified build (llama.cpp b11840 CPU x64) is pinned for AI Assist Preview (D13/D15); qualification is PR-AI-111.
+    assert [build.build_id for build in runtime.builds] == ["b11840-cpu"]
     assert not any(build.qualified for build in runtime.builds)
     assert len(registry.entries) >= 1 and not any(entry.qualified for entry in registry.entries)
 
