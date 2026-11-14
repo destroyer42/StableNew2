@@ -391,6 +391,8 @@ MIGRATED = (
     "src/pipeline/history_variation_compiler.py",
     "src/video/sequence_resume.py",
     "src/pipeline/reprocess_builder.py",
+    "src/learning/learning_njr.py",
+    "src/learning/ordinary_njr.py",
 )
 FAMILY_IDENTIFIERS = re.compile(
     r"z_?image|klein|flux|sdxl|sd15|animatediff|qwen|hunyuan|wan2|ltx", re.IGNORECASE

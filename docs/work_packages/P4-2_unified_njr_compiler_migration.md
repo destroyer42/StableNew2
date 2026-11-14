@@ -260,6 +260,33 @@ Risk: medium by reach, low by change size. Rollback: revert one commit.
 
 ## P4-2D — Learning
 
+### Status (2026-11-13): implemented on `refactor/p4-2d-njr-learning`
+
+- `learning_njr.assemble_txt2img_njr` (S6) now declares a `FROZEN` draft with `checks=(PROFILE_NJR,)` and a
+  `FrozenExpectation` over `positive_prompt`, `negative_prompt` and `workload.backend_options` (the caller's own
+  `mismatch_message` is the refusal text); `compile_njr` constructs the record, verifies the expectation, then runs the
+  exact-profile check, in the order the function used before. It serves Model Comparison, Two-Axis Grid and the Prompt x
+  Model Matrix.
+- `ordinary_njr._materialize_txt2img` (S7) declares a `FROZEN` draft with no checks (it ran none) and a prompt
+  expectation that cannot fail for values the caller passes; the strict Preview parity check still follows in
+  `materialize_njr`. The non-txt2img re-identification (V5) is `derive_njr(record, NjrDerivation(job_id=...,
+  provenance=...))` with no checks and the parent's source.
+- Not changed: the legacy (non-strict) defaults (X13), each route's model-policy and configuration rules, the planners and
+  Learning controllers. No core interface changed; no `RAW` or `EFFECTIVE` use was added. A malformed S6 configuration that
+  lacks `prompt`, `negative_prompt` or `backend_options` now raises `KeyError` while the expectation is built instead of
+  after construction (and a mismatch plus a missing later key reports the `KeyError`, not the mismatch): the code path
+  for well-formed frozen arms is identical.
+- Preview and Run: `tests/learning_v2/test_njr_preview_run_equality_p42d.py` compares the Preview compile with the Run
+  compile (ordinary strict, Model Comparison, Prompt x Model Matrix) and pins that the compile policy is never run for a
+  `FROZEN` draft. Apart from the minted `job_id`, the `output_plan` and the two `metadata` mappings, the records are equal.
+- Ownership ratchet: `tests/pipeline/test_njr_compiler.py` now also covers `learning_njr.py` and `ordinary_njr.py`.
+- Direct constructors that remain: S2 `job_builder_v2.py` and S3 `prompt_pack_job_builder.py` (P4-2E); V3
+  `replay_engine.py:161` (P4-2F); `njr_core_v26.py:1276`, R1 `migrate_legacy_njr` (read path) and T1
+  `tools/qualification/img_forge_100/run.py` (operator-only), plus the `pipeline_controller.py` references the P4-2F guard
+  will classify. One more `replace(..., job_id=...)` sits outside the core: `src/learning/qualification_batch.py:400`
+  compares a freshly compiled record with a stored one after giving it the stored identity; it produces no record and
+  the P4-2F guard must classify it as a comparison.
+
 ### Objective
 
 - Outcome: `learning_njr.assemble_txt2img_njr` and `ordinary_njr._materialize_txt2img` build `FROZEN` drafts and
