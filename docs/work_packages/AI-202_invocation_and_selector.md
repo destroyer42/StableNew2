@@ -145,7 +145,7 @@ recorded. After AI-202a the owner must re-record the attestation and create a fi
 
 Delivered and demonstrated by deterministic tests: pinned executables and impl libraries; production argv; end-of-text
 handling; exit code, bounded detail and no-content event log; attestation binding in the service, status and admin tool.
-**Held / unverified:** every item of section 4; no binary was executed, the first real run is the owner's. Nothing here is
+**Held / unverified:** every item of section 4; no binary was executed, the first real run is the owner's. The coordinating session relayed an owner authorization for supervised test runs, but the session's permission layer denied launching the runtime, so the prepared run (3 build/model pairs, every suggestion kind, `--version`/`--help`) was **NOT RUN**; read-only preconditions seen: enabled outbound Block rules exist for both `llama-completion.exe` paths. Nothing here is
 qualification, and `qualified` stays `false`.
 
 ## 9. AI-202b (planned, separate PR after 202a merges)
