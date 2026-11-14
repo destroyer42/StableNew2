@@ -11,6 +11,13 @@ from src.ai_assist.contracts import SuggestionKind
 from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
 from src.gui_v2.ai_plan_advice import PLAN_ADVICE_NOTICE, PlanReview, review_text
+from src.gui_v2.ai_slot_variety import (
+    VARIETY_LABEL,
+    VARIETY_NOTICE,
+    VarietyReview,
+    offered_label,
+    variety_text,
+)
 from src.gui_v2.ai_suggestion_view import (
     KIND_LABELS,
     RUNTIME_DETAIL_BUTTON,
@@ -33,6 +40,9 @@ class AiSuggestionDialog(tk.Toplevel):
         trust_label: str = "",
         on_advise: Callable[[str], None] | None = None,
         advise_problem: str = "",
+        on_variety: Callable[[str], None] | None = None,
+        on_add_value: Callable[[int], None] | None = None,
+        variety_problem: str = "",
     ) -> None:
         super().__init__(master)
         self.title("AI suggestion review")
@@ -74,6 +84,38 @@ class AiSuggestionDialog(tk.Toplevel):
             self.advise_button.pack(side="left", padx=4)
             self.copy_frame = ttk.Frame(plan)
             self.copy_frame.pack(fill="x", padx=4, pady=2)
+        # Slot variety (AI-212): a goal, one request button, and per-value explicit additions of offered values only.
+        self._on_variety = on_variety
+        self._on_add_value = on_add_value
+        self._variety_problem = variety_problem
+        self.variety_goal_var = tk.StringVar(value="")
+        self.variety_button: ttk.Button | None = None
+        self.variety_list: tk.Listbox | None = None
+        self.add_value_button: ttk.Button | None = None
+        self._offered_rows: list[int] = []
+        if on_variety is not None:
+            variety = ttk.LabelFrame(self, text=VARIETY_LABEL)
+            variety.pack(fill="x", padx=8, pady=(0, 4))
+            ttk.Label(variety, text=VARIETY_NOTICE, wraplength=740, justify="left").pack(
+                fill="x", padx=4, pady=2
+            )
+            row = ttk.Frame(variety)
+            row.pack(fill="x", padx=4, pady=2)
+            ttk.Label(row, text="Goal:").pack(side="left")
+            self.variety_goal_entry = ttk.Entry(row, textvariable=self.variety_goal_var, width=70)
+            self.variety_goal_entry.pack(side="left", fill="x", expand=True, padx=4)
+            self.variety_button = ttk.Button(row, text="Suggest variety", command=self._variety)
+            self.variety_button.pack(side="left", padx=4)
+            offered = ttk.Frame(variety)
+            offered.pack(fill="x", padx=4, pady=2)
+            self.variety_list = tk.Listbox(
+                offered, height=5, selectmode="browse", exportselection=False
+            )
+            self.variety_list.pack(side="left", fill="x", expand=True)
+            self.add_value_button = ttk.Button(
+                offered, text="Add selected value", command=self._add_value, state="disabled"
+            )
+            self.add_value_button.pack(side="left", padx=4, anchor="n")
         self.status_var = tk.StringVar(
             value="Choose the assistance to request. Acceptance changes only the editing buffer."
         )
@@ -116,6 +158,8 @@ class AiSuggestionDialog(tk.Toplevel):
         unavailable = [f"{KIND_LABELS[k]}: {v}" for k, v in explanations.items() if v]
         if advise_problem:
             unavailable.append(f"Advise plan: {advise_problem}")
+        if variety_problem and on_variety is not None:
+            unavailable.append(f"Suggest variety: {variety_problem}")
         self._text("\n".join(unavailable))
 
     def _advise(self) -> None:
@@ -123,10 +167,68 @@ class AiSuggestionDialog(tk.Toplevel):
             self._on_advise(self.goal_var.get())
 
     def _set_advise(self, running: bool) -> None:
+        # Both goal actions share the dialog's single-flight state.
         if self.advise_button is not None:
             self.advise_button.state(
                 ["disabled"] if running or self._advise_problem else ["!disabled"]
             )
+        if self.variety_button is not None:
+            self.variety_button.state(
+                ["disabled"] if running or self._variety_problem else ["!disabled"]
+            )
+
+    def _variety(self) -> None:
+        if self._on_variety is not None:
+            self._on_variety(self.variety_goal_var.get())
+
+    def _add_value(self) -> None:
+        if self._on_add_value is None or self.variety_list is None:
+            return
+        listbox = self.variety_list
+        chosen = [i for i in range(len(self._offered_rows)) if listbox.selection_includes(i)]
+        if len(chosen) == 1:
+            self._on_add_value(self._offered_rows[chosen[0]])
+
+    def _clear_variety(self) -> None:
+        self._offered_rows = []
+        if self.variety_list is not None:
+            self.variety_list.delete(0, "end")
+        if self.add_value_button is not None:
+            self.add_value_button.state(["disabled"])
+
+    def show_variety(self, review: VarietyReview) -> None:
+        """Judged slot-variety proposals. Only offered values enter the list; rejected ones appear in the text only."""
+
+        self._clear_copy_buttons()
+        self._clear_variety()
+        self.status(review.status)
+        self._set_requests(False)
+        self._set_advise(False)
+        self.cancel_button.state(["disabled"])
+        self.accept_button.state(["disabled"])
+        self._text(variety_text(review))
+        if self.variety_list is None:
+            return
+        for row in review.offered_rows:
+            self.variety_list.insert("end", offered_label(row))
+            self._offered_rows.append(row.index)
+        if self._offered_rows and self.add_value_button is not None:
+            self.add_value_button.state(["!disabled"])
+
+    def running_variety(self) -> None:
+        self._clear_copy_buttons()
+        self._clear_variety()
+        self.clear_runtime_detail()
+        self.status("Suggest variety: request running…")
+        self._text("")
+        self._set_requests(True)
+        self._set_advise(True)
+        self.accept_button.state(["disabled"])
+        self.cancel_button.state(["!disabled"])
+
+    @property
+    def trust_label(self) -> str:
+        return self._trust_label
 
     def set_advise_problem(self, problem: str) -> None:
         self._advise_problem = problem
@@ -175,6 +277,7 @@ class AiSuggestionDialog(tk.Toplevel):
         """Read-only display of a judged advisory plan. The only actions are per-step clipboard copies."""
 
         self._clear_copy_buttons()
+        self._clear_variety()
         self.status(review.status)
         self._set_requests(False)
         self._set_advise(False)
@@ -197,6 +300,7 @@ class AiSuggestionDialog(tk.Toplevel):
 
     def running_plan(self) -> None:
         self._clear_copy_buttons()
+        self._clear_variety()
         self.clear_runtime_detail()
         self.status("Advise plan: request running…")
         self._text("")
@@ -225,6 +329,7 @@ class AiSuggestionDialog(tk.Toplevel):
         self.preview.configure(state="disabled")
 
     def running(self, kind: SuggestionKind) -> None:
+        self._clear_variety()
         self.clear_runtime_detail()
         self.status(f"{KIND_LABELS[kind]}: request running…")
         self._text("")
@@ -235,6 +340,7 @@ class AiSuggestionDialog(tk.Toplevel):
 
     def show_review(self, model: SuggestionReview) -> None:
         self._clear_copy_buttons()
+        self._clear_variety()
         self.status(f"{model.kind}: {model.status}")
         self._set_requests(False)
         self._set_advise(False)
@@ -273,8 +379,10 @@ class AiSuggestionDialog(tk.Toplevel):
 
     def clear_sensitive(self) -> None:
         self._clear_copy_buttons()
+        self._clear_variety()
         self.clear_runtime_detail()
         self.goal_var.set("")
+        self.variety_goal_var.set("")
         self._text("")
         self.accept_button.state(["disabled"])
         self.status_var.set(
