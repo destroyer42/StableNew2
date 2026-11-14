@@ -12,7 +12,6 @@ from dataclasses import fields, replace
 
 import pytest
 
-from src.ai_assist.attestation import record_attestation
 from src.ai_assist.contracts import (
     MAX_GOAL_CHARS,
     MAX_PLAN_STEPS,
@@ -35,7 +34,7 @@ from src.ai_assist.preview import enable_preview
 from src.ai_assist.service import ServicePolicy
 from src.ai_assist.validators import validate_output
 
-from .conftest import Install
+from .conftest import Install, attest
 from .test_service_runtime import SpawnSpy, make_service
 
 TARGETS = ("model-a", "model-b")
@@ -347,7 +346,7 @@ def candidate(installation: Install) -> Install:
 
 
 def test_planning_with_a_candidate_is_refused_until_preview_is_enabled(candidate: Install) -> None:
-    record_attestation(candidate.root, "rule")
+    attest(candidate, "rule")
     spy = SpawnSpy()
     service = make_service(candidate, policy=PREVIEW_POLICY, runner=spy)
     refused = service.run(plan_request())
@@ -366,7 +365,7 @@ def test_planning_still_needs_the_egress_attestation_in_preview(candidate: Insta
 
 
 def test_a_candidate_never_runs_without_the_preview_policy(candidate: Install) -> None:
-    record_attestation(candidate.root, "rule")
+    attest(candidate, "rule")
     enable_preview(candidate.root, candidate.manifest, candidate.registry)
     policy = ServicePolicy(strict_offline=True, watch_interval_seconds=0.05)
     assert (

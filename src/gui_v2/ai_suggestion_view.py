@@ -11,6 +11,7 @@ from src.ai_assist.contracts import (
     AssistRequest,
     AssistSuggestion,
     OutcomeCode,
+    RuntimeDetail,
     SuggestionKind,
 )
 from src.ai_assist.preview import PreviewState
@@ -92,6 +93,31 @@ def checked_suggestion(outcome: AssistOutcome, request: AssistRequest) -> Assist
 def outcome_review(outcome: AssistOutcome, kind: SuggestionKind) -> SuggestionReview:
     # Never expose raw model refusal text, details, exception messages or malformed stdout.
     return SuggestionReview(OUTCOME_TEXT[outcome.code], KIND_LABELS[kind])
+
+
+RUNTIME_DETAIL_BUTTON = "Show runtime detail"
+RUNTIME_DETAIL_HIDE_BUTTON = "Hide runtime detail"
+RUNTIME_DETAIL_LABEL = (
+    "Raw runtime output, not reviewed by StableNew. It is shown here only, is never saved, and may contain "
+    "fragments of your own text."
+)
+
+
+def runtime_detail_text(detail: RuntimeDetail | None) -> str:
+    """The text behind the "Show runtime detail" control, or ``""`` when the request has nothing to show.
+
+    Held in memory by the dialog only; the exit code is the one value that is also recorded (as an integer) in the event log."""
+
+    if detail is None:
+        return ""
+    lines: list[str] = []
+    if detail.exit_code is not None:
+        lines.append(f"Exit code: {detail.exit_code}")
+    if detail.stderr_tail:
+        lines += ["", "stderr (last part):", detail.stderr_tail]
+    if detail.stdout_head:
+        lines += ["", "stdout (first part):", detail.stdout_head]
+    return "\n".join(lines).strip()
 
 
 _PREVIEW_MISSING = {

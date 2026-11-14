@@ -11,7 +11,13 @@ from src.ai_assist.contracts import SuggestionKind
 from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
 from src.gui_v2.ai_plan_advice import PLAN_ADVICE_NOTICE, PlanReview, review_text
-from src.gui_v2.ai_suggestion_view import KIND_LABELS, SuggestionReview
+from src.gui_v2.ai_suggestion_view import (
+    KIND_LABELS,
+    RUNTIME_DETAIL_BUTTON,
+    RUNTIME_DETAIL_HIDE_BUTTON,
+    RUNTIME_DETAIL_LABEL,
+    SuggestionReview,
+)
 
 
 class AiSuggestionDialog(tk.Toplevel):
@@ -74,6 +80,18 @@ class AiSuggestionDialog(tk.Toplevel):
         ttk.Label(self, textvariable=self.status_var, wraplength=760, justify="left").pack(
             fill="x", padx=8
         )
+        self._detail_text = ""
+        self._detail_shown = False
+        self.detail_button = ttk.Button(
+            self, text=RUNTIME_DETAIL_BUTTON, command=self._toggle_detail, state="disabled"
+        )
+        self.detail_button.pack(anchor="w", padx=8)
+        self.detail_label = ttk.Label(
+            self, text=RUNTIME_DETAIL_LABEL, wraplength=760, justify="left"
+        )
+        self.detail_view = tk.Text(self, height=8, width=100, wrap="word", undo=False)
+        style_text_widget(self.detail_view)
+        self.detail_view.configure(state="disabled")
         self.preview = tk.Text(self, height=22, width=100, wrap="word", undo=False)
         style_text_widget(self.preview)
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.preview.yview)
@@ -119,6 +137,40 @@ class AiSuggestionDialog(tk.Toplevel):
             button.destroy()
         self._copy_buttons.clear()
 
+    def set_runtime_detail(self, text: str) -> None:
+        """Hold raw runtime output for the operator. Nothing is shown until "Show runtime detail" is pressed."""
+
+        self._hide_detail()
+        self._detail_text = text
+        self.detail_button.state(["!disabled"] if text else ["disabled"])
+
+    def _toggle_detail(self) -> None:
+        if self._detail_shown:
+            self._hide_detail()
+            return
+        if not self._detail_text:
+            return
+        self.detail_label.pack(fill="x", padx=8, before=self.preview)
+        self.detail_view.pack(fill="x", padx=8, pady=(0, 4), before=self.preview)
+        self.detail_view.configure(state="normal")
+        self.detail_view.delete("1.0", "end")
+        self.detail_view.insert("1.0", self._detail_text)
+        self.detail_view.configure(state="disabled")
+        self.detail_button.configure(text=RUNTIME_DETAIL_HIDE_BUTTON)
+        self._detail_shown = True
+
+    def _hide_detail(self) -> None:
+        self.detail_view.configure(state="normal")
+        self.detail_view.delete("1.0", "end")
+        self.detail_view.configure(state="disabled")
+        self.detail_view.pack_forget()
+        self.detail_label.pack_forget()
+        self.detail_button.configure(text=RUNTIME_DETAIL_BUTTON)
+        self._detail_shown = False
+
+    def clear_runtime_detail(self) -> None:
+        self.set_runtime_detail("")
+
     def show_plan(self, review: PlanReview) -> None:
         """Read-only display of a judged advisory plan. The only actions are per-step clipboard copies."""
 
@@ -145,6 +197,7 @@ class AiSuggestionDialog(tk.Toplevel):
 
     def running_plan(self) -> None:
         self._clear_copy_buttons()
+        self.clear_runtime_detail()
         self.status("Advise plan: request running…")
         self._text("")
         self._set_requests(True)
@@ -172,6 +225,7 @@ class AiSuggestionDialog(tk.Toplevel):
         self.preview.configure(state="disabled")
 
     def running(self, kind: SuggestionKind) -> None:
+        self.clear_runtime_detail()
         self.status(f"{KIND_LABELS[kind]}: request running…")
         self._text("")
         self._set_requests(True)
@@ -219,6 +273,7 @@ class AiSuggestionDialog(tk.Toplevel):
 
     def clear_sensitive(self) -> None:
         self._clear_copy_buttons()
+        self.clear_runtime_detail()
         self.goal_var.set("")
         self._text("")
         self.accept_button.state(["disabled"])

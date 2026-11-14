@@ -16,10 +16,17 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 from src.ai_assist.argv import RunLimits, Sampling
-from src.ai_assist.attestation import read_attestation
-from src.ai_assist.contracts import AiCancelToken, AssistOutcome, AssistRequest, OutcomeCode
+from src.ai_assist.attestation import attestation_covers
+from src.ai_assist.contracts import (
+    AiCancelToken,
+    AssistOutcome,
+    AssistRequest,
+    OutcomeCode,
+    RuntimeDetail,
+)
 from src.ai_assist.events import EventLog
 from src.ai_assist.host import (
     GenerationActivity,
@@ -58,6 +65,16 @@ MEMORY_MARGIN_GIB = 4.0
 GUARD_AVAILABLE_GIB = 0.25
 GUARD_COMMIT_HEADROOM_GIB = 1.0
 GUARD_CONSECUTIVE = 2
+
+
+def _failure_detail(detail: RuntimeDetail | None, code: OutcomeCode) -> RuntimeDetail | None:
+    """Runtime detail only for a request that produced no suggestion; the stdout head only when the output was malformed."""
+
+    if detail is None or code is OutcomeCode.SUGGESTION:
+        return None
+    if code is OutcomeCode.MALFORMED:
+        return detail
+    return replace(detail, stdout_head="")
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,7 +371,10 @@ class AiAssistService:
                     # Fail closed: a missing, malformed or mismatched enablement record is "not enabled".
                     return refuse(OutcomeCode.NOT_INSTALLED, "preview_not_enabled")
             verification = replace(verification, trust_tier=tier)
-            if self._policy.strict_offline and read_attestation(self._root) is None:
+            if self._policy.strict_offline and not attestation_covers(
+                self._root, verification.build.build_id, verification.build.executable
+            ):
+                # No record, a legacy record without coverage, or one that does not name this build and executable.
                 return refuse(OutcomeCode.EGRESS_NOT_ATTESTED, "operator_attestation_missing")
             activity = self._read_activity()
             if activity is None:
@@ -409,16 +429,20 @@ class AiAssistService:
                 watch.cancelled_outcome,
                 observe=observer.bind,
             )
+            details: dict[str, Any] = {
+                **observer.evidence.as_details(),
+                "trust_tier": verification.trust_tier,
+            }
+            if type(result.exit_code) is int:
+                details["exit_code"] = result.exit_code
             if result.code is not None:
                 outcome = AssistOutcome(
                     code=result.code,
                     request_id=request.request_id,
                     reason=result.reason,
                     elapsed_ms=result.elapsed_ms,
-                    details={
-                        **observer.evidence.as_details(),
-                        "trust_tier": verification.trust_tier,
-                    },
+                    details=details,
+                    runtime_detail=result.detail,
                 )
             else:
                 output_chars = len(result.stdout)
@@ -429,10 +453,8 @@ class AiAssistService:
                     reason=validated.reason,
                     suggestion=validated.suggestion,
                     elapsed_ms=result.elapsed_ms,
-                    details={
-                        **observer.evidence.as_details(),
-                        "trust_tier": verification.trust_tier,
-                    },
+                    details=details,
+                    runtime_detail=_failure_detail(result.detail, validated.code),
                 )
         except Exception:  # noqa: BLE001 - the request must always end in a typed outcome
             logger.exception("AI assist request failed unexpectedly")
@@ -478,6 +500,7 @@ class AiAssistService:
             ("peak_tree_private_gib", "peak_private_gib"),
             ("priority_verified", "priority_verified"),
             ("child_observed", "child_observed"),
+            ("exit_code", "exit_code"),
         ):
             if key in outcome.details:
                 record[field] = outcome.details[key]

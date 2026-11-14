@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from src.ai_assist.attestation import record_attestation
 from src.ai_assist.events import EventLog
 from src.ai_assist.manifests import ModelRegistry, RuntimeManifest
 from src.ai_assist.paths import events_path, runtime_dir
@@ -18,7 +17,7 @@ from src.ai_assist.status import (
 )
 from src.services.operator_readiness_service import OperatorReadinessService, OperatorReadinessState
 
-from .conftest import Install
+from .conftest import Install, attest
 
 
 def _service(provider) -> OperatorReadinessService:
@@ -64,7 +63,7 @@ def test_unqualified_candidates_do_not_make_the_feature_ready(installation: Inst
 
 
 def test_status_reports_attestation_and_last_outcome_without_content(installation: Install) -> None:
-    record_attestation(installation.root, "outbound block rule")
+    attest(installation, "outbound block rule")
     EventLog(events_path(installation.root)).append(
         {"request_id": "r1", "outcome": "refused_by_model"}
     )

@@ -219,6 +219,27 @@ class AssistSuggestion:
         }
 
 
+#: The most raw runtime output kept for an operator who asks to see why a request failed (AI-202a).
+MAX_RUNTIME_DETAIL_BYTES = 2048
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeDetail:
+    """Raw runtime output for the operator's "Show runtime detail" control. In memory only, never persisted.
+
+    ``stderr_tail`` is the end of the child's stderr and ``stdout_head`` the start of its stdout (kept for ``MALFORMED``
+    only), each at most :data:`MAX_RUNTIME_DETAIL_BYTES` bytes. Both are NOT reviewed content: stdout can echo authored text,
+    so neither is ever written to ``events.jsonl``, a log or a file, and neither appears in ``repr``."""
+
+    exit_code: int | None = None
+    stderr_tail: str = field(default="", repr=False)
+    stdout_head: str = field(default="", repr=False)
+
+    @property
+    def has_text(self) -> bool:
+        return bool(self.stderr_tail or self.stdout_head)
+
+
 @dataclass(frozen=True, slots=True)
 class AssistOutcome:
     """The only thing a request returns. ``suggestion`` is set if and only if ``code`` is SUGGESTION."""
@@ -229,6 +250,7 @@ class AssistOutcome:
     suggestion: AssistSuggestion | None = None
     elapsed_ms: int = 0
     details: dict[str, Any] = field(default_factory=dict)
+    runtime_detail: RuntimeDetail | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if (self.code is OutcomeCode.SUGGESTION) != (self.suggestion is not None):
@@ -247,6 +269,7 @@ __all__ = [
     "MAX_NAME_CHARS",
     "MAX_PLAN_STEPS",
     "MAX_PLAN_TOTAL_COUNT",
+    "MAX_RUNTIME_DETAIL_BYTES",
     "MAX_RATIONALE_CHARS",
     "MAX_REFUSAL_REASON_CHARS",
     "MAX_STEP_COUNT",
@@ -259,5 +282,6 @@ __all__ = [
     "AssistSuggestion",
     "OutcomeCode",
     "PlanStep",
+    "RuntimeDetail",
     "SuggestionKind",
 ]
