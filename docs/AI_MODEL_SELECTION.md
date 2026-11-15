@@ -1,6 +1,6 @@
 # StableNew AI model selection
 
-Last reviewed: 2026-10-23
+Last reviewed: 2026-11-15
 
 The single authority for choosing a coding model and effort. `AGENTS.md`, the work-package template and the agent
 files point here instead of copying it. This is a starting heuristic, not a routing rule and not authority to act
@@ -35,36 +35,35 @@ files point here instead of copying it. This is a starting heuristic, not a rout
 
 ## Selection matrix (starting heuristic)
 
+This matrix is a prior, not a mandatory routing rule. Verify actual
+model availability and supported effort levels in the chosen host.
+
 | StableNew work profile | Codex default | Claude Code default |
 |---|---|---|
-| Git/status/docs cleanup/mechanical validation | GPT-6 Luna Low/Medium | Haiku 4.5 High, or Sonnet 5.5 Low |
+| Git/status/docs cleanup/mechanical validation | GPT-6 Luna Low/Medium | Haiku 5.5 Medium/High, or Sonnet 5.5 Low |
 | Narrow known-root-cause bug | GPT-6.1 Sol Medium | Sonnet 5.5 Medium/High |
 | Normal substantial known-architecture PR | GPT-6.1 Sol High | Sonnet 5.5 High |
-| Difficult bounded lifecycle/persistence/concurrency/cross-file PR | GPT-6.1 Sol High or XHigh | Sonnet 5.5 XHigh |
-| Material architecture/ownership ambiguity | GPT-6 Astra High/XHigh | Opus 5.5 High/XHigh |
-| Very large well-specified repo-wide autonomous work | GPT-6 Astra XHigh/Max | Fable 5.1 XHigh/Max |
+| Difficult bounded lifecycle/persistence/concurrency/cross-file PR | GPT-6.1 Sol High/XHigh | Sonnet 5.5 XHigh or Opus 5.5 High, based on risk |
+| Material architecture/ownership ambiguity | GPT-6 Astra High/XHigh | Opus 5.5 High; optional Fable 5.2 High assessment when justified and available |
+| Very large well-specified repo-wide autonomous work | GPT-6 Astra XHigh; Max only after evidence of need | Opus 5.5 High/XHigh; Fable 5.2 is an optional exception, not the default |
 | Routine independent verification | GPT-6.1 Sol Medium | Sonnet 5.5 Medium |
-| High-risk verification / security review | GPT-6 Astra High | Opus 5.5 High |
+| High-risk verification/security review | GPT-6 Astra High | Opus 5.5 High |
 
-Weigh also: architecture ambiguity, number of interacting subsystems, cost of a wrong implementation, cost of another
-discovery pass, and how much valuable context the current session already holds. Prefer the current productive session over
-switching hosts for a small theoretical gain; when switching, hand over branch/worktree, exact SHA, acceptance contract,
-accepted evidence, unresolved findings and authorization boundaries, and do not restart discovery.
+## Orchestration and frontier escalation
 
-## Effort
+Use one primary session per coherent package. When orchestration materially helps, prefer Opus 5.5 and the [orchestrator prompt](ai/prompts/OPUS_ORCHESTRATOR.md).
+For known architecture, prefer Sonnet 5.5 or the least costly tier likely to finish the whole package, counting retries, rediscovery, delegation and verification.
+For exceptional design questions, the [shared review](ai/workflows/DESIGN_REVIEW.md) supports a bounded Fable 5.2 High assessment when available and authorized.
+Temporary access can expire. Keep Opus as the ordinary frontier design option and honor owner decision boundaries. Paid credits require explicit authorization.
+Cross-host work needs a supported mechanism or operator handoff with exact SHA, scope, accepted evidence, unresolved findings and authorization limits.
+These are provisional recommendations. Provider benchmarks and limited trials can justify experiments. StableNew comparison uses PR outcomes below.
+See [Anthropic’s supported models and effort levels](https://platform.claude.com/docs/en/build-with-claude/effort).
 
-- Start at the lowest effort likely to complete the **whole package** correctly, not just its first edit.
-- Medium for bounded known work; High is the default for substantial work; XHigh for lifecycle, concurrency, persistence or
-  cross-file interactions where failure is costly; Max only when lower-effort evidence has failed. Max can do worse than XHigh
-  (extra agent activity causes timeouts and out-of-scope edits).
-- If a model is struggling, do not raise its effort indefinitely; if capability is the constraint, move up a model.
+## Effort and delegation
 
-## Splitting a package across models
-
-The session picks one model and effort for the top-level executor. Where the host allows a delegated task to run on a different
-model (Claude Code's Agent tool takes a `model`), recommend a split only when a package has a clearly separable hard part:
-for example, run the package at Sonnet 5.5 High and delegate the one architecture-ambiguous analysis to Opus 5.5, or delegate
-read-only exploration to a cheaper model. Do not split for small packages; delegation costs a fresh context.
+Start at the lowest effort likely to complete the package. Use High for substantial work and consider XHigh for expensive lifecycle,
+concurrency or persistence failures. Use Max only with evidence of need. Move up a model if capability is the constraint.
+Delegate a separable hard part only when the benefit justifies fresh context. Prefer the productive session when switching offers little gain.
 
 ## Keeping the table honest
 
